@@ -1,6 +1,7 @@
 import { clerkMiddleware } from '@clerk/tanstack-react-start/server'
 import { createCsrfMiddleware, createMiddleware, createStart } from '@tanstack/react-start'
 
+import { toastErrorFunnel } from '@/lib/http/toast-error-funnel'
 import { applySecurityHeadersToResponse, resolveCspModeFromEnv } from '@/lib/http/security-headers'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { createSourceWriteAdmissionMiddleware } from '@/lib/server/source-write-admission'
@@ -90,6 +91,7 @@ const apiRequestBoundaryMiddleware = createMiddleware().server((ctx) =>
 const clerkRequestMiddleware = isLocalE2EAuthBypassEnabled() ? [] : [clerkMiddleware()]
 export const startInstance = createStart(() => ({
 
+  functionMiddleware: [toastErrorFunnel],
   requestMiddleware: [
     requestCorrelationMiddleware,
     apiRequestBoundaryMiddleware,

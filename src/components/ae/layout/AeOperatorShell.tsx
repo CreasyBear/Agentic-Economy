@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/sidebar'
 
 import { AeOperatorBreadcrumbs } from '@/components/ae/layout/AeOperatorBreadcrumbs'
-import { AeOperatorCommandMenu } from '@/components/ae/layout/AeOperatorCommandMenu'
+import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
 import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
 import { AeRecordHeader } from '@/components/ae/layout/AeRecordHeader'
 import { OperatorCommandOpenContext } from '@/components/ae/layout/operator-command-context'
@@ -30,6 +30,10 @@ type OperatorShellChromeRegistration = {
 }
 
 const OperatorShellChromeContext = createContext<OperatorShellChromeRegistration | null>(null)
+
+export function useOperatorShellChrome(): OperatorShellChromeRegistration | null {
+  return use(OperatorShellChromeContext)
+}
 
 
 export type AeOperatorShellProps = {
@@ -113,7 +117,7 @@ function OperatorSidebarToggle() {
       aria-label={expanded ? 'Close operator navigation' : 'Open operator navigation'}
       aria-controls="operator-sidebar-navigation"
       aria-expanded={expanded}
-      className="-ml-1"
+      className="-ms-1"
     />
   )
 }
@@ -184,38 +188,37 @@ function RootOperatorShell(props: AeOperatorShellProps) {
           <a
             data-testid="skip-to-content"
             href={`#${resolvedMainContentId}`}
-            className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-20 focus:rounded-md focus:bg-container focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground"
+            className="sr-only focus:not-sr-only focus:absolute focus:start-gutter focus:top-gutter focus:z-20 focus:rounded-md focus:bg-container focus:px-gutter focus:py-intra focus:text-sm focus:font-medium focus:text-foreground"
           >
             Skip to content
           </a>
           <AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} navBadges={navBadges ?? {}} />
           <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="bg-card">
-            <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border">
-              <div className="flex min-w-0 items-center gap-2 px-4">
+            <header className="flex min-h-touch shrink-0 items-center gap-intra border-b border-border">
+              <div className="flex min-w-0 items-center gap-intra px-gutter">
                 <OperatorSidebarToggle />
                 {breadcrumbs.length === 0 ? null : (
                   <>
-                    <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+                    <Separator orientation="vertical" className="me-intra data-[orientation=vertical]:h-4" />
                     <AeOperatorBreadcrumbs items={breadcrumbs} />
                   </>
                 )}
               </div>
-              <div className="ml-auto px-4">
-                <AeOperatorCommandMenu
-                  operatorRole={operatorRole}
-                  open={commandOpen}
-                  onOpenChange={setCommandOpen}
-                />
+              <div className="ms-auto px-gutter">
+                <CommandPanelProvider open={commandOpen} onOpenChange={setCommandOpen}>
+                  <AeCommandPanel />
+                </CommandPanelProvider>
               </div>
             </header>
-            <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
+            <div className="flex min-h-0 flex-1 flex-col px-gutter pb-gutter">
               <AeRecordHeader
                 title={title}
                 description={description}
+                {...(secondaryBar === undefined ? {} : { className: 'border-b-0 pb-0' })}
                 {...(actions === undefined ? {} : { actions })}
               />
               {secondaryBar === undefined ? null : secondaryBar}
-              <div className="min-h-0 flex-1 pt-3">{children}</div>
+              <div className="min-h-0 flex-1 pt-intra">{children}</div>
             </div>
           </SidebarInset>
         </SidebarProvider>

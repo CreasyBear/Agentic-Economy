@@ -204,17 +204,145 @@ describe('thin operation chat presentation', () => {
     }]} />)
 
     expect(document.querySelectorAll('[data-operation-tool]')).toHaveLength(5)
-    expect(screen.getByText('Search operations')).toBeTruthy()
-    expect(screen.getByText('Operation details')).toBeTruthy()
-    expect(screen.getByText('Compare operations')).toBeTruthy()
-    expect(screen.getByText('Inspect operation plan')).toBeTruthy()
-    expect(screen.getByText('Execute operation')).toBeTruthy()
+    expect(screen.getByText('Search tools')).toBeTruthy()
+    expect(screen.getByText('Tool details')).toBeTruthy()
+    expect(screen.getByText('Compare tools')).toBeTruthy()
+    expect(screen.getByText('Inspect before a call')).toBeTruthy()
+    expect(screen.getByText('Call', { exact: true })).toBeTruthy()
     const transcript = screen.getByRole('log', { name: 'Chat transcript' })
     expect(transcript.getAttribute('aria-live')).toBe('polite')
     expect(transcript.getAttribute('aria-relevant')).toBe('additions text')
     expect(document.body.textContent).not.toContain('TOP_SECRET')
     expect(document.body.textContent).not.toContain('PRIVATE_REASONING')
     expect(document.body.textContent).not.toContain('private.example')
+  })
+
+  it('renders search titles as inspect links and never dumps execute output', () => {
+    render(<ChatTranscript messages={[{
+      id: 'assistant-search',
+      role: 'assistant',
+      parts: [
+        {
+          type: `tool-${providerSafeActionToolName('registry.operations.search')}`,
+          state: 'output-available',
+          output: {
+            kind: 'ok',
+            matchedCount: 1,
+            items: [{
+              operationRef,
+              title: 'Weather finder',
+              supplier: { name: 'Sky Co', slug: 'sky-co' },
+              price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
+              authentication: { kind: 'keyless' },
+              availability: { posture: 'routeable' },
+            }],
+          },
+        },
+        {
+          type: `tool-${providerSafeActionToolName('operation.execute')}`,
+          state: 'output-available',
+          output: {
+            kind: 'ok',
+            operationRef,
+            name: 'Weather finder',
+            output: { forecast: 'TOP_SECRET_RAW_PAYLOAD' },
+            evidenceHash: 'TOP_SECRET_EVIDENCE',
+          },
+        },
+      ],
+    }]} />)
+
+    const link = screen.getByRole('link', { name: 'Use Weather finder' })
+    expect(link.getAttribute('href')).toBe(`/operations/${encodeURIComponent(operationRef)}`)
+    expect(screen.getByRole('link', { name: 'View Weather finder' }).getAttribute('href')).toBe(
+      `/operations/${encodeURIComponent(operationRef)}`,
+    )
+    expect(screen.getByText('Sky Co')).toBeTruthy()
+    expect(screen.getByText('USD 0.50')).toBeTruthy()
+    expect(screen.getByText('Ready now')).toBeTruthy()
+    expect(screen.getByText('No provider key')).toBeTruthy()
+    expect(screen.queryByText('Inspect operation')).toBeNull()
+    expect(document.body.textContent).not.toContain('TOP_SECRET')
+  })
+
+  it('renders inspect-plan classes and compare contrasts instead of counts or a search list', () => {
+    const rainRef = `operation:v1:${'f'.repeat(64)}`
+    render(<ChatTranscript messages={[{
+      id: 'assistant-inspect',
+      role: 'assistant',
+      parts: [
+        {
+          type: `tool-${providerSafeActionToolName('registry.operations.search')}`,
+          state: 'output-available',
+          output: {
+            kind: 'ok',
+            matchedCount: 12,
+            items: [{
+              operationRef,
+              title: 'Weather finder',
+              supplier: { name: 'Sky Co' },
+              price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
+              authentication: { kind: 'keyless' },
+              availability: { posture: 'routeable' },
+            }],
+          },
+        },
+        {
+          type: `tool-${providerSafeActionToolName('registry.operations.compare')}`,
+          state: 'output-available',
+          output: {
+            kind: 'ok',
+            operations: [
+              {
+                operationRef,
+                offering: { label: 'Weather finder' },
+                business: { name: 'Sky Co' },
+                commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } } },
+                authentication: { kind: 'keyless' },
+                availability: { posture: 'routeable' },
+              },
+              {
+                operationRef: rainRef,
+                offering: { label: 'Rain lookup' },
+                business: { name: 'Nimbus' },
+                commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '75', exponent: 2 } } },
+                authentication: { kind: 'x402' },
+                availability: { posture: 'integrated' },
+              },
+            ],
+            facts: [{
+              field: 'price',
+              values: [
+                { operationRef, value: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } }, source: 'publication' },
+                { operationRef: rainRef, value: { kind: 'fixed', amount: { currency: 'USD', units: '75', exponent: 2 } }, source: 'publication' },
+              ],
+            }],
+          },
+        },
+        {
+          type: `tool-${providerSafeActionToolName('registry.operations.inspectPlan')}`,
+          state: 'output-available',
+          output: {
+            kind: 'ok',
+            operationRefs: [operationRef],
+            summary: {
+              maximumCost: { kind: 'known', amount: { currency: 'USD', units: '199', exponent: 2 } },
+              effects: [{ class: 'data_release' }, { class: 'financial_exposure' }],
+              dataUse: [{ classification: 'public' }],
+            },
+          },
+        },
+      ],
+    }]} />)
+
+    expect(screen.getByText('Showing 1 of 12')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Browse market' }).getAttribute('href')).toBe('/market?window=30d')
+    expect(screen.getByText('Weather finder: USD 0.50; Rain lookup: USD 0.75')).toBeTruthy()
+    expect(screen.getByText('Data release, Financial exposure')).toBeTruthy()
+    expect(screen.getByText('Public')).toBeTruthy()
+    expect(screen.queryByText('2 declared')).toBeNull()
+    expect(screen.queryByText('Inspect 1')).toBeNull()
+    expect(screen.queryByText('Inspect operation')).toBeNull()
   })
 
   it('uses the required durable Agent query shape and skips it without validated auth', () => {
@@ -359,6 +487,14 @@ describe('thin operation chat presentation', () => {
           kind: 'ok',
           operationRef,
           name: 'Weather finder',
+          items: [{
+            operationRef,
+            title: 'Weather finder',
+            supplier: { name: 'Sky Co', slug: 'sky-co' },
+            price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
+            authentication: { kind: 'keyless' },
+            availability: { posture: 'routeable' },
+          }],
           raw: 'HANDOFF_RAW_SECRET',
           provider: 'HANDOFF_PROVIDER_SECRET',
         },
@@ -377,7 +513,7 @@ describe('thin operation chat presentation', () => {
 
     expect(screen.getByText('Anonymous question')).toBeTruthy()
     expect(screen.getByText('Anonymous answer')).toBeTruthy()
-    expect(screen.getByText('Search operations')).toBeTruthy()
+    expect(screen.getByText('Search tools')).toBeTruthy()
     expect(screen.getByText('Signed in — messages from here are saved.')).toBeTruthy()
 
     await sendPrompt('First saved question')
@@ -389,7 +525,7 @@ describe('thin operation chat presentation', () => {
     const resumed = renderChat({ threadId: 'durable-thread' })
     expect(screen.getByText('Anonymous question')).toBeTruthy()
     expect(screen.getByText('Anonymous answer')).toBeTruthy()
-    expect(screen.getByText('Search operations')).toBeTruthy()
+    expect(screen.getByText('Search tools')).toBeTruthy()
     expect(screen.getByText('Weather finder')).toBeTruthy()
     expect(screen.getByText('Signed in — messages from here are saved.')).toBeTruthy()
     expect(document.body.textContent).not.toContain('HANDOFF_RAW_SECRET')
@@ -468,7 +604,7 @@ describe('thin operation chat presentation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete Weather operations' }))
     expect(screen.getByText('Delete “Weather operations”?')).toBeTruthy()
     expect(state.remove).not.toHaveBeenCalled()
-    fireEvent.click(within(screen.getByText('Delete “Weather operations”?').parentElement as HTMLElement).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(screen.getByText('Delete “Weather operations”?').parentElement as HTMLElement).getByRole('button', { name: 'Delete conversation' }))
     await waitFor(() => expect(state.remove).toHaveBeenCalledWith({ threadId: 'thread-1' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Get share link' }))
@@ -519,11 +655,15 @@ describe('thin operation chat presentation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete Busy operations' }))
     const confirmation = within(screen.getByText('Delete “Busy operations”?').parentElement as HTMLElement)
-    expect(confirmation.getByRole('button', { name: 'Delete' }).hasAttribute('disabled')).toBe(true)
+    expect(confirmation.getByRole('button', { name: 'Delete conversation' }).hasAttribute('disabled')).toBe(true)
 
-    act(() => vi.advanceTimersByTime(10 * 60 * 1_000 + 30_000))
-    expect(confirmation.getByRole('button', { name: 'Delete' }).hasAttribute('disabled')).toBe(false)
-    fireEvent.click(confirmation.getByRole('button', { name: 'Delete' }))
+    // Async stepping lets React flush between interval firings; a fully
+    // synchronous advance starves the scheduler once cross-30s UI hooks land.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1_000 + 30_000)
+    })
+    expect(confirmation.getByRole('button', { name: 'Delete conversation' }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(confirmation.getByRole('button', { name: 'Delete conversation' }))
     await act(async () => Promise.resolve())
     expect(state.remove).toHaveBeenCalledWith({ threadId: 'thread-1' })
 
@@ -569,7 +709,7 @@ describe('thin operation chat presentation', () => {
     expect(transcript.textContent?.indexOf('Middle operation result')).toBeLessThan(
       transcript.textContent?.indexOf('Newest settled answer') ?? -1,
     )
-    expect(screen.getByText('Search operations')).toBeTruthy()
+    expect(screen.getByText('Search tools')).toBeTruthy()
     expect(screen.queryByRole('textbox')).toBeNull()
     expect(screen.queryByRole('button', { name: /send/i })).toBeNull()
     expect(document.body.textContent).not.toContain('SHARED_PRIVATE_REASONING')
@@ -584,9 +724,9 @@ describe('thin operation chat presentation', () => {
     renderChat()
     const textbox = screen.getByRole('textbox', { name: 'Message' })
     const send = screen.getByRole('button', { name: 'Send message' })
-    expect(textbox.className).toContain('min-h-11')
-    expect(send.className).toContain('min-h-11')
-    expect(send.className).toContain('min-w-11')
+    expect(textbox.className).toContain('min-h-touch')
+    expect(send.className).toContain('min-h-touch')
+    expect(send.className).toContain('min-w-touch')
     expect(document.querySelector('[role="alert"]')).toBeTruthy()
     expect(document.querySelector('[role="status"][aria-live="polite"]')).toBeTruthy()
 

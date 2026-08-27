@@ -13,6 +13,8 @@ import {
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
@@ -123,12 +125,14 @@ export function AeAgentOperatorConsole({
     || revokingKeyId !== undefined
     || selected.key.revoked
     || selected.key.expired
+  const firstLoadPending = useFirstLoadPending(loading)
+  const keysPhase = stagedListPhase({ firstLoadPending, rows: items })
 
   return (
     <div className="grid gap-8">
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{approvalStatus ?? ''}</p>
       <AeSection title="Credit" description="Paid calls use the credit assigned to each agent.">
-        <Button asChild variant="secondary" className="w-fit min-h-11">
+        <Button asChild variant="secondary" className="w-fit min-h-touch">
           <a href="/owner/credit">Open Credit</a>
         </Button>
       </AeSection>
@@ -140,7 +144,7 @@ export function AeAgentOperatorConsole({
         title="Connected keys"
         description="Review what each agent can do, its usage, and spend. Revoked or expired access stays visible. Caller keys identify agents. Supplier connections and credentials are managed separately and never appear here."
       >
-        {loading ? (
+        {keysPhase === 'unloaded' ? (
           <AeRecordTable
             columns={columns}
             data={[]}
@@ -183,7 +187,7 @@ export function AeAgentOperatorConsole({
                   variant="secondary"
                   disabled={revokeDisabled}
                   onClick={() => onRevoke(selected.key.keyId)}
-                  className="min-h-11"
+                  className="min-h-touch"
                 >
                   {revoking ? 'Revoking access…' : 'Revoke access now'}
                 </Button>
@@ -234,7 +238,12 @@ function WaitingApprovalsSection({
 
   return (
     <AeSection title="Waiting for approval" description="Review the exact operation before allowing it to run once.">
-      {loading && approvals.length === 0 ? <p className="text-sm text-muted-foreground">Loading waiting approvals…</p> : null}
+      {loading && approvals.length === 0 ? (
+        <div className="grid gap-intra" aria-busy="true" aria-label="Loading waiting approvals">
+          <Skeleton className="h-touch w-full" />
+          <Skeleton className="h-touch w-full" />
+        </div>
+      ) : null}
       {error === undefined ? null : (
         <Alert variant="destructive">
           <AlertTitle>Waiting approvals unavailable</AlertTitle>
@@ -266,7 +275,7 @@ function WaitingApprovalsSection({
                 <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
                   <Button
                     type="button"
-                    className="min-h-11 w-full sm:w-auto"
+                    className="min-h-touch w-full sm:w-auto"
                     disabled={controlsDisabled}
                     onClick={() => onDecide(approval.invocationRef, approval.operationRef, 'approve')}
                   >
@@ -275,7 +284,7 @@ function WaitingApprovalsSection({
                   <Button
                     type="button"
                     variant="secondary"
-                    className="min-h-11 w-full sm:w-auto"
+                    className="min-h-touch w-full sm:w-auto"
                     disabled={controlsDisabled}
                     onClick={() => onDecide(approval.invocationRef, approval.operationRef, 'deny')}
                   >

@@ -9,12 +9,15 @@ import { Toaster } from 'sonner'
 
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
 
+import { REQUEST_FAILED_TOAST_EVENT, type RequestFailedToastDetail } from '@/lib/http/toast-error-funnel'
+import { toast } from '@/lib/ui/toast'
 import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { bootClientObservability } from '@/lib/observability/boot-client-observability'
 import appCss from '../styles/globals.css?url'
 import { clerkAppearance } from '@/components/ae/website/clerk-appearance'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { HOME } from '@/content/brand-copy'
+import { AECON_MARK_SRC } from '@/content/brand-assets'
 import { api } from '../../convex/_generated/api'
 
 function AeObservabilityBoot() {
@@ -42,8 +45,8 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
-      { rel: 'icon', href: '/brand/logo/ae-favicon.svg', type: 'image/svg+xml' },
-      { rel: 'apple-touch-icon', href: '/brand/logo/ae-app-icon.svg' },
+      { rel: 'icon', href: AECON_MARK_SRC, type: 'image/png' },
+      { rel: 'apple-touch-icon', href: AECON_MARK_SRC },
     ],
   }),
   component: RootComponent,
@@ -55,6 +58,19 @@ function RootComponent() {
       <Outlet />
     </RootDocument>
   )
+}
+
+function AeRequestFailedToasts() {
+  useEffect(() => {
+    function onRequestFailed(event: Event) {
+      const message = (event as CustomEvent<RequestFailedToastDetail>).detail?.message
+      if (typeof message === 'string' && message.length > 0) toast.error(message)
+    }
+    window.addEventListener(REQUEST_FAILED_TOAST_EVENT, onRequestFailed)
+    return () => window.removeEventListener(REQUEST_FAILED_TOAST_EVENT, onRequestFailed)
+  }, [])
+
+  return null
 }
 
 function RootDocument({ children }: { children: ReactNode }) {
@@ -78,6 +94,7 @@ function RootDocument({ children }: { children: ReactNode }) {
         <RouteProgressBar />
         <AeObservabilityBoot />
         <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
+        <AeRequestFailedToasts />
         <Toaster
           ref={(node) => {
             node?.setAttribute('aria-live', 'off')
@@ -99,7 +116,7 @@ function ChatConvexProvider({ children }: { children: ReactNode }) {
         <section className="max-w-md text-center" role="status" aria-live="polite">
           <h1 className="text-lg font-semibold">Chat is unavailable</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            The chat service is not configured. The Operation marketplace is still available.
+            The chat service is not configured. The catalog is still available.
           </p>
         </section>
       </main>

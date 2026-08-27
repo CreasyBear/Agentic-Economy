@@ -59,12 +59,6 @@
   --color-info-ring: var(--ae-info-ring);
   --color-info-subtle: var(--ae-info-subtle);
   --color-info-foreground: var(--ae-info-foreground);
-  --color-red-vivid: var(--ae-danger);
-  --color-red-ring: var(--ae-danger-ring);
-  --color-red-subtle: var(--ae-danger-subtle);
-  --color-green-vivid: var(--ae-success);
-  --color-green-ring: var(--ae-success-ring);
-  --color-green-subtle: var(--ae-success-subtle);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -123,12 +117,9 @@
   --font-weight-bold: 700;
   --font-family-body:
     "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
-  --font-family-heading:
-    "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
   --font-family-display: "Geist Pixel", "DM Mono", monospace;
   --font-family-code: "DM Mono", "SFMono-Regular", Menlo, monospace;
   --ae-font-sans: var(--font-family-body);
-  --ae-font-body: var(--font-family-body);
   --ae-font-mono: var(--font-family-code);
   --ae-font-display: var(--font-family-display);
 

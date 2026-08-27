@@ -23,8 +23,10 @@ import {
   type CapabilityOfferingRow,
 } from '../src/modules/capability-supply/public'
 import { normalizeTrustTier, type BusinessContext } from '../src/modules/business/public'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { isRecord } from '../src/modules/common/is-record'
+import type { StableHashValue } from '../src/modules/common/stable-hash'
 import {
   buildRegistrySearchDocumentsForCatalog,
   projectBusinessSupplyToPublicApi,
@@ -129,22 +131,47 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
     throw new Error('registry_search_document_capacity_exceeded')
   }
   const nextDocumentIds = new Set(searchDocuments.map((document) => document.documentId))
-  await Promise.all([
-    ...existingSearchDocuments.flatMap((document) => nextDocumentIds.has(document.documentId) ? [] : [db.delete(document._id)]),
-    ...searchDocuments.map((document) => {
-      const prior = existingSearchDocuments.find((candidate) => candidate.documentId === document.documentId)
-      const value = {
-        ...document,
-        placeKeys: [...document.placeKeys],
-        keywords: [...document.keywords],
-        sourceHash: projection.sourceDigest,
-      }
-      return prior === undefined
-        ? db.insert('registrySearchDocuments', value)
-        : db.replace(prior._id, value)
-    }),
-  ])
+  const writes: Promise<void>[] = existingSearchDocuments.flatMap((document) => (
+    nextDocumentIds.has(document.documentId) ? [] : [db.delete(document._id)]
+  ))
+  for (const document of searchDocuments) {
+    const prior = existingSearchDocuments.find((candidate) => candidate.documentId === document.documentId)
+    const value = {
+      ...document,
+      placeKeys: [...document.placeKeys],
+      keywords: [...document.keywords],
+      sourceHash: projection.sourceDigest,
+    }
+    if (prior === undefined) writes.push(db.insert('registrySearchDocuments', value).then(() => undefined))
+    else if (!sameRegistrySearchDocument(prior, value)) writes.push(db.replace(prior._id, value).then(() => undefined))
+  }
+  await Promise.all(writes)
   return { kind: 'ok', sourceDigest: projection.sourceDigest }
+}
+
+function sameRegistrySearchDocument(
+  prior: Doc<'registrySearchDocuments'>,
+  next: Omit<Doc<'registrySearchDocuments'>, '_id' | '_creationTime'>,
+): boolean {
+  const {
+    _id,
+    _creationTime,
+    updatedAt: _priorUpdatedAt,
+    generatedHash: _priorGeneratedHash,
+    sourceHash: _priorSourceHash,
+    ...current
+  } = prior
+  const {
+    updatedAt: _nextUpdatedAt,
+    generatedHash: _nextGeneratedHash,
+    sourceHash: _nextSourceHash,
+    ...candidate
+  } = next
+  void _id
+  void _creationTime
+  void _priorSourceHash
+  void _nextSourceHash
+  return canonicalDigest(current as StableHashValue) === canonicalDigest(candidate as StableHashValue)
 }
 
 export async function deriveBusinessOfferingSupportFromCapabilitySupply(

@@ -131,17 +131,17 @@ describe("market page", () => {
     expect(screen.queryByText("Exa search")).toBeNull();
     expect(
       screen.getByRole("link", {
-        name: "Company Search, 2 Operations, from USD 0.18",
+        name: "Company Search, 2 listed, from USD 0.18",
       }),
     ).toBeTruthy();
     expect(
       screen.getByRole("tab", { name: "Identity & compliance 1" }),
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain(
-      "2 Operations shown",
+      "2 shown",
     );
     expect(screen.queryByText("Market activity")).toBeNull();
-    expect(screen.getByRole("link", { name: "Set up an agent" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Connect your agent" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "List a tool" })).toBeTruthy();
   });
 
@@ -155,7 +155,7 @@ describe("market page", () => {
     expect(
       screen.getByRole("link", { name: "Use Company registry search" }),
     ).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toContain("2 Operations shown");
+    expect(screen.getByRole("status").textContent).toContain("2 shown");
     expect(screen.getByText("4.8 (24)")).toBeTruthy();
     expect(screen.getByText("842 completed calls")).toBeTruthy();
     expect(screen.getByText("420 ms")).toBeTruthy();
@@ -173,7 +173,7 @@ describe("market page", () => {
       },
     );
 
-    expect(screen.getByRole("status").textContent).toBe("0 Operations shown");
+    expect(screen.getByRole("status").textContent).toBe("0 shown");
     expect(screen.getByText("No tools match these filters")).toBeTruthy();
   });
 
@@ -191,6 +191,34 @@ describe("market page", () => {
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe("Catalogue unavailable");
     expect(screen.queryByText("No tools match these filters")).toBeNull();
+  });
+
+  it("states the page size against the catalog total and paginates browse", () => {
+    const firstItem =
+      projection.catalog.kind === "ok" ? projection.catalog.items[0] : undefined;
+    if (firstItem === undefined) {
+      throw new Error("expected catalog fixture items");
+    }
+    renderMarket(
+      { window: "30d" },
+      {
+        ...projection,
+        catalog: {
+          kind: "ok",
+          matchedCount: 136,
+          pagination: { limit: 12, hasMore: true, nextCursor: "page-2" },
+          items: [firstItem],
+        },
+      },
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "136 tools for agents" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("1 of 136");
+    expect(screen.getByRole("link", { name: "Next 12" }).getAttribute("href")).toContain(
+      "cursor=page-2",
+    );
   });
 });
 

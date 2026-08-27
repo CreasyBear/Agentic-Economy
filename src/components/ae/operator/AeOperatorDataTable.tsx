@@ -16,6 +16,7 @@ import { type KeyboardEvent, type MouseEvent, type ReactNode, useState } from 'r
 
 import { AeViewBar } from '@/components/ae/data/AeViewBar'
 import { Button } from '@/components/ui/button'
+import { useFirstLoadPending } from '@/components/ui/data-state'
 import {
   Table,
   TableBody,
@@ -36,7 +37,12 @@ type AeRecordTableProps<TData> = {
   countLabel?: string
   action?: ReactNode
   onRowClick?: (row: TData) => void
-  getRowHref?: (row: TData) => string | undefined
+  /** When provided, each row resolves to this href and renders as a link row. */
+  getRowHref?: (row: TData) => string
+  /**
+   * True while a load is in flight. Skeletons render only before the first
+   * settled result; refreshing an already-populated table keeps its rows.
+   */
   loading?: boolean
 }
 
@@ -73,10 +79,11 @@ export function AeRecordTable<TData>({
 
   const showFilter = !hideFilter && (data.length > 1 || globalFilter.length > 0)
   const rowCount = table.getRowModel().rows.length
+  const showSkeleton = useFirstLoadPending(loading)
   const interactive = onRowClick !== undefined || getRowHref !== undefined
 
   return (
-    <div className="grid">
+    <div {...(showSkeleton ? { 'aria-busy': true } : {})} className="grid">
       {showFilter || action !== undefined ? (
         <AeViewBar
           filterValue={globalFilter}
@@ -119,7 +126,7 @@ export function AeRecordTable<TData>({
             ))}
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {showSkeleton ? (
               Array.from({ length: 5 }, (_, index) => (
                 <TableRow key={`skeleton-${String(index)}`} className="hover:bg-transparent">
                   {columns.map((column, cellIndex) => (
@@ -275,7 +282,7 @@ export function AeOperatorSortableHeader({
       type="button"
       variant="ghost"
       size="sm"
-      className="-ml-2 h-8 min-h-8 px-2"
+      className="-ms-2 h-8 min-h-8 px-2"
       onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
       aria-label={`Sort by ${label}`}
     >

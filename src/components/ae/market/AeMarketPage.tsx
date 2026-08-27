@@ -1,15 +1,18 @@
 import { Link } from "@tanstack/react-router";
 import { SearchIcon } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { Suspense, useMemo, useState, type ReactNode } from "react";
 
 import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
 import { AePageHeader } from "@/components/ae/layout/AePageHeader";
 import { AeCapabilityTile } from "@/components/ae/market/AeCapabilityTile";
 import { AeOperationTable } from "@/components/ae/market/AeOperationTable";
+import { AeSiteButton } from "@/components/ae/website/AeSiteButton";
 import { Button } from "@/components/ui/button";
 import { ItemGroup } from "@/components/ui/item";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AGENT_DOOR } from "@/content/brand-copy";
+import { resolveOperationCategoryIcon } from "@/lib/public/operation-icons";
 import type { MarketWindow } from "@/modules/market/contracts";
 import {
   marketCategories,
@@ -33,7 +36,7 @@ type MarketPageSearch = Readonly<{
 }>;
 
 const CATALOG_DESCRIPTION =
-  "Compare exact Operations on price and readiness, then call through Agentic Economy. No provider signup on the browse path.";
+  "Compare price and readiness, then call. Browse without a provider account.";
 
 export function AeMarketPage({
   projection,
@@ -56,20 +59,28 @@ export function AeMarketPage({
   const matchedCount =
     catalog.kind === "unavailable" ? 0 : catalog.matchedCount;
   const drilledGroup = capabilityGroups.find(
-    (group) => group.capabilityId === search.capability,
+    (group) =>
+      group.capabilityId === search.capability ||
+      group.operations.some(
+        (operation) => operation.capabilityId === search.capability,
+      ),
   );
   const query = search.query;
   const isQuery = query !== undefined;
   const unavailable = catalog.kind === "unavailable";
   const empty = !unavailable && matchedCount === 0;
   const toolLabel = matchedCount === 1 ? "tool" : "tools";
-  const status =
-    unavailable
-      ? "Catalogue unavailable"
-      : `${(drilledGroup?.operations.length ?? matchedCount).toLocaleString()} Operations shown`;
+  const shownCount = drilledGroup?.operations.length ?? operations.length;
+  const status = unavailable
+    ? "Catalogue unavailable"
+    : catalog.kind === "ok" &&
+        drilledGroup === undefined &&
+        (catalog.pagination.hasMore || matchedCount > shownCount)
+      ? `${shownCount.toLocaleString()} of ${matchedCount.toLocaleString()}`
+      : `${shownCount.toLocaleString()} shown`;
 
   const catalogLink = (
-    <Button asChild variant="ghost" className="min-h-11">
+    <Button asChild variant="ghost" className="min-h-touch">
       <Link to="/market" search={{ window }}>
         Catalog
       </Link>
@@ -84,13 +95,13 @@ export function AeMarketPage({
   if (drilledGroup !== undefined) {
     const count = drilledGroup.operations.length;
     title = drilledGroup.label;
-    description = `${drilledGroup.category.label} · ${count.toLocaleString()} ${count === 1 ? "Operation" : "Operations"} · ${capabilityFromPrice(drilledGroup.operations)}`;
+    description = `${drilledGroup.category.label} · ${count.toLocaleString()} listed · ${capabilityFromPrice(drilledGroup.operations)}`;
     actions = catalogLink;
     body = <AeOperationTable operations={drilledGroup.operations} />;
   } else if (isQuery) {
     title = `Results for “${query}”`;
     description =
-      "Exact Operations that match this search. Compare price and readiness, then call through Agentic Economy.";
+      "Tools that match this search. Compare price and readiness, then call.";
     actions = catalogLink;
     body =
       unavailable || empty || catalog.kind !== "ok" ? (
@@ -110,12 +121,12 @@ export function AeMarketPage({
     description = CATALOG_DESCRIPTION;
     actions = (
       <>
-        <Button asChild variant="outline" className="min-h-11">
+        <AeSiteButton asChild variant="outlined">
           <Link to="/for-providers">List a tool</Link>
-        </Button>
-        <Button asChild className="min-h-11">
-          <Link to="/for-agents">Set up an agent</Link>
-        </Button>
+        </AeSiteButton>
+        <AeSiteButton asChild>
+          <Link to="/for-agents">{AGENT_DOOR.cta}</Link>
+        </AeSiteButton>
       </>
     );
     body = unavailable || empty ? (
@@ -125,6 +136,8 @@ export function AeMarketPage({
         categoryId={categoryId}
         shelves={shelves}
         window={window}
+        search={search}
+        pagination={catalog.kind === "ok" ? catalog.pagination : { limit: 12, hasMore: false }}
         onCategoryChange={setCategoryId}
       />
     );
@@ -133,6 +146,7 @@ export function AeMarketPage({
   return (
     <div id="operations" className="scroll-mt-6">
       <AePageHeader
+        eyebrow="Catalog"
         title={title}
         description={description}
         actions={actions}
@@ -165,11 +179,15 @@ function CatalogTabs({
   categoryId,
   shelves,
   window,
+  search,
+  pagination,
   onCategoryChange,
 }: {
   categoryId: MarketCategoryId | "all";
   shelves: readonly CategoryShelfViewModel[];
   window: MarketWindow;
+  search: MarketPageSearch;
+  pagination: Extract<MarketRouteProjection["catalog"], { kind: "ok" }>["pagination"];
   onCategoryChange: (value: MarketCategoryId | "all") => void;
 }) {
   const total = shelves.reduce(
@@ -178,8 +196,9 @@ function CatalogTabs({
   );
 
   return (
+    <div className="grid gap-section">
     <Tabs
-      className="gap-8"
+      className="gap-section"
       value={categoryId}
       onValueChange={(value) => {
         if (value === "all" || shelves.some((shelf) => shelf.category.id === value)) {
@@ -190,26 +209,30 @@ function CatalogTabs({
       <TabsList
         variant="line"
         aria-label="Catalog categories"
-        className="h-auto min-h-11 w-full flex-wrap justify-start border-b border-border"
+        className="h-auto min-h-touch w-full flex-wrap justify-start border-b border-border"
       >
-        <TabsTrigger value="all" className="min-h-11 flex-none">
+        <TabsTrigger value="all" className="min-h-touch flex-none">
           All {total}
         </TabsTrigger>
         {marketCategories.map((category) => {
           const shelf = shelves.find((item) => item.category.id === category.id);
           if (shelf === undefined) return null;
+          const CategoryIcon = resolveOperationCategoryIcon(category.id);
           return (
             <TabsTrigger
               key={category.id}
               value={category.id}
-              className="min-h-11 flex-none"
+              className="min-h-touch flex-none"
             >
+              <Suspense fallback={null}>
+                <CategoryIcon className="size-4" />
+              </Suspense>
               {category.label} {shelf.capabilities.length}
             </TabsTrigger>
           );
         })}
       </TabsList>
-      <TabsContent value="all" className="grid gap-8">
+      <TabsContent value="all" className="grid gap-section">
         {shelves.map((shelf) => (
           <CategoryShelf key={shelf.category.id} shelf={shelf} window={window} />
         ))}
@@ -218,12 +241,14 @@ function CatalogTabs({
         <TabsContent
           key={shelf.category.id}
           value={shelf.category.id}
-          className="grid gap-8"
+          className="grid gap-section"
         >
           <CategoryShelf shelf={shelf} window={window} />
         </TabsContent>
       ))}
     </Tabs>
+    <CatalogPagination pagination={pagination} window={window} search={search} />
+    </div>
   );
 }
 
@@ -237,8 +262,8 @@ function CategoryShelf({
   const headingId = `catalog-${shelf.category.id}`;
 
   return (
-    <section aria-labelledby={headingId} className="grid gap-4">
-      <div className="grid gap-1">
+    <section aria-labelledby={headingId} className="grid gap-related">
+      <div className="grid gap-intra">
         <h2 id={headingId} className="text-xl font-semibold tracking-tight">
           {shelf.category.label}{" "}
           <span className="font-normal text-muted-foreground">
@@ -249,7 +274,7 @@ function CategoryShelf({
           {shelf.category.description}
         </p>
       </div>
-      <ItemGroup className="grid gap-3 sm:grid-cols-2">
+      <ItemGroup className="grid gap-related sm:grid-cols-2">
         {shelf.capabilities.map((group) => (
           <li key={group.capabilityId}>
             <AeCapabilityTile group={group} window={window} />
@@ -272,14 +297,14 @@ function OperationResults({
   search: MarketPageSearch;
 }) {
   return (
-    <div className="grid gap-8">
+    <div className="grid gap-section">
       {groups.map((group) => (
         <section
           key={group.capabilityId}
           aria-labelledby={`capability-${group.capabilityId}`}
-          className="grid gap-4"
+          className="grid gap-related"
         >
-          <div className="grid gap-1">
+          <div className="grid gap-intra">
             <h2
               id={`capability-${group.capabilityId}`}
               className="text-base font-semibold"
@@ -294,30 +319,47 @@ function OperationResults({
           <AeOperationTable operations={group.operations} />
         </section>
       ))}
-      {catalog.pagination.hasMore &&
-      catalog.pagination.nextCursor !== undefined ? (
-        <Pagination aria-label="Operation pages">
-          <PaginationContent>
-            <PaginationItem>
-              <Button asChild variant="outline" className="min-h-11">
+      <CatalogPagination
+        pagination={catalog.pagination}
+        window={window}
+        search={search}
+      />
+    </div>
+  );
+}
+
+function CatalogPagination({
+  pagination,
+  window,
+  search,
+}: {
+  pagination: Extract<MarketRouteProjection["catalog"], { kind: "ok" }>["pagination"];
+  window: MarketWindow;
+  search: MarketPageSearch;
+}) {
+  if (!pagination.hasMore || pagination.nextCursor === undefined) return null;
+  return (
+    <Pagination aria-label="Catalog pages">
+      <PaginationContent>
+        <PaginationItem>
+              <Button asChild variant="outline" className="min-h-touch">
                 <Link
                   to="/market"
+                  reloadDocument
                   search={{
-                    window,
-                    ...(search.query === undefined ? {} : { query: search.query }),
-                    ...(search.availability === undefined
-                      ? {}
-                      : { availability: search.availability }),
-                    cursor: catalog.pagination.nextCursor,
-                  }}
-                >
-                  Next 12 Operations
-                </Link>
-              </Button>
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      ) : null}
-    </div>
+                window,
+                ...(search.query === undefined ? {} : { query: search.query }),
+                ...(search.availability === undefined
+                  ? {}
+                  : { availability: search.availability }),
+                cursor: pagination.nextCursor,
+              }}
+            >
+              Next {pagination.limit}
+            </Link>
+          </Button>
+        </PaginationItem>
+      </PaginationContent>
+    </Pagination>
   );
 }

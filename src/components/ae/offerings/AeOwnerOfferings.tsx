@@ -175,7 +175,7 @@ export function AeOwnerOfferingsList({
           <AlertDescription>
             <p>Your changes are saved. People still see the last safe page until this update finishes.</p>
             {onRetryProjection === undefined ? null : (
-              <Button type="button" variant="secondary" className="min-h-11" onClick={onRetryProjection}>Try publishing again</Button>
+              <Button type="button" variant="secondary" className="min-h-touch" onClick={onRetryProjection}>Try publishing again</Button>
             )}
           </AlertDescription>
         </Alert>
@@ -185,7 +185,7 @@ export function AeOwnerOfferingsList({
           title="No Operations yet"
           description="Describe one exact tool, then add its price and access route."
           action={
-            <Button asChild className="min-h-11">
+            <Button asChild className="min-h-touch">
               <a href="/owner/offerings/new">Add Operation</a>
             </Button>
           }
@@ -338,7 +338,7 @@ export function AeOwnerOfferingEditor({
             </div>
             <Field label="Currency" inputID="offering-price-currency" description="Choose the currency for this exact amount.">
               <Select value={priceDraft.currency} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ currency: isSupportedOfferingCurrency(chosen) ? chosen : DEFAULT_OFFERING_PRICE_CURRENCY })}>
-                <SelectTrigger id="offering-price-currency" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                <SelectTrigger id="offering-price-currency" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                 <SelectContent><SelectGroup>
                   {SUPPORTED_OFFERING_CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
                 </SelectGroup></SelectContent>
@@ -346,7 +346,7 @@ export function AeOwnerOfferingEditor({
             </Field>
             <Field label="Price type" inputID="offering-price-kind" description="Leave unpublished to keep only the note above.">
               <Select value={priceDraft.kind === '' ? unsetOptionValue : priceDraft.kind} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ kind: OfferingPriceKindValues.find((kind) => kind === chosen) ?? '' })}>
-                <SelectTrigger id="offering-price-kind" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                <SelectTrigger id="offering-price-kind" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                 <SelectContent><SelectGroup>
                   <SelectItem value={unsetOptionValue}>Not published</SelectItem>
                   <SelectItem value="fixed">Fixed price</SelectItem>
@@ -366,7 +366,7 @@ export function AeOwnerOfferingEditor({
                 ) : null}
                 <Field label="Charged per" inputID="offering-price-unit" description="Optional">
                   <Select value={priceDraft.unit === '' ? unsetOptionValue : priceDraft.unit} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ unit: OfferingPriceUnitValues.find((unit) => unit === chosen) ?? '' })}>
-                    <SelectTrigger id="offering-price-unit" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectTrigger id="offering-price-unit" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                     <SelectContent><SelectGroup>
                       <SelectItem value={unsetOptionValue}>Not per unit</SelectItem>
                       <SelectItem value="call">Call</SelectItem>
@@ -382,7 +382,7 @@ export function AeOwnerOfferingEditor({
                 </Field>
                 <Field label="Tax" inputID="offering-price-tax">
                   <Select value={priceDraft.taxTreatment} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ taxTreatment: OfferingPriceTaxTreatmentValues.find((treatment) => treatment === chosen) ?? 'unstated' })}>
-                    <SelectTrigger id="offering-price-tax" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectTrigger id="offering-price-tax" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                     <SelectContent><SelectGroup>
                       <SelectItem value="inclusive">Includes tax</SelectItem>
                       <SelectItem value="exclusive">Excludes tax</SelectItem>
@@ -395,7 +395,7 @@ export function AeOwnerOfferingEditor({
           </div>
           <Field label="Public state" inputID="offering-status" description="Draft stays private. Paused and retired Operations are removed from the market.">
             <Select value={value.status} disabled={editorDisabled} onValueChange={(status) => update({ status: toStatus(status) })}>
-              <SelectTrigger id="offering-status" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+              <SelectTrigger id="offering-status" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
               <SelectContent><SelectGroup>
                 <SelectItem value="draft">Draft</SelectItem>
                 <SelectItem value="published">Published</SelectItem>
@@ -410,10 +410,10 @@ export function AeOwnerOfferingEditor({
       <OwnerAccessPathsEditor paths={value.accessPaths} disabled={editorDisabled} onChange={(accessPaths) => update({ accessPaths })} />
 
       <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-card py-4 sm:flex-row sm:justify-end">
-        <Button asChild variant="secondary" className="min-h-11">
+        <Button asChild variant="secondary" className="min-h-touch">
           <a href="/owner/offerings">Back to Operations</a>
         </Button>
-        <Button type="submit" variant="default" disabled={pending || !dirty} aria-busy={pending} className="min-h-11">
+        <Button type="submit" variant="default" disabled={pending || !dirty} aria-busy={pending} className="min-h-touch">
           {retryingPartialSave ? 'Retry save' : value.status === 'published' ? 'Publish Operation' : 'Save draft'}
         </Button>
       </div>
@@ -447,7 +447,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
       <FieldGroup className="gap-4 rounded-lg border border-border p-4">
         <Field label="Add a contact route" inputID="access-path-kind">
           <Select value={selectedKind} disabled={disabled} onValueChange={(kind) => { setSelectedKind(toAccessKind(kind)); setTechnicalExpanded(false) }}>
-            <SelectTrigger id="access-path-kind" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+            <SelectTrigger id="access-path-kind" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
             <SelectContent><SelectGroup>
               <SelectItem value="phone">Call</SelectItem>
               <SelectItem value="website">Website</SelectItem>
@@ -470,7 +470,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
         {selectedKind === 'external_operation' ? (
           <Collapsible open={technicalExpanded} onOpenChange={setTechnicalExpanded} className="grid gap-3">
             <CollapsibleTrigger asChild>
-              <Button type="button" variant="link" className="h-auto min-h-11 justify-self-start px-0 font-semibold text-foreground underline">
+              <Button type="button" variant="link" className="h-auto min-h-touch justify-self-start px-0 font-semibold text-foreground underline">
                 {technicalExpanded ? 'Hide request details' : 'Add request details'}
               </Button>
             </CollapsibleTrigger>
@@ -480,7 +480,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
                 <TextInput label="Request URL" value={endpoint.url} onChange={(url) => setEndpoint((current) => ({ ...current, url }))} disabled={disabled} inputMode="url" />
                 <Field label="Method" inputID="access-path-method" description="Optional">
                   <Select value={endpoint.method === '' ? unsetOptionValue : endpoint.method} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, method: ownerEndpointMethods.find((method) => method === chosen) ?? '' }))}>
-                    <SelectTrigger id="access-path-method" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectTrigger id="access-path-method" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                     <SelectContent><SelectGroup>
                       <SelectItem value={unsetOptionValue}>Not stated</SelectItem>
                       <SelectItem value="GET">GET</SelectItem>
@@ -494,7 +494,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
                 <TextInput label="Instructions URL" value={endpoint.documentationUrl} onChange={(documentationUrl) => setEndpoint((current) => ({ ...current, documentationUrl }))} disabled={disabled} inputMode="url" optional />
                 <Field label="Interface description" inputID="access-path-interface-format" description="Optional">
                   <Select value={endpoint.interfaceFormat === '' ? unsetOptionValue : endpoint.interfaceFormat} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, interfaceFormat: ownerInterfaceFormats.find((format) => format === chosen) ?? '' }))}>
-                    <SelectTrigger id="access-path-interface-format" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectTrigger id="access-path-interface-format" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                     <SelectContent><SelectGroup>
                       <SelectItem value={unsetOptionValue}>Not stated</SelectItem>
                       <SelectItem value="OpenAPI">OpenAPI</SelectItem>
@@ -620,7 +620,7 @@ function TextInput({
         {...(invalid ? { 'aria-invalid': true } : {})}
         {...(describedByValue.length === 0 ? {} : { 'aria-describedby': describedByValue })}
         onChange={(event) => onChange(event.currentTarget.value)}
-        className="min-h-11 bg-card"
+        className="min-h-touch bg-card"
       />
     </Field>
   )

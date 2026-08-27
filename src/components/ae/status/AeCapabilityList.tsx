@@ -48,7 +48,7 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
         title="No published Operations yet"
         description="Add an Operation so agents can inspect the tool and its price."
         action={
-          <Button asChild className="min-h-11">
+          <Button asChild className="min-h-touch">
             <a href="/owner/offerings/new">Add Operation</a>
           </Button>
         }

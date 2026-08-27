@@ -10,11 +10,12 @@ describe("supply landing", () => {
   it("leads with the supplier path and published Operation rows", () => {
     renderWithRouter(<AeSupplyLanding tools={[tool]} services={[service]} />);
     expect(
-      screen.getByRole("heading", { name: "List your tool or API." }),
+      screen.getByRole("heading", { name: "List your tool." }),
     ).toBeDefined();
+    expect(screen.getByText("Suppliers")).toBeDefined();
     expect(
       screen
-        .getByRole("link", { name: "Open supplier dashboard" })
+        .getByRole("link", { name: "List a tool" })
         .getAttribute("href"),
     ).toBe("/owner/supply");
     expect(screen.getByRole("heading", { name: "What agents can inspect" })).toBeDefined();
@@ -29,6 +30,6 @@ describe("supply landing", () => {
 
   it("renders the honest empty state", () => {
     renderWithRouter(<AeSupplyLanding tools={[]} services={[]} />);
-    expect(screen.getByText("No Operations are listed yet.")).toBeDefined();
+    expect(screen.getByText("No tools are listed yet.")).toBeDefined();
   });
 });

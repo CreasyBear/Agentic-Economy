@@ -12,6 +12,8 @@ import {
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/ui/button'
+import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
+import { Skeleton } from '@/components/ui/skeleton'
 import { addExactAmounts, formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 import type { AgentActivityView, AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 import { formatTimestamp } from '@/lib/ui/format-time'
@@ -62,6 +64,8 @@ export function AeOwnerCredit({
   const activity = items
     .flatMap((item) => item.activity.map((entry) => ({ item, entry })))
     .sort((left, right) => right.entry.observedAt - left.entry.observedAt)
+  const firstLoadPending = useFirstLoadPending(loading)
+  const chargesPhase = stagedListPhase({ firstLoadPending, rows: activity })
   const [selected, setSelected] = useState<CreditChargeRow>()
   const columns = useMemo<ColumnDef<CreditChargeRow, unknown>[]>(
     () => [
@@ -114,7 +118,11 @@ export function AeOwnerCredit({
           facts={[
             {
               label: 'Available credit',
-              value: hasUnavailableData ? 'Balance unavailable' : formatCreditAmount(balance),
+              value: firstLoadPending
+                ? 'Checking…'
+                : hasUnavailableData
+                  ? 'Balance unavailable'
+                  : formatCreditAmount(balance),
             },
             {
               label: 'Assignment',
@@ -136,16 +144,13 @@ export function AeOwnerCredit({
         title="Recent charges"
         description="Calls and credit changes for each agent. Open Calls for the full table."
       >
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading recent charges…</p>
-        ) : hasUnavailableData ? (
-          <p className="text-sm text-muted-foreground">Some charge details are temporarily unavailable.</p>
-        ) : activity.length === 0 ? (
-          <AeEmptyState
-            title="No charges yet"
-            description="Browsing does not create paid-call charges."
-          />
-        ) : (
+        {chargesPhase === 'unloaded' ? (
+          <div className="grid gap-intra" aria-busy="true" aria-label="Loading recent charges">
+            <Skeleton className="h-touch w-full" />
+            <Skeleton className="h-touch w-full" />
+            <Skeleton className="h-touch w-full" />
+          </div>
+        ) : chargesPhase === 'cached-rows' ? (
           <AeRecordTable
             columns={columns}
             data={activity}
@@ -155,6 +160,13 @@ export function AeOwnerCredit({
             hideFilter={activity.length <= 1}
             onRowClick={setSelected}
           />
+        ) : activity.length === 0 ? (
+          <AeEmptyState
+            title="No charges yet"
+            description="Browsing does not create paid-call charges."
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">Some charge details are temporarily unavailable.</p>
         )}
       </AeSection>
 
@@ -169,7 +181,7 @@ export function AeOwnerCredit({
           ? {}
           : {
               action: (
-                <Button asChild className="min-h-11">
+                <Button asChild className="min-h-touch">
                   <a href={`/operations/invocations/${selected.entry.invocationRef}`}>View receipt</a>
                 </Button>
               ),
