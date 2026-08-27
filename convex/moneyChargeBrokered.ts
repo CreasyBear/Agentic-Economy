@@ -298,6 +298,13 @@ function brokeredPlanInput(
 const allBrokeredFacts = (facts: readonly boolean[]): boolean =>
   facts.every(Boolean)
 
+function optionalBrokeredRefMatches(
+  persisted: string | undefined,
+  expected: string,
+): boolean {
+  return persisted === undefined || persisted === expected
+}
+
 function replayedPayoutTransactionMatches(input: Readonly<{
   transaction: Doc<'moneyTransactions'> | undefined
   transactionRef: string
@@ -438,6 +445,112 @@ function replayedBrokeredPayoutIsExact(input: Readonly<{
   ])
 }
 
+function brokeredProviderPayoutMaterial(
+  chargeTransactionRef: string,
+  externalRef: string,
+) {
+  const identity = {
+    format: 'money-brokered-external-payout:v1',
+    chargeTransactionRef,
+    externalRef,
+  }
+  return {
+    transactionRef: canonicalDigest(identity as StableHashValue),
+    idempotencyKey: canonicalDigest({
+      ...identity,
+      format: 'money-brokered-external-payout-idempotency:v1',
+    } as StableHashValue),
+    sourceDigest: canonicalDigest({
+      ...identity,
+      format: 'money-brokered-external-payout-source:v1',
+    } as StableHashValue),
+    evidenceRef: canonicalDigest({
+      ...identity,
+      format: 'money-brokered-external-payout-evidence:v1',
+    } as StableHashValue),
+  }
+}
+
+async function replayFinalizedBrokeredInvocationCharge(
+  ctx: MutationCtx,
+  args: BrokeredInvocationChargeFinalizeArgs,
+  admitted: AdmittedInvocationCharge,
+  prior: Doc<'moneyTransactions'>,
+) {
+  if (prior.externalRef !== args.externalRef) {
+    return brokeredRefusal('charge_reconciliation_required')
+  }
+  const input = brokeredPlanInput(admitted, args, args.externalRef)
+  if (input === undefined) return brokeredRefusal('rake_not_configured')
+  const priorUsage = admitted.existingUsage === null
+    ? undefined
+    : domainMoneyUsage(admitted.existingUsage)
+  const replay = planPaidCharge({
+    ...input,
+    priorTransaction: domainMoneyTransaction(prior),
+    ...(priorUsage === undefined ? {} : { priorUsage }),
+    priorEntries: domainMoneyEntries(admitted.priorEntryRows) ?? [],
+  })
+  if (
+    replay.result.kind !== 'accepted'
+    || replay.result.chargeState !== 'paid'
+    || replay.result.providerNet === undefined
+  ) return brokeredRefusal('charge_reconciliation_required')
+  const payout = brokeredProviderPayoutMaterial(prior.transactionRef, args.externalRef)
+  const [payoutByRef, payoutByIdempotency, payoutEntries] = await Promise.all([
+    ctx.db
+      .query('moneyTransactions')
+      .withIndex('by_transactionRef', (query) =>
+        query.eq('transactionRef', payout.transactionRef),
+      )
+      .take(2),
+    ctx.db
+      .query('moneyTransactions')
+      .withIndex('by_idempotencyKey', (query) =>
+        query.eq('idempotencyKey', payout.idempotencyKey),
+      )
+      .take(2),
+    ctx.db
+      .query('moneyLedgerEntries')
+      .withIndex('by_transactionRef', (query) =>
+        query.eq('transactionRef', payout.transactionRef),
+      )
+      .take(2),
+  ])
+  if (!replayedBrokeredPayoutIsExact({
+    payoutByRef,
+    payoutByIdempotency,
+    payoutEntries,
+    transactionRef: payout.transactionRef,
+    idempotencyKey: payout.idempotencyKey,
+    sourceDigest: payout.sourceDigest,
+    evidenceRef: payout.evidenceRef,
+    externalRef: args.externalRef,
+    amount: replay.result.providerNet,
+    admitted,
+    operator: canonicalMoneyAccountPreview(admitted.operatorPrepared),
+    provider: canonicalMoneyAccountPreview(admitted.providerPrepared),
+  })) return brokeredRefusal('charge_reconciliation_required')
+  return replay.result
+}
+
+function pendingBrokeredFinalizationIsApplicable(
+  prior: Doc<'moneyTransactions'>,
+  admitted: AdmittedInvocationCharge,
+  reconciliationEvidenceRefs: readonly string[] | undefined,
+): boolean {
+  const outcomeEvidenceIsPresent = prior.state !== 'outcome_unknown'
+    || (reconciliationEvidenceRefs !== undefined
+      && reconciliationEvidenceRefs.length > 0)
+  return allBrokeredFacts([
+    prior.state === 'pending' || prior.state === 'outcome_unknown',
+    outcomeEvidenceIsPresent,
+    admitted.priorEntryRows.length === 0,
+    admitted.existingUsage === null,
+    prior.budgetState === 'reserved' || prior.budgetState === 'unknown',
+  ])
+}
+
 export async function finalizeBrokeredInvocationChargeHandler(
   ctx: MutationCtx,
   args: BrokeredInvocationChargeFinalizeArgs,
@@ -450,99 +563,16 @@ export async function finalizeBrokeredInvocationChargeHandler(
   if (pairRefusal !== undefined) return pairRefusal
   const prior = admitted.prior
   if (prior === null) return brokeredRefusal('ledger_idempotency_conflict')
-  if (prior.externalRef !== undefined && prior.externalRef !== args.externalRef)
+  if (!optionalBrokeredRefMatches(prior.externalRef, args.externalRef))
     return brokeredRefusal('ledger_idempotency_conflict')
   if (prior.state === 'applied') {
-    if (prior.externalRef !== args.externalRef)
-      return brokeredRefusal('charge_reconciliation_required')
-    const input = brokeredPlanInput(admitted, args, args.externalRef)
-    if (input === undefined) return brokeredRefusal('rake_not_configured')
-    const replay = planPaidCharge({
-      ...input,
-      priorTransaction: domainMoneyTransaction(prior),
-      ...(admitted.existingUsage === null
-        ? {}
-        : (() => {
-            const usage = domainMoneyUsage(admitted.existingUsage)
-            return usage === undefined ? {} : { priorUsage: usage }
-          })()),
-      priorEntries: domainMoneyEntries(admitted.priorEntryRows) ?? [],
-    })
-    if (
-      replay.result.kind !== 'accepted'
-      || replay.result.chargeState !== 'paid'
-      || replay.result.providerNet === undefined
-    )
-      return brokeredRefusal('charge_reconciliation_required')
-    const providerPayoutIdentity = {
-      format: 'money-brokered-external-payout:v1',
-      chargeTransactionRef: prior.transactionRef,
-      externalRef: args.externalRef,
-    }
-    const providerPayoutTransactionRef = canonicalDigest(
-      providerPayoutIdentity as StableHashValue,
-    )
-    const providerPayoutIdempotencyKey = canonicalDigest({
-      ...providerPayoutIdentity,
-      format: 'money-brokered-external-payout-idempotency:v1',
-    } as StableHashValue)
-    const providerPayoutSourceDigest = canonicalDigest({
-      ...providerPayoutIdentity,
-      format: 'money-brokered-external-payout-source:v1',
-    } as StableHashValue)
-    const providerPayoutEvidenceRef = canonicalDigest({
-      ...providerPayoutIdentity,
-      format: 'money-brokered-external-payout-evidence:v1',
-    } as StableHashValue)
-    const providerPayoutAmount = replay.result.providerNet
-    const [payoutByRef, payoutByIdempotency, payoutEntries] = await Promise.all([
-      ctx.db
-        .query('moneyTransactions')
-        .withIndex('by_transactionRef', (query) =>
-          query.eq('transactionRef', providerPayoutTransactionRef),
-        )
-        .take(2),
-      ctx.db
-        .query('moneyTransactions')
-        .withIndex('by_idempotencyKey', (query) =>
-          query.eq('idempotencyKey', providerPayoutIdempotencyKey),
-        )
-        .take(2),
-      ctx.db
-        .query('moneyLedgerEntries')
-        .withIndex('by_transactionRef', (query) =>
-          query.eq('transactionRef', providerPayoutTransactionRef),
-        )
-        .take(2),
-    ])
-    const operatorRow = canonicalMoneyAccountPreview(admitted.operatorPrepared)
-    const providerRow = canonicalMoneyAccountPreview(admitted.providerPrepared)
-    if (!replayedBrokeredPayoutIsExact({
-      payoutByRef,
-      payoutByIdempotency,
-      payoutEntries,
-      transactionRef: providerPayoutTransactionRef,
-      idempotencyKey: providerPayoutIdempotencyKey,
-      sourceDigest: providerPayoutSourceDigest,
-      evidenceRef: providerPayoutEvidenceRef,
-      externalRef: args.externalRef,
-      amount: providerPayoutAmount,
-      admitted,
-      operator: operatorRow,
-      provider: providerRow,
-    }))
-      return brokeredRefusal('charge_reconciliation_required')
-    return replay.result
+    return replayFinalizedBrokeredInvocationCharge(ctx, args, admitted, prior)
   }
-  if (prior.state !== 'pending' && prior.state !== 'outcome_unknown')
-    return brokeredRefusal('charge_reconciliation_required')
-  if (prior.state === 'outcome_unknown' &&
-      (args.reconciliationEvidenceRefs === undefined ||
-        args.reconciliationEvidenceRefs.length === 0))
-    return brokeredRefusal('charge_reconciliation_required')
-  if (admitted.priorEntryRows.length !== 0 || admitted.existingUsage !== null)
-    return brokeredRefusal('charge_reconciliation_required')
-  if (prior.budgetState !== 'reserved' && prior.budgetState !== 'unknown')
+  if (!pendingBrokeredFinalizationIsApplicable(
+    prior,
+    admitted,
+    args.reconciliationEvidenceRefs,
+  ))
     return brokeredRefusal('charge_reconciliation_required')
   const input = brokeredPlanInput(admitted, args, args.externalRef)
   if (input === undefined) return brokeredRefusal('rake_not_configured')
@@ -595,26 +625,10 @@ export async function finalizeBrokeredInvocationChargeHandler(
   if (held === undefined) return brokeredRefusal('charge_reconciliation_required')
   const nextHeld = subtractExactAmounts(held, admitted.amount)
   if (nextHeld === undefined) return brokeredRefusal('charge_reconciliation_required')
-  const providerPayoutIdentity = {
-    format: 'money-brokered-external-payout:v1',
-    chargeTransactionRef: plan.transaction.transactionRef,
-    externalRef: args.externalRef,
-  }
-  const providerPayoutTransactionRef = canonicalDigest(
-    providerPayoutIdentity as StableHashValue,
+  const providerPayout = brokeredProviderPayoutMaterial(
+    plan.transaction.transactionRef,
+    args.externalRef,
   )
-  const providerPayoutIdempotencyKey = canonicalDigest({
-    ...providerPayoutIdentity,
-    format: 'money-brokered-external-payout-idempotency:v1',
-  } as StableHashValue)
-  const providerPayoutSourceDigest = canonicalDigest({
-    ...providerPayoutIdentity,
-    format: 'money-brokered-external-payout-source:v1',
-  } as StableHashValue)
-  const providerPayoutEvidenceRef = canonicalDigest({
-    ...providerPayoutIdentity,
-    format: 'money-brokered-external-payout-evidence:v1',
-  } as StableHashValue)
   const providerPayoutAmount = plan.result.providerNet
   if (providerPayoutAmount === undefined)
     return brokeredRefusal('rake_not_configured')
@@ -664,10 +678,10 @@ export async function finalizeBrokeredInvocationChargeHandler(
   })
   await applyPreparedMoneyUsageEvent(ctx, usagePlan)
   await ctx.db.insert('moneyTransactions', {
-    transactionRef: providerPayoutTransactionRef,
+    transactionRef: providerPayout.transactionRef,
     kind: 'payout_accrual',
-    idempotencyKey: providerPayoutIdempotencyKey,
-    inputDigest: providerPayoutSourceDigest,
+    idempotencyKey: providerPayout.idempotencyKey,
+    inputDigest: providerPayout.sourceDigest,
     principalId: `business:${admitted.businessId}`,
     currency: providerPayoutAmount.currency,
     amountUnits: providerPayoutAmount.units,
@@ -679,18 +693,18 @@ export async function finalizeBrokeredInvocationChargeHandler(
     updatedAt: args.observedAt,
   })
   await ctx.db.insert('moneyLedgerEntries', {
-    entryRef: `${providerPayoutTransactionRef}:external-settlement`,
+    entryRef: `${providerPayout.transactionRef}:external-settlement`,
     accountRef: providerRow.accountRef,
     entryType: 'payout_accrual',
     direction: 'debit',
     amountUnits: providerPayoutAmount.units,
     currency: providerPayoutAmount.currency,
     exponent: providerPayoutAmount.exponent,
-    transactionRef: providerPayoutTransactionRef,
-    idempotencyKey: providerPayoutIdempotencyKey,
+    transactionRef: providerPayout.transactionRef,
+    idempotencyKey: providerPayout.idempotencyKey,
     businessId: admitted.businessId,
-    sourceDigest: providerPayoutSourceDigest,
-    evidenceRefs: [providerPayoutEvidenceRef],
+    sourceDigest: providerPayout.sourceDigest,
+    evidenceRefs: [providerPayout.evidenceRef],
     createdAt: args.observedAt,
   })
   return plan.result
