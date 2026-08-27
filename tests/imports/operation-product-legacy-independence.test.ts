@@ -42,8 +42,5 @@ describe('Operation product legacy independence', () => {
       'src/modules/action-invocation/public.ts',
       'src/modules/action-invocation/index.ts',
     ].filter((path) => retiredRuntimeNoun.test(readFileSync(path, 'utf8')))).toEqual([])
-
-    expect(readFileSync('src/modules/action-invocation/compatibility.ts', 'utf8'))
-      .toContain('CustomerRequestCanonicalClaimMaterial')
   })
 })

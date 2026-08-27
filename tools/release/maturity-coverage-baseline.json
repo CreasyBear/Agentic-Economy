@@ -1674,12 +1674,6 @@
       "functions": 3,
       "branches": 1
     },
-    "src/lib/ui/journey-events.ts": {
-      "lines": 14,
-      "statements": 14,
-      "functions": 1,
-      "branches": 10
-    },
     "src/lib/ui/status-presentation.ts": {
       "lines": 29,
       "statements": 29,

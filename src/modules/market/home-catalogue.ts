@@ -2,7 +2,6 @@ import { z } from "zod";
 
 import type { OperationCardViewModel } from "@/modules/market/operation-view-model";
 import { readMarketRouteServer } from "@/modules/market/market.functions";
-import { readStoredProjectQueryCompatibility } from "@/modules/market/project-query-compatibility";
 
 const HOME_CAPABILITY_LIMIT = 6;
 
@@ -12,7 +11,6 @@ const rootSearchSchema = z.object({
 
 export type RootSearchParams = {
   q?: string | undefined;
-  project?: string | undefined;
 };
 
 export type HomeCapabilityRead =
@@ -23,7 +21,7 @@ export type HomeCapabilityRead =
     }>
   | Readonly<{ kind: "unavailable" }>;
 
-/** Home never reads project authority. Old URL acceptance is isolated below. */
+/** Home never reads project authority. */
 export async function loadRootRoute(
   _search: RootSearchParams,
 ): Promise<undefined> {
@@ -37,7 +35,6 @@ export function validateRootSearch(
   const query = parsed.q?.trim() ?? "";
   return {
     ...(query.length === 0 ? {} : { q: query }),
-    ...readStoredProjectQueryCompatibility(search),
   };
 }
 

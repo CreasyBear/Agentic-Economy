@@ -2,16 +2,16 @@ export const OperationKeyStatusValues = ['in_progress', 'succeeded', 'failed_ret
 
 import {
   ActorKindValues,
-  AuditEventTypeValues as StoredAuditEventTypeValues,
-  AuditTargetTypeValues as StoredAuditTargetTypeValues,
+  AuditEventTypeValues as AllAuditEventTypeValues,
+  AuditTargetTypeValues as AllAuditTargetTypeValues,
 } from '@/modules/common/audit-events'
 
 export { ActorKindValues }
 
-type StoredAuditEventType = (typeof StoredAuditEventTypeValues)[number]
-type StoredAuditTargetType = (typeof StoredAuditTargetTypeValues)[number]
-export type CurrentAuditEventType = Exclude<StoredAuditEventType, `business_action.${string}`>
-export type CurrentAuditTargetType = Exclude<StoredAuditTargetType, `business_action_${string}`>
+type AnyAuditEventType = (typeof AllAuditEventTypeValues)[number]
+type AnyAuditTargetType = (typeof AllAuditTargetTypeValues)[number]
+export type CurrentAuditEventType = Exclude<AnyAuditEventType, `business_action.${string}`>
+export type CurrentAuditTargetType = Exclude<AnyAuditTargetType, `business_action_${string}`>
 
 function requireNonEmpty<T extends string>(values: readonly T[]): readonly [T, ...T[]] {
   const [first, ...rest] = values
@@ -22,13 +22,13 @@ function requireNonEmpty<T extends string>(values: readonly T[]): readonly [T, .
 }
 
 export const AuditEventTypeValues = requireNonEmpty(
-  StoredAuditEventTypeValues.filter(
+  AllAuditEventTypeValues.filter(
     (value): value is CurrentAuditEventType => !value.startsWith('business_action.'),
   ),
 )
 
 export const AuditTargetTypeValues = requireNonEmpty(
-  StoredAuditTargetTypeValues.filter(
+  AllAuditTargetTypeValues.filter(
     (value): value is CurrentAuditTargetType => !value.startsWith('business_action_'),
   ),
 )
