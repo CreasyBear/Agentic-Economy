@@ -31,7 +31,7 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await applyVercelProtectionBypassToPage(anonymousPage, baseUrl)
   await anonymousPage.goto('/t/new')
 
-  const operationChat = anonymousPage.getByRole('region', { name: 'Operation chat' })
+  const operationChat = anonymousPage.getByRole('region', { name: 'Chat' })
   await expect(operationChat).toBeVisible()
   await expect(operationChat.getByRole('button', { name: 'Sign in' })).toBeVisible()
 
@@ -57,7 +57,7 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await applyVercelProtectionBypassToPage(ownerPage, baseUrl)
   await ownerPage.goto('/t/new')
 
-  const ownerChat = ownerPage.getByRole('region', { name: 'Operation chat' })
+  const ownerChat = ownerPage.getByRole('region', { name: 'Chat' })
   await expect(ownerChat.getByText('Saved to your account', { exact: true })).toBeVisible()
   await expect(ownerChat.getByRole('complementary', { name: 'Conversation history' })).toBeVisible()
   await expect(ownerChat.getByRole('button', { name: 'New chat' }).first()).toBeVisible()
@@ -76,10 +76,10 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await expectAssistantResponse(ownerAssistant)
   const ownerSearchCard = ownerTranscript.locator('[data-operation-tool="registry.operations.search"]')
   await expect(ownerSearchCard).toHaveCount(1, { timeout: 40_000 })
-  await expect(ownerSearchCard.getByText('Search operations', { exact: true })).toBeVisible()
+  await expect(ownerSearchCard.getByText('Search tools', { exact: true })).toBeVisible()
   await expect(ownerSearchCard.getByText('Complete', { exact: true })).toBeVisible()
   await expect(ownerSearchCard.getByText('Working', { exact: true })).toHaveCount(0)
-  await expect(ownerSearchCard.getByText(/^\d+ operations$/u)).toBeVisible()
+  await expect(ownerSearchCard.getByText(/^\d+ tools$/u)).toBeVisible()
   await expect(ownerTranscript.locator('[data-operation-tool="operation.execute"]')).toHaveCount(0)
 
   await ownerChat.getByRole('button', { name: 'Create share link' }).click()
@@ -102,16 +102,16 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await applyVercelProtectionBypassToPage(publicPage, baseUrl)
   await publicPage.goto(shareUrl.toString())
 
-  const sharedChat = publicPage.getByRole('region', { name: 'Shared operation chat' })
+  const sharedChat = publicPage.getByRole('region', { name: 'Shared chat' })
   await expect(sharedChat).toBeVisible()
   await expect(sharedChat.getByText(ownerPrompt, { exact: true })).toBeVisible()
   await expectAssistantResponse(sharedChat.getByRole('article', { name: 'Assistant' }).last())
   const sharedSearchCard = sharedChat.locator('[data-operation-tool="registry.operations.search"]')
   await expect(sharedSearchCard).toHaveCount(1)
-  await expect(sharedSearchCard.getByText('Search operations', { exact: true })).toBeVisible()
+  await expect(sharedSearchCard.getByText('Search tools', { exact: true })).toBeVisible()
   await expect(sharedSearchCard.getByText('Complete', { exact: true })).toBeVisible()
   await expect(sharedSearchCard.getByText('Working', { exact: true })).toHaveCount(0)
-  await expect(sharedSearchCard.getByText(/^\d+ operations found$/u)).toBeVisible()
+  await expect(sharedSearchCard.getByText(/^\d+ tools$/u)).toBeVisible()
   await expect(sharedChat.locator('[data-operation-tool="operation.execute"]')).toHaveCount(0)
   expect(await sharedChat.evaluate((element) => element.outerHTML)).not.toMatch(
     /\b(?:toolCallId|input|output|endpoint|headers|raw)\b|registry_operations_search/iu,

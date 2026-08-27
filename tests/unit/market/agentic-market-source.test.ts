@@ -8,6 +8,8 @@ import {
 } from "@/modules/market/agentic-market-source";
 import {
   MARKET_MAX_DAILY_POINTS,
+  MARKET_SOURCE_DELAYED_AFTER_MS,
+  MARKET_SOURCE_UNAVAILABLE_AFTER_MS,
   marketSourceStatus,
 } from "@/modules/market/contracts";
 
@@ -133,10 +135,10 @@ describe("AgenticMarketSource", () => {
   });
 
   it("classifies current, delayed, and unavailable last-known-good snapshots", () => {
-    const now = 60 * 60_000;
+    const now = 48 * 60 * 60_000;
     expect(marketSourceStatus(now - 5 * 60_000, now)).toBe("live");
-    expect(marketSourceStatus(now - 15 * 60_000, now)).toBe("delayed");
-    expect(marketSourceStatus(now - 60 * 60_000, now)).toBe("unavailable");
+    expect(marketSourceStatus(now - MARKET_SOURCE_DELAYED_AFTER_MS, now)).toBe("delayed");
+    expect(marketSourceStatus(now - MARKET_SOURCE_UNAVAILABLE_AFTER_MS, now)).toBe("unavailable");
     expect(marketSourceStatus(undefined, now)).toBe("unavailable");
   });
 });

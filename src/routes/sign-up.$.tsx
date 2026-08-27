@@ -1,7 +1,7 @@
 import { SignUp } from '@clerk/tanstack-react-start'
 import { Link, createFileRoute } from '@tanstack/react-router'
 
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import {
   AeSiteAuthPanel,
   AeSiteAuthStage,
@@ -46,7 +46,7 @@ function SignUpRoute() {
   const switchSearch = redirect === undefined ? {} : { redirect }
 
   return (
-    <AePublicShell>
+    <AePublicPage>
       <AeSiteAuthStage labelledBy="sign-up-context-heading" url="/sign-up">
         {isLocalE2E ? (
           <AeSiteAuthPanel
@@ -108,6 +108,6 @@ function SignUpRoute() {
           </AeSiteAuthPanel>
         )}
       </AeSiteAuthStage>
-    </AePublicShell>
+    </AePublicPage>
   )
 }

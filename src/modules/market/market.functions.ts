@@ -6,11 +6,11 @@ import {
   readMarketRouteProjection,
 } from "./server";
 
-const inputSchema = z.strictObject({
+const inputSchema = z.object({
   window: marketWindowSchema,
   query: z.string().max(200).optional(),
   availability: z.enum(["routeable", "integrated", "unavailable"]).optional(),
-  cursor: z.string().max(512).optional(),
+  cursor: z.string().max(2_000).optional(),
 });
 
 export const readMarketRouteServer = createServerFn({ method: "GET" })

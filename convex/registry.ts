@@ -112,8 +112,8 @@ export const searchPublicBusinessOfferingSupply = queryGeneric({
     const tokens = registrySearchTokens(needle)
     if (tokens.length === 0) return paginateOfferingSupply([], input, needle)
     const locationKey = resolveSearchLocationKey(args)
-    const documents = await readMatchingSearchDocuments(ctx.db, tokens.join(' '), tokens, locationKey)
-    const candidateSlugs = uniqueBusinessSlugs(documents)
+    const documents = await readMatchingSearchDocuments(ctx.db, tokens.join(' '), tokens, locationKey, SEARCH_CANDIDATE_SLUG_CAP)
+    const candidateSlugs = uniqueBusinessSlugs(documents).slice(0, SEARCH_CANDIDATE_SLUG_CAP)
     const businesses = (await Promise.all(candidateSlugs.map((slug) => ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', slug)).unique()))).filter((business): business is Doc<'businesses'> => business !== null)
     const offeringSupplyReadPort = createOfferingSupplyReadPort(ctx.db)
     const supply = (await Promise.all(businesses.map((business) => readOfferingSupplyForBusiness(offeringSupplyReadPort, business)))).filter((item): item is OfferingSupplyDto => item !== undefined && matchesOfferingSupply(item, tokens, locationKey))
@@ -185,25 +185,35 @@ export async function readOfferingSupplyForBusiness(
   if (projected.offerings.length === 0) return undefined
   return snapshot.status === 'projection_pending' ? { ...projected, disposition: 'stale' } : projected
 }
-const SEARCH_DOCUMENT_PAGE_SIZE = 250
+const SEARCH_DOCUMENT_PAGE_SIZE = 50
+const MAX_SEARCH_DOCUMENT_PAGES = 2
+const SEARCH_CANDIDATE_SLUG_CAP = 50
 
 async function readMatchingSearchDocuments(
   db: DatabaseReader,
   searchText: string,
   tokens: readonly string[],
   locationKey: string | undefined,
+  slugCap: number,
 ): Promise<Doc<'registrySearchDocuments'>[]> {
   const documents: Doc<'registrySearchDocuments'>[] = []
+  const slugs = new Set<string>()
   let cursor: string | null = null
-  for (;;) {
+  for (let pages = 0; pages < MAX_SEARCH_DOCUMENT_PAGES; pages += 1) {
     const page = await db.query('registrySearchDocuments')
       .withSearchIndex('search_searchText_by_publicStatus', (search) => search.search('searchText', searchText).eq('publicStatus', 'published'))
       .paginate({ cursor, numItems: SEARCH_DOCUMENT_PAGE_SIZE })
-    documents.push(...page.page.filter((document) => matchesSearchDocument(document, tokens, locationKey)))
+    for (const document of page.page) {
+      if (!matchesSearchDocument(document, tokens, locationKey)) continue
+      documents.push(document)
+      if (document.businessSlug.length > 0) slugs.add(document.businessSlug)
+      if (slugs.size >= slugCap) return documents
+    }
     if (page.isDone) return documents
     if (page.continueCursor === cursor) throw new Error('registry_search_cursor_stalled')
     cursor = page.continueCursor
   }
+  return documents
 }
 
 

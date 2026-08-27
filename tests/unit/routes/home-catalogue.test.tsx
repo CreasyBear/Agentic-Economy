@@ -65,17 +65,17 @@ describe('catalogue-first home', () => {
     const row = screen.getByRole('listitem')
     expect(
       within(row).getByRole('link', {
-        name: 'Invoice extract, 1 Operation, from USD 1.25',
+        name: 'Invoice extract, Ledger Labs, from USD 1.25',
       }),
     ).toBeTruthy()
     expect(within(row).getByText('Extract line items and totals from a supplier invoice.')).toBeTruthy()
     expect(within(row).getByText('Data')).toBeTruthy()
-    expect(screen.queryByText('Ledger Labs')).toBeNull()
+    expect(within(row).getByText('Ledger Labs')).toBeTruthy()
     expect(screen.queryByText('Total price')).toBeNull()
     expect(screen.queryByRole('link', { name: 'Use Invoice extraction' })).toBeNull()
     expect(
       within(row).getByRole('link', {
-        name: 'Invoice extract, 1 Operation, from USD 1.25',
+        name: 'Invoice extract, Ledger Labs, from USD 1.25',
       }).getAttribute('href'),
     ).toContain('capability=invoice.extract')
   })
@@ -94,6 +94,8 @@ describe('catalogue-first home', () => {
     )
 
     expect(screen.getByText(/The tool catalog is temporarily unavailable/)).toBeTruthy()
+    const retry = screen.getByRole('link', { name: 'Try again' })
+    expect(retry.getAttribute('href')).toBe('/')
     view.rerender(
       <RouterContextProvider router={router}>
         <HomeCapabilityResults read={{ kind: 'ok', operations: [], matchedCount: 0 }} />
@@ -101,5 +103,7 @@ describe('catalogue-first home', () => {
     )
     expect(screen.getByText(/No tools are ready right now/)).toBeTruthy()
     expect(screen.queryByText('Invoice extract')).toBeNull()
+    const browse = screen.getAllByRole('link', { name: 'Browse tools' })
+    expect(browse.some((link) => link.getAttribute('href')?.includes('/market'))).toBe(true)
   })
 })

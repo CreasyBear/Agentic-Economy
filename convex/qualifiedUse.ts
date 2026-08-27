@@ -19,7 +19,7 @@ import {
   recordQualifiedUsePayoutAllocation,
   resolveCanonicalInvocationAuthority,
   type CanonicalQualifiedUseAuthority,
-} from './moneyQualifiedUsePayout'
+} from './lib/qualifiedUsePayout'
 import type { Id } from './_generated/dataModel'
 import { recordMarketEvidenceFact } from './marketEvidence'
 

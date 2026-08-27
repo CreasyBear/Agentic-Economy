@@ -11,6 +11,7 @@ import {
   FACILITATOR_DISCOVERY_URLS,
   isAllowlistedFacilitatorDiscoveryUrl,
   parseFacilitatorDiscoveryPage,
+  paymentRequiredFromDiscoveryItem,
 } from "@/modules/capability-supply/internal/facilitator-discovery-ingest";
 import { admitBazaarDiscoveryInfo } from "@/modules/capability-supply/internal/publication-importer-x402-bazaar";
 import { isRecord } from "@/modules/common/is-record";
@@ -100,6 +101,65 @@ describe("facilitator discovery ingest", () => {
       input,
       output: { type: "json", example: Object.fromEntries(Array.from({ length: 65 }, (_, index) => [`field${index}`, true])) },
     })).toEqual({ kind: "refused", reason: "schema_missing" });
+  });
+
+  it("keeps a searchable offering when a v2 catalog row has a URL string resource and no tags", async () => {
+    const captured = structuredClone(timezonePaymentRequired);
+    expect(captured).toBeDefined();
+    if (captured === undefined || !isRecord(captured.resource)) {
+      throw new Error("expected timezone resource");
+    }
+    const url = captured.resource.url;
+    expect(typeof url).toBe("string");
+    const admission = await admitOfficialFacilitatorDiscoveryItems([{
+      ...captured,
+      resource: url,
+    }]);
+    expect(admission.skipped).toEqual([]);
+    expect(admission.admitted[0]?.offering.searchTerms.length).toBeGreaterThan(0);
+  });
+
+  it("normalizes x402 v2 catalog items whose resource is a URL string", () => {
+    const paymentRequired = paymentRequiredFromDiscoveryItem({
+      ...noBazaarItem,
+      resource: "https://example.test/no-bazaar",
+      description: "String-resource catalog row",
+    });
+    expect(paymentRequired).toMatchObject({
+      x402Version: 2,
+      resource: {
+        url: "https://example.test/no-bazaar",
+        description: "String-resource catalog row",
+      },
+    });
+    expect(decideFacilitatorDiscoveryItem({
+      ...noBazaarItem,
+      resource: "https://example.test/no-bazaar",
+    })).toEqual({ kind: "skip", reason: "bazaar_missing" });
+  });
+
+  it("names discovered offerings as jobs instead of URL paths", () => {
+    const decision = decideFacilitatorDiscoveryItem(
+      {
+        ...noBazaarItem,
+        resource: {
+          url: "https://api.example.test/api/v1/amazon-search",
+          description: "Search Amazon product listings and return structured results.",
+        },
+      },
+      {
+        kind: "admitted",
+        method: "POST",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        query: undefined,
+      },
+    );
+    expect(decision.kind).toBe("admit");
+    if (decision.kind !== "admit") return;
+    expect(decision.import.commercial.offering.presentation.label).toBe("Amazon Search");
+    expect(decision.import.contract.name).toBe("Amazon Search");
+    expect(decision.import.commercial.offering.searchTerms).toContain("Amazon Search");
   });
 
   it("allowlists PayAI and CDP REST catalogs only", () => {

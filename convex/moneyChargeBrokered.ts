@@ -1,4 +1,5 @@
 import type { MutationCtx } from './_generated/server'
+import type { Doc } from './_generated/dataModel'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '../src/modules/common/stable-hash'
 import {
@@ -294,6 +295,149 @@ function brokeredPlanInput(
   }
 }
 
+const allBrokeredFacts = (facts: readonly boolean[]): boolean =>
+  facts.every(Boolean)
+
+function replayedPayoutTransactionMatches(input: Readonly<{
+  transaction: Doc<'moneyTransactions'> | undefined
+  transactionRef: string
+  idempotencyKey: string
+  sourceDigest: string
+  externalRef: string
+  amount: ExactAmount
+  admitted: AdmittedInvocationCharge
+  expectedProviderVersion: number
+}>): boolean {
+  const {
+    transaction,
+    transactionRef,
+    idempotencyKey,
+    sourceDigest,
+    externalRef,
+    amount,
+    admitted,
+    expectedProviderVersion,
+  } = input
+  if (transaction === undefined) return false
+  return allBrokeredFacts([
+    transaction.transactionRef === transactionRef,
+    transaction.kind === 'payout_accrual',
+    transaction.idempotencyKey === idempotencyKey,
+    transaction.inputDigest === sourceDigest,
+    transaction.principalId === `business:${admitted.businessId}`,
+    transaction.accountId === undefined,
+    transaction.currency === amount.currency,
+    transaction.amountUnits === amount.units,
+    transaction.exponent === amount.exponent,
+    transaction.state === 'applied',
+    transaction.expectedAccountVersion === expectedProviderVersion,
+    transaction.externalRef === externalRef,
+    transaction.reversalOf === undefined,
+  ])
+}
+
+function replayedProviderAccountMatches(
+  provider: ReturnType<typeof canonicalMoneyAccountPreview>,
+  admitted: AdmittedInvocationCharge,
+  amount: ExactAmount,
+): boolean {
+  return allBrokeredFacts([
+    provider.accountRef === admitted.providerAccountRef,
+    provider.accountKind === 'provider_earnings',
+    provider.businessId === admitted.businessId,
+    provider.currency === amount.currency,
+    provider.exponent === amount.exponent,
+    provider.state === 'active',
+  ])
+}
+
+function replayedProviderDebitMatches(input: Readonly<{
+  entry: Doc<'moneyLedgerEntries'> | undefined
+  transactionRef: string
+  idempotencyKey: string
+  sourceDigest: string
+  evidenceRef: string
+  amount: ExactAmount
+  admitted: AdmittedInvocationCharge
+}>): boolean {
+  const {
+    entry,
+    transactionRef,
+    idempotencyKey,
+    sourceDigest,
+    evidenceRef,
+    amount,
+    admitted,
+  } = input
+  if (entry === undefined) return false
+  return allBrokeredFacts([
+    entry.entryRef === `${transactionRef}:external-settlement`,
+    entry.accountRef === admitted.providerAccountRef,
+    entry.entryType === 'payout_accrual',
+    entry.direction === 'debit',
+    entry.amountUnits === amount.units,
+    entry.currency === amount.currency,
+    entry.exponent === amount.exponent,
+    entry.transactionRef === transactionRef,
+    entry.idempotencyKey === idempotencyKey,
+    entry.businessId === admitted.businessId,
+    entry.principalId === undefined,
+    entry.invocationRef === undefined,
+    entry.attemptRef === undefined,
+    entry.sourceDigest === sourceDigest,
+    entry.evidenceRefs.length === 1,
+    entry.evidenceRefs[0] === evidenceRef,
+    entry.reversalOf === undefined,
+  ])
+}
+
+function replayedBrokeredPayoutIsExact(input: Readonly<{
+  payoutByRef: readonly Doc<'moneyTransactions'>[]
+  payoutByIdempotency: readonly Doc<'moneyTransactions'>[]
+  payoutEntries: readonly Doc<'moneyLedgerEntries'>[]
+  transactionRef: string
+  idempotencyKey: string
+  sourceDigest: string
+  evidenceRef: string
+  externalRef: string
+  amount: ExactAmount
+  admitted: AdmittedInvocationCharge
+  operator: ReturnType<typeof canonicalMoneyAccountPreview>
+  provider: ReturnType<typeof canonicalMoneyAccountPreview>
+}>): boolean {
+  const transaction = input.payoutByRef[0]
+  const heldAfterRelease = heldBrokeredAmount(input.operator)
+  return allBrokeredFacts([
+    input.payoutByRef.length === 1,
+    input.payoutByIdempotency.length === 1,
+    transaction !== undefined,
+    input.payoutByIdempotency[0]?._id === transaction?._id,
+    input.payoutEntries.length === 1,
+    replayedPayoutTransactionMatches({
+      transaction,
+      transactionRef: input.transactionRef,
+      idempotencyKey: input.idempotencyKey,
+      sourceDigest: input.sourceDigest,
+      externalRef: input.externalRef,
+      amount: input.amount,
+      admitted: input.admitted,
+      expectedProviderVersion: input.provider.version - 1,
+    }),
+    replayedProviderAccountMatches(input.provider, input.admitted, input.amount),
+    heldAfterRelease !== undefined,
+    heldAfterRelease?.units === '0',
+    replayedProviderDebitMatches({
+      entry: input.payoutEntries[0],
+      transactionRef: input.transactionRef,
+      idempotencyKey: input.idempotencyKey,
+      sourceDigest: input.sourceDigest,
+      evidenceRef: input.evidenceRef,
+      amount: input.amount,
+      admitted: input.admitted,
+    }),
+  ])
+}
+
 export async function finalizeBrokeredInvocationChargeHandler(
   ctx: MutationCtx,
   args: BrokeredInvocationChargeFinalizeArgs,
@@ -371,57 +515,22 @@ export async function finalizeBrokeredInvocationChargeHandler(
         )
         .take(2),
     ])
-    const payoutTransaction = payoutByRef[0]
-    const providerDebit = payoutEntries[0]
     const operatorRow = canonicalMoneyAccountPreview(admitted.operatorPrepared)
     const providerRow = canonicalMoneyAccountPreview(admitted.providerPrepared)
-    const heldAfterRelease = heldBrokeredAmount(operatorRow)
-    if (
-      payoutByRef.length !== 1
-      || payoutByIdempotency.length !== 1
-      || payoutTransaction === undefined
-      || payoutByIdempotency[0]?._id !== payoutTransaction._id
-      || payoutEntries.length !== 1
-      || providerDebit === undefined
-      || payoutTransaction.transactionRef !== providerPayoutTransactionRef
-      || payoutTransaction.kind !== 'payout_accrual'
-      || payoutTransaction.idempotencyKey !== providerPayoutIdempotencyKey
-      || payoutTransaction.inputDigest !== providerPayoutSourceDigest
-      || payoutTransaction.principalId !== `business:${admitted.businessId}`
-      || payoutTransaction.accountId !== undefined
-      || payoutTransaction.currency !== providerPayoutAmount.currency
-      || payoutTransaction.amountUnits !== providerPayoutAmount.units
-      || payoutTransaction.exponent !== providerPayoutAmount.exponent
-      || payoutTransaction.state !== 'applied'
-      || payoutTransaction.expectedAccountVersion !== providerRow.version - 1
-      || payoutTransaction.externalRef !== args.externalRef
-      || payoutTransaction.reversalOf !== undefined
-      || providerRow.accountRef !== admitted.providerAccountRef
-      || providerRow.accountKind !== 'provider_earnings'
-      || providerRow.businessId !== admitted.businessId
-      || providerRow.currency !== providerPayoutAmount.currency
-      || providerRow.exponent !== providerPayoutAmount.exponent
-      || providerRow.state !== 'active'
-      || heldAfterRelease === undefined
-      || heldAfterRelease.units !== '0'
-      || providerDebit.entryRef !== `${providerPayoutTransactionRef}:external-settlement`
-      || providerDebit.accountRef !== admitted.providerAccountRef
-      || providerDebit.entryType !== 'payout_accrual'
-      || providerDebit.direction !== 'debit'
-      || providerDebit.amountUnits !== providerPayoutAmount.units
-      || providerDebit.currency !== providerPayoutAmount.currency
-      || providerDebit.exponent !== providerPayoutAmount.exponent
-      || providerDebit.transactionRef !== providerPayoutTransactionRef
-      || providerDebit.idempotencyKey !== providerPayoutIdempotencyKey
-      || providerDebit.businessId !== admitted.businessId
-      || providerDebit.principalId !== undefined
-      || providerDebit.invocationRef !== undefined
-      || providerDebit.attemptRef !== undefined
-      || providerDebit.sourceDigest !== providerPayoutSourceDigest
-      || providerDebit.evidenceRefs.length !== 1
-      || providerDebit.evidenceRefs[0] !== providerPayoutEvidenceRef
-      || providerDebit.reversalOf !== undefined
-    )
+    if (!replayedBrokeredPayoutIsExact({
+      payoutByRef,
+      payoutByIdempotency,
+      payoutEntries,
+      transactionRef: providerPayoutTransactionRef,
+      idempotencyKey: providerPayoutIdempotencyKey,
+      sourceDigest: providerPayoutSourceDigest,
+      evidenceRef: providerPayoutEvidenceRef,
+      externalRef: args.externalRef,
+      amount: providerPayoutAmount,
+      admitted,
+      operator: operatorRow,
+      provider: providerRow,
+    }))
       return brokeredRefusal('charge_reconciliation_required')
     return replay.result
   }

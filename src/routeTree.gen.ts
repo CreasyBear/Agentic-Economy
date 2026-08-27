@@ -46,6 +46,7 @@ import { Route as DotwellKnownUcpRouteImport } from './routes/[.]well-known/ucp'
 import { Route as DotwellKnownOauthProtectedResourceRouteImport } from './routes/[.]well-known/oauth-protected-resource'
 import { Route as DotwellKnownOauthAuthorizationServerRouteImport } from './routes/[.]well-known/oauth-authorization-server'
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
+import { Route as DotwellKnownApiCatalogRouteImport } from './routes/[.]well-known/api-catalog'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as OperationsInvocationsInvocationRefRouteImport } from './routes/operations.invocations.$invocationRef'
 import { Route as ApiV1ServicesRouteImport } from './routes/api.v1.services'
@@ -79,6 +80,11 @@ import { Route as ApiV1MarketOperationsInspectPlanRouteImport } from './routes/a
 import { Route as ApiV1MarketOperationsDetailRouteImport } from './routes/api.v1.market-operations.detail'
 import { Route as ApiV1MarketOperationsCompareRouteImport } from './routes/api.v1.market-operations.compare'
 import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
+import { Route as OperatorOwnerSettingsWorkspaceRouteImport } from './routes/_operator/owner.settings.workspace'
+import { Route as OperatorOwnerSettingsPayoutsRouteImport } from './routes/_operator/owner.settings.payouts'
+import { Route as OperatorOwnerSettingsMembersRouteImport } from './routes/_operator/owner.settings.members'
+import { Route as OperatorOwnerSettingsDevelopersRouteImport } from './routes/_operator/owner.settings.developers'
+import { Route as OperatorOwnerSettingsConnectionsRouteImport } from './routes/_operator/owner.settings.connections'
 import { Route as OperatorOwnerOfferingsNewRouteImport } from './routes/_operator/owner.offerings.new'
 import { Route as OperatorOwnerOfferingsOfferingRefRouteImport } from './routes/_operator/owner.offerings.$offeringRef'
 import { Route as ApiV1OperationsInvocationRefReconcileRouteImport } from './routes/api.v1.operations.$invocationRef.reconcile'
@@ -272,6 +278,11 @@ const DotwellKnownHttpMessageSignaturesDirectoryRoute =
     path: '/.well-known/http-message-signatures-directory',
     getParentRoute: () => rootRouteImport,
   } as any)
+const DotwellKnownApiCatalogRoute = DotwellKnownApiCatalogRouteImport.update({
+  id: '/.well-known/api-catalog',
+  path: '/.well-known/api-catalog',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SlugUcpRoute = SlugUcpRouteImport.update({
   id: '/ucp',
   path: '/ucp',
@@ -451,6 +462,36 @@ const OperatorOwnerSupplyOfferingRefRoute =
     path: '/$offeringRef',
     getParentRoute: () => OperatorOwnerSupplyRoute,
   } as any)
+const OperatorOwnerSettingsWorkspaceRoute =
+  OperatorOwnerSettingsWorkspaceRouteImport.update({
+    id: '/workspace',
+    path: '/workspace',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsPayoutsRoute =
+  OperatorOwnerSettingsPayoutsRouteImport.update({
+    id: '/payouts',
+    path: '/payouts',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsMembersRoute =
+  OperatorOwnerSettingsMembersRouteImport.update({
+    id: '/members',
+    path: '/members',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsDevelopersRoute =
+  OperatorOwnerSettingsDevelopersRouteImport.update({
+    id: '/developers',
+    path: '/developers',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
+const OperatorOwnerSettingsConnectionsRoute =
+  OperatorOwnerSettingsConnectionsRouteImport.update({
+    id: '/connections',
+    path: '/connections',
+    getParentRoute: () => OperatorOwnerSettingsRoute,
+  } as any)
 const OperatorOwnerOfferingsNewRoute =
   OperatorOwnerOfferingsNewRouteImport.update({
     id: '/new',
@@ -493,6 +534,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/$slug/ucp': typeof SlugUcpRoute
+  '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
@@ -520,7 +562,7 @@ export interface FileRoutesByFullPath {
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
-  '/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
   '/owner/status': typeof OperatorOwnerStatusRoute
   '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -539,6 +581,11 @@ export interface FileRoutesByFullPath {
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
+  '/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
+  '/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
+  '/owner/settings/members': typeof OperatorOwnerSettingsMembersRoute
+  '/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
+  '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
@@ -568,6 +615,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/$slug/ucp': typeof SlugUcpRoute
+  '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
@@ -595,7 +643,7 @@ export interface FileRoutesByTo {
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
-  '/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
   '/owner/status': typeof OperatorOwnerStatusRoute
   '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -614,6 +662,11 @@ export interface FileRoutesByTo {
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
+  '/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
+  '/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
+  '/owner/settings/members': typeof OperatorOwnerSettingsMembersRoute
+  '/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
+  '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
@@ -645,6 +698,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/$slug/ucp': typeof SlugUcpRoute
+  '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
@@ -672,7 +726,7 @@ export interface FileRoutesById {
   '/_operator/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/_operator/owner/credit': typeof OperatorOwnerCreditRoute
   '/_operator/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
-  '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/_operator/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
   '/_operator/owner/status': typeof OperatorOwnerStatusRoute
   '/_operator/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -691,6 +745,11 @@ export interface FileRoutesById {
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
   '/_operator/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/_operator/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
+  '/_operator/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
+  '/_operator/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
+  '/_operator/owner/settings/members': typeof OperatorOwnerSettingsMembersRoute
+  '/_operator/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
+  '/_operator/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
@@ -722,6 +781,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms'
     | '/$slug/ucp'
+    | '/.well-known/api-catalog'
     | '/.well-known/http-message-signatures-directory'
     | '/.well-known/oauth-authorization-server'
     | '/.well-known/oauth-protected-resource'
@@ -768,6 +828,11 @@ export interface FileRouteTypes {
     | '/operations/invocations/$invocationRef'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
+    | '/owner/settings/connections'
+    | '/owner/settings/developers'
+    | '/owner/settings/members'
+    | '/owner/settings/payouts'
+    | '/owner/settings/workspace'
     | '/owner/supply/$offeringRef'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
@@ -797,6 +862,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms'
     | '/$slug/ucp'
+    | '/.well-known/api-catalog'
     | '/.well-known/http-message-signatures-directory'
     | '/.well-known/oauth-authorization-server'
     | '/.well-known/oauth-protected-resource'
@@ -843,6 +909,11 @@ export interface FileRouteTypes {
     | '/operations/invocations/$invocationRef'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
+    | '/owner/settings/connections'
+    | '/owner/settings/developers'
+    | '/owner/settings/members'
+    | '/owner/settings/payouts'
+    | '/owner/settings/workspace'
     | '/owner/supply/$offeringRef'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
@@ -873,6 +944,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terms'
     | '/$slug/ucp'
+    | '/.well-known/api-catalog'
     | '/.well-known/http-message-signatures-directory'
     | '/.well-known/oauth-authorization-server'
     | '/.well-known/oauth-protected-resource'
@@ -919,6 +991,11 @@ export interface FileRouteTypes {
     | '/operations/invocations/$invocationRef'
     | '/_operator/owner/offerings/$offeringRef'
     | '/_operator/owner/offerings/new'
+    | '/_operator/owner/settings/connections'
+    | '/_operator/owner/settings/developers'
+    | '/_operator/owner/settings/members'
+    | '/_operator/owner/settings/payouts'
+    | '/_operator/owner/settings/workspace'
     | '/_operator/owner/supply/$offeringRef'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
@@ -949,6 +1026,7 @@ export interface RootRouteChildren {
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
+  DotwellKnownApiCatalogRoute: typeof DotwellKnownApiCatalogRoute
   DotwellKnownHttpMessageSignaturesDirectoryRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   DotwellKnownOauthAuthorizationServerRoute: typeof DotwellKnownOauthAuthorizationServerRoute
   DotwellKnownOauthProtectedResourceRoute: typeof DotwellKnownOauthProtectedResourceRoute
@@ -1246,6 +1324,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/.well-known/api-catalog': {
+      id: '/.well-known/api-catalog'
+      path: '/.well-known/api-catalog'
+      fullPath: '/.well-known/api-catalog'
+      preLoaderRoute: typeof DotwellKnownApiCatalogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$slug/ucp': {
       id: '/$slug/ucp'
       path: '/ucp'
@@ -1477,6 +1562,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerSupplyOfferingRefRouteImport
       parentRoute: typeof OperatorOwnerSupplyRoute
     }
+    '/_operator/owner/settings/workspace': {
+      id: '/_operator/owner/settings/workspace'
+      path: '/workspace'
+      fullPath: '/owner/settings/workspace'
+      preLoaderRoute: typeof OperatorOwnerSettingsWorkspaceRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/payouts': {
+      id: '/_operator/owner/settings/payouts'
+      path: '/payouts'
+      fullPath: '/owner/settings/payouts'
+      preLoaderRoute: typeof OperatorOwnerSettingsPayoutsRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/members': {
+      id: '/_operator/owner/settings/members'
+      path: '/members'
+      fullPath: '/owner/settings/members'
+      preLoaderRoute: typeof OperatorOwnerSettingsMembersRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/developers': {
+      id: '/_operator/owner/settings/developers'
+      path: '/developers'
+      fullPath: '/owner/settings/developers'
+      preLoaderRoute: typeof OperatorOwnerSettingsDevelopersRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
+    '/_operator/owner/settings/connections': {
+      id: '/_operator/owner/settings/connections'
+      path: '/connections'
+      fullPath: '/owner/settings/connections'
+      preLoaderRoute: typeof OperatorOwnerSettingsConnectionsRouteImport
+      parentRoute: typeof OperatorOwnerSettingsRoute
+    }
     '/_operator/owner/offerings/new': {
       id: '/_operator/owner/offerings/new'
       path: '/new'
@@ -1546,6 +1666,27 @@ const OperatorOwnerOfferingsRouteWithChildren =
     OperatorOwnerOfferingsRouteChildren,
   )
 
+interface OperatorOwnerSettingsRouteChildren {
+  OperatorOwnerSettingsConnectionsRoute: typeof OperatorOwnerSettingsConnectionsRoute
+  OperatorOwnerSettingsDevelopersRoute: typeof OperatorOwnerSettingsDevelopersRoute
+  OperatorOwnerSettingsMembersRoute: typeof OperatorOwnerSettingsMembersRoute
+  OperatorOwnerSettingsPayoutsRoute: typeof OperatorOwnerSettingsPayoutsRoute
+  OperatorOwnerSettingsWorkspaceRoute: typeof OperatorOwnerSettingsWorkspaceRoute
+}
+
+const OperatorOwnerSettingsRouteChildren: OperatorOwnerSettingsRouteChildren = {
+  OperatorOwnerSettingsConnectionsRoute: OperatorOwnerSettingsConnectionsRoute,
+  OperatorOwnerSettingsDevelopersRoute: OperatorOwnerSettingsDevelopersRoute,
+  OperatorOwnerSettingsMembersRoute: OperatorOwnerSettingsMembersRoute,
+  OperatorOwnerSettingsPayoutsRoute: OperatorOwnerSettingsPayoutsRoute,
+  OperatorOwnerSettingsWorkspaceRoute: OperatorOwnerSettingsWorkspaceRoute,
+}
+
+const OperatorOwnerSettingsRouteWithChildren =
+  OperatorOwnerSettingsRoute._addFileChildren(
+    OperatorOwnerSettingsRouteChildren,
+  )
+
 interface OperatorOwnerSupplyRouteChildren {
   OperatorOwnerSupplyOfferingRefRoute: typeof OperatorOwnerSupplyOfferingRefRoute
 }
@@ -1565,7 +1706,7 @@ interface OperatorRouteChildren {
   OperatorDevelopersDiscoveryRoute: typeof OperatorDevelopersDiscoveryRoute
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
   OperatorOwnerOfferingsRoute: typeof OperatorOwnerOfferingsRouteWithChildren
-  OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
+  OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRouteWithChildren
   OperatorOwnerStatusRoute: typeof OperatorOwnerStatusRoute
   OperatorOwnerSupplyRoute: typeof OperatorOwnerSupplyRouteWithChildren
 }
@@ -1578,7 +1719,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorDevelopersDiscoveryRoute: OperatorDevelopersDiscoveryRoute,
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
   OperatorOwnerOfferingsRoute: OperatorOwnerOfferingsRouteWithChildren,
-  OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
+  OperatorOwnerSettingsRoute: OperatorOwnerSettingsRouteWithChildren,
   OperatorOwnerStatusRoute: OperatorOwnerStatusRoute,
   OperatorOwnerSupplyRoute: OperatorOwnerSupplyRouteWithChildren,
 }
@@ -1676,6 +1817,7 @@ const rootRouteChildren: RootRouteChildren = {
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsRoute: TermsRoute,
+  DotwellKnownApiCatalogRoute: DotwellKnownApiCatalogRoute,
   DotwellKnownHttpMessageSignaturesDirectoryRoute:
     DotwellKnownHttpMessageSignaturesDirectoryRoute,
   DotwellKnownOauthAuthorizationServerRoute:

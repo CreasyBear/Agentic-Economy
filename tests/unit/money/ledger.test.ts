@@ -732,6 +732,10 @@ describe('charge journal helpers', () => {
         provider: { ...fixture.selected.provider, evidenceRefs: ['invocation:drift'] },
       },
     })).toBeUndefined()
+    expect(validateChargeContract({
+      ...fixture,
+      usage: { ...fixture.usage, observedAt: fixture.original.createdAt + 1 },
+    })).toBeUndefined()
   })
 
   it('computes payout accrual after recovery at the provider account scale', () => {

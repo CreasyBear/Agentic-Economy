@@ -80,7 +80,7 @@ function OwnerCreditRoute() {
             <AlertTitle>Local preview — credit is not connected</AlertTitle>
             <AlertDescription>
               <p>This browser journey does not sign in or add credit. Browse the public demo to explore the customer experience.</p>
-              <Button asChild variant="secondary" className="mt-2 min-h-11"><Link to="/">Browse public demo</Link></Button>
+              <Button asChild variant="secondary" className="mt-2 min-h-touch"><Link to="/">Browse public demo</Link></Button>
             </AlertDescription>
           </Alert>
         ) : null}

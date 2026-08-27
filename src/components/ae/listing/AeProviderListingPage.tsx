@@ -33,8 +33,9 @@ export function AeProviderListingPage({
   return (
     <div className="grid gap-section pb-page">
       <AePageHeader
+        eyebrow="Supplier"
         title={catalog.name}
-        description="Compare this supplier’s published Operations, exact prices, and access paths."
+        description="Compare this supplier’s listed tools, exact prices, and access paths."
         actions={
           <nav aria-label="Breadcrumb">
             <ListingBackLink
@@ -45,23 +46,23 @@ export function AeProviderListingPage({
         }
         meta={`${offerings.length} listed · ${readyCount} ready now`}
       />
-      <article className="ae-rail grid gap-8">
+      <article className="ae-rail grid gap-section">
         <ListingFirstScreen catalog={catalog} offerings={offerings} />
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+        <div className="grid gap-section lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
           <section aria-labelledby="supplier-operations-title" className="overflow-hidden rounded-card border border-border bg-card">
-            <div className="grid gap-1 border-b border-border px-4 py-4 sm:px-5">
-              <h2 id="supplier-operations-title" className="text-lg font-semibold text-foreground">Published Operations</h2>
+            <div className="grid gap-intra border-b border-border p-gutter">
+              <h2 id="supplier-operations-title" className="text-lg font-semibold text-foreground">Listed tools</h2>
               <p className="text-sm text-muted-foreground">Inspect the price, access path, and current readiness before calling.</p>
             </div>
 
           {offerings.length === 0 ? (
-            <div className="grid gap-1 px-4 py-8">
-              <p className="font-medium text-foreground">No Operations published</p>
+            <div className="grid gap-intra px-gutter py-section">
+              <p className="font-medium text-foreground">No tools listed</p>
               <p className="text-sm text-muted-foreground">This supplier profile remains visible while its catalogue is prepared.</p>
             </div>
           ) : (
-            <ul className="m-0 divide-y divide-border p-0" aria-label={`${catalog.name} Operations`}>
+            <ul className="m-0 divide-y divide-border p-0" aria-label={`${catalog.name} tools`}>
               {offerings.map((offering) => (
                 <OperationRow key={offering.offeringRef} offering={offering} catalog={catalog} />
               ))}
@@ -69,9 +70,9 @@ export function AeProviderListingPage({
           )}
         </section>
 
-        <aside className="grid gap-6 lg:sticky lg:top-20" aria-label="Supplier information">
-          <section aria-labelledby="supplier-details-title" className="grid gap-3">
-            <div className="grid gap-1">
+        <aside className="grid gap-section lg:sticky lg:top-20" aria-label="Supplier information">
+          <section aria-labelledby="supplier-details-title" className="grid gap-related">
+            <div className="grid gap-intra">
               <h2 id="supplier-details-title" className="text-base font-medium text-foreground">Supplier details</h2>
               <p className="text-sm text-muted-foreground">Facts published with this catalogue entry.</p>
             </div>
@@ -95,7 +96,7 @@ export function AeProviderListingPage({
               ]}
             />
             {catalog.businessContext.kind !== 'programmable_provider' ? null : (
-              <Button asChild variant="outline" className="min-h-11 w-full justify-between">
+              <Button asChild variant="outline" className="min-h-touch w-full justify-between">
                 <a href={catalog.businessContext.website} target="_blank" rel="noreferrer">
                   Supplier website <ArrowUpRightIcon aria-hidden="true" />
                 </a>
@@ -104,10 +105,10 @@ export function AeProviderListingPage({
           </section>
 
           <details className="rounded-card border border-border bg-card">
-            <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <summary className="flex min-h-touch cursor-pointer items-center gap-intra px-gutter py-related text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               <BracesIcon className="size-4" aria-hidden="true" /> Agent-readable catalogue
             </summary>
-            <div className="grid gap-2 border-t border-border px-4 py-3">
+            <div className="grid gap-intra border-t border-border px-gutter py-related">
               <p className="text-sm text-muted-foreground">Use the public JSON projection to inspect this supplier without parsing the page.</p>
               <AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={catalog.name} />
             </div>
@@ -115,7 +116,7 @@ export function AeProviderListingPage({
 
           <Link
             to="/privacy/remove-business"
-            className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="inline-flex min-h-touch items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             Correct or remove this supplier
           </Link>
@@ -141,7 +142,7 @@ export function ListingFirstScreen({
       <AeFactList
         className="sm:grid-cols-3"
         facts={[
-          { label: 'Operations', value: String(offerings.length), mono: true },
+          { label: 'Tools', value: String(offerings.length), mono: true },
           { label: 'Ready now', value: String(readyCount), mono: true },
           {
             label: 'Last indexed',
@@ -164,10 +165,10 @@ function OperationRow({ offering, catalog }: { offering: PublicOfferingDto; cata
     : formatOfferingPrice(offering.price)
 
   return (
-    <li className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_13rem] sm:items-start sm:gap-6">
-      <div className="grid min-w-0 gap-3">
-        <div className="grid gap-1">
-          <div className="flex flex-wrap items-center gap-2">
+    <li className="grid gap-related px-gutter py-gutter sm:grid-cols-[minmax(0,1fr)_13rem] sm:items-start sm:gap-section">
+      <div className="grid min-w-0 gap-related">
+        <div className="grid gap-intra">
+          <div className="flex flex-wrap items-center gap-intra">
             <h3 className="text-base font-semibold text-foreground">{offering.name}</h3>
             <Badge variant={offering.support.aeSupportedAction ? 'success' : offering.support.integrated ? 'warning' : 'secondary'}>
               {offering.support.aeSupportedAction ? 'Ready now' : offering.support.integrated ? 'Setup required' : 'Inspect only'}
@@ -176,7 +177,7 @@ function OperationRow({ offering, catalog }: { offering: PublicOfferingDto; cata
           <p className="text-sm text-muted-foreground">{offering.summary}</p>
         </div>
         <AeFactList
-          className="gap-4 sm:grid-cols-3"
+          className="gap-related sm:grid-cols-3"
           facts={[
             { label: 'Category', value: offering.category },
             { label: 'Price', value: price, mono: true },
@@ -185,23 +186,23 @@ function OperationRow({ offering, catalog }: { offering: PublicOfferingDto; cata
         />
         {accessNote === undefined ? null : <p className="text-xs text-muted-foreground">{accessNote}</p>}
       </div>
-      <div className="grid content-start gap-2 sm:self-center">
+      <div className="grid content-start gap-intra sm:self-center">
         {operationPath === undefined ? null : (
-          <Button asChild size="sm" className="min-h-11 justify-between">
+          <Button asChild size="sm" className="min-h-touch justify-between">
             <a href={operationPath.documentationUrl ?? operationPath.url} target="_blank" rel="noreferrer">
               Open provider route <ArrowUpRightIcon aria-hidden="true" />
             </a>
           </Button>
         )}
         {operationPath !== undefined || webPath === undefined ? null : (
-          <Button asChild variant="outline" size="sm" className="min-h-11 justify-between">
+          <Button asChild variant="outline" size="sm" className="min-h-touch justify-between">
             <a href={webPath.url} target="_blank" rel="noreferrer">
               Open website <Globe2Icon aria-hidden="true" />
             </a>
           </Button>
         )}
         {operationPath !== undefined || webPath !== undefined || phoneHref === undefined ? null : (
-          <Button asChild variant="outline" size="sm" className="min-h-11 justify-between">
+          <Button asChild variant="outline" size="sm" className="min-h-touch justify-between">
             <a href={phoneHref}>Call supplier <PhoneIcon aria-hidden="true" /></a>
           </Button>
         )}
@@ -259,14 +260,14 @@ function supplyOfferingToDto(item: PublicOfferingSupplyView['offerings'][number]
 function ListingBackLink({ from, threadId }: { from?: 'thread'; threadId?: string }) {
   if (from === 'thread' && threadId !== undefined) {
     return (
-      <Button asChild variant="ghost" size="sm" className="min-h-11 px-2">
+      <Button asChild variant="ghost" size="sm" className="min-h-touch px-2">
         <Link to="/t/$threadId" params={{ threadId }}><ArrowLeftIcon aria-hidden="true" /> Back to result</Link>
       </Button>
     )
   }
 
   return (
-    <Button asChild variant="ghost" size="sm" className="min-h-11 px-2">
+    <Button asChild variant="ghost" size="sm" className="min-h-touch px-2">
       <Link to="/market" search={{ window: '30d' }} hash="operations"><ArrowLeftIcon aria-hidden="true" /> Back to catalog</Link>
     </Button>
   )

@@ -58,8 +58,8 @@ describe('public semantic comfort', () => {
     const headings = screen.getAllByRole('heading')
     expect(headings.map((heading) => heading.tagName)).toEqual(['H1', 'H2', 'H3', 'H3', 'H3'])
     expect(screen.getByRole('heading', { level: 2, name: 'What these terms mean in practice' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Browse catalog' }).classList.contains('min-h-11')).toBe(true)
-    expect(screen.getByRole('link', { name: /Publish an Operation/ }).classList.contains('min-h-11')).toBe(true)
+    expect(screen.getByRole('link', { name: 'Browse catalog' }).classList.contains('min-h-touch')).toBe(true)
+    expect(screen.getByRole('link', { name: /Publish an Operation/ }).classList.contains('min-h-touch')).toBe(true)
   })
 
   it('gives every privacy tab a comfortable standalone target', () => {
@@ -67,16 +67,16 @@ describe('public semantic comfort', () => {
     renderRoute('/privacy')
 
     const tablist = screen.getByRole('tablist', { name: 'Privacy moments' })
-    expect(tablist.classList.contains('min-h-11')).toBe(true)
+    expect(tablist.classList.contains('min-h-touch')).toBe(true)
     for (const tab of within(tablist).getAllByRole('tab')) {
-      expect(tab.classList.contains('min-h-11')).toBe(true)
+      expect(tab.classList.contains('min-h-touch')).toBe(true)
     }
   })
 
   it('gives homepage actions a comfortable standalone target', () => {
     renderRoute('/')
 
-    for (const name of ['Browse tools', 'Set up an agent', 'List a tool'] as const) {
+    for (const name of ['Browse tools', 'Connect your agent', 'List a tool'] as const) {
       const links = screen.getAllByRole('link', { name })
       expect(links.length).toBeGreaterThan(0)
       for (const link of links) expect(link.classList.contains('min-h-touch')).toBe(true)

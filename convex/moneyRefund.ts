@@ -10,15 +10,15 @@ import {
   accountRefForProvider,
   accountRefForRake,
   addExactAmounts,
-  amountAtScale,
   amountFromParts,
-  applyProviderAccountDebit,
+  appendRefundReversal,
   compareExactAmounts,
   sameEvidenceRefs,
   subtractExactAmounts,
   qualifiedUseMaterialDigest,
   qualifiedUseRef,
   validateChargeAccounts,
+  type MoneyLedgerEntry,
   type PayoutAccrualAmounts,
 } from '../src/modules/money/public'
 import {
@@ -28,8 +28,11 @@ import {
 import { accountFromRow } from './moneyCanonicalAccounts'
 import {
   chargeJournalRecoveryAmount,
+  domainMoneyEntries,
+  domainMoneyTransaction,
+  domainMoneyUsage,
+  loadSealedChargeJournal,
   readPayoutAccrualAmounts,
-  validateChargeJournal,
 } from './moneyChargeJournal'
 import { identifier } from './moneyLedgerValues'
 import { payoutFromRow } from './moneyPayoutTransferShared'
@@ -38,7 +41,7 @@ import {
   dailyPayoutIdentity,
   qualifiedUseAllocationRef,
   type DailyPayoutIdentity,
-} from './moneyQualifiedUsePayout'
+} from './lib/qualifiedUsePayout'
 import { reverseBrokeredDisputeLoss } from './moneyBrokeredDisputeLoss'
 
 type PayoutAllocationRefundLink = Readonly<{
@@ -238,6 +241,49 @@ async function applyPayoutAccrualReversalForRefund(
   await ctx.db.patch(prepared.row._id, prepared.patch)
 }
 
+function refundLedgerEntryInsert(
+  entry: MoneyLedgerEntry,
+  payoutAllocation: PayoutAllocationRefundLink | undefined,
+  providerAccountRef: string,
+) {
+  return {
+    entryRef: entry.entryRef,
+    accountRef: entry.accountRef,
+    entryType: entry.entryType,
+    direction: entry.direction,
+    amountUnits: entry.amount.units,
+    currency: entry.amount.currency,
+    exponent: entry.amount.exponent,
+    transactionRef: entry.transactionRef,
+    idempotencyKey: entry.idempotencyKey,
+    ...(entry.principalId === undefined ? {} : { principalId: entry.principalId }),
+    ...(entry.businessId === undefined ? {} : { businessId: entry.businessId }),
+    ...(entry.invocationRef === undefined
+      ? {}
+      : { invocationRef: entry.invocationRef }),
+    ...(entry.attemptRef === undefined ? {} : { attemptRef: entry.attemptRef }),
+    sourceDigest: entry.sourceDigest,
+    evidenceRefs: [...entry.evidenceRefs],
+    createdAt: entry.createdAt,
+    ...(entry.reversalOf === undefined ? {} : { reversalOf: entry.reversalOf }),
+    ...(entry.accountRef === providerAccountRef &&
+    entry.entryType === 'refund' &&
+    entry.direction === 'debit' &&
+    payoutAllocation !== undefined
+      ? payoutAllocation
+      : {}),
+  }
+}
+
+function refundRefusal(
+  code:
+    | 'ledger_idempotency_conflict'
+    | 'charge_reconciliation_required'
+    | 'billing_identity_mismatch',
+): Extract<RefundResult, { kind: 'refused' }> {
+  return { kind: 'refused', code, retryable: false }
+}
+
 export async function appendRefundBody(
   ctx: MutationCtx,
   args: AppendRefundInput,
@@ -292,7 +338,7 @@ export async function appendRefundBody(
           .take(2),
   ])
   const usage = usageRows.length === 1 ? usageRows[0] : undefined
-  const journal = validateChargeJournal(original, usage, originalEntries)
+  const journal = loadSealedChargeJournal(original, usage, originalEntries)
   const recoveryAmount =
     journal === undefined
       ? undefined
@@ -591,49 +637,69 @@ export async function appendRefundBody(
       code: 'charge_reconciliation_required' as const,
       retryable: false,
     }
-  const operatorRefund = amountAtScale(
-    journal.chargeAmount,
-    operatorAccount.currency,
-    operatorAccount.exponent,
-  )
-  const providerRefund = amountAtScale(
-    journal.providerAmount,
-    providerAccount.currency,
-    providerAccount.exponent,
-  )
-  const rakeRefund = amountAtScale(
-    journal.rakeAmount,
-    rakeAccount.currency,
-    rakeAccount.exponent,
-  )
-  if (
-    operatorRefund === undefined ||
-    providerRefund === undefined ||
-    rakeRefund === undefined ||
-    compareExactAmounts(rakeDomain.balance, rakeRefund) === -1
-  )
+  const domainOriginal = domainMoneyTransaction(original)
+  const domainEntries = domainMoneyEntries(originalEntries)
+  const domainUsage = usage === undefined ? undefined : domainMoneyUsage(usage)
+  if (domainEntries === undefined || domainUsage === undefined)
     return {
       kind: 'refused' as const,
       code: 'charge_reconciliation_required' as const,
       retryable: false,
     }
-  const nextOperatorBalance = addExactAmounts(
-    operatorDomain.balance,
-    operatorRefund,
+  const reversal = appendRefundReversal({
+    state: {
+      accounts: new Map([
+        [operatorDomain.accountRef, operatorDomain],
+        [providerDomain.accountRef, providerDomain],
+        [rakeDomain.accountRef, rakeDomain],
+      ]),
+      entries: domainEntries,
+      transactions: [domainOriginal],
+      usageEvents: [domainUsage],
+      usageSummaries: new Map(),
+    },
+    transaction: {
+      transactionRef: args.transactionRef,
+      kind: 'refund',
+      idempotencyKey: args.idempotencyKey,
+      inputDigest: args.inputDigest,
+      principalId: args.principalId,
+      currency: original.currency,
+      expectedAccountVersion: operatorDomain.version,
+      now: args.observedAt,
+      ...(args.externalRef === undefined ? {} : { externalRef: args.externalRef }),
+    },
+    originalTransactionRef: original.transactionRef,
+    principalId: args.principalId,
+    sourceDigest: args.sourceDigest,
+    evidenceRefs: args.evidenceRefs,
+    observedAt: args.observedAt,
+  })
+  if (reversal.result.kind === 'refused') {
+    const code = reversal.result.code
+    if (
+      code === 'ledger_idempotency_conflict'
+      || code === 'charge_reconciliation_required'
+      || code === 'billing_identity_mismatch'
+    )
+      return refundRefusal(code)
+    return refundRefusal('charge_reconciliation_required')
+  }
+  const nextOperator = reversal.state.accounts.get(operatorAccount.accountRef)
+  const nextProvider = reversal.state.accounts.get(providerAccount.accountRef)
+  const nextRake = reversal.state.accounts.get(rakeAccount.accountRef)
+  const refundTransaction = reversal.state.transactions.find(
+    (transaction) => transaction.transactionRef === args.transactionRef,
   )
-  const nextProvider = applyProviderAccountDebit(
-    providerDomain,
-    providerRefund,
-    args.observedAt,
-  )
-  const nextRakeBalance = subtractExactAmounts(
-    rakeDomain.balance,
-    rakeRefund,
+  const refundEntries = reversal.state.entries.filter(
+    (entry) => entry.transactionRef === args.transactionRef,
   )
   if (
-    nextOperatorBalance === undefined ||
-    nextProvider === undefined ||
-    nextRakeBalance === undefined
+    nextOperator === undefined
+    || nextProvider === undefined
+    || nextRake === undefined
+    || refundTransaction === undefined
+    || refundEntries.length !== 3
   )
     return {
       kind: 'refused' as const,
@@ -655,55 +721,17 @@ export async function appendRefundBody(
   await applyPreparedCredentialBudgetTransition(ctx, preparedBudget)
   if (preparedPayoutReversal !== undefined)
     await applyPayoutAccrualReversalForRefund(ctx, preparedPayoutReversal)
-  const common = {
-    transactionRef: args.transactionRef,
-    idempotencyKey: args.idempotencyKey,
-    sourceDigest: args.sourceDigest,
-    evidenceRefs: [...args.evidenceRefs],
-    createdAt: args.observedAt,
-  }
   const payoutAllocation = preparedPayoutReversal?.allocation
-  await ctx.db.insert('moneyLedgerEntries', {
-    ...common,
-    entryRef: `${args.transactionRef}:operator`,
-    accountRef: operatorAccount.accountRef,
-    entryType: 'refund',
-    direction: 'credit',
-    amountUnits: operatorRefund.units,
-    currency: operatorRefund.currency,
-    exponent: operatorRefund.exponent,
-    principalId: args.principalId,
-    reversalOf: args.originalTransactionRef,
-  })
-  await ctx.db.insert('moneyLedgerEntries', {
-    ...common,
-    entryRef: `${args.transactionRef}:provider`,
-    accountRef: providerAccount.accountRef,
-    entryType: 'refund',
-    direction: 'debit',
-    amountUnits: providerRefund.units,
-    currency: providerRefund.currency,
-    exponent: providerRefund.exponent,
-    businessId: journal.businessId,
-    ...(payoutAllocation === undefined ? {} : payoutAllocation),
-    reversalOf: args.originalTransactionRef,
-  })
-  await ctx.db.insert('moneyLedgerEntries', {
-    ...common,
-    entryRef: `${args.transactionRef}:rake`,
-    accountRef: rakeAccount.accountRef,
-    entryType: 'refund',
-    direction: 'debit',
-    amountUnits: rakeRefund.units,
-    currency: rakeRefund.currency,
-    exponent: rakeRefund.exponent,
-    businessId: journal.businessId,
-    reversalOf: args.originalTransactionRef,
-  })
+  for (const entry of refundEntries) {
+    await ctx.db.insert(
+      'moneyLedgerEntries',
+      refundLedgerEntryInsert(entry, payoutAllocation, providerAccount.accountRef),
+    )
+  }
   await ctx.db.patch('moneyAccounts', operatorAccount._id, {
-    balanceUnits: nextOperatorBalance.units,
-    version: operatorAccount.version + 1,
-    updatedAt: args.observedAt,
+    balanceUnits: nextOperator.balance.units,
+    version: nextOperator.version,
+    updatedAt: nextOperator.updatedAt,
   })
   await ctx.db.patch('moneyAccounts', providerAccount._id, {
     balanceUnits: nextProvider.balance.units,
@@ -712,14 +740,14 @@ export async function appendRefundBody(
     updatedAt: nextProvider.updatedAt,
   })
   await ctx.db.patch('moneyAccounts', rakeAccount._id, {
-    balanceUnits: nextRakeBalance.units,
-    version: rakeAccount.version + 1,
-    updatedAt: args.observedAt,
+    balanceUnits: nextRake.balance.units,
+    version: nextRake.version,
+    updatedAt: nextRake.updatedAt,
   })
   await ctx.db.insert('moneyTransactions', {
-    transactionRef: args.transactionRef,
+    transactionRef: refundTransaction.transactionRef,
     kind: 'refund' as const,
-    idempotencyKey: args.idempotencyKey,
+    idempotencyKey: refundTransaction.idempotencyKey,
     inputDigest: args.inputDigest,
     principalId: args.principalId,
     currency: original.currency,
@@ -822,7 +850,7 @@ export async function reverseDisputedQualifiedUseHandler(
       q.eq('transactionRef', original.transactionRef),
     )
     .take(5)
-  const journal = validateChargeJournal(original, usage, entries)
+  const journal = loadSealedChargeJournal(original, usage, entries)
   const recoveryAmount =
     journal === undefined
       ? undefined

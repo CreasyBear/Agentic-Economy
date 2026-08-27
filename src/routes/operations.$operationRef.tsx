@@ -1,8 +1,7 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
@@ -70,17 +69,18 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
   const lastVerifiedAt = operation.availability.observedAt
     ?? operation.commercial.priceEvidence?.observedAt
   return (
-    <AePublicShell>
-      <AePageHeader
-        title={operation.offering.label}
-        description={operation.summary}
-        actions={
-          <Button asChild variant="ghost" className="min-h-11">
-            <Link to="/market" search={{ window: '30d' }} hash="operations">Catalog</Link>
-          </Button>
-        }
-        meta={label(operation.availability.posture)}
-      />
+    <AePublicPage
+      kind="tool"
+      eyebrow="Operation"
+      title={operation.offering.label}
+      description={operation.summary}
+      actions={
+        <Button asChild variant="ghost" className="min-h-touch">
+          <Link to="/market" search={{ window: '30d' }} hash="operations">Catalog</Link>
+        </Button>
+      }
+      meta={label(operation.availability.posture)}
+    >
       <article className="ae-rail grid gap-8 pb-page">
         <header className="grid gap-4">
           <p className="text-sm text-muted-foreground">{operation.business.name}</p>
@@ -167,7 +167,7 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
         </div>
 
         <details id="technical-contract" className="scroll-mt-6 rounded-card border border-border bg-card">
-          <summary className="flex min-h-11 cursor-pointer items-center px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="flex min-h-touch cursor-pointer items-center px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             Technical contract, schemas, digests, and references
           </summary>
           <div className="grid gap-6 border-t border-border p-4 sm:p-5">
@@ -210,7 +210,7 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
           </div>
         </details>
       </article>
-    </AePublicShell>
+    </AePublicPage>
   )
 }
 
@@ -227,7 +227,7 @@ function OperationAccessSidecard({
 }>) {
   if (accessMode === 'anonymous_execute') {
     return (
-      <aside className="grid gap-4 border-t border-border pt-6 lg:sticky lg:top-20 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0" aria-labelledby="execution-title">
+      <aside className="grid gap-related border-t border-border pt-6 lg:sticky lg:top-20 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0" aria-labelledby="execution-title">
         <div className="grid gap-1">
           <h2 id="execution-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
           <p className="text-sm text-muted-foreground">Ready now with no provider key. Inspect the contract, then call it through MCP.</p>
@@ -247,12 +247,12 @@ function OperationAccessSidecard({
 
   if (accessMode === 'authenticated_invoke') {
     return (
-      <aside className="grid gap-4 border-t border-border pt-6 lg:sticky lg:top-20 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0" aria-labelledby="execution-title">
+      <aside className="grid gap-related border-t border-border pt-6 lg:sticky lg:top-20 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0" aria-labelledby="execution-title">
         <div className="grid gap-1">
           <h2 id="execution-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
           <p className="text-sm text-muted-foreground">Connect once, call this capability, then follow the returned receipt. The CLI keeps the credential and retry identity for you.</p>
         </div>
-        <Button asChild className="min-h-11 w-full">
+        <Button asChild className="min-h-touch w-full">
           <Link to="/for-agents">Connect an agent</Link>
         </Button>
         <ol className="m-0 grid list-none gap-5 p-0">
@@ -267,7 +267,7 @@ function OperationAccessSidecard({
   }
 
   return (
-    <aside className="grid gap-4 border-t border-border pt-6 lg:sticky lg:top-20 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0" aria-labelledby="availability-title">
+    <aside className="grid gap-related border-t border-border pt-6 lg:sticky lg:top-20 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0" aria-labelledby="availability-title">
       <div className="grid gap-1">
         <h2 id="availability-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
         <p className="text-sm text-muted-foreground">
@@ -275,8 +275,8 @@ function OperationAccessSidecard({
         </p>
       </div>
       <div className="flex flex-col gap-3">
-        <Button asChild className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse current Operations</Link></Button>
-        <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }}>Back to market</Link></Button>
+        <Button asChild className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse current Operations</Link></Button>
+        <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }}>Back to market</Link></Button>
       </div>
     </aside>
   )
@@ -311,15 +311,15 @@ function OperationDecision({ operation }: Readonly<{ operation: PublicOperationD
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {routeable ? (
-          <Button asChild className="min-h-11">
+          <Button asChild className="min-h-touch">
             <Link to="/for-agents">Use this capability</Link>
           </Button>
         ) : (
           <>
-            <Button asChild variant="secondary" className="min-h-11">
+            <Button asChild variant="secondary" className="min-h-touch">
               <a href="#price-and-terms">Inspect price and terms</a>
             </Button>
-            <Button asChild variant="ghost" className="min-h-11">
+            <Button asChild variant="ghost" className="min-h-touch">
               <a href="#parameters">View parameters</a>
             </Button>
           </>
@@ -354,8 +354,8 @@ function OperationUnavailable({ result }: Readonly<{ result: Exclude<PublicOpera
       description={presentation.description}
       action={
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse current Operations</Link></Button>
-          <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }}>Back to market</Link></Button>
+          <Button asChild className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse current Operations</Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }}>Back to market</Link></Button>
         </div>
       }
     />

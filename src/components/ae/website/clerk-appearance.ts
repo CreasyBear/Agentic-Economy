@@ -27,12 +27,12 @@ export const clerkAppearance = {
     socialButtonsVariant: 'blockButton' as const,
   },
   elements: {
-    socialButtonsBlockButton: 'min-h-11 rounded-none border-border bg-container',
+    socialButtonsBlockButton: 'min-h-touch rounded-none border-border bg-container',
     formButtonPrimary:
-      'min-h-11 rounded-none bg-foreground text-background shadow-none hover:bg-foreground/90',
-    formFieldInput: 'min-h-11 rounded-none border-border bg-container',
-    formFieldInputShowPasswordButton: 'min-h-11 min-w-11',
-    identityPreviewEditButton: '!min-h-11 !min-w-11',
+      'min-h-touch rounded-none bg-foreground text-background shadow-none hover:bg-foreground/90',
+    formFieldInput: 'min-h-touch rounded-none border-border bg-container',
+    formFieldInputShowPasswordButton: 'min-h-touch min-w-touch',
+    identityPreviewEditButton: '!min-h-touch !min-w-touch',
     formFieldRow__password: 'aria-hidden:!hidden',
     headerTitle: 'font-display text-xl font-medium tracking-tight',
     headerSubtitle: 'text-muted-foreground',

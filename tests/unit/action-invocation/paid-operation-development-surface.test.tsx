@@ -105,7 +105,7 @@ describe('paid operation development surfaces', () => {
     const action = screen.getByRole('button', { name: 'Authorize payment' })
     action.focus()
     expect(document.activeElement).toBe(action)
-    expect(action.className).toContain('min-h-11')
+    expect(action.className).toContain('min-h-touch')
     expect(container.querySelector('[role="status"]')?.textContent).toMatch(/projection ready/i)
     expect(screen.getByText('Ready to inspect')).toBeTruthy()
     expect(screen.getByText(/Nothing has been sent to the provider/i)).toBeTruthy()

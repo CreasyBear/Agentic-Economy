@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/sidebar'
 
 import { useOpenOperatorCommand } from '@/components/ae/layout/operator-command-context'
+import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
 import {
   formatOperatorNavBadge,
   isOperatorPathActive,
@@ -56,11 +57,14 @@ export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY
             <SidebarMenuItem>
               <SidebarMenuButton asChild size="lg" tooltip="Agentic Economy workspace">
                 <a href={roleHomeHref[operatorRole]} aria-label={`${roleLabel[operatorRole]} home`}>
-                  <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent font-mono text-[0.6875rem] font-semibold tracking-tight text-sidebar-foreground">
-                    AE
-                  </span>
+                  <img
+                    src={AECON_MARK_SRC}
+                    alt=""
+                    aria-hidden="true"
+                    className={aeconMarkClassName.light}
+                  />
                   <span className={isCollapsed ? 'sr-only' : 'grid min-w-0 gap-0.5'}>
-                    <span className="truncate text-sm font-semibold text-sidebar-foreground">Agentic Economy</span>
+                    <span className="truncate text-sm font-semibold text-sidebar-foreground">AECON</span>
                     <span className="truncate text-xs text-muted-foreground">{roleLabel[operatorRole]}</span>
                   </span>
                 </a>
@@ -81,7 +85,7 @@ export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY
                     <SearchIcon aria-hidden="true" />
                     <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>Search</span>
                     {isCollapsed ? null : (
-                      <kbd className="ml-auto font-mono text-[0.6875rem] text-muted-foreground">/</kbd>
+                      <kbd className="ms-auto font-mono text-[0.6875rem] text-muted-foreground">/</kbd>
                     )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>

@@ -18,10 +18,10 @@ export function AeSection({ title, description, children, id, className }: AeSec
   return (
     <section
       aria-labelledby={titleId}
-      className={cn('grid scroll-mt-6 gap-4', className)}
+      className={cn('grid scroll-mt-6 gap-related', className)}
       {...(id === undefined ? {} : { id })}
     >
-      <div className="grid gap-2">
+      <div className="grid gap-intra">
         <h2 id={titleId} className="text-base font-semibold tracking-tight text-foreground">
           {title}
         </h2>
@@ -35,7 +35,7 @@ export function AeSection({ title, description, children, id, className }: AeSec
 }
 
 export function AeSettingsStack({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('mx-auto grid w-full max-w-3xl gap-8 pb-20', className)}>{children}</div>
+  return <div className={cn('mx-auto grid w-full max-w-3xl gap-section pb-hero', className)}>{children}</div>
 }
 
 type AeSettingsRowProps = {
@@ -48,7 +48,7 @@ type AeSettingsRowProps = {
 export function AeSettingsRow({ title, description, href, action }: AeSettingsRowProps) {
   const content = (
     <>
-      <span className="grid min-w-0 flex-1 gap-0.5">
+      <span className="grid min-w-0 flex-1 gap-intra">
         <span className="font-medium text-foreground">{title}</span>
         {description === undefined ? null : (
           <span className="text-pretty text-sm text-muted-foreground">{description}</span>
@@ -61,7 +61,7 @@ export function AeSettingsRow({ title, description, href, action }: AeSettingsRo
       )}
     </>
   )
-  const className = 'flex min-h-11 items-center gap-3 rounded-md border border-border px-3 py-3 transition-colors hover:bg-muted/40'
+  const className = 'flex min-h-touch items-center gap-related rounded-md border border-border px-gutter py-intra transition-colors hover:bg-muted/40'
 
   if (href === undefined) {
     return <div className={className}>{content}</div>

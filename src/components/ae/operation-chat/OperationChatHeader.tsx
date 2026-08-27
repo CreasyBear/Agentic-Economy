@@ -3,8 +3,11 @@ import { CheckIcon, CopyIcon, MenuIcon, PlusIcon, Share2Icon, UnlinkIcon } from 
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { chatHistory, chatStageDetail, chatStageTitle } from '@/lib/public/chat-ia'
+import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
 
 export function OperationChatHeader({
   authenticated,
@@ -33,42 +36,49 @@ export function OperationChatHeader({
 }>) {
   return (
     <>
-      <header className="flex min-h-14 items-center gap-2 border-b border-border px-3 sm:px-4">
+      <header className="flex min-h-14 items-center gap-related border-b border-border px-gutter">
         {authenticated ? (
           <Sheet>
             <SheetTrigger asChild>
-              <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11 lg:hidden" aria-label="Open conversation history">
+              <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch lg:hidden" aria-label={chatHistory.openHistory}>
                 <MenuIcon aria-hidden="true" />
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-[min(90vw,20rem)] p-0">
-              <SheetHeader className="px-4 pt-4">
-                <SheetTitle>Conversations</SheetTitle>
-                <SheetDescription>Resume or manage your saved chats.</SheetDescription>
+              <SheetHeader className="px-gutter pt-related">
+                <SheetTitle>{chatHistory.sheetTitle}</SheetTitle>
+                <SheetDescription>{chatHistory.sheetDescription}</SheetDescription>
               </SheetHeader>
               {mobileHistory}
             </SheetContent>
           </Sheet>
         ) : null}
+        <a
+          href="/"
+          aria-label={chatHistory.home}
+          className="flex min-h-touch min-w-touch shrink-0 items-center justify-center no-underline"
+        >
+          <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={aeconMarkClassName.chat} />
+        </a>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{threadId === null ? 'New operation chat' : 'Operation chat'}</p>
-          <p className="text-xs text-muted-foreground">{authenticated ? 'Saved to your account' : 'Private to this browser session'}</p>
+          <p className="truncate text-sm font-semibold">{chatStageTitle(threadId)}</p>
+          <p className="text-xs text-muted-foreground">{chatStageDetail(authenticated)}</p>
         </div>
-        <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="New chat" onClick={onNewChat}>
+        <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch" aria-label={chatHistory.newChat} onClick={onNewChat}>
           <PlusIcon aria-hidden="true" />
         </Button>
         {!authenticated ? (
           <SignInButton mode="modal">
-            <Button type="button" variant="outline" className="min-h-11">Sign in</Button>
+            <Button type="button" variant="outline" className="min-h-touch">{chatHistory.signIn}</Button>
           </SignInButton>
         ) : null}
         {authenticated && threadId !== null ? (
-          <div className="flex items-center gap-1">
-            <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={shareState === 'active' ? 'Get share link' : 'Create share link'} disabled={busy} onClick={onIssueShare}>
+          <div className="flex items-center gap-intra">
+            <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch" aria-label={shareState === 'active' ? chatHistory.shareGet : chatHistory.shareCreate} disabled={busy} onClick={onIssueShare}>
               <Share2Icon aria-hidden="true" />
             </Button>
             {shareState === 'active' ? (
-              <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Revoke share link" disabled={busy} onClick={onRevokeShare}>
+              <Button type="button" variant="ghost" size="icon" className="min-h-touch min-w-touch" aria-label={chatHistory.shareRevoke} disabled={busy} onClick={onRevokeShare}>
                 <UnlinkIcon aria-hidden="true" />
               </Button>
             ) : null}
@@ -76,14 +86,20 @@ export function OperationChatHeader({
         ) : null}
       </header>
       {sharePath === null ? null : (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/50 px-4 py-2" role="status">
-          <label htmlFor="operation-chat-share-link" className="text-xs font-medium">Read-only share link</label>
-          <Input id="operation-chat-share-link" value={sharePath} readOnly className="min-h-11 min-w-48 flex-1 font-mono text-xs" />
-          <Button type="button" variant="outline" className="min-h-11" onClick={onCopyShare}>
-            {copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
-            {copied ? 'Copied' : 'Copy'}
-          </Button>
-        </div>
+        <Field className="border-b border-border bg-muted px-gutter py-intra" role="status">
+          <FieldLabel htmlFor="operation-chat-share-link">{chatHistory.shareLabel}</FieldLabel>
+          <InputGroup>
+            <InputGroupInput id="operation-chat-share-link" value={sharePath} readOnly className="min-h-touch font-mono text-xs" />
+            <InputGroupAddon align="inline-end">
+              <Button type="button" variant="outline" className="min-h-touch" onClick={onCopyShare}>
+                {copied
+                  ? <CheckIcon data-icon="inline-start" aria-hidden="true" />
+                  : <CopyIcon data-icon="inline-start" aria-hidden="true" />}
+                {copied ? chatHistory.copied : chatHistory.copy}
+              </Button>
+            </InputGroupAddon>
+          </InputGroup>
+        </Field>
       )}
     </>
   )

@@ -8,10 +8,15 @@ import ts from 'typescript'
 const BASE_REF = 'baf4c1dc7'
 const COVERAGE_PATH = 'output/provider-connection-all-coverage/coverage-final.json'
 const CRITICAL_FILES = [
-  'convex/capabilityProviderConnectionLeases.ts',
-  'convex/capabilityProviderConnectionLifecycle.ts',
-  'convex/capabilityProviderConnectionOwner.ts',
   'convex/capabilityProviderConnections.ts',
+  'convex/lib/providerConnections/authority.ts',
+  'convex/lib/providerConnections/cleanup.ts',
+  'convex/lib/providerConnections/codecs.ts',
+  'convex/lib/providerConnections/contracts.ts',
+  'convex/lib/providerConnections/leases.ts',
+  'convex/lib/providerConnections/lifecycle.ts',
+  'convex/lib/providerConnections/owner.ts',
+  'convex/lib/providerConnections/persistence.ts',
   'src/modules/capability-supply/internal/provider-connection/lease.ts',
   'src/modules/capability-supply/internal/provider-connection/shared.ts',
   'src/modules/capability-supply/internal/provider-connection/types.ts',

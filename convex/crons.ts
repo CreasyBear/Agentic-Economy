@@ -4,23 +4,25 @@ import { internal } from './_generated/api'
 
 const crons = cronJobs()
 
+// Pre-launch cadence: keep recovery and freshness without burning included
+// Convex usage. Tighten these only when the market is actually live.
 crons.interval(
   'reconcile due facilitator invocations',
-  { minutes: 1 },
+  { minutes: 15 },
   internal.workloadCron.reconcileDueFacilitatorInvocations,
   {},
 )
 
 crons.interval(
   'refresh facilitator discovery',
-  { minutes: 10 },
+  { hours: 12 },
   internal.workloadCron.refreshFacilitatorDiscovery,
   {},
 )
 
 crons.interval(
   'refresh Agentic Market snapshots',
-  { minutes: 5 },
+  { hours: 6 },
   internal.workloadCron.refreshAgenticMarketSnapshots,
   {},
 )
@@ -34,21 +36,21 @@ crons.interval(
 
 crons.interval(
   'continue market aggregate backfill',
-  { hours: 1 },
+  { hours: 6 },
   internal.workloadCron.continueMarketAggregateBackfill,
   {},
 )
 
 crons.interval(
   'refresh current market presence',
-  { minutes: 5 },
+  { hours: 1 },
   internal.workloadCron.refreshCurrentMarketPresence,
   {},
 )
 
 crons.interval(
   'refresh capability supply readiness',
-  { minutes: 1 },
+  { hours: 1 },
   internal.workloadCron.refreshCapabilitySupplyReadiness,
   {}
 )

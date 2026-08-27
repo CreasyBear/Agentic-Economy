@@ -85,7 +85,7 @@ function ActivityRoute() {
           title="No calls yet"
           description="Find a capability and complete one call. Its task, outcome, amount, and receipt will appear here."
           action={
-            <Button asChild className="min-h-11">
+            <Button asChild className="min-h-touch">
               <Link to="/market" search={{ window: '30d' }}>Discover capabilities</Link>
             </Button>
           }
@@ -111,7 +111,7 @@ function ActivityRoute() {
               ? {}
               : {
                   action: (
-                    <Button asChild className="min-h-11">
+                    <Button asChild className="min-h-touch">
                       <Link
                         to="/operations/invocations/$invocationRef"
                         params={{ invocationRef: selected.invocationRef }}

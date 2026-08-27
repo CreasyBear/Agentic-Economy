@@ -275,6 +275,41 @@ describe('exact invocation money reconciliation', () => {
         rake.amountUnits = '1'
       },
     },
+    {
+      name: 'wrong journalDigest',
+      mutate: (db: MemoryDb) => {
+        const transaction = db.rows('moneyTransactions').find((row) => row._id === 'transaction:charge')
+        if (transaction === undefined) throw new Error('charge_transaction_fixture_missing')
+        transaction.journalDigest = 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+        transaction.digestFormat = 'charge-journal:v1'
+      },
+    },
+    {
+      name: 'empty journalDigest',
+      mutate: (db: MemoryDb) => {
+        const transaction = db.rows('moneyTransactions').find((row) => row._id === 'transaction:charge')
+        if (transaction === undefined) throw new Error('charge_transaction_fixture_missing')
+        transaction.journalDigest = ''
+        transaction.digestFormat = 'charge-journal:v1'
+      },
+    },
+    {
+      name: 'inputDigest reused as journalDigest',
+      mutate: (db: MemoryDb) => {
+        const transaction = db.rows('moneyTransactions').find((row) => row._id === 'transaction:charge')
+        if (transaction === undefined) throw new Error('charge_transaction_fixture_missing')
+        transaction.journalDigest = transaction.inputDigest
+        transaction.digestFormat = 'charge-journal:v1'
+      },
+    },
+    {
+      name: 'usage observedAt that does not match transaction createdAt',
+      mutate: (db: MemoryDb) => {
+        const usage = db.rows('moneyUsageEvents').find((row) => row._id === 'usage:money')
+        if (usage === undefined) throw new Error('usage_fixture_missing')
+        usage.observedAt = now + 1
+      },
+    },
   ])('refuses disputed use with $name without writes', async ({ mutate }) => {
     const db = new MemoryDb()
     seedDisputeFixture(db, 'key-a', 'key-a')

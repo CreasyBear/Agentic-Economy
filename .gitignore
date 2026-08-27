@@ -54,3 +54,6 @@ eval/parity/results.tsv
 
 # Convex snapshot zips are secrets-bearing; never commit
 *.convex-export.zip
+
+# Superdesign local drafts
+.superdesign/tmp/

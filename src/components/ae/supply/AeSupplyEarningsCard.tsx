@@ -269,7 +269,7 @@ function EarningsCurrencyCard({
       />
       {!hasPersistedPayout ? null : (
         <details className="grid gap-2">
-          <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-foreground">
+          <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">
             Durable transfer evidence
           </summary>
           <AeFactList
@@ -302,7 +302,7 @@ function EarningsCurrencyCard({
             <Button
               type="button"
               variant="secondary"
-              className="min-h-11 w-fit"
+              className="min-h-touch w-fit"
               disabled={busy !== undefined}
               onClick={() => void refreshRecordedStatus()}
             >
@@ -322,7 +322,7 @@ function EarningsCurrencyCard({
             <Button
               type="button"
               variant="secondary"
-              className="min-h-11"
+              className="min-h-touch"
               disabled={busy !== undefined}
               onClick={() => void createAccount()}
             >
@@ -334,7 +334,7 @@ function EarningsCurrencyCard({
             <Button
               type="button"
               variant="secondary"
-              className="min-h-11"
+              className="min-h-touch"
               disabled={busy !== undefined}
               onClick={() => void openOnboarding()}
             >

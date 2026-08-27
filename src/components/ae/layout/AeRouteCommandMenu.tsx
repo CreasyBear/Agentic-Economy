@@ -155,7 +155,7 @@ export function AeRouteCommandMenu({
         {...(open ? { 'aria-controls': commandContentId } : {})}
         data-route-command-trigger
         {...(triggerClassName === undefined
-          ? { className: 'min-h-11' }
+          ? { className: 'min-h-touch' }
           : { className: triggerClassName })}
         onClick={() => setOpen(true)}
       >

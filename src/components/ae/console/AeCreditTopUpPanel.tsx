@@ -216,13 +216,13 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
             variant="secondary"
             disabled={pending || checking || target === undefined || port === undefined}
             onClick={() => void beginTopUp()}
-            className="min-h-11"
+            className="min-h-touch"
           >
             {pending ? <Spinner data-icon="inline-start" /> : null}
             {pending ? 'Preparing secure payment…' : 'Add credit for paid calls'}
           </Button>
         ) : recovery !== undefined && (paymentStatus === 'pending' || paymentStatus === 'outcome_unknown') ? (
-          <Button type="button" variant="ghost" disabled={checking || pending} onClick={() => void refreshPayment()} className="min-h-11">
+          <Button type="button" variant="ghost" disabled={checking || pending} onClick={() => void refreshPayment()} className="min-h-touch">
             {checking ? <Spinner data-icon="inline-start" /> : null}
             {checking ? 'Checking payment…' : 'Refresh payment status'}
           </Button>
@@ -264,7 +264,7 @@ function CheckoutPaymentForm({ confirming, onConfirmed }: Readonly<{ confirming:
   return (
     <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); void confirmPayment() }}>
       <PaymentElement />
-      <Button type="submit" disabled={confirming || confirmingLocal} className="min-h-11">
+      <Button type="submit" disabled={confirming || confirmingLocal} className="min-h-touch">
         {confirming || confirmingLocal ? <Spinner data-icon="inline-start" /> : null}
         {confirming || confirmingLocal ? 'Confirming payment…' : 'Pay securely'}
       </Button>

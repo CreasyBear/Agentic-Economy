@@ -33,9 +33,9 @@ describe('homepage search error', () => {
     renderWithRouter(<ErrorComponent />)
 
     const alert = screen.getByRole('alert')
-    expect(alert.textContent).toContain('Unable to load capabilities')
+    expect(alert.textContent).toContain('Unable to load the catalog')
     expect(alert.textContent).toContain('Check your connection and try again.')
-    expect(alert.textContent).toContain('No capability was called.')
+    expect(alert.textContent).toContain('No tool was called.')
 
     const backToSearch = screen.getByRole('link', { name: 'Try again' })
     expect(backToSearch.getAttribute('href')).toBe('/')

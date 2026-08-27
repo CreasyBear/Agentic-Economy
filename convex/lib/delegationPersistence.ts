@@ -1,6 +1,7 @@
 import type { MutationCtx } from '../_generated/server'
 import type { Doc } from '../_generated/dataModel'
 import {
+  DELEGATION_MAX_ANCESTRY_GRANTS,
   DelegationError,
   parsePersistedDelegationGrant,
   reconstructPinnedDelegationSnapshotForReplay,
@@ -147,8 +148,13 @@ async function snapshotFromDocument(
   const header = document
   const ancestors = await ctx.db.query('authorityDelegationSnapshotAncestors')
     .withIndex('by_snapshotRef_and_position', (query) => query.eq('snapshotRef', header.snapshotRef))
-    .collect()
-  if (!Number.isSafeInteger(header.ancestryCount) || header.ancestryCount <= 0 || ancestors.length !== header.ancestryCount) {
+    .take(DELEGATION_MAX_ANCESTRY_GRANTS + 1)
+  if (
+    !Number.isSafeInteger(header.ancestryCount)
+    || header.ancestryCount <= 0
+    || ancestors.length > DELEGATION_MAX_ANCESTRY_GRANTS
+    || ancestors.length !== header.ancestryCount
+  ) {
     throw new DelegationError('delegation_snapshot_invalid')
   }
   const ancestry = ancestors.map((ancestor, position) => {

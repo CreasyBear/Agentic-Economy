@@ -44,6 +44,9 @@ describe('capability-supply graph/probe thinness', () => {
     expect(ownerSupply).not.toContain('internal.capabilitySupply.observeCapabilityReadiness')
     expect(convexSupply).toMatch(/recordCapabilityProbeResultFromModule\(\s*capabilitySupplyGraphPorts\(ctx\.db\)/)
   })
+  it('does not rebuild the whole-business catalogue from probe observations', () => {
+    expect(probesSource).not.toContain('rebuildCapabilityOriginSupplyProjection')
+  })
   it('keeps authorization for includeInactive in the host', () => {
     expect(convexSupply).toMatch(/args\.includeInactive/)
     expect(convexSupply).toContain("register_capability_supply")

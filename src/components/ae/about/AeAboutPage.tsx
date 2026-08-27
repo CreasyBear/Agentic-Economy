@@ -16,9 +16,10 @@ import {
   AeSiteStack,
 } from '@/components/ae/website'
 import { ABOUT, AGENT_DOOR, BUSINESS_DOOR } from '@/content/brand-copy'
+import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
 
 const MACHINE_FILES = [
-  { name: 'llms.txt', description: 'Public Operation index', href: '/llms.txt', letter: 'L' },
+  { name: 'llms.txt', description: 'Public catalog index', href: '/llms.txt', letter: 'L' },
   { name: 'SKILL.md', description: 'Assistant procedure', href: '/SKILL.md', letter: 'S' },
   { name: '.well-known/ucp', description: 'Machine handshake', href: '/.well-known/ucp', letter: 'U' },
 ] as const
@@ -51,7 +52,7 @@ export function AeAboutPage() {
           </div>
         </AeSiteHeroIntro>
         <div className="relative mx-auto mt-hero size-20">
-          <img src="/brand/logo/ae-seal.svg" alt="" aria-hidden="true" className="size-20" />
+          <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={aeconMarkClassName.about} />
         </div>
       </AeSiteSection>
       <AeSiteSection labelledBy="about-doors" scheme="surface">

@@ -55,6 +55,7 @@ import {
   type WorkloadContextStore,
 } from '../src/modules/principal-account/public'
 import {
+  DELEGATION_MAX_ANCESTRY_GRANTS,
   DelegationService,
   delegationGrantRef,
   type DelegationAuthoritySnapshot,
@@ -379,7 +380,8 @@ export async function admitDevSeedCatalogAuthority(
     .withIndex('by_subjectPrincipalRef_and_lifecycle', (query) => query
       .eq('subjectPrincipalRef', DEV_SEED_CATALOG_PRINCIPAL_REF)
       .eq('lifecycle', 'active'))
-    .collect()
+    .take(DELEGATION_MAX_ANCESTRY_GRANTS + 1)
+  if (candidates.length > DELEGATION_MAX_ANCESTRY_GRANTS) throw new DevSeedCatalogAuthorityError()
   const matching = candidates.filter((grant) => grant.accountRef === DEV_SEED_CATALOG_ACCOUNT_REF
     && grant.expiresAt > consequenceNow
     && Number.isSafeInteger(grant.generation)

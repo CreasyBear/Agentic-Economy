@@ -83,7 +83,7 @@ export function AeAssistantInstallFunnel({
                   <CodeBlockTitle>{title}</CodeBlockTitle>
                   <CodeBlockActions>
                     <CodeBlockCopyButton
-                      className="min-h-11 min-w-11"
+                      className="min-h-touch min-w-touch"
                       aria-label={`Copy ${title} command`}
                       title={`Copy ${title} command`}
                       onCopy={() => handleCopy(title)}

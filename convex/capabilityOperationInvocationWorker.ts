@@ -5,6 +5,8 @@ import { makeFunctionReference } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import { recoveryResultValue } from '@/modules/capability-execution/convex'
 import {
+  expireAuthorizationRecovery,
+  readRecoveryStatus,
   recoverCapabilityOperationInvocation,
   recoveryArgs,
   runCapabilityOperationInvocationWithAuthority,
@@ -169,11 +171,10 @@ export const reconcileScheduled = internalAction({
           resourceInvocationRef: candidate.dispatchRef,
         })
         if (await reconcileInvocationWorkloadAuthority(ctx, candidate.dispatchRef, ownerRecovery) === null) continue
-        const result = await recoverCapabilityOperationInvocation(invocationContext, {
+        const result = await expireAuthorizationRecovery(invocationContext, {
           invocationRef: candidate.dispatchRef,
           principalId: ownerRecovery.principalId,
           credentialId: ownerRecovery.credentialId,
-          mode: 'expire_authorization',
         })
         if (result.kind !== 'reconciliation_required' || !('expiryDisposition' in result)) continue
         if (result.expiryDisposition === 'manual_review') expiredManualReview += 1
@@ -219,11 +220,10 @@ export const reconcileScheduled = internalAction({
         reason = 'recovery_failed'
       } else {
         try {
-          const result = await recoverCapabilityOperationInvocation(invocationContext, {
+          const result = await readRecoveryStatus(invocationContext, {
             invocationRef: candidate.invocationRef,
             principalId: claim.principalId,
             credentialId: claim.credentialId,
-            mode: 'status',
           })
           outcome = isTerminalRecoveryResult(result) ? 'terminal' : 'reconciliation_required'
         } catch {

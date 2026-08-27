@@ -546,13 +546,7 @@ export async function completePayoutBody(
           recipientCapabilityActive: payoutAccount.recipientCapabilityActive,
         }
   if ('resolution' in args.evidence) {
-    if (
-      args.evidence.status !== 'failed' ||
-      (payout.state !== 'transfer_pending' &&
-        payout.state !== 'outcome_unknown' &&
-        payout.state !== 'held_threshold' &&
-        payout.state !== 'held_kyc')
-    )
+    if (args.evidence.status !== 'failed')
       return refusedPayout('payout_reconciliation_required', false)
     const policy =
       payout.state === 'held_threshold' ||
@@ -623,13 +617,6 @@ export async function completePayoutBody(
     )
     }
     case 'failed': {
-    if (
-      payout.state !== 'transfer_pending' &&
-      payout.state !== 'outcome_unknown' &&
-      payout.state !== 'held_threshold' &&
-      payout.state !== 'held_kyc'
-    )
-      return refusedPayout('payout_reconciliation_required', false)
     const policy =
       payout.state === 'held_threshold' ||
       payout.state === 'held_kyc'

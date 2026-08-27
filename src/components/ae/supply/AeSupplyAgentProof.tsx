@@ -18,17 +18,17 @@ export function AeSupplyAgentProof({
   return (
     <AeSection
       title="What agents can inspect"
-      description="This is the public Operation and tool evidence agents use to compare suppliers."
+      description="This is the public evidence agents use to compare."
     >
       <div className="grid gap-8">
         <div className="grid gap-3">
-          <h3 className="text-sm font-medium text-foreground">Published Operations</h3>
+          <h3 className="text-sm font-medium text-foreground">Listed in the catalog</h3>
           {services.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No Operations are listed yet.</p>
+            <p className="text-sm text-muted-foreground">No tools are listed yet.</p>
           ) : (
             <ProofList
               items={services}
-              remainingLabel="more published Operations"
+              remainingLabel="more listed"
               render={(service) => <ServiceProofRow service={service} />}
             />
           )}
@@ -36,7 +36,7 @@ export function AeSupplyAgentProof({
         <div className="grid gap-3">
           <h3 className="text-sm font-medium text-foreground">Callable tools</h3>
           {tools.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No public actions are available yet. Publish an Operation to make one available.</p>
+            <p className="text-sm text-muted-foreground">No public actions are available yet. List a tool to make one available.</p>
           ) : (
             <ProofList
               items={tools}
@@ -73,7 +73,7 @@ function ProofList<T>({
       </ul>
       {hidden.length === 0 ? null : (
         <details className="mt-3">
-          <summary className="flex min-h-11 cursor-pointer items-center font-medium text-foreground">
+          <summary className="flex min-h-touch cursor-pointer items-center font-medium text-foreground">
             Show {hidden.length} {remainingLabel}
           </summary>
           <ul className="m-0 mt-3 grid list-none divide-y divide-border border-t border-border p-0 pt-3">
@@ -101,7 +101,7 @@ function ToolProofRow({ tool }: Readonly<{ tool: SupplyLandingTool }>) {
 function ServiceProofRow({ service }: Readonly<{ service: ServiceDto }>) {
   const firstOffering = service.ae.offerings[0]
   const priceText = firstOffering?.price === undefined
-    ? (firstOffering?.pricingSummary ?? 'Price supplied in the Operation details')
+    ? (firstOffering?.pricingSummary ?? 'Price supplied in the listing')
     : formatPublishedPrice(firstOffering.price)
   return (
     <div className="grid gap-2">
@@ -114,8 +114,8 @@ function ServiceProofRow({ service }: Readonly<{ service: ServiceDto }>) {
       </div>
       <p className="text-sm text-muted-foreground">{firstOffering?.summary ?? service.category}</p>
       <div className="flex flex-wrap gap-3 text-sm">
-        <a href={service.ae.links.business} className="inline-flex min-h-11 items-center underline underline-offset-4">Supplier profile</a>
-        <a href={service.ae.links.manifest} className="inline-flex min-h-11 items-center underline underline-offset-4">Operation manifest</a>
+        <a href={service.ae.links.business} className="inline-flex min-h-touch items-center underline underline-offset-4">Supplier profile</a>
+        <a href={service.ae.links.manifest} className="inline-flex min-h-touch items-center underline underline-offset-4">Operation manifest</a>
       </div>
     </div>
   )

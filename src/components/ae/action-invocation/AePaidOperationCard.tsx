@@ -110,7 +110,7 @@ export function AePaidOperationCard({
           <Button
             type="button"
             variant={continuation.kind === 'reconcile' ? 'default' : 'secondary'}
-            className="min-h-11 w-full sm:w-fit"
+            className="min-h-touch w-full sm:w-fit"
             onClick={() => onContinue(continuation)}
           >
             {continuationIcon(continuation)}
@@ -120,7 +120,7 @@ export function AePaidOperationCard({
       </section>
 
       <details>
-        <summary className="flex min-h-11 cursor-pointer items-center font-medium text-foreground">
+        <summary className="flex min-h-touch cursor-pointer items-center font-medium text-foreground">
           Technical details
         </summary>
         <dl className="grid gap-3 pt-3 text-sm sm:grid-cols-2">

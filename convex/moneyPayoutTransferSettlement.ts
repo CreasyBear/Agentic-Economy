@@ -8,7 +8,7 @@ import { identifier } from './moneyLedgerValues'
 import {
   requireCanonicalPayoutAuthority,
   utcPeriodStartIso,
-} from './moneyQualifiedUsePayout'
+} from './lib/qualifiedUsePayout'
 import {
   reconcileWorkloadCronResourceAccount,
   reconcileWorkloadCronSnapshot,

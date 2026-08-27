@@ -1,16 +1,10 @@
-import { v, type Infer } from 'convex/values'
-
 import {
-  capabilityPublicationSourceSelectorValue,
   probeRequestDigest,
   publicationLifecycle,
   qualifySuppliedCandidate,
   readCapabilityProbeTarget,
-  readinessOutcomeValue,
-  pricingConfigValue,
 } from '@/modules/capability-supply/public'
-import { ownerSupplyAccessPathDescriptor, ownerSupplyAccessPathDescriptorValue, ownerSupplyLiteral, ownerSupplyOptionalNumber, ownerSupplyStringArray } from '@/modules/capability-supply/owner-supply-validators'
-import { normalizePricingConfig } from '@/modules/money/public'
+import { ownerSupplyLiteral, ownerSupplyOptionalNumber, ownerSupplyStringArray } from '@/modules/capability-supply/owner-supply-validators'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
@@ -23,277 +17,87 @@ const OWNER_SUPPLY_PUBLICATIONS_READ_CAP = 100
 const OWNER_SUPPLY_CAPABILITY_OFFERINGS_READ_CAP = 50
 const OWNER_SUPPLY_EVENTS_READ_CAP = 50
 
-const ownerSupplyLifecycleReasonValue = v.union(
-  v.literal('admission_unproven'),
-  v.literal('conformance_unproven'),
-  v.literal('credential_readiness_unobserved'),
-  v.literal('health_unobserved'),
-  v.literal('credential_unavailable'),
-  v.literal('health_unhealthy'),
-  v.literal('health_stale'),
-  v.literal('withdrawn'),
-  v.literal('incompatible_revision'),
-  v.literal('eligibility_integrity_failure'),
-)
-const ownerSupplyAuthorityValue = v.union(
-  v.object({ kind: v.literal('keyless') }),
-  v.object({ kind: v.literal('provider_connection'), providerRef: v.string() }),
-)
-const ownerSupplyAuthoritySnapshotValue = v.object({
-  providerRef: v.string(),
-  authorityGeneration: v.number(),
-  authorityDigest: v.string(),
-})
-const ownerSupplyPublicationValue = v.object({
-  state: v.union(
-    v.literal('current'),
-    v.literal('withdrawn'),
-    v.literal('superseded'),
-    v.literal('incompatible'),
-  ),
-  publicationRef: v.string(),
-  publicationRevision: v.number(),
-  operationRef: v.string(),
-  authorityMode: v.union(
-    v.literal('provider_owned'),
-    v.literal('ae_curated_external'),
-    v.literal('third_party_gateway'),
-    v.literal('observed_external'),
-  ),
-  contractRef: v.object({
-    capabilityId: v.string(),
-    version: v.number(),
-    contractDigest: v.string(),
-  }),
-  source: v.object({
-    kind: v.union(
-      v.literal('ae_envelope'),
-      v.literal('openapi_http'),
-      v.literal('mcp'),
-      v.literal('agent_plugin_mcp'),
-      v.literal('x402'),
-    ),
-    selector: capabilityPublicationSourceSelectorValue,
-    revision: v.string(),
-    digest: v.string(),
-  }),
-  pricing: v.optional(
-    v.object({ config: pricingConfigValue, priceDigest: v.string() }),
-  ),
-  binding: v.object({
-    bindingId: v.string(),
-    bindingDigest: v.string(),
-    endpointUrl: v.string(),
-    adapterId: v.string(),
-    admission: v.union(v.literal('not_admitted'), v.literal('admitted')),
-    conformance: v.union(v.literal('not_conformant'), v.literal('conformant')),
-    authority: ownerSupplyAuthorityValue,
-    authoritySnapshot: v.optional(ownerSupplyAuthoritySnapshotValue),
-  }),
-  lifecycle: v.object({
-    state: v.union(
-      v.literal('inactive'),
-      v.literal('active'),
-      v.literal('withdrawn'),
-      v.literal('incompatible'),
-    ),
-    reasons: v.array(ownerSupplyLifecycleReasonValue),
-  }),
-  readiness: v.object({
-    outcome: v.union(v.literal('unobserved'), readinessOutcomeValue),
-    observedAt: v.optional(v.number()),
-    validUntil: v.optional(v.number()),
-    targetDigest: v.optional(v.string()),
-    requestDigest: v.optional(v.string()),
-    responseStatus: v.optional(v.number()),
-    responseContentType: v.optional(v.string()),
-    responseDigest: v.optional(v.string()),
-    evidenceRefs: v.array(v.string()),
-  }),
-})
+import type { OwnerSupplyFunnelResult } from './capabilitySupplyOwnerFunnelProjection/contracts'
+import {
+  everyFact,
+  ownerSupplyActionableReason,
+  ownerSupplyAuthority,
+  ownerSupplyOfferingResult,
+  ownerSupplyPricing,
+  ownerSupplyPublicationDetails,
+  ownerSupplyReadiness,
+  ownerSupplyStepProgress,
+} from './capabilitySupplyOwnerFunnelProjection/offering_projection'
 
-/** Bounded owner readback for the admitted source and single-player panel. */
-export const ownerSupplyFunnelResultValue = v.union(
-  v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
-  v.object({ kind: v.literal('not_found') }),
-  v.object({ kind: v.literal('incomplete') }),
-  v.object({
-    kind: v.literal('available'),
-    businessId: v.string(),
-    business: v.object({ name: v.string(), slug: v.string() }),
-    offerings: v.array(
-      v.object({
-        offeringRef: v.string(),
-        revision: v.number(),
-        name: v.string(),
-        summary: v.string(),
-        status: v.union(
-          v.literal('draft'),
-          v.literal('published'),
-          v.literal('paused'),
-          v.literal('retired'),
-        ),
-        sourceHash: v.optional(v.string()),
-        source: v.optional(
-          v.object({
-            kind: v.union(
-              v.literal('ae_envelope'),
-              v.literal('openapi_http'),
-              v.literal('mcp'),
-              v.literal('agent_plugin_mcp'),
-              v.literal('x402'),
-            ),
-            selector: capabilityPublicationSourceSelectorValue,
-            revision: v.string(),
-            digest: v.string(),
-          }),
-        ),
-        endpointUrl: v.optional(v.string()),
-        pricing: v.optional(
-          v.object({ config: pricingConfigValue, priceDigest: v.string() }),
-        ),
-        authority: v.optional(
-          v.object({
-            mode: v.union(
-              v.literal('provider_owned'),
-              v.literal('ae_curated_external'),
-              v.literal('third_party_gateway'),
-              v.literal('observed_external'),
-            ),
-            kind: v.union(
-              v.literal('keyless'),
-              v.literal('provider_connection'),
-            ),
-            providerRef: v.optional(v.string()),
-            authorityGeneration: v.optional(v.number()),
-            authorityDigest: v.optional(v.string()),
-          }),
-        ),
-        admission: v.object({
-          state: v.union(v.literal('not_admitted'), v.literal('admitted')),
-          reason: v.optional(v.string()),
-        }),
-        operationRef: v.optional(v.string()),
-        publicationRef: v.optional(v.string()),
-        publication: v.optional(ownerSupplyPublicationValue),
-        lifecycle: v.object({
-          state: v.union(
-            v.literal('inactive'),
-            v.literal('active'),
-            v.literal('withdrawn'),
-            v.literal('incompatible'),
-          ),
-          reasons: v.array(v.string()),
-        }),
-        readiness: v.object({
-          outcome: v.union(v.literal('unobserved'), readinessOutcomeValue),
-          observedAt: v.optional(v.number()),
-          validUntil: v.optional(v.number()),
-          evidenceRefs: v.array(v.string()),
-        }),
-        live: v.object({
-          available: v.boolean(),
-          reason: v.optional(v.string()),
-        }),
-        currentStep: v.union(
-          v.literal('describe'),
-          v.literal('admission'),
-          v.literal('readiness'),
-          v.literal('test'),
-        ),
-        stepStates: v.object({
-          describe: v.union(
-            v.literal('not_started'),
-            v.literal('in_progress'),
-            v.literal('completed'),
-            v.literal('refused'),
-            v.literal('stale'),
-          ),
-          admission: v.union(
-            v.literal('not_started'),
-            v.literal('in_progress'),
-            v.literal('completed'),
-            v.literal('refused'),
-            v.literal('stale'),
-          ),
-          readiness: v.union(
-            v.literal('not_started'),
-            v.literal('in_progress'),
-            v.literal('completed'),
-            v.literal('refused'),
-            v.literal('stale'),
-          ),
-          test: v.union(
-            v.literal('not_started'),
-            v.literal('in_progress'),
-            v.literal('completed'),
-            v.literal('refused'),
-            v.literal('stale'),
-          ),
-        }),
-        actionableReason: v.optional(v.string()),
-        accessPaths: v.array(
-          v.object({
-            accessPathRef: v.string(),
-            offeringSourceHash: v.string(),
-            sourceHash: v.string(),
-            status: v.union(
-              v.literal('draft'),
-              v.literal('published'),
-              v.literal('withdrawn'),
-            ),
-            descriptor: ownerSupplyAccessPathDescriptorValue,
-          }),
-        ),
-      }),
-    ),
-    callLog: v.array(
-      v.object({
-        eventRef: v.string(),
-        offeringRef: v.string(),
-        publicationRef: v.optional(v.string()),
-        observedAt: v.number(),
-        outcome: v.union(v.literal('filled'), v.literal('zero')),
-        zeroReason: v.optional(
-          v.union(
-            v.literal('no_routeable_supply'),
-            v.literal('readiness_unavailable'),
-            v.literal('provider_refused'),
-            v.literal('credential_unavailable'),
-            v.literal('price_unavailable'),
-            v.literal('insufficient_credit'),
-            v.literal('input_invalid'),
-            v.literal('outcome_unknown'),
-          ),
-        ),
-        durationMs: v.optional(v.number()),
-        evidenceRefs: v.array(v.string()),
-        environment: v.union(
-          v.literal('local'),
-          v.literal('development'),
-          v.literal('sandbox'),
-          v.literal('production'),
-        ),
-      }),
-    ),
-    activityTruncated: v.boolean(),
-    liquidity: v.object({
-      fillCount: v.number(),
-      zeroCount: v.number(),
-      firstSuccessP50Ms: v.optional(v.number()),
-      firstSuccessP95Ms: v.optional(v.number()),
-      depthSamples: v.number(),
-      environment: v.literal('development'),
-    }),
-  }),
-)
-export type OwnerSupplyFunnelResult = Infer<typeof ownerSupplyFunnelResultValue>
+export {
+  ownerSupplyFunnelResultValue,
+  type OwnerSupplyFunnelResult,
+} from './capabilitySupplyOwnerFunnelProjection/contracts'
+
 type OwnerSupplyAvailable = Extract<
   OwnerSupplyFunnelResult,
   { kind: 'available' }
 >
 type OwnerSupplyOffering = OwnerSupplyAvailable['offerings'][number]
 type OwnerSupplyPublication = NonNullable<OwnerSupplyOffering['publication']>
+
+async function qualifyOwnerSupplyOffering(
+  db: QueryCtx['db'],
+  input: Readonly<{
+    publication: Doc<'capabilityPublications'> | undefined
+    binding: Doc<'capabilityTransportBindings'> | undefined
+    capabilityOffering: Doc<'capabilityOfferings'> | undefined
+    businessId: string
+    now: number
+  }>,
+) {
+  const { publication, binding, capabilityOffering, businessId, now } = input
+  if (
+    publication === undefined
+    || binding === undefined
+    || capabilityOffering === undefined
+  ) return undefined
+  return qualifySuppliedCandidate(capabilitySupplyGraphPorts(db), {
+    candidate: {
+      publicationRef: publication.publicationRef,
+      revision: publication.revision,
+      networkId: publication.networkId,
+      businessId,
+      offeringId: capabilityOffering.offeringId,
+      bindingId: binding.bindingId,
+      contractRef: {
+        capabilityId: binding.capabilityId,
+        version: binding.version,
+        contractDigest: binding.contractDigest,
+      },
+    },
+    now,
+  })
+}
+
+function ownerSupplyLifecycle(
+  input: Readonly<{
+    publication: Doc<'capabilityPublications'> | undefined
+    binding: Doc<'capabilityTransportBindings'> | undefined
+    capabilityOffering: Doc<'capabilityOfferings'> | undefined
+    currentConnection: Doc<'capabilityProviderConnections'> | null | undefined
+    now: number
+  }>,
+) {
+  const { publication, binding, capabilityOffering, currentConnection, now } = input
+  if (
+    publication === undefined
+    || binding === undefined
+    || capabilityOffering === undefined
+  ) return undefined
+  return publicationLifecycle(
+    publication,
+    capabilityOffering,
+    binding,
+    now,
+    currentConnection,
+  )
+}
 
 export async function readOwnerSupplyFunnelProjection(
   ctx: QueryCtx | MutationCtx,
@@ -479,113 +283,29 @@ export async function readOwnerSupplyFunnelProjection(
           publication === undefined
             ? undefined
             : providerConnectionByPublicationRef.get(publication.publicationRef)
-        const qualification =
-          publication === undefined ||
-          binding === undefined ||
-          capabilityOffering === undefined
-            ? undefined
-            : await qualifySuppliedCandidate(capabilitySupplyGraphPorts(db), {
-                candidate: {
-                  publicationRef: publication.publicationRef,
-                  revision: publication.revision,
-                  networkId: publication.networkId,
-                  businessId: String(business._id),
-                  offeringId: capabilityOffering.offeringId,
-                  bindingId: binding.bindingId,
-                  contractRef: {
-                    capabilityId: binding.capabilityId,
-                    version: binding.version,
-                    contractDigest: binding.contractDigest,
-                  },
-                },
-                now,
-              })
-        const lifecycle =
-          publication === undefined ||
-          binding === undefined ||
-          capabilityOffering === undefined
-            ? undefined
-            : publicationLifecycle(
-                publication,
-                capabilityOffering,
-                binding,
-                now,
-                currentConnection,
-              )
-        const pricing =
-          publication?.pricingConfigJson === undefined
-            ? undefined
-            : (() => {
-                try {
-                  const parsed = normalizePricingConfig(
-                    JSON.parse(publication.pricingConfigJson),
-                  )
-                  if (
-                    parsed.kind !== 'valid' ||
-                    publication.priceDigest === undefined
-                  )
-                    return undefined
-                  const config =
-                    parsed.config.freeTier === undefined
-                      ? {
-                          version: parsed.config.version,
-                          unit: parsed.config.unit,
-                          paidAmount: parsed.config.paidAmount,
-                        }
-                      : { ...parsed.config, freeTier: parsed.config.freeTier }
-                  return { config, priceDigest: publication.priceDigest }
-                } catch {
-                  return undefined
-                }
-              })()
-        const readiness =
-          publication === undefined
-            ? undefined
-            : {
-                outcome:
-                  publication.readinessOutcome ??
-                  (publication.healthState === 'healthy'
-                    ? ('healthy' as const)
-                    : publication.healthState === 'unhealthy'
-                      ? ('response_invalid' as const)
-                      : ('unobserved' as const)),
-                ...(publication.readinessObservedAt === undefined
-                  ? {}
-                  : { observedAt: publication.readinessObservedAt }),
-                ...(publication.readinessValidUntil === undefined
-                  ? {}
-                  : { validUntil: publication.readinessValidUntil }),
-                ...(publication.readinessTargetDigest === undefined
-                  ? {}
-                  : { targetDigest: publication.readinessTargetDigest }),
-                ...(publication.readinessRequestDigest === undefined
-                  ? {}
-                  : { requestDigest: publication.readinessRequestDigest }),
-                ...(publication.readinessResponseStatus === undefined
-                  ? {}
-                  : { responseStatus: publication.readinessResponseStatus }),
-                ...(publication.readinessResponseContentType === undefined
-                  ? {}
-                  : {
-                      responseContentType:
-                        publication.readinessResponseContentType,
-                    }),
-                ...(publication.readinessResponseDigest === undefined
-                  ? {}
-                  : { responseDigest: publication.readinessResponseDigest }),
-                evidenceRefs: ownerSupplyStringArray(
-                  publication.readinessEvidenceRefs,
-                  'readiness evidence',
-                ),
-              }
-        const sourceHash = revision?.sourceHash
+        const qualification = await qualifyOwnerSupplyOffering(db, {
+          publication,
+          binding,
+          capabilityOffering,
+          businessId: String(business._id),
+          now,
+        })
+        const lifecycle = ownerSupplyLifecycle({
+          publication,
+          binding,
+          capabilityOffering,
+          currentConnection,
+          now,
+        })
+        const pricing = ownerSupplyPricing(publication)
+        const readiness = ownerSupplyReadiness(publication)
         const lifecycleValue = lifecycle ?? {
           state: 'inactive' as const,
           reasons: ['admission_unproven' as const],
         }
         const lifecycleForWire: {
           state: 'inactive' | 'active' | 'withdrawn' | 'incompatible'
-          reasons: Array<Infer<typeof ownerSupplyLifecycleReasonValue>>
+          reasons: OwnerSupplyPublication['lifecycle']['reasons']
         } = {
           state: lifecycleValue.state,
           reasons: [...lifecycleValue.reasons],
@@ -594,87 +314,30 @@ export async function readOwnerSupplyFunnelProjection(
           outcome: 'unobserved' as const,
           evidenceRefs: [] as string[],
         }
-        const publicationDetails: OwnerSupplyPublication | undefined =
-          publication === undefined || binding === undefined
-            ? undefined
-            : {
-                state: ownerSupplyLiteral(
-                  publication.disposition,
-                  [
-                    'current',
-                    'withdrawn',
-                    'superseded',
-                    'incompatible',
-                  ] as const,
-                  'publication state',
-                ),
-                publicationRef: publication.publicationRef,
-                publicationRevision: publication.revision,
-                operationRef: publication.operationRef,
-                authorityMode: ownerSupplyLiteral(
-                  publication.authorityMode,
-                  [
-                    'provider_owned',
-                    'ae_curated_external',
-                    'third_party_gateway',
-                    'observed_external',
-                  ] as const,
-                  'publication authority',
-                ),
-                contractRef: {
-                  capabilityId: publication.capabilityId,
-                  version: publication.version,
-                  contractDigest: publication.contractDigest,
-                },
-                source: {
-                  kind: publication.sourceKind,
-                  selector: publication.sourceSelector ?? {},
-                  revision: publication.sourceRevision,
-                  digest: publication.sourceDigest,
-                },
-                ...(pricing === undefined ? {} : { pricing }),
-                binding: {
-                  bindingId: binding.bindingId,
-                  bindingDigest: binding.registrationHash,
-                  endpointUrl: binding.endpointUrl,
-                  adapterId: binding.adapterId,
-                  admission: binding.admission,
-                  conformance: binding.conformance,
-                  authority:
-                    binding.authority.kind === 'keyless'
-                      ? { kind: 'keyless' as const }
-                      : {
-                          kind: 'provider_connection' as const,
-                          providerRef: binding.authority.providerRef,
-                        },
-                  ...(publication.connectionAuthority === undefined
-                    ? {}
-                    : {
-                        authoritySnapshot: {
-                          providerRef:
-                            publication.connectionAuthority.providerRef,
-                          authorityGeneration:
-                            publication.connectionAuthority.authorityGeneration,
-                          authorityDigest:
-                            publication.connectionAuthority.authorityDigest,
-                        },
-                      }),
-                },
-                lifecycle: lifecycleForWire,
-                readiness: readinessValue,
-              }
-        const readyNow =
-          lifecycleValue.state === 'active' &&
-          readinessValue.outcome === 'healthy' &&
-          readinessValue.observedAt !== undefined &&
-          readinessValue.validUntil !== undefined &&
-          readinessValue.validUntil > now &&
-          readinessValue.validUntil <= now + MAX_READINESS_VALIDITY_MS
+        const publicationDetails = ownerSupplyPublicationDetails({
+          publication,
+          binding,
+          pricing,
+          lifecycle: lifecycleForWire,
+          readiness: readinessValue,
+        })
+        const readyNow = everyFact([
+          lifecycleValue.state === 'active',
+          readinessValue.outcome === 'healthy',
+          readinessValue.observedAt !== undefined,
+          readinessValue.validUntil !== undefined,
+          (readinessValue.validUntil ?? 0) > now,
+          (readinessValue.validUntil ?? Number.POSITIVE_INFINITY)
+            <= now + MAX_READINESS_VALIDITY_MS,
+        ])
         const qualificationRouteable = qualification?.status === 'eligible'
-        const testObserved =
-          publication !== undefined &&
-          publication.disposition === 'current' &&
-          testObservedPublicationRefs.has(publication.publicationRef)
+        const testObserved = everyFact([
+          publication !== undefined,
+          publication?.disposition === 'current',
+          publication === undefined
+            ? false
+            : testObservedPublicationRefs.has(publication.publicationRef),
+        ])
         const x402ProbeTarget =
           publicationDetails?.source.kind !== 'x402' ||
           publication === undefined
@@ -686,164 +349,60 @@ export async function readOwnerSupplyFunnelProjection(
                   expectedRevision: publication.revision,
                 },
               )
-        const x402ChallengeObserved =
-          publicationDetails?.state === 'current' &&
-          publicationDetails.source.kind === 'x402' &&
-          publicationDetails.binding.adapterId === 'x402-fetch:v2' &&
-          publicationDetails.binding.admission === 'admitted' &&
-          publicationDetails.binding.conformance === 'conformant' &&
-          readyNow &&
-          x402ProbeTarget?.kind === 'available' &&
-          readinessValue.targetDigest ===
-            x402ProbeTarget.target.targetDigest &&
+        const availableX402Target =
+          x402ProbeTarget?.kind === 'available' ? x402ProbeTarget : undefined
+        const x402ChallengeObserved = everyFact([
+          publicationDetails?.state === 'current',
+          publicationDetails?.source.kind === 'x402',
+          publicationDetails?.binding.adapterId === 'x402-fetch:v2',
+          publicationDetails?.binding.admission === 'admitted',
+          publicationDetails?.binding.conformance === 'conformant',
+          readyNow,
+          availableX402Target !== undefined,
+          readinessValue.targetDigest === availableX402Target?.target.targetDigest,
           readinessValue.requestDigest ===
-            probeRequestDigest(x402ProbeTarget.target) &&
-          readinessValue.responseStatus === 402 &&
+            (availableX402Target === undefined
+              ? undefined
+              : probeRequestDigest(availableX402Target.target)),
+          readinessValue.responseStatus === 402,
           readinessValue.evidenceRefs.includes(
             'probe:x402_payment_required_valid',
-          )
+          ),
+        ])
         const testCompleted =
           publicationDetails?.source.kind === 'x402'
             ? x402ChallengeObserved
             : testObserved
-        const stepStates = {
-          describe:
-            revision === undefined
-              ? ('in_progress' as const)
-              : ('completed' as const),
-          admission:
-            publication === undefined
-              ? revision === undefined
-                ? ('not_started' as const)
-                : ('in_progress' as const)
-              : ('completed' as const),
-          readiness:
-            publication === undefined
-              ? ('not_started' as const)
-              : readyNow
-                ? ('completed' as const)
-                : readinessValue.outcome === 'unobserved'
-                  ? ('in_progress' as const)
-                  : ('refused' as const),
-          test:
-            publication === undefined || !readyNow
-              ? ('not_started' as const)
-              : testCompleted
-                ? ('completed' as const)
-                : ('in_progress' as const),
-        }
-        const currentStep =
-          stepStates.describe !== 'completed'
-            ? ('describe' as const)
-            : stepStates.admission !== 'completed'
-              ? ('admission' as const)
-              : stepStates.readiness !== 'completed'
-                ? ('readiness' as const)
-                : ('test' as const)
-        const actionableReason =
-          publication === undefined
-            ? 'admission_unproven'
-            : !qualificationRouteable
-              ? (qualification?.reasons[0] ??
-                lifecycleValue.reasons[0] ??
-                'eligibility_integrity_failure')
-              : (lifecycleValue.reasons[0] ??
-                (readinessValue.outcome === 'unobserved'
-                  ? 'health_unobserved'
-                  : undefined))
-        const source = publicationDetails?.source
-        const authority =
-          publicationDetails === undefined
-            ? undefined
-            : {
-                mode: publicationDetails.authorityMode,
-                kind: publicationDetails.binding.authority.kind,
-                ...(publicationDetails.binding.authority.kind ===
-                'provider_connection'
-                  ? {
-                      providerRef:
-                        publicationDetails.binding.authority.providerRef,
-                      ...(publicationDetails.binding.authoritySnapshot ===
-                      undefined
-                        ? {}
-                        : {
-                            authorityGeneration:
-                              publicationDetails.binding.authoritySnapshot
-                                .authorityGeneration,
-                            authorityDigest:
-                              publicationDetails.binding.authoritySnapshot
-                                .authorityDigest,
-                          }),
-                    }
-                  : {}),
-              }
-        return {
-          offeringRef: offering.offeringRef,
-          revision: offering.currentRevision,
-          name: revision?.name ?? offering.offeringRef,
-          summary: revision?.summary ?? '',
-          status: ownerSupplyLiteral(
-            offering.status,
-            ['draft', 'published', 'paused', 'retired'] as const,
-            'offering status',
-          ),
-          ...(sourceHash === undefined ? {} : { sourceHash }),
-          ...(source === undefined ? {} : { source }),
-          ...(binding === undefined
-            ? {}
-            : { endpointUrl: binding.endpointUrl }),
-          ...(pricing === undefined ? {} : { pricing }),
-          ...(authority === undefined ? {} : { authority }),
-          admission: {
-            state: binding?.admission ?? 'not_admitted',
-            ...(binding?.admission === 'admitted' ||
-            actionableReason === undefined
-              ? {}
-              : { reason: actionableReason }),
-          },
-          ...(publication === undefined
-            ? {}
-            : {
-                operationRef: publication.operationRef,
-                publicationRef: publication.publicationRef,
-              }),
-          ...(publicationDetails === undefined
-            ? {}
-            : { publication: publicationDetails }),
+        const { currentStep, stepStates } = ownerSupplyStepProgress({
+          hasRevision: revision !== undefined,
+          hasPublication: publication !== undefined,
+          readyNow,
+          readinessOutcome: readinessValue.outcome,
+          testCompleted,
+        })
+        const actionableReason = ownerSupplyActionableReason({
+          hasPublication: publication !== undefined,
+          qualificationRouteable,
+          qualificationReasons: qualification?.reasons,
+          lifecycleReasons: lifecycleValue.reasons,
+          readinessOutcome: readinessValue.outcome,
+        })
+        return ownerSupplyOfferingResult({
+          offering,
+          revision,
+          paths,
+          binding,
+          pricing,
+          authority: ownerSupplyAuthority(publicationDetails),
+          publication,
+          publicationDetails,
           lifecycle: lifecycleForWire,
-          readiness: {
-            outcome: readinessValue.outcome,
-            ...(readinessValue.observedAt === undefined
-              ? {}
-              : { observedAt: readinessValue.observedAt }),
-            ...(readinessValue.validUntil === undefined
-              ? {}
-              : { validUntil: readinessValue.validUntil }),
-            evidenceRefs: readinessValue.evidenceRefs,
-          },
-          live: {
-            available: qualificationRouteable,
-            ...(qualificationRouteable
-              ? {}
-              : {
-                  reason: actionableReason ?? 'readiness_unavailable',
-                }),
-          },
+          readiness: readinessValue,
+          qualificationRouteable,
           currentStep,
           stepStates,
-          ...(actionableReason === undefined ? {} : { actionableReason }),
-          accessPaths: paths.map((path) => ({
-            accessPathRef: path.accessPathRef,
-            offeringSourceHash: path.offeringSourceHash,
-            sourceHash: path.sourceHash,
-            status: ownerSupplyLiteral(
-              path.status,
-              ['draft', 'published', 'withdrawn'] as const,
-              'access path status',
-            ),
-            descriptor: ownerSupplyAccessPathDescriptor(path.descriptor),
-          })),
-        }
+          actionableReason,
+        })
       }),
     )
     const fillEvents = events.filter(

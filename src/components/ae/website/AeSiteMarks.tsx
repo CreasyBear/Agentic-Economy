@@ -81,6 +81,21 @@ export function AeMarkedDivider({ orientation = 'auto' }: { orientation?: 'auto'
   )
 }
 
+/** 10px hairline between inline nav items — Twenty VerticalDivider. */
+export function AeVerticalHairline() {
+  return <span aria-hidden="true" className="hidden h-2.5 w-px shrink-0 bg-border md:inline-block" />
+}
+
+/** Dotted rule between stacked mobile drawer items — Twenty MenuDrawer. */
+export function AeDottedRule() {
+  return (
+    <span
+      aria-hidden="true"
+      className="block h-px w-full bg-[repeating-linear-gradient(90deg,var(--border)_0,var(--border)_1px,transparent_2px,transparent_4px)]"
+    />
+  )
+}
+
 /** Desktop-only open-top bracket that joins a section to the band above it. */
 export function AeConnectingFrame() {
   return (

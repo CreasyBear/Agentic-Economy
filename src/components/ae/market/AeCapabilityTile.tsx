@@ -23,15 +23,19 @@ export function AeCapabilityTile({
   group: CapabilityGroupViewModel;
   window: MarketWindow;
 }) {
-  const count = group.operations.length;
   const initial = group.label.trim().charAt(0).toUpperCase() || "T";
+  const listingFact =
+    group.providerCount > 1
+      ? `${group.providerCount.toLocaleString()} listed`
+      : group.operations[0]?.supplierName ?? "1 listed";
+  const price = capabilityFromPrice(group.operations);
 
   return (
-    <Item asChild variant="outline" className="h-full rounded-lg bg-card">
+    <Item asChild variant="outline" className="h-full rounded-card bg-card">
       <Link
         to="/market"
         search={{ window, capability: group.capabilityId }}
-        aria-label={`${group.label}, ${count} ${count === 1 ? "Operation" : "Operations"}, ${capabilityFromPrice(group.operations)}`}
+        aria-label={`${group.label}, ${listingFact}, ${price}`}
       >
         <ItemMedia
           variant="icon"
@@ -47,12 +51,8 @@ export function AeCapabilityTile({
           </ItemHeader>
           <ItemDescription>{group.operations[0]?.summary}</ItemDescription>
           <ItemFooter className="text-sm">
-            <span>
-              {count.toLocaleString()} {count === 1 ? "Operation" : "Operations"}
-            </span>
-            <span className="font-mono tabular-nums">
-              {capabilityFromPrice(group.operations)}
-            </span>
+            <span>{listingFact}</span>
+            <span className="font-mono tabular-nums">{price}</span>
           </ItemFooter>
         </ItemContent>
       </Link>

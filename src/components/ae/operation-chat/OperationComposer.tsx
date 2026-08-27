@@ -1,8 +1,16 @@
 import { SendIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field'
+import { InputGroup, InputGroupAddon, InputGroupTextarea } from '@/components/ui/input-group'
 import { Spinner } from '@/components/ui/spinner'
-import { Textarea } from '@/components/ui/textarea'
+import { chatAnonymousCountLine, chatComposer } from '@/lib/public/chat-ia'
 import type { ChatStatus } from './presentation'
 
 export function OperationComposer({
@@ -27,46 +35,66 @@ export function OperationComposer({
   onSubmit(): void
 }>) {
   const promptLength = Array.from(prompt).length
+  const invalid = error.length > 0
   return (
-    <form className="border-t border-border bg-background p-3 sm:p-4" action={onSubmit}>
-      <label htmlFor="operation-chat-prompt" className="mb-1.5 block text-sm font-medium">Message</label>
-      <div className="flex items-end gap-2">
-        <Textarea
-          id="operation-chat-prompt"
-          value={prompt}
-          onChange={(event) => onPromptChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault()
-              event.currentTarget.form?.requestSubmit()
-            }
-          }}
-          placeholder="Find an operation…"
-          disabled={disabled}
-          aria-describedby="operation-chat-limit operation-chat-error"
-          aria-invalid={error.length > 0}
-          className="max-h-40 min-h-11 resize-none"
-          rows={1}
-        />
-        <Button type="submit" className="min-h-11 min-w-11" disabled={disabled} aria-label={busy ? 'Sending message' : 'Send message'}>
-          {busy ? <Spinner aria-hidden="true" /> : <SendIcon aria-hidden="true" />}
-          <span className="hidden sm:inline">{busy ? 'Sending…' : 'Send'}</span>
-        </Button>
-      </div>
-      <div className="mt-1.5 flex min-h-5 items-start justify-between gap-3">
-        <div>
-          <p id="operation-chat-error" role="alert" className="text-sm text-destructive">{error}</p>
-          {anonymousMessageCount === undefined || error.length > 0 ? null : (
-            <p className="text-xs text-muted-foreground">
-              {anonymousMessageCount} / 12 browser messages
-              {anonymousMessageLimitReached ? ' — limit reached; start a new chat to continue.' : ''}
-            </p>
-          )}
-        </div>
-        <p id="operation-chat-limit" className="shrink-0 text-xs tabular-nums text-muted-foreground">
-          {promptLength >= 1_800 ? `${promptLength} / 2,000` : ''}
-        </p>
-      </div>
+    <form
+      className="bg-background px-gutter pb-[max(var(--spacing-related),env(safe-area-inset-bottom))] pt-intra"
+      action={onSubmit}
+    >
+      <FieldGroup className="mx-auto w-full max-w-3xl gap-intra">
+        <Field data-invalid={invalid || undefined}>
+          <FieldLabel htmlFor="operation-chat-prompt" className="sr-only">
+            {chatComposer.promptLabel}
+          </FieldLabel>
+          <InputGroup className="items-end bg-container">
+            <InputGroupTextarea
+              id="operation-chat-prompt"
+              value={prompt}
+              onChange={(event) => onPromptChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault()
+                  event.currentTarget.form?.requestSubmit()
+                }
+              }}
+              placeholder={chatComposer.placeholder}
+              disabled={disabled}
+              aria-describedby="operation-chat-limit operation-chat-error"
+              aria-invalid={invalid}
+              className="max-h-40 min-h-touch"
+              rows={1}
+            />
+            <InputGroupAddon align="inline-end">
+              <Button
+                type="submit"
+                className="min-h-touch min-w-touch"
+                disabled={disabled}
+                aria-label={busy ? chatComposer.sendingAria : chatComposer.sendAria}
+              >
+                {busy
+                  ? <Spinner data-icon="inline-start" aria-hidden="true" />
+                  : <SendIcon data-icon="inline-start" aria-hidden="true" />}
+                <span className="hidden sm:inline">{busy ? chatComposer.sending : chatComposer.send}</span>
+              </Button>
+            </InputGroupAddon>
+          </InputGroup>
+          <div className="flex items-start justify-between gap-related">
+            <div className="min-w-0 flex-1">
+              {invalid
+                ? <FieldError id="operation-chat-error">{error}</FieldError>
+                : <div id="operation-chat-error" role="alert" />}
+              {anonymousMessageCount === undefined || invalid ? null : (
+                <FieldDescription>
+                  {chatAnonymousCountLine(anonymousMessageCount, anonymousMessageLimitReached)}
+                </FieldDescription>
+              )}
+            </div>
+            <FieldDescription id="operation-chat-limit" className="shrink-0 tabular-nums">
+              {promptLength >= 1_800 ? `${promptLength} / 2,000` : ''}
+            </FieldDescription>
+          </div>
+        </Field>
+      </FieldGroup>
       <p className="sr-only" role="status" aria-live="polite">{status}</p>
     </form>
   )

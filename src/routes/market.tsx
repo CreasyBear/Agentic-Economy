@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { AePublicShell } from "@/components/ae/layout/AePublicShell";
+import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,8 @@ export const Route = createFileRoute("/market")({
     search.availability === "unavailable"
       ? { availability: search.availability }
       : {}),
-    ...(typeof search.cursor === "string" && search.cursor.length <= 512
+    ...(typeof search.cursor === "string" &&
+    search.cursor.length <= 2_000
       ? { cursor: search.cursor }
       : {}),
     ...(typeof search.capability === "string" &&
@@ -43,8 +44,18 @@ export const Route = createFileRoute("/market")({
       ? { capability: search.capability }
       : {}),
   }),
-  loaderDeps: ({ search }) => search,
+  loaderDeps: ({ search }) => ({
+    window: search.window,
+    ...(search.query === undefined ? {} : { query: search.query }),
+    ...(search.availability === undefined
+      ? {}
+      : { availability: search.availability }),
+    ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+  }),
   loader: ({ deps }) => readMarketRouteServer({ data: deps }),
+  shouldReload: () => true,
+  staleTime: 0,
+  preloadStaleTime: 0,
   pendingComponent: MarketPending,
   errorComponent: MarketError,
   head: () =>
@@ -52,7 +63,7 @@ export const Route = createFileRoute("/market")({
       path: "/market",
       title: "Agent tool market | Agentic Economy",
       description:
-        "Find tools your agent can call, compare admitted providers by price and observed performance, and choose an Operation.",
+        "Find tools your agent can call. Compare price and readiness, then pick one.",
     }),
   component: MarketRoute,
 });
@@ -68,7 +79,7 @@ function MarketError() {
       title="The catalog didn’t load"
       description="Reload this page to fetch the current tools. No Operation was called."
       action={
-        <Button asChild className="min-h-11">
+        <Button asChild className="min-h-touch">
           <a href="/market?window=30d">Reload catalog</a>
         </Button>
       }
@@ -78,11 +89,11 @@ function MarketError() {
 
 function MarketRoute() {
   return (
-    <AePublicShell>
+    <AePublicPage>
       <AeMarketPage
         projection={Route.useLoaderData()}
         search={Route.useSearch()}
       />
-    </AePublicShell>
+    </AePublicPage>
   );
 }

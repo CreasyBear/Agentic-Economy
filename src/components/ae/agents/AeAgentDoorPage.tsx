@@ -16,7 +16,7 @@ import {
   AeSiteSection,
   AeSiteSignoff,
 } from '@/components/ae/website'
-import { AGENT_PAGE, BUSINESS_DOOR } from '@/content/brand-copy'
+import { AGENT_PAGE, AGENT_SETUP_INSTRUCTION, BUSINESS_DOOR } from '@/content/brand-copy'
 import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
@@ -42,6 +42,7 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
                   {AGENT_PAGE.heading}
                 </AeSiteHeading>
               </div>
+              <p className="font-medium text-foreground">{AGENT_PAGE.harnesses}</p>
               <div className="mx-auto w-full max-w-lg">
                 <AeSiteBody muted size="sm" className="mx-auto">
                   {AGENT_PAGE.subhead}
@@ -58,33 +59,36 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
             </div>
           </AeSiteHeroIntro>
           <div className="order-1 md:order-2 md:mt-hero">
-            <AeAgentInstructionCard />
+            <AeAgentInstructionCard
+              headingId="agent-setup"
+              instruction={AGENT_SETUP_INSTRUCTION}
+            />
           </div>
         </div>
       </AeSiteSection>
       <AeSiteSection labelledBy="agent-quickstart" scheme="surface">
         <h2 id="agent-quickstart" className="sr-only">Four-step agent quickstart</h2>
         <div className="grid divide-y divide-border border-y border-border">
-          <AeAgentQuickstartStep number="01" title="Search" access="Public" command={`${CLI_ENTRYPOINT} search "weather forecast" --base-url "${canonicalBaseUrl}"`} body="Find current capabilities by the outcome you need." />
+          <AeAgentQuickstartStep number="01" title="Search" access="Public" command={`${CLI_ENTRYPOINT} search "weather forecast" --base-url "${canonicalBaseUrl}"`} body="Find live tools by the outcome you need." />
           <AeAgentQuickstartStep number="02" title="Inspect" access="Public" command={`${CLI_ENTRYPOINT} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}"`} body="Read exact inputs, total price, readiness, and provider." />
-          <AeAgentQuickstartStep number="03" title="Call" access="Public when eligible" command={`${CLI_ENTRYPOINT} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait`} body="Free keyless reads return literal output and an evidence hash." />
-          <AeAgentQuickstartStep number="04" title="Connect if asked" access="Once" command={`npx @agentic-economy/cli connect --base-url "${canonicalBaseUrl}" --mcp`} body="Required only for capabilities that cannot run anonymously." />
+          <AeAgentQuickstartStep number="03" title="Call" access="Public when eligible" command={`${CLI_ENTRYPOINT} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait`} body="Eligible tools return the result immediately." />
+          <AeAgentQuickstartStep number="04" title="Connect if asked" access="Once" command={`npx @agentic-economy/cli connect --base-url "${canonicalBaseUrl}" --mcp`} body="Only if the selected tool cannot run anonymously." />
         </div>
       </AeSiteSection>
       <AeSiteCallout
         headingId="agent-one-wallet"
         heading="One wallet for everything"
-        body="Every call settles from the same balance, across every provider. Payments land instantly, with one receipt and no per-provider billing."
+        body="Every call settles from the same balance, across every provider. The price is on the card before anything runs. Payments land with one receipt and no per-provider billing."
         actions={
           <AeSiteButton asChild variant="outlined">
-            <Link to="/market" search={{ window: '30d' }}>Compare Operations</Link>
+            <Link to="/market" search={{ window: '30d' }}>Compare tools</Link>
           </AeSiteButton>
         }
       />
       <AeSiteCallout
         headingId="agent-public-path"
-        heading="Try the public path first."
-        body="Search, inspect, and call eligible free keyless reads without an account. Connect only when the selected capability requires it; provider credentials stay behind AE."
+        heading="Search first. Connect when the call needs it."
+        body="Search, inspect, and run eligible tools without an account. Connect only if the selected tool requires it. Provider credentials stay with Agentic Economy."
         scheme="canvas"
         actions={
           <AeSiteButton asChild variant="outlined">
@@ -95,14 +99,14 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
       <AeSiteSection ariaLabel="Installation and reference" scheme="canvas">
         <div className="grid gap-section">
           <details className="group border-t border-border pt-6">
-            <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-4 font-medium marker:content-none">
+            <summary className="flex min-h-touch cursor-pointer items-center justify-between gap-4 font-medium marker:content-none">
               Full installation and recovery guide
               <ChevronDownIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform duration-base group-open:rotate-180" />
             </summary>
             <div className="pt-4"><AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} /></div>
           </details>
           <details className="group border-t border-border pt-6">
-            <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-4 font-medium marker:content-none">
+            <summary className="flex min-h-touch cursor-pointer items-center justify-between gap-4 font-medium marker:content-none">
               API and MCP reference
               <ChevronDownIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform duration-base group-open:rotate-180" />
             </summary>
@@ -120,7 +124,7 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
       <AeSiteSignoff
         heading="Want agents to find your tool?"
         headingId="agent-supplier-next"
-        body="Publish the capability, terms and access details once."
+        body="Publish the job, the price, and how to call it."
         crosshairSide="left"
       >
         <AeSiteButton asChild variant="outlined">
@@ -146,22 +150,22 @@ function anonymousReads(canonicalBaseUrl: string) {
     {
       command: curlCommand(canonicalBaseUrl, OPERATION_MARKET_SEARCH_PATH, '{"query":"weather forecast","limit":5}'),
       route: operationMarketRoute(OPERATION_MARKET_SEARCH_PATH),
-      description: 'Find current Operations for a natural-language job.',
+      description: 'Find current tools for a natural-language job.',
     },
     {
       command: curlCommand(canonicalBaseUrl, OPERATION_MARKET_DETAIL_PATH, '{"operationRef":"operation:v1:…"}'),
       route: operationMarketRoute(OPERATION_MARKET_DETAIL_PATH),
-      description: 'Read one exact Operation’s inputs, terms, price, effects, availability, and evidence.',
+      description: 'Read one tool’s inputs, terms, price, effects, availability, and evidence.',
     },
     {
       command: curlCommand(canonicalBaseUrl, OPERATION_MARKET_COMPARE_PATH, '{"operationRefs":["operation:v1:…","operation:v1:…"]}'),
       route: operationMarketRoute(OPERATION_MARKET_COMPARE_PATH),
-      description: 'Compare exact current Operations without invoking them.',
+      description: 'Compare current tools without calling them.',
     },
     {
       command: curlCommand(canonicalBaseUrl, OPERATION_MARKET_INSPECT_PLAN_PATH, '{"operationRefs":["operation:v1:…","operation:v1:…"]}'),
       route: operationMarketRoute(OPERATION_MARKET_INSPECT_PLAN_PATH),
-      description: 'Inspect aggregate cost, data sharing, and effects for a bounded plan of exact Operations.',
+      description: 'Inspect aggregate cost, data sharing, and effects for a bounded plan.',
     },
     {
       command: `curl -fsSL ${canonicalBaseUrl}/.well-known/ucp`,
@@ -181,7 +185,7 @@ function authenticatedCalls(canonicalBaseUrl: string) {
     {
       command: `${CLI_ENTRYPOINT} call "<operationRef>" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait`,
       route: `${OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method} ${OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path}`,
-      description: 'Call the inspected Operation; AE creates and retains the safe retry identity.',
+      description: 'Call the inspected tool; Agentic Economy creates and retains the safe retry identity.',
     },
     {
       command: `${CLI_ENTRYPOINT} status "<invocationRef>" --base-url "${canonicalBaseUrl}" --json`,

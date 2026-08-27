@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AeAgentDoorPage } from '@/components/ae/agents/AeAgentDoorPage'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AGENT_PAGE } from '@/content/brand-copy'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
@@ -21,8 +21,8 @@ function ForAgentsRoute() {
   const canonicalBaseUrl = Route.useLoaderData()
 
   return (
-    <AePublicShell>
+    <AePublicPage>
       <AeAgentDoorPage canonicalBaseUrl={canonicalBaseUrl} />
-    </AePublicShell>
+    </AePublicPage>
   )
 }

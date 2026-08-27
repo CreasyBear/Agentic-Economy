@@ -392,10 +392,10 @@ describe('Phase 2 generated protected-surface manifest', () => {
       .find((row) => row.ref === 'convex/capabilityOperationInvocations.ts:cancelInvocation')
     expect(storedFunctionReference).toMatchObject({
       status: 'bound',
-      authoritySink: 'convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority',
+      authoritySink: 'convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority',
     })
     expect(storedFunctionReference?.authorityPath?.some((hop) =>
-      hop.ref === 'convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthorityRef'
+      hop.ref === 'convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef'
       && hop.via === 'function_reference')).toBe(true)
   })
 

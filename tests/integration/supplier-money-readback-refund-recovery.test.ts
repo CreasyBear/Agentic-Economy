@@ -6,7 +6,7 @@ import {
 import type { Doc } from '../../convex/_generated/dataModel'
 import { describe, expect, it } from 'vitest'
 import { internal } from '../../convex/_generated/api'
-import { recordQualifiedUsePayoutAllocation } from '../../convex/moneyQualifiedUsePayout'
+import { recordQualifiedUsePayoutAllocation } from '../../convex/lib/qualifiedUsePayout'
 import {
   accountRefForOwner,
   accountRefForExternalLoss,

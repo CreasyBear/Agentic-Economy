@@ -8,7 +8,7 @@ import {
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
-import { beginLeaseEffectHandler } from './capabilityProviderConnectionLeases'
+import { beginLeaseEffectHandler } from './lib/providerConnections/leases'
 import type { Doc } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 

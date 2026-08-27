@@ -161,7 +161,7 @@ function AgentAccessAuthorizeRoute() {
                       <Label
                         key={option.value}
                         htmlFor={`authority-${option.value}`}
-                        className="grid min-h-11 cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-md border border-border px-3 py-3 has-[[data-state=checked]]:border-foreground"
+                        className="grid min-h-touch cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-md border border-border px-3 py-3 has-[[data-state=checked]]:border-foreground"
                       >
                         <RadioGroupItem
                           id={`authority-${option.value}`}

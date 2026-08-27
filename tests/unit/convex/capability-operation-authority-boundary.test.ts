@@ -48,8 +48,8 @@ vi.mock('../../../convex/authz', async (importOriginal) => ({
   resolveBusinessActor: vi.fn(async () => mocks.actor),
 }))
 
-vi.mock('../../../convex/capabilityOperationInvokeActions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/capabilityOperationInvokeActions')>()),
+vi.mock('../../../convex/lib/operationInvocations/invokeActions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../convex/lib/operationInvocations/invokeActions')>()),
   invokeHandler: mocks.invoke,
   readInvocationStatusHandler: mocks.readStatus,
   cancelInvocationHandler: mocks.cancel,
@@ -59,8 +59,8 @@ vi.mock('../../../convex/capabilityOperationInvokeActions', async (importOrigina
   reconcileOwnerInvocationHandler: mocks.reconcileOwner,
 }))
 
-vi.mock('../../../convex/capabilityOperationAdmission', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../convex/capabilityOperationAdmission')>()),
+vi.mock('../../../convex/lib/operationInvocations/admission', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../convex/lib/operationInvocations/admission')>()),
   listPendingOperationApprovalsHandler: mocks.listApprovals,
   decideOperationApprovalHandler: mocks.decideApproval,
 }))

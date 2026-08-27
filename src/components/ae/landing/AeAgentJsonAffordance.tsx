@@ -84,13 +84,13 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
             </>
           ) : null}
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="ghost" className="min-h-11" onClick={() => setPreviewOpen(false)}>
+            <Button type="button" variant="ghost" className="min-h-touch" onClick={() => setPreviewOpen(false)}>
               Cancel
             </Button>
             <Button
               type="button"
               variant="default"
-              className="min-h-11"
+              className="min-h-touch"
               disabled={preview.status !== 'ready' || copied}
               onClick={() => void confirmCopy()}
             >

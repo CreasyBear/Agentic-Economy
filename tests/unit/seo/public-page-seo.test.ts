@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { HOME, HOME_FAQ } from '@/content/brand-copy'
+import { HOME } from '@/content/brand-copy'
 import {
-  buildFaqPageJsonLd,
   buildPublicPageHead,
   buildSiteJsonLd,
   serializeJsonLd,
@@ -25,8 +24,8 @@ describe('public page SEO', () => {
     expect(head.scripts).toBeUndefined()
   })
 
-  it('keeps the home URL unslashed and attaches site plus FAQ JSON-LD', () => {
-    const jsonLd = [...buildSiteJsonLd('https://ae.example/'), buildFaqPageJsonLd(HOME_FAQ)]
+  it('keeps the home URL unslashed and attaches site JSON-LD without an FAQ page', () => {
+    const jsonLd = buildSiteJsonLd('https://ae.example/')
     const head = buildPublicPageHead({
       path: '/',
       title: HOME.metaTitle,
@@ -39,7 +38,7 @@ describe('public page SEO', () => {
     expect(head.scripts?.[0]?.type).toBe('application/ld+json')
     const serialized = head.scripts?.[0]?.children ?? ''
     expect(serialized).toContain('WebSite')
-    expect(serialized).toContain('FAQPage')
+    expect(serialized).not.toContain('FAQPage')
     expect(serialized).toContain('/market?query={search_term_string}\\u0026window=30d')
     expect(serializeJsonLd(jsonLd)).not.toContain('<')
   })

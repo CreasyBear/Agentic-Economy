@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AeAboutPage } from '@/components/ae/about/AeAboutPage'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { ABOUT } from '@/content/brand-copy'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { buildPublicPageHead, buildSiteJsonLd } from '@/modules/seo/public'
@@ -12,16 +12,16 @@ export const Route = createFileRoute('/about')({
     path: '/about',
     title: ABOUT.metaTitle,
     description: ABOUT.metaDescription,
-    canonicalBaseUrl: loaderData,
-    jsonLd: loaderData === undefined ? undefined : buildSiteJsonLd(loaderData),
+    ...(loaderData === undefined ? {} : { canonicalBaseUrl: loaderData }),
+    ...(loaderData === undefined ? {} : { jsonLd: buildSiteJsonLd(loaderData) }),
   }),
   component: AboutRoute,
 })
 
 function AboutRoute() {
   return (
-    <AePublicShell>
+    <AePublicPage>
       <AeAboutPage />
-    </AePublicShell>
+    </AePublicPage>
   )
 }

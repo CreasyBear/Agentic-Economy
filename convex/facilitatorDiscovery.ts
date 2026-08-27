@@ -23,7 +23,7 @@ import { isRecord } from '@/modules/common/is-record'
 
 import type { Id } from './_generated/dataModel'
 import { internalMutation, type MutationCtx } from './_generated/server'
-import { toDomain, toRow } from './capabilityProviderConnectionLifecycle'
+import { toDomain, toRow } from './lib/providerConnections/lifecycle'
 import {
   capabilityPublicationBindingValue,
   capabilityPublicationOfferingValue,
@@ -265,6 +265,24 @@ async function reconcileDraft(
   if (sourceImport === undefined) return 'skipped'
   const route = routeIdentity(sourceImport)
   if (route === undefined) return 'skipped'
+  const pricingConfig: PricingConfig = {
+    version: 'pricing:v2',
+    unit: 'call',
+    providerAmount: draft.price.provider,
+    platformFee: draft.price.platformFee,
+    paidAmount: draft.price.total,
+  }
+  const sourceRevision = draft.sourceRevision
+  const probe = await preparePublicationDraft({
+    source: sourceImport,
+    sourceRevision,
+    pricingConfig,
+    offering: draft.offering,
+    binding: draft.binding,
+    evidenceRefs: [SOURCE_EVIDENCE],
+    derefSchema: dereferenceLocalSchema,
+  })
+  if (probe.kind === 'refused') return 'skipped'
   const business = await ensureProviderBusiness(ctx, route.host, now)
   if (business === undefined) return 'skipped'
   const connection = await ensureProviderConnection(ctx, business.businessId, route.resourceUrl, now)
@@ -280,14 +298,6 @@ async function reconcileDraft(
       providerRef: connection.providerRef,
     },
   }
-  const pricingConfig: PricingConfig = {
-    version: 'pricing:v2',
-    unit: 'call',
-    providerAmount: draft.price.provider,
-    platformFee: draft.price.platformFee,
-    paidAmount: draft.price.total,
-  }
-  const sourceRevision = draft.sourceRevision
   const prepared = await preparePublicationDraft({
     source: sourceImport,
     sourceRevision,
@@ -298,7 +308,9 @@ async function reconcileDraft(
     derefSchema: dereferenceLocalSchema,
   })
   if (prepared.kind === 'refused') {
-    if (business.created || business.activated) throw new Error('facilitator_discovery_publication_prepare_failed')
+    if (business.created || business.activated) {
+      throw new Error(`facilitator_discovery_publication_prepare_failed:${prepared.reason}`)
+    }
     return 'skipped'
   }
   const publicationRef = draft.offering.offeringId
@@ -338,7 +350,9 @@ async function reconcileDraft(
       ...context,
     })
     if (result.kind === 'refused') {
-      if (business.created || business.activated) throw new Error('facilitator_discovery_publication_failed')
+      if (business.created || business.activated) {
+        throw new Error(`facilitator_discovery_publication_failed:${result.reason}`)
+      }
       return 'skipped'
     }
     return 'published'

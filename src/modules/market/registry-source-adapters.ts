@@ -17,13 +17,14 @@ import type {
 const AGENTIC_MARKET_SERVICES_URL = "https://api.agentic.market/v1/services";
 const TREG_PLATFORMS_URL = "https://treg.to/catalog/platforms";
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
-const DEFAULT_JOB_TIMEOUT_MS = 240_000;
+export const REGISTRY_SOURCE_JOB_TIMEOUT_MS = 20_000;
 const MAX_RESPONSE_BYTES = 6_291_456;
-const MAX_TOTAL_ENTRIES = 50_000;
-const MAX_AGENTIC_MARKET_SERVICES = 5_000;
-const MAX_AGENTIC_MARKET_PAGES = 120;
-const MAX_AGENTIC_MARKET_SWEEPS = 10;
-const MAX_TREG_SHELVES = 120;
+const MAX_TOTAL_ENTRIES = 1_000;
+const MAX_AGENTIC_MARKET_SERVICES = 200;
+const MAX_AGENTIC_MARKET_PAGES = 8;
+const MAX_AGENTIC_MARKET_SWEEPS = 2;
+const DEFAULT_AGENTIC_MARKET_SWEEPS = 1;
+const MAX_TREG_SHELVES = 8;
 const MIN_AGENTIC_MARKET_SERVICE_COVERAGE = 0.95;
 
 type SourceFetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -191,7 +192,7 @@ export async function fetchAgenticMarketCatalog(
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const now = input.now ?? Date.now;
   const fetchedAt = now();
-  const deadline = fetchedAt + (input.jobTimeoutMs ?? DEFAULT_JOB_TIMEOUT_MS);
+  const deadline = fetchedAt + (input.jobTimeoutMs ?? REGISTRY_SOURCE_JOB_TIMEOUT_MS);
   const pageSize = Math.min(200, Math.max(1, input.pageSize ?? 200));
   const maxServices = Math.min(
     MAX_AGENTIC_MARKET_SERVICES,
@@ -204,7 +205,7 @@ export async function fetchAgenticMarketCatalog(
   const maxPages = Math.min(MAX_AGENTIC_MARKET_PAGES, Math.max(1, input.maxPages ?? MAX_AGENTIC_MARKET_PAGES));
   const maxSweeps = Math.min(
     MAX_AGENTIC_MARKET_SWEEPS,
-    Math.max(1, input.maxSweeps ?? MAX_AGENTIC_MARKET_SWEEPS),
+    Math.max(1, input.maxSweeps ?? DEFAULT_AGENTIC_MARKET_SWEEPS),
   );
   const serviceIds = new Set<string>();
   const entries: AgenticMarketRegistrySourceEntry[] = [];
@@ -303,7 +304,7 @@ export async function fetchTregCatalog(
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const now = input.now ?? Date.now;
   const fetchedAt = now();
-  const deadline = fetchedAt + (input.jobTimeoutMs ?? DEFAULT_JOB_TIMEOUT_MS);
+  const deadline = fetchedAt + (input.jobTimeoutMs ?? REGISTRY_SOURCE_JOB_TIMEOUT_MS);
   const maxEntries = Math.min(
     MAX_TOTAL_ENTRIES,
     Math.max(1, input.maxEntries ?? MAX_TOTAL_ENTRIES),

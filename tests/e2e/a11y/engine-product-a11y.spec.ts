@@ -4,7 +4,7 @@ test.describe('market product accessibility', () => {
   test('the retired engine entry resolves to the catalogue-first home', async ({ page }) => {
     await gotoSettled(page, '/engine')
     await expect(page).toHaveURL('/')
-    await expect(page.getByRole('heading', { level: 1, name: 'APIs your agent can discover and call.' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'The marketplace built for agents.' })).toBeVisible()
   })
 
   test('home skip link and primary actions are keyboard reachable', async ({ page }) => {
@@ -14,7 +14,7 @@ test.describe('market product accessibility', () => {
     await expect(skip).toBeFocused()
     await skip.press('Enter')
     await expect(page.locator('#main-content')).toBeFocused()
-    await expect(page.getByRole('heading', { name: 'Give this to your agent' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Give this to your agent' }).first()).toBeVisible()
     await expect(page.getByRole('button', { name: 'Copy agent setup instruction' })).toBeVisible()
     const compact = (page.viewportSize()?.width ?? 1280) < 768
     if (compact) {
@@ -57,7 +57,7 @@ test.describe('market product accessibility', () => {
     await expect(footer.getByRole('link', { name: 'Activity' })).toBeVisible()
     await footer.getByRole('link', { name: 'About' }).click()
     await page.waitForURL('**/about', { timeout: 15_000 })
-    await expect(page.getByRole('heading', { level: 1, name: 'A market for agent-callable work.' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Who this market is for.' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Listed suppliers' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Browse the live catalog' })).toBeVisible()
     const compact = (page.viewportSize()?.width ?? 1280) < 768

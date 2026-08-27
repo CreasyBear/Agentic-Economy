@@ -23,7 +23,6 @@ import {
   keylessAuthorityValue,
   providerConnectionAuthorityValue,
   publicationLifecycleValue,
-  rebuildCapabilityOriginSupplyProjection,
 } from './capabilitySupplyShared'
 import { syncMarketOperationPresence } from './marketPresence'
 import { rebuildCurrentOperationProjection } from './capabilitySupplyOperationProjection'
@@ -32,7 +31,7 @@ import {
   verifySupplyAgentPrincipal,
 } from './agentAccessPrincipals'
 
-const READINESS_REFRESH_LEAD_MS = 90_000
+const READINESS_REFRESH_LEAD_MS = 30 * 60_000
 const MAX_READINESS_REFRESH_BATCH = 20
 
 const capabilityProbeAuthorityBaseFields = {
@@ -422,11 +421,6 @@ export async function observeCapabilityReadinessHandler(
       ),
     ),
   }
-  await rebuildCapabilityOriginSupplyProjection(
-    ctx,
-    publication.businessId,
-    now,
-  )
   return result
 }
 
@@ -574,11 +568,6 @@ export async function recordCapabilityProbeResultHandler(
       publicationRevision: publication.revision,
       now,
     })
-    await rebuildCapabilityOriginSupplyProjection(
-      ctx,
-      publication.businessId as Id<'businesses'>,
-      now,
-    )
   }
   return result.kind === 'observed'
     ? { ...result, lifecycle: convexPublicationLifecycle(result.lifecycle) }

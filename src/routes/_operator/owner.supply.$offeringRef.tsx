@@ -112,7 +112,7 @@ function OwnerSupplyDetailRoute() {
           <Button
             asChild
             variant="secondary"
-            className="min-h-11 justify-self-start"
+            className="min-h-touch justify-self-start"
           >
             <Link to="/owner/supply">Return to Operations</Link>
           </Button>
@@ -146,7 +146,7 @@ function OwnerSupplyDetailRoute() {
           <Button
             asChild
             variant="secondary"
-            className="min-h-11 justify-self-start"
+            className="min-h-touch justify-self-start"
           >
             <Link to="/owner/supply">Return to Operations</Link>
           </Button>

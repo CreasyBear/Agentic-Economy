@@ -267,7 +267,7 @@ function MaintenanceActions({
         {publicationState === 'current' && recheck !== undefined ? <MaintenanceButton label="Recheck readiness" callback={recheck} context={context} onResult={onResult} /> : null}
         {publicationState === 'current' && withdraw !== undefined ? (
           <>
-            <Button type="button" variant="secondary" disabled={withdrawPending} onClick={() => setWithdrawOpen(true)} className="min-h-11">
+            <Button type="button" variant="secondary" disabled={withdrawPending} onClick={() => setWithdrawOpen(true)} className="min-h-touch">
               Withdraw publication
             </Button>
             <AeConfirmDialog
@@ -299,7 +299,7 @@ function MaintenanceButton({ label, callback, context, onResult, variant = 'defa
       setPending(false)
     }
   }
-  return <Button type="button" variant={variant} disabled={pending || callback === undefined} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-11">{pending ? 'Working' : label}</Button>
+  return <Button type="button" variant={variant} disabled={pending || callback === undefined} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-touch">{pending ? 'Working' : label}</Button>
 }
 
 function ActionStep({ heading, detail, actionLabel, onAction, disabled = false }: Readonly<{ title: string; heading: string; detail: string; actionLabel: string; onAction: () => Promise<void>; disabled?: boolean }>) {
@@ -314,7 +314,7 @@ function ActionStep({ heading, detail, actionLabel, onAction, disabled = false }
   }
   return (
     <AeSection title={heading} description={detail}>
-      <Button type="button" variant="default" disabled={pending || disabled} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-11 w-fit">
+      <Button type="button" variant="default" disabled={pending || disabled} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-touch w-fit">
         {pending ? 'Working' : actionLabel}
       </Button>
     </AeSection>

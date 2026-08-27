@@ -30,7 +30,7 @@ export function AeOperationTable({
         id: "operation",
         accessorKey: "title",
         header: ({ column }) => (
-          <AeOperatorSortableHeader label="Operation" column={column} />
+          <AeOperatorSortableHeader label="Name" column={column} />
         ),
         cell: ({ row }) => {
           const routeable = row.original.readiness === "Routeable";
@@ -126,10 +126,10 @@ export function AeOperationTable({
       <AeRecordTable
         columns={columns}
         data={operations}
-        caption="Operations"
-        countLabel="Operations"
-        filterPlaceholder="Filter Operations…"
-        emptyMessage="No Operations match this filter."
+        caption="Catalog"
+        countLabel="listed"
+        filterPlaceholder="Filter…"
+        emptyMessage="Nothing matches this filter."
         onRowClick={setSelected}
       />
       <AeRecordSheet
@@ -137,14 +137,14 @@ export function AeOperationTable({
         onOpenChange={(open) => {
           if (!open) setSelected(undefined);
         }}
-        title={selected?.title ?? "Operation"}
+        title={selected?.title ?? "Listed tool"}
         {...(selected?.summary === undefined ? {} : { description: selected.summary })}
         {...(selected === undefined ? {} : { facts: operationFacts(selected) })}
         {...(selected === undefined
           ? {}
           : {
               action: (
-                <Button asChild className="min-h-11">
+                <Button asChild className="min-h-touch">
                   <Link
                     to="/operations/$operationRef"
                     params={{ operationRef: selected.operationRef }}

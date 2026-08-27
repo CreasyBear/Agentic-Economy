@@ -15,7 +15,7 @@ export {
   DiscoveryPublicSurfacePaths,
 }
 
-import { indexedPublicPagePaths } from '@/modules/seo/internal/indexed-public-paths'
+import { indexedPublicPagePaths } from '@/modules/seo/public'
 
 const staticSitemapPaths = indexedPublicPagePaths
 const robotDisallowPaths = [

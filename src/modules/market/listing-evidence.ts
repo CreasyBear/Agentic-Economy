@@ -32,7 +32,7 @@ export const marketCategories = [
   {
     id: "other",
     label: "Other",
-    description: "Operations that do not yet belong to a narrower category.",
+    description: "Tools that do not yet belong to a narrower category.",
   },
 ] as const;
 
@@ -112,8 +112,13 @@ export const MARKET_MAX_LATENCY_SAMPLE_SIZE = 48;
 export function projectMarketListingEvidence(
   source: MarketListingEvidenceSource,
   capabilityId: string,
+  catalogText = "",
 ): MarketListingEvidenceProjection {
-  const category = resolveMarketCategory(source.categoryId, capabilityId);
+  const category = resolveMarketCategory(
+    source.categoryId,
+    capabilityId,
+    catalogText,
+  );
   const rating = projectRating(source.ratingCount, source.ratingSum);
   const popularity: MarketPopularityProjection =
     source.completedInvocations === 0
@@ -144,6 +149,7 @@ export function projectMarketListingEvidence(
 export function emptyMarketListingEvidence(
   operationRef: string,
   capabilityId: string,
+  catalogText = "",
 ): MarketListingEvidenceProjection {
   return projectMarketListingEvidence(
     {
@@ -154,6 +160,7 @@ export function emptyMarketListingEvidence(
       latencySamplesMs: [],
     },
     capabilityId,
+    catalogText,
   );
 }
 
@@ -164,12 +171,13 @@ export function isMarketCategoryId(value: string): value is MarketCategoryId {
 function resolveMarketCategory(
   persistedCategoryId: string | undefined,
   capabilityId: string,
+  catalogText = "",
 ): MarketCategory {
   const persisted = marketCategories.find(
     (category) => category.id === persistedCategoryId,
   );
   if (persisted !== undefined) return persisted;
-  const normalized = capabilityId.toLowerCase();
+  const normalized = `${capabilityId} ${catalogText}`.toLowerCase();
   const inferred = categoryRules.find(({ terms }) =>
     terms.some((term) => normalized.includes(term)),
   );
@@ -249,22 +257,82 @@ const categoryRules: readonly Readonly<{
   },
   {
     categoryId: "finance",
-    terms: ["price", "finance", "payment", "market", "rate", "quote"],
+    terms: [
+      "price",
+      "finance",
+      "payment",
+      "liquidation",
+      "forex",
+      "bitcoin",
+      "crypto",
+      "swap",
+      "yield",
+      "rate",
+      "quote",
+    ],
   },
   {
     categoryId: "commerce",
-    terms: ["commerce", "purchase", "order", "inventory", "shipping"],
+    terms: [
+      "commerce",
+      "purchase",
+      "order",
+      "inventory",
+      "shipping",
+      "amazon",
+      "shop",
+      "sku",
+      "cart",
+      "product",
+    ],
   },
   {
     categoryId: "media",
-    terms: ["image", "audio", "video", "document", "media", "publish"],
+    terms: [
+      "image",
+      "audio",
+      "video",
+      "document",
+      "media",
+      "publish",
+      "tweet",
+      "twitter",
+      "youtube",
+    ],
   },
   {
     categoryId: "developer-tools",
-    terms: ["code", "deploy", "compute", "automation", "developer", "software"],
+    terms: [
+      "code",
+      "deploy",
+      "compute",
+      "automation",
+      "developer",
+      "software",
+      "gas",
+      "evm",
+      "oracle",
+      "rpc",
+      "webhook",
+    ],
   },
   {
     categoryId: "data-research",
-    terms: ["search", "research", "extract", "data", "analysis", "lookup"],
+    terms: [
+      "search",
+      "research",
+      "extract",
+      "data",
+      "analysis",
+      "lookup",
+      "weather",
+      "tide",
+      "forecast",
+      "dns",
+      "whois",
+      "scrape",
+      "outline",
+      "flight",
+    ],
   },
 ];

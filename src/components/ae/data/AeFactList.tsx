@@ -22,7 +22,7 @@ export function AeFactList({
   return (
     <dl
       className={cn(
-        density === "compact" ? "grid gap-x-4 gap-y-3" : "grid gap-3",
+        density === "compact" ? "grid gap-x-related gap-y-intra" : "grid gap-related",
         className,
       )}
     >
@@ -32,7 +32,7 @@ export function AeFactList({
           className={cn(
             "min-w-0",
             density === "default" &&
-              "grid gap-1 sm:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] sm:gap-4",
+              "grid gap-intra sm:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] sm:gap-related",
           )}
         >
           <dt

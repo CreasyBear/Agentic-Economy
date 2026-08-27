@@ -1,6 +1,3 @@
-import { paginationOptsValidator } from 'convex/server'
-import { v } from 'convex/values'
-
 import { CURRENT_OPERATION_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import {
   createCurrentOperationCommitment,
@@ -25,94 +22,24 @@ import type { MutationCtx, QueryCtx } from './_generated/server'
 import { operationRecordProjection } from './capabilitySupplyOperationShared'
 import { readCurrentPublishedOperation } from './capabilitySupplyOperationKeyless'
 
-export const currentOperationReadMode = v.union(
-  v.literal('old'),
-  v.literal('shadow'),
-  v.literal('new'),
-)
-export type CurrentOperationReadMode = 'old' | 'shadow' | 'new'
+import {
+  type CurrentOperationMismatchKind,
+  type CurrentOperationReadMode,
+} from './capabilitySupplyOperationProjection/contracts'
 
-export const currentOperationMismatchKind = v.union(
-  v.literal('missing_projection'),
-  v.literal('stale_projection'),
-  v.literal('typed_outcome'),
-  v.literal('descriptor_digest'),
-  v.literal('invalid_projection'),
-  v.literal('orphan_projection'),
-)
-export type CurrentOperationMismatchKind =
-  | 'missing_projection'
-  | 'stale_projection'
-  | 'typed_outcome'
-  | 'descriptor_digest'
-  | 'invalid_projection'
-  | 'orphan_projection'
-
-export const currentOperationProjectionRebuildReturns = v.object({
-  kind: v.union(v.literal('rebuilt'), v.literal('deactivated'), v.literal('missing')),
-  publicationRef: v.string(),
-  publicationRevision: v.number(),
-  outcomeKind: v.optional(v.union(v.literal('current'), v.literal('unavailable'), v.literal('dropped'))),
-  operationRef: v.optional(v.string()),
-  idempotent: v.boolean(),
-})
-
-export const currentOperationProjectionBackfillArgs = {
-  paginationOpts: paginationOptsValidator,
-} as const
-
-export const currentOperationProjectionBackfillReturns = v.object({
-  processed: v.number(),
-  rebuilt: v.number(),
-  dropped: v.number(),
-  unavailable: v.number(),
-  isDone: v.boolean(),
-  continueCursor: v.string(),
-})
-
-export const currentOperationReadControlReturns = v.object({
-  mode: currentOperationReadMode,
-  reason: v.string(),
-  releaseOwner: v.string(),
-  verifiedActiveCount: v.optional(v.number()),
-  verifiedProjectionDigest: v.optional(v.string()),
-  updatedAt: v.number(),
-  isDefault: v.boolean(),
-})
-
-const mismatchCount = v.object({ kind: currentOperationMismatchKind, count: v.number() })
-export const currentOperationShadowDiagnosticsReturns = v.object({
-  kind: v.literal('current_operation_shadow_diagnostic'),
-  schemaVersion: v.literal('current-operation-shadow-diagnostic:v1'),
-  sourceCount: v.number(),
-  projectionCount: v.number(),
-  comparedCount: v.number(),
-  explainedMismatchCount: v.number(),
-  unexplainedMismatchCount: v.number(),
-  truncated: v.boolean(),
-  mismatches: v.array(mismatchCount),
-})
-
-export const currentOperationStagingSnapshotReturns = v.union(
-  v.object({
-    kind: v.literal('unavailable'),
-    reason: v.literal('source_revision_unavailable'),
-  }),
-  v.object({
-    kind: v.literal('current_operation_staging_snapshot'),
-    schemaVersion: v.literal('current-operation-staging-snapshot:v1'),
-    deploymentName: v.string(),
-    sourceRevision: v.string(),
-    sourceCount: v.number(),
-    searchProjectionCount: v.number(),
-    detailProjectionCount: v.number(),
-    sourceSetDigest: v.string(),
-    readinessSetDigest: v.string(),
-    observedSinceCount: v.number(),
-    unobservedSinceCount: v.number(),
-    truncated: v.boolean(),
-  }),
-)
+export {
+  currentOperationMismatchKind,
+  currentOperationProjectionBackfillArgs,
+  currentOperationProjectionBackfillReturns,
+  currentOperationProjectionRebuildReturns,
+  currentOperationReadControlReturns,
+  currentOperationReadMode,
+  currentOperationShadowDiagnosticsReturns,
+  currentOperationStagingSnapshotReturns,
+  type CurrentOperationMismatchKind,
+  type CurrentOperationReadMode,
+} from './capabilitySupplyOperationProjection/contracts'
+export { currentOperationStagingSnapshotHandler } from './capabilitySupplyOperationProjection/staging_snapshot'
 
 type ProjectedOutcome =
   | Readonly<{ kind: 'current'; descriptor: CapabilityOperationSourceRecord }>
@@ -126,106 +53,7 @@ type ProjectedOutcome =
       reason: Doc<'capabilityCurrentOperations'>['dropReason']
     }>
 
-export async function currentOperationReadControlHandler(ctx: QueryCtx) {
-  const row = await ctx.db.query('capabilityCurrentOperationReadControls')
-    .withIndex('by_controlRef', (query) => query.eq('controlRef', 'current_operation_registry'))
-    .unique()
-  return row === null
-    ? {
-        mode: 'old' as const,
-        reason: 'projection_not_cut_over',
-        releaseOwner: 'unassigned',
-        updatedAt: 0,
-        isDefault: true,
-      }
-    : {
-        mode: row.mode,
-        reason: row.reason,
-        releaseOwner: row.releaseOwner,
-        ...(row.verifiedActiveCount === undefined ? {} : { verifiedActiveCount: row.verifiedActiveCount }),
-        ...(row.verifiedProjectionDigest === undefined
-          ? {}
-          : { verifiedProjectionDigest: row.verifiedProjectionDigest }),
-        updatedAt: row.updatedAt,
-        isDefault: false,
-      }
-}
-
-export async function currentOperationStagingSnapshotHandler(
-  ctx: QueryCtx,
-  args: Readonly<{ now: number; observedSince?: number }>,
-  sourceRevision: string | undefined,
-) {
-  if (sourceRevision === undefined || !/^[0-9a-f]{40}$/u.test(sourceRevision)) {
-    return {
-      kind: 'unavailable' as const,
-      reason: 'source_revision_unavailable' as const,
-    }
-  }
-  if (!Number.isSafeInteger(args.now)
-    || args.now < 0
-    || (args.observedSince !== undefined
-      && (!Number.isSafeInteger(args.observedSince)
-        || args.observedSince < 0
-        || args.observedSince > args.now))) {
-    throw new Error('current_operation_staging_snapshot_time_invalid')
-  }
-  const [deployment, publicationSentinel, searchSentinel, detailSentinel] = await Promise.all([
-    ctx.meta.getDeploymentMetadata(),
-    ctx.db.query('capabilityPublications')
-      .withIndex('by_disposition_and_readinessValidUntil', (query) => query.eq('disposition', 'current'))
-      .take(257),
-    ctx.db.query('capabilityCurrentOperations')
-      .withIndex('by_active_and_operationRef', (query) => query.eq('active', true))
-      .take(257),
-    ctx.db.query('capabilityCurrentOperationDetails')
-      .withIndex('by_active_and_operationRef', (query) => query.eq('active', true))
-      .take(257),
-  ])
-  const truncated = publicationSentinel.length === 257
-    || searchSentinel.length === 257
-    || detailSentinel.length === 257
-  const publications = publicationSentinel.slice(0, 256)
-  const searchRows = searchSentinel.slice(0, 256)
-  const detailRows = detailSentinel.slice(0, 256)
-  const observedSince = args.observedSince ?? 0
-  const observedSinceCount = publications.filter((publication) => (
-    publication.readinessObservedAt !== undefined
-      && publication.readinessObservedAt >= observedSince
-      && publication.readinessObservedAt <= args.now
-  )).length
-  const sourceMaterial = publications.map((publication) => ({
-    operationRef: publication.operationRef,
-    publicationRef: publication.publicationRef,
-    publicationRevision: publication.revision,
-    sourceDigest: publication.sourceDigest,
-  })).sort((left, right) => left.operationRef.localeCompare(right.operationRef))
-  const readinessMaterial = publications.map((publication) => ({
-    operationRef: publication.operationRef,
-    credentialState: publication.credentialState,
-    healthState: publication.healthState,
-    readinessObservedAt: publication.readinessObservedAt ?? null,
-    readinessValidUntil: publication.readinessValidUntil ?? null,
-    readinessTargetDigest: publication.readinessTargetDigest ?? null,
-    readinessRequestDigest: publication.readinessRequestDigest ?? null,
-    readinessResponseDigest: publication.readinessResponseDigest ?? null,
-    readinessOutcome: publication.readinessOutcome ?? null,
-  })).sort((left, right) => left.operationRef.localeCompare(right.operationRef))
-  return {
-    kind: 'current_operation_staging_snapshot' as const,
-    schemaVersion: 'current-operation-staging-snapshot:v1' as const,
-    deploymentName: deployment.name,
-    sourceRevision,
-    sourceCount: publications.length,
-    searchProjectionCount: searchRows.length,
-    detailProjectionCount: detailRows.length,
-    sourceSetDigest: canonicalDigest(sourceMaterial as StableHashValue),
-    readinessSetDigest: canonicalDigest(readinessMaterial as StableHashValue),
-    observedSinceCount,
-    unobservedSinceCount: publications.length - observedSinceCount,
-    truncated,
-  }
-}
+export { currentOperationReadControlHandler } from './capabilitySupplyOperationProjection/read_control'
 
 export async function readCurrentOperationMode(ctx: Pick<QueryCtx, 'db'>): Promise<CurrentOperationReadMode> {
   const row = await ctx.db.query('capabilityCurrentOperationReadControls')

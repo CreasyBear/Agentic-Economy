@@ -1,17 +1,16 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 
 import { AeHomeLanding } from "@/components/ae/home/AeHomeLanding";
-import { AePublicShell } from "@/components/ae/layout/AePublicShell";
+import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
 import { Button } from "@/components/ui/button";
-import { HOME, HOME_FAQ } from "@/content/brand-copy";
+import { HOME } from "@/content/brand-copy";
 import { readCanonicalBaseUrlServer } from "@/lib/server/canonical-url.functions";
 import {
   readHomeCapabilities,
   validateRootSearch,
 } from "@/modules/market/home-catalogue";
 import {
-  buildFaqPageJsonLd,
   buildPublicPageHead,
   buildSiteJsonLd,
 } from "@/modules/seo/public";
@@ -39,14 +38,14 @@ export const Route = createFileRoute("/")({
       path: "/",
       title: HOME.metaTitle,
       description: HOME.metaDescription,
-      canonicalBaseUrl: loaderData?.canonicalBaseUrl,
-      jsonLd:
-        loaderData === undefined
-          ? undefined
-          : [
-              ...buildSiteJsonLd(loaderData.canonicalBaseUrl),
-              buildFaqPageJsonLd(HOME_FAQ),
-            ],
+      ...(loaderData?.canonicalBaseUrl === undefined
+        ? {}
+        : { canonicalBaseUrl: loaderData.canonicalBaseUrl }),
+      ...(loaderData === undefined
+        ? {}
+        : {
+            jsonLd: buildSiteJsonLd(loaderData.canonicalBaseUrl ?? ""),
+          }),
     }),
   component: ServicesRoute,
 });
@@ -55,22 +54,22 @@ function ServicesRoute() {
   const { read } = Route.useLoaderData();
 
   return (
-    <AePublicShell>
+    <AePublicPage>
       <AeHomeLanding read={read} />
-    </AePublicShell>
+    </AePublicPage>
   );
 }
 
 function HomePending() {
-  return <AePageSkeleton title="Loading current capabilities" shape="list" />;
+  return <AePageSkeleton title="Loading the catalog" shape="list" />;
 }
 
 function HomeError() {
   return (
     <AePageState
       tone="danger"
-      title="Unable to load capabilities"
-      description="Check your connection and try again. No capability was called."
+      title="Unable to load the catalog"
+      description="Check your connection and try again. No tool was called."
       action={
         <Button asChild className="min-h-touch">
           <Link to="/">Try again</Link>

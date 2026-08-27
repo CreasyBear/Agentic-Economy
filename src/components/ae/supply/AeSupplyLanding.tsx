@@ -17,12 +17,12 @@ import type { ServiceDto } from '@/modules/registry/public'
 
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 
-export const SUPPLY_OFFER_SENTENCE = 'Publish the capability, price and access terms agents need to discover, compare and call your tool.'
+export const SUPPLY_OFFER_SENTENCE = 'Publish the job, the price, and the access terms. Agents compare before they call.'
 
 const SUPPLY_STEPS = [
   { number: '01', title: 'Describe the tool', detail: 'Publish the job it does, its exact inputs and the outcome it returns.' },
   { number: '02', title: 'Set access and price', detail: 'Make availability, price and payment terms clear before any call.' },
-  { number: '03', title: 'Test and publish', detail: 'Confirm the route works, then make the Operation discoverable in the market.' },
+  { number: '03', title: 'Test and publish', detail: 'Confirm the route works, then make it discoverable in the catalog.' },
 ] as const
 
 export function AeSupplyLanding({
@@ -41,9 +41,10 @@ export function AeSupplyLanding({
       <AeSiteSection labelledBy="supply-hero" rhythm="hero" scheme="muted">
         <AeSiteHeroIntro>
           <AeSiteHeadingPair>
-            <div className="mx-auto w-full max-w-xl">
+            <div className="mx-auto grid w-full max-w-xl justify-items-center gap-3">
+              <AeSiteEyebrow>Suppliers</AeSiteEyebrow>
               <AeSiteHeading as="h1" size="md" id="supply-hero">
-                List your tool or API.
+                List your tool.
               </AeSiteHeading>
             </div>
             <div className="mx-auto w-full max-w-lg">
@@ -59,12 +60,12 @@ export function AeSupplyLanding({
       </AeSiteSection>
       {sourceError === undefined ? null : (
         <AeSiteSection ariaLabel="Supplier recovery" scheme="canvas">
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="max-w-3xl">
             <AlertTitle>Supplier information is unavailable</AlertTitle>
             <AlertDescription>
               <p>{sourceError}</p>
               {onRetry === undefined ? null : (
-                <Button type="button" variant="outline" className="mt-2 min-h-11" onClick={onRetry}>
+                <Button type="button" variant="outline" className="mt-intra min-h-touch" onClick={onRetry}>
                   Try again
                 </Button>
               )}
@@ -92,7 +93,7 @@ export function AeSupplyLanding({
           </AeSiteBody>
           <Link
             to="/owner/supply"
-            className="inline-flex min-h-11 items-center justify-self-start text-sm font-medium underline underline-offset-4"
+            className="inline-flex min-h-touch items-center justify-self-start text-sm font-medium underline underline-offset-4"
           >
             Manage listings
           </Link>

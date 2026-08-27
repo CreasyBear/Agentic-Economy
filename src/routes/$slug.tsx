@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
 import { PublicBusinessNotFound } from '@/components/ae/listing/PublicBusinessNotFound'
 import { AePageState } from '@/components/ae/layout/AePageState'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { readPublicBusinessRouteServer, type PublicBusinessRouteDataResult } from '@/lib/server/public-business-route.functions'
 import { serializeJsonLd } from '@/modules/seo/public'
 
@@ -88,7 +88,7 @@ export const Route = createFileRoute('/$slug')({
 
 function ProviderListingPending() {
   return (
-    <AePublicShell>
+    <AePublicPage>
       <article className="ae-rail grid gap-6 py-section" aria-busy="true" aria-label="Loading supplier">
         <Skeleton className="h-11 w-36" />
         <header className="grid gap-4 border-b border-border pb-6">
@@ -107,7 +107,7 @@ function ProviderListingPending() {
           <Skeleton className="h-72 w-full" />
         </div>
       </article>
-    </AePublicShell>
+    </AePublicPage>
   )
 }
 function ProviderListingError() {
@@ -120,8 +120,8 @@ function ProviderListingError() {
       description="Try again, or return to the catalogue."
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
-          <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
+          <Button asChild variant="default" className="min-h-touch"><a href={pathname}>Try again</a></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
         </div>
       }
     />
@@ -138,8 +138,8 @@ export function PublicBusinessUnavailable() {
       description="The supplier catalogue source is unavailable right now. Try again in a moment."
       action={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
-          <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
+          <Button asChild variant="default" className="min-h-touch"><a href={pathname}>Try again</a></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
         </div>
       }
     />
@@ -165,7 +165,7 @@ function PublicBusinessRoute() {
   const agentJsonUrl = `/api/businesses/${catalog.slug}`
 
   return (
-    <AePublicShell>
+    <AePublicPage>
       <AeProviderListingPage
         catalog={catalog}
         agentJsonUrl={agentJsonUrl}
@@ -173,6 +173,6 @@ function PublicBusinessRoute() {
         {...(from === undefined ? {} : { backFrom: from })}
         {...(id === undefined ? {} : { backThreadId: id })}
       />
-    </AePublicShell>
+    </AePublicPage>
   )
 }

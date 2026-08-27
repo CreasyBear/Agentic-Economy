@@ -82,7 +82,7 @@ function OwnerStatusRoute() {
             description="Set up your supplier profile to publish Operations agents can inspect."
             role="status"
             action={
-              <Button asChild className="min-h-11">
+              <Button asChild className="min-h-touch">
                 <a href="/for-providers">Review supplier setup</a>
               </Button>
             }
@@ -93,7 +93,7 @@ function OwnerStatusRoute() {
             description="Try again in a moment. If this keeps happening, contact support through corrections."
             role="alert"
             action={
-              <Button asChild variant="secondary" className="min-h-11">
+              <Button asChild variant="secondary" className="min-h-touch">
                 <a href="/owner/status">Try again</a>
               </Button>
             }

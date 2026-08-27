@@ -2,6 +2,10 @@
 
 import type { ActionCtx } from '../../../convex/_generated/server'
 import {
+  cancelRecovery,
+  expireAuthorizationRecovery,
+  readRecoveryStatus,
+  reconcileRecovery,
   recoverCapabilityOperationInvocation,
   recoveryArgs,
 } from './invocation-worker/recover'
@@ -33,6 +37,10 @@ export async function runCapabilityOperationInvocationWithAuthority(
 }
 
 export {
+  cancelRecovery,
+  expireAuthorizationRecovery,
+  readRecoveryStatus,
+  reconcileRecovery,
   recoverCapabilityOperationInvocation,
   recoveryArgs,
 }

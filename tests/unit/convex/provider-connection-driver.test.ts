@@ -11,7 +11,7 @@ import {
   enqueueCleanupWork,
   shareCanonicalProviderConnection,
   transitionCanonicalProviderConnection,
-} from '../../../convex/capabilityProviderConnectionLifecycle'
+} from '../../../convex/lib/providerConnections/lifecycle'
 import {
   convexTestWithMarketComponents,
   convexTestWithWorkers,

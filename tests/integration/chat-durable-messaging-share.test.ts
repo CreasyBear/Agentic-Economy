@@ -422,18 +422,20 @@ describe.sequential('durable operation chat messaging and shares', () => {
           { type: 'text', text: expect.any(String) },
           {
             type: 'operation-card',
+            kind: 'choices',
             toolId: 'registry.operations.search',
             state: 'complete',
-            title: 'Search operations',
+            title: 'Search tools',
             operationRefs: operationRefs.slice(0, 4),
-            summary: '5 operations found',
+            choices: [],
+            count: 5,
           },
           {
             type: 'operation-card',
+            kind: 'status',
             toolId: 'operation.execute',
             state: 'error',
-            title: 'Execute operation',
-            operationRefs: [],
+            title: 'Call',
             summary: 'Tool unavailable',
           },
         ],
@@ -447,7 +449,8 @@ describe.sequential('durable operation chat messaging and shares', () => {
     expect(boundedText?.type).toBe('text')
     expect(Array.from(boundedText?.type === 'text' ? boundedText.text : '')).toHaveLength(8_000)
     for (const part of publicParts) {
-      if (part.type === 'operation-card') expect(Array.from(part.summary).length).toBeLessThanOrEqual(240)
+      if (part.type !== 'operation-card') continue
+      if (part.kind === 'status') expect(Array.from(part.summary).length).toBeLessThanOrEqual(240)
     }
     expect(shared.page.every((message) => Object.keys(message).sort().join(',') === 'id,parts,role'))
       .toBe(true)

@@ -2,7 +2,10 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { Infer } from 'convex/values'
-import type { OperationDispatchCommand, OperationDispatchProjection } from './capabilityOperationInvocations'
+import type {
+  OperationDispatchCommand,
+  OperationDispatchProjection,
+} from './lib/operationInvocations/contracts'
 import type { RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
 import { transportObservationDigest } from '@/modules/capability-supply/public'
 import {

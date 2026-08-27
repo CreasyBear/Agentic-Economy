@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto'
 import { internal } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import schema from '../../../convex/schema'
-import { beginLeaseEffectHandler } from '../../../convex/capabilityProviderConnectionLeases'
+import { beginLeaseEffectHandler } from '../../../convex/lib/providerConnections/leases'
 import {
   abortProviderConsequenceHandler,
   attestProviderConsequenceTicketHandler,

@@ -56,7 +56,7 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
               size="sm"
             />
           )}
-          <Button asChild variant="secondary" className="min-h-11">
+          <Button asChild variant="secondary" className="min-h-touch">
             <a href={readback.publicUrl}>
               <ExternalLinkIcon aria-hidden="true" />
               {isPreview ? 'Open preview' : 'Open page'}

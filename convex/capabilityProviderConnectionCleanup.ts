@@ -12,9 +12,11 @@ import { internal } from './_generated/api'
 import { internalAction, internalMutation, type ActionCtx, type MutationCtx } from './_generated/server'
 import {
   cleanupResourceAuthorityMatches,
+} from './lib/providerConnections/lifecycle'
+import {
   cleanupResourceAuthorityValue,
   type CleanupResourceAuthority,
-} from './capabilityProviderConnectionLifecycle'
+} from './lib/providerConnections/contracts'
 
 const cleanupOutcome = v.union(
   v.literal('detached'),

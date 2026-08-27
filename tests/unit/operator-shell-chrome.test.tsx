@@ -13,7 +13,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import '../setup/jsdom-platform'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { OperatorRouteNotFound } from '@/components/ae/layout/AeOperatorRouteStates'
+import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeOperatorRouteStates'
+import { AECON_MARK_SRC } from '@/content/brand-assets'
+import { ownerSettingsChrome } from '@/lib/operator/settings-navigation'
 import { Route as OperatorLayoutRoute } from '@/routes/_operator'
 import { Route as AgentAccessRoute } from '@/routes/_operator/agent-access'
 
@@ -63,6 +65,86 @@ describe('operator shell nested chrome', () => {
     const recovery = screen.getByRole('link', { name: 'Back to Keys' })
     expect(recovery.getAttribute('href')).toBe('/agent-access')
   })
+
+  it('puts AECON on the operator mark and drops the nested settings record icon', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="owner"
+        title="Workspace"
+        description="Loading your latest marketplace activity."
+        currentPath="/owner/settings"
+      >
+        <AeOperatorShell
+          operatorRole="owner"
+          title={ownerSettingsChrome.title}
+          description={ownerSettingsChrome.description}
+          currentPath="/owner/settings"
+        >
+          <div>Settings body</div>
+        </AeOperatorShell>
+      </AeOperatorShell>,
+      '/owner/settings',
+    )
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Settings' })
+    expect(heading.parentElement?.previousElementSibling).toBeNull()
+    expect(screen.getByText('AECON')).toBeTruthy()
+    expect(document.querySelector(`img[src="${AECON_MARK_SRC}"]`)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Supplier workspace home' })).toBeTruthy()
+  })
+
+  it('drops the record-header icon on operator lists', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="owner"
+        title="Operations"
+        description="Publish the exact tools agents can inspect and call."
+        currentPath="/owner/offerings"
+      >
+        <div>Operations body</div>
+      </AeOperatorShell>,
+      '/owner/offerings',
+    )
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Operations' })
+    expect(heading.parentElement?.previousElementSibling).toBeNull()
+  })
+
+  it('keeps parent chrome while a nested pending state loads', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="owner"
+        title={ownerSettingsChrome.title}
+        description={ownerSettingsChrome.description}
+        currentPath="/owner/settings/workspace"
+      >
+        <OperatorRoutePending />
+      </AeOperatorShell>,
+      '/owner/settings/workspace',
+    )
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Loading workspace' })).toBeNull()
+    expect(screen.getByLabelText('Loading workspace')).toBeTruthy()
+  })
+
+  it('keeps parent chrome when a nested route fails to load', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="owner"
+        title={ownerSettingsChrome.title}
+        description={ownerSettingsChrome.description}
+        currentPath="/owner/settings/connections"
+      >
+        <OperatorRouteError error={new Error('unavailable')} />
+      </AeOperatorShell>,
+      '/owner/settings/connections',
+    )
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Couldn’t load this page' })).toBeNull()
+    expect(screen.getByText('Workspace unavailable')).toBeTruthy()
+  })
 })
 
 function OperatorShellHarness() {
@@ -104,6 +186,10 @@ function renderAt(ui: ReactElement, pathname: string) {
     createRoute({ getParentRoute: () => rootRoute, path: '/agent-access' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/agent-access/$' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings/new' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings/workspace' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings/connections' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
   ])
   const router = createRouter({

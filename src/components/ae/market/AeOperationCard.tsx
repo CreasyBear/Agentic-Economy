@@ -38,7 +38,7 @@ export function AeOperationCard({
       <Item
         asChild
         size="sm"
-        className="group rounded-none px-4 py-4 transition-colors duration-base ease-standard hover:bg-brand-muted/35 hover:shadow-market-row-hover active:bg-brand-muted/55 sm:px-5 md:py-5"
+        className="group rounded-none px-gutter py-gutter transition-colors duration-base ease-standard hover:bg-brand-muted/35 hover:shadow-market-row-hover active:bg-brand-muted/55 md:py-related"
       >
         <Link
           to="/operations/$operationRef"
@@ -46,7 +46,7 @@ export function AeOperationCard({
           aria-label={`${routeable ? "Use" : "Inspect"} ${operation.title}`}
         >
           <ItemContent className="min-w-0 basis-full md:basis-auto">
-            <ItemTitle className="max-w-full flex-wrap gap-2">
+            <ItemTitle className="max-w-full flex-wrap gap-intra">
               <span className="line-clamp-2 break-words underline-offset-4 transition-colors duration-fast group-hover:text-brand-strong group-hover:underline">
                 {operation.title}
               </span>

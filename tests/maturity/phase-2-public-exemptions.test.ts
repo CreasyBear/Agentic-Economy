@@ -43,6 +43,8 @@ vi.mock('@/lib/server/convex-source', () => ({
   callSourceMutation: serverMocks.callSourceMutation,
   callSourceQuery: serverMocks.callPublicSourceQuery,
   sourceQuery: (name: string) => ({ name }),
+  sourceMutation: (name: string) => ({ name }),
+  sourceAction: (name: string) => ({ name }),
 }))
 vi.mock('@/modules/registry/registry.functions', () => ({
   readPublicOfferingRegistryBusinessDetail:

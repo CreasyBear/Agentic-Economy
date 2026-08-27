@@ -20,7 +20,7 @@ import {
   identifier,
 } from './moneyLedgerValues'
 import { payoutFromRow } from './moneyPayoutTransferShared'
-import { dailyPayoutIdentityFromRow } from './moneyQualifiedUsePayout'
+import { dailyPayoutIdentityFromRow } from './lib/qualifiedUsePayout'
 import {
   requireSourceWrite,
   sourceWriteAdmissionArg,

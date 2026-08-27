@@ -7,7 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -213,14 +213,14 @@ function StatusFound({
 }: Readonly<{ result: FoundInvocationStatus; actions?: InvocationStatusPageActions }>) {
   const receiptView = projectInvocationReceipt(result)
   return (
-    <AePublicShell>
-      <article id="receipt" className="ae-rail grid scroll-mt-6 gap-8 pb-page">
-        <header className="grid gap-4">
-          <div className="flex flex-wrap gap-2">
+    <AePublicPage>
+      <article id="receipt" className="ae-rail grid scroll-mt-6 gap-section pb-page">
+        <header className="grid gap-related">
+          <div className="flex flex-wrap gap-intra">
             <Badge variant="outline">Receipt</Badge>
             <Badge variant={receiptView.complete ? 'success' : receiptView.issue === undefined ? 'secondary' : 'warning'}>{receiptView.statusLabel}</Badge>
           </div>
-          <div className="grid gap-2">
+          <div className="grid gap-intra">
             <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Invocation receipt</h1>
             <p className="max-w-3xl text-muted-foreground">{receiptView.statusDetail}</p>
           </div>
@@ -252,7 +252,7 @@ function StatusFound({
 
         <ReceiptMoneyFacts view={receiptView} />
         {result.result === undefined ? (
-          <section className="grid gap-2 border-t border-border pt-8" aria-labelledby="current-result-title">
+          <section className="grid gap-intra border-t border-border pt-section" aria-labelledby="current-result-title">
             <h2 id="current-result-title" className="text-xl font-semibold tracking-tight text-foreground">Current result</h2>
             <p className="text-muted-foreground">No canonical result is recorded yet. The state above remains authoritative.</p>
           </section>
@@ -265,25 +265,25 @@ function StatusFound({
         ) : null}
         <MachineReadableReceipt view={receiptView} />
       </article>
-    </AePublicShell>
+    </AePublicPage>
   )
 }
 
 function ReceiptTimeline({ stages }: Readonly<{ stages: readonly InvocationReceiptStageView[] }>) {
   return (
-    <section className="grid gap-3 border-t border-border pt-6" aria-labelledby="receipt-progress-title">
-      <div className="grid gap-1">
+    <section className="grid gap-related border-t border-border pt-section" aria-labelledby="receipt-progress-title">
+      <div className="grid gap-intra">
         <h2 id="receipt-progress-title" className="text-xl font-semibold tracking-tight text-foreground">What happened</h2>
         <p className="text-sm text-muted-foreground">Recorded progress for this exact call. A pending stage is not claimed as complete.</p>
       </div>
-      <ol className="grid overflow-hidden rounded-lg border bg-card sm:grid-cols-2 lg:grid-cols-6">
+      <ol className="grid overflow-hidden rounded-card border bg-card sm:grid-cols-2 lg:grid-cols-6">
         {stages.map((stageView, index) => (
           <li
             key={stageView.id}
             aria-current={stageView.state === 'current' ? 'step' : undefined}
-            className="grid min-w-0 content-start gap-2 border-b p-3 last:border-b-0 sm:border-r sm:[&:nth-child(even)]:border-r-0 lg:border-b-0 lg:[&:nth-child(even)]:border-r lg:last:border-r-0"
+            className="grid min-w-0 content-start gap-intra border-b p-gutter last:border-b-0 sm:border-e sm:[&:nth-child(even)]:border-e-0 lg:border-b-0 lg:[&:nth-child(even)]:border-e lg:last:border-e-0"
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-intra">
               <StageIcon state={stageView.state} />
               <span className="text-sm font-semibold text-foreground">{index + 1}. {stageView.label}</span>
             </div>
@@ -329,15 +329,15 @@ function ReceiptMoneyFacts({ view }: Readonly<{ view: InvocationReceiptView }>) 
       title="Money before and after the call"
       description="Authorization is the pre-call ceiling. Usage is the post-call recorded amount. Missing facts stay missing."
     >
-      <div className="grid gap-8">
-        <div className="grid gap-3">
+      <div className="grid gap-section">
+        <div className="grid gap-related">
           <h3 className="text-sm font-medium text-foreground">Before</h3>
           <p className="text-sm text-muted-foreground">Quoted components and buyer authorization.</p>
           {view.receipt === undefined ? (
             <p className="text-sm text-muted-foreground">No public pre-call money receipt is attached to this record.</p>
           ) : <ReceiptAuthorizationFacts receipt={view.receipt} />}
         </div>
-        <div className="grid gap-3">
+        <div className="grid gap-related">
           <h3 className="text-sm font-medium text-foreground">After</h3>
           <p className="text-sm text-muted-foreground">Recorded settlement, refund, or uncertainty.</p>
           {view.usage === undefined && view.receipt === undefined ? (
@@ -410,20 +410,20 @@ function InvocationReuseActions({ view }: Readonly<{ view: InvocationReceiptView
       title="Use this capability again"
       description="A new run needs fresh input and a new idempotency key. The completed receipt above never becomes the identity for another call."
     >
-      <div className="flex flex-wrap gap-2">
-        <Button asChild className="min-h-11">
+      <div className="flex flex-wrap gap-intra">
+        <Button asChild className="min-h-touch">
           <Link to="/operations/$operationRef" params={{ operationRef }}>Run again</Link>
         </Button>
-        <Button asChild variant="outline" className="min-h-11"><a href="#receipt">View receipt</a></Button>
+        <Button asChild variant="outline" className="min-h-touch"><a href="#receipt">View receipt</a></Button>
       </div>
       {priorInputJson === undefined ? null : (
-        <div className="grid gap-2">
+        <div className="grid gap-intra">
           <h3 className="text-sm font-medium text-foreground">Previous input</h3>
           <p className="text-sm text-muted-foreground">Owner-visible input from this invocation. Reconfirm current terms before running it again.</p>
           <pre className="overflow-auto whitespace-pre-wrap break-words text-xs"><code>{JSON.stringify(view.previousInput, null, 2)}</code></pre>
         </div>
       )}
-      <div className="grid gap-6">
+      <div className="grid gap-section">
         <ReuseCopy title="Copy as CLI" description="Run with the installed Agentic Economy CLI." label="CLI command" code={cli} />
         <ReuseCopy title="Copy as API request" description="Call the canonical authenticated HTTP boundary." label="API request" code={api} />
         <ReuseCopy title="Add to MCP" description="Give an MCP-capable agent the exact endpoint and Operation." label="MCP setup instruction" code={mcp} />
@@ -435,7 +435,7 @@ function InvocationReuseActions({ view }: Readonly<{ view: InvocationReceiptView
 
 function ReuseCopy({ title, description, label, code }: Readonly<{ title: string; description: string; label: string; code: string }>) {
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-intra">
       <h3 className="text-sm font-medium text-foreground">{title}</h3>
       <p className="text-sm text-muted-foreground">{description}</p>
       <AeCopyCommand compact label={label} code={code} />
@@ -446,10 +446,10 @@ function ReuseCopy({ title, description, label, code }: Readonly<{ title: string
 function MachineReadableReceipt({ view }: Readonly<{ view: InvocationReceiptView }>) {
   return (
     <details>
-      <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-foreground">
+      <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">
         Machine-readable receipt
       </summary>
-      <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-foreground"><code>{JSON.stringify(view, null, 2)}</code></pre>
+      <pre className="mt-related max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-foreground"><code>{JSON.stringify(view, null, 2)}</code></pre>
     </details>
   )
 }
@@ -480,8 +480,8 @@ function InvocationRecoveryActions({
   if (!canRefreshNow && !canCancelNow && !canReconcileNow && !hasReconciliationBlocker && actions?.feedback === undefined) return null
 
   return (
-    <section className="grid gap-3 border-t border-border pt-6" aria-labelledby="recovery-actions-title">
-      <div className="grid gap-1">
+    <section className="grid gap-related border-t border-border pt-section" aria-labelledby="recovery-actions-title">
+      <div className="grid gap-intra">
         <h2 id="recovery-actions-title" className="text-xl font-semibold tracking-tight text-foreground">Resolve this invocation</h2>
         <p className="text-sm text-muted-foreground">Use only the action supported by the recorded state. Each action refreshes this exact invocation.</p>
       </div>
@@ -505,7 +505,7 @@ function InvocationRecoveryActions({
                 disabled={recoveryPending}
                 required
               >
-                <SelectTrigger id="reconciliation-resolution" className="w-full">
+                <SelectTrigger id="reconciliation-resolution" className="min-h-touch w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -526,6 +526,7 @@ function InvocationRecoveryActions({
                 placeholder="Provider control plane"
                 disabled={recoveryPending}
                 required
+                className="min-h-touch"
               />
             </Field>
             <Field data-disabled={actions?.reconcilePending || undefined}>
@@ -538,10 +539,11 @@ function InvocationRecoveryActions({
                 placeholder="Provider event or incident reference"
                 disabled={recoveryPending}
                 required
+                className="min-h-touch"
               />
             </Field>
             <Field orientation="horizontal">
-              <Button type="submit" disabled={recoveryPending}>
+              <Button type="submit" className="min-h-touch" disabled={recoveryPending}>
                 {actions?.reconcilePending === true ? 'Reconciling invocation…' : 'Submit reconciliation'}
               </Button>
             </Field>
@@ -549,11 +551,12 @@ function InvocationRecoveryActions({
         </form>
       ) : null}
       {canRefreshNow || (canCancelNow && actions?.onCancel !== undefined) ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-intra">
           {canRefreshNow ? (
             <Button
               type="button"
               variant="outline"
+              className="min-h-touch"
               disabled={actions?.refreshPending === true || actions?.cancelPending === true || actions?.reconcilePending === true}
               onClick={() => { void actions?.onRefresh?.() }}
             >
@@ -564,6 +567,7 @@ function InvocationRecoveryActions({
             <Button
               type="button"
               variant="secondary"
+              className="min-h-touch"
               disabled={actions?.cancelPending === true || actions?.refreshPending === true || actions?.reconcilePending === true}
               onClick={() => setCancelDialogOpen(true)}
             >
@@ -654,7 +658,7 @@ function ResultDetails({ result }: Readonly<{ result: OperationInvokeResult }>) 
       title="Current result"
       description="Canonical result facts as recorded, without changing the current state above."
     >
-      <dl className="grid gap-3 sm:grid-cols-2">
+      <dl className="grid gap-related sm:grid-cols-2">
         <Fact label="Result kind" value={machineLabel(result.kind)} />
         {'invocationRef' in result ? <Fact label="Result invocation reference"><Ref value={result.invocationRef} /></Fact> : null}
         {result.operationRef === undefined ? null : <Fact label="Result Operation reference"><Ref value={result.operationRef} /></Fact>}
@@ -697,9 +701,9 @@ function ResultDetails({ result }: Readonly<{ result: OperationInvokeResult }>) 
         )}
       </dl>
       {result.kind === 'completed' ? (
-        <div className="grid min-w-0 gap-2">
+        <div className="grid min-w-0 gap-intra">
           <h3 className="text-base font-semibold text-foreground">Output</h3>
-          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted p-4 text-xs text-foreground"><code>{JSON.stringify(result.output, null, 2)}</code></pre>
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-card bg-muted p-gutter text-xs text-foreground"><code>{JSON.stringify(result.output, null, 2)}</code></pre>
         </div>
       ) : null}
     </AeSection>
@@ -716,9 +720,9 @@ function StatusRefused({
   const canRetry = result.retryable && actions?.onRefresh !== undefined
   const receiptView = projectInvocationReceipt(result)
   return (
-    <AePublicShell>
-      <section id="receipt" className="ae-rail grid scroll-mt-6 gap-8 pb-page">
-        <div className="grid gap-3">
+    <AePublicPage>
+      <section id="receipt" className="ae-rail grid scroll-mt-6 gap-section pb-page">
+        <div className="grid gap-related">
           <Badge variant="warning" className="w-fit">{receiptView.statusLabel}</Badge>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Invocation receipt</h1>
           <p className="text-muted-foreground">{receiptView.statusDetail}</p>
@@ -744,7 +748,7 @@ function StatusRefused({
         </AeSection>
         <MachineReadableReceipt view={receiptView} />
       </section>
-    </AePublicShell>
+    </AePublicPage>
   )
 }
 
@@ -757,9 +761,9 @@ function StatusUnavailable({
 }>) {
   const receiptView = projectInvocationReceipt(result)
   return (
-    <AePublicShell>
-      <section id="receipt" className="ae-rail grid scroll-mt-6 gap-8 pb-page">
-        <div className="grid gap-3">
+    <AePublicPage>
+      <section id="receipt" className="ae-rail grid scroll-mt-6 gap-section pb-page">
+        <div className="grid gap-related">
           <Badge variant="warning" className="w-fit">Receipt unavailable</Badge>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Invocation receipt</h1>
           <p className="text-muted-foreground">{receiptView.statusDetail}</p>
@@ -772,7 +776,7 @@ function StatusUnavailable({
         <ReceiptMoneyFacts view={receiptView} />
         <MachineReadableReceipt view={receiptView} />
       </section>
-    </AePublicShell>
+    </AePublicPage>
   )
 }
 
@@ -781,7 +785,7 @@ function RefreshStatusButton({ actions }: Readonly<{ actions: InvocationStatusPa
     <Button
       type="button"
       variant="outline"
-      className="min-h-11 w-fit"
+      className="min-h-touch w-fit"
       disabled={actions.refreshPending === true}
       onClick={() => { void actions.onRefresh?.() }}
     >
@@ -818,7 +822,7 @@ function StatusFeedback({
 function StatusSignInAction({ invocationRef }: Readonly<{ invocationRef: string }>) {
   const redirect = `/operations/invocations/${encodeURIComponent(invocationRef)}`
   return (
-    <Button asChild className="min-h-11 w-fit">
+    <Button asChild className="min-h-touch w-fit">
       <Link to="/sign-in/$" params={{ _splat: '' }} search={{ redirect }}>
         Sign in to view current status
       </Link>
@@ -828,12 +832,12 @@ function StatusSignInAction({ invocationRef }: Readonly<{ invocationRef: string 
 
 function InvocationStatusPending() {
   return (
-    <AePublicShell>
-      <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6" aria-busy="true" aria-live="polite">
+    <AePublicPage>
+      <section className="ae-rail py-page" aria-busy="true" aria-live="polite">
         <h1 className="sr-only">Invocation receipt</h1>
         <p className="text-muted-foreground">Checking the exact current owner-scoped invocation receipt…</p>
       </section>
-    </AePublicShell>
+    </AePublicPage>
   )
 }
 
@@ -843,7 +847,7 @@ function InvocationStatusError() {
 }
 
 function Fact({ label, value, children }: Readonly<{ label: string; value?: string; children?: ReactNode }>) {
-  return <div className="grid min-w-0 gap-1"><dt className="text-xs font-medium text-muted-foreground">{label}</dt><dd className="break-words text-sm text-foreground">{children ?? value}</dd></div>
+  return <div className="grid min-w-0 gap-intra"><dt className="text-xs font-medium text-muted-foreground">{label}</dt><dd className="break-words text-sm text-foreground">{children ?? value}</dd></div>
 }
 
 function Ref({ value }: Readonly<{ value: string }>) {

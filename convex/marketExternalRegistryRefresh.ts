@@ -11,6 +11,7 @@ import {
 import {
   fetchAgenticMarketCatalog,
   fetchTregCatalog,
+  REGISTRY_SOURCE_JOB_TIMEOUT_MS,
 } from "@/modules/market/registry-source-adapters";
 
 import { internal } from "./_generated/api";
@@ -52,7 +53,7 @@ export const run = internalAction({
       let launchCohort: RegistryLaunchCandidate[] = [];
       const [agenticMarket, treg] = await Promise.all([
         fetchAgenticMarketCatalog({
-          jobTimeoutMs: 300_000,
+          jobTimeoutMs: REGISTRY_SOURCE_JOB_TIMEOUT_MS,
           onEntries: async (sourceEntries) => {
             launchCohort = selectRegistryLaunchCohort([
               ...launchCohort,
@@ -68,7 +69,7 @@ export const run = internalAction({
             insertedEntries += written.inserted;
           },
         }),
-        fetchTregCatalog({ jobTimeoutMs: 300_000 }),
+        fetchTregCatalog({ jobTimeoutMs: REGISTRY_SOURCE_JOB_TIMEOUT_MS }),
       ]);
       if (!agenticMarket.complete || !treg.complete) {
         const reason = [

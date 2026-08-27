@@ -95,7 +95,7 @@ describe('site brief markdown', () => {
     expect(about).toContain('https://ae.example/for-agents')
     expect(about).toContain('https://ae.example/for-providers')
     expect(about).toContain('https://ae.example/market')
-    expect(about).toContain('no partner logo wall')
+    expect(about).toContain('publishes a job')
     expect(about).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous/u)
   })
 

@@ -29,7 +29,7 @@ describe('facilitator discovery bounded client', () => {
     ])
   })
 
-  it('stops a cursor or offset source at the global 20-page bound', async () => {
+  it('stops a cursor or offset source at the global page bound', async () => {
     let calls = 0
     const result = await fetchFacilitatorDiscoveryPages({
       sourceUrls: ['https://facilitator.payai.network/discovery/resources'],

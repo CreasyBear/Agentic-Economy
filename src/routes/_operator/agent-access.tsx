@@ -150,7 +150,7 @@ function AgentAccessHome() {
             <AlertTitle>Local preview — no agent is connected</AlertTitle>
             <AlertDescription>
               <p>This browser journey does not sign in, create access, or authorize work. Browse the public demo to explore the customer experience.</p>
-              <Button asChild variant="secondary" className="mt-2 min-h-11"><Link to="/">Browse public demo</Link></Button>
+              <Button asChild variant="secondary" className="mt-2 min-h-touch"><Link to="/">Browse public demo</Link></Button>
             </AlertDescription>
           </Alert>
         </div>

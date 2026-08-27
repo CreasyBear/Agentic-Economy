@@ -1,8 +1,11 @@
 const recoverMock = vi.hoisted(() => vi.fn())
+const expireMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/modules/capability-execution/invocation-worker/recover', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/capability-execution/invocation-worker/recover')>()),
   recoverCapabilityOperationInvocation: recoverMock,
+  readRecoveryStatus: recoverMock,
+  expireAuthorizationRecovery: expireMock,
 }))
 
 import { getFunctionName } from 'convex/server'
@@ -454,14 +457,15 @@ describe('scheduled capability invocation reconciliation worker', () => {
       invocationRef: `due:${index}`, attemptCount: 0, nextAttemptAt: 1_000,
     }))
     const recovered: string[] = []
-    recoverMock.mockImplementation(async (_ctx: unknown, args: { invocationRef: string; mode: string }) => {
-      recovered.push(`${args.mode}:${args.invocationRef}`)
-      if (args.mode === 'expire_authorization') {
-        return { kind: 'reconciliation_required', invocationRef: args.invocationRef, operationRef: 'operation', evidence: {
-          attemptRef: 'attempt', effectGeneration: 1, requiredAt: new Date(0).toISOString(),
-          retry: 'reconcile_before_retry', evidenceSource: 'x402_authorization_expired:provider_transaction_or_chain_nonce_evidence_required',
-        }, expiryDisposition: args.invocationRef === 'expired:manual' ? 'manual_review' : 'automatic' }
-      }
+    expireMock.mockImplementation(async (_ctx: unknown, args: { invocationRef: string }) => {
+      recovered.push(`expire_authorization:${args.invocationRef}`)
+      return { kind: 'reconciliation_required', invocationRef: args.invocationRef, operationRef: 'operation', evidence: {
+        attemptRef: 'attempt', effectGeneration: 1, requiredAt: new Date(0).toISOString(),
+        retry: 'reconcile_before_retry', evidenceSource: 'x402_authorization_expired:provider_transaction_or_chain_nonce_evidence_required',
+      }, expiryDisposition: args.invocationRef === 'expired:manual' ? 'manual_review' : 'automatic' }
+    })
+    recoverMock.mockImplementation(async (_ctx: unknown, args: { invocationRef: string; mode?: string }) => {
+      recovered.push(`${args.mode ?? 'status'}:${args.invocationRef}`)
       return { kind: 'found', invocationRef: args.invocationRef, operationRef: 'operation', state: 'terminal' }
     })
     const ctx = {

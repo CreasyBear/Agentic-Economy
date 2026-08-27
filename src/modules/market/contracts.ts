@@ -90,8 +90,8 @@ export const marketWindowToUpstream = {
   "30d": 30,
 } as const satisfies Record<MarketWindow, 1 | 7 | 30>;
 
-export const MARKET_SOURCE_DELAYED_AFTER_MS = 10 * 60_000;
-export const MARKET_SOURCE_UNAVAILABLE_AFTER_MS = 60 * 60_000;
+export const MARKET_SOURCE_DELAYED_AFTER_MS = 8 * 60 * 60_000;
+export const MARKET_SOURCE_UNAVAILABLE_AFTER_MS = 24 * 60 * 60_000;
 export const MARKET_MAX_DAILY_POINTS = 31;
 export const MARKET_MAX_RECENT_ACTIVITY = 24;
 export const MARKET_MAX_FEATURED_SERVICES = 6;

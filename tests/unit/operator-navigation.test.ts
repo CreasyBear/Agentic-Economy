@@ -9,6 +9,7 @@ import {
   listOperatorCommandDestinations,
   navGroupsForRole,
   operatorUtilityItemsForRole,
+  resolveOperatorNavItem,
   roleHomeHref,
   type OperatorRole,
 } from '@/lib/operator/navigation'
@@ -114,6 +115,13 @@ describe('operator navigation', () => {
     expect(isOperatorPathActive('/owner/offerings/off_1', '/owner/offerings')).toBe(true)
     expect(isOperatorPathActive('/owner/offerings', '/owner/offerings')).toBe(true)
     expect(isOperatorPathActive('/owner/offeringsx', '/owner/offerings')).toBe(false)
+  })
+
+  it('resolves the owning sidebar item for operator page headers', () => {
+    expect(resolveOperatorNavItem('owner', '/owner/offerings')?.label).toBe('Operations')
+    expect(resolveOperatorNavItem('owner', '/owner/settings/members')?.label).toBe('Settings')
+    expect(resolveOperatorNavItem('owner', '/activity')?.label).toBe('Calls')
+    expect(resolveOperatorNavItem('admin', '/admin/audit-events')?.label).toBe('Audit')
   })
 
   it('exposes public utility links for operator sidebar footers', () => {

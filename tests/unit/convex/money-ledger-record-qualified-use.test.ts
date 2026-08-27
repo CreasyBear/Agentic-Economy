@@ -8,7 +8,7 @@ import {
   recordQualifiedUsePayoutAllocation,
   requireCanonicalPayoutAuthority,
   resolveCanonicalInvocationAuthority,
-} from '../../../convex/moneyQualifiedUsePayout'
+} from '../../../convex/lib/qualifiedUsePayout'
 import { DelegationService } from '@/modules/authority/delegation/public'
 
 import {

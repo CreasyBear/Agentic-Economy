@@ -39,7 +39,7 @@ export function AeRecordSheet({
             <SheetDescription>{description}</SheetDescription>
           )}
         </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-gutter">
           {facts === undefined || facts.length === 0 ? null : (
             <AeFactList facts={facts} />
           )}
@@ -48,7 +48,7 @@ export function AeRecordSheet({
         {action === undefined ? null : (
           <SheetFooter className="border-t border-border">
             {action}
-            <Button type="button" variant="ghost" className="min-h-11" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="ghost" className="min-h-touch" onClick={() => onOpenChange(false)}>
               Close
             </Button>
           </SheetFooter>

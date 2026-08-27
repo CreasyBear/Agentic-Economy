@@ -4,6 +4,7 @@ import { v } from 'convex/values'
 
 import {
   admitFacilitatorDiscoveryItems,
+  FACILITATOR_DISCOVERY_JOB_TIMEOUT_MS,
   fetchFacilitatorDiscoveryPages,
 } from '@/modules/capability-supply/server'
 
@@ -30,7 +31,7 @@ export const run = internalAction({
       name: 'refresh facilitator discovery',
       snapshot: workload,
     })
-    const deadlineAt = Date.now() + 120_000
+    const deadlineAt = Date.now() + FACILITATOR_DISCOVERY_JOB_TIMEOUT_MS
     const fetched = await fetchFacilitatorDiscoveryPages({
       jobTimeoutMs: Math.max(0, deadlineAt - Date.now()),
     })

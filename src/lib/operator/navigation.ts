@@ -206,6 +206,29 @@ export function isOperatorPathActive(currentPath: string, href: string): boolean
 }
 
 /**
+ * Sidebar destination that owns this path, including the list page itself.
+ * Longest href wins so `/owner/settings/members` stays on Settings, not a
+ * shorter sibling.
+ */
+export function resolveOperatorNavItem(
+  role: OperatorRole,
+  currentPath: string,
+): OperatorNavItem | undefined {
+  let match: OperatorNavItem | undefined
+  for (const group of baseNavGroupsForRole(role)) {
+    for (const item of group.items) {
+      if (!isOperatorPathActive(currentPath, item.href)) {
+        continue
+      }
+      if (match === undefined || item.href.length > match.href.length) {
+        match = item
+      }
+    }
+  }
+  return match
+}
+
+/**
  * The "List" half of a shell-derived breadcrumb trail: the nearest sidebar
  * destination that is a strict ancestor of `currentPath`. Returns undefined
  * on a list page itself (top of its section, no trail needed) or when no

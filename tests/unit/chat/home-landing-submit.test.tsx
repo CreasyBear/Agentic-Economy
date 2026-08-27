@@ -5,7 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AGENT_INSTRUCTION, HOME, HOME_CLAIMS } from '@/content/brand-copy'
+import { AGENT_DOOR, AGENT_INSTRUCTION, AGENT_SETUP_INSTRUCTION, HOME } from '@/content/brand-copy'
 
 const routeState = vi.hoisted(() => {
   const state = {
@@ -61,15 +61,19 @@ describe('catalogue-first home', () => {
 
     expect(screen.getByRole('heading', { name: HOME.heroHeading })).toBeTruthy()
     expect(screen.getByText(HOME.heroSubhead)).toBeTruthy()
-    expect(screen.getByRole('heading', { name: AGENT_INSTRUCTION.heading })).toBeTruthy()
+    expect(screen.getAllByRole('heading', { name: AGENT_INSTRUCTION.heading }).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: `Copy ${AGENT_INSTRUCTION.label}` })).toBeTruthy()
+    expect(screen.getByText(AGENT_INSTRUCTION.code)).toBeTruthy()
+    expect(screen.queryByText(AGENT_SETUP_INSTRUCTION.code)).toBeNull()
+    expect(screen.queryByText(/Claude Code/)).toBeNull()
     expect(document.querySelector('[data-slot="ae-site-browser"]')?.textContent).toContain('/llms.txt')
     expect(screen.getAllByRole('link', { name: 'Browse tools' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('link', { name: 'Set up an agent' }).length).toBeGreaterThan(0)
-    expect(screen.getByRole('link', { name: 'List a tool' })).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: AGENT_DOOR.cta }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: 'List a tool' }).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: HOME.catalogHeading })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: HOME.faqHeading })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: HOME.closeHeading })).toBeTruthy()
+    expect(screen.getByText(HOME.catalogEmpty)).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'One connection.' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Before you connect' })).toBeNull()
     expect(screen.queryByRole('searchbox')).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Popular searches' })).toBeNull()
     expect(screen.queryByText('Expand the network for this ask')).toBeNull()
@@ -78,28 +82,28 @@ describe('catalogue-first home', () => {
     vi.unstubAllGlobals()
   })
 
-  it('states the three product claims without extra setup fields', () => {
+  it('keeps browse on the catalog section when nothing is listed', () => {
     renderHomeRoute()
 
-    for (const claim of HOME_CLAIMS) {
-      expect(screen.getAllByText(claim.title).length).toBeGreaterThan(0)
-      expect(screen.getByText(claim.body)).toBeTruthy()
-    }
-    expect(screen.queryByLabelText(/timing|budget|maximum spend/i)).toBeNull()
+    const catalog = document.querySelector('#home-catalog')
+    expect(catalog).not.toBeNull()
+    const browse = screen.getAllByRole('link', { name: 'Browse tools' })
+    expect(browse.some((link) => catalog?.contains(link) && link.getAttribute('href')?.startsWith('/market'))).toBe(true)
+    const hero = document.querySelector('#home-hero')?.closest('section')
+    expect(browse.some((link) => hero?.contains(link))).toBe(false)
   })
 
-  it('orders landing sections as hero, examples, claims, questions, close', () => {
+  it('orders landing sections as hero, paste, catalog, close', () => {
     renderHomeRoute()
 
     const headings = screen.getAllByRole('heading').map((heading) => heading.textContent)
     expect(headings[0]).toBe(HOME.heroHeading)
     expect(headings).toContain(AGENT_INSTRUCTION.heading)
     expect(headings).toContain(HOME.catalogHeading)
-    expect(headings.indexOf(HOME_CLAIMS[0].title)).toBeLessThan(headings.indexOf(HOME_CLAIMS[1].title))
-    expect(headings.indexOf(HOME_CLAIMS[1].title)).toBeLessThan(headings.indexOf(HOME_CLAIMS[2].title))
-    expect(headings).toContain(HOME.faqHeading)
-    expect(headings).toContain(HOME.doorsHeading)
-    expect(headings.at(-1)).toBe(HOME.closeHeading)
+    expect(headings.indexOf(AGENT_INSTRUCTION.heading)).toBeLessThan(headings.indexOf(HOME.catalogHeading))
+    expect(headings.indexOf(HOME.catalogHeading)).toBeLessThan(headings.lastIndexOf(AGENT_INSTRUCTION.heading))
+    expect(headings.at(-1)).toBe(AGENT_INSTRUCTION.heading)
+    expect(screen.queryByLabelText(/timing|budget|maximum spend/i)).toBeNull()
   })
 
   it('keeps a query out of the first screen when the component is rendered directly', () => {

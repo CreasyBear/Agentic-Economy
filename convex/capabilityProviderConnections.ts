@@ -7,36 +7,38 @@ import {
 import { v } from 'convex/values'
 
 import {
-  advanceLeaseDrainArgs,
   advanceLeaseDrainHandler,
-  beginRevocationArgs,
   beginRevocationHandler,
+  createHandler,
+  listByBusinessLifecycleHandler,
+  listByProviderLifecycleHandler,
+  readAtGenerationHandler,
+  readCleanupTargetHandler,
+  readHandler,
+  reauthorizeHandler,
+  recordCleanupResultHandler,
+  resolveCredentialRefHandler,
+  validateAuthorityHandler,
+} from './lib/providerConnections/lifecycle'
+import {
+  advanceLeaseDrainArgs,
+  beginRevocationArgs,
   cleanupTargetValue,
   commandResult,
   connectionAuthorityValidation,
   connectionValue,
   createArgs,
-  createHandler,
   credentialResolution,
   listByBusinessLifecycleArgs,
-  listByBusinessLifecycleHandler,
   listByProviderLifecycleArgs,
-  listByProviderLifecycleHandler,
   readArgs,
   readAtGenerationArgs,
-  readAtGenerationHandler,
   readCleanupTargetArgs,
-  readCleanupTargetHandler,
-  readHandler,
   reauthorizeArgs,
-  reauthorizeHandler,
   recordCleanupResultArgs,
-  recordCleanupResultHandler,
   resolveCredentialRefArgs,
-  resolveCredentialRefHandler,
   validateAuthorityArgs,
-  validateAuthorityHandler,
-} from './capabilityProviderConnectionLifecycle'
+} from './lib/providerConnections/contracts'
 import {
   beginLeaseEffectArgs,
   beginLeaseEffectHandler,
@@ -61,7 +63,7 @@ import {
   resolveLeaseCredentialRefHandler,
   validateLeaseAuthorityArgs,
   validateLeaseAuthorityHandler,
-} from './capabilityProviderConnectionLeases'
+} from './lib/providerConnections/leases'
 import {
   connectX402OwnerArgs,
   connectX402OwnerHandler,
@@ -80,7 +82,7 @@ import {
   ownerShareResult,
   revokeOwnerArgs,
   revokeOwnerHandler,
-} from './capabilityProviderConnectionOwner'
+} from './lib/providerConnections/owner'
 
 export const advanceLeaseDrain = internalMutationGeneric({
   args: advanceLeaseDrainArgs,

@@ -13,8 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/privacy')({
@@ -86,16 +85,17 @@ function PrivacyRoute() {
   }
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        title="Privacy"
-        description="What the market handles when you browse, call, pay for, or publish Operations."
-      />
-      <div className="ae-rail grid max-w-prose gap-12 pb-page">
-        <section className="grid gap-4">
+    <AePublicPage
+      kind="document"
+      eyebrow="Legal"
+      title="Privacy"
+      description="What the market handles when you browse, call, pay for, or publish Operations."
+    >
+      <div className="ae-rail grid max-w-prose gap-page pb-page">
+        <section className="grid gap-related">
           {detailCards.map(({ icon: CardIcon, label, title, body }) => (
-            <div key={title} className="grid gap-1">
-              <p className="flex items-center gap-2 font-semibold text-foreground">
+            <div key={title} className="grid gap-intra">
+              <p className="flex items-center gap-intra font-semibold text-foreground">
                 <CardIcon className="size-4 text-foreground" aria-hidden="true" /> {title}
                 <span className="text-muted-foreground">{label}</span>
               </p>
@@ -104,21 +104,21 @@ function PrivacyRoute() {
           ))}
         </section>
 
-        <section className="border-t border-border pt-8">
-          <div className="grid gap-3">
+        <section className="border-t border-border pt-section">
+          <div className="grid gap-related">
             <Tabs defaultValue="call">
-              <TabsList aria-label="Privacy moments" className="min-h-11 w-full">
+              <TabsList aria-label="Privacy moments" className="min-h-touch w-full">
                 {moments.map(({ value, label }) => (
-                  <TabsTrigger key={value} value={value} className="min-h-11 flex-1">{label}</TabsTrigger>
+                  <TabsTrigger key={value} value={value} className="min-h-touch flex-1">{label}</TabsTrigger>
                 ))}
               </TabsList>
               {moments.map(({ value, icon: Icon, title, points }) => (
                 <TabsContent key={value} value={value}>
-                  <Card className="grid gap-4 p-5">
-                    <p className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                  <Card className="grid gap-related p-gutter">
+                    <p className="flex items-center gap-intra text-lg font-semibold text-foreground">
                       <Icon className="size-4 text-foreground" aria-hidden="true" /> {title}
                     </p>
-                    <ul className="grid gap-3 text-sm leading-6 text-muted-foreground">
+                    <ul className="grid gap-related text-sm leading-6 text-muted-foreground">
                       {points.map((point) => (
                         <li key={point}>{point}</li>
                       ))}
@@ -130,18 +130,18 @@ function PrivacyRoute() {
           </div>
         </section>
 
-        <section className="flex flex-col gap-4 border-t border-border pt-8 md:flex-row md:items-center md:justify-between">
+        <section className="flex flex-col gap-related border-t border-border pt-section md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
             <h2 className="text-3xl font-semibold text-foreground">
               Need a supplier profile fixed?
             </h2>
-            <p className="mt-2 text-muted-foreground">
+            <p className="mt-intra text-muted-foreground">
               Send the supplier slug and what should change.
             </p>
           </div>
-          <Button asChild variant="secondary" className="min-h-11"><Link to="/privacy/remove-business">Open corrections <ArrowRightIcon aria-hidden="true" /></Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/privacy/remove-business">Open corrections <ArrowRightIcon aria-hidden="true" /></Link></Button>
         </section>
       </div>
-    </AePublicShell>
+    </AePublicPage>
   )
 }

@@ -1,41 +1,13 @@
 import { SignOutButton, UserProfile } from '@clerk/tanstack-react-start'
-import { Link } from '@tanstack/react-router'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
-import { AeSection, AeSettingsRow } from '@/components/ae/layout/AeSection'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeSiteAuthPanel, AeSiteAuthSubmit } from '@/components/ae/website'
-import { cn } from '@/lib/utils'
+import { OwnerSettingsNav } from '@/components/ae/settings/OwnerSettingsNav'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 
-export type OwnerSettingsNavCurrent = 'account' | 'workspace' | 'credit'
-
-const settingsTabs = [
-  { id: 'account' as const, label: 'Account', to: '/owner/settings' },
-  { id: 'workspace' as const, label: 'Workspace', to: '/owner/settings', hash: 'workspace' },
-  { id: 'credit' as const, label: 'Credit', to: '/owner/credit' },
-] as const
-
-export function OwnerSettingsNav({ current }: { current: OwnerSettingsNavCurrent }) {
-  return (
-    <nav aria-label="Settings sections" className="flex min-h-10 flex-wrap gap-1 border-b border-border">
-      {settingsTabs.map((tab) => (
-        <Link
-          key={tab.id}
-          to={tab.to}
-          {...('hash' in tab ? { hash: tab.hash } : {})}
-          className={cn(
-            'inline-flex min-h-11 items-center border-b-2 px-3 text-sm transition-colors',
-            current === tab.id
-              ? 'border-foreground font-medium text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground',
-          )}
-        >
-          {tab.label}
-        </Link>
-      ))}
-    </nav>
-  )
-}
+export type { OwnerSettingsNavCurrent } from '@/lib/operator/settings-navigation'
+export { OwnerSettingsNav }
 
 export function AccountSettingsSection() {
   const localPreview = isLocalE2EAuthBypassEnabled()
@@ -66,39 +38,6 @@ export function AccountSettingsSection() {
           </AeSiteAuthPanel>
         </div>
       )}
-    </AeSection>
-  )
-}
-
-export function BusinessSettingsSection() {
-  return (
-    <AeSection
-      id="workspace"
-      title="Workspace"
-      description="Supplier profile, Operations, credit, and publication setup."
-    >
-      <div className="grid gap-2">
-        <AeSettingsRow
-          title="Supplier"
-          description="The public supplier agents find."
-          href="/owner/status"
-        />
-        <AeSettingsRow
-          title="Operations"
-          description="Operations this workspace lists."
-          href="/owner/offerings"
-        />
-        <AeSettingsRow
-          title="Credit"
-          description="Credit assigned to agents that make paid calls."
-          href="/owner/credit"
-        />
-        <AeSettingsRow
-          title="Setup"
-          description="Publication setup for this supplier."
-          href="/for-providers"
-        />
-      </div>
     </AeSection>
   )
 }

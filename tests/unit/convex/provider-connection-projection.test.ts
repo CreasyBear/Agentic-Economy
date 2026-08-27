@@ -5,7 +5,7 @@ import {
   canonicalLeaseEffectFailureReason,
   issueCanonicalLease,
   readCanonicalLeaseForProjection,
-} from '../../../convex/capabilityProviderConnectionLeases'
+} from '../../../convex/lib/providerConnections/leases'
 import {
   installCanonicalProviderConnection,
   failClosedCanonicalLifecycleError,
@@ -15,7 +15,7 @@ import {
   toLeaseRow,
   toRow,
   transitionCanonicalProviderConnection,
-} from '../../../convex/capabilityProviderConnectionLifecycle'
+} from '../../../convex/lib/providerConnections/lifecycle'
 
 import {
   canonicalProviderConnectionProjection,

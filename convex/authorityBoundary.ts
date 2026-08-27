@@ -9,6 +9,7 @@ import {
 import { accountRef, principalRef } from '../src/modules/principal-account/public'
 import { credentialRef } from '../src/modules/principal-account/external-identity/public'
 import {
+  DELEGATION_MAX_ANCESTRY_GRANTS,
   DelegationError,
   DelegationService,
   delegationGrantRef,
@@ -125,7 +126,8 @@ export async function resolveCanonicalAgentBinding(
     .withIndex('by_subjectPrincipalRef_and_lifecycle', (query) => query
       .eq('subjectPrincipalRef', binding.principalRef)
       .eq('lifecycle', 'active'))
-    .collect()
+    .take(DELEGATION_MAX_ANCESTRY_GRANTS + 1)
+  if (candidates.length > DELEGATION_MAX_ANCESTRY_GRANTS) return null
   const consequenceNow = Date.now()
   if (!currentServerTime(consequenceNow) || credential.expiresAt <= consequenceNow) return null
   const grants = candidates.filter((grant) => grant.expiresAt > consequenceNow

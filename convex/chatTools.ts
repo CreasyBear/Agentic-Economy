@@ -4,7 +4,6 @@ import { stepCountIs } from 'ai'
 import type { FunctionArgs } from 'convex/server'
 import type { z } from 'zod'
 
-import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 import { operationExecuteContract } from '@/modules/capability-execution/operation-execute-contract'
 import type {
   InspectPlanInput,
@@ -19,6 +18,11 @@ import {
 } from '@/modules/capability-supply/public'
 import type { OperationExecuteInput } from '@/modules/capability-execution/operation-execute-contract'
 import {
+  CHAT_TOOL_IDS,
+  CHAT_TOOL_NAME_MAP,
+  type ChatToolId,
+} from '@/modules/chat/tool-card'
+import {
   projectOperationCompareChoices,
   projectOperationSearchChoices,
 } from '@/modules/registry/operation-choice-contracts'
@@ -32,28 +36,11 @@ import type { InteractiveBusinessAuthorityContext } from '@/modules/business/pub
 
 import { api, components, internal } from './_generated/api'
 
-export const CHAT_TOOL_IDS = [
-  'registry.operations.search',
-  'registry.operations.detail',
-  'registry.operations.compare',
-  'registry.operations.inspectPlan',
-  'operation.execute',
-] as const
-
-export type ChatToolId = (typeof CHAT_TOOL_IDS)[number]
-
-const canonicalToProvider = Object.freeze(Object.fromEntries(
-  CHAT_TOOL_IDS.map((toolId) => [toolId, providerSafeActionToolName(toolId)]),
-)) as Readonly<Record<ChatToolId, string>>
-
-const providerToCanonical = Object.freeze(Object.fromEntries(
-  CHAT_TOOL_IDS.map((toolId) => [canonicalToProvider[toolId], toolId]),
-)) as Readonly<Record<string, ChatToolId>>
-
-export const CHAT_TOOL_NAME_MAP = Object.freeze({
-  canonicalToProvider,
-  providerToCanonical,
-})
+export {
+  CHAT_TOOL_IDS,
+  CHAT_TOOL_NAME_MAP,
+  type ChatToolId,
+}
 
 export const MAX_CHAT_TOOL_CALLS = 4
 export const MAX_CHAT_EXECUTE_CALLS = 1

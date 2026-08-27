@@ -25,6 +25,7 @@ import {
   domainMoneyTransaction,
   domainMoneyUsage,
   persistPaidChargePlan,
+  sealPersistedChargeJournal,
   validatePaidChargePlan,
   type ChargePlanBudgetFields,
 } from './moneyChargeJournal'
@@ -322,6 +323,7 @@ async function persistAuthorizedChargePlan(
   if (!persisted)
     return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false }
   await applyPreparedMoneyUsageEvent(ctx, usagePlan)
+  await sealPersistedChargeJournal(ctx, input.transactionRef)
   return plan.result
 }
 

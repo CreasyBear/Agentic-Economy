@@ -18,10 +18,10 @@ function AeObservabilityErrorFallback() {
       role="alert"
       action={
         <div className="flex flex-wrap justify-center gap-3">
-          <Button type="button" variant="default" className="min-h-11" onClick={() => window.location.reload()}>
+          <Button type="button" variant="default" className="min-h-touch" onClick={() => window.location.reload()}>
             Try again
           </Button>
-          <Button asChild variant="secondary" className="min-h-11"><a href="/t/new">Start a new chat</a></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><a href="/t/new">Start a new chat</a></Button>
         </div>
       }
     />

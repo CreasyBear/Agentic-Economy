@@ -1,3 +1,4 @@
+import { ABOUT } from '@/content/brand-copy'
 import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import type { BusinessContext } from '@/modules/business/public'
 import { formatOfferingPrice } from '@/modules/catalog/public'
@@ -40,7 +41,7 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
   const reconcile = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId)
   const cli = 'ae'
   return [
-    '# Agentic Economy — capability market',
+    '# Agentic Economy',
     '',
     `1. Search by outcome: \`${cli} search "<job>" --base-url "${base}" --json\` or \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`.`,
     `2. Inspect one result: \`${cli} inspect "$AE_OPERATION_REF" --base-url "${base}" --json\` or \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`. Read exact inputs, total price, authentication, readiness, provider, and last verification.`,
@@ -128,15 +129,17 @@ export function buildAboutMarkdown(options: AgentPageMarkdownOptions): string {
   return [
     '# About Agentic Economy',
     '',
-    'Agentic Economy is the market and controlled transaction layer where authorized agents discover, buy and invoke admitted third-party Market Operations, and suppliers are paid after contract-valid delivery.',
+    ABOUT.heading,
     '',
-    '## Two ways in',
+    ABOUT.subhead,
+    '',
+    '## Agents and suppliers',
     '',
     `- Agents: \`${base}/for-agents\``,
     `- Suppliers: \`${base}/for-providers\``,
     `- Live catalog: \`${base}/market\``,
     '',
-    'There is no partner logo wall. A supplier is listed when it publishes an Operation agents can inspect.',
+    ABOUT.suppliersBody,
     '',
     '## Machine files',
     '',

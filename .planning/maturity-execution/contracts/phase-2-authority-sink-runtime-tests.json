@@ -1,6 +1,6 @@
 {
   "format": "phase-2-authority-sink-runtime-tests:v2",
-  "inventorySha256": "f6763f47d010eb535ded3db25bb9597e86f63d0ba45ec926b67f720aad960476",
+  "inventorySha256": "bb40629790cec32186d63685ec3b3698aefb5a0007460212c7c0dd476b7ad09d",
   "rows": {
     "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal": {
       "status": "covered",
@@ -46,7 +46,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "73d59cf6e3c16efc31130ee4d34af5b59c050c137f95f63886e8f063a0d5e384"
+      "authorityPathSha256": "923d14ea05fa026637c39adf17e63c140d705e7858741c8bdae3ccd7544e82ee"
     },
     "convex/authz.ts:resolveBusinessActor": {
       "status": "covered",
@@ -69,76 +69,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "c080a6e7658720901d41cb3e6a77bea95fe1d36d19838cbf466f3e8bb3e1b6e6"
-    },
-    "convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority": {
-      "status": "covered",
-      "surfaceRef": "workpool:convex/capabilityOperationInvocationWorker.ts:run",
-      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
-      "testName": "drives the %s isolation case through the registered invocation worker run action and reconcilePersistedInvocationAuthority sink",
-      "checksumScope": "named_test_case_ast",
-      "sha256": "7646a9890707f594c948cbf3b96e251860676dc87e5d426af42501807bfee3e9",
-      "invocation": {
-        "kind": "convex_runtime_invocation",
-        "target": "convex/capabilityOperationInvocationWorker.ts:run",
-        "expression": "internal.capabilityOperationInvocationWorker.run"
-      },
-      "caseLabels": [
-        "owner",
-        "member",
-        "workload",
-        "missing_workload",
-        "stranger",
-        "wrong_account",
-        "stale_generation"
-      ],
-      "authorityPathSha256": "8c3d9d34dceb55bb3a7bd98fd320aad8f5e8ed81dcad815937e5d55f7578ffe6"
-    },
-    "convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority": {
-      "status": "covered",
-      "surfaceRef": "convex/capabilityOperationInvocations.ts:cancelInvocation",
-      "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
-      "testName": "drives the %s isolation case through the registered cancel action and its real current-agent sink",
-      "checksumScope": "named_test_case_ast",
-      "sha256": "d9643abd26a55297cce78e37a05e335172845a96972952c86905625c0db8c384",
-      "invocation": {
-        "kind": "registered_handler_call",
-        "target": "convex/capabilityOperationInvocations.ts:cancelInvocation",
-        "expression": "cancelBoundary"
-      },
-      "caseLabels": [
-        "owner",
-        "member",
-        "workload",
-        "missing_workload",
-        "stranger",
-        "wrong_account",
-        "stale_generation"
-      ],
-      "authorityPathSha256": "923f7587d6fc90f66c1067f1987d69e6ffac50b58d7adcc308289b37e7cd02c6"
-    },
-    "convex/capabilityProviderConnectionLifecycle.ts:readCurrentCleanupResourceAuthority": {
-      "status": "covered",
-      "surfaceRef": "workpool:convex/capabilityProviderConnectionCleanup.ts:run",
-      "testFile": "tests/unit/convex/provider-connection-driver.test.ts",
-      "testName": "evaluates readCurrentCleanupResourceAuthority %s through the registered cleanup action",
-      "checksumScope": "named_test_case_ast",
-      "sha256": "07cd790426896596badd31fc309d535dd8cd043149d3d6b1f00fae4008fcf8e0",
-      "invocation": {
-        "kind": "convex_runtime_invocation",
-        "target": "convex/capabilityProviderConnectionCleanup.ts:run",
-        "expression": "internal.capabilityProviderConnectionCleanup.run"
-      },
-      "caseLabels": [
-        "owner",
-        "member",
-        "workload",
-        "missing_workload",
-        "stranger",
-        "wrong_account",
-        "stale_generation"
-      ],
-      "authorityPathSha256": "02a3d4335dd3803b3d3a3fd1ac31c207a79e33bff7cd7d2de5c882bda6ddc187"
+      "authorityPathSha256": "05eaad7669b1822db55f153be57d7e5ca0ecd4ad2b8bdb60ddcd6a3d120b8592"
     },
     "convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequenceHandler": {
       "status": "covered",
@@ -276,7 +207,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "421586d6624ab93bd463ac3539a8893e3091ccf1f7a8f409063e62a038f036db"
+      "authorityPathSha256": "33546bd5e3872947e4921da9444ab7a242f254f320efd75031257b685bc5bb27"
     },
     "convex/catalogOfferingMutations.ts:admitDevSeedCatalogAuthority": {
       "status": "covered",
@@ -299,7 +230,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "ede4806214cd581ca227a4e2c69c9129e5a71101013229911c1d458867879c22"
+      "authorityPathSha256": "c4b1a0d1f61b8df27f5e9f6370881f20bd15f51e0b0b5c4ed32e64e5b868b978"
     },
     "convex/interactiveAuthority.ts:currentContextAtTrustedServerTime": {
       "status": "covered",
@@ -392,6 +323,75 @@
         "stale_generation"
       ],
       "authorityPathSha256": "1a647fdf7a87c10c609ecfa8ae3c4500ba2b74e9f6cc21c21e6a3d404ec9f90e"
+    },
+    "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority": {
+      "status": "covered",
+      "surfaceRef": "workpool:convex/capabilityOperationInvocationWorker.ts:run",
+      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
+      "testName": "drives the %s isolation case through the registered invocation worker run action and reconcilePersistedInvocationAuthority sink",
+      "checksumScope": "named_test_case_ast",
+      "sha256": "7646a9890707f594c948cbf3b96e251860676dc87e5d426af42501807bfee3e9",
+      "invocation": {
+        "kind": "convex_runtime_invocation",
+        "target": "convex/capabilityOperationInvocationWorker.ts:run",
+        "expression": "internal.capabilityOperationInvocationWorker.run"
+      },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
+      "authorityPathSha256": "4440a502ad6a9144bcccd71f485ed556fec3f715570a6cb9f11ad848a5583117"
+    },
+    "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority": {
+      "status": "covered",
+      "surfaceRef": "convex/capabilityOperationInvocations.ts:cancelInvocation",
+      "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
+      "testName": "drives the %s isolation case through the registered cancel action and its real current-agent sink",
+      "checksumScope": "named_test_case_ast",
+      "sha256": "d9643abd26a55297cce78e37a05e335172845a96972952c86905625c0db8c384",
+      "invocation": {
+        "kind": "registered_handler_call",
+        "target": "convex/capabilityOperationInvocations.ts:cancelInvocation",
+        "expression": "cancelBoundary"
+      },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
+      "authorityPathSha256": "42c50bc1ac6b8bc8165f1982c74217c7a8f01d1bc641750ec57e80e7ad4e4c69"
+    },
+    "convex/lib/providerConnections/authority.ts:readCurrentCleanupResourceAuthority": {
+      "status": "covered",
+      "surfaceRef": "workpool:convex/capabilityProviderConnectionCleanup.ts:run",
+      "testFile": "tests/unit/convex/provider-connection-driver.test.ts",
+      "testName": "evaluates readCurrentCleanupResourceAuthority %s through the registered cleanup action",
+      "checksumScope": "named_test_case_ast",
+      "sha256": "07cd790426896596badd31fc309d535dd8cd043149d3d6b1f00fae4008fcf8e0",
+      "invocation": {
+        "kind": "convex_runtime_invocation",
+        "target": "convex/capabilityProviderConnectionCleanup.ts:run",
+        "expression": "internal.capabilityProviderConnectionCleanup.run"
+      },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
+      "authorityPathSha256": "2a42812e3d67baf06476d065c2a349e16353a6e60f718211411f4e95b78f5ca9"
     },
     "convex/lib/secretLifecyclePersistence.ts:requireSnapshot": {
       "status": "covered",
@@ -529,7 +529,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "a776925149e04940bad5c16bd3a3d81972ab9587fb0401e5605e0dbc9f273685"
+      "authorityPathSha256": "a40be6ae6e74ec8c600dde1a0be0b29516bb84f2e988666c77cbd60d90648289"
     },
     "convex/workloadCron.ts:bindWorkloadCronActionContext": {
       "status": "covered",
@@ -552,7 +552,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "6bdcf23cf73eb406f0dcf610b29a725887eaf522fe10625cfb7edd0cae95ae0f"
+      "authorityPathSha256": "04927a503541096ee60b4cb0fbf4bf0859615e213155ffc686395802c2cfe32b"
     },
     "convex/workloadCron.ts:reconcileWorkloadCronSnapshot": {
       "status": "covered",
@@ -575,7 +575,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "d6c095dcc1b209c4c1fce9b6bd9e62cd951c83b5a2e6e99b97f834cd40d73c57"
+      "authorityPathSha256": "ec786eda8341af7b7806f3f94218ea82007aaa8bbdecf7e00d9091de2df56b80"
     },
     "src/lib/server/stripe-money-webhook.ts:verifyStripeMoneyWebhook": {
       "status": "covered",

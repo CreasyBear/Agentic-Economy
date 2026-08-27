@@ -1,3 +1,5 @@
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+
 import {
   addExactAmounts,
   compareExactAmounts,
@@ -230,4 +232,75 @@ export function validateChargeContract<T extends ChargeContractEntry>(
     )
   ) return undefined
   return { selected, usage, accountId, businessId, chargeAmount, providerAmount, rakeAmount, operator, provider, rake }
+}
+
+export const CHARGE_JOURNAL_DIGEST_FORMAT = 'charge-journal:v1' as const
+
+export type ChargeJournalUsageIdentity = Readonly<{
+  usageRef: string
+  operationKey: string
+  priceDigest: string
+}>
+
+function chargeJournalEntryFields(entry: ChargeContractEntry) {
+  return {
+    entryRef: entry.entryRef,
+    accountRef: entry.accountRef,
+    transactionRef: entry.transactionRef,
+    entryType: entry.entryType,
+    direction: entry.direction,
+    amount: entry.amount,
+    sourceDigest: entry.sourceDigest,
+    evidenceRefs: [...entry.evidenceRefs],
+    createdAt: entry.createdAt,
+    invocationRef: entry.invocationRef ?? null,
+    attemptRef: entry.attemptRef ?? null,
+  }
+}
+
+export function chargeJournalDigest(
+  input: ValidateChargeContractInput<ChargeContractEntry> & Readonly<{
+    usage: ChargeContractUsage
+    selected: SelectedChargeEntries<ChargeContractEntry>
+  }>,
+  usageIdentity: ChargeJournalUsageIdentity,
+): string {
+  return canonicalDigest({
+    format: CHARGE_JOURNAL_DIGEST_FORMAT,
+    original: {
+      transactionRef: input.original.transactionRef,
+      kind: input.original.kind,
+      principalId: input.original.principalId,
+      accountId: input.original.accountId ?? null,
+      credentialId: input.original.credentialId ?? null,
+      amount: input.original.amount,
+      createdAt: input.original.createdAt,
+    },
+    usage: {
+      usageRef: usageIdentity.usageRef,
+      principalId: input.usage.principalId,
+      credentialId: input.usage.credentialId,
+      accountId: input.usage.accountId ?? null,
+      businessId: input.usage.businessId,
+      transactionRef: input.usage.transactionRef ?? null,
+      chargeState: input.usage.chargeState,
+      amount: input.usage.amount,
+      observedAt: input.usage.observedAt,
+      invocationRef: input.usage.invocationRef,
+      attemptRef: input.usage.attemptRef,
+      operationKey: usageIdentity.operationKey,
+      priceDigest: usageIdentity.priceDigest,
+    },
+    selected: {
+      charge: chargeJournalEntryFields(input.selected.charge),
+      provider: chargeJournalEntryFields(input.selected.provider),
+      rake: chargeJournalEntryFields(input.selected.rake),
+      recovery: input.selected.recovery === undefined
+        ? null
+        : chargeJournalEntryFields(input.selected.recovery),
+    },
+    operatorAccountRef: input.operator.accountRef,
+    providerAccountRef: input.provider.accountRef,
+    rakeAccountRef: input.rake.accountRef,
+  })
 }

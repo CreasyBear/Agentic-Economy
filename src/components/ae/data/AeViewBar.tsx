@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from 'react'
+import { SearchIcon } from 'lucide-react'
 
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,21 +30,25 @@ export function AeViewBar({
   return (
     <div
       className={cn(
-        'flex min-h-10 flex-wrap items-center gap-3 border-b border-border py-2',
+        'flex min-h-touch flex-wrap items-center gap-related border-b border-border py-intra',
         className,
       )}
     >
       {showFilter ? (
-        <div className="min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1">
           <Label htmlFor={filterId} className="sr-only">
             {filterPlaceholder}
           </Label>
+          <SearchIcon
+            aria-hidden="true"
+            className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          />
           <Input
             id={filterId}
             value={filterValue ?? ''}
             onChange={(event) => onFilterChange(event.currentTarget.value)}
             placeholder={filterPlaceholder}
-            className="h-11 max-w-sm"
+            className="min-h-touch max-w-sm ps-9"
           />
         </div>
       ) : (
