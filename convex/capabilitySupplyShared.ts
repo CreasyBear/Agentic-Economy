@@ -72,14 +72,14 @@ export const cancellationValue = v.object({
   kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')),
   evidenceRefs: evidenceRefsValue,
 })
-export const keylessAuthorityValue = v.object({ kind: v.literal('keyless') })
+export const publicUpstreamAuthorityValue = v.object({ kind: v.literal('public_upstream') })
 export const providerConnectionAuthorityValue = v.object({
   kind: v.literal('provider_connection'),
   connectionRef: v.string(),
   providerRef: v.string(),
 })
 export const authorityValue = v.union(
-  keylessAuthorityValue,
+  publicUpstreamAuthorityValue,
   providerConnectionAuthorityValue,
 )
 export const publicationAuthorityModeValue = v.union(

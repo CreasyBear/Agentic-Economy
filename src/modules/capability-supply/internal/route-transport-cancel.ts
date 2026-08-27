@@ -19,7 +19,7 @@ import {
 import { boundedString } from './route-transport-observation'
 import {
   resolveCredentialForAuthority,
-  type KeylessRouteTransportInvocation,
+  type PublicUpstreamRouteTransportInvocation,
   type ProviderRouteTransportInvocation,
   type RouteTransportInvocation,
   type RouteTransportRuntime,
@@ -36,7 +36,7 @@ type RouteTransportCancellationInvocationFor<
 export type { RouteTransportCancellationInvocationFor }
 
 export type RouteTransportCancellationInvocation =
-  | RouteTransportCancellationInvocationFor<KeylessRouteTransportInvocation>
+  | RouteTransportCancellationInvocationFor<PublicUpstreamRouteTransportInvocation>
   | RouteTransportCancellationInvocationFor<ProviderRouteTransportInvocation>
 
 export type RouteTransportCancellationObservation = Readonly<{

@@ -38,7 +38,7 @@ type ProviderRouteBinding = Extract<
 >
 type KeylessRouteBinding = Extract<
   RouteTransportInvocation['binding'],
-  { readonly authority: { readonly kind: 'keyless' } }
+  { readonly authority: { readonly kind: 'public_upstream' } }
 >
 type ProviderRouteInvocation = Extract<
   RouteTransportInvocation,
@@ -106,7 +106,7 @@ export function routeInvocation(
   baseBinding: Readonly<{
     adapterId: string
     endpointUrl: string
-    authority: { kind: 'keyless' } | { kind: 'provider_connection'; connectionRef: string; providerRef: string }
+    authority: { kind: 'public_upstream' } | { kind: 'provider_connection'; connectionRef: string; providerRef: string }
     configJson: string
     configDigest: string
   }>,
@@ -138,7 +138,7 @@ export function routeInvocation(
   paymentMaximumSpend?: ExactAmount,
 ): RouteTransportInvocation {
   const inputJson = JSON.stringify(input)
-  if (baseBinding.authority.kind === 'keyless') {
+  if (baseBinding.authority.kind === 'public_upstream') {
     return {
       binding: baseBinding as KeylessRouteBinding,
       inputJson,

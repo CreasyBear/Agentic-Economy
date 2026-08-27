@@ -528,7 +528,7 @@ describe('capability-supply eligible inventory', () => {
   })
 
   it('keeps keyless supply eligible without a provider connection', async () => {
-    const binding = admittedBinding({ authority: { kind: 'keyless' } })
+    const binding = admittedBinding({ authority: { kind: 'public_upstream' } })
     const offering = activeOffering()
     const publication = currentPublication({}, false)
     const ports = emptyPorts({

@@ -1,7 +1,6 @@
 import { v } from 'convex/values'
 
 import {
-  isAnonymousKeylessOperationEligible,
   capabilityOperationId,
   createPublicOperationRef,
   parseHttpJsonTransportConfiguration,
@@ -41,7 +40,7 @@ export const publicPriceBreakdown = v.object({
   asset: v.literal('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
 })
 export const publicAuthentication = v.union(
-  v.object({ kind: v.literal('keyless') }),
+  v.object({ kind: v.literal('ae_api_key') }),
   v.object({ kind: v.literal('platform_credential'), scheme: v.literal('api_key'), in: v.union(v.literal('query'), v.literal('header')), name: v.string() }),
   v.object({ kind: v.literal('platform_credential'), scheme: v.literal('bearer') }),
   v.object({ kind: v.literal('x402') }),
@@ -72,7 +71,6 @@ export async function operationRecord(
   const projection = await operationRecordProjection(ctx, publication, now)
   return projection.kind === 'projected' ? projection.record : undefined
 }
-
 /**
  * Build the current public Operation projection while retaining a bounded,
  * privacy-safe reason when malformed source material has to fail closed.
@@ -143,14 +141,6 @@ export async function operationRecordProjection(
   const sourcePrice = offering.presentation.price
   const transport = publicOperationTransportFor(binding.endpointUrl, binding.adapterId, binding.configJson)
   if (transport === undefined) return { kind: 'dropped', reason: 'invalid_transport' }
-  const answerExecutable = isAnonymousKeylessOperationEligible({
-    authority: binding.authority,
-    adapterId: binding.adapterId,
-    method: transport.method,
-    sourceKind: publication.sourceKind,
-    price: sourcePrice,
-    effects: contractResult.contract.effects,
-  })
   const pricingSource = qualification.sources.find(({ kind }) => kind === 'pricing')
   const priceBreakdown = priceBreakdownFor(publication, binding.adapterId, binding.configJson, sourcePrice)
   if (priceBreakdown === null) return { kind: 'dropped', reason: 'malformed_price' }
@@ -190,7 +180,6 @@ export async function operationRecordProjection(
     provenance: { publisher: authorityMode, sourceKind: publication.sourceKind },
     integrated,
     routeable,
-    answerExecutable,
     ...(unavailableReason === undefined ? {} : { unavailableReason }),
     readiness: {
       ...(publication.readinessObservedAt === undefined ? {} : { observedAt: publication.readinessObservedAt }),
@@ -253,8 +242,8 @@ export function publicAuthenticationFor(
       return { kind: 'platform_credential', scheme: 'api_key', in: parsed.credential.location, name: parsed.credential.name }
     }
     if (parsed?.credential?.kind === 'bearer') return { kind: 'platform_credential', scheme: 'bearer' }
-    if (parsed?.credential?.kind === 'none') return authority.kind === 'keyless' ? { kind: 'keyless' } : { kind: 'unknown' }
-    if (parsed?.credential === undefined && authority.kind === 'keyless') return { kind: 'keyless' }
+    if (parsed?.credential?.kind === 'none') return authority.kind === 'public_upstream' ? { kind: 'ae_api_key' } : { kind: 'unknown' }
+    if (parsed?.credential === undefined && authority.kind === 'public_upstream') return { kind: 'ae_api_key' }
   }
   if (adapterId === 'mcp-jsonrpc:v1') {
     const parsed = parseMcpJsonRpcTransportConfiguration(config)
@@ -262,7 +251,7 @@ export function publicAuthenticationFor(
       return { kind: 'platform_credential', scheme: 'api_key', in: parsed.credential.location, name: parsed.credential.name }
     }
     if (parsed?.credential?.kind === 'bearer') return { kind: 'platform_credential', scheme: 'bearer' }
-    if (parsed?.credential === undefined && authority.kind === 'keyless') return { kind: 'keyless' }
+    if (parsed?.credential === undefined && authority.kind === 'public_upstream') return { kind: 'ae_api_key' }
   }
   return { kind: 'unknown' }
 }

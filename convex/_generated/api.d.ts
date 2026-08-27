@@ -31,7 +31,7 @@ import type * as capabilitySupplyEligiblePorts from "../capabilitySupplyEligible
 import type * as capabilitySupplyGraph from "../capabilitySupplyGraph.js";
 import type * as capabilitySupplyGraphPorts from "../capabilitySupplyGraphPorts.js";
 import type * as capabilitySupplyLists from "../capabilitySupplyLists.js";
-import type * as capabilitySupplyOperationKeyless from "../capabilitySupplyOperationKeyless.js";
+import type * as capabilitySupplyOperationOriginMap from "../capabilitySupplyOperationOriginMap.js";
 import type * as capabilitySupplyOperationPorts from "../capabilitySupplyOperationPorts.js";
 import type * as capabilitySupplyOperationProjection from "../capabilitySupplyOperationProjection.js";
 import type * as capabilitySupplyOperationProjection_contracts from "../capabilitySupplyOperationProjection/contracts.js";
@@ -45,6 +45,7 @@ import type * as capabilitySupplyOwnerFunnelAgentRead from "../capabilitySupplyO
 import type * as capabilitySupplyOwnerFunnelCommands from "../capabilitySupplyOwnerFunnelCommands.js";
 import type * as capabilitySupplyOwnerFunnelProjection from "../capabilitySupplyOwnerFunnelProjection.js";
 import type * as capabilitySupplyOwnerFunnelProjection_contracts from "../capabilitySupplyOwnerFunnelProjection/contracts.js";
+import type * as capabilitySupplyOwnerFunnelProjection_offering_projection from "../capabilitySupplyOwnerFunnelProjection/offering_projection.js";
 import type * as capabilitySupplyOwnerFunnelRead from "../capabilitySupplyOwnerFunnelRead.js";
 import type * as capabilitySupplyOwnerSupply from "../capabilitySupplyOwnerSupply.js";
 import type * as capabilitySupplyProbes from "../capabilitySupplyProbes.js";
@@ -61,7 +62,6 @@ import type * as catalogOfferingMutations from "../catalogOfferingMutations.js";
 import type * as catalogPublicReads from "../catalogPublicReads.js";
 import type * as chatAdmission from "../chatAdmission.js";
 import type * as chatAnonymous from "../chatAnonymous.js";
-import type * as chatExecute from "../chatExecute.js";
 import type * as chatGenerate from "../chatGenerate.js";
 import type * as chatMessages from "../chatMessages.js";
 import type * as chatShares from "../chatShares.js";
@@ -210,7 +210,7 @@ declare const fullApi: ApiFromModules<{
   capabilitySupplyGraph: typeof capabilitySupplyGraph;
   capabilitySupplyGraphPorts: typeof capabilitySupplyGraphPorts;
   capabilitySupplyLists: typeof capabilitySupplyLists;
-  capabilitySupplyOperationKeyless: typeof capabilitySupplyOperationKeyless;
+  capabilitySupplyOperationOriginMap: typeof capabilitySupplyOperationOriginMap;
   capabilitySupplyOperationPorts: typeof capabilitySupplyOperationPorts;
   capabilitySupplyOperationProjection: typeof capabilitySupplyOperationProjection;
   "capabilitySupplyOperationProjection/contracts": typeof capabilitySupplyOperationProjection_contracts;
@@ -224,6 +224,7 @@ declare const fullApi: ApiFromModules<{
   capabilitySupplyOwnerFunnelCommands: typeof capabilitySupplyOwnerFunnelCommands;
   capabilitySupplyOwnerFunnelProjection: typeof capabilitySupplyOwnerFunnelProjection;
   "capabilitySupplyOwnerFunnelProjection/contracts": typeof capabilitySupplyOwnerFunnelProjection_contracts;
+  "capabilitySupplyOwnerFunnelProjection/offering_projection": typeof capabilitySupplyOwnerFunnelProjection_offering_projection;
   capabilitySupplyOwnerFunnelRead: typeof capabilitySupplyOwnerFunnelRead;
   capabilitySupplyOwnerSupply: typeof capabilitySupplyOwnerSupply;
   capabilitySupplyProbes: typeof capabilitySupplyProbes;
@@ -240,7 +241,6 @@ declare const fullApi: ApiFromModules<{
   catalogPublicReads: typeof catalogPublicReads;
   chatAdmission: typeof chatAdmission;
   chatAnonymous: typeof chatAnonymous;
-  chatExecute: typeof chatExecute;
   chatGenerate: typeof chatGenerate;
   chatMessages: typeof chatMessages;
   chatShares: typeof chatShares;

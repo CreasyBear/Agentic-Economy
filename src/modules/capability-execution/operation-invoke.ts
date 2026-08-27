@@ -7,10 +7,6 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type {
-  OperationExecuteInput,
-  OperationExecuteResult,
-} from './operation-execute.functions'
-import type {
   ActionInvocationView,
   InvocationActor,
 } from '@/modules/action-invocation/runtime'
@@ -72,9 +68,6 @@ export type {
   OperationInvokeRecoveryRequest,
 } from './operation-invoke-recover'
 
-export type OperationInvokeKeylessExecutor = (
-  input: OperationExecuteInput & Readonly<{ correlationId?: string }>
-) => Promise<OperationExecuteResult>
 
 export type OperationInvokeAdapterFactory = (input: Readonly<{
   operation: PublishedOperation
@@ -126,8 +119,6 @@ export type OperationInvokeRuntime = Readonly<{
   createAdapter?: OperationInvokeAdapterFactory
   sourceCommands?: DevelopmentHostSourceCommands
   recovery?: OperationInvokeRecoveryPort
-  executeKeyless?: OperationInvokeKeylessExecutor
-  keylessUsage?: OperationInvokeUsageSummary
   now?: () => number
   freshnessMs?: number
   retryAfterMs?: number
@@ -162,7 +153,6 @@ export function createOperationInvokeApplication(
       request,
       policy: runtime.policy,
       currentOperation: runtime.currentOperation,
-      executeKeylessAvailable: runtime.executeKeyless !== undefined,
       now,
     })
     if (admitted.kind === 'refused') return admitted.result
@@ -256,65 +246,6 @@ async function invokeReservedOperation(input: Readonly<{
 
   if (preflightRefusal !== undefined) {
     return await refuseBeforeDispatch(preflightRefusal)
-  }
-  if (runtime.currentOperation === undefined && runtime.executeKeyless !== undefined) {
-    try {
-      const result = await runtime.executeKeyless({
-        operationRef: command.operationRef,
-        input: command.input,
-        correlationId: request.correlationId,
-      })
-      if (result.kind === 'ok') {
-        if (runtime.keylessUsage === undefined) {
-          return await refuseBeforeDispatch({
-            kind: 'refused',
-            operationRef: command.operationRef,
-            code: 'operation_unsupported',
-            retryable: false,
-          })
-        }
-        const output = result.output as JsonValue
-        try {
-          canonicalDigest(output)
-        } catch {
-          return await refuseBeforeDispatch({
-            kind: 'refused',
-            operationRef: command.operationRef,
-            code: 'result_invalid',
-            retryable: false,
-          })
-        }
-        return {
-          kind: 'completed',
-          invocationRef: reservation.invocationRef,
-          operationRef: command.operationRef,
-          output,
-          evidenceHash: result.evidenceHash,
-          usage: runtime.keylessUsage,
-        }
-      }
-      if (result.kind === 'refused') {
-        return await refuseBeforeDispatch({
-          kind: 'refused',
-          operationRef: command.operationRef,
-          code: result.reason === 'input_invalid' ? 'input_invalid' : 'provider_refused',
-          retryable: false,
-        })
-      }
-      return await refuseBeforeDispatch({
-        kind: 'refused',
-        operationRef: command.operationRef,
-        code: result.code === 'source_unavailable' ? 'source_unavailable' : 'provider_refused',
-        retryable: result.retryable,
-      })
-    } catch {
-      return await refuseBeforeDispatch({
-        kind: 'refused',
-        operationRef: command.operationRef,
-        code: 'provider_refused',
-        retryable: true,
-      })
-    }
   }
 
   if (!hasCurrentOperationReader || current === undefined || descriptor === undefined) {

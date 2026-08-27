@@ -243,7 +243,7 @@ const OWNER_SOURCE = {
       registrationEvidenceRefs: ["registration:owner"],
     },
     bindingId: "binding:owner",
-    authority: { kind: "keyless" },
+    authority: { kind: "public_upstream" },
     registrationEvidenceRefs: ["registration:owner"],
     requestTimeoutMs: 5_000,
   },

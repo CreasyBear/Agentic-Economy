@@ -72,7 +72,7 @@ export function resolveOpenApiCredential(
   const security = selectedSecurity(document, operation)
   if (security === null) return { kind: 'refused' }
   if (security === undefined || security.length === 0) {
-    return { kind: 'resolved', spec: { kind: 'keyless' }, parameterNames: [] }
+    return { kind: 'resolved', spec: { kind: 'public_upstream' }, parameterNames: [] }
   }
   const securitySchemes = readSecuritySchemes(document)
   if (securitySchemes === undefined || security.length !== 1) return { kind: 'refused' }

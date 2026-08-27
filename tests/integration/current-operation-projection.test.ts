@@ -39,7 +39,7 @@ async function publishFixture(
     api.capabilitySupply.publishPreparedCapability,
     await preparedPublicationArgs(backend, {
       ...input,
-      binding: { ...input.binding, authority: { kind: 'keyless' } },
+      binding: { ...input.binding, authority: { kind: 'public_upstream' } },
     }),
   )
   if ('reason' in published) throw new Error(`t4_publication_refused:${published.reason}`)

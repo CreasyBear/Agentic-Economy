@@ -71,7 +71,7 @@ describe('operation recovery actions', () => {
         scope: 'market_operations:invoke',
         authority: 'descriptor_classified',
       })
-      expect(action.surfaces).toEqual(operationInvokeAction.surfaces)
+      expect(action.surfaces).toEqual(['http', 'mcp', 'cli'])
     }
   })
   it('keeps the route/action graph and optional evidence fields in parity', () => {

@@ -542,7 +542,7 @@ describe('JIT provider consequence boundary', () => {
     const provider = invocation()
     const keyless: RouteTransportInvocation = {
       ...provider,
-      binding: { ...provider.binding, authority: { kind: 'keyless' } },
+      binding: { ...provider.binding, authority: { kind: 'public_upstream' } },
       authority: {
         attemptRef: provider.authority.attemptRef,
         operationKeyDigest: provider.authority.operationKeyDigest,
@@ -795,7 +795,7 @@ describe('JIT provider consequence boundary', () => {
       ...provider,
       binding: {
         ...provider.binding,
-        authority: { kind: 'keyless' },
+        authority: { kind: 'public_upstream' },
       },
       authority: {
         attemptRef: provider.authority.attemptRef,

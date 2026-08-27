@@ -61,11 +61,9 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
     : `'${JSON.stringify(inputExample.input).replaceAll("'", "'\\''")}'`
   const accessMode = operation.availability.posture !== 'routeable'
     ? 'inspect_only'
-    : operation.navigation.some(({ relation }) => relation === 'execute')
-      ? 'anonymous_execute'
-      : operation.navigation.some(({ relation }) => relation === 'invoke')
-        ? 'authenticated_invoke'
-        : 'inspect_only'
+    : operation.navigation.some(({ relation }) => relation === 'invoke')
+      ? 'authenticated_invoke'
+      : 'inspect_only'
   const lastVerifiedAt = operation.availability.observedAt
     ?? operation.commercial.priceEvidence?.observedAt
   return (
@@ -475,7 +473,7 @@ function totalPrice(operation: PublicOperationDescriptor): string {
 
 function authenticationLabel(operation: PublicOperationDescriptor): string {
   const authentication = operation.authentication
-  if (authentication.kind === 'keyless') return 'Keyless provider access'
+  if (authentication.kind === 'ae_api_key') return 'AE account invocation'
   if (authentication.kind === 'platform_credential') {
     return authentication.scheme === 'bearer'
       ? 'AE-managed bearer credential'

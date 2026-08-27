@@ -80,7 +80,7 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await expect(ownerSearchCard.getByText('Complete', { exact: true })).toBeVisible()
   await expect(ownerSearchCard.getByText('Working', { exact: true })).toHaveCount(0)
   await expect(ownerSearchCard.getByText(/^\d+ tools$/u)).toBeVisible()
-  await expect(ownerTranscript.locator('[data-operation-tool="operation.execute"]')).toHaveCount(0)
+  await expect(ownerTranscript.locator('[data-operation-tool="operation.invoke"')).toHaveCount(0)
 
   await ownerChat.getByRole('button', { name: 'Create share link' }).click()
   const shareInput = ownerChat.getByRole('textbox', { name: 'Read-only share link' })
@@ -112,7 +112,7 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await expect(sharedSearchCard.getByText('Complete', { exact: true })).toBeVisible()
   await expect(sharedSearchCard.getByText('Working', { exact: true })).toHaveCount(0)
   await expect(sharedSearchCard.getByText(/^\d+ tools$/u)).toBeVisible()
-  await expect(sharedChat.locator('[data-operation-tool="operation.execute"]')).toHaveCount(0)
+  await expect(sharedChat.locator('[data-operation-tool="operation.invoke"')).toHaveCount(0)
   expect(await sharedChat.evaluate((element) => element.outerHTML)).not.toMatch(
     /\b(?:toolCallId|input|output|endpoint|headers|raw)\b|registry_operations_search/iu,
   )

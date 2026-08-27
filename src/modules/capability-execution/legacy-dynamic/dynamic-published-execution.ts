@@ -464,7 +464,7 @@ function dynamicTransportInvocation(input: Readonly<{
     },
   }
   const inputJson = JSON.stringify(input.invocation.input)
-  if (input.operation.binding.authority.kind === 'keyless') {
+  if (input.operation.binding.authority.kind === 'public_upstream') {
     return {
       binding: {
         ...bindingBase,

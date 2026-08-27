@@ -128,73 +128,9 @@ describe('capability publication security', () => {
     )).resolves.toEqual({ kind: 'refused', reason: 'offering_identity_conflict' })
 
     await expect(publicationRows(backend)).resolves.toEqual(before)
-  })
-  it('denies anonymous reads of keyless executable descriptors carrying fixed query values', async () => {
-    const backend = convexTestWithMarketComponents()
-    const { businessId, owner } = await publishedBusinessOwner(backend, 'security-fixed-query')
-    await seedCatalogOffering(backend, businessId, 'fixed-query')
-    const baseline = publicationArgs(businessId, 'fixed-query')
-    const input = {
-      ...baseline,
-      binding: {
-        ...baseline.binding,
-        authority: { kind: 'keyless' as const },
-        adapter: {
-          adapterId: 'http-json:v1' as const,
-          config: {
-            method: 'GET' as const,
-            fixedQuery: [{ parameter: 'format', value: 'json' }],
-            requestTimeoutMs: 5_000,
-          },
-        },
-      },
-    }
-    const published = await owner.mutation(
-      api.capabilitySupply.publishPreparedCapability,
-      await preparedPublicationArgs(backend, input),
-    )
-    if ('reason' in published) throw new Error(`publication_refused:${published.reason}`)
-    await ownerAdmin(backend, 'user_capability_publication_observer')
-    const hashes = await backend.run(async (ctx) => {
-      const offering = await ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (query) => query.eq('offeringId', published.offeringId))
-        .unique()
-      const binding = await ctx.db.query('capabilityTransportBindings')
-        .withIndex('by_bindingId', (query) => query.eq('bindingId', published.bindingId))
-        .unique()
-      if (offering === null || binding === null) throw new Error('publication_supply_missing')
-      return { offering: offering.registrationHash, binding: binding.registrationHash }
-    })
-    await runEligibility(backend, {
-      offeringId: published.offeringId,
-      bindingId: published.bindingId,
-      contractRef: published.contractRef,
-      decision: 'admit',
-      expectedOfferingRegistrationHash: hashes.offering,
-      expectedBindingRegistrationHash: hashes.binding,
-      admissionEvidenceRefs: ['test:admission:fixed-query'],
-      conformanceEvidenceRefs: ['test:conformance:fixed-query'],
-      operationKey: 'op:capability-publication-security:fixed-query',
-      correlationId: 'corr:capability-publication-security:fixed-query',
-      reasonCode: 'business_capability_publication',
-      evidenceRefs: ['test:capability-publication-security'],
-    }, 'user_capability_publication_observer')
-    await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
-      publicationRef: published.publicationRef,
-      expectedRevision: published.publicationRevision,
-      credentialState: 'ready',
-      healthState: 'healthy',
-      validUntil: Date.now() + 300_000,
-      operationKey: 'op:capability-publication-security:fixed-query-readiness',
-      correlationId: 'corr:capability-publication-security:fixed-query-readiness',
-      reasonCode: 'business_capability_publication',
-      evidenceRefs: ['test:capability-publication-security'],
-    })
-    await expect(backend.query(api.capabilitySupplyOperations.readKeylessExecutable, {
-      operationRef: published.operationRef,
-    })).resolves.toBeNull()
-  })
 })
+  })
+
 async function registerProviderConnection(backend: ConvexFixtureBackend, businessId: Id<'businesses'>) {
   if (SECURITY_AUTHORITY.kind !== 'provider_connection') {
     throw new Error('provider connection fixture authority kind changed')

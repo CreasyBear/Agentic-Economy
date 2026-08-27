@@ -367,7 +367,7 @@ export const capabilitySupplyTables = {
     ...contractRefFields,
     endpointUrl: v.string(),
     authority: v.union(
-      v.object({ kind: v.literal('keyless') }),
+      v.object({ kind: v.literal('public_upstream') }),
       v.object({
         kind: v.literal('provider_connection'),
         connectionRef: v.string(),

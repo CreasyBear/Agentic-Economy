@@ -16,7 +16,7 @@ const CHAT_TOOL_IDS = [
   'registry.operations.detail',
   'registry.operations.compare',
   'registry.operations.inspectPlan',
-  'operation.execute',
+  'operation.invoke',
 ] as const
 
 type FakeActionResult = Readonly<{ kind: string } & Record<string, unknown>>

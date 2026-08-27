@@ -30,7 +30,6 @@ import {
   registryOperationsInspectPlanAction,
   registryOperationsSearchAction,
 } from '@/modules/registry/operations.actions'
-import { operationExecuteAction } from '@/modules/capability-execution/operation-execute-mcp.actions'
 import {
   operationCancelAction,
   operationReconcileAction,
@@ -45,7 +44,6 @@ const registeredActions: readonly AnyAction[] = [
   registryOperationsDetailAction,
   registryOperationsCompareAction,
   registryOperationsInspectPlanAction,
-  operationExecuteAction,
   operationInvokeAction,
   operationStatusAction,
   operationCancelAction,

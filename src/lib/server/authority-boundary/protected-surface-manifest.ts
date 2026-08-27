@@ -164,7 +164,6 @@ const MCP_TOOLS = [
   'registry.operations.detail',
   'registry.operations.compare',
   'registry.operations.inspectPlan',
-  'operation.execute',
   'operation.invoke',
   'operation.status',
   'operation.cancel',

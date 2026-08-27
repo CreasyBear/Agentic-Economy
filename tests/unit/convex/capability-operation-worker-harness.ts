@@ -183,7 +183,7 @@ export const digest = (digit: string) => `sha256:${digit.repeat(64)}`
 type WorkerKind = 'x402' | 'http'
 type WorkerOptions = Readonly<{
   environment?: 'sandbox' | 'production'
-  operatorAccountVersion?: number
+  operatorAccountVersion?: number | null
   priceUnits?: string
   actualOperatorAccountVersion?: number
   releaseFenceResult?: Readonly<{ kind: 'applied' }> | Readonly<{ kind: 'refused' }>
@@ -296,7 +296,7 @@ function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', br
     identity: { ...pricedOperation.identity, adapterId: 'http-json:v1' },
     binding: {
       ...pricedOperation.binding,
-      authority: { kind: 'keyless' },
+      authority: { kind: 'public_upstream' },
       adapter: { ...pricedOperation.binding.adapter, adapterId: 'http-json:v1' },
     },
     readiness: { ...pricedOperation.readiness, validUntil },
@@ -372,8 +372,11 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     publicationRevision: operation.identity.publicationRevision,
     contractRef: operation.contract.ref,
   })
-  const operatorAccountVersion = options.operatorAccountVersion ?? 0
-  const actualOperatorAccountVersion = options.actualOperatorAccountVersion ?? operatorAccountVersion
+  const operatorAccountVersion = options.operatorAccountVersion === undefined
+    ? 0
+    : options.operatorAccountVersion
+  const actualOperatorAccountVersion = options.actualOperatorAccountVersion
+    ?? (operatorAccountVersion === null ? 0 : operatorAccountVersion)
 
   const descriptor = materializeRuntimePublishedOperation(operation)
   const input = { symbol: 'BTC', convert: 'USD' }

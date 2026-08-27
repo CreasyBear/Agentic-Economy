@@ -165,7 +165,7 @@ function credentialOutcome(
     ? Result extends { kind: 'resolved'; spec: infer Spec } ? Spec : never
     : never,
 ): OpenApiOperationPreflightOutcome {
-  if (credential.kind === 'keyless') return { selector, kind: 'executable' }
+  if (credential.kind === 'public_upstream') return { selector, kind: 'executable' }
   return {
     selector,
     kind: 'credential_required',

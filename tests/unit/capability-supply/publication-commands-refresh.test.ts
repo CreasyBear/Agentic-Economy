@@ -181,10 +181,10 @@ describe('capability-supply publication commands refresh', () => {
       publication,
       source: {
         ...publicationSource(publication.capabilityId, publication.version),
-        binding: { ...bindingDraft(), authority: { kind: 'keyless' as const } },
+        binding: { ...bindingDraft(), authority: { kind: 'public_upstream' as const } },
       },
       offering: offeringDraft(),
-      binding: { ...bindingDraft(), authority: { kind: 'keyless' as const } },
+      binding: { ...bindingDraft(), authority: { kind: 'public_upstream' as const } },
       ...context,
       now: 10,
     }, emptyPorts({
@@ -193,7 +193,7 @@ describe('capability-supply publication commands refresh', () => {
         const { connectionAuthority: _connectionAuthority, ...persistedWithoutAuthority } = persistedBinding
         return {
           ...persistedWithoutAuthority,
-          authority: { kind: 'keyless' as const },
+          authority: { kind: 'public_upstream' as const },
         }
       },
       getExactRegisteredContract: async () => ({

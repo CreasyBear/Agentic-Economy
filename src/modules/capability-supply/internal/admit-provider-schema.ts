@@ -23,7 +23,7 @@ const MAX_ADMIT_SCHEMA_DEPTH = 64;
 // or normalizes a construct the canonical contract would otherwise refuse.
 
 export type AdmitCredentialSpec =
-  | Readonly<{ kind: "keyless" }>
+  | Readonly<{ kind: "public_upstream" }>
   | Readonly<{
       kind: "api_key";
       location: "query" | "header";

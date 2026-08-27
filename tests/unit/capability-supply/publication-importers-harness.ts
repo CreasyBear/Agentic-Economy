@@ -6,7 +6,7 @@ export const providerAuthority = {
   connectionRef: "connection:independent",
   providerRef: "provider:reference",
 } as const;
-export const keylessAuthority = { kind: "keyless" } as const;
+export const keylessAuthority = { kind: "public_upstream" } as const;
 
 export function contractMetadata(capabilityId: string, inputPointer = "/query") {
   return {

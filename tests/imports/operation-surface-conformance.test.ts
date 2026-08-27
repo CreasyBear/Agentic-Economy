@@ -33,7 +33,7 @@ const chatActionIds = [
   'registry.operations.detail',
   'registry.operations.compare',
   'registry.operations.inspectPlan',
-  'operation.execute',
+  'operation.invoke',
 ] as const
 
 describe('operation surface conformance', () => {
@@ -69,25 +69,15 @@ describe('operation surface conformance', () => {
   })
 
   it('keeps invocation on the canonical paid lifecycle surfaces', () => {
-    const directOperationIds = ['operation.execute', 'operation.invoke'] as const
-    const [executeId, invokeId] = directOperationIds
+    const invokeId = 'operation.invoke' as const
     const mcpActionIds = listMcpActions().map((action) => action.id)
     const operationRouteDescriptors = listOperationRouteDescriptors()
     const operationRouteActionIds = operationRouteDescriptors.map((route) => route.actionId)
 
-    for (const id of directOperationIds) {
-      expect(mcpActionIds).toContain(id)
-    }
-
-    const execute = findAction(executeId)
-    expect(execute).toBeDefined()
-    expect(execute?.surfaces).toEqual(['mcp', 'chat'])
-    expect(operationRouteActionIds).not.toContain(executeId)
-
     const invoke = findAction(invokeId)
     expect(invoke).toBeDefined()
     if (invoke === undefined) return
-    expect(invoke.surfaces).toEqual(['http', 'mcp', 'cli'])
+    expect(invoke.surfaces).toEqual(['http', 'mcp', 'cli', 'chat'])
     expect(mcpActionIds).toContain(invokeId)
     expect(operationRouteActionIds).toContain(invokeId)
 

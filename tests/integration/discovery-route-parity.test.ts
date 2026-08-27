@@ -322,7 +322,7 @@ const MARKET_OPERATION_DETAIL_WIRE_DESCRIPTOR = {
   evidence: [],
   cancellation: { kind: 'unsupported' },
   recovery: { idempotency: 'not_applicable', recovery: 'retry_safe' },
-  authentication: { kind: 'keyless' },
+  authentication: { kind: 'ae_api_key' },
   transport: { method: 'POST', requestTimeoutMs: 1_000 },
   provenance: { publisher: 'ae_curated_external', sourceKind: 'ae_envelope' },
   availability: { posture: 'integrated' },

@@ -70,7 +70,7 @@ describe('Site discovery manifest', () => {
     expect(serialized).not.toContain('inputJsonSchema')
     expect(serialized).not.toContain('outputJsonSchema')
     expect(compact.fullSchemas).toBe(`${origin}/api/discovery/schema`)
-    expect(compact.operationGateway.access.anonymous.cli).toContain('ae call')
+    expect(compact.operationGateway.access.connected.cli).toContain('ae connect')
   })
 
   it('resolves the route-file scan it depends on', () => {
@@ -127,9 +127,6 @@ describe('Site discovery manifest', () => {
   it('states the authentication each endpoint actually enforces', () => {
     const operationInvoke = manifest.endpoints.find((endpoint) => endpoint.kind === 'operation_invoke')
     const operationReads = manifest.endpoints.filter((endpoint) => endpoint.kind === 'operation_read')
-    const directKeylessAction = findAction('operation.execute')
-    if (directKeylessAction === undefined) throw new Error('operation.execute action missing')
-    const directKeylessDescriptor = describeActionForAgent(directKeylessAction)
 
     expect(manifest).not.toHaveProperty('customerRequest')
     expect(operationInvoke).toMatchObject({
@@ -167,32 +164,11 @@ describe('Site discovery manifest', () => {
         inputFields: expect.arrayContaining(['operationRef']),
       },
       executionModes: {
-        directKeyless: {
-          action: 'operation.execute',
-          contractVersion: 'operation.execute:v1',
-          invocationContract: expect.objectContaining({ version: 'operation.execute:v1' }),
-          mcpTool: 'ae_operation_execute',
-          authentication: 'none',
-          requiresOperationRef: true,
-          eligibility: 'free_keyless_read_only',
-          requiresExactDetailExecuteRelation: true,
-          inputJsonSchema: expect.any(Object),
-          outputJsonSchema: expect.any(Object),
-          description: expect.stringContaining('exact current detail includes the execute relation'),
-        },
         gateway: { action: 'operation.invoke', requiresOperationRef: true },
         catalogOnly: { action: null, executable: false },
       },
     })
-    const directKeyless = manifest.operationGateway.executionModes.directKeyless
-    expect(directKeyless).toMatchObject({
-      action: directKeylessAction.id,
-      contractVersion: directKeylessAction.invocationContract.version,
-      invocationContract: directKeylessAction.invocationContract,
-      inputJsonSchema: directKeylessDescriptor.inputJsonSchema,
-      outputJsonSchema: directKeylessDescriptor.outputJsonSchema,
-    })
-
+    expect(manifest.operationGateway).not.toHaveProperty('directKeyless')
     for (const endpoint of operationReads) {
       if (endpoint.actionId === undefined) throw new Error(`Operation endpoint is missing actionId: ${endpoint.path}`)
       const action = findAction(endpoint.actionId)
@@ -287,20 +263,21 @@ describe('Site discovery manifest', () => {
       },
     }
     expect(schemaDescriptorDigest(changed as StableHashValue)).not.toBe(manifest.generatedHash)
-    const changedDirectKeylessAction = {
+
+    const changedGatewayAction = {
       ...body,
       operationGateway: {
         ...body.operationGateway,
         executionModes: {
           ...body.operationGateway.executionModes,
-          directKeyless: {
-            ...body.operationGateway.executionModes.directKeyless,
-            action: 'operation.invoke',
+          gateway: {
+            ...body.operationGateway.executionModes.gateway,
+            action: 'operation.status',
           },
         },
       },
     }
-    expect(schemaDescriptorDigest(changedDirectKeylessAction as StableHashValue)).not.toBe(manifest.generatedHash)
+    expect(schemaDescriptorDigest(changedGatewayAction as StableHashValue)).not.toBe(manifest.generatedHash)
 
 
     const oversized = { values: Array.from({ length: 10_001 }, (_, index) => index) }

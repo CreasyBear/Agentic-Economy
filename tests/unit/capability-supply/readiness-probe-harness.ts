@@ -6,7 +6,7 @@ export const providerAuthority = {
   providerRef: 'provider:test-capability',
 } as const
 
-export const keylessAuthority = { kind: 'keyless' } as const
+export const keylessAuthority = { kind: 'public_upstream' } as const
 
 export const target = {
   publicationRef: 'offering:test:lookup', revision: 1,

@@ -65,7 +65,7 @@ describe('transcript projector', () => {
               summary: 'Look up forecasts',
               supplier: { name: 'Sky Co', slug: 'sky-co' },
               price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
-              authentication: { kind: 'keyless' },
+              authentication: { kind: 'ae_api_key' },
               availability: { posture: 'routeable' },
               navigation: [{ relation: 'execute', secret: executeSecret }],
             }],
@@ -85,7 +85,7 @@ describe('transcript projector', () => {
           },
         },
         {
-          type: `tool-${providerSafeActionToolName('operation.execute')}`,
+          type: `tool-${providerSafeActionToolName('operation.invoke')}`,
           state: 'output-available',
           output: {
             kind: 'ok',
@@ -106,7 +106,7 @@ describe('transcript projector', () => {
       supplier: 'Sky Co',
       price: 'USD 0.50',
       readiness: 'Ready now',
-      access: 'No provider key',
+      access: 'AE account invocation',
     }])
     expect(search?.kind === 'choices' ? search.count : undefined).toBe(12)
     expect(inspectPlan?.kind === 'inspect' ? inspectPlan.facts : undefined).toEqual([
@@ -138,7 +138,7 @@ describe('transcript projector', () => {
               offering: { label: 'Weather finder' },
               business: { name: 'Sky Co' },
               commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } } },
-              authentication: { kind: 'keyless' },
+              authentication: { kind: 'ae_api_key' },
               availability: { posture: 'routeable' },
             },
             {
@@ -228,7 +228,7 @@ describe('transcript projector', () => {
             title: 'Weather finder',
             supplier: { name: 'Sky Co', slug: 'sky-co' },
             price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
-            authentication: { kind: 'keyless' },
+            authentication: { kind: 'ae_api_key' },
             availability: { posture: 'routeable' },
             raw: 'HANDOFF_RAW_SECRET',
           }],
@@ -244,7 +244,7 @@ describe('transcript projector', () => {
       supplier: 'Sky Co',
       price: 'USD 0.50',
       readiness: 'Ready now',
-      access: 'No provider key',
+      access: 'AE account invocation',
     }])
     expect(JSON.stringify(stored)).not.toContain('HANDOFF_RAW_SECRET')
     clearAnonymousChatHandoff('handoff-thread')

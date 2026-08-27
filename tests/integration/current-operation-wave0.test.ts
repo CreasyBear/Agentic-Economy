@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { executeKeylessOperation } from '@/modules/capability-execution/operation-execute.server'
-import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   capabilityOperationId,
@@ -49,7 +47,7 @@ async function publishCurrentOperation(
       ...source,
       binding: {
         ...source.binding,
-        authority: { kind: 'keyless' },
+        authority: { kind: 'public_upstream' },
       },
     }),
   )
@@ -178,23 +176,6 @@ function percentile95(samples: readonly number[]): number {
   return ordered[Math.max(0, Math.ceil(ordered.length * 0.95) - 1)] ?? 0
 }
 
-function keylessSource(backend: ConvexFixtureBackend): KeylessExecutableSourcePort {
-  return {
-    list: async () => [],
-    search: async () => [],
-    read: async (operationRef) => {
-      const row = await backend.query(api.capabilitySupplyOperations.readKeylessExecutable, { operationRef })
-      if (row === null) return null
-      return {
-        ...row,
-        inputSchema: JSON.parse(row.inputSchemaJson) as Record<string, unknown>,
-        ...(row.outputSchemaJson === undefined
-          ? {}
-          : { outputSchema: JSON.parse(row.outputSchemaJson) as Record<string, unknown> }),
-      }
-    },
-  }
-}
 
 describe('Wave 0 current Operation verification', () => {
   it('keeps two suppliers coherent across search, detail, compare, inspect, and pinned call identity', async () => {
@@ -301,17 +282,10 @@ describe('Wave 0 current Operation verification', () => {
           }),
         })
       })
-      const providerFetch = vi.fn()
-      await expect(executeKeylessOperation(
-        { operationRef: fixture.operationRef, input: { request: 'must-reinspect' } },
-        keylessSource(backend),
-        { fetchImpl: providerFetch, isPublicTarget: async () => true },
-      )).resolves.toEqual({
-        kind: 'refused',
-        operationRef: fixture.operationRef,
-        reason: 'operation_not_found',
-      })
-      expect(providerFetch).not.toHaveBeenCalled()
+      await expect(backend.query(
+        internal.capabilitySupplyOperations.readCurrentPublishedOperationSnapshot,
+        { operationRef: fixture.operationRef },
+      )).resolves.toBeNull()
     },
   )
 

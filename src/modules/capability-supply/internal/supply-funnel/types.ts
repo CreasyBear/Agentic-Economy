@@ -189,7 +189,7 @@ export type OwnerSupplyOfferingReadback = Readonly<{
       | "ae_curated_external"
       | "third_party_gateway"
       | "observed_external";
-    kind: "keyless" | "provider_connection";
+    kind: "public_upstream" | "provider_connection";
     providerRef?: string;
     authorityGeneration?: number;
     authorityDigest?: string;
@@ -223,7 +223,7 @@ export type OwnerSupplyOfferingReadback = Readonly<{
       admission: "not_admitted" | "admitted";
       conformance: "not_conformant" | "conformant";
       authority: Readonly<
-        | { kind: "keyless" }
+        | { kind: "public_upstream" }
         | { kind: "provider_connection"; providerRef: string }
       >;
       authoritySnapshot?: Readonly<{

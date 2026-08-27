@@ -248,7 +248,7 @@ describe('owner capability publication admission', () => {
           version: 1,
           contractDigest: `sha256:${'0'.repeat(64)}`,
           endpointUrl: 'https://unrelated.example.test',
-          authority: { kind: 'keyless' },
+          authority: { kind: 'public_upstream' },
           continuation: { kind: 'single_response', evidenceRefs: [] },
           cancellation: { kind: 'unsupported', evidenceRefs: [] },
           adapterId: 'http-json:v1',

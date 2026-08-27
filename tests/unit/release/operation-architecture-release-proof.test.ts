@@ -20,7 +20,6 @@ const expectedConvexPaths = [
   getFunctionName(api.capabilitySupplyOperations.detail),
   getFunctionName(api.capabilitySupplyOperations.compare),
   getFunctionName(api.capabilitySupplyOperations.inspectPlan),
-  getFunctionName(api.capabilitySupplyOperations.readKeylessExecutable),
   getFunctionName(api.capabilityOperationInvocations.invoke),
   getFunctionName(api.capabilityOperationInvocations.readInvocationStatus),
   getFunctionName(api.capabilityOperationInvocations.cancelInvocation),
@@ -70,7 +69,6 @@ describe('Operation architecture local release proof', () => {
       'detail',
       'compare',
       'inspect_plan',
-      'keyless_call',
       'authenticated_call',
       'status',
       'cancel',
@@ -78,7 +76,6 @@ describe('Operation architecture local release proof', () => {
     ])
     expect(canaries.map(({ actionId }) => actionId)).toEqual([
       ...OPERATION_MARKET_ACTION_ENTRIES.map(({ actionId }) => actionId),
-      'operation.execute',
       OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
       OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId,
       OPERATION_INVOKE_ROUTE_CONTRACT.cancel.actionId,
@@ -95,9 +92,8 @@ describe('Operation architecture local release proof', () => {
         }))
       }
     }
-    expect(canaries.find(({ journeyStep }) => journeyStep === 'keyless_call')?.surfaces).toEqual(['mcp', 'chat'])
     expect(canaries.find(({ journeyStep }) => journeyStep === 'authenticated_call')?.surfaces)
-      .toEqual(['http', 'mcp', 'cli'])
+      .toEqual(['http', 'mcp', 'cli', 'chat'])
   })
 
   it('pins the accepted benchmark, capacity, mismatch, and exact CLI artifact thresholds', () => {

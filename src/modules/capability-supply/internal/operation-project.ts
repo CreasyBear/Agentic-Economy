@@ -37,7 +37,7 @@ if (
 )
   throw new Error("v1_payment_lane_not_brokered");
 const V1_PAYMENT_LANE = V1_PAYMENT_LANE_ADMISSION.lane;
-type OperationAccessMode = "anonymous_execute" | "authenticated_invoke" | "inspect_only";
+type OperationAccessMode = "authenticated_invoke" | "inspect_only";
 
 export function operationNavigation(
   accessMode: OperationAccessMode,
@@ -51,11 +51,7 @@ export function operationNavigation(
     navigation.market.detail,
     navigation.market.compare,
     navigation.market.inspectPlan,
-    ...(accessMode === "anonymous_execute"
-      ? [navigation.execute]
-      : accessMode === "authenticated_invoke"
-        ? [navigation.invoke]
-        : []),
+    ...(accessMode === "authenticated_invoke" ? [navigation.invoke] : []),
   ]);
 }
 export function noOperationNavigation(
@@ -163,11 +159,7 @@ export function projectCapabilityOperation(
             availability.posture !== "routeable" ||
               record.authentication.kind === "unknown"
               ? "inspect_only"
-              : record.answerExecutable &&
-                  record.authentication.kind === "keyless" &&
-                  record.provenance.sourceKind !== "x402"
-                ? "anonymous_execute"
-                : "authenticated_invoke",
+              : "authenticated_invoke",
             navigation,
           ),
     ...(parameters === undefined ? {} : { parameters }),

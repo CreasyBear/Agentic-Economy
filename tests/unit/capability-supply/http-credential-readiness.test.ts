@@ -190,7 +190,7 @@ describe('schema-conformant readiness', () => {
   const target = {
     publicationRef: 'publication:frankfurter:single-rate', revision: 1,
     bindingId: 'binding:frankfurter', capabilityId: 'frankfurter.single-rate',
-    endpointUrl: 'https://api.frankfurter.app/latest', authority: { kind: 'keyless' as const }, adapterId: 'http-json:v1',
+    endpointUrl: 'https://api.frankfurter.app/latest', authority: { kind: 'public_upstream' as const }, adapterId: 'http-json:v1',
     probeMethod: 'GET' as const, probeQuery: [],
     transportConfigJson: JSON.stringify({
       method: 'GET', query: [
@@ -206,7 +206,7 @@ describe('schema-conformant readiness', () => {
       bindingId: 'binding:frankfurter',
       capabilityId: 'frankfurter.single-rate',
       endpointUrl: 'https://api.frankfurter.app/latest',
-      authority: { kind: 'keyless' },
+      authority: { kind: 'public_upstream' },
       adapterId: 'http-json:v1',
       configDigest: canonicalDigest({
         method: 'GET',

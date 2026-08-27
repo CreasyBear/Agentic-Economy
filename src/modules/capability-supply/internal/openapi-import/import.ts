@@ -102,7 +102,7 @@ async function analyzeSelectedOperation(
   selected: SelectedOperation,
   derefSchema?: SchemaDereferencer,
 ): Promise<Readonly<{ kind: 'analyzed'; analysis: OpenApiOperationAnalysis }> | Refusal> {
-  const credentialRequired = selected.credential.spec.kind !== 'keyless'
+  const credentialRequired = selected.credential.spec.kind !== 'public_upstream'
   if (credentialRequired !== (input.commercial.authority.kind === 'provider_connection')) {
     return refused('commercial_metadata_inconsistent')
   }
@@ -182,7 +182,7 @@ function adapterConfig(
 }
 
 function credentialConfig(spec: OpenApiOperationAnalysis['credential']['spec']): JsonValue {
-  if (spec.kind === 'keyless') return { kind: 'none' as const }
+  if (spec.kind === 'public_upstream') return { kind: 'none' as const }
   if (spec.kind === 'api_key') return { kind: 'api_key' as const, location: spec.location, name: spec.name }
   return { kind: 'bearer' as const }
 }

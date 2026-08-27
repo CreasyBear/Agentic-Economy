@@ -111,9 +111,9 @@ describe('public agent skill', () => {
       .filter((name): name is string => name !== undefined)
     const projection = `Endpoint: \`https://ae.example/mcp\`. Anonymous tools: ${anonymousToolNames.map((name) => `\`${name}\``).join(', ')}. Authenticated tools: ${authenticatedToolNames.map((name) => `\`${name}\``).join(', ')}.`
     expect(body).toContain(projection)
-    expect(body).toContain('executionModes.directKeyless')
-    expect(body).toContain('not a guarantee for every Operation')
-    expect(body).toContain('compiled `ae call` command uses the official MCP client')
+    expect(body).toContain('Connect once with AE')
+    expect(body).toContain('price may be zero')
+    expect(body).toContain('explicit authority approval')
     expect(body).toContain('return literal output plus an `evidenceHash`')
   })
   it('documents the installed MCP lifecycle and the business-only catalog boundary', () => {

@@ -210,7 +210,7 @@ export const serviceOfferingOutputSchema = z.strictObject({
 })
 
 export const serviceEndpointAuthenticationOutputSchema = z.union([
-  z.strictObject({ kind: z.literal('keyless') }),
+  z.strictObject({ kind: z.literal('ae_api_key') }),
   z.strictObject({
     kind: z.literal('platform_credential'),
     scheme: z.literal('api_key'),
@@ -265,7 +265,7 @@ export const serviceEndpointOutputSchema = z.strictObject({
       provenance: z.enum(['business_declared', 'publicly_observed']).describe('Publication authority: declared by the business or observed publicly'),
       access: z.literal('external').describe('Published external Provider endpoint access'),
       authentication: serviceEndpointAuthenticationOutputSchema.describe('Public authentication classification without secret values'),
-      execution: z.enum(['answer_tool', 'request_route', 'catalog_only']).describe('Public execution channel'),
+      execution: z.enum(['operation_call', 'request_route', 'catalog_only']).describe('Public execution channel'),
       authorityMode: z.enum(['provider_owned', 'ae_curated_external', 'third_party_gateway', 'observed_external']).optional().describe('Publication authority mode when linked'),
       sourceKind: z.enum(['ae_envelope', 'openapi_http', 'mcp', 'agent_plugin_mcp', 'x402']).optional().describe('Publication source mode when linked'),
       authenticationSummary: z.string().optional().describe('Published authentication requirement'),

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
-import { findAction, listOperationRouteDescriptors, mcpToolName } from '@/modules/actions'
+import { listOperationRouteDescriptors } from '@/modules/actions'
 import {
   AGENT_ACCESS_OAUTH_ERROR_VALUES,
   AGENT_ACCESS_POLL_INTERVAL_SECONDS,
@@ -73,7 +73,7 @@ describe('market terminal manifest OAuth contract', () => {
     expect(serialized).not.toContain('inputJsonSchema')
     expect(serialized).not.toContain('outputJsonSchema')
     expect(compact.fullContract).toBe('ae manifest --technical --json')
-    expect((compact.call as JsonRecord).anonymous).toMatchObject({ transport: 'official_mcp_client' })
+    expect((compact.call as JsonRecord).connected).toMatchObject({ transport: 'operation.invoke:v1' })
   })
 
   it('serializes the registration request accepted by the OAuth handler', async () => {
@@ -103,8 +103,6 @@ describe('market terminal manifest OAuth contract', () => {
     expect(routes.map((entry) => (entry.action as JsonRecord).mcpToolName)).toEqual(
       listOperationRouteDescriptors().map(({ mcpToolName: toolName }) => toolName),
     )
-    const operationExecute = findAction('operation.execute')
-    if (operationExecute === undefined) throw new Error('operation.execute action missing')
     const operationReads = ((manifest.anonymous as JsonRecord).operationReads as readonly JsonRecord[])
     expect(operationReads).toHaveLength(listOperationRouteDescriptors().length)
     for (const operationRead of operationReads) {
@@ -115,7 +113,6 @@ describe('market terminal manifest OAuth contract', () => {
       expect(action.inputJsonSchema).toEqual(expect.any(Object))
       expect(action.outputJsonSchema).toEqual(expect.any(Object))
     }
-    expect((manifest.directKeyless as JsonRecord).mcpTool).toBe(mcpToolName(operationExecute))
     const response = await handleOAuthRegisterPost(request, { store: oauthStore(), now: () => 1_000 })
     expect(response.status).toBe(201)
   })

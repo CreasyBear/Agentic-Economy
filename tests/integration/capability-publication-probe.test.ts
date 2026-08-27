@@ -74,7 +74,7 @@ function fakeProbeTarget() {
     probeInputJson: '{"private":"probe-input"}',
     outputSchemaJson: '{"private":"output-schema"}',
     targetDigest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    authority: { kind: 'keyless' as const },
+    authority: { kind: 'public_upstream' as const },
     resourceAuthority: {
       mode: 'human_owner' as const,
       publicationRef: 'publication:forbidden-raw-ref',

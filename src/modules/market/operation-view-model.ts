@@ -201,7 +201,7 @@ export function formatOperationReadiness(
 export function formatOperationAuthentication(
   authentication: PublicOperationAuthentication,
 ): string {
-  if (authentication.kind === "keyless") return "No provider key";
+  if (authentication.kind === "ae_api_key") return "AE account invocation";
   if (authentication.kind === "x402") return "x402 payment";
   if (authentication.kind === "platform_credential") {
     return authentication.scheme === "bearer" ? "Bearer connection" : "API key connection";

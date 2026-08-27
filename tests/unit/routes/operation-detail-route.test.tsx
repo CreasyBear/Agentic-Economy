@@ -125,7 +125,6 @@ const sourceRecord = {
   provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
   integrated: false,
   routeable: true,
-  answerExecutable: false,
   readiness: { observedAt: 1_000, validUntil: 10_000 },
   searchTerms: ['invoice', 'extract'],
   snapshotKey: 'snapshot:invoice:4',
@@ -200,34 +199,7 @@ describe('/operations/$operationRef', () => {
     expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
     expect(within(execution).queryByText(/Save it securely/i)).toBeNull()
     expect(within(execution).queryByText(/ae_operation_invoke/)).toBeNull()
-    expect(within(execution).queryByText(/ae_operation_execute/)).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
-  })
-
-  it('shows free keyless access only through the direct-keyless MCP lane', () => {
-    const freeKeylessOperation = projectCapabilityOperation({
-      ...sourceRecord,
-      price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
-      authentication: { kind: 'keyless' },
-      answerExecutable: true,
-    }, 2_000)
-
-    renderWithRouter({
-      kind: 'found',
-      schemaVersion: PublicOperationRegistrySchemaVersion,
-      operation: freeKeylessOperation,
-    })
-
-    const execution = screen.getByRole('complementary', { name: 'Use this capability' })
-    expect(within(execution).getByText('ae_operation_execute', { exact: false })).toBeTruthy()
-    expect(within(execution).getByText(`operationRef=${freeKeylessOperation.operationRef}`, { exact: false })).toBeTruthy()
-    expect(within(execution).getByText(/input=\{"documentUrl":"https:\/\/docs\.example\/invoice\.pdf","includeTax":true\}/)).toBeTruthy()
-    expect(within(execution).queryByText(/JSON matching the published schema/)).toBeNull()
-    expect(within(execution).queryByRole('heading', { level: 3, name: /Connect$/ })).toBeNull()
-    expect(within(execution).queryByRole('heading', { level: 3, name: /Invoke$/ })).toBeNull()
-    expect(within(execution).queryByText(/npm run -s ae -- status/)).toBeNull()
-    expect(within(execution).queryByText(/npm run -s ae -- execute/)).toBeNull()
-    expect(within(execution).queryByText(/\/api\/v1\/operations/)).toBeNull()
   })
 
   it('keeps x402 on the authenticated invoke lane and never advertises anonymous execute', () => {
@@ -235,7 +207,6 @@ describe('/operations/$operationRef', () => {
       ...sourceRecord,
       authentication: { kind: 'x402' },
       provenance: { ...sourceRecord.provenance, sourceKind: 'x402' },
-      answerExecutable: true,
     }, 2_000)
 
     renderWithRouter({
@@ -250,7 +221,6 @@ describe('/operations/$operationRef', () => {
     expect(within(execution).getByRole('heading', { level: 3, name: '4. Open the receipt' })).toBeTruthy()
     expect(within(execution).getAllByText(/ae call/).length).toBeGreaterThan(0)
     expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
-    expect(within(execution).queryByText(/ae_operation_execute/)).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
 
@@ -275,7 +245,6 @@ describe('/operations/$operationRef', () => {
     expect(screen.getByRole('link', { name: 'Browse current Operations' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Back to market' })).toBeTruthy()
     expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
-    expect(screen.queryByText(/ae_operation_execute/)).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
 
@@ -309,7 +278,6 @@ describe('/operations/$operationRef', () => {
     expect(screen.queryByText('digest:current-price')).toBeNull()
     expect(screen.queryByRole('complementary', { name: 'Use this capability' })).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
-    expect(screen.queryByText(/ae_operation_execute/)).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
 

@@ -104,7 +104,7 @@ export function buildPublicAgentSkillMarkdown(options: {
     `HTTP detail: \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`. Read the current input schema, terms, price, effects, availability, and evidence before connecting or invoking.`,
     `Optional anonymous reads: \`${cli} compare\` / \`${cli} inspect-plan\` mirror \`POST ${base}${OPERATION_MARKET_COMPARE_PATH}\` and \`POST ${base}${OPERATION_MARKET_INSPECT_PLAN_PATH}\`.`,
 
-    '`executionModes.directKeyless` is not a guarantee for every Operation. The compiled `ae call` command uses the official MCP client only when the server revalidates the Operation as free, keyless, read-only, and routeable. On `agent_access_key_required`, connect once and repeat the same call through `operation.invoke`.',
+    '`operation.invoke` runs through the authenticated gateway only. Connect once with AE, then invoke; price may be zero, and consequential Operations require explicit authority approval.',
     OperationMarketAnonymousBoundaryLine,
     '',
     '## 5. Try the capability; connect only when required',

@@ -121,7 +121,7 @@ export const OPERATION_ARCHITECTURE_WAVE_ROLLBACKS: readonly ArchitectureWaveRol
 ])
 
 type OperationReleaseSurfaceCanary = Readonly<{
-  journeyStep: 'search' | 'detail' | 'compare' | 'inspect_plan' | 'keyless_call' | 'authenticated_call' | 'status' | 'cancel' | 'reconcile'
+  journeyStep: 'search' | 'detail' | 'compare' | 'inspect_plan' | 'authenticated_call' | 'status' | 'cancel' | 'reconcile'
   actionId: string
   routePath?: string
   convexFunctionPath: string
@@ -133,7 +133,6 @@ const operationConvexFunctionByActionId = Object.freeze({
   'registry.operations.detail': 'capabilitySupplyOperations:detail',
   'registry.operations.compare': 'capabilitySupplyOperations:compare',
   'registry.operations.inspectPlan': 'capabilitySupplyOperations:inspectPlan',
-  'operation.execute': 'capabilitySupplyOperations:readKeylessExecutable',
   'operation.invoke': 'capabilityOperationInvocations:invoke',
   'operation.status': 'capabilityOperationInvocations:readInvocationStatus',
   'operation.cancel': 'capabilityOperationInvocations:cancelInvocation',
@@ -148,8 +147,6 @@ export function operationReleaseSurfaceCanaries(): readonly OperationReleaseSurf
     convexFunctionPath: operationConvexFunctionByActionId[entry.actionId as keyof typeof operationConvexFunctionByActionId],
     surfaces: entry.surfaces,
   }))
-  const execute = findAction('operation.execute')
-  if (execute === undefined) throw new Error('operation_release_execute_action_missing')
   const routeByActionId = new Map(listOperationRouteDescriptors().map((route) => [route.actionId, route]))
   const controlled = [
     { journeyStep: 'authenticated_call', contract: OPERATION_INVOKE_ROUTE_CONTRACT.invoke },
@@ -159,12 +156,6 @@ export function operationReleaseSurfaceCanaries(): readonly OperationReleaseSurf
   ] as const
   return [
     ...browse,
-    {
-      journeyStep: 'keyless_call',
-      actionId: execute.id,
-      convexFunctionPath: operationConvexFunctionByActionId['operation.execute'],
-      surfaces: execute.surfaces,
-    },
     ...controlled.map(({ journeyStep, contract }) => {
       const route = routeByActionId.get(contract.actionId)
       if (route === undefined) throw new Error(`operation_release_route_missing:${contract.actionId}`)

@@ -174,12 +174,6 @@
       "functions": 4,
       "branches": 2
     },
-    "convex/capabilitySupplyOperationKeyless.ts": {
-      "lines": 41,
-      "statements": 57,
-      "functions": 10,
-      "branches": 103
-    },
     "convex/capabilitySupplyOperationPorts.ts": {
       "lines": 1,
       "statements": 3,
@@ -317,12 +311,6 @@
       "statements": 17,
       "functions": 3,
       "branches": 18
-    },
-    "convex/chatExecute.ts": {
-      "lines": 3,
-      "statements": 4,
-      "functions": 3,
-      "branches": 5
     },
     "convex/chatGenerate.ts": {
       "lines": 3,
@@ -2177,36 +2165,6 @@
       "statements": 3,
       "functions": 3,
       "branches": 0
-    },
-    "src/modules/capability-execution/operation-execute-contract.ts": {
-      "lines": 0,
-      "statements": 0,
-      "functions": 0,
-      "branches": 0
-    },
-    "src/modules/capability-execution/operation-execute-mcp.actions.ts": {
-      "lines": 0,
-      "statements": 0,
-      "functions": 0,
-      "branches": 0
-    },
-    "src/modules/capability-execution/operation-execute.actions.ts": {
-      "lines": 12,
-      "statements": 21,
-      "functions": 5,
-      "branches": 23
-    },
-    "src/modules/capability-execution/operation-execute.functions.ts": {
-      "lines": 8,
-      "statements": 9,
-      "functions": 0,
-      "branches": 24
-    },
-    "src/modules/capability-execution/operation-execute.server.ts": {
-      "lines": 9,
-      "statements": 13,
-      "functions": 5,
-      "branches": 13
     },
     "src/modules/capability-execution/operation-invoke-admit.ts": {
       "lines": 8,
@@ -4169,6 +4127,12 @@
       "statements": 29,
       "functions": 6,
       "branches": 6
+    },
+    "convex/capabilitySupplyOperationOriginMap.ts": {
+      "lines": 41,
+      "statements": 57,
+      "functions": 10,
+      "branches": 103
     }
   },
   "schema": "ae.coverage-ratchet-baseline:v1"

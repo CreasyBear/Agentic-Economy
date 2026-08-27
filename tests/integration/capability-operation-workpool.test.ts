@@ -116,7 +116,7 @@ async function seedKeylessLookup(backend: ConvexFixtureBackend): Promise<string>
       binding: {
         ...source.binding,
         endpointUrl: `https://${suffix}.example.test/lookup`,
-        authority: { kind: 'keyless' },
+        authority: { kind: 'public_upstream' },
         adapter: {
           adapterId: 'http-json:v1',
           config: {
@@ -169,13 +169,7 @@ async function seedKeylessLookup(backend: ConvexFixtureBackend): Promise<string>
     },
   ))
   expect(qualification).toMatchObject({ status: 'eligible', reasons: [] })
-  const executable = await backend.query(api.capabilitySupplyOperations.listKeylessExecutable, {}) as Array<{
-    capabilityId: string
-    operationRef: string
-  }>
-  const descriptor = executable.find((candidate) => candidate.capabilityId === publication.capabilityId)
-  if (descriptor === undefined) throw new Error('workpool executable descriptor missing')
-  return descriptor.operationRef
+  return publication.operationRef
 }
 
 async function seedPrincipal(

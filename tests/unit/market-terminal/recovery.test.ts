@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { listMcpActions, mcpToolName } from '@/modules/actions'
 import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
 import { operationReconciliationEvidenceSchema } from '@/modules/capability-execution/operation-recovery.actions'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -70,40 +69,6 @@ afterEach(() => {
 })
 
 describe('CLI operation recovery projections', () => {
-  it('publishes the anonymous direct-keyless MCP contract from the action registry', async () => {
-    const output = capture(process.stdout)
-    try {
-      await runManifestCommand([], { ...baseOptions, technical: true })
-    } finally {
-      output.restore()
-    }
-
-    const directAction = listMcpActions().find((action) => action.id === 'operation.execute')
-    if (directAction === undefined) throw new Error('operation.execute is not registered on the MCP surface')
-    const manifest = JSON.parse(output.read()) as {
-      directKeyless: {
-        action: string
-        contractVersion: string
-        mcpTool: string
-        authentication: string
-        requiresOperationRef: boolean
-        inputJsonSchema?: { required?: readonly string[] }
-        outputJsonSchema?: Record<string, unknown>
-        invocationContract: unknown
-      }
-    }
-    expect(manifest.directKeyless).toMatchObject({
-      action: directAction.id,
-      contractVersion: directAction.invocationContract.version,
-      mcpTool: mcpToolName(directAction),
-      authentication: 'none',
-      requiresOperationRef: true,
-      inputJsonSchema: expect.any(Object),
-      outputJsonSchema: expect.any(Object),
-      invocationContract: directAction.invocationContract,
-    })
-    expect(manifest.directKeyless.inputJsonSchema?.required).toContain('operationRef')
-  })
 
   it('publishes a schema-valid recovery example with digest and identity rules', async () => {
     const output = capture(process.stdout)

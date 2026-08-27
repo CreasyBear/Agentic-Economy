@@ -20,7 +20,7 @@ import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import {
   convexPublicationLifecycle,
   contextFields,
-  keylessAuthorityValue,
+  publicUpstreamAuthorityValue,
   providerConnectionAuthorityValue,
   publicationLifecycleValue,
 } from './capabilitySupplyShared'
@@ -230,7 +230,7 @@ const capabilityProbeTargetFields = {
 const capabilityProbeTargetValue = v.union(
   v.object({
     ...capabilityProbeTargetFields,
-    authority: keylessAuthorityValue,
+    authority: publicUpstreamAuthorityValue,
   }),
   v.object({
     ...capabilityProbeTargetFields,
@@ -510,7 +510,7 @@ export async function readCapabilityProbeTargetHandler(
     kind: 'available' as const,
     target: {
       ...targetFields,
-      authority: { kind: 'keyless' as const },
+      authority: { kind: 'public_upstream' as const },
     },
   }
 }

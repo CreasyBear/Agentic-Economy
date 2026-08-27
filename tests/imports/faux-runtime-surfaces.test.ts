@@ -18,6 +18,9 @@ const sourceFiles = globSync(deployableRoots).sort()
 const movedProductionFiles = [
   'src/modules/capability-execution/seed-supply.ts',
 ]
+const deletedSeedHelpers = [
+  'tests/helpers/keyless-seed-source.ts',
+]
 
 const forbiddenSelectors = [
   /@\/lib\/dev\/local-e2e-business-fixtures/u,
@@ -46,8 +49,8 @@ describe('faux runtime surfaces (source-shape proof only)', () => {
     expect(sourceShapeViolations()).toEqual([])
   })
 
-  it('keeps moved pure adapters out of deployable source paths', () => {
+  it('keeps moved pure adapters and deleted seed helpers out of the tree', () => {
     expect(movedProductionFiles.filter((path) => existsSync(path))).toEqual([])
-    expect(normalize(resolve('tests/helpers/keyless-seed-source.ts'))).toContain(normalize(resolve('tests/helpers')))
+    expect(deletedSeedHelpers.filter((path) => existsSync(path))).toEqual([])
   })
 })

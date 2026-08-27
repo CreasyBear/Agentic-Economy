@@ -297,10 +297,6 @@ describe('Phase 2 public Convex exemptions', () => {
       inspectPlan: await client.query(api.capabilitySupplyOperations.inspectPlan, {
         operationRefs: [operationRef],
       }),
-      listKeylessExecutable: await client.query(
-        api.capabilitySupplyOperations.listKeylessExecutable,
-        {},
-      ),
       offeringOperationMap: await client.query(
         api.capabilitySupplyOperations.offeringOperationMap,
         { businessIds: [MUST_NOT_LEAK] },

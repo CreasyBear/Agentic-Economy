@@ -20,16 +20,9 @@ import {
   searchHandler,
 } from './capabilitySupplyOperationQueries'
 import {
-  keylessExecutableListReturns,
-  keylessExecutableReturns,
-  listKeylessExecutableHandler,
   offeringOperationMapHandler,
   offeringOperationMapReturns,
-  publishedOperationSnapshotReturns,
-  readCurrentPublishedOperationSnapshotHandler,
-  readKeylessExecutableHandler,
-  serverFunctionAuth,
-} from './capabilitySupplyOperationKeyless'
+} from './capabilitySupplyOperationOriginMap'
 import {
   backfillCurrentOperationProjectionsHandler,
   currentOperationMismatchKind,
@@ -43,13 +36,15 @@ import {
   currentOperationShadowDiagnosticsReturns,
   currentOperationStagingSnapshotHandler,
   currentOperationStagingSnapshotReturns,
+  publishedOperationSnapshotReturns,
+  readCurrentPublishedOperationSnapshotHandler,
   rebuildCurrentOperationProjectionHandler,
   recordCurrentOperationMismatchExplanationHandler,
   setCurrentOperationReadModeHandler,
 } from './capabilitySupplyOperationProjection'
 import { env } from './_generated/server'
 
-export { readCurrentPublishedOperation } from './capabilitySupplyOperationKeyless'
+export { readCurrentPublishedOperation } from './capabilitySupplyOperationProjection'
 
 export const search = queryGeneric({
   args: searchArgs,
@@ -157,15 +152,4 @@ export const currentOperationStagingSnapshot = internalQueryGeneric({
     args,
     env.AE_RELEASE_SOURCE_REVISION,
   ),
-})
-export const readKeylessExecutable = queryGeneric({
-  args: { operationRef: v.string(), serviceAuth: v.optional(serverFunctionAuth) },
-  returns: keylessExecutableReturns,
-  handler: readKeylessExecutableHandler,
-})
-
-export const listKeylessExecutable = queryGeneric({
-  args: {},
-  returns: keylessExecutableListReturns,
-  handler: listKeylessExecutableHandler,
 })

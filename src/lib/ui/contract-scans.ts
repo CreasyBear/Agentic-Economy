@@ -180,7 +180,7 @@ function isDocumentedJsonBoundary(violation: ScanViolation): boolean {
         ))) ||
     ((violation.file === "convex/capabilitySupplyOperations.ts" ||
       violation.file === "convex/capabilitySupplyOperationQueries.ts" ||
-      violation.file === "convex/capabilitySupplyOperationKeyless.ts") &&
+      violation.file === "convex/capabilitySupplyOperationOriginMap.ts") &&
       violation.excerpt.includes("v.any()") &&
       violation.excerpt.includes("runtime-validated JsonValue boundary")) ||
     (violation.file ===

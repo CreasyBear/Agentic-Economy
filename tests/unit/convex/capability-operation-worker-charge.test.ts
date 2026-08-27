@@ -521,4 +521,32 @@ describe('capability operation invocation worker charge/x402', () => {
       },
     })
   })
+
+  it('bootstraps a missing money account on a zero-price authenticated charge with exact replay', async () => {
+    const worker = createWorker('http', { operatorAccountVersion: null, priceUnits: '0' })
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    expect(worker.state.money).toMatchObject({
+      amount: { currency: 'USD', units: '0', exponent: 2 },
+      expectedAccountVersion: 0,
+      freeTier: false,
+    })
+    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyLedger:authorizeInvocationCharge')).toHaveLength(1)
+    expect(worker.state.reconciliations).toHaveLength(0)
+    expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({
+      usage: {
+        chargeState: 'free_tier',
+        amount: { units: '0', currency: 'USD', exponent: 2 },
+        priceDigest: digest('p'),
+      },
+    })
+    const chargeArgs = worker.state.mutationCalls.find(
+      ({ path }) => path === 'moneyLedger:authorizeInvocationCharge',
+    )?.args
+    expect(chargeArgs).toMatchObject({
+      transactionRef: `operation-money:${invocationRef}:${attemptRef}:1`,
+      idempotencyKey: `operation-money:${invocationRef}:${attemptRef}:1`,
+      invocationRef,
+      attemptRef,
+    })
+  })
 })

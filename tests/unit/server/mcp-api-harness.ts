@@ -11,18 +11,6 @@ export function handleMcpRequest(
   return handleMcpRequestImpl(...args)
 }
 
-const hoistedMcpApiMocks = vi.hoisted(() => ({
-  executeKeylessOperation: vi.fn(),
-}))
-
-export const operationExecuteMocks = {
-  executeKeylessOperation: hoistedMcpApiMocks.executeKeylessOperation,
-}
-
-vi.mock('@/modules/capability-execution/operation-execute.server', () => ({
-  executeKeylessOperation: hoistedMcpApiMocks.executeKeylessOperation,
-}))
-
 export type JsonRpcBody = {
   result?: Record<string, unknown>
   error?: Record<string, unknown>
@@ -94,7 +82,6 @@ export async function readMcpBody(response: Response): Promise<JsonRpcBody> {
 
 beforeEach(() => {
   vi.restoreAllMocks()
-  operationExecuteMocks.executeKeylessOperation.mockReset()
   pinEnv()
 })
 

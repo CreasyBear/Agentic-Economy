@@ -155,7 +155,7 @@ describe('Operation chat Agent tools', () => {
       CHAT_TOOL_IDS.slice(0, 4).map((toolId) => CHAT_TOOL_NAME_MAP.canonicalToProvider[toolId]),
     )
     expect(agent.options.tools).not.toHaveProperty(
-      CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.execute'],
+      CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.invoke'],
     )
   })
 
@@ -271,22 +271,23 @@ describe('Operation chat Agent tools', () => {
     const agent = createChatAgent(mockModel(), AUTHORITY)
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
 
-    const first = invokeTool(agent, 'operation.execute', ctx, { operationRef: OPERATION_REF })
-    const second = invokeTool(agent, 'operation.execute', ctx, { operationRef: OPERATION_REF })
+    const first = invokeTool(agent, 'operation.invoke', ctx, { operationRef: OPERATION_REF, input: {} })
+    const second = invokeTool(agent, 'operation.invoke', ctx, { operationRef: OPERATION_REF, input: {} })
 
     await expect(second).resolves.toEqual({
       kind: 'chat_tool_refused',
-      toolId: 'operation.execute',
+      toolId: 'operation.invoke',
       reason: 'execute_limit',
     })
     release?.({
       kind: 'refused',
       operationRef: OPERATION_REF,
-      reason: 'operation_not_found',
+      code: 'grant_not_found',
+      retryable: false,
     })
     await expect(first).resolves.toMatchObject({
       kind: 'refused',
-      reason: 'operation_not_found',
+      code: 'grant_not_found',
     })
     expect(runAction).toHaveBeenCalledTimes(1)
   })

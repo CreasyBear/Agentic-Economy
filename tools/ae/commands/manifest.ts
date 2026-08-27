@@ -112,25 +112,6 @@ function describedAction(actionId: string) {
   }
 }
 
-function directKeylessManifest() {
-  const action = listMcpActions().find((candidate) => candidate.id === 'operation.execute')
-  if (action === undefined) throw new Error('Manifest action is not registered on the anonymous MCP surface: operation.execute')
-  if (!action.readOnly || action.credentialAdmission !== undefined) {
-    throw new Error('Manifest operation.execute action is not anonymous and read-only')
-  }
-  const described = describeActionForAgent(action)
-  return {
-    action: described.id,
-    contractVersion: action.invocationContract.version,
-    invocationContract: action.invocationContract,
-    mcpTool: mcpToolName(action),
-    authentication: 'none' as const,
-    requiresOperationRef: true as const,
-    eligibility: 'free_keyless_read_only' as const,
-    ...(described.inputJsonSchema === undefined ? {} : { inputJsonSchema: described.inputJsonSchema }),
-    ...(described.outputJsonSchema === undefined ? {} : { outputJsonSchema: described.outputJsonSchema }),
-  }
-}
 
 /**
  * `npm run -s ae -- manifest [--json]` — the external-agent handshake. The front door is the
@@ -146,7 +127,6 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     route,
     action: describedAction(route.actionId),
   }))
-  const directKeyless = directKeylessManifest()
 
   const manifest = {
     $schema: 'https://agentic-economy/market-terminal/manifest:v3',
@@ -216,7 +196,6 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
       })),
       operationReads,
     },
-    directKeyless,
     gateway: {
       authentication: 'Bearer AE_API_KEY (bound to AE_API_KEY_ORIGIN)',
       scope: OPERATION_INVOKE_ROUTE_CONTRACT.scope,
@@ -312,8 +291,8 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     commands: manifest.commands,
     coldLoop: ['search', 'inspect', 'call', 'receipt', 'reuse'],
     access: {
-      anonymous: 'Search, inspect, compare, and call eligible free keyless read-only capabilities without connecting.',
-      connected: 'Run ae connect once before paid, provider-keyed, or consequential capabilities.',
+      anonymous: 'Search, inspect, and compare current Operations without connecting.',
+      connected: 'Run ae connect once; authenticated invocation covers free and paid operations, and consequential operations require approval.',
     },
     routes: operationReads.map(({ route, action }) => ({
       relation: route.relation,
@@ -323,15 +302,10 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     })),
     call: {
       command: "ae call <operationRef> --input '<json>'",
-      anonymous: {
-        transport: 'official_mcp_client',
-        tool: directKeyless.mcpTool,
-        eligibility: directKeyless.eligibility,
-        result: 'Literal provider output plus evidenceHash.',
-      },
       connected: {
+        command: 'ae connect',
         transport: 'operation.invoke:v1',
-        connect: 'ae connect',
+        authentication: 'Bearer AE_API_KEY (bound to AE_API_KEY_ORIGIN)',
         receipt: 'Every accepted gateway call returns or progresses toward one invocation receipt.',
       },
     },

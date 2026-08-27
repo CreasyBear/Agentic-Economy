@@ -134,8 +134,8 @@ export function ownerSupplyPublicationDetails(input: Readonly<{
       admission: binding.admission,
       conformance: binding.conformance,
       authority:
-        binding.authority.kind === 'keyless'
-          ? { kind: 'keyless' as const }
+        binding.authority.kind === 'public_upstream'
+          ? { kind: 'public_upstream' as const }
           : {
               kind: 'provider_connection' as const,
               providerRef: binding.authority.providerRef,
@@ -200,8 +200,8 @@ export function ownerSupplyAuthority(
 ): OwnerSupplyAuthority | undefined {
   if (publication === undefined) return undefined
   const bindingAuthority = publication.binding.authority
-  if (bindingAuthority.kind === 'keyless') {
-    return { mode: publication.authorityMode, kind: 'keyless' }
+  if (bindingAuthority.kind === 'public_upstream') {
+    return { mode: publication.authorityMode, kind: 'public_upstream' }
   }
   return {
     mode: publication.authorityMode,

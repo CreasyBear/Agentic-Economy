@@ -34,7 +34,7 @@ const chatToolId = v.union(
   v.literal('registry.operations.detail'),
   v.literal('registry.operations.compare'),
   v.literal('registry.operations.inspectPlan'),
-  v.literal('operation.execute'),
+  v.literal('operation.invoke'),
 )
 
 const publicTextPart = v.object({

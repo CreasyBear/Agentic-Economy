@@ -39,7 +39,7 @@ function binding(authority: ProbeDigestBinding['authority']): ProbeDigestBinding
 
 describe('capability readiness probe target digest', () => {
   it('omits the absent connection authority for keyless bindings', () => {
-    expect(() => probeTargetDigest(publication, offering, binding({ kind: 'keyless' }))).not.toThrow()
+    expect(() => probeTargetDigest(publication, offering, binding({ kind: 'public_upstream' }))).not.toThrow()
   })
 
   it('omits a missing provider snapshot instead of hashing undefined', () => {

@@ -38,9 +38,9 @@ describe('MCP host adapter tools/list', () => {
       'ae_registry_operations_detail',
       'ae_registry_operations_compare',
       'ae_registry_operations_inspectPlan',
-      'ae_operation_execute',
     ])
     expect(expectedToolNames).not.toContain('ae_operation_invoke')
+    expect(expectedToolNames).not.toContain('ae_operation_execute')
     expect(expectedToolNames).not.toContain('ae_operation_status')
     expect(tools.map((tool) => tool.name)).toEqual(expectedToolNames)
     expect(tools).toHaveLength(expectedToolNames.length)
@@ -76,7 +76,6 @@ describe('MCP host adapter tools/list', () => {
     const compare = tools.find((tool) => tool.name === 'ae_registry_operations_compare')
     const inspectPlan = tools.find((tool) => tool.name === 'ae_registry_operations_inspectPlan')
     const search = tools.find((tool) => tool.name === 'ae_registry_search')
-    const execute = tools.find((tool) => tool.name === 'ae_operation_execute')
     expect(detail?.inputSchema).toEqual(expect.objectContaining({
       properties: expect.objectContaining({ slug: expect.any(Object) }),
     }))
@@ -119,16 +118,6 @@ describe('MCP host adapter tools/list', () => {
     expect(inspectPlan?.inputSchema).not.toEqual(expect.objectContaining({
       required: expect.arrayContaining(['operationRef']),
     }))
-    expect(execute?.inputSchema).toEqual(expect.objectContaining({
-      properties: expect.objectContaining({ operationRef: expect.any(Object), input: expect.any(Object) }),
-    }))
-    expect(execute?.description).toContain('keyless http-json:v1 GET or POST operations')
-    expect(execute?.description).toContain('Call ae_registry_operations_detail first')
-    expect(execute?.description).toContain('includes an execute relation')
-    expect(execute?.description).toContain('financial_exposure')
-    expect(execute?.description).toContain('external_state_change')
-    expect(execute?.description).not.toMatch(/\bPOST\b[^.]*refused/i)
-
   })
 
   it('does not expose customer request or non-MCP actions', async () => {

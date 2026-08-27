@@ -18,7 +18,7 @@ export const CHAT_TOOL_IDS = [
   'registry.operations.detail',
   'registry.operations.compare',
   'registry.operations.inspectPlan',
-  'operation.execute',
+  'operation.invoke',
 ] as const
 
 export type ChatToolId = (typeof CHAT_TOOL_IDS)[number]
@@ -41,7 +41,7 @@ export const CHAT_TOOL_TITLES: Readonly<Record<ChatToolId, string>> = {
   'registry.operations.detail': 'Tool details',
   'registry.operations.compare': 'Compare tools',
   'registry.operations.inspectPlan': 'Inspect before a call',
-  'operation.execute': 'Call',
+  'operation.invoke': 'Invoke',
 }
 
 export type OperationChoiceRow = Readonly<{
@@ -166,7 +166,7 @@ function readPrice(value: unknown): PublicOperationPrice | undefined {
 
 function readAuthentication(value: unknown): PublicOperationAuthentication | undefined {
   if (!isRecord(value) || typeof value.kind !== 'string') return undefined
-  if (value.kind === 'keyless') return { kind: 'keyless' }
+  if (value.kind === 'ae_api_key') return { kind: 'ae_api_key' }
   if (value.kind === 'x402') return { kind: 'x402' }
   if (value.kind === 'unknown') return { kind: 'unknown' }
   if (value.kind !== 'platform_credential') return undefined
@@ -511,7 +511,7 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): O
         facts: inspectPlanFacts(output),
         operationRefs: collectOperationRefs(output, []),
       }
-    case 'operation.execute': {
+    case 'operation.invoke': {
       const name = stringField(output.name)
       return {
         ...chrome(toolId),
@@ -551,7 +551,7 @@ function projectStoredCard(part: Record<string, unknown>): OperationCardProjecti
       operationRefs: refs,
     }
   }
-  if (part.kind === 'execute' || toolId === 'operation.execute') {
+  if (part.kind === 'execute' || toolId === 'operation.invoke') {
     const name = stringField(part.name)
     return {
       ...chrome(toolId),

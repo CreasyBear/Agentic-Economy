@@ -91,7 +91,7 @@ export function isAnonymousKeylessOperationEligible(input: Readonly<{
     effect.class !== 'financial_exposure' && effect.class !== 'external_state_change'
   ))
   return hasExactZeroPrice
-    && input.authority.kind === 'keyless'
+    && input.authority.kind === 'public_upstream'
     && input.adapterId === 'http-json:v1'
     && (input.method === 'GET' || input.method === 'POST')
     && input.sourceKind !== 'x402'
@@ -556,7 +556,7 @@ const cancellationSchema = z.strictObject({
   evidenceRefs,
 })
 const authoritySchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('keyless') }),
+  z.strictObject({ kind: z.literal('public_upstream') }),
   z.strictObject({
     kind: z.literal('provider_connection'),
     connectionRef: identifier,

@@ -53,7 +53,7 @@ export const operationInvokeAction = defineAction<OperationInvokeInput, Operatio
     spendExposure: 'bounded',
     approval: 'mandate_eligible',
   },
-  surfaces: ['http', 'mcp', 'cli'],
+  surfaces: ['http', 'mcp', 'cli', 'chat'],
   credentialAdmission: {
     scope: OPERATION_INVOKE_ROUTE_CONTRACT.scope,
     authority: 'descriptor_classified',

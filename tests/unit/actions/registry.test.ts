@@ -55,7 +55,7 @@ describe('action registry', () => {
       'registry.operations.detail',
       'registry.operations.compare',
       'registry.operations.inspectPlan',
-      'operation.execute',
+      'operation.invoke',
     ])
   })
 
@@ -69,7 +69,7 @@ describe('action registry', () => {
       'registry.search', 'registry.detail',
       'registry.operations.search', 'registry.operations.detail',
       'registry.operations.compare', 'registry.operations.inspectPlan',
-      'operation.execute', 'operation.invoke', 'operation.status',
+      'operation.invoke', 'operation.status',
       'operation.cancel', 'operation.reconcile',
       'supply.publish', 'supply.withdraw', 'supply.earnings',
     ])
@@ -82,7 +82,6 @@ describe('action registry', () => {
       'registry.search', 'registry.detail',
       'registry.operations.search', 'registry.operations.detail',
       'registry.operations.compare', 'registry.operations.inspectPlan',
-      'operation.execute',
     ])
     for (const action of anonymous) {
       expect(action.readOnly).toBe(true)
@@ -92,13 +91,15 @@ describe('action registry', () => {
     expect(exposed.find((action) => action.id === 'operation.cancel')?.readOnly).toBe(false)
     expect(exposed.find((action) => action.id === 'operation.reconcile')?.readOnly).toBe(false)
     for (const id of ['operation.invoke', 'operation.status', 'operation.cancel', 'operation.reconcile']) {
-      expect(exposed.find((action) => action.id === id)?.surfaces).toEqual(['http', 'mcp', 'cli'])
+      expect(exposed.find((action) => action.id === id)?.surfaces).toEqual(
+        id === 'operation.invoke' ? ['http', 'mcp', 'cli', 'chat'] : ['http', 'mcp', 'cli'],
+      )
     }
     expect(exposed.map((action) => mcpToolName(action))).toEqual([
       'ae_registry_search', 'ae_registry_detail',
       'ae_registry_operations_search', 'ae_registry_operations_detail',
       'ae_registry_operations_compare', 'ae_registry_operations_inspectPlan',
-      'ae_operation_execute', 'ae_operation_invoke', 'ae_operation_status',
+      'ae_operation_invoke', 'ae_operation_status',
       'ae_operation_cancel', 'ae_operation_reconcile',
       'ae_supply_publish', 'ae_supply_withdraw', 'ae_supply_earnings',
     ])
@@ -165,33 +166,15 @@ describe('action registry', () => {
     ])
   })
 
-  it('keeps operation execution on MCP and chat and fail-closed at the action boundary', () => {
-    const action = findAction('operation.execute')
+  it('keeps operation invocation on the authenticated action boundary', () => {
+    const action = findAction('operation.invoke')
     expect(action).toBeDefined()
-    expect(action?.surfaces).toEqual(['mcp', 'chat'])
-    expect(action?.readOnly).toBe(true)
-    expect(action?.effect).toMatchObject({
-      class: 'observation',
-      recipientKind: 'none',
-      spendExposure: 'none',
-      approval: 'none',
-    })
-    expect(action?.invocationContract.authorityRequirement).toBe('none')
-    expect(action?.schema.safeParse({
-      operationRef: `operation:v1:${'a'.repeat(64)}`,
-      input: { value: 'usd' },
-    }).success).toBe(true)
-    expect(action?.schema.safeParse({
-      operationRef: `operation:v1:${'a'.repeat(64)}`,
-      input: {},
-      endpointUrl: 'https://attacker.example',
-      method: 'POST',
-      credentialRef: 'attacker-secret',
-    }).success).toBe(false)
-    expect(action?.boundaries.join(' ')).toMatch(/keyless|public HTTPS|GET|endpoint|credential/i)
-    expect(action?.boundaries.join(' ')).toMatch(/book|pay|dispatch|inquiry|fulfil/i)
+    expect(action?.surfaces).toEqual(['http', 'mcp', 'cli', 'chat'])
+    expect(action?.readOnly).toBe(false)
+    expect(action?.boundaries.join(' ')).toMatch(/AE-issued bearer key|provider authority|consequential approval/i)
+    expect(action?.boundaries.join(' ')).toMatch(/server-side|never returned/i)
     expect(listActions().filter((candidate) => candidate.surfaces.includes('chat')).map(({ id }) => id))
-      .toContain('operation.execute')
+      .toContain('operation.invoke')
   })
 
   it('carries output validation schemas on every action', () => {
@@ -340,11 +323,12 @@ describe('action registry', () => {
     expect(JSON.stringify(canonicalDescriptors)).not.toMatch(/MCP|OpenAPI|callable|autonomous|agent-native|DTO|fixture/i)
   })
 
-  it('keeps operation.invoke outside chat tools', () => {
+  it('keeps operation.invoke off the anonymous MCP tier', () => {
     const action = findAction('operation.invoke')
     expect(action).toBeDefined()
     expect(action?.readOnly).toBe(false)
-    expect(action?.surfaces).not.toContain('chat')
+    expect(listMcpActions().filter((candidate) => candidate.readOnly && candidate.credentialAdmission === undefined).map(({ id }) => id))
+      .not.toContain('operation.invoke')
   })
 
   it('carries boundary-honest descriptors on the agent-facing invoke tool', () => {

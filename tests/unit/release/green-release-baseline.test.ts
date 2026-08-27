@@ -94,8 +94,9 @@ describe('green release baseline', () => {
         sourceScript.indexOf(`npm run ${orderedSourceGates[index - 1]!}`),
       )
     }
-    expect(scripts['generate:convex']).toBe('convex codegen --typecheck=disable')
-    expect(scripts['check:convex-codegen']).toBe('convex codegen --dry-run --typecheck=disable')
+    const nodeGuard = 'node tools/dev/require-supported-node.mjs --'
+    expect(scripts['generate:convex']).toBe(`${nodeGuard} convex codegen --typecheck=disable`)
+    expect(scripts['check:convex-codegen']).toBe(`${nodeGuard} convex codegen --dry-run --typecheck=disable`)
     expect(scripts['verify:convex-generated:anonymous']).toBe(
       'tsx tools/release/verify-convex-generated-anonymous.ts',
     )

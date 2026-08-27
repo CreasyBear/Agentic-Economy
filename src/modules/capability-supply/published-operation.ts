@@ -426,7 +426,7 @@ function connectionAuthorityIsExact(input: Readonly<{
   expectedOperationRef: string
   snapshot: CapabilityConnectionAuthoritySnapshot | undefined
 }>): boolean {
-  if (input.authority.kind === 'keyless') return input.snapshot === undefined
+  if (input.authority.kind === 'public_upstream') return input.snapshot === undefined
   const snapshot = input.snapshot
   return connectionAuthoritySnapshotIsValid(snapshot)
     && snapshot.connectionRef === input.authority.connectionRef

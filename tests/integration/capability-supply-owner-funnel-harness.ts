@@ -181,7 +181,7 @@ export function openApiSource(
     commercial: {
       offering: ownerOffering(),
       bindingId: 'binding:owner:lookup',
-      authority: { kind: 'keyless' as const },
+      authority: { kind: 'public_upstream' as const },
       registrationEvidenceRefs: ['registration:owner:lookup'],
       requestTimeoutMs: 5_000,
     },
@@ -280,7 +280,7 @@ export function directSource(
     binding: {
       bindingId: 'binding:owner:direct',
       endpointUrl: 'https://provider.example/lookup',
-      authority: { kind: 'keyless' as const },
+      authority: { kind: 'public_upstream' as const },
       continuation: {
         kind: 'single_response' as const,
         evidenceRefs: ['registration:owner:direct'],

@@ -74,7 +74,7 @@ export const operation = {
   cancellation: { kind: "unsupported" },
   recovery: { idempotency: "required", recovery: "retry_safe" },
   provenance: { publisher: "provider_owned", sourceKind: "openapi_http" },
-  authentication: { kind: "keyless" },
+  authentication: { kind: "ae_api_key" },
   transport: { method: "POST", requestTimeoutMs: 1_000 },
   availability: {
     posture: "routeable",
@@ -367,7 +367,7 @@ export function strictReceipt(): GatewayProductionSmokeReceipt {
       ownerServiceId: "service:owner",
       ownerOfferingRef: "offering:owner",
       ownerOperationRef: operationRef,
-      ownerAuthentication: { kind: "keyless" as const },
+      ownerAuthentication: { kind: "ae_api_key" as const },
       controlServiceId: "service:control",
       controlOfferingRef: "offering:provider:paid",
       controlBusinessId: "business:provider",
@@ -462,7 +462,7 @@ export function servicePage(
 ): unknown {
   return {
     kind: "ok",
-    schemaVersion: "public-services-api:v2",
+    schemaVersion: "public-services-api:v3",
     services,
     isDone,
     continueCursor,
@@ -473,9 +473,9 @@ export function linkedService(
   serviceId: string,
   linkedOperationRef: string,
   authentication:
-    | { kind: "keyless" }
+    | { kind: "ae_api_key" }
     | { kind: "platform_credential"; scheme: "bearer" }
-    | { kind: "x402" } = { kind: "keyless" },
+    | { kind: "x402" } = { kind: "ae_api_key" },
   offeringRef = operation.offering.offeringRef,
 ): unknown {
   return {

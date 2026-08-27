@@ -154,19 +154,6 @@ export type SiteDiscoveryManifestContract = Readonly<{
       inputFields: readonly string[]
     }>
     executionModes: Readonly<{
-      directKeyless: Readonly<{
-        action: 'operation.execute'
-        contractVersion: string
-        invocationContract: ActionInvocationContract
-        mcpTool: string
-        authentication: 'none'
-        requiresOperationRef: true
-        eligibility: 'free_keyless_read_only'
-        requiresExactDetailExecuteRelation: true
-        inputJsonSchema?: unknown
-        outputJsonSchema?: unknown
-        description: string
-      }>
       gateway: Readonly<{
         action: typeof OPERATION_INVOKE_ACTION_ID
         authentication: typeof AGENT_HTTP_AUTHENTICATION
@@ -242,13 +229,7 @@ export function buildSiteDiscoveryManifest(
   const operationInvokeAction = findAction(OPERATION_INVOKE_ACTION_ID)
   if (operationInvokeAction === undefined) throw new Error('Operation invoke action is not registered')
   const operationInvokeDescriptor = describeActionForAgent(operationInvokeAction)
-  const directKeylessTool = mcpTools.find((tool) => tool.actionId === 'operation.execute')
-  if (directKeylessTool === undefined) throw new Error('Keyless operation execute MCP tool is not registered')
-  const directKeylessAction = findAction('operation.execute')
-  if (directKeylessAction === undefined) throw new Error('Keyless operation execute action is not registered')
-  const directKeylessActionId = directKeylessAction.id
-  if (directKeylessActionId !== 'operation.execute') throw new Error('Registered keyless operation execute action has an unexpected id')
-  const directKeylessDescriptor = describeActionForAgent(directKeylessAction)
+
   const body = {
     schemaVersion: SiteDiscoveryManifestSchemaVersion,
     ucpVersion: 'v1',
@@ -297,19 +278,6 @@ export function buildSiteDiscoveryManifest(
         inputFields: Object.keys(operationInvokeDescriptor.inputJsonSchema?.properties ?? {}),
       },
       executionModes: {
-        directKeyless: {
-          action: directKeylessActionId,
-          contractVersion: directKeylessAction.invocationContract.version,
-          invocationContract: directKeylessAction.invocationContract,
-          mcpTool: directKeylessTool.name,
-          authentication: 'none',
-          requiresOperationRef: true,
-          eligibility: 'free_keyless_read_only',
-          requiresExactDetailExecuteRelation: true,
-          ...(directKeylessDescriptor.inputJsonSchema === undefined ? {} : { inputJsonSchema: directKeylessDescriptor.inputJsonSchema }),
-          ...(directKeylessDescriptor.outputJsonSchema === undefined ? {} : { outputJsonSchema: directKeylessDescriptor.outputJsonSchema }),
-          description: 'Optional anonymous observation for current free, keyless, read-only Operations; use it only when exact current detail includes the execute relation.',
-        },
         gateway: {
           action: OPERATION_INVOKE_ACTION_ID,
           authentication: AGENT_HTTP_AUTHENTICATION,
@@ -386,14 +354,11 @@ export function projectCompactSiteDiscoveryManifest(
         endpoint: manifest.operationGateway.mcp.endpoint,
         protocolVersion: manifest.operationGateway.mcp.protocolVersion,
         operationInvokeTool: manifest.operationGateway.mcp.operationInvokeTool,
-        directKeylessTool: manifest.operationGateway.executionModes.directKeyless.mcpTool,
         lifecycle: 'The official MCP client performs initialize and close; this endpoint is session-optional.',
       },
       access: {
         anonymous: {
-          eligibility: manifest.operationGateway.executionModes.directKeyless.eligibility,
-          requiresExactDetailExecuteRelation: true,
-          cli: "ae call <operationRef> --input '<json>'",
+          cli: 'Search, inspect, and compare current Operations without connecting.',
         },
         connected: {
           authentication: manifest.operationGateway.executionModes.gateway.authentication,

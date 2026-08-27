@@ -62,47 +62,6 @@ describe('market-terminal authenticated operation invocation', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('runs an eligible free keyless call through the anonymous MCP boundary without a connection', async () => {
-    const fetchMock = vi.fn<typeof fetch>()
-    vi.stubGlobal('fetch', fetchMock)
-    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-
-    await runInvokeCommand(
-      ['operation:v1:test'],
-      { ...options, input: '{"city":"Perth"}' },
-      { executeAnonymousKeyless: async () => ({
-        kind: 'ok',
-        operationRef: 'operation:v1:test',
-        capabilityId: 'weather.forecast',
-        name: 'Weather forecast',
-        output: { temperature: 24 },
-        evidenceHash: 'sha256:evidence',
-      }) },
-    )
-
-    expect(JSON.parse(write.mock.calls.flat().join(''))).toMatchObject({
-      kind: 'ok',
-      executionMode: 'anonymous_keyless_mcp',
-      evidenceHash: 'sha256:evidence',
-    })
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('names connection as the next action when anonymous execution is not eligible', async () => {
-    await expect(runInvokeCommand(
-      ['operation:v1:test'],
-      { ...options, input: '{}' },
-      { executeAnonymousKeyless: async () => ({
-        kind: 'refused',
-        operationRef: 'operation:v1:test',
-        reason: 'operation_not_keyless',
-      }) },
-    )).rejects.toMatchObject({
-      kind: 'UNAUTHENTICATED',
-      code: 'agent_access_key_required',
-    } satisfies Partial<CliFailure>)
-  })
-
   it('projects only operation input and command identity onto the canonical HTTP service', async () => {
     setApiKey('ae-test-caller-key')
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)

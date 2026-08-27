@@ -341,7 +341,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
               {
                 type: 'tool-call',
                 toolCallId: 'failed-execute',
-                toolName: 'operation_execute',
+                toolName: 'operation_invoke',
                 input: { operationRef, payload: 'FAILED_INPUT_SECRET' },
               },
             ],
@@ -377,7 +377,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
               {
                 type: 'tool-result',
                 toolCallId: 'failed-execute',
-                toolName: 'operation_execute',
+                toolName: 'operation_invoke',
                 output: { type: 'error-text', value: 'INTERNAL_EXECUTION_ERROR_SECRET' },
                 isError: true,
               },
@@ -433,9 +433,9 @@ describe.sequential('durable operation chat messaging and shares', () => {
           {
             type: 'operation-card',
             kind: 'status',
-            toolId: 'operation.execute',
+            toolId: 'operation.invoke',
             state: 'error',
-            title: 'Call',
+            title: 'Invoke',
             summary: 'Tool unavailable',
           },
         ],

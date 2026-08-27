@@ -208,7 +208,7 @@ describe('thin operation chat presentation', () => {
     expect(screen.getByText('Tool details')).toBeTruthy()
     expect(screen.getByText('Compare tools')).toBeTruthy()
     expect(screen.getByText('Inspect before a call')).toBeTruthy()
-    expect(screen.getByText('Call', { exact: true })).toBeTruthy()
+    expect(screen.getByText('Invoke', { exact: true })).toBeTruthy()
     const transcript = screen.getByRole('log', { name: 'Chat transcript' })
     expect(transcript.getAttribute('aria-live')).toBe('polite')
     expect(transcript.getAttribute('aria-relevant')).toBe('additions text')
@@ -233,13 +233,13 @@ describe('thin operation chat presentation', () => {
               title: 'Weather finder',
               supplier: { name: 'Sky Co', slug: 'sky-co' },
               price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
-              authentication: { kind: 'keyless' },
+              authentication: { kind: 'ae_api_key' },
               availability: { posture: 'routeable' },
             }],
           },
         },
         {
-          type: `tool-${providerSafeActionToolName('operation.execute')}`,
+          type: `tool-${providerSafeActionToolName('operation.invoke')}`,
           state: 'output-available',
           output: {
             kind: 'ok',
@@ -260,7 +260,7 @@ describe('thin operation chat presentation', () => {
     expect(screen.getByText('Sky Co')).toBeTruthy()
     expect(screen.getByText('USD 0.50')).toBeTruthy()
     expect(screen.getByText('Ready now')).toBeTruthy()
-    expect(screen.getByText('No provider key')).toBeTruthy()
+    expect(screen.getByText('AE account invocation')).toBeTruthy()
     expect(screen.queryByText('Inspect operation')).toBeNull()
     expect(document.body.textContent).not.toContain('TOP_SECRET')
   })
@@ -282,7 +282,7 @@ describe('thin operation chat presentation', () => {
               title: 'Weather finder',
               supplier: { name: 'Sky Co' },
               price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
-              authentication: { kind: 'keyless' },
+              authentication: { kind: 'ae_api_key' },
               availability: { posture: 'routeable' },
             }],
           },
@@ -298,7 +298,7 @@ describe('thin operation chat presentation', () => {
                 offering: { label: 'Weather finder' },
                 business: { name: 'Sky Co' },
                 commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } } },
-                authentication: { kind: 'keyless' },
+                authentication: { kind: 'ae_api_key' },
                 availability: { posture: 'routeable' },
               },
               {
@@ -462,7 +462,7 @@ describe('thin operation chat presentation', () => {
       parts: [
         { type: 'text', text: 'Visible' },
         { type: 'reasoning', text: 'Hidden' },
-        { type: 'tool-operation_execute', output: { secret: true } },
+        { type: 'tool-operation_invoke', output: { secret: true } },
       ],
     }])
     expect(projected).toEqual([{ role: 'assistant', content: 'Visible' }])
@@ -492,7 +492,7 @@ describe('thin operation chat presentation', () => {
             title: 'Weather finder',
             supplier: { name: 'Sky Co', slug: 'sky-co' },
             price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
-            authentication: { kind: 'keyless' },
+            authentication: { kind: 'ae_api_key' },
             availability: { posture: 'routeable' },
           }],
           raw: 'HANDOFF_RAW_SECRET',

@@ -136,8 +136,8 @@ export function matchGatewayServiceOperation(
     throw new GatewaySmokeError(
       `gateway_smoke_${role}_service_authentication_mismatch`,
     );
-  if (role === "owner" && linked.authentication.kind !== "keyless")
-    throw new GatewaySmokeError("gateway_smoke_owner_operation_not_keyless");
+  if (role === "owner" && linked.authentication.kind !== "ae_api_key")
+    throw new GatewaySmokeError("gateway_smoke_owner_operation_not_brokered");
   if (
     role === "control" &&
     linked.authentication.kind !== "platform_credential" &&
@@ -177,9 +177,9 @@ export async function discoverOperation(
   )
     throw new GatewaySmokeError("gateway_smoke_search_result_malformed");
   for (const candidate of search.data.items) {
-    if (role === "owner" && candidate.authentication.kind !== "keyless")
+    if (role === "owner" && candidate.authentication.kind !== "ae_api_key")
       continue;
-    if (role === "control" && candidate.authentication.kind === "keyless")
+    if (role === "control" && candidate.authentication.kind === "ae_api_key")
       continue;
     if (
       role === "control" &&

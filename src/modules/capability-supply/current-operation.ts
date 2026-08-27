@@ -60,7 +60,7 @@ export type CurrentOperationCommitment = Readonly<{
     configDigest: string
   }>
   providerAuthority:
-    | Readonly<{ kind: 'keyless' }>
+    | Readonly<{ kind: 'public_upstream' }>
     | Readonly<{
         kind: 'provider_connection'
         connectionRef: string
@@ -273,9 +273,9 @@ function currentProviderAuthority(
   const bindingAuthority = operation.binding.authority
   const operationAuthority = operation.connectionAuthority
   const identityAuthority = operation.identity.connectionAuthority
-  if (bindingAuthority.kind === 'keyless') {
+  if (bindingAuthority.kind === 'public_upstream') {
     return operationAuthority === undefined && identityAuthority === undefined
-      ? { kind: 'keyless' }
+      ? { kind: 'public_upstream' }
       : undefined
   }
   if (!connectionAuthoritySnapshotIsValid(operationAuthority)
@@ -322,7 +322,7 @@ function readinessIsExact(readiness: CurrentOperationCommitmentMaterial['readine
 function providerAuthorityMaterialIsExact(
   authority: CurrentOperationCommitmentMaterial['providerAuthority'],
 ): boolean {
-  if (authority.kind === 'keyless') return true
+  if (authority.kind === 'public_upstream') return true
   const hasGeneration = authority.authorityGeneration !== undefined
   const hasDigest = authority.authorityDigest !== undefined
   if (authority.connectionRef.trim().length === 0

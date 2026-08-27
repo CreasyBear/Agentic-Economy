@@ -60,7 +60,7 @@ function invocation(operationKeyDigest: string, adapterId: 'http-json:v1' | 'x40
     binding: {
       adapterId,
       endpointUrl: endpoint,
-      authority: { kind: 'keyless' },
+      authority: { kind: 'public_upstream' },
       configJson: JSON.stringify(config),
       configDigest: canonicalDigest(config),
     },

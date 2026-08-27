@@ -151,7 +151,7 @@ const admittedTransport = {
   configJson: JSON.stringify(admittedTransportConfig),
   configDigest: canonicalDigest(admittedTransportConfig),
 }
-const mcpAuthority = { kind: 'keyless' as const }
+const mcpAuthority = { kind: 'public_upstream' as const }
 const mcpRegistration = defineCapabilityTransportBindingRegistration({
   bindingId: candidate.bindingId,
   offeringId: candidate.offeringId,

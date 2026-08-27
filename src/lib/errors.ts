@@ -9,7 +9,6 @@
  * per-route codes, SSE gate codes). No bespoke enum or envelope is invented —
  * the wire format follows the published standard.
  */
-import type { OperationExecuteResult } from '@/modules/capability-execution'
 
 /** Canonical problem kinds (google.rpc.Code subset + repo-native extensions). */
 export const PROBLEM_KINDS = [
@@ -334,28 +333,3 @@ export function operationInvokeResultToProblem(result: unknown): ProblemInput | 
   return gatewayFailureToProblem({ kind: 'error' })
 }
 
-/**
- * Map a keyless-execution outcome to a {@link ProblemInput}. Returns `null`
- * for `ok` (not an error). `refused` and `error` carry their stable code +
- * canonical kind; refusal honesty is preserved via `code`/`reason`/`detail`.
- */
-export function operationResultToProblem(result: OperationExecuteResult): ProblemInput | null {
-  if (result.kind === 'ok') return null
-  if (result.kind === 'refused') {
-    switch (result.reason) {
-      case 'operation_not_found':
-        return { kind: 'NOT_FOUND', code: 'operation_not_found' }
-      case 'input_invalid':
-        return { kind: 'INVALID_ARGUMENT', code: 'input_invalid' }
-      default:
-        return { kind: 'FAILED_PRECONDITION', code: result.reason }
-    }
-  }
-  const { retryable, code, reason } = result
-  return {
-    kind: retryable ? 'UNAVAILABLE' : 'INTERNAL',
-    code,
-    retryable,
-    detail: reason,
-  }
-}

@@ -19,7 +19,7 @@ const ownerSupplyLifecycleReasonValue = v.union(
   v.literal('eligibility_integrity_failure'),
 )
 const ownerSupplyAuthorityValue = v.union(
-  v.object({ kind: v.literal('keyless') }),
+  v.object({ kind: v.literal('public_upstream') }),
   v.object({ kind: v.literal('provider_connection'), providerRef: v.string() }),
 )
 const ownerSupplyAuthoritySnapshotValue = v.object({
@@ -144,7 +144,7 @@ export const ownerSupplyFunnelResultValue = v.union(
               v.literal('observed_external'),
             ),
             kind: v.union(
-              v.literal('keyless'),
+              v.literal('public_upstream'),
               v.literal('provider_connection'),
             ),
             providerRef: v.optional(v.string()),

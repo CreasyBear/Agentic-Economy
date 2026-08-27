@@ -35,7 +35,7 @@ export const APPROVED_EXTERNAL_MOVEMENT_CAP: ExactAmount = Object.freeze({
 });
 
 export const authenticationSchema = z.union([
-  z.strictObject({ kind: z.literal("keyless") }),
+  z.strictObject({ kind: z.literal("ae_api_key") }),
   z.strictObject({
     kind: z.literal("platform_credential"),
     scheme: z.literal("api_key"),
@@ -364,7 +364,7 @@ export const GatewayProductionSmokeReceiptSchema =
     )
       issue(["calls"], "service identity mismatch");
     if (
-      receipt.discovery.ownerAuthentication.kind !== "keyless" ||
+      receipt.discovery.ownerAuthentication.kind !== "ae_api_key" ||
       (receipt.discovery.controlAuthentication.kind !== "platform_credential" &&
         receipt.discovery.controlAuthentication.kind !== "x402")
     )
