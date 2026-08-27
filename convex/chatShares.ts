@@ -2,7 +2,7 @@ import { listUIMessages } from '@convex-dev/agent'
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v } from 'convex/values'
 
-import { isPublicOperationRef } from '@/modules/capability-supply/public'
+import { isRecord } from '@/modules/common/is-record'
 import {
   CHAT_THREAD_SHARE_TOKEN_PATTERN,
   chatThreadShareAccessId,
@@ -10,12 +10,20 @@ import {
   mintChatThreadShareToken,
   resolveChatThreadShareKeyring,
   verifyChatThreadShare,
-} from '@/modules/chat/share-token'
+} from '@/modules/chat-sharing/share-token'
+import {
+  findChatThreadShareByAccessId,
+  findChatThreadShareByThread,
+  writeChatThreadShare,
+} from '@/modules/chat-sharing/convex'
+import {
+  projectOperationCard,
+  serializeOperationCard,
+} from '@/modules/chat/tool-card'
 
 import { components } from './_generated/api'
 import { env, mutation, query } from './_generated/server'
 import { requireOwnedChatThread } from './chatThreads'
-import { CHAT_TOOL_NAME_MAP, type ChatToolId } from './chatTools'
 
 const MAX_MESSAGE_PAGE_SIZE = 50
 const MAX_PUBLIC_TEXT_CHARS = 8_000
@@ -34,14 +42,57 @@ const publicTextPart = v.object({
   text: v.string(),
 })
 
-const publicOperationCardPart = v.object({
+const publicChoiceRow = v.object({
+  operationRef: v.string(),
+  title: v.string(),
+  supplier: v.optional(v.string()),
+  price: v.optional(v.string()),
+  readiness: v.optional(v.string()),
+  access: v.optional(v.string()),
+})
+
+const publicFact = v.object({
+  label: v.string(),
+  value: v.string(),
+})
+
+const publicCardChrome = {
   type: v.literal('operation-card'),
   toolId: chatToolId,
-  state: v.union(v.literal('complete'), v.literal('refused'), v.literal('error')),
   title: v.string(),
-  operationRefs: v.array(v.string()),
-  summary: v.string(),
-})
+}
+
+const publicOperationCardPart = v.union(
+  v.object({
+    ...publicCardChrome,
+    kind: v.literal('status'),
+    state: v.union(v.literal('refused'), v.literal('error')),
+    summary: v.string(),
+  }),
+  v.object({
+    ...publicCardChrome,
+    kind: v.literal('choices'),
+    state: v.literal('complete'),
+    operationRefs: v.array(v.string()),
+    choices: v.array(publicChoiceRow),
+    count: v.optional(v.number()),
+    contrasts: v.optional(v.array(publicFact)),
+  }),
+  v.object({
+    ...publicCardChrome,
+    kind: v.literal('inspect'),
+    state: v.literal('complete'),
+    operationRefs: v.array(v.string()),
+    facts: v.array(publicFact),
+  }),
+  v.object({
+    ...publicCardChrome,
+    kind: v.literal('execute'),
+    state: v.literal('complete'),
+    operationRefs: v.array(v.string()),
+    name: v.optional(v.string()),
+  }),
+)
 
 const publicSharedMessage = v.object({
   id: v.string(),
@@ -52,43 +103,6 @@ const publicSharedMessage = v.object({
 type PublicOperationCard = typeof publicOperationCardPart.type
 type PublicSharedPart = typeof publicTextPart.type | PublicOperationCard
 type PublicSharedMessage = typeof publicSharedMessage.type
-
-const PUBLIC_TOOL_TITLES: Readonly<Record<ChatToolId, string>> = Object.freeze({
-  'registry.operations.search': 'Search operations',
-  'registry.operations.detail': 'Operation details',
-  'registry.operations.compare': 'Compare operations',
-  'registry.operations.inspectPlan': 'Inspect operation plan',
-  'operation.execute': 'Execute operation',
-})
-
-const PUBLIC_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
-  source_unavailable: 'Source unavailable',
-  source_capacity_exceeded: 'Source capacity exceeded',
-  setup_required: 'Setup required',
-  temporarily_unavailable: 'Temporarily unavailable',
-  readiness_expired: 'Readiness expired',
-  publisher_withdrew: 'Publisher withdrew the operation',
-  under_review: 'Operation under review',
-  updated_terms_require_review: 'Updated terms require review',
-  not_supported_by_ae: 'Operation not supported',
-  operation_not_found: 'Operation not found',
-  operation_unavailable: 'Operation unavailable',
-  mapping_unavailable: 'Mapping unavailable',
-  mapping_incompatible: 'Mapping incompatible',
-  mapping_cycle: 'Mapping cycle detected',
-  operation_not_keyless: 'Operation requires credentials',
-  operation_not_executable: 'Operation cannot be executed here',
-  input_invalid: 'Input was refused',
-  endpoint_invalid: 'Endpoint was refused',
-  source_output_invalid: 'Source response was refused',
-  result_too_large: 'Result was too large',
-  tool_limit: 'Tool limit reached',
-  execute_limit: 'Execution limit reached',
-})
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function boundUnicode(value: string, maximum: number): string {
   return Array.from(value).slice(0, maximum).join('')
@@ -104,125 +118,88 @@ function sanitizeSummary(value: string): string {
   return sanitizePublicString(value.replace(/\s+/gu, ' ').trim(), MAX_PUBLIC_SUMMARY_CHARS)
 }
 
-function addPublicOperationRef(refs: string[], value: unknown): void {
-  if (refs.length >= 4 || !isPublicOperationRef(value) || refs.includes(value)) return
-  refs.push(value)
+function sanitizeFacts(values: unknown): Array<{ label: string; value: string }> {
+  if (!Array.isArray(values)) return []
+  return values.flatMap((value) => {
+    if (!isRecord(value) || typeof value.label !== 'string' || typeof value.value !== 'string') return []
+    return [{ label: sanitizeSummary(value.label), value: sanitizeSummary(value.value) }]
+  })
 }
 
-function collectPublicOperationRefs(output: Record<string, unknown>): string[] {
-  const refs: string[] = []
-  addPublicOperationRef(refs, output.operationRef)
-  if (Array.isArray(output.operationRefs)) {
-    for (const value of output.operationRefs) addPublicOperationRef(refs, value)
-  }
-  if (isRecord(output.operation)) addPublicOperationRef(refs, output.operation.operationRef)
-  for (const field of ['items', 'operations'] as const) {
-    const values = output[field]
-    if (!Array.isArray(values)) continue
-    for (const value of values) {
-      if (isRecord(value)) addPublicOperationRef(refs, value.operationRef)
+function sanitizeStoredCard(stored: Record<string, unknown>): PublicOperationCard | null {
+  const title = typeof stored.title === 'string' ? sanitizeSummary(stored.title) : ''
+  if (stored.kind === 'status') {
+    return {
+      type: 'operation-card',
+      kind: 'status',
+      toolId: stored.toolId as PublicOperationCard['toolId'],
+      title,
+      state: stored.state === 'refused' ? 'refused' : 'error',
+      summary: typeof stored.summary === 'string' ? sanitizeSummary(stored.summary) : 'Tool unavailable',
     }
   }
-  return refs
-}
-
-function publicCount(output: Record<string, unknown>): number | null {
-  if (typeof output.matchedCount === 'number' && Number.isSafeInteger(output.matchedCount)) {
-    return Math.max(0, output.matchedCount)
+  const operationRefs = Array.isArray(stored.operationRefs)
+    ? stored.operationRefs.filter((value): value is string => typeof value === 'string')
+    : []
+  if (stored.kind === 'choices') {
+    const choices = Array.isArray(stored.choices)
+      ? stored.choices.flatMap((value) => {
+          if (!isRecord(value) || typeof value.operationRef !== 'string' || typeof value.title !== 'string') return []
+          return [{
+            operationRef: value.operationRef,
+            title: sanitizeSummary(value.title),
+            ...(typeof value.supplier === 'string' ? { supplier: sanitizeSummary(value.supplier) } : {}),
+            ...(typeof value.price === 'string' ? { price: sanitizeSummary(value.price) } : {}),
+            ...(typeof value.readiness === 'string' ? { readiness: sanitizeSummary(value.readiness) } : {}),
+            ...(typeof value.access === 'string' ? { access: sanitizeSummary(value.access) } : {}),
+          }]
+        })
+      : []
+    const contrasts = sanitizeFacts(stored.contrasts)
+    return {
+      type: 'operation-card',
+      kind: 'choices',
+      toolId: stored.toolId as PublicOperationCard['toolId'],
+      title,
+      state: 'complete',
+      operationRefs,
+      choices,
+      ...(typeof stored.count === 'number' ? { count: stored.count } : {}),
+      ...(contrasts.length === 0 ? {} : { contrasts }),
+    }
   }
-  for (const field of ['operationRefs', 'operations', 'items'] as const) {
-    if (Array.isArray(output[field])) return output[field].length
+  if (stored.kind === 'inspect') {
+    const facts = sanitizeFacts(stored.facts)
+    return {
+      type: 'operation-card',
+      kind: 'inspect',
+      toolId: stored.toolId as PublicOperationCard['toolId'],
+      title,
+      state: 'complete',
+      operationRefs,
+      facts,
+    }
+  }
+  if (stored.kind === 'execute') {
+    return {
+      type: 'operation-card',
+      kind: 'execute',
+      toolId: stored.toolId as PublicOperationCard['toolId'],
+      title,
+      state: 'complete',
+      operationRefs,
+      ...(typeof stored.name === 'string' ? { name: sanitizeSummary(stored.name) } : {}),
+    }
   }
   return null
 }
 
-function projectSuccessfulToolOutput(
-  toolId: ChatToolId,
-  output: Record<string, unknown>,
-): Pick<PublicOperationCard, 'state' | 'summary'> {
-  const kind = typeof output.kind === 'string' ? output.kind : null
-  if (kind === 'error') return { state: 'error', summary: 'Tool unavailable' }
-
-  if (
-    kind === 'refused'
-    || kind === 'unavailable'
-    || kind === 'chat_tool_refused'
-  ) {
-    const reason = typeof output.reason === 'string' ? PUBLIC_REASON_LABELS[output.reason] : undefined
-    return {
-      state: 'refused',
-      summary: sanitizeSummary(reason ?? 'Request refused'),
-    }
-  }
-  if (kind === 'not_found') return { state: 'refused', summary: 'Operation not found' }
-  if (kind === 'no_candidates') return { state: 'refused', summary: 'No operations found' }
-
-  if (kind === 'found') return { state: 'complete', summary: 'Operation found' }
-  if (kind !== 'ok') return { state: 'error', summary: 'Tool unavailable' }
-
-  const count = publicCount(output)
-  if (toolId === 'registry.operations.search') {
-    return { state: 'complete', summary: `${count ?? 0} operations found` }
-  }
-  if (toolId === 'registry.operations.compare') {
-    return { state: 'complete', summary: `${count ?? 0} operations compared` }
-  }
-  if (toolId === 'registry.operations.inspectPlan') {
-    return { state: 'complete', summary: `${count ?? 0} operations inspected` }
-  }
-  if (toolId === 'operation.execute') {
-    const name = typeof output.name === 'string' ? sanitizeSummary(output.name) : ''
-    return { state: 'complete', summary: name.length > 0 ? `Completed: ${name}` : 'Operation completed' }
-  }
-  return { state: 'complete', summary: 'Operation details available' }
-}
-
-function providerToolName(part: Record<string, unknown>): string | null {
-  if (part.type === 'dynamic-tool') {
-    return typeof part.toolName === 'string' ? part.toolName : null
-  }
-  return typeof part.type === 'string' && part.type.startsWith('tool-')
-    ? part.type.slice('tool-'.length)
-    : null
-}
-
-function completedToolOutput(value: unknown): Record<string, unknown> | null {
-  if (!isRecord(value)) return null
-  if (value.type === 'json') return isRecord(value.value) ? value.value : null
-  return value
-}
-
 function projectPublicToolPart(value: unknown): PublicOperationCard | null {
-  if (!isRecord(value)) return null
-  const providerName = providerToolName(value)
-  const toolId = providerName === null
-    ? undefined
-    : CHAT_TOOL_NAME_MAP.providerToCanonical[providerName]
-  if (toolId === undefined) return null
-
-  const base = {
-    type: 'operation-card' as const,
-    toolId,
-    title: PUBLIC_TOOL_TITLES[toolId],
-    operationRefs: [] as string[],
-  }
-  if (value.state === 'output-denied') {
-    return { ...base, state: 'refused', summary: 'Request refused' }
-  }
-  if (value.state === 'output-error') {
-    return { ...base, state: 'error', summary: 'Tool unavailable' }
-  }
-  if (value.state !== 'output-available') return null
-  const output = completedToolOutput(value.output)
-  if (output === null) return { ...base, state: 'error', summary: 'Tool unavailable' }
-
-  const projected = projectSuccessfulToolOutput(toolId, output)
-  return {
-    ...base,
-    ...projected,
-    operationRefs: collectPublicOperationRefs(output),
-    summary: sanitizeSummary(projected.summary),
-  }
+  const card = projectOperationCard(value)
+  if (card === null) return null
+  const stored = serializeOperationCard(card)
+  if (stored === null) return null
+  return sanitizeStoredCard(stored)
 }
 
 function projectPublicMessage(message: Awaited<ReturnType<typeof listUIMessages>>['page'][number]): PublicSharedMessage | null {
@@ -271,10 +248,7 @@ export const issueShare = mutation({
   handler: async (ctx, args) => {
     const thread = await requireOwnedChatThread(ctx, args.threadId)
     const signingKey = keyring()
-    const existing = await ctx.db
-      .query('chatThreadShares')
-      .withIndex('by_threadId', (index) => index.eq('threadId', thread.threadId))
-      .unique()
+    const existing = await findChatThreadShareByThread(ctx, thread.threadId)
     const generation = existing === null
       ? 1
       : existing.status === 'revoked'
@@ -295,11 +269,7 @@ export const issueShare = mutation({
       status: 'active' as const,
       createdAt: existing?.status === 'active' ? existing.createdAt : now,
     }
-    if (existing === null) {
-      await ctx.db.insert('chatThreadShares', share)
-    } else {
-      await ctx.db.replace(existing._id, share)
-    }
+    await writeChatThreadShare(ctx, share)
     return { threadId: thread.threadId, shareToken }
   },
 })
@@ -309,15 +279,18 @@ export const revokeShare = mutation({
   returns: v.object({ threadId: v.string(), revoked: v.boolean() }),
   handler: async (ctx, args) => {
     const thread = await requireOwnedChatThread(ctx, args.threadId)
-    const existing = await ctx.db
-      .query('chatThreadShares')
-      .withIndex('by_threadId', (index) => index.eq('threadId', thread.threadId))
-      .unique()
+    const existing = await findChatThreadShareByThread(ctx, thread.threadId)
     if (existing === null || existing.status === 'revoked') {
       return { threadId: thread.threadId, revoked: false }
     }
-    await ctx.db.patch(existing._id, {
+    await writeChatThreadShare(ctx, {
+      threadId: existing.threadId,
+      accessId: existing.accessId,
+      generation: existing.generation,
+      verifier: existing.verifier,
+      keyId: existing.keyId,
       status: 'revoked',
+      createdAt: existing.createdAt,
       revokedAt: Date.now(),
     })
     return { threadId: thread.threadId, revoked: true }
@@ -332,10 +305,7 @@ export const getShareState = query({
   }),
   handler: async (ctx, args) => {
     const thread = await requireOwnedChatThread(ctx, args.threadId)
-    const existing = await ctx.db
-      .query('chatThreadShares')
-      .withIndex('by_threadId', (index) => index.eq('threadId', thread.threadId))
-      .unique()
+    const existing = await findChatThreadShareByThread(ctx, thread.threadId)
     const state: 'none' | 'active' | 'revoked' = existing?.status ?? 'none'
     return {
       threadId: thread.threadId,
@@ -355,11 +325,10 @@ export const listSharedMessages = query({
     if (!CHAT_THREAD_SHARE_TOKEN_PATTERN.test(shareToken)) {
       throw new Error('shared_thread_not_found')
     }
-    const grant = await ctx.db
-      .query('chatThreadShares')
-      .withIndex('by_accessId', (index) =>
-        index.eq('accessId', chatThreadShareAccessId(shareToken)))
-      .unique()
+    const grant = await findChatThreadShareByAccessId(
+      ctx,
+      chatThreadShareAccessId(shareToken),
+    )
     const signingKey = keyring()
     if (grant === null || !verifyChatThreadShare({
       grant,

@@ -14,6 +14,7 @@ import { mutation, query } from './_generated/server'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
 import type { BusinessActor } from '../src/modules/business/public'
+import { deleteChatThreadShares } from '../src/modules/chat-sharing/convex'
 
 const DEFAULT_PAGE_SIZE = 20
 const MAX_PAGE_SIZE = 50
@@ -207,14 +208,6 @@ export const renameThread = mutation({
   },
 })
 
-async function deleteShares(ctx: MutationCtx, threadId: string): Promise<void> {
-  for await (const share of ctx.db
-    .query('chatThreadShares')
-    .withIndex('by_threadId', (index) => index.eq('threadId', threadId))) {
-    await ctx.db.delete(share._id)
-  }
-}
-
 export const deleteThread = mutation({
   args: { threadId: v.string() },
   returns: v.null(),
@@ -222,7 +215,7 @@ export const deleteThread = mutation({
     const row = await requireOwnedChatThread(ctx, args.threadId)
     if (isChatThreadBusy(row, Date.now())) throw new Error('thread_busy')
 
-    await deleteShares(ctx, row.threadId)
+    await deleteChatThreadShares(ctx, row.threadId)
     await ctx.db.delete(row._id)
     await ctx.runMutation(components.agent.threads.deleteAllForThreadIdAsync, {
       threadId: row.threadId,

@@ -15,6 +15,7 @@ import { registryTables } from '../src/modules/registry/schema'
 import { securityTables } from '../src/modules/security/schema'
 import { moneyTables } from '../src/modules/money/schema'
 import { marketTables } from '../src/modules/market/schema'
+import { chatSharingTables } from '../src/modules/chat-sharing/schema'
 import { chatTables } from '../src/modules/chat/schema'
 import { principalAccountTables } from '../src/modules/principal-account/public'
 import { authorityDelegationTables } from '../src/modules/authority/internal/convex-schema'
@@ -24,6 +25,7 @@ import { recoveryProductionTables } from '../src/modules/authority/recovery/publ
 
 export default defineSchema({
   ...chatTables,
+  ...chatSharingTables,
   ...actionInvocationTables,
   ...capabilityOperationInvocationTables,
   ...businessTables,

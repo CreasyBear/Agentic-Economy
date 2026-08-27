@@ -21,6 +21,7 @@ export type ModuleName =
   | 'capability-supply'
   | 'catalog'
   | 'chat'
+  | 'chat-sharing'
   | 'common'
   | 'connections'
   | 'dev'
@@ -96,7 +97,8 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { name: 'discovery', entrySurfaces: ['public.ts', 'convex.ts', 'discovery.functions.ts', 'developer-discovery.ts', 'developer-discovery-route.ts'], allowedDependencies: ['common', 'business', 'capability-contract', 'catalog', 'registry', 'capability-supply', 'capability-execution', 'agent-access', 'money', 'actions', 'market', 'observability', 'seo'] },
     { name: 'seo', entrySurfaces: ['public.ts', 'public-route.ts'], allowedDependencies: ['common', 'business', 'catalog', 'registry'] },
     { name: 'storefront', entrySurfaces: ['public.ts'], allowedDependencies: ['common', 'network-guard', 'business', 'catalog', 'registry', 'model-gateway'] },
-    { name: 'chat', entrySurfaces: ['share-token.ts', 'schema.ts', 'tool-card.ts'], allowedDependencies: ['common', 'actions', 'registry', 'capability-execution', 'capability-supply', 'market', 'money'] },
+    { name: 'chat', entrySurfaces: ['schema.ts', 'tool-card.ts'], allowedDependencies: ['common', 'actions', 'registry', 'capability-execution', 'capability-supply', 'market', 'money'] },
+    { name: 'chat-sharing', entrySurfaces: ['share-token.ts', 'schema.ts', 'convex.ts'], allowedDependencies: ['common'] },
     { name: 'model-gateway', entrySurfaces: ['public.ts'], allowedDependencies: ['common', 'actions'] },
     { name: 'dev', entrySurfaces: ['public.ts'], allowedDependencies: ['common', 'business', 'catalog', 'registry', 'capability-supply', 'capability-execution', 'actions'] },
   ],
