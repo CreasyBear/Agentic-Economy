@@ -1,7 +1,6 @@
 import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
 import {
   findAction,
-  listMcpActions,
   listOperationRouteDescriptors,
   mcpToolName,
 } from '@/modules/actions'

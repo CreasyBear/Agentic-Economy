@@ -9,7 +9,6 @@ import type { OperationInvokePersistedAuthority } from './internal/convex-schema
 import {
   type OperationInvokeRefusalCode,
   type OperationInvokeResult,
-  type OperationInvokeUsageSummary,
 } from './operation-invoke-contracts'
 import type {
   OperationInvokeRecoveryResult,
@@ -90,7 +89,6 @@ export type OperationInvokeRuntime = Readonly<{
   dispatch: OperationInvokeDispatchPort
   recovery?: OperationInvokeRecoveryPort
   now?: () => number
-  freshnessMs?: number
   retryAfterMs?: number
 }>
 
@@ -104,7 +102,6 @@ export function createOperationInvokeApplication(
   runtime: OperationInvokeRuntime,
 ): OperationInvokeService {
   const now = runtime.now ?? Date.now
-  const freshnessMs = runtime.freshnessMs ?? 30_000
   const retryAfterMs = runtime.retryAfterMs ?? 1_000
 
   const invokeOperation = async (
@@ -129,7 +126,6 @@ export function createOperationInvokeApplication(
       admitted,
       reserved,
       now,
-      freshnessMs,
       retryAfterMs,
     })
   }
@@ -146,10 +142,9 @@ async function invokeReservedOperation(input: Readonly<{
   admitted: OperationInvokeAdmitted
   reserved: OperationInvokeReserved
   now: () => number
-  freshnessMs: number
   retryAfterMs: number
 }>): Promise<OperationInvokeResult> {
-  const { runtime, request, admitted, reserved, now, freshnessMs, retryAfterMs } = input
+  const { runtime, request, admitted, reserved, now, retryAfterMs } = input
   const { command, grant, hasCurrentOperationReader, current, descriptor, preflightRefusal, inputDigest } = admitted
   const { reservation, reservationMayBeAbandoned } = reserved
 

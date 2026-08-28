@@ -3,9 +3,7 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import schema from '../../../convex/schema'
-import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
 
 const convexModules = Object.fromEntries(
   Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
