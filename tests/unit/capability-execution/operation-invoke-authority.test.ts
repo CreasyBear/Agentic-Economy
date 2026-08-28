@@ -188,6 +188,18 @@ describe('operation.invoke authority continuity', () => {
     const fullYoloPrincipal: AgentAccessPrincipal = { ...principal, authorityMode: 'full_yolo' }
     let dispatchedAuthority: Parameters<NonNullable<OperationInvokeRuntime['dispatch']>>[0]['authority'] | undefined
     const runtime: OperationInvokeRuntime = {
+      currentOperation: async () => ({ operation, operationRef, descriptor }),
+      recovery: {
+        read: async () => {
+          throw new Error('recovery_not_reached')
+        },
+        cancel: async () => {
+          throw new Error('recovery_not_reached')
+        },
+        reconcile: async () => {
+          throw new Error('recovery_not_reached')
+        },
+      },
       policy: {
         readGrant: async () => ({ kind: 'granted', grant }),
         evaluateAuthority: async () => ({
@@ -200,7 +212,6 @@ describe('operation.invoke authority continuity', () => {
         reserve: async (reservation) => ({ kind: 'reserved' as const, reservation }),
         abandon: async () => ({ kind: 'abandoned' as const }),
       },
-      currentOperation: async () => ({ operation, operationRef, descriptor }),
       dispatch: async (input) => {
         dispatchedAuthority = input.authority
         return { kind: 'enqueued' as const }

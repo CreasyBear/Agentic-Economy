@@ -3,13 +3,6 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import {
-  createDevelopmentDurablePort,
-  createDevelopmentDurableState,
-  createDevelopmentDynamicPublishedSource,
-  createDynamicPublishedActionInvocationAdapter,
-  type DynamicPublishedInvocationResult,
-} from '@/modules/capability-execution/legacy-dynamic'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import schema from '../../../convex/schema'
 import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
@@ -748,104 +741,5 @@ describe('Convex schema', () => {
       control: expect.objectContaining({ acceptedAuthority }),
     }))
     expect(row).not.toHaveProperty('acceptedAuthority')
-  })
-  it('validates current begin and answer gathering-information writes', async () => {
-    const backend = convexTest(schema, convexModules)
-    const fixture = buildDevelopmentPublishedOperationEvidence()
-    const now = fixture.operation.readiness.observedAt + 1_000
-    const actor = { callerRef: 'caller:schema-input', principalRef: 'principal:schema-input' }
-    const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
-    const adapter = createDynamicPublishedActionInvocationAdapter({
-      operation: fixture.operation,
-      source: createDevelopmentDynamicPublishedSource([fixture.operation]),
-      runtime: {
-        send: async () => { throw new Error('schema regression must not execute transport') },
-        resolveCredential: () => undefined,
-      },
-      now: () => now,
-      nextInvocationRef: () => 'invocation:schema-input',
-      nextAuthorityRef: () => 'authority:schema-input',
-      nextAttemptRef: () => 'attempt:schema-input',
-      paymentAttemptPort: createInMemoryX402PaymentAttemptPort(),
-      durablePort: createDevelopmentDurablePort(durableState),
-      developmentSnapshot: durableState,
-    })
-    const origin = { kind: 'standalone' as const, ...actor }
-
-    const began = await adapter.begin({ origin, actor, partial: {} })
-    expect(began.state).toBe('gathering_information')
-    const beginControl = adapter.exportDevelopmentSnapshot().controls.find(
-      ({ invocationRef }) => invocationRef === began.invocationRef,
-    )
-    if (beginControl === undefined) throw new Error('begin control was not persisted')
-    const toConvexControlRow = (row: Exclude<typeof beginControl, undefined>) => {
-      const { control } = row
-      const state = control.control
-      if (state.state !== 'gathering_information') {
-        throw new Error('expected gathering-information control')
-      }
-      return {
-        invocationRef: row.invocationRef,
-        invocationVersion: row.invocationVersion,
-        sourceRef: row.sourceRef,
-        control: {
-          invocationRef: control.invocationRef,
-          invocationVersion: control.invocationVersion,
-          origin: control.origin,
-          owner: control.owner,
-          action: control.action,
-          desired: control.desired,
-          ...(control.authority === undefined ? {} : { authority: control.authority }),
-          ...(control.acceptedAuthority === undefined ? {} : { acceptedAuthority: control.acceptedAuthority }),
-          freshness: control.freshness,
-          control: {
-            state: 'gathering_information' as const,
-            missingFields: [...state.missingFields],
-          },
-        },
-        ...(row.sourceResultRef === undefined ? {} : { sourceResultRef: row.sourceResultRef }),
-        ...(row.sourceResultDigest === undefined ? {} : { sourceResultDigest: row.sourceResultDigest }),
-        ...(row.terminalBusinessOutcome === undefined ? {} : { terminalBusinessOutcome: row.terminalBusinessOutcome }),
-        ...(row.terminalResultReferenceable === undefined ? {} : { terminalResultReferenceable: row.terminalResultReferenceable }),
-        ...(row.preparedMaterialDigest === undefined ? {} : { preparedMaterialDigest: row.preparedMaterialDigest }),
-        ...(row.preparedTargetDigest === undefined ? {} : { preparedTargetDigest: row.preparedTargetDigest }),
-        ...(row.consequence === undefined ? {} : { consequence: row.consequence }),
-        ...(row.dataLimitSummary === undefined ? {} : { dataLimitSummary: row.dataLimitSummary }),
-        ...(row.authorityBinding === undefined ? {} : { authorityBinding: row.authorityBinding }),
-        ...(row.authorityDecisionAt === undefined ? {} : { authorityDecisionAt: row.authorityDecisionAt }),
-        ...(row.currentAttemptRef === undefined ? {} : { currentAttemptRef: row.currentAttemptRef }),
-        ...(row.currentEffectGeneration === undefined ? {} : { currentEffectGeneration: row.currentEffectGeneration }),
-        ...(row.currentLeaseOwner === undefined ? {} : { currentLeaseOwner: row.currentLeaseOwner }),
-        ...(row.currentLeaseExpiresAt === undefined ? {} : { currentLeaseExpiresAt: row.currentLeaseExpiresAt }),
-        updatedAt: row.updatedAt,
-      }
-    }
-    const controlId = await backend.run(async (ctx) => (
-      ctx.db.insert('actionInvocationControls', toConvexControlRow(beginControl))
-    ))
-
-    const answered = await adapter.answer({
-      invocationRef: began.invocationRef,
-      actor,
-      answers: { symbol: 'BTC' },
-      freshnessMs: 30_000,
-    })
-    if (!('state' in answered) || answered.state !== 'gathering_information') {
-      throw new Error('answer should remain in gathering state')
-    }
-    const answerControl = adapter.exportDevelopmentSnapshot().controls.find(
-      ({ invocationRef }) => invocationRef === began.invocationRef,
-    )
-    if (answerControl === undefined) throw new Error('answer control was not persisted')
-    await backend.run(async (ctx) => {
-      await ctx.db.replace(controlId, toConvexControlRow(answerControl))
-    })
-
-    const persisted = await backend.run(async (ctx) => ctx.db.get(controlId))
-    expect(persisted?.control.control).toEqual({
-      state: 'gathering_information',
-      missingFields: ['convert'],
-    })
-    expect(persisted?.invocationVersion).toBe(2)
   })
 })

@@ -27,9 +27,9 @@ import {
   type CanonicalTerminalOutcome,
   type DurableActionInvocationPort,
   type OperationInvokePersistedAuthority,
-  type DynamicPublishedInvocationResult,
   type PublicInvocationStatus,
 } from '@/modules/capability-execution/convex'
+import type { OperationInvokeResult } from '@/modules/capability-execution/operation-invoke-contracts'
 import type { ActionCtx } from './_generated/server'
 import { internal } from './_generated/api'
 
@@ -87,7 +87,7 @@ export type WorkerAcceptedCharge = Omit<MoneyAcceptedInvocationCharge, 'transact
 }>
 
 export type CanonicalPort = Pick<
-  DurableActionInvocationPort<DynamicPublishedInvocationResult>,
+  DurableActionInvocationPort<OperationInvokeResult>,
   'transact' | 'readControl' | 'readAttempt' | 'readAttempts' | 'readHistory' | 'readHistoryCommand' | 'recordLateObservation'
 >
 
@@ -128,7 +128,7 @@ type RecoveryOuterProjectionOptions = Readonly<{
 }>
 
 export function toOperationDispatchCommand(
-  command: Parameters<DurableActionInvocationPort<DynamicPublishedInvocationResult>['transact']>[0],
+  command: Parameters<DurableActionInvocationPort<OperationInvokeResult>['transact']>[0],
 ): OperationDispatchCommand {
   const { commandId, commandDigest, expectedInvocationVersion, expectedEffectGeneration, row, currentAttemptWrite, history } = command
   return {
@@ -152,7 +152,7 @@ export function toOperationDispatchCommand(
 
 export function canonicalPort(ctx: ActionCtx): CanonicalPort {
   return {
-    transact: async (command: Parameters<DurableActionInvocationPort<DynamicPublishedInvocationResult>['transact']>[0]) => {
+    transact: async (command: Parameters<DurableActionInvocationPort<OperationInvokeResult>['transact']>[0]) => {
       const { commandId, commandDigest, expectedInvocationVersion, expectedEffectGeneration, row, currentAttemptWrite, history } = command
       const mutableRow = {
         ...row,

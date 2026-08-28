@@ -23,9 +23,9 @@ describe('operation.invoke dispatch', () => {
     const abandon = vi.fn(async () => ({ kind: 'abandoned' as const }))
     const service = createOperationInvokeApplication(runtime({
       currentOperation: async () => ({ operation, operationRef, descriptor }),
-      createAdapter: async () => {
+      dispatch: async () => {
         adapters += 1
-        throw new Error('must_not_construct_adapter')
+        throw new Error('must_not_dispatch')
       },
       idempotency: {
         reserve: async (input) => {
@@ -97,7 +97,7 @@ describe('operation.invoke dispatch', () => {
           expiresAt: new Date(Date.now() + 30_000).toISOString(),
         }),
       },
-      createAdapter: async () => {
+      dispatch: async () => {
         throw new Error('adapter_unavailable')
       },
     }))
@@ -269,10 +269,7 @@ describe('operation.invoke dispatch', () => {
         expect(input.operation.operationId).toBe(descriptor.id)
         return { kind: 'enqueued' as const, retryAfterMs: 2_000 }
       },
-      createAdapter: async () => {
-        adapters += 1
-        throw new Error('development_adapter_must_not_run')
-      },
+
     }))
 
     const request = {

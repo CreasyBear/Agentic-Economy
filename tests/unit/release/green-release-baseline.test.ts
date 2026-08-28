@@ -117,7 +117,6 @@ describe('green release baseline', () => {
       'test:ui-contract',
       'test:e2e',
       'test:e2e:a11y',
-      'test:e2e:paid-operation',
       'test:cli-package',
       'test:maturity:coverage',
       'build',
@@ -161,28 +160,18 @@ describe('green release baseline', () => {
     )
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e')
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e:a11y')
-    expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e:paid-operation')
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:maturity:coverage')
-    expect(scripts['test:release:source:after-codegen']!.indexOf('npm run test:e2e:paid-operation')).toBeGreaterThan(
-      scripts['test:release:source:after-codegen']!.indexOf('npm run test:e2e:a11y'),
-    )
     expect(scripts['test:e2e']).toBe('node tools/dev/run-with-cleanup.mjs playwright test tests/e2e')
     expect(scripts['test:e2e']).not.toMatch(/--grep|testMatch|ignore|\.spec\.ts/u)
-    expect(scripts['test:e2e:paid-operation']).toBe(
-      'node tools/dev/run-with-cleanup.mjs playwright test --config=playwright.paid-operation.config.ts',
-    )
-    const paidOperationConfig = readFileSync(resolve(root, 'playwright.paid-operation.config.ts'), 'utf8')
-    expect(paidOperationConfig).toContain("testDir: './tests/development'")
-    expect(paidOperationConfig).toContain("testMatch: 'paid-operation-development-surface.spec.ts'")
-    expect(paidOperationConfig).not.toContain("testDir: './tests/e2e'")
     for (const staleFile of [
       'tests/e2e/paid-operation-development-surface.spec.ts',
       'tests/e2e/protected-action-owner-flow.spec.ts',
       'tests/e2e/shortlist-export-preview.spec.ts',
+      'playwright.paid-operation.config.ts',
+      'tests/development/paid-operation-development-surface.spec.ts',
     ]) {
       expect(existsSync(resolve(root, staleFile)), `${staleFile} must remain deleted`).toBe(false)
     }
-    expect(existsSync(resolve(root, 'tests/development/paid-operation-development-surface.spec.ts'))).toBe(true)
     expect(chain).not.toContain('npm run test:eval:report')
   })
 

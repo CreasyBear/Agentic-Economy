@@ -2,10 +2,10 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
-  buildDynamicPublishedInput,
-  createDynamicPublishedAction,
-  type DynamicPublishedInvocationInput,
-} from '../../legacy-dynamic/dynamic-published-contract'
+  buildInvocationMaterial,
+  createRecoveryControlAction,
+  type InvocationMaterialInput,
+} from '../../invocation-material'
 import {
   createDurableActionInvocationTracer,
   type ReconciliationEvidence,
@@ -69,7 +69,7 @@ function createRecoveryControlOnlyAction(input: Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
 }>) {
-  const refused = (value: DynamicPublishedInvocationInput) => ({
+  const refused = (value: InvocationMaterialInput) => ({
     kind: 'published_operation_refused' as const,
     sourceDisposition: 'refused' as const,
     operationId: input.operation.operationId,
@@ -77,7 +77,7 @@ function createRecoveryControlOnlyAction(input: Readonly<{
     requestDigest: value.inputDigest,
     failureCode: 'recovery_control_only',
   })
-  return createDynamicPublishedAction({
+  return createRecoveryControlAction({
     operation: input.operation,
     descriptor: input.descriptor,
     now: () => Date.now(),
@@ -213,7 +213,7 @@ export async function loadRecoveryWorkContext(
 type RecoveryMaterial = Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
-  dynamicInput: DynamicPublishedInvocationInput
+  dynamicInput: InvocationMaterialInput
 }>
 
 function parseRecoveryMaterial(recovered: RecoveredInvocation): RecoveryMaterial | undefined {
@@ -223,7 +223,7 @@ function parseRecoveryMaterial(recovered: RecoveredInvocation): RecoveryMaterial
     const descriptor = materializeRuntimePublishedOperation(operation)
     const parsedInput: unknown = JSON.parse(recovered.inputJson)
     if (!isBoundedJsonValue(parsedInput)) return undefined
-    const dynamicInput = buildDynamicPublishedInput({ operation, descriptor, value: parsedInput })
+    const dynamicInput = buildInvocationMaterial({ operation, descriptor, value: parsedInput })
     return { operation, descriptor, dynamicInput }
   } catch {
     return undefined

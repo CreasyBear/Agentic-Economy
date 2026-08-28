@@ -10,7 +10,7 @@ import type { ExactAmount, MoneyAcceptedInvocationCharge } from '@/modules/money
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 
-export type DynamicPublishedInvocationInput = Readonly<{
+export type InvocationMaterialInput = Readonly<{
   operationKey: string
   input: StableHashValue
   inputDigest: string
@@ -18,7 +18,7 @@ export type DynamicPublishedInvocationInput = Readonly<{
   target: StableHashValue
 }>
 
-export type DynamicPublishedInvocationResult = ActionResult & Readonly<{
+export type RecoveryControlResult = ActionResult & Readonly<{
   kind:
     | 'published_operation_succeeded'
     | 'published_operation_refused'
@@ -35,11 +35,11 @@ export type DynamicPublishedInvocationResult = ActionResult & Readonly<{
   failureCode?: string
   usage?: Pick<MoneyAcceptedInvocationCharge, 'usageRef' | 'observedAt' | 'chargeState' | 'amount' | 'priceDigest' | 'transactionRef'>
 }>
-export function buildDynamicPublishedInput(input: Readonly<{
+export function buildInvocationMaterial(input: Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
   value: StableHashValue
-}>): DynamicPublishedInvocationInput {
+}>): InvocationMaterialInput {
   if (!input.descriptor.validateInput(input.value)) {
     throw new Error('published_operation_input_invalid')
   }
@@ -71,7 +71,7 @@ export function buildDynamicPublishedInput(input: Readonly<{
       },
     },
   )
-  const sourceSnapshotDigest = dynamicPublishedSourceDigest(input.operation, input.descriptor)
+  const sourceSnapshotDigest = invocationMaterialSourceDigest(input.operation, input.descriptor)
   const operationKey = canonicalDigest({
     operationId: input.operation.operationId,
     operationVersion: input.descriptor.version,
@@ -87,7 +87,7 @@ export function buildDynamicPublishedInput(input: Readonly<{
   }
 }
 
-export function dynamicPublishedSourceDigest(
+export function invocationMaterialSourceDigest(
   operation: PublishedOperation,
   descriptor: RuntimePublishedOperationDescriptor,
 ): string {
@@ -113,19 +113,19 @@ export function assertExactDescriptor(
   executableFixedPrice(operation)
 }
 
-export function createDynamicPublishedAction(input: Readonly<{
+export function createRecoveryControlAction(input: Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
   now: () => number
   run: (
-    value: DynamicPublishedInvocationInput,
+    value: InvocationMaterialInput,
     context: ActionContext,
-  ) => Promise<DynamicPublishedInvocationResult>
+  ) => Promise<RecoveryControlResult>
   preReleaseCheck: (
-    value: DynamicPublishedInvocationInput,
+    value: InvocationMaterialInput,
     context: ActionContext,
-  ) => Promise<DynamicPublishedInvocationResult | undefined>
-}>): Action<DynamicPublishedInvocationInput, DynamicPublishedInvocationResult> {
+  ) => Promise<RecoveryControlResult | undefined>
+}>): Action<InvocationMaterialInput, RecoveryControlResult> {
   const { operation, descriptor } = input
   assertExactDescriptor(operation, descriptor)
   const classes = new Set(descriptor.effects.map(({ class: effectClass }) => effectClass))
@@ -153,12 +153,12 @@ export function createDynamicPublishedAction(input: Readonly<{
     name: descriptor.name,
     summary: descriptor.summary,
     boundaries: ['Exact admitted publication only.', 'No host or static action registration.'],
-    schema: z.unknown() as z.ZodType<DynamicPublishedInvocationInput>,
+    schema: z.unknown() as z.ZodType<InvocationMaterialInput>,
     parameters: [],
     readOnly: false,
     effect,
     surfaces: [],
-    outputSchema: z.unknown() as z.ZodType<DynamicPublishedInvocationResult>,
+    outputSchema: z.unknown() as z.ZodType<RecoveryControlResult>,
     invocationContract: {
       version: descriptor.version,
       consequenceClass: descriptor.consequenceClass,
@@ -180,7 +180,7 @@ export function createDynamicPublishedAction(input: Readonly<{
       reconciliationEvidenceSource: `published-operation:${operation.operationId}`,
     },
     projectInvocationPreparation: {
-      project: (_value: DynamicPublishedInvocationInput) => ({
+      project: (_value: InvocationMaterialInput) => ({
         dataUse: {
           fields: descriptor.dataUse.map(({ inputPointer }) => inputPointer),
           limits: {
@@ -192,13 +192,13 @@ export function createDynamicPublishedAction(input: Readonly<{
       }),
     }.project,
     classifyInvocationResult: {
-      classify: (result: DynamicPublishedInvocationResult) => ({
+      classify: (result: RecoveryControlResult) => ({
         outcome: result.kind,
         referenceable: result.kind === 'published_operation_succeeded',
       }),
     }.classify,
     preReleaseCheck: {
-      check: async ({ data, context }: { data: DynamicPublishedInvocationInput; context: ActionContext }) =>
+      check: async ({ data, context }: { data: InvocationMaterialInput; context: ActionContext }) =>
         await input.preReleaseCheck(data, context),
     }.check,
     run: async ({ data, context }) => await input.run(data, context),

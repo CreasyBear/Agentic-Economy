@@ -738,12 +738,6 @@
       "functions": 1,
       "branches": 9
     },
-    "src/components/ae/action-invocation/AePaidOperationCard.tsx": {
-      "lines": 6,
-      "statements": 6,
-      "functions": 3,
-      "branches": 7
-    },
     "src/components/ae/console/AeAgentOperatorConsole.tsx": {
       "lines": 17,
       "statements": 27,
@@ -1865,18 +1859,6 @@
       "statements": 15,
       "functions": 2,
       "branches": 23
-    },
-    "src/modules/action-invocation/paid-operation-application-service.ts": {
-      "lines": 6,
-      "statements": 8,
-      "functions": 1,
-      "branches": 11
-    },
-    "src/modules/action-invocation/paid-operation-semantics.ts": {
-      "lines": 8,
-      "statements": 9,
-      "functions": 0,
-      "branches": 12
     },
     "src/modules/action-invocation/preparation.ts": {
       "lines": 0,

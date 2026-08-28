@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-08-26)
 Phase: 0 of 7 (candidate roadmap review; Phase 1 not activated)
 Plan: 0 of TBD
 Status: Blocked from lifecycle advance pending separate fresh engineering-plan review and fresh Ox challenge; candidate-commit approval is recorded but is not implementation authorization
-Last activity: 2026-08-26 — Created candidate canonical ROADMAP/STATE and mapped all 76 v1 requirements
+Last activity: 2026-08-28 — Verified quick task 260828-et5: import-boundary migration repair already satisfied
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -66,6 +66,13 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - Phase discussion, phase planning, and implementation are unauthorized until the candidate roadmap clears both fresh reviews.
 - Any proof-property, runtime-seam, trust-source, or effect-boundary change requires immediate architecture rebaseline.
 - Historical Phase 2 leaf marks, counts, and aggregates are not accepted progress.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260828-e6f | Bounded keyless-to-standard Operation migration | 2026-08-28 | 9a9ae6f53 | Verified | [260828-e6f-finish-the-first-bounded-keyless-to-stan](./quick/260828-e6f-finish-the-first-bounded-keyless-to-stan/) |
+| 260828-et5 | Import-boundary repair after compatibility fixture deletion | 2026-08-28 | — | Verified (already satisfied) | [260828-et5-repair-the-import-boundary-release-gate-](./quick/260828-et5-repair-the-import-boundary-release-gate-/) |
 
 ## Deferred Items
 

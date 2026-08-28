@@ -36,11 +36,23 @@ describe('Operation product legacy independence', () => {
     expect(legacyInputs(cliInputs)).toEqual([])
   })
 
-  it('keeps current Call runtime and broad entry barrels free of retired product nouns', () => {
-    expect([
-      'src/modules/action-invocation/runtime.ts',
-      'src/modules/action-invocation/public.ts',
-      'src/modules/action-invocation/index.ts',
-    ].filter((path) => retiredRuntimeNoun.test(readFileSync(path, 'utf8')))).toEqual([])
+  it('keeps the retired legacy-dynamic bundle deleted with zero imports anywhere', () => {
+    expect(globSync('src/modules/capability-execution/legacy-dynamic/**')).toEqual([])
+    const sources = [
+      ...globSync('src/**/*.ts'),
+      ...globSync('convex/**/*.ts'),
+      ...globSync('tests/**/*.ts'),
+      ...globSync('tools/**/*.ts'),
+    ].filter((path) => !path.includes('_generated') && !path.includes('routeTree'))
+    expect(sources.filter((path) => (
+      /legacy-dynamic|DynamicPublished|PaidOperationSemantics|published_operation_succeeded|published_operation_refused/u
+        .test(readFileSync(path, 'utf8')))
+    ).sort()).toEqual([
+      'src/modules/capability-execution/invocation-material.ts',
+      'src/modules/capability-execution/invocation-worker/recovery/loading.ts',
+      'tests/imports/action-invocation-host-boundaries.test.ts',
+      'tests/imports/operation-product-legacy-independence.test.ts',
+      'tests/unit/capability-execution/legacy-result-parity.test.ts',
+    ])
   })
 })

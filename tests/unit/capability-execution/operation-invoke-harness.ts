@@ -66,10 +66,7 @@ export function fixture(runtimeEnvironment: AgentAccessPrincipal['environment'] 
   }
 }
 
-export type RuntimeOverrides = Partial<Omit<OperationInvokeRuntime, 'currentOperation'>> & {
-  currentOperation?: NonNullable<OperationInvokeRuntime['currentOperation']>
-  withoutCurrentOperation?: boolean
-}
+export type RuntimeOverrides = Partial<OperationInvokeRuntime>
 
 export function runtime(
   overrides: RuntimeOverrides = {},
@@ -95,19 +92,22 @@ export function runtime(
       abandon: async () => ({ kind: 'abandoned' as const }),
     },
     currentOperation: async () => ({ operation, operationRef, descriptor }),
-    createAdapter: async () => {
-      throw new Error('adapter_not_reached_in_preflight_test')
+    dispatch: async () => {
+      throw new Error('dispatch_not_reached_in_test')
     },
-    sourceCommands: {
-      leaseOwner: (_host, invocationRef) => `operation-invoke:${invocationRef}`,
-      reconciliationEvidence: () => undefined,
+    recovery: {
+      read: async () => {
+        throw new Error('recovery_not_reached_in_test')
+      },
+      cancel: async () => {
+        throw new Error('recovery_not_reached_in_test')
+      },
+      reconcile: async () => {
+        throw new Error('recovery_not_reached_in_test')
+      },
     },
   }
-  const { withoutCurrentOperation, ...overrideValues } = overrides
-  const merged: OperationInvokeRuntime = { ...base, ...overrideValues }
-  if (withoutCurrentOperation !== true) return merged
-  const { currentOperation: _currentOperation, ...runtimeWithoutCurrentOperation } = merged
-  return runtimeWithoutCurrentOperation
+  return { ...base, ...overrides }
 }
 
 export function outerDispatch(operationRef: string): Parameters<typeof projectOuterResult>[1] {
