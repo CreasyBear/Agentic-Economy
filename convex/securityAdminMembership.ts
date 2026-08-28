@@ -75,7 +75,7 @@ export async function bootstrapOwnerAdminHandler(ctx: MutationCtx, args: Bootstr
     ...(identity?.subject === undefined ? {} : { clerkUserIds: [identity.subject] }),
     ...(identity?.tokenIdentifier === undefined ? {} : { tokenIdentifiers: [identity.tokenIdentifier] }),
   })
-  const clerkUserId = actor.clerkUserId
+  const clerkUserId = typeof identity?.subject === 'string' ? identity.subject : ''
   const tokenIdentifier = typeof identity?.tokenIdentifier === 'string' ? identity.tokenIdentifier : ''
   if (
     bootstrapPrincipalIds().includes(clerkUserId)

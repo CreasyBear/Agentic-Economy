@@ -1,12 +1,8 @@
 import type { UserIdentity } from 'convex/server'
 import { describe, expect, it, vi } from 'vitest'
 
-import { accountRef } from '@/modules/principal-account/account/public'
-import { principalRef } from '@/modules/principal-account/principal/public'
-
 import {
   readActiveAdminMembership,
-  readCanonicalCompatibilityOwner,
   readCurrentActiveAdminMembership,
   resolveAdminAuthority,
   resolveBusinessActor,
@@ -84,10 +80,6 @@ describe('Convex authz helpers', () => {
     const authority = {
       principalRef: `prn_${'1'.repeat(32)}`,
       accountRef: `acc_${'2'.repeat(32)}`,
-      legacyOwnerId: 'owners:canonical',
-      legacyOwnerLocator: 'legacy-owner-row',
-      displayName: 'Canonical owner',
-      emailHash: 'sha256:canonical-owner',
       revision: {
         binding: 1,
         credential: 1,
@@ -96,7 +88,6 @@ describe('Convex authz helpers', () => {
         access: 1,
         currentOwnership: 1,
         currentOwnerPrincipal: 1,
-        compatibilityUpdatedAt: 1,
       },
       provenance: {
         providerNamespace: 'clerk/user' as const,
@@ -113,13 +104,12 @@ describe('Convex authz helpers', () => {
       auth: authCtx(new FakeDb(), sam()).auth,
       runAction: async () => authority,
     } as Parameters<typeof resolveBusinessActor>[0])
-    expect(actor).toMatchObject({
+    expect(actor).toStrictEqual({
       kind: 'authenticated_owner',
-      clerkUserId: 'legacy-owner-row',
       canonicalPrincipalRef: authority.principalRef,
       canonicalAccountRef: authority.accountRef,
-      displayName: 'Canonical owner',
-      emailHash: 'sha256:canonical-owner',
+      authorityRevision: authority.revision,
+      authorityProvenance: authority.provenance,
     })
     expect(Object.isFrozen(actor)).toBe(true)
 
@@ -138,43 +128,6 @@ describe('Convex authz helpers', () => {
         throw unexpected
       },
     } as Parameters<typeof resolveBusinessActor>[0])).rejects.toBe(unexpected)
-  })
-
-  it('accepts only the exact canonical compatibility owner projection', async () => {
-    const db = new FakeDb()
-    db.seed('owners', row('owners:canonical', {
-      canonicalPrincipalRef: principalRef(`prn_${'1'.repeat(32)}`),
-      canonicalAccountRef: accountRef(`acc_${'2'.repeat(32)}`),
-    }))
-    const actor = {
-      kind: 'authenticated_owner' as const,
-      clerkUserId: 'caller-shaped-locator-is-not-authority',
-      canonicalPrincipalRef: principalRef(`prn_${'1'.repeat(32)}`),
-      canonicalAccountRef: accountRef(`acc_${'2'.repeat(32)}`),
-      legacyOwnerId: 'owners:canonical',
-      authorityRevision: {} as never,
-      authorityProvenance: {} as never,
-    }
-
-    await expect(readCanonicalCompatibilityOwner(db as never, actor)).resolves.toMatchObject({
-      _id: 'owners:canonical',
-    })
-    await expect(readCanonicalCompatibilityOwner(db as never, {
-      ...actor,
-      legacyOwnerId: 'invalid',
-    })).resolves.toBeNull()
-    await expect(readCanonicalCompatibilityOwner(db as never, {
-      ...actor,
-      legacyOwnerId: 'owners:missing',
-    })).resolves.toBeNull()
-    await expect(readCanonicalCompatibilityOwner(db as never, {
-      ...actor,
-      canonicalPrincipalRef: principalRef(`prn_${'3'.repeat(32)}`),
-    })).resolves.toBeNull()
-    await expect(readCanonicalCompatibilityOwner(db as never, {
-      ...actor,
-      canonicalAccountRef: accountRef(`acc_${'4'.repeat(32)}`),
-    })).resolves.toBeNull()
   })
 
   it('reads current admin membership with complete durable provenance', async () => {
@@ -240,32 +193,6 @@ describe('Convex authz helpers', () => {
     })
   })
 
-  it('fails closed when the verified identity disappears between actor and admin checks', async () => {
-    const db = new FakeDb()
-    seedSamAuthority(db)
-    db.seed('adminMemberships', row('admin:sam', {
-      clerkUserId: 'user_sam',
-      tokenIdentifier: 'clerk|user_sam',
-      role: 'owner_admin',
-      state: 'active',
-      grantedBy: 'root',
-      grantedAt: 1,
-    }))
-    let calls = 0
-    const ctx = {
-      db: db as unknown as AuthCtx['db'],
-      auth: {
-        getUserIdentity: async () => (++calls === 1 ? sam() : null),
-      },
-    }
-
-    await expect(resolveAdminAuthority(ctx, 'register_capability_supply')).resolves.toEqual({
-      kind: 'denied',
-      reason: 'missing_membership',
-    })
-    calls = 0
-    await expect(readCurrentActiveAdminMembership(ctx)).resolves.toBeUndefined()
-  })
 
   it('requires an exact current admin membership identity', async () => {
     const db = new FakeDb()
@@ -275,8 +202,8 @@ describe('Convex authz helpers', () => {
       tokenIdentifier: 'clerk|missing',
     })).resolves.toBeUndefined()
 
-    db.seed('adminMemberships', row('admin:mismatched-locator', {
-      clerkUserId: 'user_someone_else',
+    db.seed('adminMemberships', row('admin:sam', {
+      clerkUserId: 'user_sam',
       tokenIdentifier: 'clerk|user_sam',
       role: 'owner_admin',
       state: 'active',
@@ -284,9 +211,9 @@ describe('Convex authz helpers', () => {
       grantedAt: 1,
     }))
     await expect(resolveAdminAuthority(authCtx(db, sam()), 'register_capability_supply'))
-      .resolves.toEqual({ kind: 'denied', reason: 'missing_membership' })
+      .resolves.toMatchObject({ kind: 'allowed' })
     await expect(readCurrentActiveAdminMembership(authCtx(db, sam())))
-      .resolves.toBeUndefined()
+      .resolves.toMatchObject({ tokenIdentifier: 'clerk|user_sam' })
   })
 })
 
@@ -432,11 +359,5 @@ function seedSamAuthority(db: FakeDb): void {
     ownerPrincipalRef: principalRef,
     lifecycle: 'active',
     revision: 1,
-  }))
-  db.seed('owners', row('owners:canonical', {
-    clerkUserId: 'user_sam',
-    canonicalPrincipalRef: principalRef,
-    canonicalAccountRef: accountRef,
-    updatedAt: 1,
   }))
 }

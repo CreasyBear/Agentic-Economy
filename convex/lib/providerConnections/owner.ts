@@ -28,7 +28,7 @@ import {
   toRow,
 } from './lifecycle'
 import { lifecycle } from './contracts'
-import { readCanonicalCompatibilityOwner, resolveBusinessActor } from '../../authz'
+import { resolveBusinessActor } from '../../authz'
 import { accountRef, principalRef } from '../../../src/modules/principal-account/public'
 
 export const ownerProjection = v.object({
@@ -167,13 +167,13 @@ async function readOwnedConnection(
 ) {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return null
-  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
-  if (owner === null) return null
   const row = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef', (index) => index.eq('connectionRef', connectionRef)).unique()
   if (row === null) return null
   const business = await ctx.db.get(row.businessId)
-  if (business === null || business.ownerId !== owner._id || row.owningAccountRef !== actor.canonicalAccountRef) return null
+  if (business === null
+    || business.owningAccountRef !== actor.canonicalAccountRef
+    || row.owningAccountRef !== actor.canonicalAccountRef) return null
   const canonical = await readCanonicalConnectionForProjection(ctx, toDomain(row), requireUsable)
   return canonical === null ? null : { row, canonical, actor }
 }
@@ -184,10 +184,10 @@ async function readOwnedBusiness(
 ) {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return null
-  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
-  if (owner === null) return null
   const business = await ctx.db.get(businessId)
-  return business !== null && business.ownerId === owner._id ? { business, actor } : null
+  return business !== null && business.owningAccountRef === actor.canonicalAccountRef
+    ? { business, actor }
+    : null
 }
 
 async function reauthorizeOwnerConnection(
@@ -237,10 +237,9 @@ export async function readOwnerHandler(ctx: QueryCtx, args: { connectionRef: str
 export async function listOwnerHandler(ctx: QueryCtx) {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return []
-  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
-  if (owner === null) return []
   const businesses = await ctx.db.query('businesses')
-    .withIndex('by_owner_updatedAt', (index) => index.eq('ownerId', owner._id)).take(50)
+    .withIndex('by_owningAccountRef_and_updatedAt', (index) => index.eq('owningAccountRef', actor.canonicalAccountRef))
+    .take(50)
   const rows = (await Promise.all(businesses.map((business) => (
     Promise.all([
       ...['active', 'reauthorization_required', 'revocation_pending', 'revoked', 'cleanup_required'].map((state) => (

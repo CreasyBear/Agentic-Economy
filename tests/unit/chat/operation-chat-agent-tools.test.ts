@@ -19,8 +19,6 @@ const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
 const AUTHORITY = {
   principalRef: `prn_${'1'.repeat(32)}`,
   accountRef: `acc_${'2'.repeat(32)}`,
-  legacyOwnerId: 'owners:chat-authority',
-  legacyOwnerLocator: 'user_chat-authority',
   revision: {
     binding: 1, credential: 1, principal: 1, account: 1, access: 1,
     currentOwnership: 1, currentOwnerPrincipal: 1, compatibilityUpdatedAt: 1,

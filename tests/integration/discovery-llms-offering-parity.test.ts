@@ -9,18 +9,16 @@ describe('durable llms Offering parity', () => {
   it('excludes businesses without offerings and private detail', async () => {
     const backend = convexTest(schema, modules)
     await backend.run(async (ctx) => {
-      const ownerId = await ctx.db.insert('owners', {
-        clerkUserId: 'owner:llms-parity', createdAt: 1, updatedAt: 1,
-      })
+      const owningAccountRef = 'account:llms-parity-owner'
       await ctx.db.insert('businesses', {
-        ownerId, slug: 'offering-engineering', name: 'Offering Engineering', normalizedName: 'offering engineering',
+        owningAccountRef, slug: 'offering-engineering', name: 'Offering Engineering', normalizedName: 'offering engineering',
         category: 'Engineering', businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
         publicStatus: 'published', trustTier: 'listed',
         sourceHash: 'business:offering-engineering', createdAt: 1, updatedAt: 1,
       })
 
       await ctx.db.insert('businesses', {
-        ownerId, slug: 'profile-only-consulting', name: 'Profile Only Consulting', normalizedName: 'profile only consulting',
+        owningAccountRef, slug: 'profile-only-consulting', name: 'Profile Only Consulting', normalizedName: 'profile only consulting',
         category: 'Consulting', businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
         publicStatus: 'published', trustTier: 'listed',
         sourceHash: 'business:profile-only', createdAt: 1, updatedAt: 1,

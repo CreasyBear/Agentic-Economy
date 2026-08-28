@@ -153,13 +153,6 @@ export async function ownerAdmin(
         expiresAt: credentialExpiresAt,
         updatedAt: 1,
       })
-      await ctx.db.insert('owners', {
-        clerkUserId: identity.subject,
-        canonicalPrincipalRef,
-        canonicalAccountRef,
-        createdAt: 1,
-        updatedAt: 1,
-      })
     }
     const existing = await ctx.db
       .query('adminMemberships')
@@ -306,15 +299,8 @@ export async function publishedBusinessOwner(
       },
       updatedAt: 1,
     })
-    const ownerId = await ctx.db.insert('owners', {
-      clerkUserId: identity.subject,
-      canonicalPrincipalRef,
-      canonicalAccountRef,
-      createdAt: 1,
-      updatedAt: 1,
-    })
     return await ctx.db.insert('businesses', {
-      ownerId,
+      owningAccountRef: canonicalAccountRef,
       slug: `${slugPrefix}${slug}`,
       name: businessName,
       normalizedName: businessName.toLowerCase(),

@@ -261,15 +261,10 @@ describe('Convex payout persistence — transfer snapshots', () => {
     const reversalProcessedAt = secondObservedAt + 3
     const successProcessedAt = reversalProcessedAt + 1
     const db = new MemoryDb()
-    db.seed('owners', {
-      _id: 'owners:status',
-      clerkUserId: 'owner:test',
-      createdAt: 1,
-      updatedAt: 1,
-    })
+    
     db.seed('businesses', {
       _id: 'business-1',
-      ownerId: 'owners:status',
+      ownerId: 'principal:status',
       updatedAt: 1,
     })
     seedPayout(db)
@@ -490,15 +485,10 @@ describe('Convex payout persistence — transfer snapshots', () => {
 
   it('reverses a successful payout onto current balance and replays after credit', async () => {
     const db = new MemoryDb()
-    db.seed('owners', {
-      _id: 'owners:paid-readback',
-      clerkUserId: 'owner:test',
-      createdAt: 1,
-      updatedAt: 1,
-    })
+    
     db.seed('businesses', {
       _id: 'business-1',
-      ownerId: 'owners:paid-readback',
+      ownerId: 'principal:paid-readback',
       updatedAt: 1,
     })
     seedPayout(db)

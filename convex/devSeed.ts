@@ -9,6 +9,8 @@ import {
 } from '../src/modules/dev/public'
 import { persistDevSeedCatalogState } from './devSeedStore'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import { AGENT_ACCESS_DEFAULT_APPLICATION_REF } from '@/modules/agent-access/agent-access'
+import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import {
   MAX_ACCESS_PATHS_PER_OFFERING,
   MAX_OFFERINGS_PER_BUSINESS,
@@ -21,15 +23,187 @@ import {
 } from './catalog'
 import {
   admitDevSeedCatalogAuthority,
+  DEV_SEED_CATALOG_ACCOUNT_NAME,
+  DEV_SEED_CATALOG_ACCOUNT_REF,
+  DEV_SEED_CATALOG_PRINCIPAL_NAME,
+  DEV_SEED_CATALOG_PRINCIPAL_REF,
+  DEV_SEED_CATALOG_RESOURCE,
+  DEV_SEED_CATALOG_SCOPE,
   reviseBusinessOfferingCommand,
   upsertOfferingAccessPathCommand,
 } from './catalogOfferingMutations'
 
+const DEV_SEED_CATALOG_OWNERSHIP_REF = 'own_d2000000000000000000000000000001'
+const DEV_SEED_CATALOG_GRANT_REF = 'grt_d2000000000000000000000000000001'
+// Each provision refreshes the fixture grant's live window so a deployment that
+// sat idle past a previous TTL self-heals on the next seed run instead of
+// failing delegation admission with dev_seed_catalog_authority_denied.
+const DEV_SEED_CATALOG_GRANT_TTL_MS = 60 * 60 * 1000
+
+// Self-healing bootstrap for the dev-catalog seed's fixed machine identity
+// (prn_d200…/acc_d200…/own_d200…/grt_d200…). admitDevSeedCatalogAuthority
+// remains the sole authority sink: this only inserts the canonical rows it
+// consumes (same shapes as tests/integration/dev-seed-public-catalog-facts.test.ts)
+// when absent, so it is safe to run on every stack bring-up.
+export async function provisionDevSeedCatalogIdentityRows(ctx: MutationCtx): Promise<string[]> {
+  const now = Date.now()
+  const created: string[] = []
+  const principal = await ctx.db.query('principals')
+    .withIndex('by_principalRef', (query) => query.eq('principalRef', DEV_SEED_CATALOG_PRINCIPAL_REF))
+    .unique()
+  if (principal === null) {
+    await ctx.db.insert('principals', {
+      principalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      kind: 'workload',
+      displayName: DEV_SEED_CATALOG_PRINCIPAL_NAME,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    created.push('principal')
+  }
+  const account = await ctx.db.query('accounts')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', DEV_SEED_CATALOG_ACCOUNT_REF))
+    .unique()
+  if (account === null) {
+    await ctx.db.insert('accounts', {
+      accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+      displayName: DEV_SEED_CATALOG_ACCOUNT_NAME,
+      lifecycle: 'active',
+      recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+      creationActorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      creationIdempotencyRef: 'dev-seed-account:create',
+      initialOwnershipRef: DEV_SEED_CATALOG_OWNERSHIP_REF,
+      currentOwnershipRef: DEV_SEED_CATALOG_OWNERSHIP_REF,
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+      lastAction: {
+        actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        correlationRef: 'dev-seed-account:create',
+        idempotencyRef: 'dev-seed-account:create',
+      },
+    })
+    created.push('account')
+  }
+  const ownership = await ctx.db.query('accountOwnerships')
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', DEV_SEED_CATALOG_OWNERSHIP_REF))
+    .unique()
+  if (ownership === null) {
+    await ctx.db.insert('accountOwnerships', {
+      ownershipRef: DEV_SEED_CATALOG_OWNERSHIP_REF,
+      accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+      ownerPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      lifecycle: 'active',
+      changeKind: 'creation',
+      revision: 1,
+      createdAt: now,
+      createdBy: {
+        actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        correlationRef: 'dev-seed-ownership:create',
+        idempotencyRef: 'dev-seed-ownership:create',
+      },
+    })
+    created.push('ownership')
+  }
+  const grant = await ctx.db.query('authorityDelegationGrants')
+    .withIndex('by_grantRef', (query) => query.eq('grantRef', DEV_SEED_CATALOG_GRANT_REF))
+    .unique()
+  if (grant === null) {
+    await ctx.db.insert('authorityDelegationGrants', {
+      grantRef: DEV_SEED_CATALOG_GRANT_REF,
+      accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+      actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      subjectPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      scopes: [DEV_SEED_CATALOG_SCOPE],
+      resourceRefs: [DEV_SEED_CATALOG_RESOURCE],
+      budgetLimit: 1,
+      budgetUsed: 0,
+      expiresAt: now + DEV_SEED_CATALOG_GRANT_TTL_MS,
+      generation: 1,
+      revision: 1,
+      lifecycle: 'active',
+      createdAt: now,
+      createdBy: {
+        actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        correlationRef: 'dev-seed-grant:create',
+        idempotencyRef: 'dev-seed-grant:create',
+      },
+    })
+    created.push('grant')
+  } else if (grant.lifecycle !== 'active' || grant.expiresAt <= now) {
+    await ctx.db.patch(grant._id, {
+      lifecycle: 'active',
+      expiresAt: now + DEV_SEED_CATALOG_GRANT_TTL_MS,
+      revision: grant.revision + 1,
+    })
+    created.push('grant')
+  }
+  return created
+}
+
+export const provisionDevSeedCatalogIdentity = internalMutation({
+  args: {},
+  returns: v.object({
+    kind: v.literal('ensured'),
+    created: v.array(v.string()),
+  }),
+  handler: async (ctx) => {
+    const created = await provisionDevSeedCatalogIdentityRows(ctx)
+    return { kind: 'ensured' as const, created }
+  },
+})
+
+// Self-healing bootstrap for the local-E2E consent loop's fixed owner-side
+// agent credential (ak_local_e2e_owner). The bypass consent flow registers
+// per-consent grants for this credential through the normal serviceAuth'd
+// registerGrantForServer path, which requires this principal row to exist
+// beforehand (convex/agentAccessPolicy.ts). Insert-if-absent via the
+// by_principalId unique index, so it is safe to run on every bring-up.
+const LOCAL_E2E_OWNER_CREDENTIAL_ID = 'ak_local_e2e_owner'
+const LOCAL_E2E_OWNER_PRINCIPAL_ID = `clerk_api_key:${LOCAL_E2E_OWNER_CREDENTIAL_ID}`
+const LOCAL_E2E_OWNER_ACCOUNT_REF = 'acc_acce2e0000000000000000000000000'
+
+export const ensureLocalE2EOwnerIdentity = internalMutation({
+  args: {},
+  returns: v.object({
+    kind: v.literal('ensured'),
+    created: v.array(v.string()),
+  }),
+  handler: async (ctx) => {
+    const now = Date.now()
+    const created: string[] = []
+    const principal = await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_principalId', (query) => query.eq('principalId', LOCAL_E2E_OWNER_PRINCIPAL_ID))
+      .unique()
+    if (principal === null) {
+      await ctx.db.insert('agentAccessPrincipals', {
+        principalId: LOCAL_E2E_OWNER_PRINCIPAL_ID,
+        ownerId: LOCAL_E2E_OWNER_ACCOUNT_REF,
+        credentialId: LOCAL_E2E_OWNER_CREDENTIAL_ID,
+        applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
+        environment: 'sandbox',
+        scopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
+        authorityMode: 'approve_each',
+        grantGeneration: 1,
+        policyDigest: 'local-e2e-owner-key',
+        lifecycle: 'active',
+        recordedAt: now,
+        lastSeenAt: now,
+      })
+      created.push('agentAccessPrincipal')
+    }
+    return { kind: 'ensured' as const, created }
+  },
+})
+
 type SeedDevCatalogResult = Readonly<{
   kind: 'seeded'
   seededSlugs: string[]
-  ownerClerkUserId: string
-  ownerId: string
   businessIdsBySlug: Record<string, string>
 }>
 
@@ -38,18 +212,15 @@ export const seedDevCatalog = internalMutation({
   returns: v.object({
     kind: v.literal('seeded'),
     seededSlugs: v.array(v.string()),
-    ownerClerkUserId: v.string(),
-    ownerId: v.string(),
     businessIdsBySlug: v.record(v.string(), v.string()),
   }),
   handler: async (ctx): Promise<SeedDevCatalogResult> => {
+    // Self-heal the fixed dev-seed identity before authority admission.
+    await provisionDevSeedCatalogIdentityRows(ctx)
     const authority = await admitDevSeedCatalogAuthority(ctx, 'seedDevCatalog')
     // Reconcile existing capability publications before catalog and offering ingest.
-    const bundle = buildDevSeedCatalogState(DEV_SEED_BUSINESS_FIXTURES)
-    const result = await persistDevSeedCatalogState(ctx.db, bundle, {
-      principalRef: authority.actorPrincipalRef,
-      accountRef: authority.accountRef,
-    })
+    const bundle = buildDevSeedCatalogState(DEV_SEED_BUSINESS_FIXTURES, authority.accountRef)
+    const result = await persistDevSeedCatalogState(ctx.db, bundle, authority.accountRef)
     let offeringSeed: {
       processed: number
       seeded: number

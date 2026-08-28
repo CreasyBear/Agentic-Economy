@@ -5,6 +5,7 @@ import { problem } from '@/lib/server/problem'
 
 import { bearerChallenge, oauthProtectedResourceMetadata } from '@/lib/http/oauth-challenge'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { isLocalE2EAuthBypassEnabled, LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
@@ -41,6 +42,7 @@ import {
   type AgentAccessOAuthTransition,
 } from '@/modules/agent-access/oauth-state'
 import {
+  AGENT_ACCESS_DEFAULT_APPLICATION_REF,
   AGENT_ACCESS_MAX_TTL_SECONDS,
   AGENT_ACCESS_MIN_TTL_SECONDS,
   issueAgentAccessKey,
@@ -73,6 +75,7 @@ type OAuthApiOptions = Readonly<{
   }>) => Promise<Readonly<{ keyId: string; secret?: string }>>
   getSecret?: (keyId: string) => Promise<{ secret: string }>
   rateLimit?: RateLimitAdmission
+  devicePollRateLimit?: RateLimitAdmission
 }>
 
 export type { OAuthApiOptions }
@@ -354,7 +357,7 @@ async function pollDeviceGrantRequest(form: URLSearchParams, request: Request, o
   const clientId = form.get('client_id')
   const deviceCode = form.get('device_code')
   if (clientId === null || deviceCode === null) return oauthError('invalid_request', 400)
-  const limited = await oauthAdmissionResponse(request, options, `device_code:${deviceCode}`)
+  const limited = await oauthAdmissionResponse(request, options, `device_code:${deviceCode}`, 'device_poll')
   if (limited !== undefined) return limited
   const client = await readClient(clientId, options)
   if (client === null) return oauthError('invalid_client', 401)
@@ -389,7 +392,7 @@ async function deliverClaimedGrant(
   const keyId = claimed.value.grant.keyId
   if (keyId === undefined) return oauthError('invalid_grant', 400)
   try {
-    const secret = await (options.getSecret ?? (async (id: string) => await clerkClient().apiKeys.getSecret(id)))(keyId)
+    const secret = await (options.getSecret ?? defaultOAuthKeySecret)(keyId)
     const consumed = await completeGrantDelivery(requireStore(options), {
       grantRef: claimed.value.grant.grantRef,
       claimToken: claimed.value.claimToken,
@@ -406,6 +409,68 @@ async function deliverClaimedGrant(
     await resetGrantDelivery(requireStore(options), { grantRef: claimed.value.grant.grantRef, claimToken: claimed.value.claimToken })
     return oauthError('invalid_grant', 400)
   }
+}
+
+/**
+ * Local-E2E-only key material registry, reachable only under
+ * `isLocalE2EAuthBypassEnabled()` (which throws in production). The durable
+ * half of issuance — the grant row bound to the seed-provisioned fixed
+ * owner credential — still flows through the real serviceAuth'd
+ * registerGrantForServer path; only the Clerk-held secret lives here, for
+ * the lifetime of the dev server process.
+ */
+const LOCAL_E2E_OWNER_CREDENTIAL_ID = 'ak_local_e2e_owner'
+const localE2EOAuthKeys = new Map<string, Readonly<{ secret: string; expiresAt: number }>>()
+let localE2EOAuthGrantGeneration = 0
+
+async function defaultOAuthKeySecret(keyId: string): Promise<{ secret: string }> {
+  if (!isLocalE2EAuthBypassEnabled()) return await clerkClient().apiKeys.getSecret(keyId)
+  const record = localE2EOAuthKeys.get(keyId)
+  if (record === undefined || record.expiresAt <= Date.now()) throw new Error('local_e2e_agent_key_unavailable')
+  return { secret: record.secret }
+}
+
+async function issueLocalE2EOAuthGrantKey(
+  ownerId: string,
+  grant: AgentAccessOAuthGrant,
+  authorityMode: AgentAccessAuthorityMode,
+  policy: AgentAccessPolicy,
+): Promise<{ keyId: string }> {
+  const now = Date.now()
+  const expiresAt = now + grant.requestedAccess.expiresInSeconds * 1000
+  let generation = localE2EOAuthGrantGeneration + 1
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const registered = await registerAgentAccessGrant({
+      grantRef: grant.grantRef,
+      principalId: `clerk_api_key:${LOCAL_E2E_OWNER_CREDENTIAL_ID}`,
+      ownerId,
+      applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
+      credentialId: LOCAL_E2E_OWNER_CREDENTIAL_ID,
+      environment: grant.requestedAccess.environment,
+      operationAccess: 'all_admitted',
+      authorityMode,
+      policy: agentAccessPolicySchema.parse({
+        ...policy,
+        budget: { ...policy.budget, generation },
+        rate: { ...policy.rate, generation },
+      }),
+      lifecycle: 'active',
+      generation,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt,
+    })
+    if (registered.kind === 'recorded' || registered.kind === 'replayed') {
+      localE2EOAuthGrantGeneration = generation
+      localE2EOAuthKeys.set(LOCAL_E2E_OWNER_CREDENTIAL_ID, {
+        secret: `ak_secret_local_${createOpaqueOAuthValue(32)}`,
+        expiresAt,
+      })
+      return { keyId: LOCAL_E2E_OWNER_CREDENTIAL_ID }
+    }
+    generation += 1
+  }
+  throw new Error('issuance_unavailable')
 }
 
 async function issueGrantKey(grant: AgentAccessOAuthGrant, ownerId: string, options: OAuthApiOptions): Promise<{ keyId: string }> {
@@ -427,6 +492,9 @@ async function issueGrantKey(grant: AgentAccessOAuthGrant, ownerId: string, opti
         requestedAccess: inputGrant.requestedAccess,
         policy,
       })
+    }
+    if (isLocalE2EAuthBypassEnabled()) {
+      return await issueLocalE2EOAuthGrantKey(inputOwnerId, inputGrant, authorityMode, policy)
     }
     const issued = await issueAgentAccessKey({
       ownerId: inputOwnerId,
@@ -518,6 +586,9 @@ async function readClient(clientId: string | null, options: OAuthApiOptions): Pr
 }
 
 async function ownerIdentity(options: OAuthApiOptions): Promise<{ isAuthenticated: boolean; userId: string | null }> {
+  if (options.authenticateOwner === undefined && isLocalE2EAuthBypassEnabled()) {
+    return { isAuthenticated: true, userId: LOCAL_E2E_OPERATOR_PRINCIPAL }
+  }
   return options.authenticateOwner === undefined ? await auth() : await options.authenticateOwner()
 }
 
@@ -534,9 +605,13 @@ async function oauthAdmissionResponse(
   request: Request,
   options: OAuthApiOptions,
   keySuffix: string,
+  kind: 'default' | 'device_poll' = 'default',
 ): Promise<Response | undefined> {
-  if (options.rateLimit === undefined) return undefined
-  const admission = await options.rateLimit({ request, keySuffix })
+  const rateLimit = kind === 'device_poll'
+    ? (options.devicePollRateLimit ?? options.rateLimit)
+    : options.rateLimit
+  if (rateLimit === undefined) return undefined
+  const admission = await rateLimit({ request, keySuffix })
   if (admission.ok) return undefined
   return oauthError('rate_limited', 429, {
     'Retry-After': String(Math.max(1, Math.ceil(admission.retryAfter / 1_000))),

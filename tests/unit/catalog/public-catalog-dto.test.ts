@@ -12,7 +12,6 @@ const revisionSourceHash = canonicalDigest('offering-revision')
 
 const business = {
   businessId,
-  ownerId: brandNonEmpty('owner:sam', 'OwnerId'),
   slug,
   name: 'Demo listed provider',
   normalizedName: 'demo listed provider',
@@ -85,7 +84,6 @@ const accessPath = {
 
 function readState(overrides: Partial<Pick<PublicCatalogReadState, 'offerings' | 'revisions' | 'accessPaths'>> = {}): PublicCatalogReadState {
   return {
-    owners: [],
     businesses: [business],
     businessContexts: [context],
     offerings: overrides.offerings ?? [offering],

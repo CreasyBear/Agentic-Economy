@@ -245,19 +245,20 @@ describe("Phase 2 authority registrar foundation", () => {
       "user_foundation_matrix_workload",
     );
     await backend.run(async (ctx) => {
-      const row = await ctx.db
-        .query("owners")
-        .withIndex("by_clerkUserId", (query) =>
-          query.eq("clerkUserId", "user_foundation_matrix_workload"),
+      const binding = await ctx.db
+        .query("externalIdentityBindings")
+        .withIndex("by_providerNamespace_and_providerIdentifier", (query) =>
+          query
+            .eq("providerNamespace", "clerk/user")
+            .eq("providerIdentifier", "token_foundation_matrix_workload"),
         )
         .unique();
-      if (row?.canonicalPrincipalRef === undefined)
-        throw new Error("workload fixture principal missing");
-      const principalRef = row.canonicalPrincipalRef;
+      if (binding === null)
+        throw new Error("workload fixture binding missing");
       const principal = await ctx.db
         .query("principals")
         .withIndex("by_principalRef", (query) =>
-          query.eq("principalRef", principalRef),
+          query.eq("principalRef", binding.principalRef),
         )
         .unique();
       if (principal === null)
@@ -409,25 +410,16 @@ async function canonicalAuthorityFor(
   subject: string,
 ): Promise<{ accountRef: string; credentialRef: string }> {
   return await backend.run(async (ctx) => {
-    const owner = await ctx.db
-      .query("owners")
-      .withIndex("by_clerkUserId", (query) => query.eq("clerkUserId", subject))
-      .unique();
-    if (
-      owner === null ||
-      owner.canonicalAccountRef === undefined ||
-      owner.canonicalPrincipalRef === undefined
-    ) {
-      throw new Error("fixture canonical owner missing");
-    }
-    const principalRef = owner.canonicalPrincipalRef;
+    const tokenIdentifier = subject.replace(/^user_/u, "token_");
     const binding = await ctx.db
       .query("externalIdentityBindings")
-      .withIndex("by_principalRef_and_lifecycle", (query) =>
-        query.eq("principalRef", principalRef).eq("lifecycle", "active"),
+      .withIndex("by_providerNamespace_and_providerIdentifier", (query) =>
+        query
+          .eq("providerNamespace", "clerk/user")
+          .eq("providerIdentifier", tokenIdentifier),
       )
       .unique();
-    if (binding === null) throw new Error("fixture binding missing");
+    if (binding === null) throw new Error("fixture canonical binding missing");
     const credential = await ctx.db
       .query("credentials")
       .withIndex("by_bindingRef_and_generation_and_lifecycle", (query) =>
@@ -438,10 +430,16 @@ async function canonicalAuthorityFor(
       )
       .unique();
     if (credential === null) throw new Error("fixture credential missing");
-    const accountRef = owner.canonicalAccountRef;
-    if (accountRef === undefined)
-      throw new Error("fixture canonical account missing");
-    return { accountRef, credentialRef: credential.credentialRef };
+    const ownership = await ctx.db
+      .query("accountOwnerships")
+      .withIndex("by_ownerPrincipalRef_and_lifecycle", (query) =>
+        query
+          .eq("ownerPrincipalRef", binding.principalRef)
+          .eq("lifecycle", "active"),
+      )
+      .unique();
+    if (ownership === null) throw new Error("fixture canonical account missing");
+    return { accountRef: ownership.accountRef, credentialRef: credential.credentialRef };
   });
 }
 
@@ -452,18 +450,17 @@ async function moveIdentityToMembership(
 ) {
   const member = await ownerAdmin(backend, subject);
   await backend.run(async (ctx) => {
-    const compatibility = await ctx.db
-      .query("owners")
-      .withIndex("by_clerkUserId", (query) => query.eq("clerkUserId", subject))
+    const tokenIdentifier = subject.replace(/^user_/u, "token_");
+    const binding = await ctx.db
+      .query("externalIdentityBindings")
+      .withIndex("by_providerNamespace_and_providerIdentifier", (query) =>
+        query
+          .eq("providerNamespace", "clerk/user")
+          .eq("providerIdentifier", tokenIdentifier),
+      )
       .unique();
-    if (
-      compatibility?.canonicalPrincipalRef === undefined ||
-      compatibility.canonicalAccountRef === undefined
-    ) {
-      throw new Error("member fixture compatibility missing");
-    }
-    const memberPrincipalRef = compatibility.canonicalPrincipalRef;
-    const memberAccountRef = compatibility.canonicalAccountRef;
+    if (binding === null) throw new Error("member fixture binding missing");
+    const memberPrincipalRef = binding.principalRef;
     const oldOwnership = await ctx.db
       .query("accountOwnerships")
       .withIndex("by_ownerPrincipalRef_and_lifecycle", (query) =>
@@ -474,6 +471,7 @@ async function moveIdentityToMembership(
       .unique();
     if (oldOwnership === null)
       throw new Error("member fixture ownership missing");
+    const memberAccountRef = oldOwnership.accountRef;
     await ctx.db.patch(oldOwnership._id, {
       lifecycle: "ended",
       endedAt: 2,
@@ -483,10 +481,6 @@ async function moveIdentityToMembership(
         correlationRef: `member:${subject}`,
         idempotencyRef: `member:${subject}`,
       },
-    });
-    await ctx.db.patch(compatibility._id, {
-      canonicalAccountRef: targetAccountRef,
-      updatedAt: 2,
     });
     await ctx.db.insert("memberships", {
       membershipRef: `mem_${subject

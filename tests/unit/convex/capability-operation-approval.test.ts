@@ -20,7 +20,6 @@ vi.mock('../../../convex/authz', async (importOriginal) => ({
       canonicalAccountRef: identity.tokenIdentifier === 'clerk|user_123'
         ? `acc_${'2'.repeat(32)}`
         : `acc_${'8'.repeat(32)}`,
-      legacyOwnerId: 'owners:1',
       authorityRevision: {},
       authorityProvenance: {},
     }

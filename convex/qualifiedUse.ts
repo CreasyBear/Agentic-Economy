@@ -7,7 +7,7 @@ import {
   query,
   type QueryCtx,
 } from './_generated/server'
-import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
+import { resolveBusinessActor } from './authz'
 import {
   buildQualifiedUseReceipt,
   decideQualifiedUseWrite,
@@ -125,22 +125,27 @@ function receiptAuthorityMatches(
 
 /**
  * A supplier invoking its own operation does not accrue Qualified Use, so the
- * owner behind the invoking principal is compared against the owner of the
- * supplying business. Unknown principals are treated as third parties: the
- * caller already proved authorization before reaching delivery.
+ * account pinned by the invocation's delegation grant is compared against the
+ * supplying business owner account. Unknown grants are treated as third
+ * parties: the caller already proved authorization before reaching delivery.
  */
 async function isOwnerSelfInvocation(
   ctx: QueryCtx,
-  principalId: string,
+  invocationRef: string,
   businessId: string,
 ): Promise<boolean> {
-  const principal = await ctx.db
-    .query('agentAccessPrincipals')
-    .withIndex('by_principalId', (q) => q.eq('principalId', principalId))
+  const invocation = await ctx.db
+    .query('capabilityOperationInvocations')
+    .withIndex('by_invocationRef', (q) => q.eq('invocationRef', invocationRef))
     .unique()
-  if (principal === null) return false
+  if (invocation === null) return false
+  const grant = await ctx.db
+    .query('authorityDelegationGrants')
+    .withIndex('by_grantRef', (q) => q.eq('grantRef', invocation.grantRef))
+    .unique()
+  if (grant === null || grant.generation !== invocation.grantGeneration) return false
   const business = await ctx.db.get(businessId as Id<'businesses'>)
-  return business !== null && String(business.ownerId) === principal.ownerId
+  return business !== null && business.owningAccountRef === grant.accountRef
 }
 
 /**
@@ -169,7 +174,7 @@ export const recordQualifiedUse = internalMutation({
       releaseOutcome: 'released',
       ownerSelfInvocation: await isOwnerSelfInvocation(
         ctx,
-        args.principalId,
+        args.invocationRef,
         args.businessId,
       ),
       refundedBeforeDelivery: false,
@@ -293,11 +298,11 @@ export const readOwnerQualifiedUse = query({
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner')
       return { kind: 'error' as const, code: 'unauthenticated' as const }
-    const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
-    if (owner === null) return { kind: 'not_found' as const }
     const business = await ctx.db
       .query('businesses')
-      .withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id))
+      .withIndex('by_owningAccountRef_and_updatedAt', (q) =>
+        q.eq('owningAccountRef', actor.canonicalAccountRef),
+      )
       .order('desc')
       .first()
     if (business === null) return { kind: 'not_found' as const }

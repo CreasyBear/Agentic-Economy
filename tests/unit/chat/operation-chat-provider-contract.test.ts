@@ -19,8 +19,6 @@ import type { InteractiveBusinessAuthorityContext } from '@/modules/business/pub
 const AUTHORITY = {
   principalRef: `prn_${'1'.repeat(32)}`,
   accountRef: `acc_${'2'.repeat(32)}`,
-  legacyOwnerId: 'owners:provider-contract',
-  legacyOwnerLocator: 'user_provider_contract',
   revision: {
     binding: 1, credential: 1, principal: 1, account: 1, access: 1,
     currentOwnership: 1, currentOwnerPrincipal: 1, compatibilityUpdatedAt: 1,

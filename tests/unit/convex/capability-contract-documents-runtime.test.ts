@@ -26,24 +26,14 @@ describe('V2 capability contract Convex registry', () => {
     if (first.kind !== 'registered') throw new Error('capability contract registration failed')
 
     const persisted = await backend.run(async (ctx) => {
-      const compatibilityOwner = await ctx.db.query('owners')
-        .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', 'user_capability_admin'))
-        .unique()
-      const actorRef = compatibilityOwner?.canonicalPrincipalRef
-      if (actorRef === undefined) throw new Error('canonical capability admin missing')
+      const operation = (await ctx.db.query('operationKeys').take(1))[0]
+      if (operation === undefined) throw new Error('capability contract operation missing')
+      const actorRef = operation.actorRef
       const contract = await ctx.db.query('capabilityContractDocuments')
         .withIndex('by_capabilityId_and_version', (query) => (
           query.eq('capabilityId', first.ref.capabilityId).eq('version', first.ref.version)
         ))
         .unique()
-      const operation = await ctx.db.query('operationKeys')
-        .withIndex('by_actor_operation_key', (query) => (
-          query.eq('actorRef', actorRef)
-            .eq('operationName', 'registerCapabilityContract')
-            .eq('key', args.operationKey)
-        ))
-        .unique()
-      if (operation === null) throw new Error('capability contract operation missing')
       const auditEventId = operation.effectRefs[0]
       if (auditEventId === undefined) throw new Error('capability contract audit effect missing')
       const audit = await ctx.db.query('auditEvents')
@@ -201,24 +191,20 @@ describe('V2 capability contract Convex registry', () => {
     )).resolves.toMatchObject({
       kind: 'registered', ref: { capabilityId: 'reference.lookup', version: 1 },
     })
-    const ownerRows = await ownerBackend.run(async (ctx) => {
-      const compatibilityOwner = await ctx.db.query('owners')
-        .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', 'user_owner'))
-        .unique()
-      return {
-        actorRef: compatibilityOwner?.canonicalPrincipalRef,
-        contracts: await ctx.db.query('capabilityContractDocuments').take(2),
-        audits: await ctx.db.query('auditEvents').take(2),
-        operations: await ctx.db.query('operationKeys').take(2),
-      }
-    })
-    expect(ownerRows.actorRef).toMatch(/^prn_/u)
+    const ownerRows = await ownerBackend.run(async (ctx) => ({
+      contracts: await ctx.db.query('capabilityContractDocuments').take(2),
+      audits: await ctx.db.query('auditEvents').take(2),
+      operations: await ctx.db.query('operationKeys').take(2),
+    }))
+    const ownerActorRef = ownerRows.operations[0]?.actorRef
+    if (ownerActorRef === undefined) throw new Error('capability contract operation missing')
+    expect(ownerActorRef).toMatch(/^prn_/u)
     expect(ownerRows.contracts).toHaveLength(1)
     expect(ownerRows.audits[0]).toMatchObject({
-      eventType: 'capability_contract.registered', actorKind: 'admin', actorRef: ownerRows.actorRef,
+      eventType: 'capability_contract.registered', actorKind: 'admin', actorRef: ownerActorRef,
     })
     expect(ownerRows.operations[0]).toMatchObject({
-      actorRef: ownerRows.actorRef, operationName: 'registerCapabilityContract', status: 'succeeded',
+      actorRef: ownerActorRef, operationName: 'registerCapabilityContract', status: 'succeeded',
     })
 
     await expect(owner.mutation(
@@ -254,7 +240,6 @@ describe('V2 capability contract Convex registry', () => {
     'expired_credential',
     'revoked_binding',
     'credential_principal_drift',
-    'cross_account_compatibility_drift',
   ] as const)('denies %s through the public registration handler without effects', async (scenario) => {
     const backend = convexTest(schema, modules)
     const owner = await ownerAdmin(backend, `user_capability_admin_${scenario}`)
@@ -262,8 +247,7 @@ describe('V2 capability contract Convex registry', () => {
     await backend.run(async (ctx) => {
       const [binding] = await ctx.db.query('externalIdentityBindings').take(1)
       const [credential] = await ctx.db.query('credentials').take(1)
-      const [compatibilityOwner] = await ctx.db.query('owners').take(1)
-      if (binding === undefined || credential === undefined || compatibilityOwner === undefined) {
+      if (binding === undefined || credential === undefined) {
         throw new Error('canonical authority fixture missing')
       }
 
@@ -292,9 +276,6 @@ describe('V2 capability contract Convex registry', () => {
         await ctx.db.patch(credential._id, { principalRef: `prn_${'f'.repeat(32)}` })
         return
       }
-      await ctx.db.patch(compatibilityOwner._id, {
-        canonicalAccountRef: `acc_${'f'.repeat(32)}`,
-      })
     })
 
     await expect(owner.mutation(

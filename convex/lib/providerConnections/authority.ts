@@ -76,30 +76,21 @@ export async function resolveCanonicalBusinessOwner(
 ): Promise<CanonicalActor | null> {
   const business = await ctx.db.get(businessId)
   if (business === null) return null
-  const owner = await ctx.db.get(business.ownerId)
-  if ([
-    owner === null, owner?.canonicalPrincipalRef === undefined,
-    owner?.canonicalAccountRef === undefined,
-  ].some(Boolean)) return null
-  if (owner === null) return null
-  const [principal, account] = await Promise.all([
-    ctx.db.query('principals').withIndex('by_principalRef', (query) => query.eq('principalRef', owner.canonicalPrincipalRef as never)).unique(),
-    ctx.db.query('accounts').withIndex('by_accountRef', (query) => query.eq('accountRef', owner.canonicalAccountRef as never)).unique(),
-  ])
-  if ([principal, account].some((row) => row === null)) return null
-  const activePrincipal = principal as NonNullable<typeof principal>
-  const activeAccount = account as NonNullable<typeof account>
-  if (![activePrincipal.lifecycle === 'active', activeAccount.lifecycle === 'active'].every(Boolean))
-    return null
+  const account = await ctx.db.query('accounts')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
+    .unique()
+  if (account === null || account.lifecycle !== 'active') return null
   const ownership = await ctx.db.query('accountOwnerships')
-    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', activeAccount.currentOwnershipRef))
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
     .unique()
   if (ownership === null) return null
-  if (![
-    ownership.lifecycle === 'active', ownership.accountRef === activeAccount.accountRef,
-    ownership.ownerPrincipalRef === activePrincipal.principalRef,
-  ].every(Boolean)) return null
-  return canonicalActor(activePrincipal.principalRef, activeAccount.accountRef)
+  if (![ownership.lifecycle === 'active', ownership.accountRef === account.accountRef].every(Boolean))
+    return null
+  const principal = await ctx.db.query('principals')
+    .withIndex('by_principalRef', (query) => query.eq('principalRef', ownership.ownerPrincipalRef))
+    .unique()
+  if (principal === null || principal.lifecycle !== 'active') return null
+  return canonicalActor(principal.principalRef, account.accountRef)
 }
 
 function canonicalActor(principal: string, account: string): CanonicalActor | null {

@@ -5,13 +5,14 @@ import { createConvexAgentAccessOAuthStore } from '@/lib/server/agent-access-oau
 import { handleOAuthTokenPost } from '@/lib/server/agent-access-oauth-api'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 const admitOAuth = createHttpRateLimitAdmission('oauth-issuance')
+const admitDevicePoll = createHttpRateLimitAdmission('oauth-device-poll')
 
 export const Route = createFileRoute('/oauth/token')({
   server: {
     handlers: {
       POST: async ({ request }) => {
         const body = await request.clone().text()
-        return await handleOAuthTokenPost(request, { store: createConvexAgentAccessOAuthStore(request, body), rateLimit: admitOAuth })
+        return await handleOAuthTokenPost(request, { store: createConvexAgentAccessOAuthStore(request, body), rateLimit: admitOAuth, devicePollRateLimit: admitDevicePoll })
       },
       GET: () => methodNotAllowed(['POST']),
       PUT: () => methodNotAllowed(['POST']),

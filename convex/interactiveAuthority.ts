@@ -3,6 +3,8 @@ import { v } from 'convex/values'
 
 import {
   accountRef,
+  generateAccountRef,
+  generateOwnershipRef,
   membershipRef,
   ownershipRef,
   type AccountRef,
@@ -11,14 +13,18 @@ import {
 import {
   credentialRef,
   externalIdentityBindingRef,
+  generateCredentialRef,
+  generateExternalIdentityBindingRef,
 } from '../src/modules/principal-account/external-identity/public'
 import {
+  generatePrincipalRef,
   principalRef,
   type PrincipalRef,
 } from '../src/modules/principal-account/principal/public'
 import type {
   InteractiveBusinessAuthorityContext,
 } from '../src/modules/business/public'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import type { DataModel, Doc } from './_generated/dataModel'
 import { internalAction, internalQuery, mutation, type MutationCtx } from './_generated/server'
 import {
@@ -27,6 +33,12 @@ import {
 } from './interactiveCredentialLifecycle'
 
 const CLERK_USER_PROVIDER_NAMESPACE = 'clerk/user' as const
+
+// One Clerk session-token lifetime. Convex does not surface the JWT `exp`
+// claim on UserIdentity, so identities without the claim anchor their
+// credential window on the Convex-verified presentation instead.
+const INTERACTIVE_OWNER_SESSION_WINDOW_MS = 60_000
+
 
 export type InteractiveAuthorityErrorCode =
   | 'identity_invalid'
@@ -52,9 +64,6 @@ export type InteractiveAuthorityErrorCode =
   | 'ownership_missing'
   | 'ownership_ambiguous'
   | 'ownership_mismatch'
-  | 'compatibility_missing'
-  | 'compatibility_ambiguous'
-  | 'compatibility_mismatch'
 
 export class InteractiveAuthorityError extends Error {
   readonly code: InteractiveAuthorityErrorCode
@@ -69,10 +78,6 @@ export class InteractiveAuthorityError extends Error {
 export const interactiveAuthorityContextValue = v.object({
   principalRef: v.string(),
   accountRef: v.string(),
-  legacyOwnerId: v.string(),
-  legacyOwnerLocator: v.string(),
-  displayName: v.optional(v.string()),
-  emailHash: v.optional(v.string()),
   revision: v.object({
     binding: v.number(),
     credential: v.number(),
@@ -81,7 +86,6 @@ export const interactiveAuthorityContextValue = v.object({
     access: v.number(),
     currentOwnership: v.number(),
     currentOwnerPrincipal: v.number(),
-    compatibilityUpdatedAt: v.number(),
   }),
   provenance: v.object({
     providerNamespace: v.literal(CLERK_USER_PROVIDER_NAMESPACE),
@@ -181,22 +185,327 @@ export async function resolveInteractiveAuthorityContext(
   return current
 }
 
+const OWNER_DISPLAY_NAME_MAX_LENGTH = 200
+
+export type OwnerIdentityProvisioningRefs = Readonly<{
+  bindingRef: string
+  principalRef: string
+  accountRef?: string
+  ownershipRef?: string
+}>
+
+function interactiveOwnerDigest(kind: string, tokenIdentifier: string): string {
+  return canonicalDigest({ kind, tokenIdentifier }).slice('sha256:'.length, 'sha256:'.length + 32)
+}
+
+function provisionedOwnerDisplayName(identity: UserIdentity): string {
+  const claimedName = typeof identity.name === 'string' ? identity.name.trim() : ''
+  const displayName = claimedName.length > 0 ? claimedName : identity.subject
+  return displayName.slice(0, OWNER_DISPLAY_NAME_MAX_LENGTH)
+}
+
+// Operational refusal log for the fail-closed provisioning paths. A silent
+// `false` here was undiagnosable on the live stack (the 401 reached the page
+// while no server-side reason was observable), so every refusal carries a
+// structured reason code.
+function logProvisionRefusal(reason: string, detail: Record<string, unknown> = {}): void {
+  console.error(JSON.stringify({ kind: 'IA_PROVISION_REFUSAL', reason, ...detail }))
+}
+
+/**
+ * Idempotent owner-identity provisioning for a verified Clerk session. A real
+ * sign-up previously produced no authority rows: this creates the canonical
+ * binding, human principal, account, and creation ownership once, mirroring
+ * the canonical fixture shapes, and issues the provider-token credential
+ * generation bound to the verified token window when the identity carries the
+ * JWT `exp` claim, and to one Clerk session-token lifetime from the observed
+ * presentation otherwise. Identity rows are never duplicated or re-keyed;
+ * only the credential generation rotates when the verified window no longer
+ * matches the current credential (token refresh) or the current generation
+ * expired. Revoked, drifted, or ambiguous credentials fail closed so the
+ * authority chain reports the precise reason.
+ */
+export async function ensureOwnerIdentityForAuthenticatedIdentity(
+  ctx: Pick<MutationCtx, 'db' | 'scheduler'>,
+  identity: UserIdentity,
+): Promise<OwnerIdentityProvisioningRefs | null> {
+  const tokenIdentifier = identity.tokenIdentifier
+  if (typeof tokenIdentifier !== 'string' || tokenIdentifier.trim().length === 0) {
+    logProvisionRefusal('identity_token_identifier_missing')
+    return null
+  }
+  const verifiedTokenExpirySeconds = typeof identity.exp === 'number'
+    && Number.isSafeInteger(identity.exp)
+    && identity.exp >= 1
+    ? identity.exp
+    : undefined
+  const expiresAt = verifiedTokenExpirySeconds === undefined
+    ? Date.now() + INTERACTIVE_OWNER_SESSION_WINDOW_MS
+    : verifiedTokenExpirySeconds * 1_000
+
+  const bindings = await ctx.db.query('externalIdentityBindings')
+    .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+      .eq('providerNamespace', CLERK_USER_PROVIDER_NAMESPACE)
+      .eq('providerIdentifier', tokenIdentifier))
+    .take(2)
+  if (bindings.length > 1) {
+    logProvisionRefusal('binding_ambiguous', { count: bindings.length, tokenIdentifierSuffix: tokenIdentifier.slice(-8) })
+    return null
+  }
+  const [binding] = bindings
+  if (binding === undefined) {
+    return await provisionOwnerIdentity(
+      ctx,
+      tokenIdentifier,
+      expiresAt,
+      provisionedOwnerDisplayName(identity),
+    )
+  }
+  if (binding.lifecycle !== 'active'
+    || binding.providerState.kind !== 'known'
+    || binding.providerState.value !== 'active') {
+    logProvisionRefusal('binding_not_current', { lifecycle: binding.lifecycle, providerState: binding.providerState })
+    return null
+  }
+  return await ensureCurrentOwnerCredentialGeneration(
+    ctx,
+    binding,
+    tokenIdentifier,
+    expiresAt,
+    verifiedTokenExpirySeconds !== undefined,
+  )
+}
+
+async function ensureCurrentOwnerCredentialGeneration(
+  ctx: Pick<MutationCtx, 'db' | 'scheduler'>,
+  binding: Doc<'externalIdentityBindings'>,
+  tokenIdentifier: string,
+  expiresAt: number,
+  hasVerifiedTokenWindow: boolean,
+): Promise<OwnerIdentityProvisioningRefs | null> {
+  const active = await credentialsForOwnerGeneration(ctx, binding, 'active')
+  if (active.length > 1) {
+    logProvisionRefusal('credential_ambiguous', { activeCount: active.length, generation: binding.credentialGeneration })
+    return null
+  }
+  let current: Doc<'credentials'> | undefined = active[0]
+  if (current === undefined) {
+    // Re-issue only a legitimately exhausted generation: an expired session
+    // leaves exactly one stale credential for the current generation. A
+    // revoked credential is a revocation, and an absent one is drift: both
+    // must keep failing closed.
+    const [stale] = await credentialsForOwnerGeneration(ctx, binding, 'stale')
+    if (stale === undefined
+      || (await credentialsForOwnerGeneration(ctx, binding, 'revoked')).length > 0) {
+      logProvisionRefusal(stale === undefined
+        ? 'credential_generation_drift_stale_missing'
+        : 'credential_generation_revoked_present', {
+        generation: binding.credentialGeneration,
+        activeCount: active.length,
+      })
+      return null
+    }
+    current = stale
+  }
+  if (current.type !== 'provider_token' || current.principalRef !== binding.principalRef) {
+    logProvisionRefusal('credential_type_or_principal_mismatch', { type: current.type })
+    return null
+  }
+  if (current.expiresAt === expiresAt) {
+    return { bindingRef: binding.bindingRef, principalRef: binding.principalRef }
+  }
+  // Without a verified token window there is nothing to match exactly: the
+  // server-anchored credential stays current until its own window lapses,
+  // then the ordinary refresh below re-issues it.
+  if (!hasVerifiedTokenWindow && Date.now() < current.expiresAt) {
+    return { bindingRef: binding.bindingRef, principalRef: binding.principalRef }
+  }
+  // A still-active generation whose window no longer matches the verified
+  // token is an ordinary refresh: supersede it with the next generation.
+  return await issueOwnerCredentialGeneration(ctx, binding, tokenIdentifier, expiresAt, current.credentialRef)
+}
+
+async function credentialsForOwnerGeneration(
+  ctx: Pick<MutationCtx, 'db'>,
+  binding: Doc<'externalIdentityBindings'>,
+  lifecycle: 'active' | 'stale' | 'revoked',
+): Promise<Doc<'credentials'>[]> {
+  return await ctx.db.query('credentials')
+    .withIndex('by_bindingRef_and_generation_and_lifecycle', (query) => query
+      .eq('bindingRef', binding.bindingRef)
+      .eq('generation', binding.credentialGeneration)
+      .eq('lifecycle', lifecycle))
+    .take(2)
+}
+
+async function issueOwnerCredentialGeneration(
+  ctx: Pick<MutationCtx, 'db' | 'scheduler'>,
+  binding: Doc<'externalIdentityBindings'>,
+  tokenIdentifier: string,
+  expiresAt: number,
+  predecessorCredentialRef: string,
+): Promise<OwnerIdentityProvisioningRefs> {
+  const now = Date.now()
+  const generation = binding.credentialGeneration + 1
+  const credentialRef = generateCredentialRef()
+  await ctx.db.insert('credentials', {
+    credentialRef,
+    bindingRef: binding.bindingRef,
+    principalRef: binding.principalRef,
+    type: 'provider_token',
+    lifecycle: 'active',
+    generation,
+    issueIdempotencyRef: `issue:interactive-owner:${interactiveOwnerDigest('interactive_owner_credential_issue:v1', tokenIdentifier)}:${generation}`,
+    revision: 1,
+    issuedAt: now,
+    expiresAt,
+    predecessorCredentialRef,
+    updatedAt: now,
+  })
+  const predecessor = await ctx.db.query('credentials')
+    .withIndex('by_credentialRef', (query) => query.eq('credentialRef', predecessorCredentialRef))
+    .unique()
+  if (predecessor !== null && predecessor.lifecycle === 'active') {
+    await ctx.db.patch(predecessor._id, {
+      lifecycle: 'stale',
+      staleAt: now,
+      revision: predecessor.revision + 1,
+      updatedAt: now,
+    })
+  }
+  await ctx.db.patch(binding._id, {
+    credentialGeneration: generation,
+    revision: binding.revision + 1,
+    updatedAt: now,
+  })
+  await armOwnerCredentialExpiry(ctx, binding.bindingRef, credentialRef, generation)
+  return { bindingRef: binding.bindingRef, principalRef: binding.principalRef }
+}
+
+async function provisionOwnerIdentity(
+  ctx: Pick<MutationCtx, 'db' | 'scheduler'>,
+  tokenIdentifier: string,
+  expiresAt: number,
+  displayName: string,
+): Promise<OwnerIdentityProvisioningRefs> {
+  const now = Date.now()
+  const principalRef = generatePrincipalRef()
+  const accountRef = generateAccountRef()
+  const ownershipRef = generateOwnershipRef()
+  const bindingRef = generateExternalIdentityBindingRef()
+  const credentialRef = generateCredentialRef()
+  await ctx.db.insert('principals', {
+    principalRef,
+    kind: 'human',
+    displayName,
+    lifecycle: 'active',
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+  })
+  await ctx.db.insert('accountOwnerships', {
+    ownershipRef,
+    accountRef,
+    ownerPrincipalRef: principalRef,
+    lifecycle: 'active',
+    changeKind: 'creation',
+    revision: 1,
+    createdAt: now,
+    createdBy: {
+      actorPrincipalRef: principalRef,
+      activeAccountRef: accountRef,
+      correlationRef: `create:${ownershipRef}`,
+      idempotencyRef: `create:${ownershipRef}`,
+    },
+  })
+  await ctx.db.insert('accounts', {
+    accountRef,
+    displayName,
+    lifecycle: 'active',
+    recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+    creationActorPrincipalRef: principalRef,
+    creationIdempotencyRef: `create:${accountRef}`,
+    initialOwnershipRef: ownershipRef,
+    currentOwnershipRef: ownershipRef,
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+    lastAction: {
+      actorPrincipalRef: principalRef,
+      activeAccountRef: accountRef,
+      correlationRef: `create:${accountRef}`,
+      idempotencyRef: `create:${accountRef}`,
+    },
+  })
+  await ctx.db.insert('externalIdentityBindings', {
+    bindingRef,
+    principalRef,
+    providerNamespace: CLERK_USER_PROVIDER_NAMESPACE,
+    providerIdentifier: tokenIdentifier,
+    providerState: { kind: 'known', value: 'active' },
+    lifecycle: 'active',
+    credentialGeneration: 1,
+    bindIdempotencyRef: `bind:interactive-owner:${interactiveOwnerDigest('interactive_owner_binding:v1', tokenIdentifier)}`,
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+  })
+  await ctx.db.insert('credentials', {
+    credentialRef,
+    bindingRef,
+    principalRef,
+    type: 'provider_token',
+    lifecycle: 'active',
+    generation: 1,
+    issueIdempotencyRef: `issue:interactive-owner:${interactiveOwnerDigest('interactive_owner_credential_issue:v1', tokenIdentifier)}:1`,
+    revision: 1,
+    issuedAt: now,
+    expiresAt,
+    updatedAt: now,
+  })
+  await armOwnerCredentialExpiry(ctx, bindingRef, credentialRef, 1)
+  return { bindingRef, principalRef, accountRef, ownershipRef }
+}
+
+async function armOwnerCredentialExpiry(
+  ctx: Pick<MutationCtx, 'db' | 'scheduler'>,
+  bindingRef: string,
+  credentialRef: string,
+  expectedGeneration: number,
+): Promise<void> {
+  const result = await armInteractiveCredentialExpiryHandler(ctx as MutationCtx, {
+    bindingRef,
+    credentialRef,
+    expectedGeneration,
+  })
+  if (result.kind === 'refused') throw new InteractiveAuthorityError('credential_not_current')
+}
+
 /**
  * Session bootstrap for cache-safe authenticated reads. The verified Clerk
- * token is only a binding locator; the lifecycle handler loads and validates
- * the canonical binding and credential before it schedules exact expiry.
+ * token is only a binding locator: the owner-identity provisioning seam first
+ * ensures canonical authority rows exist for the verified identity, then the
+ * lifecycle handler loads and validates the canonical binding and credential
+ * before it schedules exact expiry.
  */
 export const materializeCurrentInteractiveAuthority = mutation({
   args: {},
   returns: v.boolean(),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return false
+    if (identity === null) {
+      logProvisionRefusal('mutation_identity_null')
+      return false
+    }
     try {
+      await ensureOwnerIdentityForAuthenticatedIdentity(ctx, identity)
       await resolveInteractiveAuthorityContext(ctx, identity)
       return true
     } catch (error) {
-      if (error instanceof InteractiveAuthorityError) return false
+      if (error instanceof InteractiveAuthorityError) {
+        logProvisionRefusal('materialize_failed', { code: error.code })
+        return false
+      }
       throw error
     }
   },
@@ -268,7 +577,7 @@ async function resolveInteractiveAuthorityFacts(
   return await resolveInteractiveAuthorityFactsForToken(
     db,
     tokenIdentifier,
-    typeof identity.exp === 'number' ? identity.exp : Number.NaN,
+    typeof identity.exp === 'number' ? identity.exp : undefined,
   )
 }
 
@@ -405,22 +714,6 @@ async function resolveInteractiveAuthorityFactsForToken(
     requireCanonicalRef(currentOwnership.ownerPrincipalRef, principalRef),
   )
 
-  const compatibleOwners = await db
-    .query('owners')
-    .withIndex('by_canonicalPrincipalRef_and_canonicalAccountRef', (query) =>
-      query
-        .eq('canonicalPrincipalRef', canonicalPrincipalRef)
-        .eq('canonicalAccountRef', canonicalAccountRef))
-    .take(2)
-  if (compatibleOwners.length > 1) {
-    throw new InteractiveAuthorityError('compatibility_ambiguous')
-  }
-  if (compatibleOwners.length === 0) {
-    await rejectMismatchedCompatibility(db, canonicalPrincipalRef, canonicalAccountRef)
-    throw new InteractiveAuthorityError('compatibility_missing')
-  }
-  const [owner] = compatibleOwners
-  if (owner === undefined) throw new InteractiveAuthorityError('compatibility_missing')
   assertCanonicalFactNumbers([
     binding.credentialGeneration,
     binding.revision,
@@ -431,15 +724,11 @@ async function resolveInteractiveAuthorityFactsForToken(
     access.row.revision,
     currentOwnership.revision,
     currentOwner.revision,
-  ], owner.updatedAt, owner.clerkUserId)
+  ])
 
   const context = freezeInteractiveContext({
     principalRef: canonicalPrincipalRef,
     accountRef: canonicalAccountRef,
-    legacyOwnerId: owner._id,
-    legacyOwnerLocator: owner.clerkUserId,
-    ...(owner.displayName === undefined ? {} : { displayName: owner.displayName }),
-    ...(owner.emailHash === undefined ? {} : { emailHash: owner.emailHash }),
     revision: {
       binding: binding.revision,
       credential: credential.revision,
@@ -448,7 +737,6 @@ async function resolveInteractiveAuthorityFactsForToken(
       access: access.row.revision,
       currentOwnership: currentOwnership.revision,
       currentOwnerPrincipal: currentOwner.revision,
-      compatibilityUpdatedAt: owner.updatedAt,
     },
     provenance: {
       providerNamespace: CLERK_USER_PROVIDER_NAMESPACE,
@@ -515,8 +803,6 @@ function sameScheduledAuthority(
 ): boolean {
   return current.principalRef === expected.principalRef
     && current.accountRef === expected.accountRef
-    && current.legacyOwnerId === expected.legacyOwnerId
-    && current.legacyOwnerLocator === expected.legacyOwnerLocator
     && current.provenance.providerNamespace === expected.provenance.providerNamespace
     && current.provenance.bindingRef === expected.provenance.bindingRef
     && current.provenance.credentialRef === expected.provenance.credentialRef
@@ -531,7 +817,6 @@ function sameScheduledAuthority(
     && current.revision.access === expected.revision.access
     && current.revision.currentOwnership === expected.revision.currentOwnership
     && current.revision.currentOwnerPrincipal === expected.revision.currentOwnerPrincipal
-    && current.revision.compatibilityUpdatedAt === expected.revision.compatibilityUpdatedAt
 }
 
 function currentContextAtTrustedServerTime(
@@ -564,14 +849,9 @@ function requireCanonicalRef<Value>(
 
 function assertCanonicalFactNumbers(
   positiveIntegers: readonly number[],
-  compatibilityUpdatedAt: number,
-  legacyOwnerLocator: string,
 ): void {
   const positive = positiveIntegers.every((value) => Number.isSafeInteger(value) && value > 0)
-  const compatibilityCurrent = Number.isSafeInteger(compatibilityUpdatedAt)
-    && compatibilityUpdatedAt >= 0
-  const compatibilityLocatorPresent = legacyOwnerLocator.trim().length > 0
-  if (!positive || !compatibilityCurrent || !compatibilityLocatorPresent) {
+  if (!positive) {
     throw new InteractiveAuthorityError('authority_fact_invalid')
   }
 }
@@ -631,38 +911,16 @@ async function requireCurrentOwnerActive(
   db: AuthorityDb,
   ownerPrincipalRef: PrincipalRef,
 ): Promise<Doc<'principals'>> {
-  const owners = await db
+  const principalRows = await db
     .query('principals')
     .withIndex('by_principalRef', (query) => query.eq('principalRef', ownerPrincipalRef))
     .take(2)
-  if (owners.length !== 1) throw new InteractiveAuthorityError('ownership_mismatch')
-  const [owner] = owners
+  if (principalRows.length !== 1) throw new InteractiveAuthorityError('ownership_mismatch')
+  const [owner] = principalRows
   if (owner === undefined || owner.lifecycle !== 'active') {
     throw new InteractiveAuthorityError('ownership_mismatch')
   }
   return owner
-}
-
-async function rejectMismatchedCompatibility(
-  db: AuthorityDb,
-  canonicalPrincipalRef: PrincipalRef,
-  canonicalAccountRef: AccountRef,
-): Promise<void> {
-  const [byPrincipal, byAccount] = await Promise.all([
-    db
-      .query('owners')
-      .withIndex('by_canonicalPrincipalRef', (query) =>
-        query.eq('canonicalPrincipalRef', canonicalPrincipalRef))
-      .take(1),
-    db
-      .query('owners')
-      .withIndex('by_canonicalAccountRef', (query) =>
-        query.eq('canonicalAccountRef', canonicalAccountRef))
-      .take(1),
-  ])
-  if (byPrincipal.length > 0 || byAccount.length > 0) {
-    throw new InteractiveAuthorityError('compatibility_mismatch')
-  }
 }
 
 function freezeInteractiveContext(
@@ -684,10 +942,6 @@ function interactiveAuthorityContextFromValue(
   return freezeInteractiveContext({
     principalRef: principalRef(input.principalRef),
     accountRef: accountRef(input.accountRef),
-    legacyOwnerId: input.legacyOwnerId,
-    legacyOwnerLocator: input.legacyOwnerLocator,
-    ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
-    ...(input.emailHash === undefined ? {} : { emailHash: input.emailHash }),
     revision: { ...input.revision },
     provenance: {
       ...input.provenance,

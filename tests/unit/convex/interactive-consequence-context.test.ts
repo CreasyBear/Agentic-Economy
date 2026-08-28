@@ -70,11 +70,6 @@ describe('interactive consequence authority', () => {
     const { businessId } = await publishedBusinessOwner(backend, 'catalog-account-a')
     const { owner: accountBOwner } = await publishedBusinessOwner(backend, 'catalog-account-b')
 
-    await backend.run(async (ctx) => {
-      const business = await ctx.db.get(businessId)
-      if (business === null) throw new Error('catalog_business_fixture_missing')
-      await ctx.db.patch(business.ownerId, { clerkUserId: 'user_catalog-account-b' })
-    })
 
     const command = await withSourceWrite('catalog_publish', {
       businessId,
@@ -215,22 +210,14 @@ describe('interactive consequence authority', () => {
 
     const crossAccountDb = new MemoryDb()
     seedPayout(crossAccountDb)
-    crossAccountDb.seed('owners', {
-      _id: 'owners:cross-account',
-      clerkUserId: 'owner:payout',
-      canonicalPrincipalRef: `prn_${'a'.repeat(32)}`,
-      canonicalAccountRef: `acc_${'b'.repeat(32)}`,
-      createdAt: 1,
-      updatedAt: 1,
-    })
     crossAccountDb.seed('businesses', {
-      _id: 'business-cross-account',
-      ownerId: 'owners:cross-account',
+      _id: 'businesses:cross-account',
+      owningAccountRef: `acc_${'b'.repeat(32)}`,
       updatedAt: 1,
     })
     await expect(payoutAuthorityAllowed(
       { db: crossAccountDb as never, auth: payoutIdentity as never, scheduler: {} as never },
-      'business-cross-account',
+      'businesses:cross-account',
       payoutAuthorityPrincipalRef,
     )).resolves.toBe(false)
 
@@ -275,6 +262,7 @@ describe('interactive consequence authority', () => {
     const db = new MemoryDb()
     seedPayout(db)
 
+
     await expect(payoutAuthorityAllowed(
       { db: db as never, auth: payoutIdentity as never, scheduler: {} as never },
       'business-1',
@@ -291,15 +279,24 @@ describe('interactive consequence authority', () => {
     const currentAuthority = {
       principalRef: `prn_${'1'.repeat(32)}`,
       accountRef: `acc_${'2'.repeat(32)}`,
-      legacyOwnerLocator: 'user_owner-supply',
-      legacyOwnerId: 'owners:owner-supply',
-      revision: 1,
+      revision: {
+        binding: 1,
+        credential: 1,
+        principal: 1,
+        account: 1,
+        access: 1,
+        currentOwnership: 1,
+        currentOwnerPrincipal: 1,
+      },
       provenance: {
+        providerNamespace: 'clerk/user' as const,
         bindingRef: `eib_${'3'.repeat(32)}`,
         credentialRef: `crd_${'4'.repeat(32)}`,
         credentialGeneration: 1,
-        ownershipRef: `own_${'5'.repeat(32)}`,
         accessKind: 'ownership' as const,
+        accessRef: `own_${'5'.repeat(32)}`,
+        currentOwnershipRef: `own_${'5'.repeat(32)}`,
+        resolvedAt: 1,
       },
     }
     const ctx = {
@@ -324,7 +321,7 @@ describe('interactive consequence authority', () => {
               publicationRef: 'publication:owner-supply',
               publication: {
                 publicationRevision: 1,
-                authorityMode: 'keyless',
+                authorityMode: 'public_upstream',
                 source: { kind: 'openapi_http' },
               },
               operationRef: 'operation:owner-supply',
@@ -395,7 +392,7 @@ describe('interactive consequence authority', () => {
               publicationRef: 'publication:current-owner',
               publication: {
                 publicationRevision: 1,
-                authorityMode: 'keyless',
+                authorityMode: 'public_upstream',
                 source: { kind: 'openapi_http' },
               },
               operationRef: 'operation:current-owner',
@@ -619,8 +616,6 @@ function ownerSupplyAuthority() {
   return {
     principalRef: `prn_${'b'.repeat(32)}`,
     accountRef: `acc_${'c'.repeat(32)}`,
-    legacyOwnerLocator: 'user_owner-supply-current',
-    legacyOwnerId: 'owners:owner-supply-current',
     revision: {
       binding: 1,
       credential: 1,
@@ -629,7 +624,6 @@ function ownerSupplyAuthority() {
       access: 1,
       currentOwnership: 1,
       currentOwnerPrincipal: 1,
-      compatibilityUpdatedAt: 1,
     },
     provenance: {
       providerNamespace: 'clerk/user' as const,
@@ -685,7 +679,7 @@ function ownerSupplyActionContext(options: Readonly<{
             publicationRef: ownerSupplyArgs().publicationRef,
             publication: {
               publicationRevision: 1,
-              authorityMode: 'keyless',
+              authorityMode: 'public_upstream',
               source: { kind: options.sourceKind },
             },
             operationRef: 'operation:authority-refresh',

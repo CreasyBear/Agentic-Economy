@@ -414,17 +414,9 @@ export function seedPayout(
   })
   const existingBusiness = db.rows('businesses').find((row) => row._id === 'business-1')
   if (existingBusiness === undefined) {
-    db.seed('owners', {
-      _id: 'owners:payout-owner',
-      clerkUserId: 'owner:payout',
-      canonicalPrincipalRef: payoutAuthorityPrincipalRef,
-      canonicalAccountRef: payoutOwningAccountRef,
-      createdAt: 1,
-      updatedAt: 1,
-    })
     db.seed('businesses', {
       _id: 'business-1',
-      ownerId: 'owners:payout-owner',
+      owningAccountRef: payoutOwningAccountRef,
       slug: 'payout-owner',
       name: 'Payout Owner',
       normalizedName: 'payout owner',
@@ -437,10 +429,7 @@ export function seedPayout(
       updatedAt: 1,
     })
   } else {
-    const existingOwner = db.rows('owners').find((row) => row._id === existingBusiness.ownerId)
-    if (existingOwner === undefined) throw new Error('payout_owner_fixture_missing')
-    existingOwner.canonicalPrincipalRef = payoutAuthorityPrincipalRef
-    existingOwner.canonicalAccountRef = payoutOwningAccountRef
+    existingBusiness.owningAccountRef = payoutOwningAccountRef
   }
   db.seed('moneyAccounts', {
     _id: 'moneyAccounts:1',

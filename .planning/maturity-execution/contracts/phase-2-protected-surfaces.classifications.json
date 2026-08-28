@@ -9,23 +9,23 @@
       "binding": "interactive_account",
       "consequential": true
     },
-      "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer": {
+    "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer": {
       "binding": "public_non_consequential",
       "consequential": false,
       "exemption": {
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer ignores caller-shaped identity headers and returns only the public origin"
-        }
-      },
-      "src/lib/server/require-operator-session.ts:admitOperatorSessionServer": {
-        "binding": "narrow_system_non_consequential",
-        "consequential": false,
-        "exemption": {
-          "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
-          "testName": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer establishes only a Clerk session and cannot establish Account or resource authority",
-          "testSymbol": "requireOperatorBeforeLoad"
-        }
-      },
+      }
+    },
+    "src/lib/server/require-operator-session.ts:admitOperatorSessionServer": {
+      "binding": "narrow_system_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer establishes only a Clerk session and cannot establish Account or resource authority",
+        "testSymbol": "requireOperatorBeforeLoad"
+      }
+    },
     "src/lib/server/agent-access-console.functions.ts:readAgentAccessConsoleServer": {
       "binding": "interactive_account",
       "consequential": true
@@ -206,26 +206,26 @@
         "testName": "recordServerFunnelEventServer discards caller-shaped actor and business provenance before analytics release"
       }
     },
-      "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer": {
+    "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer": {
       "binding": "public_non_consequential",
       "consequential": false,
       "exemption": {
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer treats the operation ref as lookup data, never authority"
-        }
-      },
-      "src/routes/_operator/admin.audit-events.tsx:readAdminAuditEventsServer": {
-        "binding": "interactive_account",
-        "consequential": true
-      },
-      "src/routes/_operator/admin.index-health.tsx:readAdminIndexHealthServer": {
-        "binding": "interactive_account",
-        "consequential": true
-      },
-      "src/routes/privacy.remove-business.tsx:openRemovalServer": {
-        "binding": "signed_callback",
-        "consequential": true
-      },
+      }
+    },
+    "src/routes/_operator/admin.audit-events.tsx:readAdminAuditEventsServer": {
+      "binding": "admin_membership",
+      "consequential": true
+    },
+    "src/routes/_operator/admin.index-health.tsx:readAdminIndexHealthServer": {
+      "binding": "admin_membership",
+      "consequential": true
+    },
+    "src/routes/privacy.remove-business.tsx:openRemovalServer": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
     "convex/actionInvocationControl.ts:readAttemptSource": {
       "binding": "signed_callback",
       "consequential": true
@@ -371,7 +371,7 @@
       "consequential": true
     },
     "convex/capabilitySupply.ts:inspectBindingControlState": {
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true
     },
     "convex/capabilitySupply.ts:publishPreparedCapability": {
@@ -379,7 +379,7 @@
       "consequential": true
     },
     "convex/capabilitySupply.ts:queryCapabilityGraph": {
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true
     },
     "convex/capabilitySupply.ts:readCapabilityPublication": {
@@ -410,14 +410,6 @@
         "testName": "keeps public operation projections identity-invariant and consequence-free"
       }
     },
-    "convex/capabilitySupplyOperations.ts:listKeylessExecutable": {
-      "binding": "public_non_consequential",
-      "consequential": false,
-      "exemption": {
-        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
-        "testName": "keeps public operation projections identity-invariant and consequence-free"
-      }
-    },
     "convex/capabilitySupplyOperations.ts:offeringOperationMap": {
       "binding": "public_non_consequential",
       "consequential": false,
@@ -425,10 +417,6 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps public operation projections identity-invariant and consequence-free"
       }
-    },
-    "convex/capabilitySupplyOperations.ts:readKeylessExecutable": {
-      "binding": "signed_callback",
-      "consequential": true
     },
     "convex/capabilitySupplyOperations.ts:search": {
       "binding": "public_non_consequential",
@@ -759,11 +747,11 @@
       "consequential": true
     },
     "convex/security.ts:closeRemovalDispute": {
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true
     },
     "convex/security.ts:grantAdminMembership": {
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true
     },
     "convex/security.ts:openRemovalDispute": {
@@ -771,26 +759,53 @@
       "consequential": true
     },
     "convex/security.ts:readAdminAuditEvents": {
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true
     },
     "convex/security.ts:readAdminIndexHealth": {
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true
     },
     "convex/security.ts:revokeAdminMembership": {
+      "binding": "admin_membership",
+      "consequential": true
+    },
+    "convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority": {
       "binding": "interactive_account",
       "consequential": true
     },
-    "convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority": { "binding": "interactive_account", "consequential": true },
-    "convex/recoveryBreakGlass.ts:authorizeRecoveryOperation": { "binding": "interactive_account", "consequential": true },
-    "convex/recoveryBreakGlass.ts:submitRecoveryApproval": { "binding": "interactive_account", "consequential": true },
-    "convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
-    "convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket": { "binding": "canonical_agent", "consequential": true },
-    "convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
-    "convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
-    "convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc": { "binding": "canonical_agent", "consequential": true },
-    "convex/secretLifecycleHttp.ts:secretLifecycleRpc": { "binding": "workload_account", "consequential": true },
+    "convex/recoveryBreakGlass.ts:authorizeRecoveryOperation": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/recoveryBreakGlass.ts:submitRecoveryApproval": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/secretLifecycleHttp.ts:secretLifecycleRpc": {
+      "binding": "workload_account",
+      "consequential": true
+    },
     "convex_http_route:POST /chat/anonymous": {
       "binding": "public_non_consequential",
       "consequential": false,
@@ -799,48 +814,126 @@
         "testName": "convex/chatAnonymous.ts:anonymousChat fails closed before admission or provider use regardless of caller-shaped headers"
       }
     },
-    "convex_http_route:POST /internal/provider-consequence/journal/abort": { "binding": "canonical_agent", "consequential": true },
-    "convex_http_route:POST /internal/provider-consequence/journal/attest": { "binding": "canonical_agent", "consequential": true },
-    "convex_http_route:POST /internal/provider-consequence/journal/begin": { "binding": "canonical_agent", "consequential": true },
-    "convex_http_route:POST /internal/provider-consequence/journal/complete": { "binding": "canonical_agent", "consequential": true },
-    "convex_http_route:POST /internal/provider-consequence/x402": { "binding": "canonical_agent", "consequential": true },
-    "convex_http_route:POST /internal/secret-lifecycle": { "binding": "workload_account", "consequential": true },
-    "callback:convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
-    "callback:convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket": { "binding": "canonical_agent", "consequential": true },
-    "callback:convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
-    "callback:convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
-    "callback:convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc": { "binding": "canonical_agent", "consequential": true },
-    "callback:convex/secretLifecycleHttp.ts:secretLifecycleRpc": { "binding": "workload_account", "consequential": true },
-    "callback:src/routes/api.stripe.webhook.ts:Route": { "binding": "signed_callback", "consequential": true },
-    "continuation:convex/capabilityOperationInvocations.ts:completeWork": { "binding": "workload_account", "consequential": true },
-    "continuation:convex/capabilityProviderConnectionCleanup.ts:completeWork": { "binding": "workload_account", "consequential": true },
-    "job:convex/agentAccessOAuth.ts:cleanupExpiredOAuthGrants": {
-      "binding": "workload_account", "consequential": true
+    "convex_http_route:POST /internal/provider-consequence/journal/abort": {
+      "binding": "canonical_agent",
+      "consequential": true
     },
-    "job:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled": { "binding": "workload_account", "consequential": true },
-    "job:convex/facilitatorDiscoveryAction.ts:run": { "binding": "workload_account", "consequential": true },
+    "convex_http_route:POST /internal/provider-consequence/journal/attest": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex_http_route:POST /internal/provider-consequence/journal/begin": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex_http_route:POST /internal/provider-consequence/journal/complete": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex_http_route:POST /internal/provider-consequence/x402": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex_http_route:POST /internal/secret-lifecycle": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "callback:convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "callback:convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "callback:convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "callback:convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "callback:convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "callback:convex/secretLifecycleHttp.ts:secretLifecycleRpc": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "callback:src/routes/api.stripe.webhook.ts:Route": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "continuation:convex/capabilityOperationInvocations.ts:completeWork": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "continuation:convex/capabilityProviderConnectionCleanup.ts:completeWork": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "job:convex/agentAccessOAuth.ts:cleanupExpiredOAuthGrants": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "job:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "job:convex/facilitatorDiscoveryAction.ts:run": {
+      "binding": "workload_account",
+      "consequential": true
+    },
     "job:convex/marketAggregateBackfill.ts:run": {
-      "binding": "workload_account", "consequential": true
+      "binding": "workload_account",
+      "consequential": true
     },
     "job:convex/marketExternalRefresh.ts:run": {
-      "binding": "workload_account", "consequential": true
+      "binding": "workload_account",
+      "consequential": true
     },
     "job:convex/marketExternalRegistryRefresh.ts:run": {
-      "binding": "workload_account", "consequential": true
+      "binding": "workload_account",
+      "consequential": true
     },
     "job:convex/marketPresence.ts:refresh": {
-      "binding": "workload_account", "consequential": true
+      "binding": "workload_account",
+      "consequential": true
     },
-    "job:convex/moneyLedger.ts:runDailySupplierSettlement": { "binding": "workload_account", "consequential": true },
+    "job:convex/moneyLedger.ts:runDailySupplierSettlement": {
+      "binding": "workload_account",
+      "consequential": true
+    },
     "job:convex/sourceWriteAdmission.ts:cleanupExpiredSourceWriteNonces": {
-      "binding": "workload_account", "consequential": true
+      "binding": "workload_account",
+      "consequential": true
     },
-    "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocation": { "binding": "canonical_agent", "consequential": true },
-    "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority": { "binding": "workload_account", "consequential": true },
-    "reconciliation:convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation": { "binding": "interactive_account", "consequential": true },
-    "reconciliation:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled": { "binding": "workload_account", "consequential": true },
-    "reconciliation:convex/facilitatorDiscovery.ts:reconcile": { "binding": "workload_account", "consequential": true },
-    "reconciliation:convex/interactiveAuthority.ts:reconcileScheduledInteractiveAuthority": { "binding": "interactive_account", "consequential": true },
+    "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocation": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "reconciliation:convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "reconciliation:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "reconciliation:convex/facilitatorDiscovery.ts:reconcile": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "reconciliation:convex/interactiveAuthority.ts:reconcileScheduledInteractiveAuthority": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
     "reconciliation:convex/interactiveCredentialLifecycle.ts:reconcileInteractiveCredentialExpiry": {
       "binding": "narrow_system_non_consequential",
       "consequential": false,
@@ -849,24 +942,74 @@
         "testName": "reconcileInteractiveCredentialExpiry fails closed on a missing chain and cannot create authority or resources"
       }
     },
-    "reconciliation:convex/moneyLedger.ts:reconcileCharge": { "binding": "workload_account", "consequential": true },
-    "reconciliation:convex/moneyLedger.ts:reconcileExternalInvocationSpend": { "binding": "workload_account", "consequential": true },
-    "reconciliation:convex/moneyLedger.ts:reconcileInvocationCharge": { "binding": "workload_account", "consequential": true },
-    "reconciliation:convex/moneyLedger.ts:reconcilePayoutTransfer": { "binding": "interactive_account", "consequential": true },
-    "reconciliation:convex/moneyX402PaymentAttempts.ts:reconcileX402PaymentAttempt": { "binding": "workload_account", "consequential": true },
-    "reconciliation:convex/workloadCron.ts:reconcile": { "binding": "workload_account", "consequential": true },
-    "reconciliation:convex/workloadCron.ts:reconcileDueFacilitatorInvocations": { "binding": "workload_account", "consequential": true },
-    "reconciliation:src/routes/api.v1.operations.$invocationRef.reconcile.ts:Route": { "binding": "canonical_agent", "consequential": true },
-    "run_action:convex/capabilityOperationInvocationWorker.ts:recover": { "binding": "workload_account", "consequential": true },
-    "run_action:convex/capabilitySupplyReadiness.ts:probe": { "binding": "workload_account", "consequential": true },
-    "run_action:convex/chatExecute.ts:execute": { "binding": "interactive_account", "consequential": true },
-    "run_action:convex/interactiveAuthority.ts:resolveCurrentInteractiveAuthority": { "binding": "interactive_account", "consequential": true },
-    "run_action:convex/marketRegistryGraduation.ts:run": { "binding": "workload_account", "consequential": true },
-    "run_action:convex/workloadCron.ts:runAdmittedAction": { "binding": "workload_account", "consequential": true },
-    "scheduler:convex/capabilitySupplyReadiness.ts:probe": { "binding": "workload_account", "consequential": true },
-    "scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron": { "binding": "workload_account", "consequential": true },
-    "scheduler:convex/chatGenerate.ts:generate": { "binding": "interactive_account", "consequential": true },
-    "scheduler:convex/devSeed.ts:seedOfferingSupply": { "binding": "workload_account", "consequential": true },
+    "reconciliation:convex/moneyLedger.ts:reconcileCharge": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "reconciliation:convex/moneyLedger.ts:reconcileExternalInvocationSpend": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "reconciliation:convex/moneyLedger.ts:reconcileInvocationCharge": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "reconciliation:convex/moneyLedger.ts:reconcilePayoutTransfer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "reconciliation:convex/moneyX402PaymentAttempts.ts:reconcileX402PaymentAttempt": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "reconciliation:convex/workloadCron.ts:reconcile": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "reconciliation:convex/workloadCron.ts:reconcileDueFacilitatorInvocations": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "reconciliation:src/routes/api.v1.operations.$invocationRef.reconcile.ts:Route": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "run_action:convex/capabilityOperationInvocationWorker.ts:recover": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "run_action:convex/capabilitySupplyReadiness.ts:probe": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "run_action:convex/interactiveAuthority.ts:resolveCurrentInteractiveAuthority": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "run_action:convex/marketRegistryGraduation.ts:run": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "run_action:convex/workloadCron.ts:runAdmittedAction": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "scheduler:convex/capabilitySupplyReadiness.ts:probe": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "scheduler:convex/chatGenerate.ts:generate": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "scheduler:convex/devSeed.ts:seedOfferingSupply": {
+      "binding": "workload_account",
+      "consequential": true
+    },
     "scheduler:convex/interactiveCredentialLifecycle.ts:expireInteractiveCredential": {
       "binding": "narrow_system_non_consequential",
       "consequential": false,
@@ -883,13 +1026,34 @@
         "testName": "deleteGenerationBatch removes only inactive public registry metadata and cannot touch the active generation"
       }
     },
-    "scheduler:convex/marketRegistryGraduation.ts:sweep": { "binding": "workload_account", "consequential": true },
-    "scheduler:convex/workloadCron.ts:cleanupExpiredAgentAccessOAuthGrants": { "binding": "workload_account", "consequential": true },
-    "scheduler:convex/workloadCron.ts:cleanupExpiredSourceWriteNonces": { "binding": "workload_account", "consequential": true },
-    "scheduler:convex/workloadCron.ts:continueMarketAggregateBackfill": { "binding": "workload_account", "consequential": true },
-    "scheduler:convex/workloadCron.ts:refreshCurrentMarketPresence": { "binding": "workload_account", "consequential": true },
-    "workpool:convex/capabilityOperationInvocationWorker.ts:run": { "binding": "workload_account", "consequential": true },
-    "workpool:convex/capabilityProviderConnectionCleanup.ts:run": { "binding": "workload_account", "consequential": true },
+    "scheduler:convex/marketRegistryGraduation.ts:sweep": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "scheduler:convex/workloadCron.ts:cleanupExpiredAgentAccessOAuthGrants": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "scheduler:convex/workloadCron.ts:cleanupExpiredSourceWriteNonces": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "scheduler:convex/workloadCron.ts:continueMarketAggregateBackfill": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "scheduler:convex/workloadCron.ts:refreshCurrentMarketPresence": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "workpool:convex/capabilityOperationInvocationWorker.ts:run": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "workpool:convex/capabilityProviderConnectionCleanup.ts:run": {
+      "binding": "workload_account",
+      "consequential": true
+    },
     "cron:cleanup expired agent access oauth grants": {
       "binding": "workload_account",
       "consequential": true
@@ -928,6 +1092,10 @@
     },
     "cron:run daily supplier settlement": {
       "binding": "workload_account",
+      "consequential": true
+    },
+    "run_action:convex/capabilityOperationInvocations.ts:invoke": {
+      "binding": "canonical_agent",
       "consequential": true
     }
   }

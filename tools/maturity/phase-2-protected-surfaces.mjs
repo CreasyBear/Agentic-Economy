@@ -12,13 +12,13 @@ const SURFACE_AUTHORITY_MAP = resolve(ROOT, '.planning/maturity-execution/contra
 const CLASSIFICATIONS = resolve(ROOT, '.planning/maturity-execution/contracts/phase-2-protected-surfaces.classifications.json')
 const INVENTORY_TEST = 'tests/maturity/phase-2-protected-surfaces.test.ts'
 const BASELINE_COUNTS = Object.freeze({
-  serverFunctions: 43,
-  publicConvex: 116,
-  convexHttpActions: 1,
+  serverFunctions: 47,
+  publicConvex: 117,
+  convexHttpActions: 7,
   crons: 10,
   backgroundFamilies: 25,
-  frozenHttp: 39,
-  frozenMcp: 14,
+  frozenHttp: 40,
+  frozenMcp: 13,
   frozenCli: 12,
 })
 const PUBLIC_CONVEX_REGISTRARS = new Set([
@@ -79,6 +79,10 @@ const AUTHORITY_SINKS = Object.freeze({
     'convex/catalogOfferingMutations.ts:admitDevSeedCatalogAuthority',
     'convex/lib/secretLifecyclePersistence.ts:requireSnapshot',
   ]),
+  admin_membership: Object.freeze([
+    'convex/authz.ts:resolveAdminAuthority',
+    'convex/authz.ts:readCurrentActiveAdminMembership',
+  ]),
 })
 const EXEMPT_BINDINGS = new Set([
   'public_non_consequential',
@@ -130,11 +134,41 @@ const ISOLATION_CASE_LABELS = Object.freeze([
   'wrong_account',
   'stale_generation',
 ])
+// Per-binding isolation label sets (family-specific required sets). Every
+// family currently expresses all seven labels, with family-specific semantics.
+// admin_membership readings: owner = active adminMemberships row matching the
+// caller identity → allowed; member = same-account membership without an admin
+// row → denied; workload = workload-kind principal identity → denied;
+// missing_workload = no identity → denied; stranger = foreign identity with no
+// row → denied; wrong_account = adminMemberships row belonging to a different
+// clerk account → denied; stale_generation = revoked/expired membership →
+// denied. A family that cannot honestly express a label must declare its own
+// reduced set here instead of faking a case.
+const BINDING_ISOLATION_CASE_LABELS = Object.freeze({
+  interactive_account: ISOLATION_CASE_LABELS,
+  canonical_agent: ISOLATION_CASE_LABELS,
+  signed_callback: ISOLATION_CASE_LABELS,
+  workload_account: ISOLATION_CASE_LABELS,
+  admin_membership: ISOLATION_CASE_LABELS,
+})
+const SINK_BINDING = Object.freeze(Object.fromEntries(
+  Object.entries(AUTHORITY_SINKS).flatMap(([binding, sinks]) => sinks.map((sink) => [sink, binding])),
+))
+
+function requiredIsolationCaseLabels(sink) {
+  const binding = SINK_BINDING[sink]
+  const labels = binding === undefined ? undefined : BINDING_ISOLATION_CASE_LABELS[binding]
+  if (labels === undefined) throw new Error(`protected_surface_sink_isolation_labels_missing:${sink}`)
+  return labels
+}
+
 const SINK_TEST_ASSIGNMENTS = Object.freeze({
-  'convex/authz.ts:resolveBusinessActor': ['convex/capabilityProviderConnections.ts:readOwner', 'tests/maturity/phase-2-owner-query-authority.test.ts', 'evaluates resolveBusinessActor %s through the registered account-scoped provider query'],
+  'convex/authz.ts:resolveBusinessActor': ['convex/catalog.ts:getCurrentOwnerOfferingSupply', 'tests/unit/convex/authz-actor-isolation.test.ts', 'evaluates resolveBusinessActor %s through the registered owner catalog supply query'],
+  'convex/authz.ts:readCurrentActiveAdminMembership': ['convex/security.ts:readAdminAuditEvents', 'tests/unit/convex/admin-actor-isolation.test.ts', 'evaluates readCurrentActiveAdminMembership %s through the registered admin audit readback query'],
+  'convex/authz.ts:resolveAdminAuthority': ['convex/capabilitySupply.ts:inspectBindingControlState', 'tests/unit/convex/admin-actor-isolation.test.ts', 'evaluates resolveAdminAuthority %s through the registered capability binding control query'],
   'convex/sourceWriteAdmission.ts:requireSourceRead': ['convex/actionInvocationControl.ts:readControlSource', 'tests/unit/convex/source-write-admission.test.ts', 'drives the %s isolation case through both registered source handlers without a denied data or control effect'],
   'convex/sourceWriteAdmission.ts:requireSourceWrite': ['convex/actionInvocationControl.ts:recordLateObservationSource', 'tests/unit/convex/source-write-admission.test.ts', 'drives the %s isolation case through both registered source handlers without a denied data or control effect'],
-  'src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion': ['convex/moneyConnect.ts:connectAccount', 'tests/unit/convex/provider-connection-driver.test.ts', 'drives the %s isolation case through the registered connect account handler'],
+  'src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion': ['convex/agentAccessPolicy.ts:registerGrantForServer', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'drives the %s isolation case through the registered grant registration handler'],
   'convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext': ['convex/agentAccessPrincipals.ts:registerAgentPrincipal', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'drives the %s isolation case through the registered agent registration mutation and its real canonical-context sink'],
   'convex/authorityBoundary.ts:resolveCanonicalAgentBinding': ['convex/authorityBoundary.ts:resolveAgentBinding', 'tests/unit/convex/authority-boundary.test.ts', 'drives the %s isolation case through the registered mutation and commits no denied authority snapshot'],
   'convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority': ['convex/capabilityOperationInvocations.ts:cancelInvocation', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'drives the %s isolation case through the registered cancel action and its real current-agent sink'],
@@ -1519,7 +1553,7 @@ export function validateSinkTestRegistry(inventory, registry) {
       || !/^tests\/.+\.test\.tsx?$/u.test(row.testFile ?? '')
       || typeof row.testName !== 'string' || !/^[a-f0-9]{64}$/u.test(row.sha256 ?? '')
       || row.checksumScope !== 'named_test_case_ast'
-      || JSON.stringify(row.caseLabels) !== JSON.stringify(ISOLATION_CASE_LABELS)
+      || JSON.stringify(row.caseLabels) !== JSON.stringify(requiredIsolationCaseLabels(sink))
       || !/^[a-f0-9]{64}$/u.test(row.authorityPathSha256 ?? '')) {
       throw new Error(`protected_surface_sink_registry_row_invalid:${sink}`)
     }
@@ -1529,7 +1563,7 @@ export function validateSinkTestRegistry(inventory, registry) {
     if (runtimeTestChecksum(source, row.testFile, row.testName) !== row.sha256 || invocation === undefined
       || JSON.stringify(invocation) !== JSON.stringify(row.invocation)
       || JSON.stringify(runtimeIsolationCaseLabels(source, row.testFile, row.testName))
-        !== JSON.stringify(ISOLATION_CASE_LABELS)
+        !== JSON.stringify(requiredIsolationCaseLabels(sink))
       || digest(JSON.stringify(surface.authorityPath)) !== row.authorityPathSha256) {
       throw new Error(`protected_surface_sink_registry_test_invalid:${sink}`)
     }
@@ -1587,7 +1621,7 @@ function buildSurfaceAuthorityMap(inventory, registry) {
 
 function writeSurfaceAuthorityMap(inventory, registry) {
   const map = buildSurfaceAuthorityMap(inventory, registry)
-  if (map.red !== 0 || map.total !== 242 || map.protected + map.exemptions !== map.total) {
+  if (map.red !== 0 || map.total !== 240 || map.protected + map.exemptions !== map.total) {
     throw new Error('protected_surface_authority_map_red')
   }
   writeFileSync(SURFACE_AUTHORITY_MAP, `${JSON.stringify(map, null, 2)}\n`)

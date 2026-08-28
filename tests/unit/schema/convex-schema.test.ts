@@ -54,7 +54,6 @@ const durableTables = [
   'secretLifecycleJournal',
   'recoveryBreakGlassApprovals',
   'recoveryBreakGlassAdmissions',
-  'owners',
   'businesses',
   'businessOfferings',
   'businessOfferingRevisions',
@@ -230,14 +229,7 @@ const requiredIndexes = {
   moneyPayoutAccounts: ['by_businessId_and_currency', 'by_stripeAccountId'],
   moneyPayouts: ['by_businessId_and_currency_and_state', 'by_businessId_and_currency_and_state_and_updatedAt', 'by_periodStart_and_state', 'by_stripeTransferId', 'by_payoutRef', 'by_businessId_and_currency_and_updatedAt', 'by_businessId_and_currency_and_cadence_and_updatedAt'],
   moneyPayoutAllocations: ['by_allocationRef', 'by_qualifiedUseRef', 'by_transactionRef', 'by_payoutRef_and_qualifiedAt', 'by_businessId_and_currency_and_qualifiedAt'],
-  qualifiedUseReceipts: ['by_qualifiedUseRef', 'by_businessId_and_qualifiedAt', 'by_invocationRef', 'by_operationRef_and_qualifiedAt'],
-  owners: [
-    'by_canonicalAccountRef',
-    'by_canonicalPrincipalRef',
-    'by_canonicalPrincipalRef_and_canonicalAccountRef',
-    'by_clerkUserId',
-  ],
-  businesses: ['by_slug', 'by_owner_updatedAt', 'by_publicStatus_slug'],
+  businesses: ['by_slug', 'by_owningAccountRef_and_updatedAt', 'by_publicStatus_slug'],
   businessOfferings: ['by_offeringRef', 'by_businessId_and_status'],
   businessOfferingRevisions: ['by_offeringRef_and_revision', 'by_businessId_and_createdAt'],
   offeringAccessPaths: [
@@ -351,7 +343,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(81)
+    expect(durableTables).toHaveLength(80)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
@@ -529,13 +521,8 @@ describe('Convex schema', () => {
   it('refuses the obsolete aggregate registry search document envelope after the per-Offering cutover', async () => {
     const backend = convexTest(schema, convexModules)
     const businessId = await backend.run(async (ctx) => {
-      const ownerId = await ctx.db.insert('owners', {
-        clerkUserId: 'user_registry_schema_compatibility',
-        createdAt: 1_784_764_800_000,
-        updatedAt: 1_784_764_800_000,
-      })
       return ctx.db.insert('businesses', {
-        ownerId,
+        owningAccountRef: `acc_${'7'.repeat(32)}`,
         slug: 'sandbox-phase5-web-starter',
         name: 'Phase 5 Demo Website Starter',
         normalizedName: 'phase 5 demo website starter',

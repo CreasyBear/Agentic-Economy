@@ -2,10 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import schema from '../../convex/schema'
 import {
-  CANONICAL_IDENTITY_TABLES,
-  LEGACY_IDENTITY_RESET_MANIFEST,
-} from '../../tools/maturity-reset/public'
-import {
   accountTables,
   externalIdentityBindingValue,
   externalIdentityTables,
@@ -46,14 +42,6 @@ describe('Phase 1 principal/account integration', () => {
     for (const tableName of principalAccountTableNames) {
       expect(schema.tables[tableName]).toBe(principalAccountTables[tableName])
     }
-  })
-
-  it('keeps legacy identity stores outside the canonical Phase 1 composition', () => {
-    const canonical = new Set(Object.keys(principalAccountTables))
-    for (const { table } of LEGACY_IDENTITY_RESET_MANIFEST) {
-      expect(canonical.has(table)).toBe(false)
-    }
-    expect(CANONICAL_IDENTITY_TABLES).toEqual(canonicalIdentityTableNames)
   })
 
   it('keeps identity bindings referential and never makes them resource owners', () => {

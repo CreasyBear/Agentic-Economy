@@ -152,11 +152,19 @@ async function canonicalOwner(
   return await backend.run(async (ctx) => {
     const business = await ctx.db.get(businessId)
     if (business === null) throw new Error('business_missing')
-    const owner = await ctx.db.get(business.ownerId)
-    if (owner?.canonicalPrincipalRef === undefined || owner.canonicalAccountRef === undefined) {
-      throw new Error('canonical_owner_missing')
-    }
-    return { principalRef: owner.canonicalPrincipalRef, accountRef: owner.canonicalAccountRef }
+    const account = await ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
+      .unique()
+    if (account === null) throw new Error('canonical_account_missing')
+    const ownership = await ctx.db.query('accountOwnerships')
+      .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+      .unique()
+    if (ownership === null) throw new Error('canonical_ownership_missing')
+    const principal = await ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', ownership.ownerPrincipalRef))
+      .unique()
+    if (principal === null) throw new Error('canonical_owner_missing')
+    return { principalRef: principal.principalRef, accountRef: account.accountRef }
   })
 }
 

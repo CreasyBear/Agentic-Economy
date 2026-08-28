@@ -20,6 +20,7 @@ import {
   parseFacilitatorDiscoverySourceImport,
 } from '@/modules/capability-supply/convex'
 import { isRecord } from '@/modules/common/is-record'
+import { generateAccountRef } from '@/modules/principal-account/account/public'
 
 import type { Id } from './_generated/dataModel'
 import { internalMutation, type MutationCtx } from './_generated/server'
@@ -37,7 +38,6 @@ import {
   workloadCronSnapshotValue,
 } from './workloadCron'
 const SOURCE_EVIDENCE = 'source:facilitator-discovery'
-const BUSINESS_OWNER_PREFIX = 'system:facilitator-discovery:'
 const BUSINESS_SOURCE_KIND = 'facilitator-discovery-business:v1'
 const MAX_RECONCILE_ITEMS = 100
 const MAX_RECONCILE_ITEM_BYTES = 262_144
@@ -390,28 +390,19 @@ async function ensureProviderBusiness(
   host: string,
   now: number,
 ): Promise<Readonly<{ businessId: Id<'businesses'>; created: boolean; activated: boolean }> | undefined> {
-  const ownerKey = `${BUSINESS_OWNER_PREFIX}${host}`
-  const owner = await ctx.db.query('owners').withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', ownerKey)).unique()
   const businessSlug = providerBusinessSlug(host)
   const existingBusiness = await ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', businessSlug)).unique()
   if (existingBusiness !== null) {
-    const existingOwner = await ctx.db.get(existingBusiness.ownerId)
-    if (existingOwner === null || existingOwner.clerkUserId !== ownerKey || existingBusiness.suppressedAt !== undefined) return undefined
+    if (existingBusiness.suppressedAt !== undefined) return undefined
     if (existingBusiness.businessContext.kind !== 'programmable_provider'
       || existingBusiness.businessContext.providerIdentifier !== `provider:x402:${host}`) return undefined
     const activated = existingBusiness.publicStatus !== 'published'
     if (activated) await ctx.db.patch(existingBusiness._id, { publicStatus: 'published', updatedAt: now })
     return { businessId: existingBusiness._id, created: false, activated }
   }
-  const resolvedOwner = owner?._id ?? await ctx.db.insert('owners', {
-    clerkUserId: ownerKey,
-    displayName: `x402 ${host}`,
-    createdAt: now,
-    updatedAt: now,
-  })
   const sourceHash = canonicalDigest({ kind: BUSINESS_SOURCE_KIND, host })
   const businessId = await ctx.db.insert('businesses', {
-    ownerId: resolvedOwner,
+    owningAccountRef: generateAccountRef(),
     slug: businessSlug,
     name: `x402 ${host}`,
     normalizedName: `x402 ${host}`.toLowerCase(),
@@ -521,8 +512,8 @@ async function withdrawMissing(
     if (remaining.length !== 0) continue
     const business = await ctx.db.get(businessId)
     if (business === null) continue
-    const owner = await ctx.db.get(business.ownerId)
-    if (owner?.clerkUserId.startsWith(BUSINESS_OWNER_PREFIX)) {
+    if (business.businessContext.kind === 'programmable_provider'
+      && business.businessContext.providerIdentifier.startsWith('provider:x402:')) {
       await ctx.db.patch(businessId, { publicStatus: 'unpublished', updatedAt: now })
     }
   }

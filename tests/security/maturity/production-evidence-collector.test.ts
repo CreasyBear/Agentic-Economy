@@ -53,8 +53,8 @@ function rows(kind: MeasuredProtectedSurfaceRow['kind'], count: number, firstExe
 
 function inventory(): MeasuredProtectedSurfaceInventory {
   const baselineCounts = Object.freeze({
-    serverFunctions: 43, publicConvex: 116, convexHttpActions: 1, crons: 10,
-    backgroundFamilies: 25, frozenHttp: 39, frozenMcp: 14, frozenCli: 12,
+    serverFunctions: 47, publicConvex: 117, convexHttpActions: 7, crons: 10,
+    backgroundFamilies: 25, frozenHttp: 40, frozenMcp: 13, frozenCli: 12,
   })
   const candidateCounts = Object.freeze({ ...baselineCounts, convexHttpRoutes: 0 })
   return Object.freeze({
@@ -66,13 +66,13 @@ function inventory(): MeasuredProtectedSurfaceInventory {
     frozenContract: Object.freeze({
       sourceFile: '.planning/maturity-execution/contracts/public-surface-inventory.json',
       sha256: HASH,
-      httpRefs: Object.freeze(Array.from({ length: 39 }, (_, index) => `http:${index}`)),
-      mcpRefs: Object.freeze(Array.from({ length: 14 }, (_, index) => `mcp:${index}`)),
+      httpRefs: Object.freeze(Array.from({ length: 40 }, (_, index) => `http:${index}`)),
+      mcpRefs: Object.freeze(Array.from({ length: 13 }, (_, index) => `mcp:${index}`)),
       cliRefs: Object.freeze(Array.from({ length: 12 }, (_, index) => `cli:${index}`)),
     }),
-    serverFunctions: rows('server_function', 43),
-    publicConvex: rows('convex_public', 116, true),
-    convexHttpActions: rows('http', 1),
+    serverFunctions: rows('server_function', 47),
+    publicConvex: rows('convex_public', 117, true),
+    convexHttpActions: rows('http', 7),
     convexHttpRoutes: Object.freeze([]),
     crons: rows('cron', 10),
     backgroundFamilies: rows('job', 25),
@@ -188,7 +188,7 @@ describe('P2-05 production evidence collector', () => {
   it('accounts for every exact measured ID through the measured runtime-isolation map', async () => {
     const proof = await collect()
     const candidateCount = candidateSurfaceCount(inventory())
-    expect(proof.baselineSurfaceCount).toBe(195)
+    expect(proof.baselineSurfaceCount).toBe(206)
     expect(proof.measuredSurfaceCount).toBe(candidateCount)
     expect(proof.surfaceRuntimeIsolationIndex).toMatchObject({
       surfaceCount: candidateCount,
@@ -223,17 +223,17 @@ describe('P2-05 production evidence collector', () => {
       row('continuation', 121),
     )
     expanded.convexHttpRoutes = [row('http', 122)]
-    expanded.candidateCounts = { ...expanded.candidateCounts, publicConvex: 122, convexHttpRoutes: 1 }
-    expanded.actualCounts = { ...expanded.actualCounts, publicConvex: 122, convexHttpRoutes: 1 }
+    expanded.candidateCounts = { ...expanded.candidateCounts, publicConvex: 123, convexHttpRoutes: 1 }
+    expanded.actualCounts = { ...expanded.actualCounts, publicConvex: 123, convexHttpRoutes: 1 }
 
     const proof = await collect(expanded)
 
     expect(proof.baselineCounts).toEqual(inventory().expectedCounts)
-    expect(proof.baselineSurfaceCount).toBe(195)
-    expect(proof.candidateCounts.publicConvex).toBe(122)
+    expect(proof.baselineSurfaceCount).toBe(206)
+    expect(proof.candidateCounts.publicConvex).toBe(123)
     expect(proof.candidateCounts.convexHttpRoutes).toBe(1)
-    expect(proof.measuredSurfaceCount).toBe(202)
-    expect(proof.surfaceRuntimeIsolationIndex.caseCount).toBe(201 * 7)
+    expect(proof.measuredSurfaceCount).toBe(213)
+    expect(proof.surfaceRuntimeIsolationIndex.caseCount).toBe(212 * 7)
   })
 
   it('rejects omissions, duplicates, unproved exemptions and synthetic sink rows', async () => {

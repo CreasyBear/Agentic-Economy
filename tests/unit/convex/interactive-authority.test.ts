@@ -13,6 +13,7 @@ import {
 } from 'vitest'
 
 import schema from '../../../convex/schema'
+import { api } from '../../../convex/_generated/api'
 import {
   InteractiveAuthorityError,
   materializeCurrentInteractiveAuthority,
@@ -22,6 +23,7 @@ import {
 import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
 import { resolveBusinessActor } from '../../../convex/authz'
 import { convexModules as modules } from '../../helpers/convex-fixtures'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const NOW = 10_000
 const PRINCIPAL_REF = `prn_${'1'.repeat(32)}`
@@ -41,6 +43,16 @@ const readCurrentInteractiveAuthorityFactsRef = makeFunctionReference<
   Record<string, never>,
   unknown
 >('interactiveAuthority:readCurrentInteractiveAuthorityFacts')
+
+const AUTHORITY_CASE_LABELS = [
+  "owner",
+  "member",
+  "workload",
+  "missing_workload",
+  "stranger",
+  "wrong_account",
+  "stale_generation",
+] as const;
 
 describe('canonical interactive authority', () => {
   beforeEach(() => {
@@ -62,10 +74,6 @@ describe('canonical interactive authority', () => {
     expect(context).toEqual({
       principalRef: PRINCIPAL_REF,
       accountRef: ACCOUNT_REF,
-      legacyOwnerId: expect.any(String),
-      legacyOwnerLocator: 'legacy-owner-row',
-      displayName: 'Canonical owner',
-      emailHash: 'sha256:canonical',
       revision: {
         binding: 7,
         credential: 6,
@@ -74,7 +82,6 @@ describe('canonical interactive authority', () => {
         access: 3,
         currentOwnership: 3,
         currentOwnerPrincipal: 5,
-        compatibilityUpdatedAt: 9,
       },
       provenance: {
         providerNamespace: 'clerk/user',
@@ -89,7 +96,6 @@ describe('canonical interactive authority', () => {
     })
     expect(context.principalRef).not.toBe('caller-shaped-subject')
     expect(context.accountRef).not.toBe(TOKEN_IDENTIFIER)
-    expect(context.legacyOwnerLocator).not.toBe('caller-shaped-subject')
 
     const actor = await backend.run(async (ctx) => resolveBusinessActor({
       db: ctx.db,
@@ -98,16 +104,12 @@ describe('canonical interactive authority', () => {
         getUserIdentity: async () => identity({ subject: 'caller-shaped-subject' }),
       },
     }))
-    expect(actor).toMatchObject({
+    expect(actor).toStrictEqual({
       kind: 'authenticated_owner',
-      clerkUserId: 'legacy-owner-row',
       canonicalPrincipalRef: PRINCIPAL_REF,
       canonicalAccountRef: ACCOUNT_REF,
-      authorityProvenance: {
-        providerNamespace: 'clerk/user',
-        bindingRef: BINDING_REF,
-        credentialRef: CREDENTIAL_REF,
-      },
+      authorityRevision: context.revision,
+      authorityProvenance: context.provenance,
     })
   })
 
@@ -130,7 +132,7 @@ describe('canonical interactive authority', () => {
     const backend = convexTest(schema, modules)
     await expect(backend.withIdentity(identity()).action(resolveCurrentInteractiveAuthorityRef, {}))
       .resolves.toBeNull()
-    await seedAuthority(backend, { omitOwnerProfile: true })
+    await seedAuthority(backend)
 
     await expect(backend.action(resolveCurrentInteractiveAuthorityRef, {})).resolves.toBeNull()
     await expect(backend.withIdentity(identity()).action(resolveCurrentInteractiveAuthorityRef, {}))
@@ -146,7 +148,7 @@ describe('canonical interactive authority', () => {
     ['workload', false, { principalKind: 'workload' }, identity()],
     ['missing_workload', false, { omit: 'principal' }, identity()],
     ['stranger', false, {}, identity({ tokenIdentifier: 'https://clerk.example.test|user_stranger' })],
-    ['wrong_account', false, { ownerAccountRef: `acc_${'9'.repeat(32)}` }, identity()],
+    ['wrong_account', false, { currentOwnershipAccountRef: `acc_${'b'.repeat(32)}` }, identity()],
     ['stale_generation', false, { bindingGeneration: 3, credentialGeneration: 2 }, identity()],
   ] as const)(
     'evaluates %s through the registered trusted-time action without mutating authority facts',
@@ -305,15 +307,9 @@ describe('canonical interactive authority', () => {
     ['authority_fact_invalid', { access: 'membership', currentOwnerPrincipalRef: 'not-a-principal-ref' }],
     ['ownership_mismatch', { access: 'membership', currentOwnerLifecycle: 'suspended' }],
     ['ownership_mismatch', { staleActiveFormerOwner: true }],
-    ['compatibility_missing', { omit: 'owner' }],
-    ['compatibility_ambiguous', { duplicate: 'owner' }],
-    ['compatibility_mismatch', { ownerPrincipalRef: `prn_${'9'.repeat(32)}` }],
-    ['compatibility_mismatch', { ownerAccountRef: `acc_${'9'.repeat(32)}` }],
     ['authority_fact_invalid', { bindingRevision: -1 }],
     ['authority_fact_invalid', { bindingRevision: 1.5 }],
     ['authority_fact_invalid', { bindingGeneration: 0 }],
-    ['authority_fact_invalid', { ownerUpdatedAt: Number.NaN }],
-    ['authority_fact_invalid', { ownerLocator: '   ' }],
   ] as const)('rejects %s authority facts', async (code, options) => {
     const backend = convexTest(schema, modules)
     await seedAuthority(backend, options as SeedOptions)
@@ -335,11 +331,6 @@ describe('canonical interactive authority', () => {
       identity({ tokenIdentifier: '   ' }),
     ))).rejects.toEqual(new InteractiveAuthorityError('identity_invalid'))
 
-    await seedAuthority(backend)
-    await expect(backend.run(async (ctx) => resolveInteractiveAuthorityContext(
-      ctx.db,
-      identity({ exp: undefined }),
-    ))).rejects.toEqual(new InteractiveAuthorityError('credential_not_current'))
   })
 
   it('keeps the registered materializer fail closed across changing identity facts', async () => {
@@ -427,8 +418,8 @@ describe('canonical interactive authority', () => {
 
 type SeedOptions = Readonly<{
   access?: 'ownership' | 'membership'
-  omit?: 'binding' | 'credential' | 'principal' | 'access' | 'account' | 'currentOwnership' | 'owner'
-  duplicate?: 'binding' | 'credential' | 'principal' | 'access' | 'account' | 'currentOwnership' | 'owner'
+  omit?: 'binding' | 'credential' | 'principal' | 'access' | 'account' | 'currentOwnership'
+  duplicate?: 'binding' | 'credential' | 'principal' | 'access' | 'account' | 'currentOwnership'
   bindingLifecycle?: 'active' | 'revoked'
   bindingGeneration?: number
   bindingRevision?: number
@@ -450,11 +441,6 @@ type SeedOptions = Readonly<{
   currentOwnershipLifecycle?: 'active' | 'ended'
   currentOwnerPrincipalRef?: string
   currentOwnerLifecycle?: 'active' | 'suspended'
-  ownerPrincipalRef?: string
-  ownerAccountRef?: string
-  omitOwnerProfile?: boolean
-  ownerUpdatedAt?: number
-  ownerLocator?: string
   staleActiveFormerOwner?: boolean
 }>
 
@@ -615,21 +601,6 @@ async function seedAuthority(backend: Backend, options: SeedOptions = {}): Promi
       }, `own_${'9'.repeat(32)}`)
     }
 
-    if (options.omit !== 'owner') {
-      const owner = {
-        clerkUserId: options.ownerLocator ?? 'legacy-owner-row',
-        ...(options.omitOwnerProfile === true ? {} : {
-          displayName: 'Canonical owner',
-          emailHash: 'sha256:canonical',
-        }),
-        canonicalPrincipalRef: options.ownerPrincipalRef ?? PRINCIPAL_REF,
-        canonicalAccountRef: options.ownerAccountRef ?? ACCOUNT_REF,
-        createdAt: 1,
-        updatedAt: options.ownerUpdatedAt ?? 9,
-      }
-      await ctx.db.insert('owners', owner)
-      if (options.duplicate === 'owner') await ctx.db.insert('owners', owner)
-    }
   })
 }
 
@@ -685,3 +656,274 @@ function identity(overrides: Partial<UserIdentity> = {}): UserIdentity {
     ...overrides,
   }
 }
+
+describe('owner identity provisioning', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const PROVISIONED_TOKEN = 'https://clerk.example.test|user_provisioned'
+
+  function provisionedIdentity(overrides: Partial<UserIdentity> = {}): UserIdentity {
+    return identity({
+      subject: 'user_provisioned',
+      tokenIdentifier: PROVISIONED_TOKEN,
+      ...overrides,
+    })
+  }
+
+  async function provisionedRows(backend: TestConvex<typeof schema>) {
+    return await backend.run(async (ctx) => ({
+      bindings: await ctx.db.query('externalIdentityBindings').collect(),
+      credentials: await ctx.db.query('credentials').collect(),
+      principals: await ctx.db.query('principals').collect(),
+      accounts: await ctx.db.query('accounts').collect(),
+      ownerships: await ctx.db.query('accountOwnerships').collect(),
+      memberships: await ctx.db.query('memberships').collect(),
+    }))
+  }
+
+  it('provisions a verified identity exactly once and resolves the full authority chain', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(provisionedIdentity())
+
+    await expect(owner.mutation(
+      api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+      {},
+    )).resolves.toBe(true)
+
+    const provisioned = await provisionedRows(backend)
+    expect(provisioned.memberships).toEqual([])
+    expect(provisioned.bindings).toHaveLength(1)
+    expect(provisioned.principals).toHaveLength(1)
+    expect(provisioned.accounts).toHaveLength(1)
+    expect(provisioned.ownerships).toHaveLength(1)
+    expect(provisioned.credentials).toHaveLength(1)
+    const [binding] = provisioned.bindings
+    const [principal] = provisioned.principals
+    const [account] = provisioned.accounts
+    const [ownership] = provisioned.ownerships
+    const [credential] = provisioned.credentials
+    expect(binding).toMatchObject({
+      providerNamespace: 'clerk/user',
+      providerIdentifier: PROVISIONED_TOKEN,
+      providerState: { kind: 'known', value: 'active' },
+      lifecycle: 'active',
+      credentialGeneration: 1,
+    })
+    expect(principal).toMatchObject({
+      kind: 'human',
+      displayName: 'user_provisioned',
+      lifecycle: 'active',
+    })
+    expect(ownership).toMatchObject({
+      accountRef: account!.accountRef,
+      ownerPrincipalRef: principal!.principalRef,
+      lifecycle: 'active',
+      changeKind: 'creation',
+    })
+    expect(account).toMatchObject({
+      lifecycle: 'active',
+      initialOwnershipRef: ownership!.ownershipRef,
+      currentOwnershipRef: ownership!.ownershipRef,
+      creationActorPrincipalRef: principal!.principalRef,
+    })
+    expect(credential).toMatchObject({
+      bindingRef: binding!.bindingRef,
+      principalRef: principal!.principalRef,
+      type: 'provider_token',
+      lifecycle: 'active',
+      generation: 1,
+      issuedAt: NOW,
+      expiresAt: 20_000,
+    })
+    expect(credential!.expiryMaterialization).toMatchObject({
+      state: 'scheduled',
+      credentialGeneration: 1,
+      credentialExpiresAt: 20_000,
+      scheduleRef: expect.any(String),
+    })
+
+    await expect(owner.mutation(
+      api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+      {},
+    )).resolves.toBe(true)
+    await expect(provisionedRows(backend)).resolves.toEqual(provisioned)
+
+    const context = await backend.run(async (ctx) =>
+      resolveInteractiveAuthorityContext(ctx.db, provisionedIdentity()))
+    expect(context).toMatchObject({
+      principalRef: principal!.principalRef,
+      accountRef: account!.accountRef,
+      provenance: {
+        providerNamespace: 'clerk/user',
+        bindingRef: binding!.bindingRef,
+        credentialGeneration: 1,
+        accessKind: 'ownership',
+        currentOwnershipRef: ownership!.ownershipRef,
+      },
+    })
+
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('businesses', {
+        owningAccountRef: account!.accountRef,
+        slug: 'provisioned-owner-business',
+        name: 'Provisioned Owner Business',
+        normalizedName: 'provisioned owner business',
+        category: 'programmable provider',
+        businessContext: {
+          kind: 'programmable_provider',
+          website: 'https://provisioned.example.test',
+          providerIdentifier: 'provider:x402:provisioned.example.test',
+        },
+        publicStatus: 'published',
+        trustTier: 'registry_verified',
+        sourceHash: canonicalDigest({
+          kind: 'test-provisioned-owner-business:v1',
+          tokenIdentifier: PROVISIONED_TOKEN,
+        }),
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    })
+    await expect(backend.run(async (ctx) => resolveBusinessActor({
+      db: ctx.db,
+      scheduler: ctx.scheduler,
+      auth: { getUserIdentity: async () => provisionedIdentity() },
+    }))).resolves.toMatchObject({
+      kind: 'authenticated_owner',
+      canonicalPrincipalRef: principal!.principalRef,
+      canonicalAccountRef: account!.accountRef,
+    })
+  })
+
+  it('rotates the credential generation for a fresh verified token window without re-keying identity', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(provisionedIdentity())
+    await expect(owner.mutation(
+      api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+      {},
+    )).resolves.toBe(true)
+    const provisioned = await provisionedRows(backend)
+    const [binding] = provisioned.bindings
+    const [principal] = provisioned.principals
+    const [account] = provisioned.accounts
+    const [ownership] = provisioned.ownerships
+
+    await expect(backend.withIdentity(provisionedIdentity({ exp: 40 })).mutation(
+      api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+      {},
+    )).resolves.toBe(true)
+
+    const rotated = await provisionedRows(backend)
+    expect(rotated.bindings).toEqual([{
+      ...binding!,
+      credentialGeneration: 2,
+      revision: binding!.revision + 1,
+    }])
+    expect(rotated.principals).toEqual(provisioned.principals)
+    expect(rotated.accounts).toEqual(provisioned.accounts)
+    expect(rotated.ownerships).toEqual(provisioned.ownerships)
+    expect(rotated.credentials).toHaveLength(2)
+    const previous = rotated.credentials.find(({ generation }) => generation === 1)
+    const current = rotated.credentials.find(({ generation }) => generation === 2)
+    expect(previous).toMatchObject({ lifecycle: 'stale', staleAt: NOW })
+    expect(current).toMatchObject({
+      bindingRef: binding!.bindingRef,
+      principalRef: principal!.principalRef,
+      type: 'provider_token',
+      lifecycle: 'active',
+      generation: 2,
+      issuedAt: NOW,
+      expiresAt: 40_000,
+      predecessorCredentialRef: previous!.credentialRef,
+    })
+    expect(current!.expiryMaterialization).toMatchObject({
+      state: 'scheduled',
+      credentialGeneration: 2,
+      credentialExpiresAt: 40_000,
+    })
+
+    const context = await backend.run(async (ctx) =>
+      resolveInteractiveAuthorityContext(ctx.db, provisionedIdentity({ exp: 40 })))
+    expect(context).toMatchObject({
+      principalRef: principal!.principalRef,
+      accountRef: account!.accountRef,
+      provenance: {
+        credentialGeneration: 2,
+        currentOwnershipRef: ownership!.ownershipRef,
+      },
+    })
+  })
+
+  it('anchors the credential window on the server clock when the identity carries no exp claim', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(provisionedIdentity({ exp: undefined }))
+
+    await expect(owner.mutation(
+      api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+      {},
+    )).resolves.toBe(true)
+    const provisioned = await provisionedRows(backend)
+    const [binding] = provisioned.bindings
+    const [credential] = provisioned.credentials
+    expect(credential).toMatchObject({
+      bindingRef: binding!.bindingRef,
+      type: 'provider_token',
+      lifecycle: 'active',
+      generation: 1,
+      issuedAt: NOW,
+      expiresAt: NOW + 60_000,
+    })
+    expect(credential!.expiryMaterialization).toMatchObject({
+      state: 'scheduled',
+      credentialGeneration: 1,
+      credentialExpiresAt: NOW + 60_000,
+    })
+
+    // Two materialize calls within one page load observe the same live
+    // window and must not churn the credential generation.
+    vi.setSystemTime(NOW + 5_000)
+    await expect(owner.mutation(
+      api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+      {},
+    )).resolves.toBe(true)
+    await expect(provisionedRows(backend)).resolves.toEqual(provisioned)
+    await expect(backend.run(async (ctx) =>
+      resolveInteractiveAuthorityContext(ctx.db, provisionedIdentity({ exp: undefined }))))
+      .resolves.toMatchObject({ provenance: { credentialGeneration: 1 } })
+
+    // Idle past the window: the next verified presentation re-issues the
+    // generation with a fresh server-anchored window.
+    vi.setSystemTime(NOW + 60_000)
+    await expect(owner.mutation(
+      api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+      {},
+    )).resolves.toBe(true)
+    const rotated = await provisionedRows(backend)
+    expect(rotated.credentials).toHaveLength(2)
+    const previous = rotated.credentials.find(({ generation }) => generation === 1)
+    const current = rotated.credentials.find(({ generation }) => generation === 2)
+    expect(previous).toMatchObject({ lifecycle: 'stale', staleAt: NOW + 60_000 })
+    expect(current).toMatchObject({
+      lifecycle: 'active',
+      generation: 2,
+      issuedAt: NOW + 60_000,
+      expiresAt: NOW + 120_000,
+    })
+    await expect(backend.run(async (ctx) =>
+      resolveInteractiveAuthorityContext(ctx.db, provisionedIdentity({ exp: undefined }))))
+      .resolves.toMatchObject({ provenance: { credentialGeneration: 2 } })
+
+    // A lapsed window still denies wall-clock reads.
+    vi.setSystemTime(NOW + 120_000)
+    await expect(backend.run(async (ctx) =>
+      resolveInteractiveAuthorityContext(ctx.db, provisionedIdentity({ exp: undefined }))))
+      .rejects.toEqual(new InteractiveAuthorityError('credential_not_current'))
+  })
+})

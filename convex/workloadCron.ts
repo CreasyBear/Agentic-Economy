@@ -33,6 +33,11 @@ import {
 import {
   CONSEQUENCE_OPERATIONS,
   ConvexWorkloadContextStore,
+  PHASE_2_CRON_ACCOUNT_REF,
+  PHASE_2_CRON_MEMBERSHIP_REF,
+  PHASE_2_CRON_OWNER_PRINCIPAL_REF,
+  PHASE_2_CRON_OWNERSHIP_REF,
+  PHASE_2_CRON_PRINCIPAL_REF,
   WorkloadCronBoundaryError,
   consequenceJsonValue,
   consequenceOperationValue,
@@ -81,6 +86,106 @@ export const admit = internalQuery({
   args: { name: workloadCronNameValue },
   returns: workloadCronSnapshotValue,
   handler: admitWorkloadCronHandler,
+})
+
+type EnsurePlatformWorkloadIdentitiesResult = Readonly<{
+  kind: 'ensured'
+  created: string[]
+}>
+
+// Self-healing bootstrap for the cron fleet's machine identity. Every scheduled
+// workload admits through WorkloadContextAdmission with the fixed Phase 2 refs,
+// which throws workload_principal_missing on any fresh deployment. This
+// internalMutation inserts the canonical rows (see convex/agentAccessOAuth.test.ts
+// and tests/integration/facilitator-discovery.test.ts fixtures) when absent and
+// leaves existing rows untouched, so it is safe to run on every stack bring-up.
+export async function ensurePlatformWorkloadIdentitiesHandler(
+  ctx: MutationCtx,
+): Promise<EnsurePlatformWorkloadIdentitiesResult> {
+  const now = Date.now()
+  const created: string[] = []
+  const action = Object.freeze({
+    actorPrincipalRef: PHASE_2_CRON_OWNER_PRINCIPAL_REF,
+    activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+    correlationRef: 'platform-identity:cron',
+    idempotencyRef: 'platform-identity:cron',
+  })
+  const principal = await ctx.db.query('principals')
+    .withIndex('by_principalRef', (query) => query.eq('principalRef', PHASE_2_CRON_PRINCIPAL_REF))
+    .unique()
+  if (principal === null) {
+    await ctx.db.insert('principals', {
+      principalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      kind: 'workload',
+      displayName: 'Phase 2 scheduled workload',
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    created.push('principal')
+  }
+  const account = await ctx.db.query('accounts')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', PHASE_2_CRON_ACCOUNT_REF))
+    .unique()
+  if (account === null) {
+    await ctx.db.insert('accounts', {
+      accountRef: PHASE_2_CRON_ACCOUNT_REF,
+      displayName: 'Phase 2 operations',
+      lifecycle: 'active',
+      recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+      creationActorPrincipalRef: PHASE_2_CRON_OWNER_PRINCIPAL_REF,
+      creationIdempotencyRef: 'platform-identity:cron:account',
+      initialOwnershipRef: PHASE_2_CRON_OWNERSHIP_REF,
+      currentOwnershipRef: PHASE_2_CRON_OWNERSHIP_REF,
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+      lastAction: action,
+    })
+    created.push('account')
+  }
+  const ownership = await ctx.db.query('accountOwnerships')
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', PHASE_2_CRON_OWNERSHIP_REF))
+    .unique()
+  if (ownership === null) {
+    await ctx.db.insert('accountOwnerships', {
+      ownershipRef: PHASE_2_CRON_OWNERSHIP_REF,
+      accountRef: PHASE_2_CRON_ACCOUNT_REF,
+      ownerPrincipalRef: PHASE_2_CRON_OWNER_PRINCIPAL_REF,
+      lifecycle: 'active',
+      changeKind: 'creation',
+      revision: 1,
+      createdAt: now,
+      createdBy: action,
+    })
+    created.push('ownership')
+  }
+  const membership = await ctx.db.query('memberships')
+    .withIndex('by_membershipRef', (query) => query.eq('membershipRef', PHASE_2_CRON_MEMBERSHIP_REF))
+    .unique()
+  if (membership === null) {
+    await ctx.db.insert('memberships', {
+      membershipRef: PHASE_2_CRON_MEMBERSHIP_REF,
+      accountRef: PHASE_2_CRON_ACCOUNT_REF,
+      memberPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      createdBy: action,
+    })
+    created.push('membership')
+  }
+  return { kind: 'ensured', created }
+}
+
+export const ensurePlatformWorkloadIdentities = internalMutation({
+  args: {},
+  returns: v.object({
+    kind: v.literal('ensured'),
+    created: v.array(v.string()),
+  }),
+  handler: ensurePlatformWorkloadIdentitiesHandler,
 })
 
 export async function reconcileWorkloadCronSnapshot(

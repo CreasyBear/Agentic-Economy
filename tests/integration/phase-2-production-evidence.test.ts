@@ -343,7 +343,7 @@ describe('Phase 2 exact production evidence composition', () => {
       sinkCollectors: jit.collectors,
     })
 
-    expect(proof.baselineSurfaceCount).toBe(195)
+    expect(proof.baselineSurfaceCount).toBe(206)
     expect(proof.baselineCounts).toEqual(measuredInventory.expectedCounts)
     expect(proof.candidateCounts).toEqual(measuredInventory.actualCounts)
     expect(proof.measuredSurfaceCount).toBe(candidateSurfaceCount)

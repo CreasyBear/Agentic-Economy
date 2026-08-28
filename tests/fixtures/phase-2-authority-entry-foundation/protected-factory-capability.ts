@@ -15,8 +15,16 @@ const fixedProtectedFactory = () =>
 export const protectedFactoryCapability = fixedProtectedFactory()({
   args: {},
   handler: async (ctx) =>
-    await ctx.db.insert("owners", {
-      clerkUserId: "forbidden-protected-factory-write",
+    await ctx.db.insert("businesses", {
+      owningAccountRef: "acc_forbidden-protected-factory-write",
+      slug: "forbidden-protected-factory-write",
+      name: "Forbidden protected factory write",
+      normalizedName: "forbidden protected factory write",
+      category: "hostile fixture",
+      businessContext: { kind: "local_human", suburb: "Perth", stateTerritory: "WA" },
+      publicStatus: "unpublished",
+      trustTier: "claimed",
+      sourceHash: "hash:forbidden-protected-factory-write",
       createdAt: 0,
       updatedAt: 0,
     }),

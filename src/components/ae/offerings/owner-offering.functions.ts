@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
+import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 import { exactAmountSchema } from '@/modules/money/public'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import {
@@ -136,7 +137,8 @@ type OfferingFacts = Readonly<{ name: string; category: string; summary: string;
 export const readOwnerOfferingSupplyServer = createServerFn().handler(async (): Promise<OwnerOfferingSupplyReadResult> => {
   try {
     return await callSourceQuery(readSupplyQuery, {})
-  } catch {
+  } catch (error) {
+    console.error('[owner-offerings] supply source read failed', sanitizeTelemetryError(error))
     return { kind: 'error', code: 'source_unavailable', reason: 'The Operation source did not answer. Try again.' }
   }
 })

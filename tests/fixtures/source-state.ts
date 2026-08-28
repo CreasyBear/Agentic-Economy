@@ -11,7 +11,6 @@ type EmptyRegistryProjectionSourceState = RegistrySourceState
 
 function createEmptySourceState(): EmptySourceState {
   return {
-    owners: [],
     businesses: [],
     businessContexts: [],
     offerings: [],

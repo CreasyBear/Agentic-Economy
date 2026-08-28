@@ -163,10 +163,10 @@ export async function createAuthenticatedConvexClient(
   let materialized: boolean
   try {
     materialized = await client.mutation(materializeCurrentInteractiveAuthorityMutation, {})
-  } catch {
+  } catch (error) {
     throw new ConvexSourceError(
       'missing_auth',
-      'Authenticated source authority could not be armed.',
+      `Authenticated source authority could not be armed. ${String(error)}`,
       503,
     )
   }

@@ -169,12 +169,10 @@ describe('facilitator discovery reconciliation', () => {
 
     const persisted = await backend.run(async (ctx) => ({
       businesses: await ctx.db.query('businesses').collect(),
-      owners: await ctx.db.query('owners').collect(),
       connections: await ctx.db.query('capabilityProviderConnections').collect(),
       publications: await ctx.db.query('capabilityPublications').collect(),
     }))
-    expect(persisted.businesses).toHaveLength(1)
-    expect(persisted.owners[0]?.clerkUserId).toMatch(/^system:facilitator-discovery:/u)
+    expect(persisted.businesses[0]?.owningAccountRef).toMatch(/^acc_[0-9a-f]{32}$/u)
     expect(persisted.connections[0]).toMatchObject({
       providerRef: 'provider:x402:402timezones.vercel.app',
       providerAccountRef: 'x402:https://402timezones.vercel.app/api/convert-timezone',
@@ -359,12 +357,10 @@ describe('facilitator discovery reconciliation', () => {
     })
     await expect(backend.run(async (ctx) => ({
       businesses: await ctx.db.query('businesses').collect(),
-      owners: await ctx.db.query('owners').collect(),
       connections: await ctx.db.query('capabilityProviderConnections').collect(),
       publications: await ctx.db.query('capabilityPublications').collect(),
     }))).resolves.toMatchObject({
       businesses: [],
-      owners: [],
       connections: [],
       publications: [],
     })
@@ -403,12 +399,10 @@ describe('facilitator discovery reconciliation', () => {
 
     await expect(backend.run(async (ctx) => ({
       businesses: await ctx.db.query('businesses').collect(),
-      owners: await ctx.db.query('owners').collect(),
       connections: await ctx.db.query('capabilityProviderConnections').collect(),
       publications: await ctx.db.query('capabilityPublications').collect(),
     }))).resolves.toMatchObject({
       businesses: [],
-      owners: [],
       connections: [],
       publications: [],
     })

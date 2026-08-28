@@ -13,8 +13,16 @@ export const protectedDbAlias = protectedInteractiveMutation({
   args: {},
   handler: async (ctx) => {
     const db = ctx.db;
-    return await db.insert("owners", {
-      clerkUserId: "forbidden-protected-db-alias",
+    return await db.insert("businesses", {
+      owningAccountRef: "acc_forbidden-protected-db-alias",
+      slug: "forbidden-protected-db-alias",
+      name: "Forbidden protected db alias",
+      normalizedName: "forbidden protected db alias",
+      category: "hostile fixture",
+      businessContext: { kind: "local_human", suburb: "Perth", stateTerritory: "WA" },
+      publicStatus: "unpublished",
+      trustTier: "claimed",
+      sourceHash: "hash:forbidden-protected-db-alias",
       createdAt: 0,
       updatedAt: 0,
     });

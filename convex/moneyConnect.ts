@@ -2,7 +2,7 @@ import { v } from 'convex/values'
 
 import type { Doc } from './_generated/dataModel'
 import { env, type MutationCtx, type QueryCtx } from './_generated/server'
-import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
+import { resolveBusinessActor } from './authz'
 import {
   requireBillingSourceWrite,
   type BillingSourceWriteArgs,
@@ -373,11 +373,9 @@ export async function readOwnerPayoutAccountHandler(
 ) {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return null
-  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
-  if (owner === null) return null
   const businesses = await ctx.db
     .query('businesses')
-    .withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id))
+    .withIndex('by_owningAccountRef_and_updatedAt', (q) => q.eq('owningAccountRef', actor.canonicalAccountRef))
     .order('desc')
     .take(20)
   if (

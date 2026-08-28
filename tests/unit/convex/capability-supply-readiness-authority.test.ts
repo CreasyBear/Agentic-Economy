@@ -19,10 +19,18 @@ describe('capability supply readiness authority', () => {
     const refs = await backend.run(async (ctx) => {
       const business = await ctx.db.get(businessId)
       if (business === null) throw new Error('business missing')
-      const owner = await ctx.db.get(business.ownerId)
-      if (owner?.canonicalPrincipalRef === undefined || owner.canonicalAccountRef === undefined) {
-        throw new Error('canonical owner missing')
-      }
+      const account = await ctx.db.query('accounts')
+        .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
+        .unique()
+      if (account === null) throw new Error('canonical account missing')
+      const ownership = await ctx.db.query('accountOwnerships')
+        .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+        .unique()
+      if (ownership === null) throw new Error('canonical ownership missing')
+      const principal = await ctx.db.query('principals')
+        .withIndex('by_principalRef', (query) => query.eq('principalRef', ownership.ownerPrincipalRef))
+        .unique()
+      if (principal === null) throw new Error('canonical principal missing')
       const publicationId = await ctx.db.insert('capabilityPublications', {
         publicationRef: 'publication:readiness-authority',
         operationRef: 'operation:readiness-authority',
@@ -36,7 +44,7 @@ describe('capability supply readiness authority', () => {
         sourceKind: 'ae_envelope',
         sourceRevision: '1',
         sourceDigest: `sha256:${'2'.repeat(64)}`,
-        publisherRef: owner.canonicalPrincipalRef,
+        publisherRef: principal.principalRef,
         authorityMode: 'provider_owned',
         provenanceDigest: `sha256:${'3'.repeat(64)}`,
         offeringId: 'offering:readiness-authority',
@@ -49,26 +57,14 @@ describe('capability supply readiness authority', () => {
         createdAt: 1,
         updatedAt: 1,
       })
-      const principal = await ctx.db.query('principals')
-        .withIndex('by_principalRef', (query) => query.eq('principalRef', owner.canonicalPrincipalRef as never))
-        .unique()
-      const account = await ctx.db.query('accounts')
-        .withIndex('by_accountRef', (query) => query.eq('accountRef', owner.canonicalAccountRef as never))
-        .unique()
-      if (principal === null || account === null) throw new Error('canonical authority missing')
-      const ownership = await ctx.db.query('accountOwnerships')
-        .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
-        .unique()
-      if (ownership === null) throw new Error('canonical ownership missing')
       return {
         businessId,
-        ownerId: owner._id,
         publicationId,
         principalId: principal._id,
         accountId: account._id,
         ownershipId: ownership._id,
-        principalRef: owner.canonicalPrincipalRef,
-        accountRef: owner.canonicalAccountRef,
+        principalRef: principal.principalRef,
+        accountRef: account.accountRef,
       }
     })
 
@@ -107,14 +103,14 @@ describe('capability supply readiness authority', () => {
         now: Date.now(),
       }))).resolves.toBeNull()
     await backend.run(async (ctx) => await ctx.db.patch(refs.businessId, { suppressedAt: undefined }))
-    await backend.run(async (ctx) => await ctx.db.patch(refs.ownerId, { canonicalAccountRef: undefined }))
+    await backend.run(async (ctx) => await ctx.db.patch(refs.businessId, { owningAccountRef: 'acc_unresolvable_owner' }))
     await expect(backend.run(async (ctx) =>
       await readCurrentCapabilityProbeAuthority(ctx, {
         publicationRef: 'publication:readiness-authority',
         expectedRevision: 1,
         now: Date.now(),
       }))).resolves.toBeNull()
-    await backend.run(async (ctx) => await ctx.db.patch(refs.ownerId, { canonicalAccountRef: refs.accountRef }))
+    await backend.run(async (ctx) => await ctx.db.patch(refs.businessId, { owningAccountRef: refs.accountRef }))
 
     await backend.run(async (ctx) => await ctx.db.patch(refs.accountId, { revision: 2 }))
     const revised = await backend.run(async (ctx) =>
@@ -164,15 +160,14 @@ describe('capability supply readiness authority', () => {
     const seeded = await backend.run(async (ctx) => {
       const business = await ctx.db.get(businessId)
       if (business === null) throw new Error('business missing')
-      const owner = await ctx.db.get(business.ownerId)
-      if (owner?.canonicalAccountRef === undefined) throw new Error('canonical owner missing')
+      const owningAccountRef = business.owningAccountRef
       const principalId = 'agent:readiness-publisher'
       const grantRef = 'agent-grant:readiness-publisher'
       const policyDigest = `sha256:${'4'.repeat(64)}`
       const expiresAt = now + 300_000
       const agentId = await ctx.db.insert('agentAccessPrincipals', {
         principalId,
-        ownerId: owner.canonicalAccountRef,
+        ownerId: owningAccountRef,
         credentialId: 'credential:readiness-publisher',
         applicationRef: 'application:readiness-publisher',
         environment: 'production',
@@ -189,7 +184,7 @@ describe('capability supply readiness authority', () => {
         format: 'ae.agent-access-grant:v1',
         grantRef,
         principalId,
-        ownerId: owner.canonicalAccountRef,
+        ownerId: owningAccountRef,
         applicationRef: 'application:readiness-publisher',
         credentialId: 'credential:readiness-publisher',
         environment: 'production',
@@ -251,7 +246,7 @@ describe('capability supply readiness authority', () => {
         createdAt: 1,
         updatedAt: 1,
       })
-      return { agentId, grantId, publicationId, principalId, grantRef, accountRef: owner.canonicalAccountRef }
+      return { agentId, grantId, publicationId, principalId, grantRef, accountRef: owningAccountRef }
     })
     const read = async (at = Date.now()) => await backend.run(async (ctx) =>
       await readCurrentCapabilityProbeAuthority(ctx, {

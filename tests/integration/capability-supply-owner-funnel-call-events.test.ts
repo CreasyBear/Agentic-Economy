@@ -86,7 +86,6 @@ function canonicalActor(principalRef: string, accountRef: string, revision: numb
     clerkUserId: 'clerk_hostile_not_authority',
     canonicalPrincipalRef: principalRef,
     canonicalAccountRef: accountRef,
-    legacyOwnerId: 'owner_legacy',
     authorityRevision: revision,
     authorityProvenance: {
       providerNamespace: 'clerk',

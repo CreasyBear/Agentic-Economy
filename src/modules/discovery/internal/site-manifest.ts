@@ -39,7 +39,7 @@ import {
 } from '../developer-discovery'
 import type { DeveloperDiscoveryUnsupportedCapability } from '../developer-discovery'
 import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
-import { describeActionForAgent, findAction, type ActionInvocationContract } from '@/modules/actions'
+import { describeActionForAgent, findAction } from '@/modules/actions'
 
 const AGENT_HTTP_AUTHENTICATION = 'clerk_api_key' as const
 export const SITE_DISCOVERY_SUMMARY_LINES = Object.freeze([

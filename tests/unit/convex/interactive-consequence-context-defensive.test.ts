@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const authorityMocks = vi.hoisted(() => ({
   resolveBusinessActor: vi.fn(),
-  readCanonicalCompatibilityOwner: vi.fn(),
   readActiveAdminMembership: vi.fn(),
 }))
 
@@ -16,10 +15,8 @@ import { payoutAuthorityAllowed } from '../../../convex/moneyPayoutTransferShare
 
 const actor = {
   kind: 'authenticated_owner' as const,
-  clerkUserId: 'legacy-owner-locator',
   canonicalPrincipalRef: `prn_${'1'.repeat(32)}`,
   canonicalAccountRef: `acc_${'2'.repeat(32)}`,
-  legacyOwnerId: 'owners:defensive',
   authorityRevision: {
     binding: 1,
     credential: 1,
@@ -28,7 +25,6 @@ const actor = {
     access: 1,
     currentOwnership: 1,
     currentOwnerPrincipal: 1,
-    compatibilityUpdatedAt: 1,
   },
   authorityProvenance: {
     providerNamespace: 'clerk/user' as const,
@@ -45,13 +41,18 @@ const actor = {
 describe('interactive consequence defensive denials', () => {
   beforeEach(() => {
     authorityMocks.resolveBusinessActor.mockReset().mockResolvedValue(actor)
-    authorityMocks.readCanonicalCompatibilityOwner.mockReset().mockResolvedValue(null)
     authorityMocks.readActiveAdminMembership.mockReset()
   })
 
-  it('catalog fails closed if the canonical compatibility owner disappears', async () => {
+  it('catalog fails closed if the owned business belongs to a different account', async () => {
     const ctx = {
-      db: { get: vi.fn() },
+      db: {
+        query: vi.fn(() => {
+          const withIndex = vi.fn(() => ({ unique: vi.fn(async () => null) }))
+          return { withIndex }
+        }),
+        get: vi.fn(async () => ({ _id: 'businesses:defensive', owningAccountRef: `acc_${'9'.repeat(32)}` })),
+      },
       auth: { getUserIdentity: vi.fn() },
       scheduler: {},
     }
@@ -66,13 +67,9 @@ describe('interactive consequence defensive denials', () => {
         summary: 'Canonical owner disappearance.',
       },
     })).resolves.toMatchObject({ kind: 'error', code: 'wrong_owner' })
-    expect(ctx.db.get).not.toHaveBeenCalled()
   })
 
   it('catalog fails closed if the owned business disappears', async () => {
-    authorityMocks.readCanonicalCompatibilityOwner.mockResolvedValue({
-      _id: 'owners:defensive',
-    })
     const ctx = {
       db: { get: vi.fn(async () => null) },
       auth: { getUserIdentity: vi.fn() },
@@ -91,12 +88,12 @@ describe('interactive consequence defensive denials', () => {
     })).resolves.toMatchObject({ kind: 'error', code: 'wrong_owner' })
   })
 
-  it('payout fails closed if the exact compatibility owner disappears', async () => {
+  it('payout fails closed if the owned business disappears', async () => {
     await expect(payoutAuthorityAllowed({
       auth: { getUserIdentity: vi.fn() },
       db: {
-        normalizeId: vi.fn(),
-        get: vi.fn(),
+        normalizeId: vi.fn(() => 'businesses:defensive'),
+        get: vi.fn(async () => null),
       },
       scheduler: {},
     } as never, 'businesses:defensive', actor.canonicalPrincipalRef)).resolves.toBe(false)

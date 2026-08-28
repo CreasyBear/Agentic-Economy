@@ -413,7 +413,7 @@ function seededAdminDb(): FakeDb {
   db.seed('businesses', {
     _id: 'businesses:1',
     _creationTime: 3,
-    ownerId: 'owners:1',
+    ownerId: 'principal:1',
     slug: 'sam-plumbing',
     name: 'Sam Plumbing',
     normalizedName: 'sam plumbing',
@@ -580,15 +580,7 @@ function seedCanonicalIdentity(db: FakeDb, identity: UserIdentity): void {
       materializedAt: now,
     },
   })
-  db.seed('owners', {
-    _id: `owners:${suffix}`,
-    _creationTime: now,
-    clerkUserId: identity.subject,
-    canonicalPrincipalRef: principalRef,
-    canonicalAccountRef: accountRef,
-    createdAt: now,
-    updatedAt: now,
-  })
+  
 }
 
 function ownerAdmin(): UserIdentity {

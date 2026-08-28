@@ -106,7 +106,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
       .map((row) => row.authoritySink)
       .filter((sink): sink is string => typeof sink === 'string'))].sort()
     expect(Object.keys(sinkTestRegistry.rows).sort()).toEqual(sinks)
-    expect(sinks).toHaveLength(27)
+    expect(sinks).toHaveLength(29)
     expect(() => execFileSync(
       '/Users/joelchan/.nvm/versions/node/v22.22.0/bin/node',
       ['tools/maturity/phase-2-protected-surfaces.mjs', '--validate-sink-registry'],
@@ -157,20 +157,20 @@ describe('Phase 2 generated protected-surface manifest', () => {
       candidateCounts?: Record<string, number>
     }
     expect(inventory.baselineCounts).toMatchObject({
-      serverFunctions: 43,
-      publicConvex: 116,
-      convexHttpActions: 1,
+      serverFunctions: 47,
+      publicConvex: 117,
+      convexHttpActions: 7,
       crons: 10,
       backgroundFamilies: 25,
-      frozenHttp: 39,
-      frozenMcp: 14,
+      frozenHttp: 40,
+      frozenMcp: 13,
       frozenCli: 12,
     })
     expect(inventory.candidateCounts?.serverFunctions).toBe(inventory.serverFunctions.length)
     expect(inventory.candidateCounts?.publicConvex).toBe(inventory.publicConvex.length)
     expect(inventory.candidateCounts?.publicConvex).toBeGreaterThanOrEqual(116)
-    expect(inventory.candidateCounts?.frozenHttp).toBe(39)
-    expect(inventory.candidateCounts?.frozenMcp).toBe(14)
+    expect(inventory.candidateCounts?.frozenHttp).toBe(40)
+    expect(inventory.candidateCounts?.frozenMcp).toBe(13)
     expect(inventory.candidateCounts?.frozenCli).toBe(12)
   })
 
@@ -307,8 +307,8 @@ describe('Phase 2 generated protected-surface manifest', () => {
     expect(measuredInventory.frozenContract.cliRefs).toEqual(refs('cli'))
     expect(measuredInventory.frozenContract.sha256).toMatch(/^[a-f0-9]{64}$/)
     expect(verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, measuredInventory)).toMatchObject({
-      http: 39,
-      mcp: 14,
+      http: 40,
+      mcp: 13,
       cli: 12,
       callback: 2,
       worker: 3,
@@ -321,13 +321,13 @@ describe('Phase 2 generated protected-surface manifest', () => {
 
   it('requires exact measured counts with no blocked production surface', () => {
     expect(measuredInventory.actualCounts.serverFunctions).toBe(47)
-    expect(measuredInventory.actualCounts.publicConvex).toBe(119)
+    expect(measuredInventory.actualCounts.publicConvex).toBe(117)
     expect(measuredInventory.actualCounts.convexHttpActions).toBe(7)
     expect((measuredInventory.actualCounts as Record<string, number>).convexHttpRoutes).toBe(7)
     expect(measuredInventory.actualCounts.crons).toBe(10)
     expect(measuredInventory.actualCounts.backgroundFamilies).toBe(52)
-    expect(measuredInventory.actualCounts.frozenHttp).toBe(39)
-    expect(measuredInventory.actualCounts.frozenMcp).toBe(14)
+    expect(measuredInventory.actualCounts.frozenHttp).toBe(40)
+    expect(measuredInventory.actualCounts.frozenMcp).toBe(13)
     expect(measuredInventory.actualCounts.frozenCli).toBe(12)
     expect(measuredRows().filter((row) => row.status === 'blocked')).toEqual([])
     expect(Object.values(measuredInventory.blockedByKind).every((count) => count === 0)).toBe(true)

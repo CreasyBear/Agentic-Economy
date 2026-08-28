@@ -277,7 +277,7 @@ describe('T8 current Operation staging observation', () => {
     ], { CONVEX_DEPLOY_KEY: `dev:${alias}|fabricated-secret-material-123456` })).toThrow()
   })
 
-  it('rejects malformed revisions, missing/duplicate/extra arguments, empty owners and rollback reasons', () => {
+  it('rejects malformed revisions, missing/duplicate/extra arguments, empty actor lists and rollback reasons', () => {
     const base = ['start', '--deployment', deploymentName, '--revision', revision, '--owner', owner, '--receipt', 'output/release/start.json']
     const environment = { CONVEX_DEPLOY_KEY: deployKey }
     expect(() => parseStageOptions([...base, '--extra', 'value'], environment)).toThrow('staging_observation_argument_invalid')

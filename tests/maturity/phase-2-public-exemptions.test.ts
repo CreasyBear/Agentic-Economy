@@ -683,18 +683,8 @@ describe('Phase 2 authority-bound narrow-system jobs', () => {
 
 async function seedPrivateBusinesses(backend: Backend): Promise<void> {
   await backend.run(async (ctx) => {
-    const ownerA = await ctx.db.insert('owners', {
-      clerkUserId: 'owner-public',
-      createdAt: 1,
-      updatedAt: 1,
-    })
-    const ownerB = await ctx.db.insert('owners', {
-      clerkUserId: MUST_NOT_LEAK,
-      createdAt: 1,
-      updatedAt: 1,
-    })
     await ctx.db.insert('businesses', {
-      ownerId: ownerA,
+      owningAccountRef: 'account:public-owner',
       slug: 'public-no-offering',
       name: 'Public no offering',
       normalizedName: 'public no offering',
@@ -707,7 +697,7 @@ async function seedPrivateBusinesses(backend: Backend): Promise<void> {
       updatedAt: 1,
     })
     await ctx.db.insert('businesses', {
-      ownerId: ownerB,
+      owningAccountRef: `account:${MUST_NOT_LEAK}`,
       slug: 'cross-account-private',
       name: MUST_NOT_LEAK,
       normalizedName: MUST_NOT_LEAK,

@@ -82,8 +82,6 @@ export const sendMessage = mutation({
     const authority: InteractiveBusinessAuthorityContext = Object.freeze({
       principalRef: actor.canonicalPrincipalRef,
       accountRef: actor.canonicalAccountRef,
-      legacyOwnerId: actor.legacyOwnerId,
-      legacyOwnerLocator: actor.clerkUserId,
       revision: actor.authorityRevision,
       provenance: actor.authorityProvenance,
     })

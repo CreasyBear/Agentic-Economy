@@ -68,14 +68,10 @@ export async function resolveBusinessActor(
   if (authority === null) return anonymousBusinessActor()
   return Object.freeze({
     kind: 'authenticated_owner',
-    clerkUserId: authority.legacyOwnerLocator,
     canonicalPrincipalRef: authority.principalRef,
     canonicalAccountRef: authority.accountRef,
-    legacyOwnerId: authority.legacyOwnerId,
     authorityRevision: authority.revision,
     authorityProvenance: authority.provenance,
-    ...(authority.displayName === undefined ? {} : { displayName: authority.displayName }),
-    ...(authority.emailHash === undefined ? {} : { emailHash: authority.emailHash }),
   })
 }
 
@@ -86,36 +82,12 @@ function anonymousBusinessActor(): Extract<BusinessActor, { kind: 'anonymous' }>
   })
 }
 
-export async function readCanonicalCompatibilityOwner(
-  db: GenericDatabaseReader<DataModel>,
-  actor: Extract<BusinessActor, { kind: 'authenticated_owner' }>,
-): Promise<Doc<'owners'> | null> {
-  const ownerId = db.normalizeId('owners', actor.legacyOwnerId)
-  if (ownerId === null) return null
-  const owner = await db.get(ownerId)
-  return owner !== null &&
-    String(owner._id) === actor.legacyOwnerId &&
-    owner.canonicalPrincipalRef === actor.canonicalPrincipalRef &&
-    owner.canonicalAccountRef === actor.canonicalAccountRef
-    ? owner
-    : null
-}
-
 export async function resolveAdminAuthority(ctx: AuthzCtx, action: AdminAction): Promise<AdminAuthorityResult> {
-  const actor = await resolveBusinessActor(ctx)
-  if (actor.kind !== 'authenticated_owner') {
-    return requireAdminAuthority(undefined, action)
-  }
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null) {
     return requireAdminAuthority(undefined, action)
   }
-
-  const membership = await readActiveAdminMembership(ctx.db, identity)
-  return requireAdminAuthority(
-    membership?.clerkUserId === actor.clerkUserId ? membership : undefined,
-    action,
-  )
+  return requireAdminAuthority(await readActiveAdminMembership(ctx.db, identity), action)
 }
 
 export async function readCurrentActiveAdminMembership(
@@ -124,12 +96,9 @@ export async function readCurrentActiveAdminMembership(
     auth: QueryCtx['auth']
   }>,
 ): Promise<AdminMembership | undefined> {
-  const actor = await resolveBusinessActor(ctx)
-  if (actor.kind !== 'authenticated_owner') return undefined
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null) return undefined
-  const membership = await readActiveAdminMembership(ctx.db, identity)
-  return membership?.clerkUserId === actor.clerkUserId ? membership : undefined
+  return readActiveAdminMembership(ctx.db, identity)
 }
 
 export async function readActiveAdminMembership(

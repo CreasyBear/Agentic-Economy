@@ -712,7 +712,6 @@ function createDurablePublishedRegistryState(input: {
   publishedPhone?: string
 }): RegistrySourceState {
   const state = emptyRegistrySourceState()
-  const ownerId = brandNonEmpty(`owner:${input.requestedSlug}`, 'OwnerId')
   const businessId = brandNonEmpty(`business:${input.requestedSlug}`, 'BusinessId')
   const slug = brandNonEmpty(input.requestedSlug, 'Slug')
   const businessContext = {
@@ -722,16 +721,8 @@ function createDurablePublishedRegistryState(input: {
     ...(input.publishedPhone === undefined ? {} : { publishedPhone: input.publishedPhone }),
   }
   const businessSourceHash = canonicalDigest({ input, businessContext })
-  state.owners.push({
-    ownerId,
-    clerkUserId: `owner:${input.requestedSlug}`,
-    displayName: input.businessName,
-    createdAt: 10_000,
-    updatedAt: 10_000,
-  })
   state.businesses.push({
     businessId,
-    ownerId,
     slug,
     name: input.businessName,
     normalizedName: input.businessName.toLowerCase(),

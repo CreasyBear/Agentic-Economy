@@ -26,30 +26,18 @@ export {
 export type DevSeedCatalogState = BusinessSourceState & RegistrySourceState
 
 export type DevSeedCatalogBundle = {
-  ownerClerkUserId: string
   state: DevSeedCatalogState
   seededSlugs: readonly string[]
 }
-
-export const DEV_SEED_OWNER_CLERK_USER_ID = 'dev-seed-owner-session'
-
-/**
- * The email hash is what makes the owner a *resolvable recipient*. Without it
- * `toResolvableOwnerRecipient` yields nothing, every seeded business fails
- * admission on `recipient_unresolvable`, and no business can accept a first
- * contact, so no unverified contact path is exposed in
- * development. Hashed the same way `convex/authz.ts` hashes a real identity.
- */
-export const DEV_SEED_OWNER_EMAIL = 'dev-seed-owner@agentic.market' as const
 
 const devSeedNow = 1_777_100_000_000
 
 
 export function buildDevSeedCatalogState(
-  fixtures: readonly DevSeedBusinessFixture[] = DEV_SEED_BUSINESS_FIXTURES
+  fixtures: readonly DevSeedBusinessFixture[] = DEV_SEED_BUSINESS_FIXTURES,
+  owningAccountRef: string,
 ): DevSeedCatalogBundle {
   let state: DevSeedCatalogState = {
-    owners: [],
     businesses: [],
     businessContexts: [],
     ...createEmptyCatalogSourceState(),
@@ -60,26 +48,12 @@ export function buildDevSeedCatalogState(
     indexStatus: [],
   }
 
-  const ownerId = brandNonEmpty(`owner:${DEV_SEED_OWNER_CLERK_USER_ID}`, 'OwnerId')
-  state = {
-    ...state,
-    owners: [{
-      ownerId,
-      clerkUserId: DEV_SEED_OWNER_CLERK_USER_ID,
-      displayName: 'Dev Seed Owner',
-      emailHash: canonicalDigest({ email: DEV_SEED_OWNER_EMAIL }),
-      createdAt: devSeedNow,
-      updatedAt: devSeedNow,
-    }],
-  }
-
   for (const [index, fixture] of fixtures.entries()) {
     const now = devSeedNow + index * 1_000
-    state = seedBusinessFixture(state, fixture, now)
+    state = seedBusinessFixture(state, fixture, owningAccountRef, now)
   }
 
   return {
-    ownerClerkUserId: DEV_SEED_OWNER_CLERK_USER_ID,
     state,
     seededSlugs: fixtures.map((fixture) => fixture.requestedSlug),
   }
@@ -88,10 +62,9 @@ export function buildDevSeedCatalogState(
 function seedBusinessFixture(
   state: DevSeedCatalogState,
   fixture: DevSeedBusinessFixture,
+  owningAccountRef: string,
   now: number
 ): DevSeedCatalogState {
-  const owner = state.owners[0]
-  if (owner === undefined) throw new Error('Dev seed owner is required.')
 
   const businessId = brandNonEmpty(`business:${fixture.requestedSlug}`, 'BusinessId')
   const slug = brandNonEmpty(fixture.requestedSlug, 'Slug')
@@ -110,7 +83,6 @@ function seedBusinessFixture(
   const sourceHash = canonicalDigest({ fixture, businessContext })
   const business: BusinessRecord = {
     businessId,
-    ownerId: owner.ownerId,
     slug,
     name: fixture.businessName,
     normalizedName: fixture.businessName.trim().toLowerCase().replace(/\s+/gu, ' '),
@@ -149,7 +121,7 @@ function seedBusinessFixture(
     operations: [],
   }, {
     businessId,
-    authority: { actorRef: owner.ownerId, ownerRef: owner.ownerId, businessOwnerRef: owner.ownerId },
+    authority: { actorRef: owningAccountRef, ownerRef: owningAccountRef, businessOwnerRef: owningAccountRef },
     services: services.services,
     operationKey: operationKey(`publish:${fixture.requestedSlug}`),
     now: now + 500,

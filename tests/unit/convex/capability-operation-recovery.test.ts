@@ -29,7 +29,7 @@ vi.mock('../../../convex/authz', async (importOriginal) => ({
         ? `prn_${'1'.repeat(32)}` : `prn_${'9'.repeat(32)}`,
       canonicalAccountRef: identity.tokenIdentifier === 'clerk|user_123'
         ? `acc_${'2'.repeat(32)}` : `acc_${'8'.repeat(32)}`,
-      legacyOwnerId: 'owners:1', authorityRevision: {}, authorityProvenance: {},
+      authorityRevision: {}, authorityProvenance: {},
     }
   }),
 }))

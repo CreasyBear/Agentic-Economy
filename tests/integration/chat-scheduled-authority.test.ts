@@ -91,11 +91,17 @@ describe('scheduled chat consequence authority', () => {
         })
       } else if (caseKind === 'wrong_account') {
         await backend.run(async (ctx) => {
-          const business = await ctx.db.get(published.businessId)
-          if (business === null) throw new Error('chat_materialize_business_missing')
-          const owner = await ctx.db.get(business.ownerId)
-          if (owner === null) throw new Error('chat_materialize_owner_missing')
-          await ctx.db.patch(owner._id, { canonicalAccountRef: `acc_${'f'.repeat(32)}` })
+          const account = await ctx.db.query('accounts').collect()
+          const target = account.find((row) => row.currentOwnershipRef !== undefined)
+          if (target === undefined) throw new Error('chat_materialize_account_missing')
+          const ownership = await ctx.db
+            .query('accountOwnerships')
+            .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', target.currentOwnershipRef))
+            .unique()
+          if (ownership === null) throw new Error('chat_materialize_ownership_missing')
+          await ctx.db.patch(ownership._id, {
+            accountRef: `acc_${'b'.repeat(32)}`,
+          })
         })
       } else if (caseKind === 'stale_generation') {
         await backend.run(async (ctx) => {
@@ -115,14 +121,41 @@ describe('scheduled chat consequence authority', () => {
         accounts: await ctx.db.query('accounts').collect(),
         ownerships: await ctx.db.query('accountOwnerships').collect(),
         memberships: await ctx.db.query('memberships').collect(),
-        owners: await ctx.db.query('owners').collect(),
       }))
       const before = await authorityState()
       await expect(caller.mutation(
         api.interactiveAuthority.materializeCurrentInteractiveAuthority,
         {},
-      )).resolves.toBe(caseKind === 'owner' || caseKind === 'member')
-      await expect(authorityState()).resolves.toEqual(before)
+      )).resolves.toBe(
+        caseKind === 'owner' || caseKind === 'member' || caseKind === 'stranger',
+      )
+      const after = await authorityState()
+      if (caseKind === 'stranger') {
+        // A verified stranger provisions its own identity on first
+        // materialization: every pre-existing row is preserved untouched and
+        // exactly one new binding, credential, principal, account, and
+        // ownership are created for the stranger's token.
+        const preservedRows = <Row extends { _id: unknown }>(
+          beforeRows: readonly Row[],
+          afterRows: readonly Row[],
+        ) => afterRows.filter((row) => beforeRows.some((previous) => previous._id === row._id))
+        expect({
+          bindings: preservedRows(before.bindings, after.bindings),
+          credentials: preservedRows(before.credentials, after.credentials),
+          principals: preservedRows(before.principals, after.principals),
+          accounts: preservedRows(before.accounts, after.accounts),
+          ownerships: preservedRows(before.ownerships, after.ownerships),
+          memberships: preservedRows(before.memberships, after.memberships),
+        }).toEqual(before)
+        expect(after.bindings).toHaveLength(before.bindings.length + 1)
+        expect(after.credentials).toHaveLength(before.credentials.length + 1)
+        expect(after.principals).toHaveLength(before.principals.length + 1)
+        expect(after.accounts).toHaveLength(before.accounts.length + 1)
+        expect(after.ownerships).toHaveLength(before.ownerships.length + 1)
+        expect(after.memberships).toHaveLength(before.memberships.length)
+      } else {
+        expect(after).toEqual(before)
+      }
     },
   )
 
@@ -312,7 +345,7 @@ describe('scheduled chat consequence authority', () => {
     expect(replay).toEqual({ scheduleRef: firstScheduleRef, expirySchedules: 1 })
   })
 
-  it('fails closed without materializing caller-shaped or conflicting credential facts', async () => {
+  it('provisions verified identities, rotates stale windows, and fails closed on conflicting credential facts', async () => {
     const anonymousBackend = convexTestWithMarketComponents()
     await expect(anonymousBackend.mutation(
       api.interactiveAuthority.materializeCurrentInteractiveAuthority,
@@ -323,10 +356,23 @@ describe('scheduled chat consequence authority', () => {
       issuer: 'https://identity.example',
       exp: 8_000_000_000,
     })
+    // A verified Clerk identity is provisioned on first materialization.
     await expect(unknownIdentity.mutation(
       api.interactiveAuthority.materializeCurrentInteractiveAuthority,
       {},
-    )).resolves.toBe(false)
+    )).resolves.toBe(true)
+    const provisioned = await anonymousBackend.run(async (ctx) => ({
+      bindings: await ctx.db.query('externalIdentityBindings').collect(),
+      credentials: await ctx.db.query('credentials').collect(),
+      principals: await ctx.db.query('principals').collect(),
+      accounts: await ctx.db.query('accounts').collect(),
+      ownerships: await ctx.db.query('accountOwnerships').collect(),
+    }))
+    expect(provisioned.bindings).toHaveLength(1)
+    expect(provisioned.credentials).toHaveLength(1)
+    expect(provisioned.principals).toHaveLength(1)
+    expect(provisioned.accounts).toHaveLength(1)
+    expect(provisioned.ownerships).toHaveLength(1)
 
     const mismatchBackend = convexTestWithMarketComponents()
     const { owner: mismatchedOwner } = await publishedBusinessOwner(
@@ -341,10 +387,18 @@ describe('scheduled chat consequence authority', () => {
         expiryMaterialization: undefined,
       })
     })
+    // A still-active generation whose window no longer matches the verified
+    // token is an ordinary refresh: the next generation supersedes it.
     await expect(mismatchedOwner.mutation(
       api.interactiveAuthority.materializeCurrentInteractiveAuthority,
       {},
-    )).resolves.toBe(false)
+    )).resolves.toBe(true)
+    const rotated = await mismatchBackend.run(async (ctx) =>
+      await ctx.db.query('credentials').collect())
+    expect(rotated.map(({ generation, lifecycle }) => ({ generation, lifecycle }))).toEqual([
+      { generation: 1, lifecycle: 'stale' },
+      { generation: 2, lifecycle: 'active' },
+    ])
 
     const conflictBackend = convexTestWithMarketComponents()
     const { owner: conflictedOwner } = await publishedBusinessOwner(
@@ -370,7 +424,10 @@ describe('scheduled chat consequence authority', () => {
       {},
     )).resolves.toBe(false)
 
-    for (const backend of [mismatchBackend, conflictBackend]) {
+    for (const [backend, expectedSchedules] of [
+      [mismatchBackend, 1],
+      [conflictBackend, 0],
+    ] as const) {
       const expirySchedules = await backend.run(async (ctx) => {
         const db = ctx.db as unknown as {
           system: {
@@ -383,7 +440,7 @@ describe('scheduled chat consequence authority', () => {
           ({ name }) => name === 'interactiveCredentialLifecycle:expireInteractiveCredential',
         ).length
       })
-      expect(expirySchedules).toBe(0)
+      expect(expirySchedules).toBe(expectedSchedules)
     }
   })
 
@@ -768,17 +825,10 @@ async function readAuthority(
     const account = await ctx.db.query('accounts')
       .withIndex('by_accountRef', (query) => query.eq('accountRef', ownership.accountRef))
       .unique()
-    const owner = await ctx.db.query('owners')
-      .withIndex('by_canonicalPrincipalRef_and_canonicalAccountRef', (query) => query
-        .eq('canonicalPrincipalRef', binding.principalRef)
-        .eq('canonicalAccountRef', ownership.accountRef))
-      .unique()
-    if (account === null || owner === null) throw new Error('chat_account_fixture_missing')
+    if (account === null) throw new Error('chat_account_fixture_missing')
     return {
       principalRef: binding.principalRef as InteractiveBusinessAuthorityContext['principalRef'],
       accountRef: account.accountRef as InteractiveBusinessAuthorityContext['accountRef'],
-      legacyOwnerId: String(owner._id),
-      legacyOwnerLocator: owner.clerkUserId,
       revision: {
         binding: binding.revision,
         credential: credential.revision,
@@ -787,7 +837,6 @@ async function readAuthority(
         access: ownership.revision,
         currentOwnership: ownership.revision,
         currentOwnerPrincipal: principal.revision,
-        compatibilityUpdatedAt: owner.updatedAt,
       },
       provenance: {
         providerNamespace: 'clerk/user',
@@ -821,10 +870,14 @@ async function seedChatMember(
   await backend.run(async (ctx) => {
     const business = await ctx.db.get(businessId)
     if (business === null) throw new Error('chat_member_business_missing')
-    const owner = await ctx.db.get(business.ownerId)
-    if (owner?.canonicalPrincipalRef === undefined || owner.canonicalAccountRef === undefined) {
-      throw new Error('chat_member_owner_missing')
-    }
+    const ownerAccountRef = business.owningAccountRef
+    const ownership = await ctx.db.query('accountOwnerships')
+      .withIndex('by_accountRef_and_lifecycle', (query) => query
+        .eq('accountRef', ownerAccountRef)
+        .eq('lifecycle', 'active'))
+      .unique()
+    if (ownership === null) throw new Error('chat_member_owner_missing')
+    const ownerPrincipalRef = ownership.ownerPrincipalRef
     await ctx.db.insert('principals', {
       principalRef,
       kind: 'human',
@@ -836,14 +889,14 @@ async function seedChatMember(
     })
     await ctx.db.insert('memberships', {
       membershipRef,
-      accountRef: owner.canonicalAccountRef,
+      accountRef: ownerAccountRef,
       memberPrincipalRef: principalRef,
       lifecycle: 'active',
       revision: 1,
       createdAt: 1,
       createdBy: {
-        actorPrincipalRef: owner.canonicalPrincipalRef,
-        activeAccountRef: owner.canonicalAccountRef,
+        actorPrincipalRef: ownerPrincipalRef,
+        activeAccountRef: ownerAccountRef,
         correlationRef: `create:${membershipRef}`,
         idempotencyRef: `create:${membershipRef}`,
       },
@@ -886,13 +939,6 @@ async function seedChatMember(
         scheduleRef: `scheduled:${credentialRef}`,
         materializedAt: 1,
       },
-      updatedAt: 1,
-    })
-    await ctx.db.insert('owners', {
-      clerkUserId: subject,
-      canonicalPrincipalRef: principalRef,
-      canonicalAccountRef: owner.canonicalAccountRef,
-      createdAt: 1,
       updatedAt: 1,
     })
   })

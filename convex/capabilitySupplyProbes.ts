@@ -10,7 +10,6 @@ import {
 } from '@/modules/capability-supply/public'
 
 import { internal } from './_generated/api'
-import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import {
   parseWorkloadCronSnapshot,
@@ -96,28 +95,23 @@ export async function readCurrentCapabilityProbeAuthority(
   if (business === null
     || business.publicStatus !== 'published'
     || business.suppressedAt !== undefined) return null
-  const owner = await ctx.db.get(business.ownerId)
-  if (owner?.canonicalPrincipalRef === undefined || owner.canonicalAccountRef === undefined) return null
-  const [ownerPrincipal, account] = await Promise.all([
-    ctx.db.query('principals')
-      .withIndex('by_principalRef', (query) => query.eq('principalRef', owner.canonicalPrincipalRef as never))
-      .unique(),
-    ctx.db.query('accounts')
-      .withIndex('by_accountRef', (query) => query.eq('accountRef', owner.canonicalAccountRef as never))
-      .unique(),
-  ])
-  if (ownerPrincipal === null
-    || ownerPrincipal.kind !== 'human'
-    || ownerPrincipal.lifecycle !== 'active'
-    || account === null
-    || account.lifecycle !== 'active') return null
+  const account = await ctx.db
+    .query('accounts')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
+    .unique()
+  if (account === null || account.lifecycle !== 'active') return null
   const ownership = await ctx.db.query('accountOwnerships')
     .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
     .unique()
   if (ownership === null
     || ownership.lifecycle !== 'active'
-    || ownership.accountRef !== account.accountRef
-    || ownership.ownerPrincipalRef !== ownerPrincipal.principalRef) return null
+    || ownership.accountRef !== account.accountRef) return null
+  const ownerPrincipal = await ctx.db.query('principals')
+    .withIndex('by_principalRef', (query) => query.eq('principalRef', ownership.ownerPrincipalRef))
+    .unique()
+  if (ownerPrincipal === null
+    || ownerPrincipal.kind !== 'human'
+    || ownerPrincipal.lifecycle !== 'active') return null
 
   const base = {
     publicationRef: publication.publicationRef,

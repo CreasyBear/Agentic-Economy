@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
     clerkUserId: 'clerk|owner',
     canonicalPrincipalRef: `prn_${'1'.repeat(32)}`,
     canonicalAccountRef: `acc_${'2'.repeat(32)}`,
-    legacyOwnerId: 'owners:1',
     authorityRevision: {},
     authorityProvenance: {},
   } as Record<string, unknown>,
@@ -79,7 +78,10 @@ import {
   resolveInvocationAgentAuthority,
 } from '../../../convex/capabilityOperationInvocations'
 import { registerAgentPrincipal } from '../../../convex/agentAccessPrincipals'
+import { registerGrantForServer } from '../../../convex/agentAccessPolicy'
 import { validateCanonicalAgentDelegation } from '../../../convex/lib/canonicalAgentAuthority'
+import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { createCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 
 type Handler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
 type IsolationCaseKind =
@@ -112,6 +114,7 @@ const decideApprovalBoundary = (decideOperationApproval as unknown as { _handler
 const resolveAgentBoundary = (resolveInvocationAgentAuthority as unknown as { _handler: Handler })._handler
 const reconcileWorkloadBoundary = (reconcileInvocationWorkloadAuthority as unknown as { _handler: Handler })._handler
 const registerAgentBoundary = (registerAgentPrincipal as unknown as { _handler: Handler })._handler
+const registerGrantBoundary = (registerGrantForServer as unknown as { _handler: Handler })._handler
 
 const callerPrincipal = {
   principalId: `prn_${'3'.repeat(32)}`,
@@ -318,7 +321,6 @@ beforeEach(() => {
     clerkUserId: 'clerk|owner',
     canonicalPrincipalRef: `prn_${'1'.repeat(32)}`,
     canonicalAccountRef: `acc_${'2'.repeat(32)}`,
-    legacyOwnerId: 'owners:1',
     authorityRevision: {},
     authorityProvenance: {},
   }
@@ -881,3 +883,107 @@ function isolationPrincipal(caseKind: IsolationCaseKind): typeof callerPrincipal
       return callerPrincipal
   }
 }
+
+const grantServerToken = 'agent-access-grant-server-token-at-least-32-bytes'
+const grantForeignAccountRef = `acc_${'e'.repeat(32)}`
+const grantRegistrationMaterial = {
+  grantRef: GRANT_REF,
+  principalId: PRINCIPAL_REF,
+  ownerId: ACCOUNT_REF,
+  credentialId: callerPrincipal.credentialId,
+  applicationRef: callerPrincipal.applicationRef,
+  environment: callerPrincipal.environment,
+  authorityMode: callerPrincipal.authorityMode,
+  generation: 4,
+  policyDigest: 'sha256:policy',
+  lifecycle: 'active',
+}
+
+async function signedGrantServiceAssertion(
+  grant: typeof grantRegistrationMaterial,
+  issuedAt: number,
+  overrides: Readonly<{ ownerId?: string; scopes?: readonly string[] }> = {},
+) {
+  const signed = { ...grant, ownerId: overrides.ownerId ?? grant.ownerId }
+  return await createCustomerRequestServiceAssertion({
+    key: grantServerToken,
+    operation: 'agentAccessPolicy.registerGrantForServer',
+    command: { grant: signed },
+    principal: {
+      principalId: grant.principalId,
+      ownerId: signed.ownerId,
+      credentialId: grant.credentialId,
+      scopes: overrides.scopes ?? [MARKET_OPERATIONS_INVOKE_SCOPE],
+    },
+    issuedAt,
+  })
+}
+
+describe('agent grant registration server authority', () => {
+  it.each(ISOLATION_CASES)(
+    'drives the %s isolation case through the registered grant registration handler',
+    async (caseKind) => {
+      vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', grantServerToken)
+      try {
+        const now = Date.now()
+        const grant = { ...grantRegistrationMaterial, expiresAt: now + 50_000 }
+        const storedAgent = {
+          _id: 'agentAccessPrincipals:1',
+          principalId: grant.principalId,
+          ownerId: grant.ownerId,
+          credentialId: grant.credentialId,
+          applicationRef: grant.applicationRef,
+          environment: grant.environment,
+          scopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
+          authorityMode: grant.authorityMode,
+          grantGeneration: grant.generation,
+          policyDigest: grant.policyDigest,
+          lifecycle: 'active',
+          expiresAt: now + 60_000,
+        }
+        const db = new AuthorityMemoryDb(caseKind === 'missing_workload'
+          ? { agentAccessPrincipals: [] }
+          : { agentAccessPrincipals: [storedAgent] })
+        const runMutation = vi.fn(async (_reference: unknown, args: Record<string, unknown>) => {
+          return { kind: 'recorded' as const, forwarded: args }
+        })
+
+        let args: Record<string, unknown>
+        if (caseKind === 'owner') {
+          args = { grant }
+        } else if (caseKind === 'member') {
+          args = { grant, serviceAuth: await signedGrantServiceAssertion(grant, now, { scopes: ['market_supply:manage'] }) }
+        } else if (caseKind === 'wrong_account') {
+          args = { grant, serviceAuth: await signedGrantServiceAssertion(grant, now, { ownerId: grantForeignAccountRef }) }
+        } else {
+          const issuedAt = caseKind === 'stale_generation' ? now - 10 * 60_000 : now
+          args = { grant, serviceAuth: await signedGrantServiceAssertion(grant, issuedAt) }
+        }
+        if (caseKind === 'stranger') {
+          const assertion = args.serviceAuth as { signature: string }
+          args = { ...args, serviceAuth: { ...assertion, signature: `${assertion.signature}forged` } }
+        }
+
+        if (caseKind === 'owner') {
+          await expect(registerGrantBoundary({ db, runMutation }, args)).rejects.toThrow()
+        } else if (caseKind === 'workload') {
+          await expect(registerGrantBoundary({ db, runMutation }, args)).resolves.toEqual({
+            kind: 'recorded',
+            forwarded: { grant: { ...grant, ownerId: storedAgent.ownerId } },
+          })
+          expect(runMutation).toHaveBeenCalledTimes(1)
+        } else {
+          await expect(registerGrantBoundary({ db, runMutation }, args)).resolves.toEqual({
+            kind: 'refused',
+            code: 'authentication_required',
+          })
+          expect(runMutation).not.toHaveBeenCalled()
+        }
+        expect(db.insertions).toHaveLength(0)
+        expect(db.patches).toHaveLength(0)
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    },
+  )
+})

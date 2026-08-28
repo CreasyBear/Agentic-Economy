@@ -72,7 +72,7 @@ describe('capability supply boundaries', () => {
     expect(seed).toContain('rebuildBusinessSupplyProjectionSnapshotCommand')
     expect(seed).not.toContain('claimBusinessCommand')
     expect(seed).not.toContain('publishBusinessCatalogCommand')
-    expect(seed).not.toMatch(/ctx\.db\.(?:insert|patch|replace)|db\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/)
+    expect(seed).not.toMatch(/(?:ctx\.db|db)\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/)
   })
 
   it('keeps publication importers production-owned and fixture-independent', () => {

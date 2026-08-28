@@ -123,7 +123,6 @@ function ownerSupplyAuthorityFingerprint(authority: OwnerSupplyAuthority): strin
   return canonicalDigest({
     principalRef: authority.canonicalPrincipalRef,
     accountRef: authority.canonicalAccountRef,
-    legacyOwnerId: authority.legacyOwnerId,
     revision: authority.authorityRevision,
     provenance: {
       providerNamespace: authority.authorityProvenance.providerNamespace,

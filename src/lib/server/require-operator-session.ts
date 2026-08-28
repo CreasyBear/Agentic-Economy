@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 
+import { LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 import {
   requireClerkServerSession,
   type ClerkServerSessionAdmission,
@@ -11,7 +12,7 @@ const admitOperatorSessionServer = createServerFn()
   .validator((data: { redirectTo: string }) => data)
   .handler(({ data }): Promise<OperatorSessionAdmission> =>
     requireClerkServerSession({
-      localBypassPrincipal: 'local-e2e-operator',
+      localBypassPrincipal: LOCAL_E2E_OPERATOR_PRINCIPAL,
       redirectTo: data.redirectTo,
     }),
   )

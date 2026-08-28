@@ -4,6 +4,7 @@ import { api, internal } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { issueProviderApprovalDecision } from '@/modules/capability-supply/provider-approval'
 import { beginProviderConnectionRevocation } from '@/modules/capability-supply/provider-connection'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { accountRef, principalRef } from '@/modules/principal-account/public'
 import {
   advanceLeaseDrainHandler,
@@ -35,11 +36,19 @@ async function canonicalOwner(
   return await backend.run(async (ctx) => {
     const business = await ctx.db.get(businessId)
     if (business === null) throw new Error('business_missing')
-    const owner = await ctx.db.get(business.ownerId)
-    if (owner?.canonicalPrincipalRef === undefined || owner.canonicalAccountRef === undefined) {
-      throw new Error('canonical_owner_missing')
-    }
-    return { principalRef: owner.canonicalPrincipalRef, accountRef: owner.canonicalAccountRef }
+    const account = await ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
+      .unique()
+    if (account === null) throw new Error('canonical_account_missing')
+    const ownership = await ctx.db.query('accountOwnerships')
+      .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+      .unique()
+    if (ownership === null) throw new Error('canonical_ownership_missing')
+    const principal = await ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', ownership.ownerPrincipalRef))
+      .unique()
+    if (principal === null) throw new Error('canonical_owner_missing')
+    return { principalRef: principal.principalRef, accountRef: account.accountRef }
   })
 }
 
@@ -1423,7 +1432,7 @@ describe('canonical provider-connection driver', () => {
     await backend.run(async (ctx) => {
       const business = await ctx.db.get(fixture.businessId)
       if (business === null) throw new Error('business_missing')
-      await ctx.db.patch(business.ownerId, { canonicalPrincipalRef: undefined, canonicalAccountRef: undefined })
+      await ctx.db.patch(business._id, { owningAccountRef: 'acc_unresolvable_owner' })
     })
     await expect(backend.mutation(internal.capabilityProviderConnections.create, {
       commandId: 'command:create:no-actor',

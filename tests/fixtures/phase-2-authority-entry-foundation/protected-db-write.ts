@@ -12,8 +12,16 @@ export const protectedDbWrite = protectedInteractiveMutation({
 })({
   args: {},
   handler: async (ctx) =>
-    await ctx.db.insert("owners", {
-      clerkUserId: "forbidden-protected-db-write",
+    await ctx.db.insert("businesses", {
+      owningAccountRef: "acc_forbidden-protected-db-write",
+      slug: "forbidden-protected-db-write",
+      name: "Forbidden protected db write",
+      normalizedName: "forbidden protected db write",
+      category: "hostile fixture",
+      businessContext: { kind: "local_human", suburb: "Perth", stateTerritory: "WA" },
+      publicStatus: "unpublished",
+      trustTier: "claimed",
+      sourceHash: "hash:forbidden-protected-db-write",
       createdAt: 0,
       updatedAt: 0,
     }),

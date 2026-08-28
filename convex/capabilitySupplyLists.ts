@@ -10,7 +10,7 @@ import {
 import { registeredOperationMappingValue } from './capabilitySupplyValues'
 import { toRegisteredOperationMapping } from './capabilitySupplyRowMappers'
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
-import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
+import { resolveBusinessActor } from './authz'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
@@ -266,11 +266,9 @@ export async function authorizeOwnerSupplyActionHandler(
 ) {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return false
-  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
-  if (owner === null) return false
   const business = await ctx.db.get(args.businessId)
   return business !== null &&
-    business.ownerId === owner._id &&
+    business.owningAccountRef === actor.canonicalAccountRef &&
     business.publicStatus === 'published' &&
     business.suppressedAt === undefined
 }
@@ -359,9 +357,8 @@ async function requireCurrentCallEventOwner(ctx: MutationCtx, businessId: Id<'bu
   if (actor.kind !== 'authenticated_owner') {
     throw new Error('capability_call_event_authorization_denied')
   }
-  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
   const business = await ctx.db.get(businessId)
-  if (owner === null || business === null || business.ownerId !== owner._id) {
+  if (business === null || business.owningAccountRef !== actor.canonicalAccountRef) {
     throw new Error('capability_call_event_authorization_denied')
   }
   return actor
@@ -413,7 +410,6 @@ function callEventActorFingerprint(actor: Extract<Awaited<ReturnType<typeof reso
   return canonicalDigest({
     principalRef: actor.canonicalPrincipalRef,
     accountRef: actor.canonicalAccountRef,
-    legacyOwnerId: actor.legacyOwnerId,
     revision: actor.authorityRevision,
     provenance: {
       providerNamespace: actor.authorityProvenance.providerNamespace,

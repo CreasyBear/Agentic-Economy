@@ -106,8 +106,8 @@ describe('system offering source authority', () => {
     }],
     ['substituted business provenance', async (backend: CatalogBackend) => {
       await backend.run(async (ctx) => {
-        const owner = await ctx.db.query('owners').first()
-        if (owner !== null) await ctx.db.patch(owner._id, { canonicalPrincipalRef: 'prn_d2000000000000000000000000000002' })
+        const business = await ctx.db.query('businesses').first()
+        if (business !== null) await ctx.db.patch(business._id, { owningAccountRef: 'acc_d2000000000000000000000000000002' })
       })
     }],
   ])('fails closed for %s without a duplicate offering effect', async (_label, mutateAuthority) => {
@@ -149,13 +149,13 @@ describe('system offering source authority', () => {
       .collect())).resolves.toHaveLength(2)
   })
 
-  it('admits a declared workload as an active account member without making it the owner', async () => {
+  it('binds system offering authority to the current canonical owner of the business account', async () => {
     const backend = convexTest(schema, modules)
     const fixture = await seedSystemOfferingFixture(backend)
     await backend.run(async (ctx) => {
-      const ownerPrincipalRef = 'prn_d2000000000000000000000000000002'
+      const humanOwnerRef = 'prn_d2000000000000000000000000000002'
       await ctx.db.insert('principals', {
-        principalRef: ownerPrincipalRef,
+        principalRef: humanOwnerRef,
         kind: 'human',
         displayName: 'Development account owner',
         lifecycle: 'active',
@@ -167,23 +167,20 @@ describe('system offering source authority', () => {
         .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', 'own_d2000000000000000000000000000001'))
         .unique()
       if (ownership === null) throw new Error('fixture_ownership_missing')
-      await ctx.db.patch(ownership._id, { ownerPrincipalRef })
-      await ctx.db.insert('memberships', {
-        membershipRef: 'mem_d2000000000000000000000000000001',
-        accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
-        memberPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
-        lifecycle: 'active',
-        revision: 1,
-        createdAt: 1,
-        createdBy: {
-          actorPrincipalRef: ownerPrincipalRef,
-          activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
-          correlationRef: 'dev-seed-membership:create',
-          idempotencyRef: 'dev-seed-membership:create',
-        },
-      })
+      await ctx.db.patch(ownership._id, { ownerPrincipalRef: humanOwnerRef })
     })
-    await expect(revise(backend, fixture.businessId, 'member')).resolves.toMatchObject({
+    await expect(revise(backend, fixture.businessId, 'non-owner')).resolves.toMatchObject({
+      kind: 'error',
+      code: 'authority_denied',
+    })
+    await backend.run(async (ctx) => {
+      const ownership = await ctx.db.query('accountOwnerships')
+        .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', 'own_d2000000000000000000000000000001'))
+        .unique()
+      if (ownership === null) throw new Error('fixture_ownership_missing')
+      await ctx.db.patch(ownership._id, { ownerPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF })
+    })
+    await expect(revise(backend, fixture.businessId, 'canonical-owner')).resolves.toMatchObject({
       kind: 'ok',
       code: 'revised',
     })
@@ -378,15 +375,8 @@ async function seedSystemOfferingFixture(backend: CatalogBackend) {
         idempotencyRef: 'dev-seed-ownership:create',
       },
     })
-    const ownerId = await ctx.db.insert('owners', {
-      clerkUserId: 'hostile-caller-shaped-clerk-id-is-not-authority',
-      canonicalPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
-      canonicalAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
-      createdAt: 1,
-      updatedAt: 1,
-    })
     const businessId = await ctx.db.insert('businesses', {
-      ownerId,
+      owningAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
       slug: 'dev-seed-authority',
       name: 'Development seed authority',
       normalizedName: 'development seed authority',

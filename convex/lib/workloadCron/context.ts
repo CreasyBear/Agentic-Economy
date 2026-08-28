@@ -28,6 +28,17 @@ import type { Doc } from '../../_generated/dataModel'
 export const PHASE_2_CRON_PRINCIPAL_REF = 'prn_f2000000000000000000000000000001' as PrincipalRef
 export const PHASE_2_CRON_ACCOUNT_REF = 'acc_f2000000000000000000000000000001' as AccountRef
 
+// Fixed machine-identity refs for the cron workload's platform rows, provisioned
+// idempotently by ensurePlatformWorkloadIdentities (convex/workloadCron.ts) so a
+// fresh deployment admits the cron fleet without out-of-band seeding. The
+// account is owned by a distinct platform owner principal; the workload
+// principal reaches it through an active membership (accessVia 'membership'),
+// matching the canonical fixtures in convex/agentAccessOAuth.test.ts and
+// tests/integration/facilitator-discovery.test.ts.
+export const PHASE_2_CRON_OWNER_PRINCIPAL_REF = 'prn_f2000000000000000000000000000002' as PrincipalRef
+export const PHASE_2_CRON_OWNERSHIP_REF = 'own_f2000000000000000000000000000001'
+export const PHASE_2_CRON_MEMBERSHIP_REF = 'mem_f2000000000000000000000000000001'
+
 export const WORKLOAD_CRON_DECLARATIONS = [
   declaration('reconcile due facilitator invocations', 'reconciliation', 'reconcileDueFacilitatorInvocations'),
   declaration('refresh facilitator discovery', 'cron', 'refreshFacilitatorDiscovery'),

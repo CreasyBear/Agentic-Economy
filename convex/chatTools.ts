@@ -11,7 +11,6 @@ import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import {
   operationInvokeInputSchema,
   operationInvokeResultSchema,
-  type OperationInvokeInput,
 } from '@/modules/capability-execution/operation-invoke-contracts'
 import type {
   InspectPlanInput,
@@ -41,7 +40,7 @@ import {
 } from '@/modules/registry/operation-action-contracts'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
 
-import { api, components, internal } from './_generated/api'
+import { api, components } from './_generated/api'
 
 export {
   CHAT_TOOL_IDS,

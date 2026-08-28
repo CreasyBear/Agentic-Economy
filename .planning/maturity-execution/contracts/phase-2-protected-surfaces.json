@@ -1,54 +1,55 @@
 {
   "format": "phase-2-protected-surfaces:v2",
   "expectedCounts": {
-    "serverFunctions": 43,
-    "publicConvex": 116,
-    "convexHttpActions": 1,
+    "serverFunctions": 47,
+    "publicConvex": 117,
+    "convexHttpActions": 7,
     "crons": 10,
     "backgroundFamilies": 25,
-    "frozenHttp": 39,
-    "frozenMcp": 14,
+    "frozenHttp": 40,
+    "frozenMcp": 13,
     "frozenCli": 12
   },
   "baselineCounts": {
-    "serverFunctions": 43,
-    "publicConvex": 116,
-    "convexHttpActions": 1,
+    "serverFunctions": 47,
+    "publicConvex": 117,
+    "convexHttpActions": 7,
     "crons": 10,
     "backgroundFamilies": 25,
-    "frozenHttp": 39,
-    "frozenMcp": 14,
+    "frozenHttp": 40,
+    "frozenMcp": 13,
     "frozenCli": 12
   },
   "actualCounts": {
     "serverFunctions": 47,
-    "publicConvex": 119,
+    "publicConvex": 117,
     "convexHttpActions": 7,
     "convexHttpRoutes": 7,
     "crons": 10,
     "backgroundFamilies": 52,
-    "frozenHttp": 39,
-    "frozenMcp": 14,
+    "frozenHttp": 40,
+    "frozenMcp": 13,
     "frozenCli": 12
   },
   "candidateCounts": {
     "serverFunctions": 47,
-    "publicConvex": 119,
+    "publicConvex": 117,
     "convexHttpActions": 7,
     "convexHttpRoutes": 7,
     "crons": 10,
     "backgroundFamilies": 52,
-    "frozenHttp": 39,
-    "frozenMcp": 14,
+    "frozenHttp": 40,
+    "frozenMcp": 13,
     "frozenCli": 12
   },
   "frozenContract": {
     "sourceFile": ".planning/maturity-execution/contracts/public-surface-inventory.json",
-    "sha256": "31b549ff6b6ebe9928b0f192b1cad424b6728ba77c80c86917d9f8e8b3373b0b",
+    "sha256": "5b6bc97afe960d6a9af91e151ad72ef624922d875ed44ec34f0a4d94271f9002",
     "httpRefs": [
       "agent-skill",
       "anonymous-chat-convex",
       "anonymous-chat-edge",
+      "api-catalog",
       "api-registry",
       "business-detail",
       "business-list",
@@ -88,7 +89,6 @@
     ],
     "mcpRefs": [
       "operation.cancel",
-      "operation.execute",
       "operation.invoke",
       "operation.reconcile",
       "operation.status",
@@ -126,13 +126,13 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c4fefabac7a52360829d88912e1f1d2b2f16e590b545699a2ba016de05d14aaa",
+      "sha256": "7ea9ccc725111abefa9903b36ad648cbe3b2a4999ef97758829b5f571795ef42",
       "declaration": {
         "file": "src/components/ae/offerings/owner-offering.functions.ts",
         "symbol": "readOwnerOfferingSupplyServer",
-        "line": 136,
+        "line": 137,
         "column": 14,
-        "sha256": "0567f742e9935b52a3e3d9f614be6fe1d093230fe16b9e611ed2109a110fffdc"
+        "sha256": "79c5afe25a4c9d60b312d071b5a8956e154954315a92b06be7fe5aa5df7a94ca"
       },
       "status": "bound",
       "marker": "transitive_authority_path:src/components/ae/offerings/owner-offering.functions.ts:readOwnerOfferingSupplyServer=>convex/authz.ts:resolveBusinessActor",
@@ -141,14 +141,14 @@
         {
           "ref": "src/components/ae/offerings/owner-offering.functions.ts:readOwnerOfferingSupplyServer",
           "file": "src/components/ae/offerings/owner-offering.functions.ts",
-          "line": 136,
+          "line": 137,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "src/components/ae/offerings/owner-offering.functions.ts:readSupplyQuery",
           "file": "src/components/ae/offerings/owner-offering.functions.ts",
-          "line": 127,
+          "line": 128,
           "column": 7,
           "via": "function_reference"
         },
@@ -162,7 +162,7 @@
         {
           "ref": "convex/catalogPublicReads.ts:getCurrentOwnerOfferingSupplyHandler",
           "file": "convex/catalogPublicReads.ts",
-          "line": 252,
+          "line": 247,
           "column": 1,
           "via": "call"
         },
@@ -183,11 +183,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c4fefabac7a52360829d88912e1f1d2b2f16e590b545699a2ba016de05d14aaa",
+      "sha256": "7ea9ccc725111abefa9903b36ad648cbe3b2a4999ef97758829b5f571795ef42",
       "declaration": {
         "file": "src/components/ae/offerings/owner-offering.functions.ts",
         "symbol": "saveOwnerOfferingServer",
-        "line": 144,
+        "line": 146,
         "column": 14,
         "sha256": "29a4940039753ca4e55ac201648b4b51a624aa55e2ec33e0fa457f127273ea14"
       },
@@ -198,14 +198,14 @@
         {
           "ref": "src/components/ae/offerings/owner-offering.functions.ts:saveOwnerOfferingServer",
           "file": "src/components/ae/offerings/owner-offering.functions.ts",
-          "line": 144,
+          "line": 146,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "src/components/ae/offerings/owner-offering.functions.ts:changeStatusMutation",
           "file": "src/components/ae/offerings/owner-offering.functions.ts",
-          "line": 130,
+          "line": 131,
           "column": 7,
           "via": "function_reference"
         },
@@ -219,14 +219,14 @@
         {
           "ref": "convex/catalogOfferingMutations.ts:changeBusinessOfferingStatusHandler",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 444,
+          "line": 451,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/catalogOfferingMutations.ts:runOfferingSourceMutation",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 478,
+          "line": 485,
           "column": 1,
           "via": "call"
         },
@@ -297,7 +297,7 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingPrincipalContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 58,
+          "line": 59,
           "column": 1,
           "via": "call"
         },
@@ -332,7 +332,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer ignores caller-shaped identity headers and returns only the public origin",
         "sourceRef": "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -421,7 +421,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/lib/server/owner-status.functions.ts:readPublicBusinessPageServer returns only public catalog data for a cross-account slug",
         "sourceRef": "src/lib/server/owner-status.functions.ts:readPublicBusinessPageServer",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -446,7 +446,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/lib/server/public-business-route.functions.ts:readPublicBusinessRouteServer cannot turn a public slug into a provider, money, or secret effect",
         "sourceRef": "src/lib/server/public-business-route.functions.ts:readPublicBusinessRouteServer",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -457,13 +457,13 @@
       "registrar": "createServerFn",
       "binding": "narrow_system_non_consequential",
       "consequential": false,
-      "sha256": "f432a9da91b9707ad751290278f7d435155455b1e1fb86570abcec43387adef3",
+      "sha256": "69393cb9f725572a1b88633d0876bfec3ffeef3380f6136b3333faed44912041",
       "declaration": {
         "file": "src/lib/server/require-operator-session.ts",
         "symbol": "admitOperatorSessionServer",
-        "line": 10,
+        "line": 11,
         "column": 7,
-        "sha256": "5b7aa9fb4bfd33fb616bc75e26a46eaa1dd17666e36429b995ec14342839cfe5"
+        "sha256": "00da59db65e6ebad56036f34aba1bce79a1bba4cf49f70c38cf29c14aa961b2d"
       },
       "status": "bound",
       "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:src/lib/server/require-operator-session.ts:admitOperatorSessionServer establishes only a Clerk session and cannot establish Account or resource authority",
@@ -471,7 +471,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer establishes only a Clerk session and cannot establish Account or resource authority",
         "sourceRef": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -1119,7 +1119,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:connectX402OwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 412,
+          "line": 411,
           "column": 1,
           "via": "call"
         },
@@ -1588,7 +1588,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 408,
+          "line": 407,
           "column": 1,
           "via": "call"
         },
@@ -1730,7 +1730,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:retryOwnerCleanupHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 341,
+          "line": 340,
           "column": 1,
           "via": "call"
         },
@@ -1801,7 +1801,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:revokeOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 263,
+          "line": 262,
           "column": 1,
           "via": "call"
         },
@@ -1865,7 +1865,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerSupply.ts:runOwnerSupplyReadiness",
           "file": "convex/capabilitySupplyOwnerSupply.ts",
-          "line": 145,
+          "line": 144,
           "column": 14,
           "via": "function_reference"
         },
@@ -1929,7 +1929,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerSupply.ts:runOwnerSupplyTest",
           "file": "convex/capabilitySupplyOwnerSupply.ts",
-          "line": 197,
+          "line": 196,
           "column": 14,
           "via": "function_reference"
         },
@@ -2042,7 +2042,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/modules/discovery/developer-discovery-route.ts:loadDeveloperDiscoveryRouteServer fixes its public request context instead of accepting caller authority",
         "sourceRef": "src/modules/discovery/developer-discovery-route.ts:loadDeveloperDiscoveryRouteServer",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -2067,7 +2067,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/modules/market/market.functions.ts:readMarketRouteServer passes only bounded public filters and performs no consequence",
         "sourceRef": "src/modules/market/market.functions.ts:readMarketRouteServer",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -2121,7 +2121,7 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingPrincipalContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 58,
+          "line": 59,
           "column": 1,
           "via": "call"
         },
@@ -2185,14 +2185,14 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingTopupContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 122,
+          "line": 123,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingPrincipalContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 58,
+          "line": 59,
           "column": 1,
           "via": "call"
         },
@@ -2657,7 +2657,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer treats the operation ref as lookup data, never authority",
         "sourceRef": "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -2666,7 +2666,7 @@
       "file": "src/routes/_operator/admin.audit-events.tsx",
       "symbol": "readAdminAuditEventsServer",
       "registrar": "createServerFn",
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true,
       "sha256": "2a75a85106111c2c31233b3dae01859cb863d2fee85cc93837abcf1bcf527402",
       "declaration": {
@@ -2677,8 +2677,8 @@
         "sha256": "4724e26350107fe3b87d9d596191e4457cf5f3000ab0a6d48db24bc0873f6152"
       },
       "status": "bound",
-      "marker": "transitive_authority_path:src/routes/_operator/admin.audit-events.tsx:readAdminAuditEventsServer=>convex/authz.ts:resolveBusinessActor",
-      "authoritySink": "convex/authz.ts:resolveBusinessActor",
+      "marker": "transitive_authority_path:src/routes/_operator/admin.audit-events.tsx:readAdminAuditEventsServer=>convex/authz.ts:readCurrentActiveAdminMembership",
+      "authoritySink": "convex/authz.ts:readCurrentActiveAdminMembership",
       "authorityPath": [
         {
           "ref": "src/routes/_operator/admin.audit-events.tsx:readAdminAuditEventsServer",
@@ -2725,14 +2725,7 @@
         {
           "ref": "convex/authz.ts:readCurrentActiveAdminMembership",
           "file": "convex/authz.ts",
-          "line": 121,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/authz.ts:resolveBusinessActor",
-          "file": "convex/authz.ts",
-          "line": 42,
+          "line": 93,
           "column": 1,
           "via": "call"
         }
@@ -2744,7 +2737,7 @@
       "file": "src/routes/_operator/admin.index-health.tsx",
       "symbol": "readAdminIndexHealthServer",
       "registrar": "createServerFn",
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true,
       "sha256": "1dcbe899ff271b5d762b0d4043b8ad1738c223927fcd268805fe6335fd49c075",
       "declaration": {
@@ -2755,8 +2748,8 @@
         "sha256": "d5cab4f42ebb4428e619126d80d23fc0e8a934b2a9d01250098b48c816927932"
       },
       "status": "bound",
-      "marker": "transitive_authority_path:src/routes/_operator/admin.index-health.tsx:readAdminIndexHealthServer=>convex/authz.ts:resolveBusinessActor",
-      "authoritySink": "convex/authz.ts:resolveBusinessActor",
+      "marker": "transitive_authority_path:src/routes/_operator/admin.index-health.tsx:readAdminIndexHealthServer=>convex/authz.ts:readCurrentActiveAdminMembership",
+      "authoritySink": "convex/authz.ts:readCurrentActiveAdminMembership",
       "authorityPath": [
         {
           "ref": "src/routes/_operator/admin.index-health.tsx:readAdminIndexHealthServer",
@@ -2803,14 +2796,7 @@
         {
           "ref": "convex/authz.ts:readCurrentActiveAdminMembership",
           "file": "convex/authz.ts",
-          "line": 121,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/authz.ts:resolveBusinessActor",
-          "file": "convex/authz.ts",
-          "line": 42,
+          "line": 93,
           "column": 1,
           "via": "call"
         }
@@ -3205,7 +3191,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps OAuth client metadata public while grants remain source-admitted",
         "sourceRef": "convex/agentAccessOAuth.ts:getClient",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -4217,7 +4203,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:connectX402OwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 412,
+          "line": 411,
           "column": 1,
           "via": "call"
         },
@@ -4360,7 +4346,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 408,
+          "line": 407,
           "column": 1,
           "via": "call"
         },
@@ -4417,7 +4403,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:retryOwnerCleanupHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 341,
+          "line": 340,
           "column": 1,
           "via": "call"
         },
@@ -4467,7 +4453,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:revokeOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 263,
+          "line": 262,
           "column": 1,
           "via": "call"
         },
@@ -4517,7 +4503,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 408,
+          "line": 407,
           "column": 1,
           "via": "call"
         },
@@ -4550,7 +4536,7 @@
       "file": "convex/capabilitySupply.ts",
       "symbol": "inspectBindingControlState",
       "registrar": "queryGeneric",
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true,
       "sha256": "921913da523e72f45b47e59711ceaf402b7c0e34e93ba387a1155fda9574a183",
       "declaration": {
@@ -4561,8 +4547,8 @@
         "sha256": "6014b34ad6b31aea2cbed9ccd09bc085274ea013df3c21570b78ea3e51ad7c99"
       },
       "status": "bound",
-      "marker": "transitive_authority_path:convex/capabilitySupply.ts:inspectBindingControlState=>convex/authz.ts:resolveBusinessActor",
-      "authoritySink": "convex/authz.ts:resolveBusinessActor",
+      "marker": "transitive_authority_path:convex/capabilitySupply.ts:inspectBindingControlState=>convex/authz.ts:resolveAdminAuthority",
+      "authoritySink": "convex/authz.ts:resolveAdminAuthority",
       "authorityPath": [
         {
           "ref": "convex/capabilitySupply.ts:inspectBindingControlState",
@@ -4581,14 +4567,7 @@
         {
           "ref": "convex/authz.ts:resolveAdminAuthority",
           "file": "convex/authz.ts",
-          "line": 104,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/authz.ts:resolveBusinessActor",
-          "file": "convex/authz.ts",
-          "line": 42,
+          "line": 85,
           "column": 1,
           "via": "call"
         }
@@ -4643,7 +4622,7 @@
       "file": "convex/capabilitySupply.ts",
       "symbol": "queryCapabilityGraph",
       "registrar": "queryGeneric",
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true,
       "sha256": "921913da523e72f45b47e59711ceaf402b7c0e34e93ba387a1155fda9574a183",
       "declaration": {
@@ -4654,8 +4633,8 @@
         "sha256": "1a7e1098721fefd494e912f5f7620c5104cfde885be3ac60f6d03cc15c9f585d"
       },
       "status": "bound",
-      "marker": "transitive_authority_path:convex/capabilitySupply.ts:queryCapabilityGraph=>convex/authz.ts:resolveBusinessActor",
-      "authoritySink": "convex/authz.ts:resolveBusinessActor",
+      "marker": "transitive_authority_path:convex/capabilitySupply.ts:queryCapabilityGraph=>convex/authz.ts:resolveAdminAuthority",
+      "authoritySink": "convex/authz.ts:resolveAdminAuthority",
       "authorityPath": [
         {
           "ref": "convex/capabilitySupply.ts:queryCapabilityGraph",
@@ -4674,14 +4653,7 @@
         {
           "ref": "convex/authz.ts:resolveAdminAuthority",
           "file": "convex/authz.ts",
-          "line": 104,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/authz.ts:resolveBusinessActor",
-          "file": "convex/authz.ts",
-          "line": 42,
+          "line": 85,
           "column": 1,
           "via": "call"
         }
@@ -4745,11 +4717,11 @@
       "registrar": "queryGeneric",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
+      "sha256": "725164a3cda99b912c8c1813d0b624c72cddba7f58137e0e9d1edd37dec4353d",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "compare",
-        "line": 64,
+        "line": 59,
         "column": 14,
         "sha256": "f61757c76df1bfc68246d61545304893b2a8d9d719bc70ea706e3fa034dbe442"
       },
@@ -4759,7 +4731,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps public operation projections identity-invariant and consequence-free",
         "sourceRef": "convex/capabilitySupplyOperations.ts:compare",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -4770,11 +4742,11 @@
       "registrar": "queryGeneric",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
+      "sha256": "725164a3cda99b912c8c1813d0b624c72cddba7f58137e0e9d1edd37dec4353d",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "detail",
-        "line": 59,
+        "line": 54,
         "column": 14,
         "sha256": "1df678635eab3a70397ffc752d6d5282e614dd1024ef09c854359d691e23dd58"
       },
@@ -4784,7 +4756,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps public operation projections identity-invariant and consequence-free",
         "sourceRef": "convex/capabilitySupplyOperations.ts:detail",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -4795,11 +4767,11 @@
       "registrar": "queryGeneric",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
+      "sha256": "725164a3cda99b912c8c1813d0b624c72cddba7f58137e0e9d1edd37dec4353d",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "inspectPlan",
-        "line": 69,
+        "line": 64,
         "column": 14,
         "sha256": "e659c8ad24647df5a2ba74fff541b3a346e67b1b895d0f7e4aa36ee28d38e9da"
       },
@@ -4809,32 +4781,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps public operation projections identity-invariant and consequence-free",
         "sourceRef": "convex/capabilitySupplyOperations.ts:inspectPlan",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
-      }
-    },
-    {
-      "ref": "convex/capabilitySupplyOperations.ts:listKeylessExecutable",
-      "kind": "convex_public",
-      "file": "convex/capabilitySupplyOperations.ts",
-      "symbol": "listKeylessExecutable",
-      "registrar": "queryGeneric",
-      "binding": "public_non_consequential",
-      "consequential": false,
-      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
-      "declaration": {
-        "file": "convex/capabilitySupplyOperations.ts",
-        "symbol": "listKeylessExecutable",
-        "line": 167,
-        "column": 14,
-        "sha256": "977ca420123e8ce1bbca2ad019ba3bac50cce436eddeed5ad12a2d12bec8b42d"
-      },
-      "status": "bound",
-      "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:keeps public operation projections identity-invariant and consequence-free",
-      "exemption": {
-        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
-        "testName": "keeps public operation projections identity-invariant and consequence-free",
-        "sourceRef": "convex/capabilitySupplyOperations.ts:listKeylessExecutable",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -4845,11 +4792,11 @@
       "registrar": "queryGeneric",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
+      "sha256": "725164a3cda99b912c8c1813d0b624c72cddba7f58137e0e9d1edd37dec4353d",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "offeringOperationMap",
-        "line": 75,
+        "line": 70,
         "column": 14,
         "sha256": "4ce8f13a28b0051377df91edb52ecedaead5d7394ff927961f8a88f023ee8fea"
       },
@@ -4859,58 +4806,8 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps public operation projections identity-invariant and consequence-free",
         "sourceRef": "convex/capabilitySupplyOperations.ts:offeringOperationMap",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
-    },
-    {
-      "ref": "convex/capabilitySupplyOperations.ts:readKeylessExecutable",
-      "kind": "convex_public",
-      "file": "convex/capabilitySupplyOperations.ts",
-      "symbol": "readKeylessExecutable",
-      "registrar": "queryGeneric",
-      "binding": "signed_callback",
-      "consequential": true,
-      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
-      "declaration": {
-        "file": "convex/capabilitySupplyOperations.ts",
-        "symbol": "readKeylessExecutable",
-        "line": 161,
-        "column": 14,
-        "sha256": "ea320168155198df77c27840e17d51a5ebac852433d160f312b24966f6ee3f1c"
-      },
-      "status": "bound",
-      "marker": "transitive_authority_path:convex/capabilitySupplyOperations.ts:readKeylessExecutable=>src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion",
-      "authoritySink": "src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion",
-      "authorityPath": [
-        {
-          "ref": "convex/capabilitySupplyOperations.ts:readKeylessExecutable",
-          "file": "convex/capabilitySupplyOperations.ts",
-          "line": 161,
-          "column": 14,
-          "via": "declaration"
-        },
-        {
-          "ref": "convex/capabilitySupplyOperationKeyless.ts:readKeylessExecutableHandler",
-          "file": "convex/capabilitySupplyOperationKeyless.ts",
-          "line": 363,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/capabilitySupplyOperationKeyless.ts:serverFunctionAuthorized",
-          "file": "convex/capabilitySupplyOperationKeyless.ts",
-          "line": 337,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion",
-          "file": "src/modules/agent-access/service-auth-envelope.ts",
-          "line": 44,
-          "column": 1,
-          "via": "call"
-        }
-      ]
     },
     {
       "ref": "convex/capabilitySupplyOperations.ts:search",
@@ -4920,11 +4817,11 @@
       "registrar": "queryGeneric",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
+      "sha256": "725164a3cda99b912c8c1813d0b624c72cddba7f58137e0e9d1edd37dec4353d",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "search",
-        "line": 54,
+        "line": 49,
         "column": 14,
         "sha256": "21ba4d5dfc9913720403bd06179a90bfe006771b9a06ba2bbdb8c2a539f2529a"
       },
@@ -4934,7 +4831,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/capabilitySupplyOperations.ts:search is identity-invariant, bounded, and cannot disclose cross-account private state",
         "sourceRef": "convex/capabilitySupplyOperations.ts:search",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -5217,11 +5114,11 @@
       "registrar": "action",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "add42f9a53d9a3edf632bf13f9b13a20be53e3c49a1e126af4db00fdd74aa06c",
+      "sha256": "244607f7bfd78e3eedb9580340da78790226593efa560c663c74a053152be3a3",
       "declaration": {
         "file": "convex/capabilitySupplyOwnerSupply.ts",
         "symbol": "runOwnerSupplyReadiness",
-        "line": 145,
+        "line": 144,
         "column": 14,
         "sha256": "48577c2ce8503a4aadad3632d395ec3243cefc4e129ddbc19e60ff7b2b1df20c"
       },
@@ -5232,7 +5129,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerSupply.ts:runOwnerSupplyReadiness",
           "file": "convex/capabilitySupplyOwnerSupply.ts",
-          "line": 145,
+          "line": 144,
           "column": 14,
           "via": "declaration"
         },
@@ -5260,11 +5157,11 @@
       "registrar": "action",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "add42f9a53d9a3edf632bf13f9b13a20be53e3c49a1e126af4db00fdd74aa06c",
+      "sha256": "244607f7bfd78e3eedb9580340da78790226593efa560c663c74a053152be3a3",
       "declaration": {
         "file": "convex/capabilitySupplyOwnerSupply.ts",
         "symbol": "runOwnerSupplyTest",
-        "line": 197,
+        "line": 196,
         "column": 14,
         "sha256": "595e21d5957f8d65f87a92edf0fec63e32d8535a83ed8dd0ce50781a39b95911"
       },
@@ -5275,7 +5172,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerSupply.ts:runOwnerSupplyTest",
           "file": "convex/capabilitySupplyOwnerSupply.ts",
-          "line": 197,
+          "line": 196,
           "column": 14,
           "via": "declaration"
         },
@@ -5325,14 +5222,14 @@
         {
           "ref": "convex/catalogOfferingMutations.ts:changeBusinessOfferingStatusHandler",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 444,
+          "line": 451,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/catalogOfferingMutations.ts:runOfferingSourceMutation",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 478,
+          "line": 485,
           "column": 1,
           "via": "call"
         },
@@ -5375,14 +5272,14 @@
         {
           "ref": "convex/catalogOfferingMutations.ts:createBusinessOfferingHandler",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 422,
+          "line": 429,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/catalogOfferingMutations.ts:runOfferingSourceMutation",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 478,
+          "line": 485,
           "column": 1,
           "via": "call"
         },
@@ -5425,7 +5322,7 @@
         {
           "ref": "convex/catalogPublicReads.ts:getCurrentOwnerOfferingSupplyHandler",
           "file": "convex/catalogPublicReads.ts",
-          "line": 252,
+          "line": 247,
           "column": 1,
           "via": "call"
         },
@@ -5503,7 +5400,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/catalog.ts:getPublicBusinessCatalogBySlug denies unpublished cross-account rows without trusting caller identity",
         "sourceRef": "convex/catalog.ts:getPublicBusinessCatalogBySlug",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -5536,14 +5433,14 @@
         {
           "ref": "convex/catalogOfferingMutations.ts:retryBusinessSupplyProjectionHandler",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 513,
+          "line": 518,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/catalogOfferingMutations.ts:requireCatalogSupplyAdmin",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 521,
+          "line": 526,
           "column": 1,
           "via": "call"
         },
@@ -5586,14 +5483,14 @@
         {
           "ref": "convex/catalogOfferingMutations.ts:reviseBusinessOfferingHandler",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 433,
+          "line": 440,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/catalogOfferingMutations.ts:runOfferingSourceMutation",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 478,
+          "line": 485,
           "column": 1,
           "via": "call"
         },
@@ -5636,14 +5533,14 @@
         {
           "ref": "convex/catalogOfferingMutations.ts:upsertOfferingAccessPathHandler",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 455,
+          "line": 462,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/catalogOfferingMutations.ts:runOfferingSourceMutation",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 478,
+          "line": 485,
           "column": 1,
           "via": "call"
         },
@@ -5686,14 +5583,14 @@
         {
           "ref": "convex/catalogOfferingMutations.ts:withdrawOfferingAccessPathHandler",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 468,
+          "line": 475,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/catalogOfferingMutations.ts:runOfferingSourceMutation",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 478,
+          "line": 485,
           "column": 1,
           "via": "call"
         },
@@ -5728,7 +5625,7 @@
         "testFile": "tests/integration/chat-anonymous-transport.test.ts",
         "testName": "keeps the edge and Convex backstop admissions in independent hourly buckets",
         "sourceRef": "convex/chatAdmission.ts:admitAnonymousEdge",
-        "sha256": "25ed9d056800e0fcd751ace0ae72f09964acb3c0a990a8f777f4d6adeca7f189"
+        "sha256": "0eadb3003a369d4a6b8dcb3aa1807083eef7fab31f80c49bbbc0cc791903536a"
       }
     },
     {
@@ -5739,11 +5636,11 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "d555211048a99358acf69ab7410c725e5e9fdab60aa7981e33cb0b19fdfcc071",
+      "sha256": "acae6569da7225e9f167e784e702760e02acd1994b4bd953bf8b668c312574a4",
       "declaration": {
         "file": "convex/chatMessages.ts",
         "symbol": "listMessages",
-        "line": 193,
+        "line": 191,
         "column": 14,
         "sha256": "96b0c4d9a61c1f61838a612ff86ba6cdc256cb1a6dc2eaddab988a45b8592223"
       },
@@ -5754,7 +5651,7 @@
         {
           "ref": "convex/chatMessages.ts:listMessages",
           "file": "convex/chatMessages.ts",
-          "line": 193,
+          "line": 191,
           "column": 14,
           "via": "declaration"
         },
@@ -5796,13 +5693,13 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "d555211048a99358acf69ab7410c725e5e9fdab60aa7981e33cb0b19fdfcc071",
+      "sha256": "acae6569da7225e9f167e784e702760e02acd1994b4bd953bf8b668c312574a4",
       "declaration": {
         "file": "convex/chatMessages.ts",
         "symbol": "sendMessage",
         "line": 70,
         "column": 14,
-        "sha256": "8513614565c69d23874fbb30d09eb4b8d71dbea9797d164bfe250ec067878ba6"
+        "sha256": "de35839d5944c53ec9767ccf4ddae2fc5091fd1c1fc625f09ed36455ed5fa8a0"
       },
       "status": "bound",
       "marker": "transitive_authority_path:convex/chatMessages.ts:sendMessage=>convex/authz.ts:resolveBusinessActor",
@@ -5839,7 +5736,7 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "88576fb9036a76e32264fb1877a7641e53f5de608938b5db4509850e7f4aeb1c",
+      "sha256": "574dea8ff544660ccb46349d65b2ffbcc3924770a8b6c3d237649cf3113daae4",
       "declaration": {
         "file": "convex/chatShares.ts",
         "symbol": "getShareState",
@@ -5896,7 +5793,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "88576fb9036a76e32264fb1877a7641e53f5de608938b5db4509850e7f4aeb1c",
+      "sha256": "574dea8ff544660ccb46349d65b2ffbcc3924770a8b6c3d237649cf3113daae4",
       "declaration": {
         "file": "convex/chatShares.ts",
         "symbol": "issueShare",
@@ -5953,7 +5850,7 @@
       "registrar": "query",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "88576fb9036a76e32264fb1877a7641e53f5de608938b5db4509850e7f4aeb1c",
+      "sha256": "574dea8ff544660ccb46349d65b2ffbcc3924770a8b6c3d237649cf3113daae4",
       "declaration": {
         "file": "convex/chatShares.ts",
         "symbol": "listSharedMessages",
@@ -5967,7 +5864,7 @@
         "testFile": "tests/integration/chat-durable-messaging-share.test.ts",
         "testName": "issues one opaque grant, hides ownership publicly, revokes, and reissues by generation",
         "sourceRef": "convex/chatShares.ts:listSharedMessages",
-        "sha256": "07751cc8318f6bb45372c18a2db565e95e4465291dbbf23258250fda6d154124"
+        "sha256": "2e30e6feba3584bd06933ce77862decaec0a3e93cd1a9fa20c0693f0b66f2eea"
       }
     },
     {
@@ -5978,7 +5875,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "88576fb9036a76e32264fb1877a7641e53f5de608938b5db4509850e7f4aeb1c",
+      "sha256": "574dea8ff544660ccb46349d65b2ffbcc3924770a8b6c3d237649cf3113daae4",
       "declaration": {
         "file": "convex/chatShares.ts",
         "symbol": "revokeShare",
@@ -6035,7 +5932,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "6954dbd5c1c82afebea98fe9726b37dde16fd15d572d7e1cd19f74121a7c5db6",
+      "sha256": "2f2d164bd2646edf39a622d66eaac3dc0cd97bde1160cc31471755f76b89ebb8",
       "declaration": {
         "file": "convex/chatThreads.ts",
         "symbol": "createThread",
@@ -6085,7 +5982,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "6954dbd5c1c82afebea98fe9726b37dde16fd15d572d7e1cd19f74121a7c5db6",
+      "sha256": "2f2d164bd2646edf39a622d66eaac3dc0cd97bde1160cc31471755f76b89ebb8",
       "declaration": {
         "file": "convex/chatThreads.ts",
         "symbol": "deleteThread",
@@ -6142,7 +6039,7 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "6954dbd5c1c82afebea98fe9726b37dde16fd15d572d7e1cd19f74121a7c5db6",
+      "sha256": "2f2d164bd2646edf39a622d66eaac3dc0cd97bde1160cc31471755f76b89ebb8",
       "declaration": {
         "file": "convex/chatThreads.ts",
         "symbol": "getThread",
@@ -6199,7 +6096,7 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "6954dbd5c1c82afebea98fe9726b37dde16fd15d572d7e1cd19f74121a7c5db6",
+      "sha256": "2f2d164bd2646edf39a622d66eaac3dc0cd97bde1160cc31471755f76b89ebb8",
       "declaration": {
         "file": "convex/chatThreads.ts",
         "symbol": "listThreads",
@@ -6249,7 +6146,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "6954dbd5c1c82afebea98fe9726b37dde16fd15d572d7e1cd19f74121a7c5db6",
+      "sha256": "2f2d164bd2646edf39a622d66eaac3dc0cd97bde1160cc31471755f76b89ebb8",
       "declaration": {
         "file": "convex/chatThreads.ts",
         "symbol": "renameThread",
@@ -6306,7 +6203,7 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "6954dbd5c1c82afebea98fe9726b37dde16fd15d572d7e1cd19f74121a7c5db6",
+      "sha256": "2f2d164bd2646edf39a622d66eaac3dc0cd97bde1160cc31471755f76b89ebb8",
       "declaration": {
         "file": "convex/chatThreads.ts",
         "symbol": "searchThreads",
@@ -6370,7 +6267,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/discovery.ts:readDiscoveryBusinessSlugPage returns only public offering slugs and no cross-account private detail",
         "sourceRef": "convex/discovery.ts:readDiscoveryBusinessSlugPage",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -6395,7 +6292,7 @@
         "testFile": "tests/integration/discovery-llms-offering-parity.test.ts",
         "testName": "excludes businesses without offerings and private detail",
         "sourceRef": "convex/discovery.ts:readLlmsTxt",
-        "sha256": "50d10b7d944d15a29900b077c9684f68cbf48af26a87d329f0d57e65397d8ee7"
+        "sha256": "7af211c5b1be7e7953cd2fe69bfe1353ec9ecf8b39d520777023d01834effaf5"
       }
     },
     {
@@ -6406,13 +6303,13 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "d5e47aad72b8a34d8cb120fae30e4daae815fefa0fa9eeb23b29bca4a1b987c4",
+      "sha256": "87a05f4616be250ce73aaf4bee5e71c8c9cf5bde81f5239a8dbc74cfc33ff56a",
       "declaration": {
         "file": "convex/interactiveAuthority.ts",
         "symbol": "materializeCurrentInteractiveAuthority",
-        "line": 189,
+        "line": 491,
         "column": 14,
-        "sha256": "33a58d73dab059cb37cc89463958b66a54517f4c2ca4abc456ac2936c0d1f6ed"
+        "sha256": "8d3f94b3a79de71edf071d1411add949c8cf0fc99eb1d06b9adb5e6cffaebfc8"
       },
       "status": "bound",
       "marker": "transitive_authority_path:convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority=>convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext",
@@ -6421,14 +6318,14 @@
         {
           "ref": "convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority",
           "file": "convex/interactiveAuthority.ts",
-          "line": 189,
+          "line": 491,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext",
           "file": "convex/interactiveAuthority.ts",
-          "line": 163,
+          "line": 167,
           "column": 1,
           "via": "call"
         }
@@ -6456,7 +6353,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/marketExternalRegistry.ts:search exposes source metadata only and is invariant across caller identities",
         "sourceRef": "convex/marketExternalRegistry.ts:search",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -6481,7 +6378,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/marketExternalSnapshots.ts:read returns aggregate public evidence without account-scoped disclosure or writes",
         "sourceRef": "convex/marketExternalSnapshots.ts:read",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -6542,7 +6439,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/marketListingEvidence.ts:read returns bounded public operation evidence and ignores caller-shaped identity",
         "sourceRef": "convex/marketListingEvidence.ts:read",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -6553,7 +6450,7 @@
       "registrar": "action",
       "binding": "signed_callback",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "applyVerifiedStripeEvent",
@@ -6596,7 +6493,7 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:requireBillingSourceWrite",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 572,
+          "line": 678,
           "column": 1,
           "via": "call"
         },
@@ -6617,7 +6514,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "beginPayoutTransfer",
@@ -6667,7 +6564,7 @@
       "registrar": "mutation",
       "binding": "signed_callback",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "bindConnectAccount",
@@ -6696,7 +6593,7 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:requireBillingSourceWrite",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 572,
+          "line": 678,
           "column": 1,
           "via": "call"
         },
@@ -6717,7 +6614,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "bindCreditPaymentSession",
@@ -6739,14 +6636,14 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingTopupContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 122,
+          "line": 123,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingPrincipalContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 58,
+          "line": 59,
           "column": 1,
           "via": "call"
         },
@@ -6767,7 +6664,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "completePayoutTransfer",
@@ -6824,7 +6721,7 @@
       "registrar": "mutation",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "finalizeConnectAccount",
@@ -6838,7 +6735,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/moneyLedger.ts:reserveConnectAccount and finalizeConnectAccount remain identity-invariant fail-closed compatibility surfaces with no money effect",
         "sourceRef": "convex/moneyLedger.ts:finalizeConnectAccount",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -6849,7 +6746,7 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "listCreditActivity",
@@ -6871,7 +6768,7 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingPrincipalContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 58,
+          "line": 59,
           "column": 1,
           "via": "call"
         },
@@ -6892,7 +6789,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "markCreditTopupOutcomeUnknown",
@@ -6914,14 +6811,14 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingTopupContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 122,
+          "line": 123,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingPrincipalContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 58,
+          "line": 59,
           "column": 1,
           "via": "call"
         },
@@ -6942,7 +6839,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "markPayoutTransferOutcomeUnknown",
@@ -6992,13 +6889,13 @@
       "registrar": "mutation",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "readAgentProviderEarnings",
         "line": 587,
         "column": 14,
-        "sha256": "47d55935b165ef6282e2fb5ea40b835b9968e2f19bf806b14b5ab33d73a79230"
+        "sha256": "819a3d7041da17d6f2eea9194710beec221234c46320dcfde335804579d1ce7a"
       },
       "status": "bound",
       "marker": "transitive_authority_path:convex/moneyLedger.ts:readAgentProviderEarnings=>convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
@@ -7014,7 +6911,7 @@
         {
           "ref": "convex/moneyProviderEarnings.ts:readAgentProviderEarningsHandler",
           "file": "convex/moneyProviderEarnings.ts",
-          "line": 683,
+          "line": 681,
           "column": 1,
           "via": "call"
         },
@@ -7035,7 +6932,7 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "readCreditAccount",
@@ -7057,7 +6954,7 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingPrincipalContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 58,
+          "line": 59,
           "column": 1,
           "via": "call"
         },
@@ -7078,7 +6975,7 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "readCreditTopupCommand",
@@ -7100,14 +6997,14 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingTopupContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 122,
+          "line": 123,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingPrincipalContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 58,
+          "line": 59,
           "column": 1,
           "via": "call"
         },
@@ -7128,7 +7025,7 @@
       "registrar": "query",
       "binding": "signed_callback",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "readCreditTopupWebhookCommand",
@@ -7178,7 +7075,7 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "readKeyUsage",
@@ -7200,7 +7097,7 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingPrincipalContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 58,
+          "line": 59,
           "column": 1,
           "via": "call"
         },
@@ -7221,7 +7118,7 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "readOwnerPayoutAccount",
@@ -7264,7 +7161,7 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "readOwnerPayoutTransfer",
@@ -7307,7 +7204,7 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "readOwnerProviderEarnings",
@@ -7350,7 +7247,7 @@
       "registrar": "query",
       "binding": "signed_callback",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "readPayoutAccountByStripeId",
@@ -7400,7 +7297,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "reconcilePayoutTransfer",
@@ -7457,7 +7354,7 @@
       "registrar": "mutation",
       "binding": "signed_callback",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "recordConnectAccountEvent",
@@ -7479,14 +7376,14 @@
         {
           "ref": "convex/moneyConnect.ts:recordConnectAccountEventHandler",
           "file": "convex/moneyConnect.ts",
-          "line": 396,
+          "line": 394,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/moneyBillingAuthorization.ts:requireBillingSourceWrite",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 572,
+          "line": 678,
           "column": 1,
           "via": "call"
         },
@@ -7507,7 +7404,7 @@
       "registrar": "mutation",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "reserveConnectAccount",
@@ -7521,7 +7418,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/moneyLedger.ts:reserveConnectAccount and finalizeConnectAccount remain identity-invariant fail-closed compatibility surfaces with no money effect",
         "sourceRef": "convex/moneyLedger.ts:reserveConnectAccount",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -7532,7 +7429,7 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "reserveCreditTopup",
@@ -7554,7 +7451,7 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingPrincipalContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 58,
+          "line": 59,
           "column": 1,
           "via": "call"
         },
@@ -7575,13 +7472,13 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "fc7ac70e1238e3e73216dec3ecda983ce458476879acad3e31160c96ba082676",
+      "sha256": "d4ad30ba5d70ec56f2247f0e2b986f17d81846e3e5b0f032ade11452b7106050",
       "declaration": {
         "file": "convex/qualifiedUse.ts",
         "symbol": "readOwnerQualifiedUse",
-        "line": 281,
+        "line": 286,
         "column": 14,
-        "sha256": "75058d916b4e54186f6efc4a32750b9041362e29cb9dd0d9b15214e35eac206b"
+        "sha256": "d08afed3415174b8ee2c6f432a3f79cdb8c043b061b079982aeeece452d15755"
       },
       "status": "bound",
       "marker": "transitive_authority_path:convex/qualifiedUse.ts:readOwnerQualifiedUse=>convex/authz.ts:resolveBusinessActor",
@@ -7590,7 +7487,7 @@
         {
           "ref": "convex/qualifiedUse.ts:readOwnerQualifiedUse",
           "file": "convex/qualifiedUse.ts",
-          "line": 281,
+          "line": 286,
           "column": 14,
           "via": "declaration"
         },
@@ -7611,11 +7508,11 @@
       "registrar": "mutationGeneric",
       "binding": "narrow_system_non_consequential",
       "consequential": false,
-      "sha256": "7002aefbc9dafcc044055ff146ff1e27c1b8d409c6faa949c3698ea302fb2760",
+      "sha256": "e1e58369430d2dc6dffc1bc2d8dbed64282b124e116416f7af47abc7935e7713",
       "declaration": {
         "file": "convex/rateLimit.ts",
         "symbol": "admitHttp",
-        "line": 41,
+        "line": 43,
         "column": 14,
         "sha256": "69329258bdb861c18f82934e2d397a0f8403eda009e3dbae781d7d2c1bde206d"
       },
@@ -7625,7 +7522,7 @@
         "testFile": "tests/integration/chat-anonymous-transport.test.ts",
         "testName": "keeps the edge and Convex backstop admissions in independent hourly buckets",
         "sourceRef": "convex/rateLimit.ts:admitHttp",
-        "sha256": "25ed9d056800e0fcd751ace0ae72f09964acb3c0a990a8f777f4d6adeca7f189"
+        "sha256": "0eadb3003a369d4a6b8dcb3aa1807083eef7fab31f80c49bbbc0cc791903536a"
       }
     },
     {
@@ -7729,7 +7626,7 @@
         "testFile": "tests/unit/convex/registry-runtime.test.ts",
         "testName": "returns detail by slug with the current canonical offering identity",
         "sourceRef": "convex/registry.ts:getPublicBusinessOfferingSupplyBySlug",
-        "sha256": "80420ce0058e0c34e1d25562ed6c97074497d85acd78732fe392ca5368af4a6a"
+        "sha256": "0cffd7ad9908a8622ad8f10061651b6df9cc4bb2c8a25235ef4d8a110d9e1524"
       }
     },
     {
@@ -7754,7 +7651,7 @@
         "testFile": "tests/unit/convex/registry-runtime.test.ts",
         "testName": "returns every eligible public business exactly once across native cursors",
         "sourceRef": "convex/registry.ts:listPublicBusinessOfferingSupply",
-        "sha256": "80420ce0058e0c34e1d25562ed6c97074497d85acd78732fe392ca5368af4a6a"
+        "sha256": "0cffd7ad9908a8622ad8f10061651b6df9cc4bb2c8a25235ef4d8a110d9e1524"
       }
     },
     {
@@ -7779,7 +7676,7 @@
         "testFile": "tests/unit/convex/registry-runtime.test.ts",
         "testName": "returns a bounded full-text search result for the canonical business",
         "sourceRef": "convex/registry.ts:searchPublicBusinessOfferingSupply",
-        "sha256": "80420ce0058e0c34e1d25562ed6c97074497d85acd78732fe392ca5368af4a6a"
+        "sha256": "0cffd7ad9908a8622ad8f10061651b6df9cc4bb2c8a25235ef4d8a110d9e1524"
       }
     },
     {
@@ -7831,7 +7728,7 @@
       "file": "convex/security.ts",
       "symbol": "closeRemovalDispute",
       "registrar": "mutationGeneric",
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true,
       "sha256": "ececea0293cdfb1e3bb01335be22dedbc2cbe242ddbaf071f80e2c2c70d7e777",
       "declaration": {
@@ -7842,8 +7739,8 @@
         "sha256": "b39c45637837047f9c2d684a320aede6e7d147c07059ba93135200f2fbcb135f"
       },
       "status": "bound",
-      "marker": "transitive_authority_path:convex/security.ts:closeRemovalDispute=>convex/authz.ts:resolveBusinessActor",
-      "authoritySink": "convex/authz.ts:resolveBusinessActor",
+      "marker": "transitive_authority_path:convex/security.ts:closeRemovalDispute=>convex/authz.ts:readCurrentActiveAdminMembership",
+      "authoritySink": "convex/authz.ts:readCurrentActiveAdminMembership",
       "authorityPath": [
         {
           "ref": "convex/security.ts:closeRemovalDispute",
@@ -7862,14 +7759,7 @@
         {
           "ref": "convex/authz.ts:readCurrentActiveAdminMembership",
           "file": "convex/authz.ts",
-          "line": 121,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/authz.ts:resolveBusinessActor",
-          "file": "convex/authz.ts",
-          "line": 42,
+          "line": 93,
           "column": 1,
           "via": "call"
         }
@@ -7881,7 +7771,7 @@
       "file": "convex/security.ts",
       "symbol": "grantAdminMembership",
       "registrar": "mutationGeneric",
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true,
       "sha256": "ececea0293cdfb1e3bb01335be22dedbc2cbe242ddbaf071f80e2c2c70d7e777",
       "declaration": {
@@ -7892,8 +7782,8 @@
         "sha256": "91f4b36211c40a6a3997bf14d12206df314b8f49a7ddad251a022f468353b911"
       },
       "status": "bound",
-      "marker": "transitive_authority_path:convex/security.ts:grantAdminMembership=>convex/authz.ts:resolveBusinessActor",
-      "authoritySink": "convex/authz.ts:resolveBusinessActor",
+      "marker": "transitive_authority_path:convex/security.ts:grantAdminMembership=>convex/authz.ts:readCurrentActiveAdminMembership",
+      "authoritySink": "convex/authz.ts:readCurrentActiveAdminMembership",
       "authorityPath": [
         {
           "ref": "convex/security.ts:grantAdminMembership",
@@ -7912,14 +7802,7 @@
         {
           "ref": "convex/authz.ts:readCurrentActiveAdminMembership",
           "file": "convex/authz.ts",
-          "line": 121,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/authz.ts:resolveBusinessActor",
-          "file": "convex/authz.ts",
-          "line": 42,
+          "line": 93,
           "column": 1,
           "via": "call"
         }
@@ -7974,7 +7857,7 @@
       "file": "convex/security.ts",
       "symbol": "readAdminAuditEvents",
       "registrar": "queryGeneric",
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true,
       "sha256": "ececea0293cdfb1e3bb01335be22dedbc2cbe242ddbaf071f80e2c2c70d7e777",
       "declaration": {
@@ -7985,8 +7868,8 @@
         "sha256": "616a2522905acb5deea030868e0462cd17b07a33a024f8711db03a234e38651c"
       },
       "status": "bound",
-      "marker": "transitive_authority_path:convex/security.ts:readAdminAuditEvents=>convex/authz.ts:resolveBusinessActor",
-      "authoritySink": "convex/authz.ts:resolveBusinessActor",
+      "marker": "transitive_authority_path:convex/security.ts:readAdminAuditEvents=>convex/authz.ts:readCurrentActiveAdminMembership",
+      "authoritySink": "convex/authz.ts:readCurrentActiveAdminMembership",
       "authorityPath": [
         {
           "ref": "convex/security.ts:readAdminAuditEvents",
@@ -8012,14 +7895,7 @@
         {
           "ref": "convex/authz.ts:readCurrentActiveAdminMembership",
           "file": "convex/authz.ts",
-          "line": 121,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/authz.ts:resolveBusinessActor",
-          "file": "convex/authz.ts",
-          "line": 42,
+          "line": 93,
           "column": 1,
           "via": "call"
         }
@@ -8031,7 +7907,7 @@
       "file": "convex/security.ts",
       "symbol": "readAdminIndexHealth",
       "registrar": "queryGeneric",
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true,
       "sha256": "ececea0293cdfb1e3bb01335be22dedbc2cbe242ddbaf071f80e2c2c70d7e777",
       "declaration": {
@@ -8042,8 +7918,8 @@
         "sha256": "cd0fffec51ef3ed93d2763ba67320400534939f396c72a64e686dcc56cc26fd6"
       },
       "status": "bound",
-      "marker": "transitive_authority_path:convex/security.ts:readAdminIndexHealth=>convex/authz.ts:resolveBusinessActor",
-      "authoritySink": "convex/authz.ts:resolveBusinessActor",
+      "marker": "transitive_authority_path:convex/security.ts:readAdminIndexHealth=>convex/authz.ts:readCurrentActiveAdminMembership",
+      "authoritySink": "convex/authz.ts:readCurrentActiveAdminMembership",
       "authorityPath": [
         {
           "ref": "convex/security.ts:readAdminIndexHealth",
@@ -8069,14 +7945,7 @@
         {
           "ref": "convex/authz.ts:readCurrentActiveAdminMembership",
           "file": "convex/authz.ts",
-          "line": 121,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/authz.ts:resolveBusinessActor",
-          "file": "convex/authz.ts",
-          "line": 42,
+          "line": 93,
           "column": 1,
           "via": "call"
         }
@@ -8088,7 +7957,7 @@
       "file": "convex/security.ts",
       "symbol": "revokeAdminMembership",
       "registrar": "mutationGeneric",
-      "binding": "interactive_account",
+      "binding": "admin_membership",
       "consequential": true,
       "sha256": "ececea0293cdfb1e3bb01335be22dedbc2cbe242ddbaf071f80e2c2c70d7e777",
       "declaration": {
@@ -8099,8 +7968,8 @@
         "sha256": "06643a7fe6ac39e1bcc1b11481a187f5d170be1919c0b9f3150239b5f6aac4b4"
       },
       "status": "bound",
-      "marker": "transitive_authority_path:convex/security.ts:revokeAdminMembership=>convex/authz.ts:resolveBusinessActor",
-      "authoritySink": "convex/authz.ts:resolveBusinessActor",
+      "marker": "transitive_authority_path:convex/security.ts:revokeAdminMembership=>convex/authz.ts:readCurrentActiveAdminMembership",
+      "authoritySink": "convex/authz.ts:readCurrentActiveAdminMembership",
       "authorityPath": [
         {
           "ref": "convex/security.ts:revokeAdminMembership",
@@ -8119,14 +7988,7 @@
         {
           "ref": "convex/authz.ts:readCurrentActiveAdminMembership",
           "file": "convex/authz.ts",
-          "line": 121,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/authz.ts:resolveBusinessActor",
-          "file": "convex/authz.ts",
-          "line": 42,
+          "line": 93,
           "column": 1,
           "via": "call"
         }
@@ -8142,13 +8004,13 @@
       "registrar": "httpAction",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "c4a65979f7d98fecdedb0a3f3e9e5af8c3f04c735a11fbae604d091d8fde84ab",
+      "sha256": "df0b85584b09f65d679c0af22dc94b0faca05c446a0ecad3291059df9d6fcd53",
       "declaration": {
         "file": "convex/chatAnonymous.ts",
         "symbol": "anonymousChat",
-        "line": 183,
+        "line": 180,
         "column": 14,
-        "sha256": "aae991b6e185bfc977496062522f1f3f36b6477876c00ce5ddb996d0ea2300ec"
+        "sha256": "3736d027b51f7ed67e04187ec57f3af4f7501106e253137fc132b45c2301fbf7"
       },
       "status": "bound",
       "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:convex/chatAnonymous.ts:anonymousChat fails closed before admission or provider use regardless of caller-shaped headers",
@@ -8156,7 +8018,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/chatAnonymous.ts:anonymousChat fails closed before admission or provider use regardless of caller-shaped headers",
         "sourceRef": "convex/chatAnonymous.ts:anonymousChat",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       }
     },
     {
@@ -8441,13 +8303,13 @@
       "registrar": "http.route",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "c4a65979f7d98fecdedb0a3f3e9e5af8c3f04c735a11fbae604d091d8fde84ab",
+      "sha256": "df0b85584b09f65d679c0af22dc94b0faca05c446a0ecad3291059df9d6fcd53",
       "declaration": {
         "file": "convex/chatAnonymous.ts",
         "symbol": "anonymousChat",
-        "line": 183,
+        "line": 180,
         "column": 14,
-        "sha256": "aae991b6e185bfc977496062522f1f3f36b6477876c00ce5ddb996d0ea2300ec"
+        "sha256": "3736d027b51f7ed67e04187ec57f3af4f7501106e253137fc132b45c2301fbf7"
       },
       "status": "bound",
       "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:convex/chatAnonymous.ts:anonymousChat fails closed before admission or provider use regardless of caller-shaped headers",
@@ -8455,7 +8317,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/chatAnonymous.ts:anonymousChat fails closed before admission or provider use regardless of caller-shaped headers",
         "sourceRef": "convex_http_route:POST /chat/anonymous",
-        "sha256": "ba95ffe0c5ecf451a822b9350a16df962946c4086012051a8d8ff470c7d0d7be"
+        "sha256": "b340476803d5d7ecc1bac92d9cae76abe92e72e256ac5e633146893f56b25097"
       },
       "handlerRef": "convex/chatAnonymous.ts:anonymousChat",
       "method": "POST",
@@ -8817,11 +8679,11 @@
       "registrar": "interval",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "cleanupExpiredAgentAccessOAuthGrants",
-        "line": 480,
+        "line": 585,
         "column": 14,
         "sha256": "a81a26376378263e0afd0102044f0c1e638c7fb06d0e74148c9cc74a2ecbcc0e"
       },
@@ -8832,14 +8694,14 @@
         {
           "ref": "cron:cleanup expired agent access oauth grants",
           "file": "convex/workloadCron.ts",
-          "line": 480,
+          "line": 585,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:cleanupExpiredAgentAccessOAuthGrantsHandler",
           "file": "convex/workloadCron.ts",
-          "line": 411,
+          "line": 516,
           "column": 1,
           "via": "call"
         },
@@ -8853,7 +8715,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -8875,11 +8737,11 @@
       "registrar": "interval",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "cleanupExpiredSourceWriteNonces",
-        "line": 474,
+        "line": 579,
         "column": 14,
         "sha256": "6bd69b853164c373adb3563fd148678a66bcc1866a947b50c3427c1480b28e3c"
       },
@@ -8890,14 +8752,14 @@
         {
           "ref": "cron:cleanup expired source write nonces",
           "file": "convex/workloadCron.ts",
-          "line": 474,
+          "line": 579,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:cleanupExpiredSourceWriteNoncesHandler",
           "file": "convex/workloadCron.ts",
-          "line": 399,
+          "line": 504,
           "column": 1,
           "via": "call"
         },
@@ -8911,7 +8773,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -8933,11 +8795,11 @@
       "registrar": "interval",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "continueMarketAggregateBackfill",
-        "line": 456,
+        "line": 561,
         "column": 14,
         "sha256": "ddbbcfc5a009c407050e1b25e1ae79bc48576177fccbddf236700dc4b984a817"
       },
@@ -8948,14 +8810,14 @@
         {
           "ref": "cron:continue market aggregate backfill",
           "file": "convex/workloadCron.ts",
-          "line": 456,
+          "line": 561,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:continueMarketAggregateBackfillHandler",
           "file": "convex/workloadCron.ts",
-          "line": 372,
+          "line": 477,
           "column": 1,
           "via": "call"
         },
@@ -8969,7 +8831,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -8991,11 +8853,11 @@
       "registrar": "interval",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "reconcileDueFacilitatorInvocations",
-        "line": 432,
+        "line": 537,
         "column": 14,
         "sha256": "0f37b90b92ae38d7529b27bf42c2378730584a627bc911afa4a302344a8b5e6d"
       },
@@ -9006,14 +8868,14 @@
         {
           "ref": "cron:reconcile due facilitator invocations",
           "file": "convex/workloadCron.ts",
-          "line": 432,
+          "line": 537,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileDueFacilitatorInvocationsHandler",
           "file": "convex/workloadCron.ts",
-          "line": 336,
+          "line": 441,
           "column": 1,
           "via": "call"
         },
@@ -9027,21 +8889,21 @@
         {
           "ref": "convex/workloadCron.ts:reconcile",
           "file": "convex/workloadCron.ts",
-          "line": 132,
+          "line": 237,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshotHandler",
           "file": "convex/workloadCron.ts",
-          "line": 105,
+          "line": 210,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -9063,11 +8925,11 @@
       "registrar": "interval",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "refreshAgenticEconomyApiRegistry",
-        "line": 450,
+        "line": 555,
         "column": 14,
         "sha256": "591c546f007e574335dba42706a4751f8600e3f14361067fac50a3730853e91a"
       },
@@ -9078,14 +8940,14 @@
         {
           "ref": "cron:refresh Agentic Economy API registry",
           "file": "convex/workloadCron.ts",
-          "line": 450,
+          "line": 555,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:refreshAgenticEconomyApiRegistryHandler",
           "file": "convex/workloadCron.ts",
-          "line": 363,
+          "line": 468,
           "column": 1,
           "via": "call"
         },
@@ -9099,7 +8961,7 @@
         {
           "ref": "convex/workloadCron.ts:bindWorkloadCronActionContext",
           "file": "convex/workloadCron.ts",
-          "line": 230,
+          "line": 335,
           "column": 1,
           "via": "call"
         }
@@ -9121,11 +8983,11 @@
       "registrar": "interval",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "refreshAgenticMarketSnapshots",
-        "line": 444,
+        "line": 549,
         "column": 14,
         "sha256": "5b70d0f0a3eed0d6fa93f0e538ea439ecaaabca1429ae0c54b993f9c3daf8c01"
       },
@@ -9136,14 +8998,14 @@
         {
           "ref": "cron:refresh Agentic Market snapshots",
           "file": "convex/workloadCron.ts",
-          "line": 444,
+          "line": 549,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:refreshAgenticMarketSnapshotsHandler",
           "file": "convex/workloadCron.ts",
-          "line": 354,
+          "line": 459,
           "column": 1,
           "via": "call"
         },
@@ -9157,7 +9019,7 @@
         {
           "ref": "convex/workloadCron.ts:bindWorkloadCronActionContext",
           "file": "convex/workloadCron.ts",
-          "line": 230,
+          "line": 335,
           "column": 1,
           "via": "call"
         }
@@ -9179,11 +9041,11 @@
       "registrar": "interval",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "refreshCapabilitySupplyReadiness",
-        "line": 468,
+        "line": 573,
         "column": 14,
         "sha256": "36940f17ecb5b86568f3a9f30fdecaa6d2fa1488dc08dd6abd90035202b44f42"
       },
@@ -9194,21 +9056,21 @@
         {
           "ref": "cron:refresh capability supply readiness",
           "file": "convex/workloadCron.ts",
-          "line": 468,
+          "line": 573,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:refreshCapabilitySupplyReadinessHandler",
           "file": "convex/workloadCron.ts",
-          "line": 393,
+          "line": 498,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/workloadCron.ts:admitWorkloadCron",
           "file": "convex/workloadCron.ts",
-          "line": 54,
+          "line": 59,
           "column": 1,
           "via": "call"
         }
@@ -9230,11 +9092,11 @@
       "registrar": "interval",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "refreshCurrentMarketPresence",
-        "line": 462,
+        "line": 567,
         "column": 14,
         "sha256": "2621cefce737367407c7f51135f694138e10cbbdb45a5d52e46b1700c90e01cc"
       },
@@ -9245,14 +9107,14 @@
         {
           "ref": "cron:refresh current market presence",
           "file": "convex/workloadCron.ts",
-          "line": 462,
+          "line": 567,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:refreshCurrentMarketPresenceHandler",
           "file": "convex/workloadCron.ts",
-          "line": 381,
+          "line": 486,
           "column": 1,
           "via": "call"
         },
@@ -9266,7 +9128,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -9288,11 +9150,11 @@
       "registrar": "interval",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "refreshFacilitatorDiscovery",
-        "line": 438,
+        "line": 543,
         "column": 14,
         "sha256": "7ea1511ab6ee667f6bd1a5503486b8669b89c66ec8efe58551e796ce744e0175"
       },
@@ -9303,14 +9165,14 @@
         {
           "ref": "cron:refresh facilitator discovery",
           "file": "convex/workloadCron.ts",
-          "line": 438,
+          "line": 543,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:refreshFacilitatorDiscoveryHandler",
           "file": "convex/workloadCron.ts",
-          "line": 345,
+          "line": 450,
           "column": 1,
           "via": "call"
         },
@@ -9324,7 +9186,7 @@
         {
           "ref": "convex/workloadCron.ts:bindWorkloadCronActionContext",
           "file": "convex/workloadCron.ts",
-          "line": 230,
+          "line": 335,
           "column": 1,
           "via": "call"
         }
@@ -9346,11 +9208,11 @@
       "registrar": "cron",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "runDailySupplierSettlement",
-        "line": 486,
+        "line": 591,
         "column": 14,
         "sha256": "91054bbd24e99d59f0f9e6d9621c00b3b5bbf383ae37ace6fd9db4832a3250ab"
       },
@@ -9361,28 +9223,28 @@
         {
           "ref": "cron:run daily supplier settlement",
           "file": "convex/workloadCron.ts",
-          "line": 486,
+          "line": 591,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:runDailySupplierSettlementHandler",
           "file": "convex/workloadCron.ts",
-          "line": 423,
+          "line": 528,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/workloadCron.ts:runAdmittedMutation",
           "file": "convex/workloadCron.ts",
-          "line": 325,
+          "line": 430,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/workloadCron.ts:admitWorkloadCron",
           "file": "convex/workloadCron.ts",
-          "line": 54,
+          "line": 59,
           "column": 1,
           "via": "call"
         }
@@ -9879,7 +9741,7 @@
         {
           "ref": "convex/lib/providerConnections/authority.ts:readCurrentCleanupResourceAuthority",
           "file": "convex/lib/providerConnections/authority.ts",
-          "line": 210,
+          "line": 201,
           "column": 1,
           "via": "call"
         }
@@ -9924,7 +9786,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -9933,7 +9795,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 415,
+          "line": 520,
           "column": 16,
           "expression": "runAdmittedMutation"
         }
@@ -9969,21 +9831,21 @@
         {
           "ref": "convex/workloadCron.ts:reconcile",
           "file": "convex/workloadCron.ts",
-          "line": 132,
+          "line": 237,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshotHandler",
           "file": "convex/workloadCron.ts",
-          "line": 105,
+          "line": 210,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -9992,7 +9854,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 337,
+          "line": 442,
           "column": 16,
           "expression": "runAdmittedAction"
         }
@@ -10028,7 +9890,7 @@
         {
           "ref": "convex/workloadCron.ts:bindWorkloadCronActionContext",
           "file": "convex/workloadCron.ts",
-          "line": 230,
+          "line": 335,
           "column": 1,
           "via": "call"
         }
@@ -10037,7 +9899,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 346,
+          "line": 451,
           "column": 16,
           "expression": "runAdmittedAction"
         }
@@ -10073,7 +9935,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -10082,7 +9944,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 373,
+          "line": 478,
           "column": 16,
           "expression": "runAdmittedMutation"
         }
@@ -10118,7 +9980,7 @@
         {
           "ref": "convex/workloadCron.ts:bindWorkloadCronActionContext",
           "file": "convex/workloadCron.ts",
-          "line": 230,
+          "line": 335,
           "column": 1,
           "via": "call"
         }
@@ -10127,7 +9989,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 355,
+          "line": 460,
           "column": 16,
           "expression": "runAdmittedAction"
         }
@@ -10163,7 +10025,7 @@
         {
           "ref": "convex/workloadCron.ts:bindWorkloadCronActionContext",
           "file": "convex/workloadCron.ts",
-          "line": 230,
+          "line": 335,
           "column": 1,
           "via": "call"
         }
@@ -10172,7 +10034,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 364,
+          "line": 469,
           "column": 16,
           "expression": "runAdmittedAction"
         }
@@ -10208,7 +10070,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -10217,7 +10079,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 385,
+          "line": 490,
           "column": 16,
           "expression": "runAdmittedMutation"
         }
@@ -10231,7 +10093,7 @@
       "registrar": "job",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "runDailySupplierSettlement",
@@ -10260,7 +10122,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -10269,7 +10131,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 424,
+          "line": 529,
           "column": 16,
           "expression": "runAdmittedMutation"
         }
@@ -10305,7 +10167,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -10314,7 +10176,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 403,
+          "line": 508,
           "column": 16,
           "expression": "runAdmittedMutation"
         }
@@ -10541,21 +10403,21 @@
         {
           "ref": "convex/workloadCron.ts:reconcile",
           "file": "convex/workloadCron.ts",
-          "line": 132,
+          "line": 237,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshotHandler",
           "file": "convex/workloadCron.ts",
-          "line": 105,
+          "line": 210,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -10578,7 +10440,7 @@
       "registrar": "reconciliation",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "830f3b5e9b79cd847420b09290f23fa02e5781843a68166d3910e0ca13d18246",
+      "sha256": "3ccaa00785ce708d02f2ffd25bf745cc497a5372312dff2608df55e5d5696ac5",
       "declaration": {
         "file": "convex/facilitatorDiscovery.ts",
         "symbol": "reconcile",
@@ -10600,7 +10462,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -10623,11 +10485,11 @@
       "registrar": "reconciliation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "d5e47aad72b8a34d8cb120fae30e4daae815fefa0fa9eeb23b29bca4a1b987c4",
+      "sha256": "87a05f4616be250ce73aaf4bee5e71c8c9cf5bde81f5239a8dbc74cfc33ff56a",
       "declaration": {
         "file": "convex/interactiveAuthority.ts",
         "symbol": "reconcileScheduledInteractiveAuthority",
-        "line": 505,
+        "line": 793,
         "column": 14,
         "sha256": "04bf0479267bd61e280da59ec1193f9172016726be6b10813c8f7054a0bd05da"
       },
@@ -10638,14 +10500,14 @@
         {
           "ref": "reconciliation:convex/interactiveAuthority.ts:reconcileScheduledInteractiveAuthority",
           "file": "convex/interactiveAuthority.ts",
-          "line": 505,
+          "line": 793,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext",
           "file": "convex/interactiveAuthority.ts",
-          "line": 481,
+          "line": 769,
           "column": 1,
           "via": "call"
         }
@@ -10654,7 +10516,7 @@
       "callSites": [
         {
           "file": "convex/interactiveAuthority.ts",
-          "line": 505,
+          "line": 793,
           "column": 14,
           "expression": "reconcileScheduledInteractiveAuthority"
         }
@@ -10702,7 +10564,7 @@
       "registrar": "reconciliation",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "reconcileCharge",
@@ -10724,14 +10586,14 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:canonicalBillingTransactionContext",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 505,
+          "line": 611,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 176,
+          "line": 317,
           "column": 1,
           "via": "call"
         }
@@ -10754,7 +10616,7 @@
       "registrar": "reconciliation",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "reconcileExternalInvocationSpend",
@@ -10776,7 +10638,7 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 176,
+          "line": 317,
           "column": 1,
           "via": "call"
         }
@@ -10799,7 +10661,7 @@
       "registrar": "reconciliation",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "reconcileInvocationCharge",
@@ -10821,7 +10683,7 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 176,
+          "line": 317,
           "column": 1,
           "via": "call"
         }
@@ -10844,7 +10706,7 @@
       "registrar": "reconciliation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "b5d719630183f23c4b1fedc5d502cbf1f09255b383e8604c42e33fe293ac3f26",
+      "sha256": "3f8107f8493a7d97f5eb952cb35c7c4b6868587d1142308670bc181eeaf69e15",
       "declaration": {
         "file": "convex/moneyLedger.ts",
         "symbol": "reconcilePayoutTransfer",
@@ -10932,7 +10794,7 @@
         {
           "ref": "convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent",
           "file": "convex/moneyBillingAuthorization.ts",
-          "line": 176,
+          "line": 317,
           "column": 1,
           "via": "call"
         }
@@ -10955,11 +10817,11 @@
       "registrar": "reconciliation",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "reconcile",
-        "line": 132,
+        "line": 237,
         "column": 14,
         "sha256": "0124db02c8f79e3627c3ae88a448bc7a35d0588ad45a9f4f1effc3472fa87fc2"
       },
@@ -10970,21 +10832,21 @@
         {
           "ref": "reconciliation:convex/workloadCron.ts:reconcile",
           "file": "convex/workloadCron.ts",
-          "line": 132,
+          "line": 237,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshotHandler",
           "file": "convex/workloadCron.ts",
-          "line": 105,
+          "line": 210,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -10993,7 +10855,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 132,
+          "line": 237,
           "column": 14,
           "expression": "reconcile"
         }
@@ -11007,11 +10869,11 @@
       "registrar": "reconciliation",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "reconcileDueFacilitatorInvocations",
-        "line": 432,
+        "line": 537,
         "column": 14,
         "sha256": "0f37b90b92ae38d7529b27bf42c2378730584a627bc911afa4a302344a8b5e6d"
       },
@@ -11022,14 +10884,14 @@
         {
           "ref": "reconciliation:convex/workloadCron.ts:reconcileDueFacilitatorInvocations",
           "file": "convex/workloadCron.ts",
-          "line": 432,
+          "line": 537,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileDueFacilitatorInvocationsHandler",
           "file": "convex/workloadCron.ts",
-          "line": 336,
+          "line": 441,
           "column": 1,
           "via": "call"
         },
@@ -11043,21 +10905,21 @@
         {
           "ref": "convex/workloadCron.ts:reconcile",
           "file": "convex/workloadCron.ts",
-          "line": 132,
+          "line": 237,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshotHandler",
           "file": "convex/workloadCron.ts",
-          "line": 105,
+          "line": 210,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -11066,7 +10928,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 432,
+          "line": 537,
           "column": 14,
           "expression": "reconcileDueFacilitatorInvocations"
         }
@@ -11149,6 +11011,86 @@
           "line": 9,
           "column": 14,
           "expression": "Route"
+        }
+      ]
+    },
+    {
+      "ref": "run_action:convex/capabilityOperationInvocations.ts:invoke",
+      "kind": "worker",
+      "file": "convex/capabilityOperationInvocations.ts",
+      "symbol": "invoke",
+      "registrar": "run_action",
+      "binding": "canonical_agent",
+      "consequential": true,
+      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "declaration": {
+        "file": "convex/capabilityOperationInvocations.ts",
+        "symbol": "invoke",
+        "line": 222,
+        "column": 14,
+        "sha256": "a2191067c2343edb22a95805de2e8c92b92be5f78b62ed58a879cf9b093a356f"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:run_action:convex/capabilityOperationInvocations.ts:invoke=>convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
+      "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
+      "authorityPath": [
+        {
+          "ref": "run_action:convex/capabilityOperationInvocations.ts:invoke",
+          "file": "convex/capabilityOperationInvocations.ts",
+          "line": 222,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentInvokeHandler",
+          "file": "convex/lib/operationInvocations/authorityHandlers.ts",
+          "line": 373,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
+          "file": "convex/lib/operationInvocations/authorityHandlers.ts",
+          "line": 108,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
+          "file": "convex/lib/operationInvocations/authorityHandlers.ts",
+          "line": 37,
+          "column": 14,
+          "via": "function_reference"
+        },
+        {
+          "ref": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
+          "file": "convex/capabilityOperationInvocations.ts",
+          "line": 80,
+          "column": 14,
+          "via": "function_reference"
+        },
+        {
+          "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
+          "file": "convex/lib/operationInvocations/authorityHandlers.ts",
+          "line": 83,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
+          "file": "convex/lib/operationInvocations/authorityHandlers.ts",
+          "line": 222,
+          "column": 1,
+          "via": "call"
+        }
+      ],
+      "discoveryKind": "run_action",
+      "callSites": [
+        {
+          "file": "convex/chatTools.ts",
+          "line": 271,
+          "column": 32,
+          "expression": "ctx.runAction"
         }
       ]
     },
@@ -11299,14 +11241,14 @@
         {
           "ref": "convex/capabilitySupplyProbes.ts:readCapabilityProbeTargetHandler",
           "file": "convex/capabilitySupplyProbes.ts",
-          "line": 427,
+          "line": 421,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority",
           "file": "convex/capabilitySupplyProbes.ts",
-          "line": 84,
+          "line": 83,
           "column": 1,
           "via": "call"
         }
@@ -11315,66 +11257,14 @@
       "callSites": [
         {
           "file": "convex/capabilitySupplyOwnerSupply.ts",
-          "line": 166,
+          "line": 165,
           "column": 26,
           "expression": "ctx.runAction"
         },
         {
           "file": "convex/capabilitySupplyOwnerSupply.ts",
-          "line": 239,
+          "line": 238,
           "column": 26,
-          "expression": "ctx.runAction"
-        }
-      ]
-    },
-    {
-      "ref": "run_action:convex/chatExecute.ts:execute",
-      "kind": "worker",
-      "file": "convex/chatExecute.ts",
-      "symbol": "execute",
-      "registrar": "run_action",
-      "binding": "interactive_account",
-      "consequential": true,
-      "sha256": "7229bc96a79c7cbc0b1a3136237558eab7067ae4fd1e05d97b96a64ef6f23d10",
-      "declaration": {
-        "file": "convex/chatExecute.ts",
-        "symbol": "execute",
-        "line": 177,
-        "column": 14,
-        "sha256": "36a7225aaab833fafdcb62ddb5fd3b5505a2461aae801e9ebd51cd74d0779ff1"
-      },
-      "status": "bound",
-      "marker": "transitive_authority_path:run_action:convex/chatExecute.ts:execute=>convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext",
-      "authoritySink": "convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext",
-      "authorityPath": [
-        {
-          "ref": "run_action:convex/chatExecute.ts:execute",
-          "file": "convex/chatExecute.ts",
-          "line": 177,
-          "column": 14,
-          "via": "declaration"
-        },
-        {
-          "ref": "convex/interactiveAuthority.ts:reconcileScheduledInteractiveAuthority",
-          "file": "convex/interactiveAuthority.ts",
-          "line": 505,
-          "column": 14,
-          "via": "function_reference"
-        },
-        {
-          "ref": "convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext",
-          "file": "convex/interactiveAuthority.ts",
-          "line": 481,
-          "column": 1,
-          "via": "call"
-        }
-      ],
-      "discoveryKind": "run_action",
-      "callSites": [
-        {
-          "file": "convex/chatTools.ts",
-          "line": 245,
-          "column": 32,
           "expression": "ctx.runAction"
         }
       ]
@@ -11387,11 +11277,11 @@
       "registrar": "run_action",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "d5e47aad72b8a34d8cb120fae30e4daae815fefa0fa9eeb23b29bca4a1b987c4",
+      "sha256": "87a05f4616be250ce73aaf4bee5e71c8c9cf5bde81f5239a8dbc74cfc33ff56a",
       "declaration": {
         "file": "convex/interactiveAuthority.ts",
         "symbol": "resolveCurrentInteractiveAuthority",
-        "line": 122,
+        "line": 126,
         "column": 14,
         "sha256": "dee160f7ed9307c3f67b2e74771e29035941d49859287e3b0c1fea5627cd441a"
       },
@@ -11402,14 +11292,14 @@
         {
           "ref": "run_action:convex/interactiveAuthority.ts:resolveCurrentInteractiveAuthority",
           "file": "convex/interactiveAuthority.ts",
-          "line": 122,
+          "line": 126,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/interactiveAuthority.ts:currentContextAtTrustedServerTime",
           "file": "convex/interactiveAuthority.ts",
-          "line": 537,
+          "line": 822,
           "column": 1,
           "via": "call"
         }
@@ -11454,7 +11344,7 @@
         {
           "ref": "convex/workloadCron.ts:bindWorkloadCronActionContext",
           "file": "convex/workloadCron.ts",
-          "line": 230,
+          "line": 335,
           "column": 1,
           "via": "call"
         }
@@ -11477,11 +11367,11 @@
       "registrar": "run_action",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "runAdmittedAction",
-        "line": 314,
+        "line": 419,
         "column": 1,
         "sha256": "7c2fd5ad28a23f164df29ccf7cadc1c243e11e16078564ce63bd2e014e7d6bf1"
       },
@@ -11492,28 +11382,28 @@
         {
           "ref": "run_action:convex/workloadCron.ts:runAdmittedAction",
           "file": "convex/workloadCron.ts",
-          "line": 314,
+          "line": 419,
           "column": 1,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:admit",
           "file": "convex/workloadCron.ts",
-          "line": 80,
+          "line": 85,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/workloadCron.ts:admitWorkloadCronHandler",
           "file": "convex/workloadCron.ts",
-          "line": 73,
+          "line": 78,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/workloadCron.ts:admitWorkloadCron",
           "file": "convex/workloadCron.ts",
-          "line": 54,
+          "line": 59,
           "column": 1,
           "via": "call"
         }
@@ -11522,7 +11412,7 @@
       "callSites": [
         {
           "file": "convex/workloadCron.ts",
-          "line": 321,
+          "line": 426,
           "column": 9,
           "expression": "ctx.runAction"
         }
@@ -11572,14 +11462,14 @@
         {
           "ref": "convex/capabilitySupplyProbes.ts:readCapabilityProbeTargetHandler",
           "file": "convex/capabilitySupplyProbes.ts",
-          "line": 427,
+          "line": 421,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority",
           "file": "convex/capabilitySupplyProbes.ts",
-          "line": 84,
+          "line": 83,
           "column": 1,
           "via": "call"
         }
@@ -11631,7 +11521,7 @@
         {
           "ref": "convex/workloadCron.ts:bindWorkloadCronActionContext",
           "file": "convex/workloadCron.ts",
-          "line": 230,
+          "line": 335,
           "column": 1,
           "via": "call"
         }
@@ -11640,7 +11530,7 @@
       "callSites": [
         {
           "file": "convex/capabilitySupplyProbes.ts",
-          "line": 597,
+          "line": 591,
           "column": 7,
           "expression": "ctx.scheduler.runAfter"
         }
@@ -11654,11 +11544,11 @@
       "registrar": "scheduler",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "e0b018e49d76f2cea5aa24e8c66e842342c2108831af559fe0ab7c03746f38a6",
+      "sha256": "3f2cd453abdec4af1293ef1489a96380885508856b3212b6275195da2d0714e9",
       "declaration": {
         "file": "convex/chatGenerate.ts",
         "symbol": "generate",
-        "line": 71,
+        "line": 67,
         "column": 14,
         "sha256": "9ab7d0b222df0b230f40b6806c5fcda735ced5e64bcf129dfd607845de2f2567"
       },
@@ -11669,21 +11559,21 @@
         {
           "ref": "scheduler:convex/chatGenerate.ts:generate",
           "file": "convex/chatGenerate.ts",
-          "line": 71,
+          "line": 67,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/chatMessages.ts:authorizeScheduledGeneration",
           "file": "convex/chatMessages.ts",
-          "line": 173,
+          "line": 171,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext",
           "file": "convex/interactiveAuthority.ts",
-          "line": 481,
+          "line": 769,
           "column": 1,
           "via": "call"
         }
@@ -11692,7 +11582,7 @@
       "callSites": [
         {
           "file": "convex/chatMessages.ts",
-          "line": 141,
+          "line": 139,
           "column": 11,
           "expression": "ctx.scheduler.runAfter"
         }
@@ -11706,11 +11596,11 @@
       "registrar": "scheduler",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "7fc2e722e8694cc0f9a1c6a7caffbb56a2c7a0acce454c5dd51371fff76c9c05",
+      "sha256": "1d51cdc9fdea4375c888c5434cb9d2cdb8cf789f60f0dbcdf74f293730078cf5",
       "declaration": {
         "file": "convex/devSeed.ts",
         "symbol": "seedOfferingSupply",
-        "line": 81,
+        "line": 252,
         "column": 14,
         "sha256": "bf922c23b7e20f0c53703a0d67c305eb712b8e0d9eea971b880b943d43018e00"
       },
@@ -11721,14 +11611,14 @@
         {
           "ref": "scheduler:convex/devSeed.ts:seedOfferingSupply",
           "file": "convex/devSeed.ts",
-          "line": 81,
+          "line": 252,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/catalogOfferingMutations.ts:admitDevSeedCatalogAuthority",
           "file": "convex/catalogOfferingMutations.ts",
-          "line": 347,
+          "line": 346,
           "column": 1,
           "via": "call"
         }
@@ -11737,7 +11627,7 @@
       "callSites": [
         {
           "file": "convex/devSeed.ts",
-          "line": 111,
+          "line": 282,
           "column": 13,
           "expression": "ctx.scheduler.runAfter"
         }
@@ -11848,7 +11738,7 @@
         {
           "ref": "convex/workloadCron.ts:bindWorkloadCronActionContext",
           "file": "convex/workloadCron.ts",
-          "line": 230,
+          "line": 335,
           "column": 1,
           "via": "call"
         }
@@ -11883,11 +11773,11 @@
       "registrar": "scheduler",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "cleanupExpiredAgentAccessOAuthGrants",
-        "line": 480,
+        "line": 585,
         "column": 14,
         "sha256": "a81a26376378263e0afd0102044f0c1e638c7fb06d0e74148c9cc74a2ecbcc0e"
       },
@@ -11898,14 +11788,14 @@
         {
           "ref": "scheduler:convex/workloadCron.ts:cleanupExpiredAgentAccessOAuthGrants",
           "file": "convex/workloadCron.ts",
-          "line": 480,
+          "line": 585,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:cleanupExpiredAgentAccessOAuthGrantsHandler",
           "file": "convex/workloadCron.ts",
-          "line": 411,
+          "line": 516,
           "column": 1,
           "via": "call"
         },
@@ -11919,7 +11809,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -11942,11 +11832,11 @@
       "registrar": "scheduler",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "cleanupExpiredSourceWriteNonces",
-        "line": 474,
+        "line": 579,
         "column": 14,
         "sha256": "6bd69b853164c373adb3563fd148678a66bcc1866a947b50c3427c1480b28e3c"
       },
@@ -11957,14 +11847,14 @@
         {
           "ref": "scheduler:convex/workloadCron.ts:cleanupExpiredSourceWriteNonces",
           "file": "convex/workloadCron.ts",
-          "line": 474,
+          "line": 579,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:cleanupExpiredSourceWriteNoncesHandler",
           "file": "convex/workloadCron.ts",
-          "line": 399,
+          "line": 504,
           "column": 1,
           "via": "call"
         },
@@ -11978,7 +11868,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -12001,11 +11891,11 @@
       "registrar": "scheduler",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "continueMarketAggregateBackfill",
-        "line": 456,
+        "line": 561,
         "column": 14,
         "sha256": "ddbbcfc5a009c407050e1b25e1ae79bc48576177fccbddf236700dc4b984a817"
       },
@@ -12016,14 +11906,14 @@
         {
           "ref": "scheduler:convex/workloadCron.ts:continueMarketAggregateBackfill",
           "file": "convex/workloadCron.ts",
-          "line": 456,
+          "line": 561,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:continueMarketAggregateBackfillHandler",
           "file": "convex/workloadCron.ts",
-          "line": 372,
+          "line": 477,
           "column": 1,
           "via": "call"
         },
@@ -12037,7 +11927,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -12060,11 +11950,11 @@
       "registrar": "scheduler",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "371624bc0c31918d53b4af61cf2384a648e06a97b3dc92756f581c4da4e36af2",
+      "sha256": "373085c033cd4e78270ca26611ac4b9433db0b1b7a30a81a068f705f75d1da14",
       "declaration": {
         "file": "convex/workloadCron.ts",
         "symbol": "refreshCurrentMarketPresence",
-        "line": 462,
+        "line": 567,
         "column": 14,
         "sha256": "2621cefce737367407c7f51135f694138e10cbbdb45a5d52e46b1700c90e01cc"
       },
@@ -12075,14 +11965,14 @@
         {
           "ref": "scheduler:convex/workloadCron.ts:refreshCurrentMarketPresence",
           "file": "convex/workloadCron.ts",
-          "line": 462,
+          "line": 567,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/workloadCron.ts:refreshCurrentMarketPresenceHandler",
           "file": "convex/workloadCron.ts",
-          "line": 381,
+          "line": 486,
           "column": 1,
           "via": "call"
         },
@@ -12096,7 +11986,7 @@
         {
           "ref": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
           "file": "convex/workloadCron.ts",
-          "line": 86,
+          "line": 191,
           "column": 1,
           "via": "call"
         }
@@ -12235,7 +12125,7 @@
         {
           "ref": "convex/lib/providerConnections/authority.ts:readCurrentCleanupResourceAuthority",
           "file": "convex/lib/providerConnections/authority.ts",
-          "line": 210,
+          "line": 201,
           "column": 1,
           "via": "call"
         }

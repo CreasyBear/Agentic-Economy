@@ -7,7 +7,7 @@ import {
 } from './capabilitySupplyProjection'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
-import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
+import { resolveBusinessActor } from './authz'
 
 export const contractRefValue = v.object({
   capabilityId: v.string(),
@@ -144,8 +144,7 @@ export async function ownsPublishedBusiness(
   const business = await publishedBusiness(ctx.db, businessId)
   if (business === null) return false
 
-  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
-  return owner !== null && owner._id === business.ownerId
+  return business.owningAccountRef === actor.canonicalAccountRef
 }
 
 export async function ownsPublishedBusinessForOwnerId(
@@ -155,11 +154,7 @@ export async function ownsPublishedBusinessForOwnerId(
 ): Promise<boolean> {
   const business = await publishedBusiness(ctx.db, businessId)
   if (business === null) return false
-  const owner = await ctx.db
-    .query('owners')
-    .withIndex('by_canonicalAccountRef', (q) => q.eq('canonicalAccountRef', ownerId))
-    .unique()
-  return owner !== null && business.ownerId === owner._id
+  return business.owningAccountRef === ownerId
 }
 
 export async function rebuildCapabilityOriginSupplyProjection(

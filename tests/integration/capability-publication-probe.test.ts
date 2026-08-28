@@ -301,11 +301,14 @@ describe('capability publication probe', () => {
         if (publication === null || business === null) {
           throw new Error('probe_isolation_rows_missing')
         }
-        const legacyOwner = await ctx.db.get(business.ownerId)
-        if (legacyOwner?.canonicalPrincipalRef === undefined
-          || legacyOwner.canonicalAccountRef === undefined) {
-          throw new Error('probe_isolation_owner_missing')
-        }
+        const account = await ctx.db.query('accounts')
+          .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
+          .unique()
+        if (account === null) throw new Error('probe_isolation_account_missing')
+        const ownership = await ctx.db.query('accountOwnerships')
+          .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+          .unique()
+        if (ownership === null) throw new Error('probe_isolation_ownership_missing')
         const publisher = await ctx.db.query('principals')
           .withIndex('by_principalRef', (query) => query.eq('principalRef', publication.publisherRef))
           .unique()
@@ -325,32 +328,20 @@ describe('capability publication probe', () => {
             createdAt: 2,
             updatedAt: 2,
           })
-          const account = await ctx.db.query('accounts')
-            .withIndex('by_accountRef', (query) => query.eq('accountRef', legacyOwner.canonicalAccountRef as never))
-            .unique()
-          if (account === null) throw new Error('probe_isolation_account_missing')
-          const ownership = await ctx.db.query('accountOwnerships')
-            .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
-            .unique()
-          if (ownership === null) throw new Error('probe_isolation_ownership_missing')
           await ctx.db.patch(ownership._id, {
             ownerPrincipalRef: replacementRef,
             revision: ownership.revision + 1,
           })
-          await ctx.db.patch(legacyOwner._id, {
-            canonicalPrincipalRef: replacementRef,
-            updatedAt: legacyOwner.updatedAt + 1,
-          })
           await ctx.db.insert('memberships', {
             membershipRef,
-            accountRef: legacyOwner.canonicalAccountRef,
+            accountRef: business.owningAccountRef,
             memberPrincipalRef: publication.publisherRef,
             lifecycle: 'active',
             revision: 1,
             createdAt: 2,
             createdBy: {
               actorPrincipalRef: replacementRef,
-              activeAccountRef: legacyOwner.canonicalAccountRef,
+              activeAccountRef: business.owningAccountRef,
               correlationRef: `create:${membershipRef}`,
               idempotencyRef: `create:${membershipRef}`,
             },
@@ -403,7 +394,7 @@ describe('capability publication probe', () => {
           })
           await ctx.db.insert('agentAccessPrincipals', {
             principalId: agentRef,
-            ownerId: legacyOwner.canonicalAccountRef,
+            ownerId: business.owningAccountRef,
             credentialId: 'credential:stale-probe-agent',
             applicationRef: 'application:stale-probe-agent',
             environment: 'production',

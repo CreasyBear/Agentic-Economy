@@ -41,13 +41,8 @@ export async function readAgentOwnerSupplyFunnelHandler(
     const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal)
     if (admission.kind !== 'allowed')
       return { kind: 'error', code: 'unauthenticated' }
-    const owner = await ctx.db
-      .query('owners')
-      .withIndex('by_canonicalAccountRef', (q) => q.eq('canonicalAccountRef', admission.ownerId))
-      .unique()
-    if (owner === null) return { kind: 'not_found' }
     const business = await ctx.db.get(args.businessId)
-    if (business === null || business.ownerId !== owner._id)
+    if (business === null || business.owningAccountRef !== admission.ownerId)
       return { kind: 'not_found' }
     return await readOwnerSupplyFunnelProjection(ctx, args, business)
 }

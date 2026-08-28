@@ -7,7 +7,7 @@ import {
   type AgentAccessPrincipalValue,
   verifySupplyAgentPrincipal,
 } from './agentAccessPrincipals'
-import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
+import { resolveBusinessActor } from './authz'
 import { accountFromRow } from './moneyCanonicalAccounts'
 import {
   domainMoneyEntries,
@@ -669,11 +669,9 @@ export async function readOwnerProviderEarningsHandler(
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner')
     return { kind: 'error' as const, code: 'unauthenticated' as const }
-  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
-  if (owner === null) return { kind: 'not_found' as const }
   const business = await ctx.db
     .query('businesses')
-    .withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id))
+    .withIndex('by_owningAccountRef_and_updatedAt', (q) => q.eq('owningAccountRef', actor.canonicalAccountRef))
     .order('desc')
     .first()
   if (business === null) return { kind: 'not_found' as const }
@@ -690,14 +688,9 @@ export async function readAgentProviderEarningsHandler(
   const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal)
   if (admission.kind !== 'allowed')
     return { kind: 'error' as const, code: 'unauthenticated' as const }
-  const owner = await ctx.db
-    .query('owners')
-    .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', admission.ownerId))
-    .unique()
-  if (owner === null) return { kind: 'not_found' as const }
   const business = await ctx.db
     .query('businesses')
-    .withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id))
+    .withIndex('by_owningAccountRef_and_updatedAt', (q) => q.eq('owningAccountRef', admission.ownerId))
     .order('desc')
     .first()
   if (business === null) return { kind: 'not_found' as const }

@@ -1,6 +1,6 @@
 {
   "format": "phase-2-authority-sink-runtime-tests:v2",
-  "inventorySha256": "bb40629790cec32186d63685ec3b3698aefb5a0007460212c7c0dd476b7ad09d",
+  "inventorySha256": "f1746db43d9f775cb650f35e7aa375b0873575d576b09ffbc0d682ff90a4e93e",
   "rows": {
     "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal": {
       "status": "covered",
@@ -48,17 +48,17 @@
       ],
       "authorityPathSha256": "923d14ea05fa026637c39adf17e63c140d705e7858741c8bdae3ccd7544e82ee"
     },
-    "convex/authz.ts:resolveBusinessActor": {
+    "convex/authz.ts:readCurrentActiveAdminMembership": {
       "status": "covered",
-      "surfaceRef": "convex/capabilityProviderConnections.ts:readOwner",
-      "testFile": "tests/maturity/phase-2-owner-query-authority.test.ts",
-      "testName": "evaluates resolveBusinessActor %s through the registered account-scoped provider query",
+      "surfaceRef": "convex/security.ts:readAdminAuditEvents",
+      "testFile": "tests/unit/convex/admin-actor-isolation.test.ts",
+      "testName": "evaluates readCurrentActiveAdminMembership %s through the registered admin audit readback query",
       "checksumScope": "named_test_case_ast",
-      "sha256": "55834865f1a955d982946fd0068004ac509e9908d6666d504c4a3c6fd10e57b7",
+      "sha256": "b6aa7ed29670205232e9104a582386491d874a4622ee32b7261a3dcba84b42a1",
       "invocation": {
         "kind": "convex_runtime_invocation",
-        "target": "convex/capabilityProviderConnections.ts:readOwner",
-        "expression": "api.capabilityProviderConnections.readOwner"
+        "target": "convex/security.ts:readAdminAuditEvents",
+        "expression": "api.security.readAdminAuditEvents"
       },
       "caseLabels": [
         "owner",
@@ -69,7 +69,53 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "05eaad7669b1822db55f153be57d7e5ca0ecd4ad2b8bdb60ddcd6a3d120b8592"
+      "authorityPathSha256": "25cfc52d3b7be9427a7332d4096ad774e424f1e3a8bd4289dca63411688237d3"
+    },
+    "convex/authz.ts:resolveAdminAuthority": {
+      "status": "covered",
+      "surfaceRef": "convex/capabilitySupply.ts:inspectBindingControlState",
+      "testFile": "tests/unit/convex/admin-actor-isolation.test.ts",
+      "testName": "evaluates resolveAdminAuthority %s through the registered capability binding control query",
+      "checksumScope": "named_test_case_ast",
+      "sha256": "ec3ea53f88eeedd754e60713c81ebf9cb41e833bf4fd0d45a382f6720a92ced3",
+      "invocation": {
+        "kind": "convex_runtime_invocation",
+        "target": "convex/capabilitySupply.ts:inspectBindingControlState",
+        "expression": "api.capabilitySupply.inspectBindingControlState"
+      },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
+      "authorityPathSha256": "1fad5a971462944b4b7a7a85f1ad5fc73faca6d4bc7c9284c3db24de8c31d0ab"
+    },
+    "convex/authz.ts:resolveBusinessActor": {
+      "status": "covered",
+      "surfaceRef": "convex/catalog.ts:getCurrentOwnerOfferingSupply",
+      "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
+      "testName": "evaluates resolveBusinessActor %s through the registered owner catalog supply query",
+      "checksumScope": "named_test_case_ast",
+      "sha256": "62bea6d79a57638cb5fe4dcc86a708665e2212def45ea31b1874eb48cde75084",
+      "invocation": {
+        "kind": "convex_runtime_invocation",
+        "target": "convex/catalog.ts:getCurrentOwnerOfferingSupply",
+        "expression": "api.catalog.getCurrentOwnerOfferingSupply"
+      },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
+      "authorityPathSha256": "18f28a6adf60e0fd67b52f85c11f6bed4e5545174fddaf3fe91e10a544d5de08"
     },
     "convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequenceHandler": {
       "status": "covered",
@@ -192,7 +238,7 @@
       "testFile": "tests/integration/capability-publication-probe.test.ts",
       "testName": "evaluates readCurrentCapabilityProbeAuthority %s through the registered readiness action",
       "checksumScope": "named_test_case_ast",
-      "sha256": "ab64f1036ed2680f18b5a7d37347273a180948f545b771fbe2bac4cc3740f90b",
+      "sha256": "8619b03fc72b92268b9b03c7f8f685f5e2d69d280e8e6190f61010c660bf25ab",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/capabilitySupplyReadiness.ts:probe",
@@ -207,7 +253,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "33546bd5e3872947e4921da9444ab7a242f254f320efd75031257b685bc5bb27"
+      "authorityPathSha256": "a6d61daa061a2898fafae3028a0bdce267dd51c700ff4b53e16a9f5f98a2b493"
     },
     "convex/catalogOfferingMutations.ts:admitDevSeedCatalogAuthority": {
       "status": "covered",
@@ -230,7 +276,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "c4b1a0d1f61b8df27f5e9f6370881f20bd15f51e0b0b5c4ed32e64e5b868b978"
+      "authorityPathSha256": "a24c8541075315ee7e5ade604e78cd96e3ae3357e5a9fd417b4f12b6004de670"
     },
     "convex/interactiveAuthority.ts:currentContextAtTrustedServerTime": {
       "status": "covered",
@@ -253,7 +299,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "5c7be385c630172f6a72e060af1b49da3344f58cd4a9270711d0ab8e7ce73dd6"
+      "authorityPathSha256": "5c86bdc0b001e6bceace30d0ee2e3cf59bc39f8331f814862fa3eef17aead111"
     },
     "convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext": {
       "status": "covered",
@@ -261,7 +307,7 @@
       "testFile": "tests/integration/chat-scheduled-authority.test.ts",
       "testName": "evaluates resolveInteractiveAuthorityContext %s through the registered materialization mutation",
       "checksumScope": "named_test_case_ast",
-      "sha256": "609f9f85739dbb3eb64064443fe60a4c1c57cd8f067e89926a24239ff10cd7d2",
+      "sha256": "806c19fbc82f89c16ae4937e462a579828fc47e388e25ddca4a28098a66ee43e",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority",
@@ -276,7 +322,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "a605b0d9a6a5c63bf359258ed917fa0b2ea34a124183ee479a77966bf982e01e"
+      "authorityPathSha256": "2a170bd35195cc90ea19c2bf70a2aa226803a2348e1efe7c3b989007291518c8"
     },
     "convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext": {
       "status": "covered",
@@ -299,7 +345,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "c3ca37a58a75137473a5d4d77045f56e1f6219874dd876819ba1c48719860335"
+      "authorityPathSha256": "9a00e996efa3c1f0e2dff0325fc2d75011f5576724b002f487f1af766359e650"
     },
     "convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext": {
       "status": "covered",
@@ -391,7 +437,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "2a42812e3d67baf06476d065c2a349e16353a6e60f718211411f4e95b78f5ca9"
+      "authorityPathSha256": "aa1d100fe080092dfa21b97006fdc9df600881172acd775552e4630c7fe1744f"
     },
     "convex/lib/secretLifecyclePersistence.ts:requireSnapshot": {
       "status": "covered",
@@ -437,7 +483,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "733845da2301f6e9e90a241af64020f34309976c42eeedfe2467efa1ef3885b8"
+      "authorityPathSha256": "14ce1f4db9dd131b92cb1fa4c388b5e6f494c73838fb3699e8534449f5b875cd"
     },
     "convex/recoveryBreakGlass.ts:resolveRecoveryAccountFacts": {
       "status": "covered",
@@ -529,7 +575,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "a40be6ae6e74ec8c600dde1a0be0b29516bb84f2e988666c77cbd60d90648289"
+      "authorityPathSha256": "1d79eb45f8f73fad4cfd5a8d2e91f3163376582206277d738acf8d15f09d44cc"
     },
     "convex/workloadCron.ts:bindWorkloadCronActionContext": {
       "status": "covered",
@@ -552,7 +598,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "04927a503541096ee60b4cb0fbf4bf0859615e213155ffc686395802c2cfe32b"
+      "authorityPathSha256": "d6915dc6e7787a9a52c0d947f911ea2d72156da6336c3b38c7dedc78d05bb296"
     },
     "convex/workloadCron.ts:reconcileWorkloadCronSnapshot": {
       "status": "covered",
@@ -575,7 +621,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "ec786eda8341af7b7806f3f94218ea82007aaa8bbdecf7e00d9091de2df56b80"
+      "authorityPathSha256": "87f207360c59353fee854dd65299c21814f7fa2716bd541ccc48b5ca50d49e38"
     },
     "src/lib/server/stripe-money-webhook.ts:verifyStripeMoneyWebhook": {
       "status": "covered",
@@ -602,15 +648,15 @@
     },
     "src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion": {
       "status": "covered",
-      "surfaceRef": "convex/capabilitySupplyOperations.ts:readKeylessExecutable",
-      "testFile": "tests/integration/capability-supply-operations.test.ts",
-      "testName": "drives the %s isolation case through the registered fixed-query descriptor handler",
+      "surfaceRef": "convex/agentAccessPolicy.ts:registerGrantForServer",
+      "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
+      "testName": "drives the %s isolation case through the registered grant registration handler",
       "checksumScope": "named_test_case_ast",
-      "sha256": "df4951d011760f7a7133446fa438c40f6ac5d8719a89d7e9de2854b79bda869e",
+      "sha256": "52013965d1096a17f24b7e4a8a0cecea77937f5cc08d11c1b01311cdb124949e",
       "invocation": {
-        "kind": "convex_runtime_invocation",
-        "target": "convex/capabilitySupplyOperations.ts:readKeylessExecutable",
-        "expression": "api.capabilitySupplyOperations.readKeylessExecutable"
+        "kind": "registered_handler_call",
+        "target": "convex/agentAccessPolicy.ts:registerGrantForServer",
+        "expression": "registerGrantBoundary"
       },
       "caseLabels": [
         "owner",
@@ -621,7 +667,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "fe27593b5f322f8ff1baa5e3032ce2f99ae5e0f49064202199a3a37761ffbc8c"
+      "authorityPathSha256": "611178ed8b11617fa6f158addc3137959dc9b2dc376b2381f471b9990bd134a2"
     }
   }
 }

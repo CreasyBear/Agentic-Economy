@@ -1,6 +1,6 @@
 import type { Id } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
-import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
+import { resolveBusinessActor } from './authz'
 import {
   readOwnerSupplyFunnelProjection,
   type OwnerSupplyFunnelResult,
@@ -15,8 +15,7 @@ export async function readOwnerSupplyFunnelHandler(
       return { kind: 'error', code: 'unauthenticated' }
     const business = await ctx.db.get(args.businessId)
     if (business === null) return { kind: 'not_found' }
-    const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
-    if (owner === null || owner._id !== business.ownerId)
+    if (actor.canonicalAccountRef !== business.owningAccountRef)
       return { kind: 'not_found' }
     return await readOwnerSupplyFunnelProjection(ctx, args, business)
 }

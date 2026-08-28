@@ -359,7 +359,7 @@ async function main() {
   }
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   main().catch((error) => {
     process.stderr.write(`${stringifyDiagnostic(error)}\n`);
     process.exitCode = 1;

@@ -5,6 +5,7 @@ export const SURFACE_AUTHORITY_BINDINGS = [
   'interactive_account',
   'canonical_agent',
   'workload_account',
+  'admin_membership',
 ] as const
 
 export type SurfaceAuthorityBinding = typeof SURFACE_AUTHORITY_BINDINGS[number]
@@ -55,23 +56,23 @@ export type MeasuredProtectedSurfaceRow = Readonly<{
 export type MeasuredProtectedSurfaceInventory = Readonly<{
   format: 'phase-2-protected-surfaces:v2'
   expectedCounts: Readonly<{
-    serverFunctions: 43
-    publicConvex: 116
-    convexHttpActions: 1
+    serverFunctions: 47
+    publicConvex: 117
+    convexHttpActions: 7
     crons: 10
     backgroundFamilies: 25
-    frozenHttp: 39
-    frozenMcp: 14
+    frozenHttp: 40
+    frozenMcp: 13
     frozenCli: 12
   }>
   baselineCounts: Readonly<{
-    serverFunctions: 43
-    publicConvex: 116
-    convexHttpActions: 1
+    serverFunctions: 47
+    publicConvex: 117
+    convexHttpActions: 7
     crons: 10
     backgroundFamilies: 25
-    frozenHttp: 39
-    frozenMcp: 14
+    frozenHttp: 40
+    frozenMcp: 13
     frozenCli: 12
   }>
   candidateCounts: Readonly<{
@@ -119,6 +120,7 @@ const PUBLIC_HTTP = [
   'oauth-authorization-server-metadata',
   'oauth-protected-resource-metadata',
   'site-ucp',
+  'api-catalog',
   'business-detail',
   'business-search',
   'business-list',
@@ -294,7 +296,7 @@ export function verifyProtectedSurfaceManifest(
     ['http', 'mcp', 'cli', 'server_function', 'convex_public', 'callback', 'worker', 'job', 'cron', 'continuation', 'reconciliation']
       .map((kind) => [kind, manifest.filter((row) => row.kind === kind).length]),
   ) as Record<ProtectedSurfaceManifestRow['kind'], number>
-  if (counts.http !== 39 || counts.mcp !== 14 || counts.cli !== 12
+  if (counts.http !== 40 || counts.mcp !== 13 || counts.cli !== 12
     || counts.callback !== 2 || counts.worker !== 3 || counts.job !== 9 || counts.cron !== 10
     || counts.continuation !== 2 || counts.reconciliation !== 9) {
     throw new Error('protected_surface_inventory_invalid')
@@ -305,31 +307,31 @@ export function verifyProtectedSurfaceManifest(
       ...measured.crons, ...measured.backgroundFamilies]
     const blockedRows = measuredRows.filter((row) => row.status === 'blocked')
     if (measured.format !== 'phase-2-protected-surfaces:v2'
-      || measured.expectedCounts.serverFunctions !== 43
-      || measured.expectedCounts.publicConvex !== 116
-      || measured.expectedCounts.convexHttpActions !== 1
+      || measured.expectedCounts.serverFunctions !== 47
+      || measured.expectedCounts.publicConvex !== 117
+      || measured.expectedCounts.convexHttpActions !== 7
       || measured.expectedCounts.crons !== 10
       || measured.expectedCounts.backgroundFamilies !== 25
-      || measured.expectedCounts.frozenHttp !== 39
-      || measured.expectedCounts.frozenMcp !== 14
+      || measured.expectedCounts.frozenHttp !== 40
+      || measured.expectedCounts.frozenMcp !== 13
       || measured.expectedCounts.frozenCli !== 12
-      || measured.baselineCounts.serverFunctions !== 43
-      || measured.baselineCounts.publicConvex !== 116
-      || measured.baselineCounts.convexHttpActions !== 1
+      || measured.baselineCounts.serverFunctions !== 47
+      || measured.baselineCounts.publicConvex !== 117
+      || measured.baselineCounts.convexHttpActions !== 7
       || measured.baselineCounts.crons !== 10
       || measured.baselineCounts.backgroundFamilies !== 25
-      || measured.baselineCounts.frozenHttp !== 39
-      || measured.baselineCounts.frozenMcp !== 14
+      || measured.baselineCounts.frozenHttp !== 40
+      || measured.baselineCounts.frozenMcp !== 13
       || measured.baselineCounts.frozenCli !== 12
       || !exactCountRecords(measured.actualCounts, measured.candidateCounts)
       || !candidateCountsMatchRows(measured)
       || measured.frozenContract.sourceFile !== '.planning/maturity-execution/contracts/public-surface-inventory.json'
       || !/^[a-f0-9]{64}$/.test(measured.frozenContract.sha256)
-      || measured.frozenContract.httpRefs.length !== 39
-      || measured.frozenContract.mcpRefs.length !== 14
+      || measured.frozenContract.httpRefs.length !== 40
+      || measured.frozenContract.mcpRefs.length !== 13
       || measured.frozenContract.cliRefs.length !== 12
-      || new Set(measured.frozenContract.httpRefs).size !== 39
-      || new Set(measured.frozenContract.mcpRefs).size !== 14
+      || new Set(measured.frozenContract.httpRefs).size !== 40
+      || new Set(measured.frozenContract.mcpRefs).size !== 13
       || new Set(measured.frozenContract.cliRefs).size !== 12
       || new Set(measured.serverFunctions.map((row) => row.ref)).size !== measured.serverFunctions.length
       || new Set(measured.publicConvex.map((row) => row.ref)).size !== measured.publicConvex.length

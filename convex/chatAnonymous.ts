@@ -1,6 +1,7 @@
 import type { LanguageModelV4 } from '@ai-sdk/provider'
 import type { ModelMessage } from 'ai'
 
+import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
 import {
   openRouterGatewayConfig,
@@ -172,10 +173,6 @@ export async function streamAnonymousChatResponse(
       messages: messages.map((message) => ({ ...message })) as ModelMessage[],
       ...(abortSignal === undefined ? {} : { abortSignal }),
     },
-    {
-      contextOptions: { recentMessages: 0 },
-      storageOptions: { saveMessages: 'none' },
-    },
   )
   return result.toUIMessageStreamResponse()
 }
@@ -190,7 +187,7 @@ export const anonymousChat = httpAction(async (ctx, request) =>
     stream: async (messages, signal) => {
       const apiKey = env.OPENROUTER_API_KEY?.trim()
       if (apiKey === undefined || apiKey.length === 0) {
-        return jsonError(503, 'chat_unavailable')
+        return jsonError(503, 'chat_model_unconfigured')
       }
       const config = openRouterGatewayConfig({
         OPENROUTER_API_KEY: apiKey,
@@ -204,8 +201,9 @@ export const anonymousChat = httpAction(async (ctx, request) =>
           openRouterModel(config, config.model),
           signal,
         )
-      } catch {
-        return jsonError(503, 'chat_unavailable')
+      } catch (error) {
+        console.error('[chat-anonymous] stream failed', sanitizeTelemetryError(error))
+        return jsonError(503, 'chat_stream_failed')
       }
     },
   }),

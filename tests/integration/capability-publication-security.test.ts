@@ -2,50 +2,18 @@ import type { FunctionArgs } from 'convex/server'
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { api, internal } from '../../convex/_generated/api'
+import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
-import {
-  rebuildCapabilityOriginSupplyProjection,
-  setCapabilitySupplyEligibilityCommand,
-} from '../../convex/capabilitySupply'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import {
   convexTestWithMarketComponents,
-  ownerAdmin,
   prepareCapabilityPublicationMutation,
   publishedBusinessOwner,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
-import type {
-  CapabilityTransportAuthority,
-  EligibilityInput,
-  RegistrationContext,
-} from '@/modules/capability-supply/public'
+import type { CapabilityTransportAuthority } from '@/modules/capability-supply/public'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import { installCanonicalProviderConnectionFixture } from './capability-publication-harness'
-
-
-async function runEligibility(
-  backend: ConvexFixtureBackend,
-  args: EligibilityInput & RegistrationContext,
-  actorRef: string,
-) {
-  return await backend.run(async (ctx) => {
-    const now = Date.now()
-    const result = await setCapabilitySupplyEligibilityCommand(ctx.db, {
-      actor: { kind: 'admin', ref: actorRef },
-      eligibility: args,
-      context: args,
-    }, now)
-    if (result.kind === 'eligible' || result.kind === 'ineligible') {
-      const offering = await ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (index) => index.eq('offeringId', args.offeringId)).unique()
-      if (offering !== null) await rebuildCapabilityOriginSupplyProjection(ctx, offering.businessId, now)
-    }
-    return result
-  })
-
-}
 const SECURITY_AUTHORITY: CapabilityTransportAuthority = {
   kind: 'provider_connection',
   connectionRef: 'connection:capability-publication-security',

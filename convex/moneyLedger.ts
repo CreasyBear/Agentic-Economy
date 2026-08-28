@@ -589,7 +589,7 @@ export const readAgentProviderEarnings = mutation({
   returns: ownerProviderEarningsResultValue,
   handler: async (ctx, args) => {
     const now = Date.now()
-    const [storedAgent, principal, account, owner] = await Promise.all([
+    const [storedAgent, principal, account] = await Promise.all([
       ctx.db
         .query('agentAccessPrincipals')
         .withIndex('by_principalId', (query) =>
@@ -606,12 +606,6 @@ export const readAgentProviderEarnings = mutation({
         .query('accounts')
         .withIndex('by_accountRef', (query) =>
           query.eq('accountRef', args.agentPrincipal.ownerId),
-        )
-        .unique(),
-      ctx.db
-        .query('owners')
-        .withIndex('by_canonicalAccountRef', (query) =>
-          query.eq('canonicalAccountRef', args.agentPrincipal.ownerId),
         )
         .unique(),
     ])
@@ -631,10 +625,7 @@ export const readAgentProviderEarnings = mutation({
       principal.lifecycle !== 'active' ||
       account === null ||
       account.accountRef !== storedAgent.ownerId ||
-      account.lifecycle !== 'active' ||
-      owner === null ||
-      owner.canonicalAccountRef !== storedAgent.ownerId ||
-      owner.canonicalPrincipalRef === undefined
+      account.lifecycle !== 'active'
     ) {
       return { kind: 'error' as const, code: 'unauthenticated' as const }
     }
@@ -642,7 +633,7 @@ export const readAgentProviderEarnings = mutation({
     if (admission.kind === 'error') return admission
     const business = await ctx.db
       .query('businesses')
-      .withIndex('by_owner_updatedAt', (query) => query.eq('ownerId', owner._id))
+      .withIndex('by_owningAccountRef_and_updatedAt', (query) => query.eq('owningAccountRef', storedAgent.ownerId))
       .order('desc')
       .first()
     if (business === null) return { kind: 'not_found' as const }

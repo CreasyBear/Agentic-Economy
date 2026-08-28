@@ -65,8 +65,6 @@ export type InteractiveEntryAuthority = Readonly<{
   mode: "protected_interactive_principal_account";
   principalRef: string;
   accountRef: string;
-  legacyOwnerId: string;
-  legacyOwnerLocator: string;
   revision: Readonly<Record<string, number>>;
   provenance: Readonly<Record<string, string | number>>;
 }>;
@@ -359,8 +357,6 @@ async function interactiveAdmission<
     mode: "protected_interactive_principal_account" as const,
     principalRef: actor.canonicalPrincipalRef,
     accountRef: actor.canonicalAccountRef,
-    legacyOwnerId: actor.legacyOwnerId,
-    legacyOwnerLocator: actor.clerkUserId,
     revision: Object.freeze({ ...actor.authorityRevision }),
     provenance: Object.freeze({ ...actor.authorityProvenance }),
   });

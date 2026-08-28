@@ -6,7 +6,6 @@ import type { DataModel, Doc, Id } from './_generated/dataModel'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import {
   readActiveAdminMembership,
-  readCanonicalCompatibilityOwner,
   resolveBusinessActor,
 } from './authz'
 import { requireSourceWrite } from './sourceWriteAdmission'
@@ -70,8 +69,8 @@ export const DEV_SEED_CATALOG_PRINCIPAL_REF = 'prn_d2000000000000000000000000000
 export const DEV_SEED_CATALOG_ACCOUNT_REF = 'acc_d2000000000000000000000000000001' as AccountRef
 export const DEV_SEED_CATALOG_SCOPE = 'catalog:dev_seed' as const
 export const DEV_SEED_CATALOG_RESOURCE = 'catalog:dev-seed' as const
-const DEV_SEED_CATALOG_PRINCIPAL_NAME = 'Agentic Economy development catalog seed workload'
-const DEV_SEED_CATALOG_ACCOUNT_NAME = 'Agentic Economy development catalog seed account'
+export const DEV_SEED_CATALOG_PRINCIPAL_NAME = 'Agentic Economy development catalog seed workload'
+export const DEV_SEED_CATALOG_ACCOUNT_NAME = 'Agentic Economy development catalog seed account'
 
 type OfferingCommandResult =
   | { kind: 'ok'; code: string; resultRef?: string; currentRevision?: number }
@@ -410,9 +409,17 @@ export async function admitDevSeedCatalogAuthority(
   })
   if (businessId !== undefined) {
     const business = await ctx.db.get(businessId)
-    const owner = business === null ? null : await ctx.db.get(business.ownerId)
-    if (owner?.canonicalPrincipalRef !== snapshot.actorPrincipalRef
-      || owner.canonicalAccountRef !== snapshot.accountRef) {
+    const account = business === null ? null : await ctx.db
+      .query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
+      .unique()
+    const ownership = account === null ? null : await ctx.db
+      .query('accountOwnerships')
+      .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+      .unique()
+    if (business === null || ownership === null
+      || ownership.ownerPrincipalRef !== snapshot.actorPrincipalRef
+      || business.owningAccountRef !== snapshot.accountRef) {
       throw new DevSeedCatalogAuthorityError()
     }
   }
@@ -483,11 +490,9 @@ async function runOfferingSourceMutation(
 ): Promise<OfferingCommandResult> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return { kind: 'error', code: 'unauthenticated', reason: 'Authentication is required.' }
-  const canonicalOwner = await readCanonicalCompatibilityOwner(ctx.db, actor)
-  if (canonicalOwner === null) return { kind: 'error', code: 'wrong_owner', reason: 'Canonical owner context is invalid.' }
   const business = await ctx.db.get(args.businessId)
   if (business === null) return { kind: 'error', code: 'wrong_owner', reason: 'Business was not found.' }
-  if (business.ownerId !== canonicalOwner._id) {
+  if (business.owningAccountRef !== actor.canonicalAccountRef) {
     return { kind: 'error', code: 'wrong_owner', reason: 'Only the canonical business owner may change this business.' }
   }
   const admitted = await requireSourceWrite(ctx, args, 'catalog_publish')
@@ -526,7 +531,7 @@ async function requireCatalogSupplyAdmin(ctx: MutationCtx) {
   const identity = await ctx.auth.getUserIdentity()
   const membership = identity === null ? undefined : await readActiveAdminMembership(ctx.db, identity)
   const authority = requireAdminAuthority(
-    membership?.clerkUserId === actor.clerkUserId ? membership : undefined,
+    membership,
     'register_capability_supply',
   )
   return authority.kind === 'allowed' ? ctx.db : { kind: 'error' as const, code: 'admin_denied' as const, reason: authority.reason }

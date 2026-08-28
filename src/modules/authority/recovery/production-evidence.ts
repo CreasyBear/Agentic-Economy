@@ -11,13 +11,13 @@ import {
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u
 const PHASE_2_BASELINE_COUNTS = Object.freeze({
-  serverFunctions: 43,
-  publicConvex: 116,
-  convexHttpActions: 1,
+  serverFunctions: 47,
+  publicConvex: 117,
+  convexHttpActions: 7,
   crons: 10,
   backgroundFamilies: 25,
-  frozenHttp: 39,
-  frozenMcp: 14,
+  frozenHttp: 40,
+  frozenMcp: 13,
   frozenCli: 12,
 })
 

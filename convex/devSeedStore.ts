@@ -4,29 +4,18 @@ import type { BusinessRecord } from '../src/modules/business/public'
 import type { DevSeedCatalogBundle } from '../src/modules/dev/public'
 export type DevSeedPersistResult = {
   seededSlugs: readonly string[]
-  ownerClerkUserId: string
-  ownerId: Id<'owners'>
   businessIdsBySlug: Record<string, Id<'businesses'>>
 }
 
 export async function persistDevSeedCatalogState(
   db: GenericDatabaseWriter<DataModel>,
   bundle: DevSeedCatalogBundle,
-  canonicalOwnerAuthority: Readonly<{
-    principalRef: string
-    accountRef: string
-  }>,
+  owningAccountRef: string,
 ): Promise<DevSeedPersistResult> {
-  const owner = bundle.state.owners.find((candidate) => candidate.clerkUserId === bundle.ownerClerkUserId)
-  if (owner === undefined) {
-    throw new Error('Dev seed owner was not found in module state.')
-  }
-
-  const ownerId = await upsertOwner(db, owner, canonicalOwnerAuthority)
   const businessIdsBySlug: Record<string, Id<'businesses'>> = {}
 
   for (const business of bundle.state.businesses) {
-    const convexBusinessId = await upsertBusiness(db, ownerId, business)
+    const convexBusinessId = await upsertBusiness(db, owningAccountRef, business)
     businessIdsBySlug[business.slug] = convexBusinessId
 
     for (const offering of bundle.state.offerings.filter((candidate) => candidate.businessId === business.businessId)) {
@@ -48,50 +37,13 @@ export async function persistDevSeedCatalogState(
 
   return {
     seededSlugs: bundle.seededSlugs,
-    ownerClerkUserId: bundle.ownerClerkUserId,
-    ownerId,
     businessIdsBySlug,
   }
 }
 
-async function upsertOwner(
-  db: GenericDatabaseWriter<DataModel>,
-  owner: DevSeedCatalogBundle['state']['owners'][number],
-  canonicalOwnerAuthority: Readonly<{
-    principalRef: string
-    accountRef: string
-  }>,
-): Promise<Id<'owners'>> {
-  const existing = await db
-    .query('owners')
-    .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', owner.clerkUserId))
-    .unique()
-  const patch = {
-    clerkUserId: owner.clerkUserId,
-    canonicalPrincipalRef: canonicalOwnerAuthority.principalRef,
-    canonicalAccountRef: canonicalOwnerAuthority.accountRef,
-    ...(owner.displayName === undefined ? {} : { displayName: owner.displayName }),
-    ...(owner.emailHash === undefined ? {} : { emailHash: owner.emailHash }),
-    updatedAt: owner.updatedAt,
-  }
-
-  if (existing === null) {
-    return db.insert('owners', { ...patch, createdAt: owner.createdAt })
-  }
-
-  if ((existing.canonicalPrincipalRef !== undefined
-      && existing.canonicalPrincipalRef !== canonicalOwnerAuthority.principalRef)
-    || (existing.canonicalAccountRef !== undefined
-      && existing.canonicalAccountRef !== canonicalOwnerAuthority.accountRef)) {
-    throw new Error('Dev seed owner canonical authority conflicts with persisted state.')
-  }
-
-  await db.patch(existing._id, patch)
-  return existing._id
-}
 async function upsertBusiness(
   db: GenericDatabaseWriter<DataModel>,
-  ownerId: Id<'owners'>,
+  owningAccountRef: string,
   business: BusinessRecord,
 ): Promise<Id<'businesses'>> {
   const existing = await db
@@ -99,7 +51,7 @@ async function upsertBusiness(
     .withIndex('by_slug', (query) => query.eq('slug', business.slug))
     .unique()
   const patch = {
-    ownerId,
+    owningAccountRef,
     slug: business.slug,
     name: business.name,
     normalizedName: business.normalizedName,

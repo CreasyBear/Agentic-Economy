@@ -30,10 +30,6 @@ function interactiveAuthorityContextFromValue(
   return Object.freeze({
     principalRef: principalRef(input.principalRef),
     accountRef: accountRef(input.accountRef),
-    legacyOwnerId: input.legacyOwnerId,
-    legacyOwnerLocator: input.legacyOwnerLocator,
-    ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
-    ...(input.emailHash === undefined ? {} : { emailHash: input.emailHash }),
     revision: Object.freeze({ ...input.revision }),
     provenance: Object.freeze({
       ...input.provenance,

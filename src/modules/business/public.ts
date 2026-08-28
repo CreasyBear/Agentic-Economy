@@ -109,17 +109,6 @@ export type BusinessIdentity = {
   sourceHash: SourceHash
 }
 
-export type BusinessOwnerRecord = {
-  ownerId: OwnerId
-  clerkUserId: string
-  canonicalPrincipalRef?: PrincipalRef
-  canonicalAccountRef?: AccountRef
-  displayName?: string
-  emailHash?: string
-  createdAt: number
-  updatedAt: number
-}
-
 export type BusinessAuthorityRevision = Readonly<{
   binding: number
   credential: number
@@ -128,7 +117,6 @@ export type BusinessAuthorityRevision = Readonly<{
   access: number
   currentOwnership: number
   currentOwnerPrincipal: number
-  compatibilityUpdatedAt: number
 }>
 
 export type BusinessAuthorityProvenance = Readonly<{
@@ -145,10 +133,6 @@ export type BusinessAuthorityProvenance = Readonly<{
 export type InteractiveBusinessAuthorityContext = Readonly<{
   principalRef: PrincipalRef
   accountRef: AccountRef
-  legacyOwnerId: string
-  legacyOwnerLocator: string
-  displayName?: string
-  emailHash?: string
   revision: BusinessAuthorityRevision
   provenance: BusinessAuthorityProvenance
 }>
@@ -156,15 +140,10 @@ export type InteractiveBusinessAuthorityContext = Readonly<{
 export type BusinessActor =
   | Readonly<{
     kind: 'authenticated_owner'
-    /** Compatibility locator copied from the canonically matched owner row. */
-    clerkUserId: string
     canonicalPrincipalRef: PrincipalRef
     canonicalAccountRef: AccountRef
-    legacyOwnerId: string
     authorityRevision: BusinessAuthorityRevision
     authorityProvenance: BusinessAuthorityProvenance
-    displayName?: string
-    emailHash?: string
   }>
   | { kind: 'anonymous'; anonymousBucket: string }
 
@@ -193,7 +172,6 @@ export type PublicBusinessPhoto = {
 
 export type BusinessRecord = {
   businessId: BusinessId
-  ownerId: OwnerId
   slug: Slug
   name: string
   normalizedName: string
@@ -208,7 +186,6 @@ export type BusinessRecord = {
 }
 
 export type BusinessSourceState = {
-  owners: BusinessOwnerRecord[]
   businesses: BusinessRecord[]
   businessContexts: BusinessContextRecord[]
 }
