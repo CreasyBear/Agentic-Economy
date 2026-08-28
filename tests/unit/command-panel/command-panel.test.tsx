@@ -196,6 +196,20 @@ describe('operator command panel', () => {
 
     expect(await screen.findByText(/temporarily unavailable/)).toBeTruthy()
   })
+
+  it('rejects the retired keyless authentication discriminator', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(operationSearchPayload({ kind: 'keyless' }))),
+    )
+
+    renderPanel({ openImmediately: true })
+    const input = await screen.findByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+
+    expect(await screen.findByText(/catalog returned something unreadable/)).toBeTruthy()
+    expect(screen.queryByRole('option', { name: /Weather forecast/ })).toBeNull()
+  })
 })
 
 function jsonResponse(payload: unknown): Response {
@@ -208,7 +222,7 @@ function jsonResponse(payload: unknown): Response {
 /** Shared canonical-ref constant valid under the published operationRef regex. */
 const TEST_OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
 
-function operationSearchPayload() {
+function operationSearchPayload(authentication: unknown = { kind: 'ae_api_key' }) {
   return {
     kind: 'ok',
     schemaVersion: 'registry-operations:v1',
@@ -221,7 +235,7 @@ function operationSearchPayload() {
         summary: 'Forecast by coordinates.',
         supplier: { name: 'Open-Meteo', slug: 'open-meteo' },
         price: { kind: 'on_request' },
-        authentication: { kind: 'keyless' },
+        authentication,
         availability: { posture: 'routeable' },
         navigation: [],
       },
