@@ -67,6 +67,27 @@ describe('OperationHistory first-load gate', () => {
     expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
     expect(screen.getByText(chatHistory.empty)).toBeTruthy()
   })
+
+  it('renders resolved conversations without pending or empty-state UI', () => {
+    render(
+      <OperationHistory
+        idPrefix="test"
+        activeThreadId="thread-1"
+        threads={threads}
+        search=""
+        busy={false}
+        onSearch={() => undefined}
+        onOpen={() => undefined}
+        onRename={async () => true}
+        onDelete={async () => true}
+        onNewChat={() => undefined}
+      />,
+    )
+
+    expect(screen.getByText('Weather operations')).toBeTruthy()
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
+    expect(screen.queryByText(chatHistory.empty)).toBeNull()
+  })
 })
 
 describe('ChatTranscript first-page gate', () => {

@@ -36,6 +36,14 @@ describe('Operation product legacy independence', () => {
     expect(legacyInputs(cliInputs)).toEqual([])
   })
 
+  it('keeps canonical action-invocation entrypoints free of retired runtime nouns', () => {
+    expect([
+      'src/modules/action-invocation/runtime.ts',
+      'src/modules/action-invocation/public.ts',
+      'src/modules/action-invocation/index.ts',
+    ].filter((path) => retiredRuntimeNoun.test(readFileSync(path, 'utf8')))).toEqual([])
+  })
+
   it('keeps the retired legacy-dynamic bundle deleted with zero imports anywhere', () => {
     expect(globSync('src/modules/capability-execution/legacy-dynamic/**')).toEqual([])
     const sources = [

@@ -2,7 +2,6 @@
  * @vitest-environment jsdom
  */
 import { cleanup, render } from "@testing-library/react";
-import * as LucideIcons from "lucide-react";
 import { afterEach, describe, expect, it } from "vitest";
 import "../../setup/jsdom-platform";
 

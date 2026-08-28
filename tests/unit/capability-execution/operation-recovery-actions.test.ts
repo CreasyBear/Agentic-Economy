@@ -75,6 +75,7 @@ describe('operation recovery actions', () => {
     }
   })
   it('keeps the route/action graph and optional evidence fields in parity', () => {
+    expect(operationInvokeAction.id).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId)
     expect(operationStatusAction.id).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId)
     expect(operationCancelAction.id).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.cancel.actionId)
     expect(operationReconcileAction.id).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId)

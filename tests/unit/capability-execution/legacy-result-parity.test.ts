@@ -413,6 +413,7 @@ describe('legacy DynamicPublishedInvocationResult parity gate', () => {
       expect(refusalCodes).toContain(code)
     }
     const receiptStates = operationInvokeReceiptStateValues as readonly string[]
+    expect(receiptStates).toEqual(['settled', 'refunded', 'reconciliation_required'])
     expect(operationInvokeReceiptSchema.safeParse({
       receiptRef: 'receipt:parity',
       state: 'settled',
