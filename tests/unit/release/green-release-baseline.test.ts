@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -53,7 +54,50 @@ function workflowSteps(workflow: Workflow): WorkflowStep[] {
   return Object.values(workflow.jobs ?? {}).flatMap((job) => job.steps ?? [])
 }
 
+const LISTED_VITEST_RUNNER = 'node tools/dev/run-listed-vitest.mjs'
+
+function listedVitestFiles(name: string): string[] {
+  const command = scripts[name]
+  if (typeof command !== 'string') throw new Error(`missing npm script: ${name}`)
+  const runnerIndex = command.indexOf(LISTED_VITEST_RUNNER)
+  if (runnerIndex < 0) throw new Error(`${name} must use the listed Vitest runner`)
+  const args = command.slice(runnerIndex + LISTED_VITEST_RUNNER.length).trim().split(/\s+/u)
+  const delimiterIndex = args.indexOf('--')
+  return delimiterIndex < 0 ? args : args.slice(0, delimiterIndex)
+}
+
 describe('green release baseline', () => {
+  it('fails closed when an explicit conformance test path is missing', () => {
+    for (const scriptName of ['test:conformance', 'test:chat:conformance']) {
+      const files = listedVitestFiles(scriptName)
+      expect(files.length).toBeGreaterThan(0)
+      for (const file of files) {
+        expect(existsSync(resolve(root, file)), `${scriptName} names missing test ${file}`).toBe(true)
+      }
+    }
+
+    const generalConformance = scripts['test:conformance']!
+    expect(generalConformance).toContain('tests/unit/capability-execution/operation-invoke-admit.test.ts')
+    expect(generalConformance).not.toContain('published-operation-provider-conformance.test.ts')
+    expect(generalConformance).not.toContain('provider-conformance-evidence.test.ts')
+
+    const chatConformance = scripts['test:chat:conformance']!
+    expect(chatConformance).toContain('tests/unit/chat/operation-chat-agent-tools.test.ts')
+    expect(chatConformance).not.toContain('tests/unit/chat/operation-chat-execute.test.ts')
+    expect(chatConformance).not.toContain('tests/unit/capability-execution/operation-execute.test.ts')
+    expect(chatConformance).toContain(' -- --no-file-parallelism')
+
+    const missingPath = 'tests/unit/release/__missing-listed-vitest-path__.test.ts'
+    const preflight = spawnSync(
+      process.execPath,
+      ['tools/dev/run-listed-vitest.mjs', missingPath],
+      { cwd: root, encoding: 'utf8' },
+    )
+    expect(preflight.status).toBe(1)
+    expect(preflight.stderr).toContain(`listed vitest path missing:\n${missingPath}`)
+    expect(`${preflight.stdout}\n${preflight.stderr}`).not.toContain('RUN  v')
+  })
+
   it('executes every required source sub-gate through gate:release', () => {
     const chain = releaseCommandChain('gate:release')
     expect(releaseCommandChain('test:release:source')).toContain('npm run verify:deployment-manifest -- --environment development')
