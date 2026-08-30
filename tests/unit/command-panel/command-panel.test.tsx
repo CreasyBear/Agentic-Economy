@@ -133,7 +133,9 @@ describe('operator command panel', () => {
     const back = await screen.findByRole('button', { name: 'Back' })
     expect(back.className).toContain('min-h-touch')
     fireEvent.click(back)
-    expect(await screen.findByRole('combobox', { name: 'Search operations' })).toBeTruthy()
+    const restoredInput = await screen.findByRole('combobox', { name: 'Search operations' })
+    expect((restoredInput as HTMLInputElement).value).toBe('weather')
+    expect(screen.getByRole('option', { name: /Weather forecast/ })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
@@ -235,6 +237,9 @@ describe('operator command panel', () => {
     await screen.findByRole('button', { name: 'Copy Operation reference' })
 
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' })
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Search operations' }), {
+      target: { value: '' },
+    })
     const recent = await screen.findByRole('option', { name: new RegExp(TEST_OPERATION_REF) })
     expect(recent.textContent).toContain(TEST_OPERATION_REF)
     const persisted = JSON.stringify(window.localStorage)

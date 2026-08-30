@@ -97,11 +97,16 @@ export function AeCommandPanel() {
             )}
           </div>
           <div className="flex min-h-0 flex-1 flex-col" data-testid="command-panel-body">
-            {panel.topPage.kind === 'operations-search' ? (
+            <div
+              hidden={panel.topPage.kind !== 'operations-search'}
+              className="contents"
+              aria-hidden={panel.topPage.kind !== 'operations-search'}
+            >
               <OperationsSearchPage onSelectOperation={panel.pushInspect} />
-            ) : (
+            </div>
+            {panel.topPage.kind === 'operation-inspect' ? (
               <OperationInspectPage operationRef={panel.topPage.operationRef} />
-            )}
+            ) : null}
           </div>
           <p className="border-t border-border px-gutter py-intra text-xs text-muted-foreground">
             Esc pops a layer · Enter inspects
