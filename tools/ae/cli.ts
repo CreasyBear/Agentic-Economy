@@ -180,7 +180,7 @@ function printUsage(): void {
 
 Usage: ${CLI_ENTRYPOINT} <command> [args] [flags]
 
-Canonical Operation commands (need a running server; hosted default https://agentic-economy-phi.vercel.app, or http://127.0.0.1:3024 when CONVEX_URL is loopback):
+Canonical Operation commands (need a running server; hosted by default, or the managed local Vite origin when Convex is loopback):
 ${rootCommandHelpLines().join('\n')}
 
 Flags:

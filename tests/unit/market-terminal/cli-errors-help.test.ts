@@ -60,6 +60,8 @@ describe('market-terminal CLI error contracts', () => {
     expect(textHelp.stdout).toContain('reconcile:')
     expect(textHelp.stdout).toContain('AE_API_KEY')
     expect(textHelp.stdout).toContain('--idempotency-key')
+    expect(textHelp.stdout).toContain('managed local Vite origin')
+    expect(textHelp.stdout).not.toContain('127.0.0.1:3024')
 
     const unknown = spawnCliSync(['feeds', '--json'])
     expect(unknown.status).toBe(1)
