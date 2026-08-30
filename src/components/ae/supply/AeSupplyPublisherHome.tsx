@@ -193,8 +193,8 @@ type SupplierContinuation = Readonly<{
   label:
     | 'Continue description'
     | 'Connect provider'
-    | 'Refresh provider authority'
-    | 'Repair provider connection'
+    | 'Refresh and re-admit'
+    | 'Choose replacement connection'
     | 'Recheck readiness'
     | 'Inspect incompatibility'
     | 'Republish'
@@ -214,10 +214,10 @@ function supplierContinuationForOffering(
     || offering.actionableReason === 'credential_unavailable'
     || offering.actionableReason === 'credential_rejected'
   const authorityStale = offering.actionableReason === 'authority_stale'
-  const providerConnectionHref = offering.authority?.kind === 'provider_connection'
+  const providerConnectionTarget = offering.authority?.kind === 'provider_connection'
     && offering.authority.providerRef !== undefined
-    ? `/owner/supply#${encodeURIComponent(providerConnectionTargetId(offering.authority.providerRef))}`
-    : '/owner/supply#supplier-connections'
+    ? providerConnectionTargetId(offering.authority.providerRef)
+    : 'supplier-connections'
 
   if (offering.status === 'retired' || publicationState === 'superseded') {
     return { label: 'Review earnings', href: '/owner/supply#earnings' }
@@ -232,10 +232,17 @@ function supplierContinuationForOffering(
     return { label: 'Continue description', href: `${detailHref}#description` }
   }
   if (authorityStale) {
-    return { label: 'Refresh provider authority', href: providerConnectionHref }
+    const rebindQuery = `?rebind=${encodeURIComponent(offering.offeringRef)}`
+    return {
+      label: 'Refresh and re-admit',
+      href: `/owner/supply${rebindQuery}#${encodeURIComponent(providerConnectionTarget)}`,
+    }
   }
   if (credentialNeedsAttention) {
-    return { label: 'Repair provider connection', href: providerConnectionHref }
+    return {
+      label: 'Choose replacement connection',
+      href: `${detailHref}#credential-recovery`,
+    }
   }
   if (offering.currentStep === 'admission') {
     return { label: 'Connect provider', href: `${detailHref}#provider` }

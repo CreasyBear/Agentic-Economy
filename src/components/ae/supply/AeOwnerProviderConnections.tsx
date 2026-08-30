@@ -1,7 +1,8 @@
 import { Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/ui/button'
@@ -30,6 +31,10 @@ export function AeOwnerProviderConnections({
   const [resourceUrl, setResourceUrl] = useState('')
   const [busy, setBusy] = useState<string>()
   const [notice, setNotice] = useState<{ kind: 'error' | 'status'; text: string }>()
+  const [rebindOfferingRef, setRebindOfferingRef] = useState<string>()
+  const [rebindProviderRef, setRebindProviderRef] = useState<string>()
+  const [refreshedForRebind, setRefreshedForRebind] = useState<string>()
+  const rebindLinkRef = useRef<HTMLAnchorElement>(null)
   const canConnect = businessId !== undefined && businessId.length > 0
 
   useEffect(() => {
@@ -48,8 +53,18 @@ export function AeOwnerProviderConnections({
     }
     window.addEventListener('hashchange', focusHashTarget)
     focusHashTarget()
+    const requestedRebind = new URLSearchParams(window.location.search).get('rebind')?.trim()
+    if (requestedRebind !== undefined && requestedRebind.length > 0 && requestedRebind.length <= 300) {
+      setRebindOfferingRef(requestedRebind)
+      setRebindProviderRef(providerRefFromHash())
+    }
     return () => window.removeEventListener('hashchange', focusHashTarget)
   }, [])
+
+  useEffect(() => {
+    if (refreshedForRebind === undefined) return
+    rebindLinkRef.current?.focus()
+  }, [refreshedForRebind])
 
   async function refresh() {
     await router.invalidate()
@@ -105,6 +120,13 @@ export function AeOwnerProviderConnections({
         return
       }
       await refresh()
+      if (action === 'reconnect' && rebindOfferingRef !== undefined) {
+        setRefreshedForRebind(connection.connectionRef)
+        setNotice({
+          kind: 'status',
+          text: 'Authority refreshed. Re-admit the exact Operation so its binding uses the new generation and digest.',
+        })
+      }
     } catch {
       setNotice({ kind: 'error', text: 'The supplier connection could not be updated. Try again.' })
     } finally {
@@ -195,6 +217,31 @@ export function AeOwnerProviderConnections({
                   </Button>
                 ) : null}
               </div>
+              {rebindOfferingRef !== undefined && connection.providerRef === rebindProviderRef ? (
+                refreshedForRebind === connection.connectionRef ? (
+                  <Alert>
+                    <AlertTitle>Authority refreshed</AlertTitle>
+                    <AlertDescription className="grid gap-3">
+                      Re-admit {rebindOfferingRef} now so this Operation binds to the refreshed authority snapshot.
+                      <Button asChild className="min-h-touch justify-self-start">
+                        <a
+                          ref={rebindLinkRef}
+                          href={`/owner/supply/${encodeURIComponent(rebindOfferingRef)}#provider`}
+                        >
+                          Re-admit Operation
+                        </a>
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Alert>
+                    <AlertTitle>Two-step authority recovery</AlertTitle>
+                    <AlertDescription>
+                      Refresh this connection first. AE will then continue to {rebindOfferingRef} so its binding can be re-admitted against the new authority generation and digest.
+                    </AlertDescription>
+                  </Alert>
+                )
+              ) : null}
             </li>
           ))}
         </ul>
@@ -270,4 +317,15 @@ function connectionRefusalCopy(code: string): string {
   if (code === 'authority_conflict') return 'This connection changed in another session. Reload and try again.'
   if (code === 'invalid_resource') return 'Enter a public HTTPS x402 resource URL.'
   return 'The provider connection could not be updated. Reload and try again.'
+}
+
+function providerRefFromHash(): string | undefined {
+  try {
+    const targetId = decodeURIComponent(window.location.hash.replace(/^#/, ''))
+    return targetId.startsWith('provider-connection-')
+      ? targetId.slice('provider-connection-'.length)
+      : undefined
+  } catch {
+    return undefined
+  }
 }

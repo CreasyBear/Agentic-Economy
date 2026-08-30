@@ -85,14 +85,26 @@ export function AeSupplyFunnel({
   const isX402Test = offering.publication?.source.kind === 'x402'
   const incompatible = offering.publication?.state === 'incompatible'
     || offering.lifecycle.state === 'incompatible'
+  const credentialNeedsReplacement = offering.readiness.outcome === 'credential_rejected'
+    || offering.readiness.outcome === 'credential_unavailable'
+    || offering.actionableReason === 'credential_rejected'
+    || offering.actionableReason === 'credential_unavailable'
+  const authorityNeedsRebind = offering.actionableReason === 'authority_stale'
 
   useEffect(() => {
-    if (window.location.hash !== '#incompatibility') return
-    const target = document.getElementById('incompatibility')
+    const targetId = window.location.hash === '#incompatibility'
+      ? 'incompatibility'
+      : window.location.hash === '#credential-recovery'
+        ? 'credential-recovery'
+        : window.location.hash === '#provider' && authorityNeedsRebind
+          ? 'provider'
+        : undefined
+    if (targetId === undefined) return
+    const target = document.getElementById(targetId)
     if (target === null) return
     target.scrollIntoView({ block: 'start' })
     target.focus({ preventScroll: true })
-  }, [])
+  }, [authorityNeedsRebind])
 
   async function reload() {
     setConfirmTest(false)
@@ -126,6 +138,31 @@ export function AeSupplyFunnel({
         </Alert>
       )}
       <SupplyTruthCard offering={offering} />
+      {credentialNeedsReplacement ? (
+        <div
+          id="credential-recovery"
+          tabIndex={-1}
+          className="scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <Alert>
+            <AlertTitle>Choose a replacement connection</AlertTitle>
+            <AlertDescription className="grid gap-3">
+              Refreshing a rejected or unavailable connection reuses the same credential state. Choose a different available owner-scoped connection below, then check and re-admit this exact Operation. If no compatible replacement appears, ask the connection owner to create one; never paste a raw credential here.
+              <Button asChild variant="secondary" className="min-h-touch justify-self-start">
+                <a href="#provider">Choose replacement connection</a>
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      ) : null}
+      {authorityNeedsRebind ? (
+        <Alert>
+          <AlertTitle>Re-admit the refreshed authority</AlertTitle>
+          <AlertDescription>
+            This Operation still holds the previous provider authority snapshot. Check and re-admit the source below; the current Operation revision and source hash guards still apply.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <ol className="m-0 grid list-none gap-2 p-0 sm:grid-cols-4" aria-label="Your four setup steps">
         {steps.map((step) => {
           const state = offering.stepStates[step]
@@ -156,8 +193,12 @@ export function AeSupplyFunnel({
           />
         </div>
       ) : null}
-      {currentStep === 'admission' || incompatible ? (
-        <div id="provider" className="scroll-mt-6">
+      {currentStep === 'admission' || incompatible || credentialNeedsReplacement || authorityNeedsRebind ? (
+        <div
+          id="provider"
+          tabIndex={authorityNeedsRebind ? -1 : undefined}
+          className="scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
           <AeSupplyEndpointConfigStep
             {...(initialSource === undefined ? {} : { initialValue: initialSource })}
             {...(initialDocumentPreflight === undefined ? {} : { initialDocumentPreflight })}
@@ -171,7 +212,7 @@ export function AeSupplyFunnel({
           />
         </div>
       ) : null}
-      {currentStep === 'readiness' && !incompatible ? (
+      {currentStep === 'readiness' && !incompatible && !credentialNeedsReplacement && !authorityNeedsRebind ? (
         <ActionStep
           title="3 · CHECK READINESS"
           heading="Check that the admitted operation works"
@@ -187,7 +228,7 @@ export function AeSupplyFunnel({
           }}
         />
       ) : null}
-      {currentStep === 'test' && !incompatible ? (
+      {currentStep === 'test' && !incompatible && !credentialNeedsReplacement && !authorityNeedsRebind ? (
         <ActionStep
           title="4 · RUN A TEST"
           heading={isX402Test ? 'Check the payment challenge' : 'Run a real test'}
