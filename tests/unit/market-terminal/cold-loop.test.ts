@@ -351,7 +351,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(new Headers(accountRequest?.[1]?.headers).get('Authorization')).toBe('Bearer stored-buyer-secret')
   })
 
-  it('suggests an immediate call for a routeable keyless Operation without probing buyer access', async () => {
+  it('keeps a zero-price brokered invoke behind the canonical buyer-access rail', async () => {
     const operationRef = `operation:v1:${'a'.repeat(64)}`
     const operation = {
       ...operationDescriptor(operationRef, 'Public continuation'),
@@ -361,7 +361,7 @@ describe('external-agent Market Operation cold loop', () => {
         pathTemplate: '/api/v1/operations/call',
         method: 'POST',
         actionId: 'agentic-economy.operation-invoke',
-        authentication: 'none',
+        authentication: 'required',
         surfaces: ['http', 'cli', 'mcp', 'chat'],
       }],
     }
@@ -377,7 +377,7 @@ describe('external-agent Market Operation cold loop', () => {
       output.restore()
     }
 
-    expect(output.read()).toContain('next: ae call')
+    expect(output.read()).toContain('next: ae connect')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 

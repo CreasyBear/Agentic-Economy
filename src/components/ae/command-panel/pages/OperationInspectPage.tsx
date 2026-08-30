@@ -106,7 +106,8 @@ function FoundBody({
   const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
   const callable = operation.availability.posture === 'routeable' && invokeNavigation !== undefined
   const inputExample = operation.contract.inputExamples?.[0]
-  const requiresBuyerCredential = invokeNavigation?.authentication === 'required'
+  // Every command copied here targets the authenticated brokered CLI rail.
+  const requiresBuyerCredential = invokeNavigation !== undefined
   const continuation = continuationForOperationFacts({
     operationRef: operation.operationRef,
     availabilityPosture: operation.availability.posture === 'routeable' && !callable

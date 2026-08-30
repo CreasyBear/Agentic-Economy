@@ -80,7 +80,9 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
   )
   const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
   const callable = operation.availability.posture === 'routeable' && invokeNavigation !== undefined
-  const requiresBuyerCredential = invokeNavigation?.authentication === 'required'
+  // The installed CLI calls the brokered invoke route, whose canonical
+  // contract requires buyer access even when the upstream provider is public.
+  const requiresBuyerCredential = invokeNavigation !== undefined
   const continuation = operationContinuationForCli({
     operationRef: operation.operationRef,
     availabilityPosture: operation.availability.posture === 'routeable' && !callable

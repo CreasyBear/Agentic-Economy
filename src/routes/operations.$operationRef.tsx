@@ -105,7 +105,9 @@ function CurrentOperationDetail({
     availabilityPosture: operation.availability.posture === 'routeable' && invokeNavigation === undefined
       ? 'integrated'
       : operation.availability.posture,
-    requiresBuyerCredential: invokeNavigation?.authentication === 'required',
+    // The page copies the installed CLI command, which uses the authenticated
+    // brokered invoke rail even when the upstream provider itself is public.
+    requiresBuyerCredential: invokeNavigation !== undefined,
     hasBuyerCredential,
   })
   const lastVerifiedAt = operation.availability.observedAt
