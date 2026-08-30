@@ -6,6 +6,8 @@ export type SuggestedContinuation = Readonly<{
   warning?: string
 }>
 
+type CommandContinuation = SuggestedContinuation & Readonly<{ command: string }>
+
 export type ContinuationState =
   | Readonly<{
       subject: 'operation'
@@ -41,7 +43,7 @@ type InvocationStatusState =
 export function continuationForInvocationStatus(input: Readonly<{
   invocationRef: string
   state: InvocationStatusState
-}>): SuggestedContinuation {
+}>): CommandContinuation {
   const state: Extract<ContinuationState, { subject: 'invocation' }>['state'] =
     input.state === 'authorized' || input.state === 'leased'
       ? 'cancellable'
@@ -52,7 +54,7 @@ export function continuationForInvocationStatus(input: Readonly<{
           : input.state === 'terminal' || input.state === 'cancelled' || input.state === 'invalidated'
             ? 'completed'
             : 'pending'
-  return suggestContinuation({ subject: 'invocation', state, invocationRef: input.invocationRef })
+  return invocationContinuation({ subject: 'invocation', state, invocationRef: input.invocationRef })
 }
 
 /**
@@ -102,7 +104,7 @@ function operationContinuation(
 
 function invocationContinuation(
   state: Extract<ContinuationState, { subject: 'invocation' }>,
-): SuggestedContinuation {
+): CommandContinuation {
   if (state.state === 'pending') {
     return { label: 'Check call status', kind: 'copy_command', command: `ae status ${state.invocationRef}` }
   }

@@ -33,9 +33,9 @@ export function operationContinuationForCli(
 ): SuggestedContinuation {
   const state = input.requiresBuyerCredential && !input.hasBuyerCredential
     ? 'connection_required'
-    : input.availabilityPosture === 'integrated'
+    : input.availabilityPosture === 'routeable'
       ? 'ready'
-      : input.availabilityPosture === 'routeable'
+      : input.availabilityPosture === 'integrated'
         ? 'inspect_only'
         : 'unavailable'
   return suggestContinuation({

@@ -278,7 +278,6 @@ function InvocationSuggestedContinuation({ result }: Readonly<{ result: FoundInv
     invocationRef: result.invocationRef,
     state: result.state,
   })
-  if (continuation.command === undefined) return null
   return (
     <AeSection
       title="What can I do next?"
