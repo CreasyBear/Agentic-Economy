@@ -27,16 +27,9 @@ export async function readOwnerPayoutTransferHandler(
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner')
       return refusedPayout('billing_identity_missing', false)
-    const owner = await ctx.db
-      .query('owners')
-      .withIndex('by_clerkUserId', (q) =>
-        q.eq('clerkUserId', actor.clerkUserId),
-      )
-      .unique()
-    if (owner === null) return refusedPayout('billing_identity_missing', false)
     const businesses = await ctx.db
       .query('businesses')
-      .withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id))
+      .withIndex('by_owningAccountRef_and_updatedAt', (q) => q.eq('owningAccountRef', actor.canonicalAccountRef))
       .order('desc')
       .take(20)
     if (

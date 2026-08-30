@@ -5,6 +5,7 @@ import {
   queryGeneric,
 } from 'convex/server'
 import { v } from 'convex/values'
+import { workloadCronSnapshotValue } from './workloadCron'
 
 import {
   publishPreparedCapabilityArgs,
@@ -109,7 +110,7 @@ export const recordCapabilityProbeResult = internalMutationGeneric({
 })
 
 export const scheduleDueCapabilityProbes = internalMutationGeneric({
-  args: {},
+  args: { workload: workloadCronSnapshotValue },
   returns: v.number(),
   handler: scheduleDueCapabilityProbesHandler,
 })

@@ -59,7 +59,7 @@ type CapabilityProbeTargetBase = Readonly<{
 
 export type CapabilityProbeTarget = Readonly<
   | CapabilityProbeTargetBase & Readonly<{
-      authority: Extract<CapabilityTransportBindingRegistration['authority'], { kind: 'keyless' }>
+      authority: Extract<CapabilityTransportBindingRegistration['authority'], { kind: 'public_upstream' }>
     }>
   | CapabilityProbeTargetBase & Readonly<{
       authority: Extract<CapabilityTransportBindingRegistration['authority'], { kind: 'provider_connection' }>

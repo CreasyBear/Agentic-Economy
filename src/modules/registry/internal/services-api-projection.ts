@@ -27,7 +27,7 @@ import type {
   PublicOfferingAccessPathDto,
 } from './offering-api-projection'
 
-export const PublicServicesApiSchemaVersion = 'public-services-api:v2' as const
+export const PublicServicesApiSchemaVersion = 'public-services-api:v3' as const
 
 /**
  * The W1 origin seam: a per-catalog-offering list of exact admitted
@@ -212,8 +212,8 @@ function projectEndpoint(
   const execution: ServiceEndpointDto['ae']['execution'] =
     linked === undefined || !linked.routeable
       ? 'catalog_only'
-      : linked.answerExecutable && linked.authentication.kind === 'keyless'
-        ? 'answer_tool'
+      : linked.authentication.kind === 'ae_api_key'
+        ? 'operation_call'
         : 'request_route'
   const pricing = projectEndpointPricing(linked?.catalogPrice, linked?.payment)
   const paymentCurrencyMismatch = hasPaymentCurrencyMismatch(linked?.catalogPrice, linked?.payment)

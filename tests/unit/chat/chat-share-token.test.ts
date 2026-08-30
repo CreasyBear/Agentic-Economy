@@ -7,7 +7,7 @@ import {
   mintChatThreadShareToken,
   resolveChatThreadShareKeyring,
   verifyChatThreadShare,
-} from '@/modules/chat/share-token'
+} from '@/modules/chat-sharing/share-token'
 
 const keyring = {
   keyId: 'chat-share:test',

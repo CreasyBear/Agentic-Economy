@@ -12,8 +12,28 @@ import {
   type ChatToolId,
 } from '../../../convex/chatTools'
 import { api } from '../../../convex/_generated/api'
+import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
+import { registryOperationsSearchContract } from '@/modules/registry/operation-action-contracts'
 
 const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
+const AUTHORITY = {
+  principalRef: `prn_${'1'.repeat(32)}`,
+  accountRef: `acc_${'2'.repeat(32)}`,
+  revision: {
+    binding: 1, credential: 1, principal: 1, account: 1, access: 1,
+    currentOwnership: 1, currentOwnerPrincipal: 1, compatibilityUpdatedAt: 1,
+  },
+  provenance: {
+    providerNamespace: 'clerk/user',
+    bindingRef: `eib_${'3'.repeat(32)}`,
+    credentialRef: `crd_${'4'.repeat(32)}`,
+    credentialGeneration: 1,
+    accessKind: 'ownership',
+    accessRef: `own_${'5'.repeat(32)}`,
+    currentOwnershipRef: `own_${'5'.repeat(32)}`,
+    resolvedAt: 1,
+  },
+} as unknown as InteractiveBusinessAuthorityContext
 
 const noCandidates = {
   kind: 'no_candidates',
@@ -91,7 +111,7 @@ function nativeReadResult(functionName: string): unknown {
 
 describe('Operation chat Agent tools', () => {
   it('exports exactly the five canonical tools and bounded Agent defaults', () => {
-    const agent = createChatAgent(mockModel())
+    const agent = createChatAgent(mockModel(), AUTHORITY)
 
     expect(Object.keys(agent.options.tools ?? {})).toEqual(
       CHAT_TOOL_IDS.map((toolId) => CHAT_TOOL_NAME_MAP.canonicalToProvider[toolId]),
@@ -108,7 +128,7 @@ describe('Operation chat Agent tools', () => {
   })
 
   it('mentions only provider tool names that the Agent actually offers', () => {
-    const agent = createChatAgent(mockModel())
+    const agent = createChatAgent(mockModel(), AUTHORITY)
     const tools = agent.options.tools ?? {}
     const offeredNames = new Set(Object.keys(tools))
     const descriptions = Object.values(tools)
@@ -125,6 +145,16 @@ describe('Operation chat Agent tools', () => {
     for (const mentionedName of mentionedNames) {
       expect(offeredNames.has(mentionedName)).toBe(true)
     }
+  })
+
+  it('omits operation execution from anonymous chat while preserving public reads', () => {
+    const agent = createChatAgent(mockModel())
+    expect(Object.keys(agent.options.tools ?? {})).toEqual(
+      CHAT_TOOL_IDS.slice(0, 4).map((toolId) => CHAT_TOOL_NAME_MAP.canonicalToProvider[toolId]),
+    )
+    expect(agent.options.tools).not.toHaveProperty(
+      CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.invoke'],
+    )
   })
 
   it('lets the AI SDK reject canonical invalid provider input before native dispatch', async () => {
@@ -153,7 +183,7 @@ describe('Operation chat Agent tools', () => {
 
   it('dispatches all reads through their native Convex queries', async () => {
     const runQuery = vi.fn(async (reference) => nativeReadResult(getFunctionName(reference)))
-    const agent = createChatAgent(mockModel())
+    const agent = createChatAgent(mockModel(), AUTHORITY)
     const ctx = toolCtx({ runQuery: runQuery as ToolCtx['runQuery'] })
 
     await invokeTool(agent, 'registry.operations.search', ctx, { query: 'weather' })
@@ -236,26 +266,132 @@ describe('Operation chat Agent tools', () => {
       release = resolve
     })
     const runAction = vi.fn(async () => await firstExecution)
-    const agent = createChatAgent(mockModel())
+    const agent = createChatAgent(mockModel(), AUTHORITY)
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
 
-    const first = invokeTool(agent, 'operation.execute', ctx, { operationRef: OPERATION_REF })
-    const second = invokeTool(agent, 'operation.execute', ctx, { operationRef: OPERATION_REF })
+    const first = invokeTool(agent, 'operation.invoke', ctx, { operationRef: OPERATION_REF, input: {} })
+    const second = invokeTool(agent, 'operation.invoke', ctx, { operationRef: OPERATION_REF, input: {} })
 
     await expect(second).resolves.toEqual({
       kind: 'chat_tool_refused',
-      toolId: 'operation.execute',
+      toolId: 'operation.invoke',
       reason: 'execute_limit',
     })
     release?.({
       kind: 'refused',
       operationRef: OPERATION_REF,
-      reason: 'operation_not_found',
+      code: 'grant_not_found',
+      retryable: false,
     })
     await expect(first).resolves.toMatchObject({
       kind: 'refused',
-      reason: 'operation_not_found',
+      code: 'grant_not_found',
     })
     expect(runAction).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails composition when a canonical contract no longer declares the chat surface', () => {
+    const surfaces = registryOperationsSearchContract.surfaces as unknown as string[]
+    const index = surfaces.indexOf('chat')
+    expect(index).toBeGreaterThanOrEqual(0)
+    surfaces.splice(index, 1)
+    try {
+      expect(() => createChatAgent(mockModel())).toThrow(
+        'Chat Action is unavailable: registry.operations.search',
+      )
+    } finally {
+      surfaces.splice(index, 0, 'chat')
+    }
+  })
+
+  it('sanitizes accepted strings and fails closed at both serialization boundaries', async () => {
+    const schemaAgent = createChatAgent(mockModel())
+    const safeParse = vi.spyOn(registryOperationsSearchContract.outputSchema, 'safeParse')
+      .mockReturnValueOnce({ success: false } as never)
+    try {
+      await expect(invokeTool(
+        schemaAgent,
+        'registry.operations.search',
+        toolCtx({ runQuery: vi.fn(async () => noCandidates) as ToolCtx['runQuery'] }),
+        { query: 'weather' },
+      )).resolves.toEqual({
+        kind: 'chat_tool_refused',
+        toolId: 'registry.operations.search',
+        reason: 'source_output_invalid',
+      })
+    } finally {
+      safeParse.mockRestore()
+    }
+
+    const sanitizedAgent = createChatAgent(mockModel())
+    const sanitizedCtx = toolCtx({
+      runQuery: vi.fn(async () => ({
+        ...noCandidates,
+        query: '<user>quoted</user><>',
+      })) as ToolCtx['runQuery'],
+    })
+    await expect(invokeTool(
+      sanitizedAgent,
+      'registry.operations.search',
+      sanitizedCtx,
+      { query: 'weather' },
+    )).resolves.toMatchObject({ query: '[data-tag]quoted[data-tag]‹›' })
+
+    const stringifyAgent = createChatAgent(mockModel())
+    const stringify = vi.spyOn(JSON, 'stringify').mockImplementationOnce(() => {
+      throw new TypeError('hostile serialization')
+    })
+    try {
+      await expect(invokeTool(
+        stringifyAgent,
+        'registry.operations.search',
+        toolCtx({ runQuery: vi.fn(async () => noCandidates) as ToolCtx['runQuery'] }),
+        { query: 'weather' },
+      )).resolves.toEqual({
+        kind: 'chat_tool_refused',
+        toolId: 'registry.operations.search',
+        reason: 'source_output_invalid',
+      })
+    } finally {
+      stringify.mockRestore()
+    }
+
+    const parseAgent = createChatAgent(mockModel())
+    const parse = vi.spyOn(JSON, 'parse').mockImplementationOnce(() => ({ kind: 'forged' }))
+    try {
+      await expect(invokeTool(
+        parseAgent,
+        'registry.operations.search',
+        toolCtx({ runQuery: vi.fn(async () => noCandidates) as ToolCtx['runQuery'] }),
+        { query: 'weather' },
+      )).resolves.toEqual({
+        kind: 'chat_tool_refused',
+        toolId: 'registry.operations.search',
+        reason: 'source_output_invalid',
+      })
+    } finally {
+      parse.mockRestore()
+    }
+  })
+
+  it('enforces the shared call budget before every remaining native handler', async () => {
+    const runQuery = vi.fn(async (reference) => nativeReadResult(getFunctionName(reference)))
+    const agent = createChatAgent(mockModel(), AUTHORITY)
+    const ctx = toolCtx({ runQuery: runQuery as ToolCtx['runQuery'] })
+    for (let index = 0; index < MAX_CHAT_TOOL_CALLS; index += 1) {
+      await invokeTool(agent, 'registry.operations.search', ctx, { query: 'weather' })
+    }
+    for (const [toolId, input] of [
+      ['registry.operations.detail', { operationRef: OPERATION_REF }],
+      ['registry.operations.compare', { operationRefs: [OPERATION_REF] }],
+      ['registry.operations.inspectPlan', { operationRefs: [OPERATION_REF] }],
+    ] as const) {
+      await expect(invokeTool(agent, toolId, ctx, input)).resolves.toEqual({
+        kind: 'chat_tool_refused',
+        toolId,
+        reason: 'tool_limit',
+      })
+    }
+    expect(runQuery).toHaveBeenCalledTimes(MAX_CHAT_TOOL_CALLS)
   })
 })

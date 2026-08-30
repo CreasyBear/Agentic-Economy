@@ -2,28 +2,32 @@ import {
   operationDetailInputSchema,
   operationDetailOutputSchema,
 } from '@/modules/capability-supply/public'
+import {
+  AGENT_ACCOUNT_SELF_ROUTE_CONTRACT,
+  agentAccountSelfResultSchema,
+} from '@/modules/agent-access/account.actions'
+import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
+import { usageFailure } from '../lib/help'
 import { OPERATION_MARKET_DETAIL_PATH } from '@/modules/registry/operation-entry'
 import {
   formatOperationAuthentication,
   formatOperationAvailability,
-  formatOperationContinuations,
   formatOperationInputs,
   formatOperationTotalPrice,
   formatOperationVerification,
   operationLabel,
 } from '../lib/operation-format'
 import { throwOperationReadFailure } from '../lib/operation-read-failure'
+import { resolveAgentAccessCredential } from '../lib/config'
+import { operationContinuationForCli } from '../lib/suggested-continuation-adapter'
 /** Read one exact current Market Operation without a caller credential. */
 export async function runInspectCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const operationRef = args[0]?.trim()
   if (operationRef === undefined || operationRef.length === 0 || args.length > 1) {
-    throw new CliFailure('Usage: ae inspect <operation-ref>', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'inspect-usage',
-    })
+    throw usageFailure('inspect', 'inspect-usage')
   }
   const parsedInput = inspectCommandDescriptor.inputSchema.safeParse({ operationRef })
   if (!parsedInput.success) {
@@ -74,9 +78,43 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
       ? 'none'
       : operation.effects.map((effect) => effect.class.replace(/_/gu, ' ')).join(', ')}`,
   )
-  line(`  next: ${formatOperationContinuations(operation)}`)
+  const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
+  const callable = operation.availability.posture === 'routeable' && invokeNavigation !== undefined
+  // The installed CLI calls the brokered invoke route, whose canonical
+  // contract requires buyer access even when the upstream provider is public.
+  const requiresBuyerCredential = invokeNavigation !== undefined
+  const continuation = operationContinuationForCli({
+    operationRef: operation.operationRef,
+    availabilityPosture: operation.availability.posture === 'routeable' && !callable
+      ? 'integrated'
+      : operation.availability.posture,
+    requiresBuyerCredential,
+    hasBuyerCredential: requiresBuyerCredential
+      ? await hasCurrentBuyerInvokeCredential(options.baseUrl)
+      : false,
+  })
+  line(`  next: ${continuation.command ?? continuation.label}`)
+  if (continuation.warning !== undefined) line(`  warning: ${continuation.warning}`)
   if (operation.contract.inputExamples?.[0] !== undefined) {
     line(`  example input: ${JSON.stringify(operation.contract.inputExamples[0].input)}`)
+  }
+}
+
+async function hasCurrentBuyerInvokeCredential(baseUrl: string): Promise<boolean> {
+  const credential = resolveAgentAccessCredential(baseUrl, MARKET_OPERATIONS_INVOKE_SCOPE)
+  if (credential === undefined) return false
+  const configuredOrigin = credential.origin.trim()
+  if (configuredOrigin !== '' && configuredOrigin !== new URL(baseUrl).origin) return false
+  try {
+    const outcome = await callJson(baseUrl, AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.path, {
+      method: AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.method,
+      headers: { Authorization: `Bearer ${credential.accessToken}` },
+    })
+    if (!outcome.ok) return false
+    const account = agentAccountSelfResultSchema.safeParse(outcome.body)
+    return account.success && account.data.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+  } catch {
+    return false
   }
 }
 

@@ -50,8 +50,8 @@ export async function importMcpCapability(
     return { kind: "refused", reason: "schema_missing" };
   }
   const credential: AdmitCredentialSpec =
-    input.commercial.authority.kind === "keyless"
-      ? { kind: "keyless" }
+    input.commercial.authority.kind === "public_upstream"
+      ? { kind: "public_upstream" }
       : { kind: "http_bearer", schemeName: "mcp-http-bearer" };
   const admit = await admitProviderSchema(
     {
@@ -89,7 +89,7 @@ export async function importMcpCapability(
         toolName: input.tool.name,
         requestTimeoutMs: input.commercial.requestTimeoutMs,
         credential:
-          credential.kind === "keyless" ? { kind: "none" } : { kind: "bearer" },
+          credential.kind === "public_upstream" ? { kind: "none" } : { kind: "bearer" },
       },
     },
   });

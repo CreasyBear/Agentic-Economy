@@ -10,6 +10,7 @@ import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorC
 import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeCreditTopUpPanel, type CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
+import { AeOwnerCredit, creditTopupTargetFromItems } from '@/components/ae/console/AeOwnerCredit'
 import type { CreditPaymentSession } from '@/modules/money/public'
 import type { CreditTopupBeginInput } from '@/modules/money/server'
 
@@ -37,6 +38,7 @@ const keyReadback: AgentOperatorKeyReadback = {
     expired: false,
   },
   grant: {
+    principalId: `prn_${'1'.repeat(32)}`,
     credentialId: 'key_ui_1',
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
@@ -80,6 +82,48 @@ afterEach(() => {
   cleanup()
   window.sessionStorage.clear()
   stripeTestState.confirm.mockReset()
+})
+
+describe('owner credit target', () => {
+  it('uses the active grant policy before the first credit account exists', () => {
+    const { account: _fundedAccount, ...unfundedKeyReadback } = keyReadback
+    expect(creditTopupTargetFromItems([{
+      ...unfundedKeyReadback,
+      principalId: `prn_${'1'.repeat(32)}`,
+      dataState: 'empty',
+    }])).toEqual({
+      principalId: `prn_${'1'.repeat(32)}`,
+      currency: 'USD',
+      exponent: 2,
+    })
+  })
+
+  it('uses the shared funding continuation after an insufficient-credit call', () => {
+    render(<AeOwnerCredit
+      items={[{
+        ...keyReadback,
+        activity: [{
+          activityRef: 'activity:insufficient',
+          credentialId: 'key_ui_1',
+          serviceRef: 'service:weather',
+          offeringRef: 'offering:weather',
+          businessId: 'business:weather',
+          operationKey: 'weather.lookup',
+          invocationRef: 'invocation:insufficient',
+          attemptRef: 'attempt:insufficient',
+          grossAmount: { currency: 'USD', units: '500', exponent: 2 },
+          chargeState: 'insufficient_credit',
+          priceDigest: `sha256:${'a'.repeat(64)}`,
+          observedAt: 2,
+        }],
+      }]}
+      loading={false}
+    />)
+
+    fireEvent.click(screen.getByText('Call declined for insufficient credit'))
+    const continuation = screen.getByRole('link', { name: 'Add credit' })
+    expect(continuation.getAttribute('href')).toBe('/owner/credit#fund')
+  })
 })
 
 describe('assistant access components', () => {
@@ -228,16 +272,18 @@ describe('assistant access components', () => {
       />,
     )
     expect(screen.getAllByText(/USD 12\.5/u).length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: /balance/i })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Credit' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Credit' })).toBeTruthy()
     expect(screen.getByRole('list')).toBeTruthy()
     expect(screen.getByText('Lost, expired, or revoked agent key')).toBeTruthy()
     expect(screen.getByText('Provider reauthorization required')).toBeTruthy()
     expect(screen.getByText('Outcome uncertain')).toBeTruthy()
     expect(screen.getByText(/USD 5\.005/u)).toBeTruthy()
+    expect(screen.getByText('Browse only')).toBeTruthy()
+    fireEvent.click(screen.getByText('UI assistant'))
     expect(screen.getByText('Development')).toBeTruthy()
     expect(screen.getByText('30/min · 300/hour')).toBeTruthy()
     expect(screen.getByText('USD 25.00')).toBeTruthy()
-    expect(screen.getByText('Browse only')).toBeTruthy()
     expect(screen.queryByText(/scope:|data:|principal|clerk_api_key/u)).toBeNull()
   })
 

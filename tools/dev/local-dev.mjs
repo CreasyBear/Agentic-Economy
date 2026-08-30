@@ -5,7 +5,7 @@ import { delimiter, dirname, resolve as resolvePath } from 'node:path'
 import { parseEnv } from 'node:util'
 import { fileURLToPath } from 'node:url'
 
-import { configureLocalSourceWriteSecret } from './local-source-write-secret.mjs'
+import { configureLocalConvexServerFunctionToken, configureLocalSourceWriteSecret } from './local-source-write-secret.mjs'
 
 const DEFAULT_VITE_ARGS = ['--port', '3024', '--strictPort', '--host', '127.0.0.1']
 const LOCAL_STARTUP_TIMEOUT_MS = 120_000
@@ -261,9 +261,11 @@ export function createSupervisor() {
 async function runVite(viteArgs, supervisor) {
   const env = localDevelopmentEnv()
   const { secret, adminKey } = await configureLocalSourceWriteSecret({ env })
+  const { token: serverFunctionToken } = await configureLocalConvexServerFunctionToken({ env })
   const appArgs = viteArgs.length > 0 ? viteArgs : DEFAULT_VITE_ARGS
   Object.assign(env, {
     AE_SOURCE_WRITE_SECRET: secret,
+    AE_CONVEX_SERVER_FUNCTION_TOKEN: serverFunctionToken,
     CONVEX_SELF_HOSTED_ADMIN_KEY: adminKey,
     VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E:
       env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E ?? 'true',
@@ -326,10 +328,32 @@ async function runLocalStack(viteArgs) {
       return signalExitStatus(supervisor.parentSignal)
     }
 
-    // Seed the dev catalog (idempotent) so the stack is usable immediately and
-    // persists across restarts. A seed failure should not tear down an already
-    // healthy Convex+Vite stack, so it is best-effort and logged.
+    // Provision the fixed platform workload identities (cron fleet + dev-catalog
+    // seed), the fixed local-E2E owner-agent credential for the consent loop,
+    // and seed the dev catalog (all idempotent) so the stack is usable
+    // immediately and persists across restarts. A failure should not tear down
+    // an already healthy Convex+Vite stack, so it is best-effort and logged.
     try {
+      const ensured = supervisor.add(createManagedChild(
+        'npx',
+        ['convex', 'run', 'workloadCron:ensurePlatformWorkloadIdentities'],
+        env,
+        { label: 'Ensure platform workload identities', timeoutMs: 60_000 },
+      ))
+      const ensuredResult = await ensured.done
+      if (childExitStatus(ensuredResult) !== 0) {
+        process.stderr.write('local-dev: platform workload identity ensure reported a non-zero exit; continuing.\n')
+      }
+      const ownerIdentity = supervisor.add(createManagedChild(
+        'npx',
+        ['convex', 'run', 'devSeed:ensureLocalE2EOwnerIdentity'],
+        env,
+        { label: 'Ensure local-E2E owner identity', timeoutMs: 60_000 },
+      ))
+      const ownerIdentityResult = await ownerIdentity.done
+      if (childExitStatus(ownerIdentityResult) !== 0) {
+        process.stderr.write('local-dev: local-E2E owner identity ensure reported a non-zero exit; continuing.\n')
+      }
       const seed = supervisor.add(createManagedChild(
         'npx',
         ['convex', 'run', 'devSeed:seedDevCatalog'],

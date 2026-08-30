@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { AGENT_ACCESS_KEY_TTL_SECONDS } from '@/modules/agent-access/agent-access'
 
 import {
@@ -79,12 +79,20 @@ describe('Customer Request OAuth state machine', () => {
     expect(userCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u)
     expect(normalizeRequestedScopes('customer_requests:approve_each')).toEqual({
       mode: 'approve_each', scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:approve_each'],
+      profile: 'market',
     })
     expect(normalizeRequestedScopes('customer_requests:create customer_requests:approve_each')).toBeUndefined()
     expect(normalizeRequestedScopes(`${MARKET_OPERATIONS_INVOKE_SCOPE} ${CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE}`)).toEqual({
       mode: 'bounded_mandate',
       scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE],
+      profile: 'market',
     })
+    expect(normalizeRequestedScopes(MARKET_SUPPLY_MANAGE_SCOPE)).toEqual({
+      mode: 'bounded_mandate',
+      scopes: [MARKET_SUPPLY_MANAGE_SCOPE],
+      profile: 'supplier',
+    })
+    expect(normalizeRequestedScopes(`${MARKET_SUPPLY_MANAGE_SCOPE} ${MARKET_OPERATIONS_INVOKE_SCOPE}`)).toBeUndefined()
     expect(normalizeRequestedScopes('customer_requests:create customer_requests:approve_each customer_requests:full_yolo')).toBeUndefined()
     expect(normalizeRequestedScopes('customer_requests:create customer_requests:standing_authority')).toBeUndefined()
   })
@@ -138,6 +146,41 @@ describe('Customer Request OAuth state machine', () => {
     })
     if (defaultAuthResult.kind !== 'ok') throw new Error('authorization default grant did not begin')
     expect(JSON.stringify(defaultAuthResult.value.grant.requestedAccess)).toBe(JSON.stringify(expectedDefault))
+  })
+
+  it('preserves exact supplier scope through owner approval and refuses mode tampering', async () => {
+    const store = storeFixture()
+    const started = await beginDeviceGrant(store, {
+      client: deviceClient,
+      requestedScopes: [MARKET_SUPPLY_MANAGE_SCOPE],
+      now: 1_000,
+    })
+    if (started.kind !== 'ok') throw new Error('supplier grant did not begin')
+    const issuedScopes: string[][] = []
+    const approved = await approveGrant(store, {
+      grantRef: started.value.grant.grantRef,
+      ownerId: 'owner-one',
+      now: 1_001,
+      authorityMode: 'bounded_mandate',
+      issueKey: async ({ grant }) => {
+        issuedScopes.push([...grant.requestedScopes])
+        return { keyId: 'key_supplier' }
+      },
+    })
+    expect(approved.kind).toBe('ok')
+    expect(issuedScopes).toEqual([[MARKET_SUPPLY_MANAGE_SCOPE]])
+    if (approved.kind === 'ok') expect(approved.value.grant.requestedScopes).toEqual([MARKET_SUPPLY_MANAGE_SCOPE])
+
+    const tamperedStore = storeFixture()
+    const tampered = await beginDeviceGrant(tamperedStore, { client: deviceClient, requestedScopes: [MARKET_SUPPLY_MANAGE_SCOPE], now: 1_000 })
+    if (tampered.kind !== 'ok') throw new Error('supplier grant did not begin')
+    await expect(approveGrant(tamperedStore, {
+      grantRef: tampered.value.grant.grantRef,
+      ownerId: 'owner-one',
+      now: 1_001,
+      authorityMode: 'inspect_only',
+      issueKey,
+    })).resolves.toEqual({ kind: 'refused', reason: 'invalid_scope' })
   })
 
   it('enforces expiry and owner binding inside consent transitions', async () => {

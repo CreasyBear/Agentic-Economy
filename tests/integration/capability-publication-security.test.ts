@@ -2,49 +2,18 @@ import type { FunctionArgs } from 'convex/server'
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { api, internal } from '../../convex/_generated/api'
+import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
-import {
-  rebuildCapabilityOriginSupplyProjection,
-  setCapabilitySupplyEligibilityCommand,
-} from '../../convex/capabilitySupply'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import {
   convexTestWithMarketComponents,
-  ownerAdmin,
   prepareCapabilityPublicationMutation,
   publishedBusinessOwner,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
-import type {
-  CapabilityTransportAuthority,
-  EligibilityInput,
-  RegistrationContext,
-} from '@/modules/capability-supply/public'
+import type { CapabilityTransportAuthority } from '@/modules/capability-supply/public'
 import { withSourceWrite } from '../helpers/source-write-admission'
-
-
-async function runEligibility(
-  backend: ConvexFixtureBackend,
-  args: EligibilityInput & RegistrationContext,
-  actorRef: string,
-) {
-  return await backend.run(async (ctx) => {
-    const now = Date.now()
-    const result = await setCapabilitySupplyEligibilityCommand(ctx.db, {
-      actor: { kind: 'admin', ref: actorRef },
-      eligibility: args,
-      context: args,
-    }, now)
-    if (result.kind === 'eligible' || result.kind === 'ineligible') {
-      const offering = await ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (index) => index.eq('offeringId', args.offeringId)).unique()
-      if (offering !== null) await rebuildCapabilityOriginSupplyProjection(ctx, offering.businessId, now)
-    }
-    return result
-  })
-
-}
+import { installProviderConnectionFixture } from './capability-publication-harness'
 const SECURITY_AUTHORITY: CapabilityTransportAuthority = {
   kind: 'provider_connection',
   connectionRef: 'connection:capability-publication-security',
@@ -127,91 +96,24 @@ describe('capability publication security', () => {
     )).resolves.toEqual({ kind: 'refused', reason: 'offering_identity_conflict' })
 
     await expect(publicationRows(backend)).resolves.toEqual(before)
-  })
-  it('denies anonymous reads of keyless executable descriptors carrying fixed query values', async () => {
-    const backend = convexTestWithMarketComponents()
-    const { businessId, owner } = await publishedBusinessOwner(backend, 'security-fixed-query')
-    await seedCatalogOffering(backend, businessId, 'fixed-query')
-    const baseline = publicationArgs(businessId, 'fixed-query')
-    const input = {
-      ...baseline,
-      binding: {
-        ...baseline.binding,
-        authority: { kind: 'keyless' as const },
-        adapter: {
-          adapterId: 'http-json:v1' as const,
-          config: {
-            method: 'GET' as const,
-            fixedQuery: [{ parameter: 'format', value: 'json' }],
-            requestTimeoutMs: 5_000,
-          },
-        },
-      },
-    }
-    const published = await owner.mutation(
-      api.capabilitySupply.publishPreparedCapability,
-      await preparedPublicationArgs(backend, input),
-    )
-    if ('reason' in published) throw new Error(`publication_refused:${published.reason}`)
-    await ownerAdmin(backend, 'user_capability_publication_observer')
-    const hashes = await backend.run(async (ctx) => {
-      const offering = await ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (query) => query.eq('offeringId', published.offeringId))
-        .unique()
-      const binding = await ctx.db.query('capabilityTransportBindings')
-        .withIndex('by_bindingId', (query) => query.eq('bindingId', published.bindingId))
-        .unique()
-      if (offering === null || binding === null) throw new Error('publication_supply_missing')
-      return { offering: offering.registrationHash, binding: binding.registrationHash }
-    })
-    await runEligibility(backend, {
-      offeringId: published.offeringId,
-      bindingId: published.bindingId,
-      contractRef: published.contractRef,
-      decision: 'admit',
-      expectedOfferingRegistrationHash: hashes.offering,
-      expectedBindingRegistrationHash: hashes.binding,
-      admissionEvidenceRefs: ['test:admission:fixed-query'],
-      conformanceEvidenceRefs: ['test:conformance:fixed-query'],
-      operationKey: 'op:capability-publication-security:fixed-query',
-      correlationId: 'corr:capability-publication-security:fixed-query',
-      reasonCode: 'business_capability_publication',
-      evidenceRefs: ['test:capability-publication-security'],
-    }, 'user_capability_publication_observer')
-    await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
-      publicationRef: published.publicationRef,
-      expectedRevision: published.publicationRevision,
-      credentialState: 'ready',
-      healthState: 'healthy',
-      validUntil: Date.now() + 300_000,
-      operationKey: 'op:capability-publication-security:fixed-query-readiness',
-      correlationId: 'corr:capability-publication-security:fixed-query-readiness',
-      reasonCode: 'business_capability_publication',
-      evidenceRefs: ['test:capability-publication-security'],
-    })
-    await expect(backend.query(api.capabilitySupplyOperations.readKeylessExecutable, {
-      operationRef: published.operationRef,
-    })).resolves.toBeNull()
-  })
 })
+  })
+
 async function registerProviderConnection(backend: ConvexFixtureBackend, businessId: Id<'businesses'>) {
   if (SECURITY_AUTHORITY.kind !== 'provider_connection') {
     throw new Error('provider connection fixture authority kind changed')
   }
-  const result = await backend.mutation(internal.capabilityProviderConnections.create, {
+  const result = await installProviderConnectionFixture(backend, {
     commandId: 'command:create:capability-publication-security',
     connectionRef: SECURITY_AUTHORITY.connectionRef,
     businessId,
     providerRef: SECURITY_AUTHORITY.providerRef,
     providerAccountRef: 'account:capability-publication-security',
     adapterId: 'http-json:v1',
-    credentialRef: 'env:SECURITY_CAPABILITY_KEY',
-    requestedScopes: ['capability:security.atomic.lookup'],
-    grantedScopes: ['capability:security.atomic.lookup'],
-    requestedResources: ['endpoint:https://security.example.test/capability'],
-    grantedResources: ['endpoint:https://security.example.test/capability'],
+    secretRef: 'sec_11111111111111111111111111111111',
+    scopes: ['capability:security.atomic.lookup'],
+    resources: ['endpoint:https://security.example.test/capability'],
     evidenceRefs: ['test:provider-connection:capability-publication-security'],
-    now: 1,
   })
   if (result.kind !== 'applied') throw new Error(`provider_connection_fixture_${result.kind}`)
 }

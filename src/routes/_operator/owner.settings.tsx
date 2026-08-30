@@ -1,10 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import {
-  AccountSettingsSection,
-  BusinessSettingsSection,
-} from '@/components/ae/settings/OwnerSettingsSections'
+import { AccountSettingsSection } from '@/components/ae/settings/OwnerSettingsSections'
+import { OwnerSettingsShell } from '@/components/ae/settings/OwnerSettingsShell'
+import { ownerSettingsCurrentForPath } from '@/lib/operator/settings-navigation'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/settings')({
@@ -20,17 +18,12 @@ export const Route = createFileRoute('/_operator/owner/settings')({
 })
 
 function OwnerSettingsRoute() {
+  const { pathname } = useLocation()
+  const current = ownerSettingsCurrentForPath(pathname)
+
   return (
-    <AeOperatorShell
-      operatorRole="owner"
-      title="Settings"
-      description="Manage your account, supplier profile, and Operations."
-      currentPath="/owner/settings"
-    >
-      <div className="grid gap-6">
-        <AccountSettingsSection />
-        <BusinessSettingsSection />
-      </div>
-    </AeOperatorShell>
+    <OwnerSettingsShell current={current}>
+      {pathname === '/owner/settings' ? <AccountSettingsSection /> : <Outlet />}
+    </OwnerSettingsShell>
   )
 }

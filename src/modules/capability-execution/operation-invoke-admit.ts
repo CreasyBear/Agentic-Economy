@@ -186,7 +186,6 @@ export async function admitOperationInvoke(input: Readonly<{
   request: OperationInvokeRequest
   policy: OperationInvokePolicyReader
   currentOperation: OperationInvokeCurrentOperationReader | undefined
-  executeKeylessAvailable: boolean
   now: () => number
 }>): Promise<OperationInvokeAdmitOutcome> {
   const parsedInput = operationInvokeInputSchema.safeParse(input.request.input)
@@ -337,13 +336,6 @@ export async function admitOperationInvoke(input: Readonly<{
           nextAction: operationEnvironmentMismatchNextAction,
         }
       }
-    }
-  } else if (!input.executeKeylessAvailable) {
-    preflightRefusal = {
-      kind: 'refused',
-      operationRef: command.operationRef,
-      code: 'invocation_runtime_unavailable',
-      retryable: true,
     }
   }
   return {

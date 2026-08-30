@@ -6,7 +6,7 @@ import {
   handler,
   invocationRef,
   mocks,
-  paymentCredentialRef,
+  paymentSecretRef,
 } from './capability-operation-worker-harness'
 import type { RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
 import { describe, expect, it, vi } from 'vitest'
@@ -55,15 +55,20 @@ describe('capability operation invocation worker charge/x402', () => {
       dispatchRef: invocationRef,
       attemptRef,
       effectGeneration: 1,
-      credentialRef: paymentCredentialRef,
+      credentialRef: paymentSecretRef,
     })
     expect(worker.state.payment.prepare).not.toHaveProperty('custodyBudgetRef')
     expect(worker.state.payment.prepare).not.toHaveProperty('custodyGeneration')
     expect(worker.state.payment.prepare).not.toHaveProperty('custodyDailyMaximumUnits')
     expect(worker.state.payment.mark).toMatchObject({ dispatchRef: invocationRef, effectGeneration: 1 })
     expect(worker.state.payment.observe).toMatchObject({ dispatchRef: invocationRef, effectGeneration: 1 })
-    expect(mocks.createSandboxEvmX402PaymentSignature).toHaveBeenCalledWith(expect.objectContaining({ credential: '0xpayer-secret' }))
-    expect(mocks.credentialFromEnvironment).toHaveBeenCalledWith(paymentCredentialRef)
+    expect(mocks.createSandboxEvmX402PaymentSignature).toHaveBeenCalledWith(expect.objectContaining({
+      credential: 'callback-scoped-test-secret',
+    }))
+    expect(mocks.x402PaymentCredentialRefFromEnvironment).not.toHaveBeenCalled()
+    expect(mocks.credentialFromEnvironment).not.toHaveBeenCalled()
+    expect(mocks.cdpX402CustodyConfigurationFromEnvironment).not.toHaveBeenCalled()
+    expect(mocks.cdpX402CustodyBudgetRef).not.toHaveBeenCalled()
     expect(mocks.invokePreparedRouteTransport).toHaveBeenCalledTimes(1)
     expect(worker.state.qualifiedUse).toEqual([
       expect.objectContaining({
@@ -75,7 +80,6 @@ describe('capability operation invocation worker charge/x402', () => {
     ])
   })
   it('brokers production x402 with a buyer reservation and exact external payment', async () => {
-    vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')
     const worker = createWorker('x402', { environment: 'production' })
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
@@ -136,7 +140,6 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({ state: 'completed' })
   })
   it('refuses managed x402 without custody configuration before either persistence write', async () => {
-    vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')
     mocks.cdpX402CustodyConfigurationFromEnvironment.mockImplementationOnce(() => undefined as never)
     const worker = createWorker('x402', { environment: 'production' })
 
@@ -165,7 +168,6 @@ describe('capability operation invocation worker charge/x402', () => {
     })
   })
   it('releases the prepared spend without signing or paid send when the grant is revoked at the signing boundary', async () => {
-    vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')
     const worker = createWorker('x402', {
       environment: 'production',
       signingBoundaryGrant: null,
@@ -386,7 +388,7 @@ describe('capability operation invocation worker charge/x402', () => {
     })
   })
   it('refuses missing x402 payer custody before money reservation or transport', async () => {
-    vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')
+    vi.stubEnv('AE_X402_PAYMENT_SECRET_REF', '')
     const worker = createWorker('x402')
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
@@ -396,6 +398,9 @@ describe('capability operation invocation worker charge/x402', () => {
       state: 'refused',
       result: { kind: 'refused' },
     })
+    expect(mocks.x402PaymentCredentialRefFromEnvironment).not.toHaveBeenCalled()
+    expect(mocks.credentialFromEnvironment).not.toHaveBeenCalled()
+    expect(mocks.cdpX402CustodyConfigurationFromEnvironment).not.toHaveBeenCalled()
     expect(worker.state.qualifiedUse).toHaveLength(0)
   })
   it('settles exactly one AE-internal charge after valid output', async () => {
@@ -514,6 +519,34 @@ describe('capability operation invocation worker charge/x402', () => {
         amount: { units: '0', currency: 'USD', exponent: 2 },
         priceDigest: digest('p'),
       },
+    })
+  })
+
+  it('bootstraps a missing money account on a zero-price authenticated charge with exact replay', async () => {
+    const worker = createWorker('http', { operatorAccountVersion: null, priceUnits: '0' })
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    expect(worker.state.money).toMatchObject({
+      amount: { currency: 'USD', units: '0', exponent: 2 },
+      expectedAccountVersion: 0,
+      freeTier: false,
+    })
+    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyLedger:authorizeInvocationCharge')).toHaveLength(1)
+    expect(worker.state.reconciliations).toHaveLength(0)
+    expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({
+      usage: {
+        chargeState: 'free_tier',
+        amount: { units: '0', currency: 'USD', exponent: 2 },
+        priceDigest: digest('p'),
+      },
+    })
+    const chargeArgs = worker.state.mutationCalls.find(
+      ({ path }) => path === 'moneyLedger:authorizeInvocationCharge',
+    )?.args
+    expect(chargeArgs).toMatchObject({
+      transactionRef: `operation-money:${invocationRef}:${attemptRef}:1`,
+      idempotencyKey: `operation-money:${invocationRef}:${attemptRef}:1`,
+      invocationRef,
+      attemptRef,
     })
   })
 })

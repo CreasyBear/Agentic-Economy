@@ -61,6 +61,10 @@ agent to continue its own project.
 - Thin chat translates natural-language needs into the five bounded market
   tools: search, detail, compare, inspect-plan, and eligible keyless execute.
 - API, MCP, and CLI expose the same canonical market to software agents.
+- A connected buyer may retain one bounded failed-search phrase as a private
+  market-gap signal and later re-evaluate it against current canonical
+  Operations. This is market demand memory, not project memory, a tender, or a
+  supplier message; the signal is never callable supply.
 - The authenticated invocation plane owns controlled calls, idempotency,
   payment, receipts, status, cancellation, and reconciliation.
 - Supplier surfaces publish and maintain callable Operations.

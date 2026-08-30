@@ -8,6 +8,22 @@ import { parseEnv } from 'node:util'
 
 const LOCAL_CONVEX_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost):3210\/?$/u
 const SOURCE_WRITE_SECRET_NAME = 'AE_SOURCE_WRITE_SECRET'
+const CONVEX_SERVER_FUNCTION_TOKEN_NAME = 'AE_CONVEX_SERVER_FUNCTION_TOKEN'
+const MIN_CONVEX_SERVER_FUNCTION_TOKEN_LENGTH = 32
+
+function mergedLocalEnv({ env, dotenvFiles }) {
+  return Object.assign({}, ...dotenvFiles.map(({ content }) => parseEnv(content)), env)
+}
+
+function assertLocalProvisioningFence(effectiveEnv) {
+  if (effectiveEnv.NODE_ENV?.trim() === 'production') {
+    throw new Error('local_source_write_production_forbidden')
+  }
+  const convexUrl = effectiveEnv.CONVEX_URL?.trim() || effectiveEnv.VITE_CONVEX_URL?.trim()
+  if (convexUrl === undefined || !LOCAL_CONVEX_URL.test(convexUrl)) {
+    throw new Error('local_source_write_local_convex_required')
+  }
+}
 
 /**
  * Resolve the one server-only source-write root used by a local app and its
@@ -19,15 +35,8 @@ export function resolveLocalSourceWriteSecret({
   dotenvFiles = [],
   randomBytes: randomBytesImpl = (size) => randomBytes(size),
 } = {}) {
-  const effectiveEnv = Object.assign({}, ...dotenvFiles.map(({ content }) => parseEnv(content)), env)
-  const convexUrl = effectiveEnv.CONVEX_URL?.trim() || effectiveEnv.VITE_CONVEX_URL?.trim()
-
-  if (effectiveEnv.NODE_ENV?.trim() === 'production') {
-    throw new Error('local_source_write_production_forbidden')
-  }
-  if (convexUrl === undefined || !LOCAL_CONVEX_URL.test(convexUrl)) {
-    throw new Error('local_source_write_local_convex_required')
-  }
+  const effectiveEnv = mergedLocalEnv({ env, dotenvFiles })
+  assertLocalProvisioningFence(effectiveEnv)
 
   const configured = nonEmpty(effectiveEnv[SOURCE_WRITE_SECRET_NAME])
   if (configured !== undefined) {
@@ -42,6 +51,35 @@ export function resolveLocalSourceWriteSecret({
   }
 }
 
+/**
+ * Resolve the service-auth token the app's server code signs Convex
+ * source-function assertions with (registerAgentAccessGrant and friends).
+ * Same local-only fence as the source-write secret; generated values are
+ * 64 hex chars, satisfying the >=32-char assertion gate on both sides.
+ */
+export function resolveLocalConvexServerFunctionToken({
+  env = process.env,
+  dotenvFiles = [],
+  randomBytes: randomBytesImpl = (size) => randomBytes(size),
+} = {}) {
+  const effectiveEnv = mergedLocalEnv({ env, dotenvFiles })
+  assertLocalProvisioningFence(effectiveEnv)
+
+  const configured = nonEmpty(effectiveEnv[CONVEX_SERVER_FUNCTION_TOKEN_NAME])
+  if (configured !== undefined) {
+    if (configured.length < MIN_CONVEX_SERVER_FUNCTION_TOKEN_LENGTH) {
+      throw new Error('local_convex_server_function_token_too_short')
+    }
+    return { token: configured, source: 'existing' }
+  }
+
+  return {
+    token: Buffer.from(randomBytesImpl(32)).toString('hex'),
+    source: 'generated',
+    persistPath: '.env.development.local',
+  }
+}
+
 export function sourceWriteEnvAssignment(secret) {
   const value = nonEmpty(secret)
   if (value === undefined) {
@@ -50,14 +88,22 @@ export function sourceWriteEnvAssignment(secret) {
   return `${SOURCE_WRITE_SECRET_NAME}=${value}\n`
 }
 
-export async function persistLocalSourceWriteSecret(path, secret) {
-  const assignment = sourceWriteEnvAssignment(secret)
+async function persistLocalEnvAssignment(path, name, value) {
+  const assignment = `${name}=${value}\n`
   const current = existsSync(path) ? await readFile(path, 'utf8') : ''
-  const linePattern = /^AE_SOURCE_WRITE_SECRET=.*$/mu
+  const linePattern = new RegExp(`^${name}=.*$`, 'mu')
   const next = linePattern.test(current)
     ? current.replace(linePattern, assignment.trimEnd())
     : `${current}${current.length > 0 && !current.endsWith('\n') ? '\n' : ''}${assignment}`
   await writeFile(path, next, 'utf8')
+}
+
+export async function persistLocalSourceWriteSecret(path, secret) {
+  await persistLocalEnvAssignment(path, SOURCE_WRITE_SECRET_NAME, secret)
+}
+
+export async function persistLocalConvexServerFunctionToken(path, token) {
+  await persistLocalEnvAssignment(path, CONVEX_SERVER_FUNCTION_TOKEN_NAME, token)
 }
 
 export async function configureLocalSourceWriteSecret({
@@ -77,6 +123,35 @@ export async function configureLocalSourceWriteSecret({
     url: convexConfig.url,
     adminKey: convexConfig.adminKey,
     secret: result.secret,
+  })
+
+  return { ...result, adminKey: convexConfig.adminKey }
+}
+
+/**
+ * Provision AE_CONVEX_SERVER_FUNCTION_TOKEN idempotently: reuse the
+ * configured value, or generate and persist one, then push it into the
+ * local Convex deployment env store so server-signed service assertions
+ * verify on the Convex side. Returns the resolved token.
+ */
+export async function configureLocalConvexServerFunctionToken({
+  cwd = process.cwd(),
+  env = process.env,
+  runEnvSet = runConvexEnvSet,
+} = {}) {
+  const dotenvFiles = await readDotenvFiles(cwd)
+  const result = resolveLocalConvexServerFunctionToken({ env, dotenvFiles })
+  if (result.source === 'generated') {
+    await persistLocalConvexServerFunctionToken(resolvePath(cwd, result.persistPath), result.token)
+  }
+
+  const convexConfig = await readLocalConvexConfig(cwd)
+  await runEnvSet({
+    cwd,
+    url: convexConfig.url,
+    adminKey: convexConfig.adminKey,
+    name: CONVEX_SERVER_FUNCTION_TOKEN_NAME,
+    secret: result.token,
   })
 
   return { ...result, adminKey: convexConfig.adminKey }
@@ -109,7 +184,7 @@ async function readLocalConvexConfig(cwd) {
   }
 }
 
-function runConvexEnvSet({ cwd, url, adminKey, secret }) {
+function runConvexEnvSet({ cwd, url, adminKey, name = SOURCE_WRITE_SECRET_NAME, secret }) {
   return new Promise((resolve, reject) => {
     const child = spawn('npx', [
       'convex',
@@ -119,7 +194,7 @@ function runConvexEnvSet({ cwd, url, adminKey, secret }) {
       url,
       '--admin-key',
       adminKey,
-      SOURCE_WRITE_SECRET_NAME,
+      name,
     ], {
       cwd,
       env: { ...process.env },

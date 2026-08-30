@@ -22,7 +22,7 @@ describe('ListingFirstScreen', () => {
     const text = fragmentFrom(markup).textContent ?? ''
 
     expect(text).toContain('Emergency plumbing')
-    expect(text).toContain('Published Operations')
+    expect(text).toContain('Listed tools')
     expect(text).toContain('Inspect the price, access path, and current readiness before calling.')
     expect(markup).not.toContain('Ask this business')
     expect(markup).not.toContain('href="/demo-plumbing/inquiry"')
@@ -31,10 +31,8 @@ describe('ListingFirstScreen', () => {
   it('puts literal market facts before any access path', () => {
     const markup = renderFirstScreen(catalogFixture())
 
-    expect(markup).toContain('Demo listed provider')
     expect(markup).toContain('Plumber')
-    expect(markup).toContain('Compare this supplier’s published Operations, exact prices, and access paths.')
-    expect(markup).toContain('Operations')
+    expect(markup).toContain('Tools')
     expect(markup).toContain('Ready now')
     expect(markup).toContain('Last indexed')
     expect(markup).not.toContain('href="tel:')
@@ -193,7 +191,8 @@ function renderListingToStaticMarkup(ui: ReactElement): string {
   const slugRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$slug' })
   const threadRoute = createRoute({ getParentRoute: () => rootRoute, path: '/t/$threadId' })
   const privacyRemoveRoute = createRoute({ getParentRoute: () => rootRoute, path: '/privacy/remove-business' })
-  const routeTree = rootRoute.addChildren([homeRoute, slugRoute, threadRoute, privacyRemoveRoute])
+  const marketRoute = createRoute({ getParentRoute: () => rootRoute, path: '/market' })
+  const routeTree = rootRoute.addChildren([homeRoute, slugRoute, threadRoute, privacyRemoveRoute, marketRoute])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return renderToStaticMarkup(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }

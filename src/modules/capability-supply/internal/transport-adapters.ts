@@ -451,7 +451,7 @@ export type HttpJsonProbeConfiguration = Readonly<{
   credential?: HttpJsonCredential
 }>
 function validAuthority(value: CapabilityTransportAuthority, allowKeyless: boolean): boolean {
-  if (value.kind === 'keyless') return allowKeyless
+  if (value.kind === 'public_upstream') return allowKeyless
   return /^connection:[A-Za-z0-9][A-Za-z0-9:_-]{0,199}$/.test(value.connectionRef)
     && /^provider:[A-Za-z0-9][A-Za-z0-9:_.-]{0,199}$/.test(value.providerRef)
 }

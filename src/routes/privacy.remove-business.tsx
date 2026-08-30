@@ -14,8 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/lib/ui/toast'
 import { z } from 'zod'
 
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { openRemovalDisputeThroughSource } from '@/modules/security/removal-dispute.functions'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 
@@ -139,18 +138,18 @@ function RemoveBusinessRoute() {
   }
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow="Privacy"
-        title="Supplier corrections"
-        description="Send the supplier slug, your email, and the exact Operation or profile fact that should change."
-      />
-      <div className="mx-auto grid w-full max-w-5xl gap-10 px-4 pb-16 md:px-6">
-        <section className="grid gap-4 md:grid-cols-3">
+    <AePublicPage
+      kind="document"
+      eyebrow="Privacy"
+      title="Supplier corrections"
+      description="Send the supplier slug, your email, and the exact Operation or profile fact that should change."
+    >
+      <div className="ae-rail grid max-w-prose gap-page pb-page">
+        <section className="grid gap-related">
           {correctionPaths.map(({ icon: Icon, label, title, body }) => (
-            <Card key={title} className="grid h-full gap-1.5 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <Card key={title} className="grid gap-intra p-gutter shadow-none">
+              <div className="flex items-center justify-between gap-related">
+                <p className="flex items-center gap-intra text-lg font-semibold text-foreground">
                   <Icon className="size-4 text-foreground" aria-hidden="true" /> {title}
                 </p>
                 <Badge variant="secondary">{label}</Badge>
@@ -163,7 +162,7 @@ function RemoveBusinessRoute() {
         {!hydrated ? (
           <div className="mx-auto w-full max-w-3xl text-sm text-muted-foreground" aria-live="polite">Preparing correction form.</div>
         ) : (
-        <form onSubmit={handleSubmit} className="mx-auto grid w-full max-w-3xl gap-6" noValidate>
+        <form onSubmit={handleSubmit} className="mx-auto grid w-full max-w-3xl gap-section" noValidate>
           {error === undefined ? null : (
             <Alert variant="destructive">
               <AlertTitle>Request needs attention</AlertTitle>
@@ -185,6 +184,7 @@ function RemoveBusinessRoute() {
                 value={value.slug}
                 disabled={pending}
                 aria-describedby={slugDescriptionId}
+                className="min-h-touch"
                 onChange={(event) => {
                   const nextValue = event.currentTarget.value
                   setValue((current) => ({ ...current, slug: nextValue }))
@@ -203,6 +203,7 @@ function RemoveBusinessRoute() {
                 ref={contactEmailRef}
                 value={value.contactEmail}
                 disabled={pending}
+                className="min-h-touch"
                 onChange={(event) => {
                   const nextValue = event.currentTarget.value
                   setValue((current) => ({ ...current, contactEmail: nextValue }))
@@ -223,7 +224,7 @@ function RemoveBusinessRoute() {
                   setValue((current) => ({ ...current, reasonCode: toRemovalReason(nextValue) }))
                 }}
               >
-                <SelectTrigger id="reasonCode" className="min-h-11 w-full">
+                <SelectTrigger id="reasonCode" className="min-h-touch w-full">
                   <SelectValue placeholder="Choose one" />
                 </SelectTrigger>
                 <SelectContent>
@@ -257,14 +258,14 @@ function RemoveBusinessRoute() {
               ) : null}
             </Field>
           </FieldGroup>
-          <Button type="submit" disabled={pending} className="justify-self-start">
+          <Button type="submit" disabled={pending} className="min-h-touch justify-self-start">
             {pending ? <Spinner /> : null}
             Send request
           </Button>
         </form>
         )}
       </div>
-    </AePublicShell>
+    </AePublicPage>
   )
 }
 

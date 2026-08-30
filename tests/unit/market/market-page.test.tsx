@@ -117,50 +117,51 @@ const projection: MarketRouteProjection = {
 afterEach(cleanup);
 
 describe("market page", () => {
-  it("shows callable Operations by default without source-access modes", () => {
+  it("shows the catalog as category shelves of capabilities", () => {
     renderMarket({ window: "30d" });
 
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "Find the right tool for the job.",
+        name: "2 current Operations",
       }),
     ).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "Search tools" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Search" })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Search tools" })).toBeNull();
     expect(screen.queryByRole("radio", { name: "Pay per call" })).toBeNull();
     expect(screen.queryByText("Exa search")).toBeNull();
     expect(
-      screen.getByRole("link", { name: "Use Company registry search" }),
+      screen.getByRole("link", {
+        name: "Company Search, 2 listed, from USD 0.18",
+      }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("radio", { name: "Identity & compliance" }),
+      screen.getByRole("tab", { name: "Identity & compliance 1" }),
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain(
-      "2 Operations shown",
+      "2 shown",
     );
     expect(screen.queryByText("Market activity")).toBeNull();
+    expect(screen.getByRole("link", { name: "Connect your agent" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Publish an Operation" })).toBeTruthy();
   });
 
-  it("keeps admitted Operations separate with their comparison evidence", () => {
-    renderMarket({ window: "30d" });
+  it("keeps admitted Operations separate once a capability is opened", () => {
+    renderMarket({ window: "30d", capability: "identity.company_search" });
 
     expect(screen.queryByText("Exa search")).toBeNull();
     expect(
-      screen.getByRole("link", { name: "Use Company registry search" }),
+      screen.getByRole("heading", { level: 1, name: "Company Search" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("heading", { level: 3, name: "Company Search" }),
+      screen.getByRole("link", { name: "Use Company registry search" }),
     ).toBeTruthy();
-    expect(screen.getByText(/2 providers/)).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("2 shown");
     expect(screen.getByText("4.8 (24)")).toBeTruthy();
     expect(screen.getByText("842 completed calls")).toBeTruthy();
     expect(screen.getByText("420 ms")).toBeTruthy();
     expect(screen.getByText("API key connection")).toBeTruthy();
     expect(screen.getByText("Use capability")).toBeTruthy();
-    expect(
-      screen.getAllByRole("link", { name: "Set up an agent" }),
-    ).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "Catalog" })).toBeTruthy();
   });
 
   it("announces an empty Operation search truthfully", () => {
@@ -172,8 +173,9 @@ describe("market page", () => {
       },
     );
 
-    expect(screen.getByRole("status").textContent).toBe("0 Operations shown");
-    expect(screen.getByText("No tools match these filters")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("0 shown");
+    expect(screen.getByText("No Operations match these filters")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Clear filters" })).toBeTruthy();
   });
 
   it("distinguishes catalogue unavailability from an empty search", () => {
@@ -186,10 +188,39 @@ describe("market page", () => {
     );
 
     expect(
-      screen.getByText("The tool catalog is temporarily unavailable"),
+      screen.getByText("The Operation catalog is temporarily unavailable"),
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe("Catalogue unavailable");
-    expect(screen.queryByText("No tools match these filters")).toBeNull();
+    expect(screen.queryByText("No Operations match these filters")).toBeNull();
+    expect(screen.getByRole("link", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("states the page size against the catalog total and paginates browse", () => {
+    const firstItem =
+      projection.catalog.kind === "ok" ? projection.catalog.items[0] : undefined;
+    if (firstItem === undefined) {
+      throw new Error("expected catalog fixture items");
+    }
+    renderMarket(
+      { window: "30d" },
+      {
+        ...projection,
+        catalog: {
+          kind: "ok",
+          matchedCount: 136,
+          pagination: { limit: 12, hasMore: true, nextCursor: "page-2" },
+          items: [firstItem],
+        },
+      },
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "136 current Operations" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("1 of 136");
+    expect(screen.getByRole("link", { name: "Next 12" }).getAttribute("href")).toContain(
+      "cursor=page-2",
+    );
   });
 });
 

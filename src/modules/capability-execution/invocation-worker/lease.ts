@@ -16,6 +16,7 @@ export type ConnectionAuthority = Readonly<{
 }>
 
 export type ProviderLeaseAuthority = Readonly<{
+  connectionRef: string
   authorityGeneration: number
   authorityDigest: string
   grantedScopes: readonly string[]
@@ -78,6 +79,7 @@ export async function issueProviderLease(
     kind: 'issued',
     leaseRef: lease.lease.leaseRef,
     leaseAuthority: {
+      connectionRef: lease.lease.connectionRef,
       authorityGeneration: lease.lease.authorityGeneration,
       authorityDigest: lease.lease.authorityDigest,
       grantedScopes: lease.lease.grantedScopes,

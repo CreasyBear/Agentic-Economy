@@ -77,6 +77,11 @@ const bindingRegistration = defineCapabilityTransportBindingRegistration({
 const providerConnectionCommand: CreateProviderConnectionCommand = {
   commandId: 'command:create:demo',
   connectionRef: 'connection:demo',
+  owningAccountRef: 'account:owner',
+  installedByPrincipalRef: 'principal:owner',
+  authorityGrantRef: 'grant:connection',
+  authorityGrantGeneration: 1,
+  secretRef: 'env:DEMO_PROVIDER_SECRET',
   businessId: 'business-1',
   providerRef: 'provider:demo',
   providerAccountRef: 'account:demo',
@@ -528,7 +533,7 @@ describe('capability-supply eligible inventory', () => {
   })
 
   it('keeps keyless supply eligible without a provider connection', async () => {
-    const binding = admittedBinding({ authority: { kind: 'keyless' } })
+    const binding = admittedBinding({ authority: { kind: 'public_upstream' } })
     const offering = activeOffering()
     const publication = currentPublication({}, false)
     const ports = emptyPorts({

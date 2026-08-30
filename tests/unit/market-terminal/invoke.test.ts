@@ -62,47 +62,6 @@ describe('market-terminal authenticated operation invocation', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('runs an eligible free keyless call through the anonymous MCP boundary without a connection', async () => {
-    const fetchMock = vi.fn<typeof fetch>()
-    vi.stubGlobal('fetch', fetchMock)
-    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-
-    await runInvokeCommand(
-      ['operation:v1:test'],
-      { ...options, input: '{"city":"Perth"}' },
-      { executeAnonymousKeyless: async () => ({
-        kind: 'ok',
-        operationRef: 'operation:v1:test',
-        capabilityId: 'weather.forecast',
-        name: 'Weather forecast',
-        output: { temperature: 24 },
-        evidenceHash: 'sha256:evidence',
-      }) },
-    )
-
-    expect(JSON.parse(write.mock.calls.flat().join(''))).toMatchObject({
-      kind: 'ok',
-      executionMode: 'anonymous_keyless_mcp',
-      evidenceHash: 'sha256:evidence',
-    })
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('names connection as the next action when anonymous execution is not eligible', async () => {
-    await expect(runInvokeCommand(
-      ['operation:v1:test'],
-      { ...options, input: '{}' },
-      { executeAnonymousKeyless: async () => ({
-        kind: 'refused',
-        operationRef: 'operation:v1:test',
-        reason: 'operation_not_keyless',
-      }) },
-    )).rejects.toMatchObject({
-      kind: 'UNAUTHENTICATED',
-      code: 'agent_access_key_required',
-    } satisfies Partial<CliFailure>)
-  })
-
   it('projects only operation input and command identity onto the canonical HTTP service', async () => {
     setApiKey('ae-test-caller-key')
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
@@ -140,7 +99,31 @@ describe('market-terminal authenticated operation invocation', () => {
       idempotencyKey: 'idem-cli-one',
     })
     expect(String(init?.body)).not.toMatch(/endpoint|provider|credential|payment/iu)
-    expect(write.mock.calls.flat().join('')).not.toContain('ae-test-caller-key')
+    const stdout = write.mock.calls.flat().join('')
+    expect(stdout).not.toContain('ae-test-caller-key')
+    expect(stdout).not.toContain('idem-cli-one')
+  })
+
+  it('never prints raw idempotency material in human output', async () => {
+    setApiKey('ae-test-caller-key')
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'pending',
+      invocationRef: 'invocation:one',
+      operationRef: 'operation:v1:test',
+      retryAfterMs: 100,
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    await runInvokeCommand(['operation:v1:test'], {
+      ...options,
+      json: false,
+      input: '{}',
+      idempotencyKey: 'FAKE_IDEMPOTENCY_SENTINEL',
+    })
+
+    expect(stdout.mock.calls.flat().join('')).not.toContain('FAKE_IDEMPOTENCY_SENTINEL')
+    expect(stderr.mock.calls.flat().join('')).not.toContain('FAKE_IDEMPOTENCY_SENTINEL')
   })
   it('polls a pending invocation through the authenticated status route and prints the durable terminal result', async () => {
     setApiKey('ae-test-caller-key')
@@ -221,6 +204,36 @@ describe('market-terminal authenticated operation invocation', () => {
       retryable: true,
     } satisfies Partial<CliFailure>)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses the shared insufficient-credit continuation instead of status', async () => {
+    setApiKey('ae-test-caller-key')
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'completed',
+      invocationRef: 'invocation:credit',
+      operationRef: 'operation:v1:test',
+      output: {},
+      evidenceHash: 'sha256:credit',
+      usage: {
+        usageRef: 'usage:credit',
+        observedAt: 100,
+        chargeState: 'insufficient_credit',
+        amount: { currency: 'USD', units: '100', exponent: 2 },
+        priceDigest: 'sha256:price',
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    await runInvokeCommand(['operation:v1:test'], {
+      ...options,
+      input: '{}',
+      idempotencyKey: 'idem-credit',
+    })
+
+    expect(JSON.parse(write.mock.calls.flat().join(''))).toMatchObject({
+      kind: 'completed',
+      nextCommand: 'ae account balance',
+    })
   })
 
 })

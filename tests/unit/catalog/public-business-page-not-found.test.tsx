@@ -118,8 +118,8 @@ describe('ProviderListingError copy', () => {
 
     expect(screen.getByText('This supplier didn’t load')).toBeTruthy()
     expect(screen.queryByText(/registry/i)).toBeNull()
-    expect(screen.getByRole('link', { name: 'Try again' }).classList.contains('min-h-11')).toBe(true)
+    expect(screen.getByRole('link', { name: 'Try again' }).classList.contains('min-h-touch')).toBe(true)
     expect(screen.getByRole('link', { name: 'Back to catalog' }).getAttribute('href')).toContain('/market')
-    expect(screen.getByRole('link', { name: 'Back to catalog' }).classList.contains('min-h-11')).toBe(true)
+    expect(screen.getByRole('link', { name: 'Back to catalog' }).classList.contains('min-h-touch')).toBe(true)
   })
 })

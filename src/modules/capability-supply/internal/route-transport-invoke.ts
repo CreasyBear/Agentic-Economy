@@ -24,7 +24,7 @@ import {
   requestTarget,
   invokeHttp,
   type HttpConfiguration,
-  type KeylessRouteTransportAuthority,
+  type PublicUpstreamRouteTransportAuthority,
   type ProviderRouteTransportAuthority,
   type RouteTransportFetch,
 } from './route-transport-http-json'
@@ -59,11 +59,11 @@ type RouteTransportBinding<Authority extends CapabilityTransportAuthority> =
     configDigest: string
   }>
 
-export type KeylessRouteTransportInvocation = Readonly<{
+export type PublicUpstreamRouteTransportInvocation = Readonly<{
   binding: RouteTransportBinding<
-    Extract<CapabilityTransportAuthority, { kind: 'keyless' }>
+    Extract<CapabilityTransportAuthority, { kind: 'public_upstream' }>
   >
-  authority: KeylessRouteTransportAuthority
+  authority: PublicUpstreamRouteTransportAuthority
   inputJson: string
 }>
 
@@ -76,7 +76,7 @@ export type ProviderRouteTransportInvocation = Readonly<{
 }>
 
 export type RouteTransportInvocation =
-  KeylessRouteTransportInvocation | ProviderRouteTransportInvocation
+  PublicUpstreamRouteTransportInvocation | ProviderRouteTransportInvocation
 
 export type ProviderConnectionAuthorityLookup = Readonly<{
   connectionRef: string

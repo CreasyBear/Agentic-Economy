@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { runCapabilityReadinessProbe } from '@/modules/capability-supply/internal/readiness-probe'
+import {
+  HEALTHY_TTL_MS,
+  UNHEALTHY_TTL_MS,
+} from '@/modules/capability-supply/internal/readiness-probe-shared'
 
 import { keylessAuthority, target } from './readiness-probe-harness'
 
@@ -27,7 +31,7 @@ describe('capability readiness probe', () => {
     })
     expect(result).toMatchObject({
       outcome: 'healthy',
-      credentialState: 'ready', healthState: 'healthy', validUntil: 310_000,
+      credentialState: 'ready', healthState: 'healthy', validUntil: 10_000 + HEALTHY_TTL_MS,
       evidenceRefs: ['probe:credential_resolved', 'probe:target_public', 'probe:http_2xx'],
     })
     expect(send).toHaveBeenCalledOnce()
@@ -55,7 +59,7 @@ describe('capability readiness probe', () => {
     })
     expect(result).toMatchObject({
       outcome: 'healthy',
-      credentialState: 'ready', healthState: 'healthy', validUntil: 310_000,
+      credentialState: 'ready', healthState: 'healthy', validUntil: 10_000 + HEALTHY_TTL_MS,
       evidenceRefs: ['probe:credential_not_required', 'probe:target_public', 'probe:http_2xx'],
     })
     expect(resolveProviderConnectionCredential).not.toHaveBeenCalled()
@@ -71,7 +75,7 @@ describe('capability readiness probe', () => {
       now: () => 10_000,
     })).resolves.toMatchObject({
       outcome: 'credential_unavailable',
-      credentialState: 'unavailable', healthState: 'unhealthy', validUntil: 70_000,
+      credentialState: 'unavailable', healthState: 'unhealthy', validUntil: 10_000 + UNHEALTHY_TTL_MS,
       evidenceRefs: ['probe:credential_unavailable'],
     })
     expect(send).not.toHaveBeenCalled()
@@ -86,7 +90,7 @@ describe('capability readiness probe', () => {
       send: async () => response, now: () => 10_000,
     })).resolves.toMatchObject({
       outcome,
-      credentialState, healthState: 'unhealthy', validUntil: 70_000,
+      credentialState, healthState: 'unhealthy', validUntil: 10_000 + UNHEALTHY_TTL_MS,
       evidenceRefs: ['probe:credential_resolved', 'probe:target_public', evidence],
     })
   })
@@ -100,7 +104,7 @@ describe('capability readiness probe', () => {
       send, now: () => 10_000,
     })).resolves.toMatchObject({
       outcome: 'target_not_public',
-      credentialState: 'ready', healthState: 'unhealthy', validUntil: 70_000,
+      credentialState: 'ready', healthState: 'unhealthy', validUntil: 10_000 + UNHEALTHY_TTL_MS,
       evidenceRefs: ['probe:target_not_public'],
     })
     expect(validateTarget).toHaveBeenCalledOnce()

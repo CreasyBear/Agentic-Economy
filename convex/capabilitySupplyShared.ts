@@ -7,6 +7,7 @@ import {
 } from './capabilitySupplyProjection'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
+import { resolveBusinessActor } from './authz'
 
 export const contractRefValue = v.object({
   capabilityId: v.string(),
@@ -71,14 +72,14 @@ export const cancellationValue = v.object({
   kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')),
   evidenceRefs: evidenceRefsValue,
 })
-export const keylessAuthorityValue = v.object({ kind: v.literal('keyless') })
+export const publicUpstreamAuthorityValue = v.object({ kind: v.literal('public_upstream') })
 export const providerConnectionAuthorityValue = v.object({
   kind: v.literal('provider_connection'),
   connectionRef: v.string(),
   providerRef: v.string(),
 })
 export const authorityValue = v.union(
-  keylessAuthorityValue,
+  publicUpstreamAuthorityValue,
   providerConnectionAuthorityValue,
 )
 export const publicationAuthorityModeValue = v.union(
@@ -138,13 +139,12 @@ export async function ownsPublishedBusiness(
   ctx: Pick<MutationCtx | QueryCtx, 'auth' | 'db'>,
   businessId: Id<'businesses'>,
 ): Promise<boolean> {
-  const identity = await ctx.auth.getUserIdentity()
-  if (identity === null) return false
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') return false
   const business = await publishedBusiness(ctx.db, businessId)
   if (business === null) return false
 
-  const owner = await ctx.db.get(business.ownerId)
-  return owner !== null && owner.clerkUserId === identity.subject
+  return business.owningAccountRef === actor.canonicalAccountRef
 }
 
 export async function ownsPublishedBusinessForOwnerId(
@@ -154,11 +154,7 @@ export async function ownsPublishedBusinessForOwnerId(
 ): Promise<boolean> {
   const business = await publishedBusiness(ctx.db, businessId)
   if (business === null) return false
-  const owner = await ctx.db
-    .query('owners')
-    .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', ownerId))
-    .unique()
-  return owner !== null && business.ownerId === owner._id
+  return business.owningAccountRef === ownerId
 }
 
 export async function rebuildCapabilityOriginSupplyProjection(

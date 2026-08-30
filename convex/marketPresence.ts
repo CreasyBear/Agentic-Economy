@@ -4,6 +4,11 @@ import { v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import type { DataModel, Id } from './_generated/dataModel'
 import { internalMutation, type MutationCtx, type QueryCtx } from './_generated/server'
+import {
+  parseWorkloadCronSnapshot,
+  reconcileWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+} from './workloadCron'
 
 const PRESENCE_REFRESH_PAGE_SIZE = 20
 
@@ -78,9 +83,17 @@ export async function countMarketPresence(ctx: QueryCtx): Promise<{ operations: 
  * Operation after its readiness window expires without another publication.
  */
 export const refresh = internalMutation({
-  args: { cursor: v.union(v.string(), v.null()) },
+  args: {
+    cursor: v.union(v.string(), v.null()),
+    workload: workloadCronSnapshotValue,
+  },
   returns: v.object({ processed: v.number(), complete: v.boolean() }),
   handler: async (ctx, args) => {
+    await reconcileWorkloadCronSnapshot(
+      ctx,
+      'refresh current market presence',
+      parseWorkloadCronSnapshot(args.workload),
+    )
     const now = Date.now()
     const page = await ctx.db.query('capabilityPublications').paginate({
       cursor: args.cursor,
@@ -98,7 +111,9 @@ export const refresh = internalMutation({
       })
     }
     if (!page.isDone) {
-      await ctx.scheduler.runAfter(0, internal.marketPresence.refresh, { cursor: page.continueCursor })
+      await ctx.scheduler.runAfter(0, internal.workloadCron.refreshCurrentMarketPresence, {
+        cursor: page.continueCursor,
+      })
     }
     return { processed: page.page.length, complete: page.isDone }
   },

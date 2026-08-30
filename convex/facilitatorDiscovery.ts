@@ -20,10 +20,11 @@ import {
   parseFacilitatorDiscoverySourceImport,
 } from '@/modules/capability-supply/convex'
 import { isRecord } from '@/modules/common/is-record'
+import { generateAccountRef } from '@/modules/principal-account/account/public'
 
 import type { Id } from './_generated/dataModel'
 import { internalMutation, type MutationCtx } from './_generated/server'
-import { toDomain, toRow } from './capabilityProviderConnectionLifecycle'
+import { toDomain, toRow } from './lib/providerConnections/lifecycle'
 import {
   capabilityPublicationBindingValue,
   capabilityPublicationOfferingValue,
@@ -31,8 +32,12 @@ import {
   publishBootstrapCapability,
 } from './capabilitySupplyPublish'
 import { rebuildCapabilityOriginSupplyProjection } from './capabilitySupplyShared'
+import {
+  parseWorkloadCronSnapshot,
+  reconcileWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+} from './workloadCron'
 const SOURCE_EVIDENCE = 'source:facilitator-discovery'
-const BUSINESS_OWNER_PREFIX = 'system:facilitator-discovery:'
 const BUSINESS_SOURCE_KIND = 'facilitator-discovery-business:v1'
 const MAX_RECONCILE_ITEMS = 100
 const MAX_RECONCILE_ITEM_BYTES = 262_144
@@ -182,9 +187,15 @@ export const reconcile = internalMutation({
     complete: v.boolean(),
     seenPublicationRefs: v.optional(v.array(v.string())),
     deadlineAt: v.number(),
+    workload: workloadCronSnapshotValue,
   },
   returns: reconcileResult,
   handler: async (ctx, args) => {
+    await reconcileWorkloadCronSnapshot(
+      ctx,
+      args.workload.name,
+      parseWorkloadCronSnapshot(args.workload),
+    )
     if (
       args.items.length > MAX_RECONCILE_ITEMS
       || args.items.some((item) => {
@@ -254,6 +265,24 @@ async function reconcileDraft(
   if (sourceImport === undefined) return 'skipped'
   const route = routeIdentity(sourceImport)
   if (route === undefined) return 'skipped'
+  const pricingConfig: PricingConfig = {
+    version: 'pricing:v2',
+    unit: 'call',
+    providerAmount: draft.price.provider,
+    platformFee: draft.price.platformFee,
+    paidAmount: draft.price.total,
+  }
+  const sourceRevision = draft.sourceRevision
+  const probe = await preparePublicationDraft({
+    source: sourceImport,
+    sourceRevision,
+    pricingConfig,
+    offering: draft.offering,
+    binding: draft.binding,
+    evidenceRefs: [SOURCE_EVIDENCE],
+    derefSchema: dereferenceLocalSchema,
+  })
+  if (probe.kind === 'refused') return 'skipped'
   const business = await ensureProviderBusiness(ctx, route.host, now)
   if (business === undefined) return 'skipped'
   const connection = await ensureProviderConnection(ctx, business.businessId, route.resourceUrl, now)
@@ -269,14 +298,6 @@ async function reconcileDraft(
       providerRef: connection.providerRef,
     },
   }
-  const pricingConfig: PricingConfig = {
-    version: 'pricing:v2',
-    unit: 'call',
-    providerAmount: draft.price.provider,
-    platformFee: draft.price.platformFee,
-    paidAmount: draft.price.total,
-  }
-  const sourceRevision = draft.sourceRevision
   const prepared = await preparePublicationDraft({
     source: sourceImport,
     sourceRevision,
@@ -287,7 +308,9 @@ async function reconcileDraft(
     derefSchema: dereferenceLocalSchema,
   })
   if (prepared.kind === 'refused') {
-    if (business.created || business.activated) throw new Error('facilitator_discovery_publication_prepare_failed')
+    if (business.created || business.activated) {
+      throw new Error(`facilitator_discovery_publication_prepare_failed:${prepared.reason}`)
+    }
     return 'skipped'
   }
   const publicationRef = draft.offering.offeringId
@@ -327,7 +350,9 @@ async function reconcileDraft(
       ...context,
     })
     if (result.kind === 'refused') {
-      if (business.created || business.activated) throw new Error('facilitator_discovery_publication_failed')
+      if (business.created || business.activated) {
+        throw new Error(`facilitator_discovery_publication_failed:${result.reason}`)
+      }
       return 'skipped'
     }
     return 'published'
@@ -365,28 +390,19 @@ async function ensureProviderBusiness(
   host: string,
   now: number,
 ): Promise<Readonly<{ businessId: Id<'businesses'>; created: boolean; activated: boolean }> | undefined> {
-  const ownerKey = `${BUSINESS_OWNER_PREFIX}${host}`
-  const owner = await ctx.db.query('owners').withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', ownerKey)).unique()
   const businessSlug = providerBusinessSlug(host)
   const existingBusiness = await ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', businessSlug)).unique()
   if (existingBusiness !== null) {
-    const existingOwner = await ctx.db.get(existingBusiness.ownerId)
-    if (existingOwner === null || existingOwner.clerkUserId !== ownerKey || existingBusiness.suppressedAt !== undefined) return undefined
+    if (existingBusiness.suppressedAt !== undefined) return undefined
     if (existingBusiness.businessContext.kind !== 'programmable_provider'
       || existingBusiness.businessContext.providerIdentifier !== `provider:x402:${host}`) return undefined
     const activated = existingBusiness.publicStatus !== 'published'
     if (activated) await ctx.db.patch(existingBusiness._id, { publicStatus: 'published', updatedAt: now })
     return { businessId: existingBusiness._id, created: false, activated }
   }
-  const resolvedOwner = owner?._id ?? await ctx.db.insert('owners', {
-    clerkUserId: ownerKey,
-    displayName: `x402 ${host}`,
-    createdAt: now,
-    updatedAt: now,
-  })
   const sourceHash = canonicalDigest({ kind: BUSINESS_SOURCE_KIND, host })
   const businessId = await ctx.db.insert('businesses', {
-    ownerId: resolvedOwner,
+    owningAccountRef: generateAccountRef(),
     slug: businessSlug,
     name: `x402 ${host}`,
     normalizedName: `x402 ${host}`.toLowerCase(),
@@ -433,6 +449,8 @@ async function ensureProviderConnection(
       ? connection
       : undefined
   }
+  const business = await ctx.db.get(businessId)
+  if (business === null) return undefined
   const commandId = `facilitator-discovery:connection:${canonicalDigest(identity).slice(7)}`
   const result = createX402ProviderConnection({
     commandId,
@@ -442,6 +460,10 @@ async function ensureProviderConnection(
     providerAccountRef,
     resourceUrl,
     evidenceRefs: [SOURCE_EVIDENCE],
+    owningAccountRef: business.owningAccountRef,
+    installedByPrincipalRef: FACILITATOR_DISCOVERY_PUBLISHER_REF,
+    authorityGrantRef: `observed:${FACILITATOR_DISCOVERY_PUBLISHER_REF}`,
+    authorityGrantGeneration: 1,
   }, now)
   if (result.kind !== 'applied') return undefined
   await ctx.db.insert('capabilityProviderConnections', toRow(result.connection, commandId, result.commandDigest))
@@ -496,8 +518,8 @@ async function withdrawMissing(
     if (remaining.length !== 0) continue
     const business = await ctx.db.get(businessId)
     if (business === null) continue
-    const owner = await ctx.db.get(business.ownerId)
-    if (owner?.clerkUserId.startsWith(BUSINESS_OWNER_PREFIX)) {
+    if (business.businessContext.kind === 'programmable_provider'
+      && business.businessContext.providerIdentifier.startsWith('provider:x402:')) {
       await ctx.db.patch(businessId, { publicStatus: 'unpublished', updatedAt: now })
     }
   }

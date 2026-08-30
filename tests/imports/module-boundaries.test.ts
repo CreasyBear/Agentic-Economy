@@ -20,7 +20,7 @@ describe('module surface and dependency manifest', () => {
   it('enforces every current runtime module import through the target DAG or one bounded exception', () => {
     const result = scanModuleBoundaries({ manifest: MODULE_BOUNDARY_MANIFEST })
     expect(result.violations).toEqual([])
-    expect(result.moduleCount).toBe(22)
+    expect(result.moduleCount).toBe(27)
     expect(result.cycles).toEqual([])
     expect(result.usedRuntimeExceptionIds).toHaveLength(
       MODULE_BOUNDARY_MANIFEST.temporaryRuntimeExceptions.filter(

@@ -98,6 +98,12 @@ export function setPublicSourceTransportForTests(
 
 export const sourceConvexApi = anyApi
 
+const materializeCurrentInteractiveAuthorityMutation = makeFunctionReference<
+  'mutation',
+  Record<string, never>,
+  boolean
+>('interactiveAuthority:materializeCurrentInteractiveAuthority')
+
 export function sourceQuery<Args extends DefaultFunctionArgs = DefaultFunctionArgs, Result = unknown>(
   name: string
 ): FunctionReference<'query', 'public', Args, Result> {
@@ -147,13 +153,31 @@ export async function createAuthenticatedConvexClient(
   const authObject = options.authObject ?? (await auth())
   const token = await readRequiredConvexAuthToken(authObject, options.tokenTemplate ?? 'convex')
 
-  return new ConvexHttpClient(convexUrl, {
+  const client = new ConvexHttpClient(convexUrl, {
     auth: token,
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     ...(options.skipConvexDeploymentUrlCheck === undefined
       ? {}
       : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),
   })
+  let materialized: boolean
+  try {
+    materialized = await client.mutation(materializeCurrentInteractiveAuthorityMutation, {})
+  } catch (error) {
+    throw new ConvexSourceError(
+      'missing_auth',
+      `Authenticated source authority could not be armed. ${String(error)}`,
+      503,
+    )
+  }
+  if (!materialized) {
+    throw new ConvexSourceError(
+      'missing_auth',
+      'Authenticated source authority is not current.',
+      401,
+    )
+  }
+  return client
 }
 
 function createPublicConvexClient(options: Pick<CreateAuthenticatedConvexClientOptions, 'env' | 'fetch' | 'skipConvexDeploymentUrlCheck'> = {}): ConvexHttpClient {

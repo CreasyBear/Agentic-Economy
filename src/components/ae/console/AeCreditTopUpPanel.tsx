@@ -8,7 +8,6 @@ import {
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
@@ -51,6 +50,7 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
   const [recovery, setRecovery] = useState<RecoveryLocator>()
   const idempotencyKey = useRef<string | undefined>(undefined)
   const recoveryAttempted = useRef(false)
+  const targetPrincipalId = target?.principalId
 
   const stripePromise = useMemo(() => {
     const key = (publishableKey ?? import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)?.trim()
@@ -73,7 +73,7 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
       if (result.evidence.status === 'failed') setErrorMessage('The provider did not complete this payment. No credit was added.')
       if (result.evidence.status === 'outcome_unknown') setErrorMessage('Payment status is still being verified. No credit was added by this browser return.')
       setRecovery(locator)
-      persistRecovery(target?.principalId, locator)
+      persistRecovery(targetPrincipalId, locator)
       try {
         await onRefresh?.()
       } catch {
@@ -85,7 +85,7 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
     } finally {
       setChecking(false)
     }
-  }, [onRefresh, port, target?.principalId])
+  }, [onRefresh, port, targetPrincipalId])
 
   useEffect(() => {
     if (target === undefined || port === undefined || recoveryAttempted.current) return
@@ -157,12 +157,7 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
   const showSetupRefusal = target !== undefined && stripePromise === null && session === undefined
 
   return (
-    <Card className="border border-border bg-card">
-      <CardHeader>
-        <CardTitle>Add credit for paid calls</CardTitle>
-        <CardDescription>Paid calls use this credit. The server fixes the exact credit amount, fee, and charge before payment.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
+    <div className="grid gap-3">
         {target === undefined ? (
           <Alert>
             <AlertTitle>Credit is unavailable for this account</AlertTitle>
@@ -216,26 +211,25 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
             <p id="credit-topup-amount-help" className="text-xs text-muted-foreground">The configured minimum and maximum are enforced by the authenticated server.</p>
           </div>
         ) : null}
-      </CardContent>
-      <CardFooter className="gap-2">
+      <div className="flex flex-wrap gap-2">
         {session === undefined && recovery === undefined ? (
           <Button
             variant="secondary"
             disabled={pending || checking || target === undefined || port === undefined}
             onClick={() => void beginTopUp()}
-            className="min-h-11"
+            className="min-h-touch"
           >
             {pending ? <Spinner data-icon="inline-start" /> : null}
             {pending ? 'Preparing secure payment…' : 'Add credit for paid calls'}
           </Button>
         ) : recovery !== undefined && (paymentStatus === 'pending' || paymentStatus === 'outcome_unknown') ? (
-          <Button type="button" variant="ghost" disabled={checking || pending} onClick={() => void refreshPayment()} className="min-h-11">
+          <Button type="button" variant="ghost" disabled={checking || pending} onClick={() => void refreshPayment()} className="min-h-touch">
             {checking ? <Spinner data-icon="inline-start" /> : null}
             {checking ? 'Checking payment…' : 'Refresh payment status'}
           </Button>
         ) : null}
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   )
 }
 
@@ -271,7 +265,7 @@ function CheckoutPaymentForm({ confirming, onConfirmed }: Readonly<{ confirming:
   return (
     <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); void confirmPayment() }}>
       <PaymentElement />
-      <Button type="submit" disabled={confirming || confirmingLocal} className="min-h-11">
+      <Button type="submit" disabled={confirming || confirmingLocal} className="min-h-touch">
         {confirming || confirmingLocal ? <Spinner data-icon="inline-start" /> : null}
         {confirming || confirmingLocal ? 'Confirming payment…' : 'Pay securely'}
       </Button>

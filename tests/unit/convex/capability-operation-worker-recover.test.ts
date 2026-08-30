@@ -18,7 +18,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { materializeRuntimePublishedOperation } from '@/modules/capability-supply/public'
 import { brokeredChargeReservationForRecovery } from '@/modules/capability-execution/invocation-worker/charge'
-import { recoverCapabilityOperationInvocation } from '@/modules/capability-execution/invocation-worker/recover'
+import { recoverCapabilityOperationInvocation, expireAuthorizationRecovery } from '@/modules/capability-execution/invocation-worker/recover'
 import { externalSpendIdentityFromAttempt } from '@/modules/capability-execution/invocation-worker/x402Settlement'
 import { mintExternalSpendIdentity } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -750,11 +750,10 @@ describe('capability operation invocation worker recover', () => {
     })
     const expiryWorker = createWorker('x402')
     const appliedSetup = configureExpiryRecovery(expiryWorker, 'applied')
-    const appliedResult = await recoverCapabilityOperationInvocation(expiryWorker.ctx as never, {
+    const appliedResult = await expireAuthorizationRecovery(expiryWorker.ctx as never, {
       invocationRef,
       principalId: String(expiryWorker.state.dispatch.principalId),
       credentialId: String(expiryWorker.state.dispatch.credentialId),
-      mode: 'expire_authorization',
     })
     expect(appliedResult).toMatchObject({
       kind: 'reconciliation_required',
@@ -783,11 +782,10 @@ describe('capability operation invocation worker recover', () => {
 
     const manualWorker = createWorker('x402')
     const manualSetup = configureExpiryRecovery(manualWorker, 'failed')
-    const manualResult = await recoverCapabilityOperationInvocation(manualWorker.ctx as never, {
+    const manualResult = await expireAuthorizationRecovery(manualWorker.ctx as never, {
       invocationRef,
       principalId: String(manualWorker.state.dispatch.principalId),
       credentialId: String(manualWorker.state.dispatch.credentialId),
-      mode: 'expire_authorization',
     })
     expect(manualResult).toMatchObject({
       kind: 'reconciliation_required',

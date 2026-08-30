@@ -7,18 +7,18 @@ import {
   OperationKeyStatusValues,
 } from '@/modules/observability/public'
 import {
-  StoredAuditEventTypeValues,
-  StoredAuditTargetTypeValues,
-} from '@/modules/observability/stored-compatibility'
+  AuditEventTypeValues,
+  AuditTargetTypeValues,
+} from '@/modules/common/audit-events'
 
 export const observabilityTables = {
   auditEvents: defineTable({
     eventId: v.string(),
-    eventType: literalUnion(StoredAuditEventTypeValues),
+    eventType: literalUnion(AuditEventTypeValues),
     actorKind: literalUnion(ActorKindValues),
     actorRef: v.string(),
     businessId: v.optional(v.id('businesses')),
-    targetType: literalUnion(StoredAuditTargetTypeValues),
+    targetType: literalUnion(AuditTargetTypeValues),
     targetRef: v.string(),
     beforeState: v.optional(v.string()),
     afterState: v.optional(v.string()),

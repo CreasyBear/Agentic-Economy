@@ -6,6 +6,26 @@ const mocks = vi.hoisted(() => ({
   readCurrentPublishedOperation: vi.fn(async (): Promise<unknown> => undefined),
 }))
 
+vi.mock('../../../convex/authz', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../convex/authz')>()),
+  resolveBusinessActor: vi.fn(async (ctx: { auth: { getUserIdentity: () => Promise<AuthIdentity | null> } }) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return { kind: 'anonymous', anonymousBucket: 'convex:anonymous' }
+    return {
+      kind: 'authenticated_owner',
+      clerkUserId: identity.tokenIdentifier,
+      canonicalPrincipalRef: identity.tokenIdentifier === 'clerk|user_123'
+        ? `prn_${'1'.repeat(32)}`
+        : `prn_${'9'.repeat(32)}`,
+      canonicalAccountRef: identity.tokenIdentifier === 'clerk|user_123'
+        ? `acc_${'2'.repeat(32)}`
+        : `acc_${'8'.repeat(32)}`,
+      authorityRevision: {},
+      authorityProvenance: {},
+    }
+  }),
+}))
+
 vi.mock('../../../convex/marketDispatchWorkpool', () => ({
   marketDispatchWorkpool: { enqueueAction: mocks.enqueueAction },
 }))
@@ -144,8 +164,8 @@ mocks.readCurrentPublishedOperation.mockResolvedValue(operation)
 const input = { symbol: 'BTC', convert: 'USD' }
 const now = operation.readiness.observedAt + 1_000
 const grantExpiresAt = now + 60_000
-const owner = 'clerk|user_123'
-const ownerIdentity: AuthIdentity = { subject: 'user_123', tokenIdentifier: owner }
+const owner = `acc_${'2'.repeat(32)}`
+const ownerIdentity: AuthIdentity = { subject: 'user_123', tokenIdentifier: 'clerk|user_123' }
 const principal: AgentAccessPrincipal = {
   principalId: 'principal:approval',
   ownerId: owner,
@@ -419,6 +439,8 @@ describe('bounded mandate invocation dispatch', () => {
         switch (functionPath(reference)) {
           case 'capabilityOperationInvocations:admit':
             return { kind: 'accepted' }
+          case 'capabilityOperationInvocations:resolveInvocationAgentAuthority':
+            return args.principal
           case 'capabilityOperationInvocations:reserve':
             return { kind: 'reserved', reservation }
           case 'capabilityOperationInvocations:dispatch':
@@ -492,6 +514,8 @@ describe('invocation admission after an empty pending replay', () => {
         switch (functionPath(reference)) {
           case 'capabilityOperationInvocations:admit':
             return { kind: 'accepted' }
+          case 'capabilityOperationInvocations:resolveInvocationAgentAuthority':
+            return args.principal
           case 'capabilityOperationInvocations:reserve':
             return { kind: 'replayed', reservation }
           case 'capabilityOperationInvocations:abandon':

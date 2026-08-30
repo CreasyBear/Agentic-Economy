@@ -1,9 +1,5 @@
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { isRecord } from '@/modules/common/is-record'
-import {
-  defaultDnsResolver,
-  isPublicHttpTarget,
-} from '@/modules/network-guard/public'
 import { eip3009ABI } from '@x402/evm'
 import {
   createPublicClient,
@@ -58,6 +54,7 @@ export async function readGuardedX402EvmReceipt(input: Readonly<{
   nonce: string
   dispatcher: Agent
 }>): Promise<X402EvmReceipt | undefined> {
+  const { defaultDnsResolver, isPublicHttpTarget } = await import('@/modules/network-guard/public')
   if (
     input.target.protocol !== 'https:'
     || input.network !== BASE_NETWORK

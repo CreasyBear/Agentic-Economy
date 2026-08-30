@@ -1,0 +1,584 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "/owner/settings": {
+      "targetKind": "existing-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "baselineDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "activeDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md",
+        "src/styles/globals.css:117:233",
+        "src/components/ae/settings/OwnerSettingsNav.tsx",
+        "src/components/ae/settings/OwnerSettingsSections.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618",
+        ".superdesign/init/theme.md": "07832fb75e2312b2ca7343b43c4623d5622cf189de67a4db87d36f2336f66768",
+        "src/styles/globals.css": "c19cb4ae2af332418368a4e9a70d2648b920607d65ab4a12b08889384e97dd22",
+        "src/components/ae/settings/OwnerSettingsNav.tsx": "ec96445181fde25fb64a1209f4f4a509b5c1646add7b4e0750e7a6cd55ddcefd",
+        "src/components/ae/settings/OwnerSettingsSections.tsx": "799d3d9108fd0e3a6c6ae99d9b343778a027957fd8f23f39499e2ac137fe8628"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        },
+        {
+          "name": "SettingsNav",
+          "id": "ec3ae7f7-db08-4a0e-9d28-c7f7a7a57bcd",
+          "sourcePath": "src/components/ae/settings/OwnerSettingsNav.tsx"
+        }
+      ],
+      "drafts": {
+        "1cd410f3-2476-4ca0-8141-920d24bfb4e9": {
+          "title": "Settings \u2014 AECON",
+          "visualDirection": "redesigned settings: one title, slim tab strip, no nested page",
+          "currentVersion": 9
+        }
+      },
+      "updatedAt": "2026-08-27T05:44:11Z"
+    },
+    "/owner/settings/workspace": {
+      "targetKind": "new-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "activeDraftId": "a133177b-97ad-4175-a056-2a4027d006b5",
+      "sourceTarget": "/owner/settings",
+      "sourceDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        },
+        {
+          "name": "SettingsNav",
+          "id": "ec3ae7f7-db08-4a0e-9d28-c7f7a7a57bcd",
+          "sourcePath": "src/components/ae/settings/OwnerSettingsNav.tsx"
+        }
+      ],
+      "drafts": {
+        "a133177b-97ad-4175-a056-2a4027d006b5": {
+          "title": "Settings General",
+          "visualDirection": "one-frame operator sibling from stitched settings",
+          "parentDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-27T05:44:11Z"
+    },
+    "/owner/settings/members": {
+      "targetKind": "new-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "activeDraftId": "956f7914-0f98-4224-9e1a-898d9b48b5b2",
+      "sourceTarget": "/owner/settings",
+      "sourceDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        },
+        {
+          "name": "SettingsNav",
+          "id": "ec3ae7f7-db08-4a0e-9d28-c7f7a7a57bcd",
+          "sourcePath": "src/components/ae/settings/OwnerSettingsNav.tsx"
+        }
+      ],
+      "drafts": {
+        "956f7914-0f98-4224-9e1a-898d9b48b5b2": {
+          "title": "Settings Members",
+          "visualDirection": "one-frame operator sibling from stitched settings",
+          "parentDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-27T05:44:11Z"
+    },
+    "/owner/settings/developers": {
+      "targetKind": "new-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "activeDraftId": "787b17cb-65d7-4339-a6cb-dd1a9bc4388a",
+      "sourceTarget": "/owner/settings",
+      "sourceDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        },
+        {
+          "name": "SettingsNav",
+          "id": "ec3ae7f7-db08-4a0e-9d28-c7f7a7a57bcd",
+          "sourcePath": "src/components/ae/settings/OwnerSettingsNav.tsx"
+        }
+      ],
+      "drafts": {
+        "787b17cb-65d7-4339-a6cb-dd1a9bc4388a": {
+          "title": "Settings Keys and APIs",
+          "visualDirection": "one-frame operator sibling from stitched settings",
+          "parentDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-27T05:44:11Z"
+    },
+    "brand-kit": {
+      "targetKind": "new-ui",
+      "projectId": "dc8a1047-8b41-470e-a5c8-0008c873d051",
+      "activeDraftId": "85373aa8-1662-4e09-a509-ae81b9c0d325",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark",
+        "public-brand-logo-aecon-wordmark",
+        "public-brand-image-aecon-header"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/dc8a1047-8b41-470e-a5c8-0008c873d051/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618"
+      },
+      "components": [],
+      "drafts": {
+        "85373aa8-1662-4e09-a509-ae81b9c0d325": {
+          "title": "AECON Brand Guidelines Kit",
+          "visualDirection": "light dual-surface brand kit, green accents, AECON is Agentic Economy",
+          "currentVersion": 2
+        }
+      },
+      "updatedAt": "2026-08-27T05:31:30Z"
+    },
+    "/owner/offerings": {
+      "targetKind": "new-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "activeDraftId": "beecb479-dc2c-4eed-8825-7d3e20534d7a",
+      "sourceTarget": "/owner/settings",
+      "sourceDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "src/routes/_operator/owner.offerings.tsx",
+        "src/routes/_operator/activity.tsx",
+        "src/routes/_operator/owner.credit.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618",
+        "src/routes/_operator/owner.offerings.tsx": "d5c8d7918ed93d2ee64f0176b4832760bd76b83f97e88d52bec08acf414ce5a6",
+        "src/routes/_operator/activity.tsx": "ad27210ce3acceafec998a3342d92c1dce23f4e27a8c3c691ac320b7c6234594",
+        "src/routes/_operator/owner.credit.tsx": "b917632c54d3b056c56db08c350692350880dcde34668fd1a0c489d72d6e1f82"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        }
+      ],
+      "drafts": {
+        "beecb479-dc2c-4eed-8825-7d3e20534d7a": {
+          "title": "Operations",
+          "visualDirection": "stitched one-frame operator sibling",
+          "parentDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-27T05:37:11Z"
+    },
+    "/activity": {
+      "targetKind": "new-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "activeDraftId": "f43ae14a-0152-4534-8718-007c3ea4469e",
+      "sourceTarget": "/owner/settings",
+      "sourceDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "src/routes/_operator/owner.offerings.tsx",
+        "src/routes/_operator/activity.tsx",
+        "src/routes/_operator/owner.credit.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618",
+        "src/routes/_operator/owner.offerings.tsx": "d5c8d7918ed93d2ee64f0176b4832760bd76b83f97e88d52bec08acf414ce5a6",
+        "src/routes/_operator/activity.tsx": "ad27210ce3acceafec998a3342d92c1dce23f4e27a8c3c691ac320b7c6234594",
+        "src/routes/_operator/owner.credit.tsx": "b917632c54d3b056c56db08c350692350880dcde34668fd1a0c489d72d6e1f82"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        }
+      ],
+      "drafts": {
+        "f43ae14a-0152-4534-8718-007c3ea4469e": {
+          "title": "Calls",
+          "visualDirection": "stitched one-frame operator sibling",
+          "parentDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-27T05:37:11Z"
+    },
+    "/owner/credit": {
+      "targetKind": "new-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "activeDraftId": "ee32ab8b-8f78-4991-8403-24936adb1cfc",
+      "sourceTarget": "/owner/settings",
+      "sourceDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "src/routes/_operator/owner.offerings.tsx",
+        "src/routes/_operator/activity.tsx",
+        "src/routes/_operator/owner.credit.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618",
+        "src/routes/_operator/owner.offerings.tsx": "d5c8d7918ed93d2ee64f0176b4832760bd76b83f97e88d52bec08acf414ce5a6",
+        "src/routes/_operator/activity.tsx": "ad27210ce3acceafec998a3342d92c1dce23f4e27a8c3c691ac320b7c6234594",
+        "src/routes/_operator/owner.credit.tsx": "b917632c54d3b056c56db08c350692350880dcde34668fd1a0c489d72d6e1f82"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        }
+      ],
+      "drafts": {
+        "ee32ab8b-8f78-4991-8403-24936adb1cfc": {
+          "title": "Credit",
+          "visualDirection": "stitched one-frame operator sibling",
+          "parentDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-27T05:37:11Z"
+    },
+    "/agent-access": {
+      "targetKind": "new-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "activeDraftId": "f50c43dd-109b-4bfc-94fe-54f0c3a4626a",
+      "sourceTarget": "/owner/settings",
+      "sourceDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        }
+      ],
+      "drafts": {
+        "f50c43dd-109b-4bfc-94fe-54f0c3a4626a": {
+          "title": "Keys",
+          "visualDirection": "one-frame operator sibling from stitched settings",
+          "parentDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-27T05:44:11Z"
+    },
+    "/owner/status": {
+      "targetKind": "new-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "activeDraftId": "2b7fa141-b951-4771-89d1-9bc32869a6d3",
+      "sourceTarget": "/owner/settings",
+      "sourceDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        }
+      ],
+      "drafts": {
+        "2b7fa141-b951-4771-89d1-9bc32869a6d3": {
+          "title": "Supplier",
+          "visualDirection": "one-frame operator sibling from stitched settings",
+          "parentDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-27T05:44:11Z"
+    },
+    "/owner/supply": {
+      "targetKind": "new-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "activeDraftId": "39be1dc5-8375-4596-bf62-f47f689efa22",
+      "sourceTarget": "/owner/settings",
+      "sourceDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        }
+      ],
+      "drafts": {
+        "39be1dc5-8375-4596-bf62-f47f689efa22": {
+          "title": "Publish",
+          "visualDirection": "one-frame operator sibling from stitched settings",
+          "parentDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-27T05:44:11Z"
+    },
+    "/owner/settings/connections": {
+      "targetKind": "new-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "activeDraftId": "f20ce8e0-9af6-42f6-984f-5f0877c52da2",
+      "sourceTarget": "/owner/settings",
+      "sourceDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        },
+        {
+          "name": "SettingsNav",
+          "id": "ec3ae7f7-db08-4a0e-9d28-c7f7a7a57bcd",
+          "sourcePath": "src/components/ae/settings/OwnerSettingsNav.tsx"
+        }
+      ],
+      "drafts": {
+        "f20ce8e0-9af6-42f6-984f-5f0877c52da2": {
+          "title": "Settings Connections",
+          "visualDirection": "one-frame operator sibling from stitched settings",
+          "parentDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-27T05:44:11Z"
+    },
+    "/owner/settings/payouts": {
+      "targetKind": "new-ui",
+      "projectId": "f3f54096-6042-4e2b-9a4e-133d75277088",
+      "activeDraftId": "306f86e9-4336-4e48-af3f-185c10ec0dff",
+      "sourceTarget": "/owner/settings",
+      "sourceDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-brand-logo-aecon-mark"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-brand-logo-aecon-mark",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/f3f54096-6042-4e2b-9a4e-133d75277088/brand-assets/public-brand-logo-aecon-mark/mark.jpg",
+          "sourcePath": "public/brand/aecon/mark.jpg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "55637649e979db0894778d60fcf7f020ee6ca103b8885a251b20566ea6fd5618"
+      },
+      "components": [
+        {
+          "name": "OperatorSidebar",
+          "id": "1d1da45f-d653-4113-b5fc-26002a809eae",
+          "sourcePath": "src/components/ae/layout/AeOperatorSidebar.tsx",
+          "logoAssetKey": "public-brand-logo-aecon-mark"
+        },
+        {
+          "name": "SettingsNav",
+          "id": "ec3ae7f7-db08-4a0e-9d28-c7f7a7a57bcd",
+          "sourcePath": "src/components/ae/settings/OwnerSettingsNav.tsx"
+        }
+      ],
+      "drafts": {
+        "306f86e9-4336-4e48-af3f-185c10ec0dff": {
+          "title": "Settings Payouts",
+          "visualDirection": "one-frame operator sibling from stitched settings",
+          "parentDraftId": "1cd410f3-2476-4ca0-8141-920d24bfb4e9",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-27T05:44:11Z"
+    }
+  }
+}

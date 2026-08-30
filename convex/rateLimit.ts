@@ -8,6 +8,7 @@ const internalRateLimitName = v.union(
   v.literal('public-read'),
   v.literal('public-mutation'),
   v.literal('oauth-issuance'),
+  v.literal('oauth-device-poll'),
   v.literal('chat-submit'),
   v.literal('chat-anonymous'),
   v.literal('dispute-open'),
@@ -17,6 +18,7 @@ const publicHttpRateLimitName = v.union(
   v.literal('public-read'),
   v.literal('public-mutation'),
   v.literal('oauth-issuance'),
+  v.literal('oauth-device-poll'),
   v.literal('dispute-open'),
 )
 

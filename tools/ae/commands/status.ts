@@ -1,13 +1,23 @@
 import { isRecord } from '@/modules/common/is-record'
+import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   operationInvokeStatusResultSchema,
   operationStatusInputSchema,
 } from '@/modules/capability-execution/operation-recovery.actions'
-import type { OperationInvokeStatusResult } from '@/modules/capability-execution/operation-recovery-contracts'
+import {
+  operationInvokeStatusStateSchema,
+  type OperationInvokeStatusResult,
+} from '@/modules/capability-execution/operation-recovery-contracts'
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
+import { usageFailure } from '../lib/help'
+import {
+  connectionContinuationForCli,
+  creditContinuationForCli,
+  invocationContinuationForCli,
+} from '../lib/suggested-continuation-adapter'
 
 export const MAX_STATUS_WAIT_MS = 60_000
 export const MIN_STATUS_DELAY_MS = 100
@@ -30,9 +40,11 @@ const LOOPBACK_HOSTNAMES: Record<string, true> = { localhost: true, '127.0.0.1':
 
 function configuredApiKeyOrigin(options: CliOptions, rawOrigin: string | undefined): string {
   if (rawOrigin === undefined || rawOrigin.trim().length === 0) {
-    throw new CliFailure('Connect this agent to the selected Agentic Economy origin first.', {
+    throw new CliFailure('Bind the existing credential to the selected Agentic Economy origin before using it.', {
       kind: 'INVALID_ARGUMENT',
       code: 'agent_access_key_origin_required',
+      suggestion: 'Preserve the current credential identity and bind it to the exact selected origin.',
+      nextCommand: `export AE_API_KEY_ORIGIN=${JSON.stringify(new URL(options.baseUrl).origin)}`,
     })
   }
 
@@ -85,12 +97,25 @@ function configuredApiKeyOrigin(options: CliOptions, rawOrigin: string | undefin
   return originUrl.origin
 }
 
-export function requireAgentAccessKey(command: string, options: CliOptions): string {
-  const credential = resolveAgentAccessCredential(options.baseUrl)
+export function requireAgentAccessKey(command: string, options: CliOptions, requiredScope?: string): string {
+  const credential = resolveAgentAccessCredential(options.baseUrl, requiredScope)
   if (credential === undefined) {
-    throw new CliFailure(`Run ae connect before operation ${command}.`, {
+    const shouldAuthorizeNow = command === 'invoke'
+      || command === 'connect'
+      || command === 'request create'
+      || command.startsWith('supply ')
+    const buyerConnection = connectionContinuationForCli('buyer')
+    const connect = requiredScope === MARKET_SUPPLY_MANAGE_SCOPE
+      ? { label: 'Authorize supplier access for this exact origin.', command: 'ae connect --supplier' }
+      : { label: buyerConnection?.label ?? 'Authorize buyer access for this exact origin.', command: buyerConnection?.command ?? 'ae connect' }
+    const continuation = shouldAuthorizeNow
+      ? connect
+      : { label: 'Inspect origin-bound connections before authorizing a new identity.', command: 'ae account connections' }
+    throw new CliFailure(`No matching credential is selected for ${command} on this origin.`, {
       kind: 'UNAUTHENTICATED',
       code: 'agent_access_key_required',
+      suggestion: continuation.label,
+      nextCommand: continuation.command,
     })
   }
   configuredApiKeyOrigin(options, credential.origin)
@@ -195,14 +220,29 @@ export function renderStatusResult(
     ['status', typeof record?.state === 'string' ? record.state : typeof record?.kind === 'string' ? record.kind : 'unknown'],
     ['operation', typeof record?.operationRef === 'string' ? record.operationRef : 'unknown'],
   ])
+  if (record?.kind === 'found' || record?.kind === 'refused') {
+    const parsedState = operationInvokeStatusStateSchema.safeParse(record.state)
+    const usage = asRecord(record.usage)
+    const continuation = usage?.chargeState === 'insufficient_credit'
+      ? creditContinuationForCli()
+      : invocationContinuationForCli({
+          kind: record.kind,
+          invocationRef,
+          ...(parsedState.success ? { state: parsedState.data } : {}),
+          ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
+        })
+    if (continuation?.command !== undefined) line(`  next: ${continuation.command}`)
+    if (continuation?.warning !== undefined) line(`  warning: ${continuation.warning}`)
+  }
   line(JSON.stringify(body, undefined, 2))
 }
 
 export async function readOperationStatus(
   options: CliOptions,
   invocationRef: string,
+  credentialCommand = 'status',
 ): Promise<OperationInvokeStatusResult> {
-  const apiKey = requireAgentAccessKey('status', options)
+  const apiKey = requireAgentAccessKey(credentialCommand, options)
   const path = operationStatusPath(invocationRef)
   const outcome = await callJson(options.baseUrl, path, {
     method: OPERATION_INVOKE_ROUTE_CONTRACT.status.method,
@@ -215,10 +255,7 @@ export async function runStatusCommand(args: readonly string[], options: CliOpti
   const invocationRef = args[0]?.trim()
   const parsedRef = operationStatusInputSchema.safeParse({ invocationRef })
   if (!parsedRef.success || args.length > 1) {
-    throw new CliFailure('Usage: npm run -s ae -- status <invocation-ref>', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'status-usage',
-    })
+    throw usageFailure('status', 'status-usage')
   }
 
   let body: OperationInvokeStatusResult

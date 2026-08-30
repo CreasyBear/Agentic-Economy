@@ -47,9 +47,9 @@ describe('owner browser CLI continuations', () => {
       surface: 'owner_browser',
       authentication: 'owner_session',
       method: 'open',
-      path: '/agent-access',
+      path: '/owner/credit',
       anchor: '#fund',
-      url: 'https://market.example/agent-access#fund',
+      url: 'https://market.example/owner/credit#fund',
       agentCredential: 'not_used',
       instruction: 'Open this continuation as the owner to add assistant credit; the CLI does not fund an owner account.',
     })

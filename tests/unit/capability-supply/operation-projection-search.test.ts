@@ -66,7 +66,7 @@ const sourcePort = (
   snapshotKey = 'snapshot:search',
 ) => ({
   navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
-  listCurrent: async () => ({ operations, snapshotKey }),
+  listCurrent: async () => ({ operations, sourceCount: operations.length, snapshotKey }),
   loadCurrent: async () => null,
 })
 const projectCapabilityOperation = (
@@ -79,6 +79,15 @@ const projectCapabilityOperation = (
 )
 
 describe('capability operation search ranking', () => {
+  it('refuses capacity overflow based on raw source rows even when malformed rows were dropped', async () => {
+    const result = await searchCapabilityOperations({
+      ...sourcePort([]),
+      listCurrent: async () => ({ operations: [], sourceCount: 257, snapshotKey: 'snapshot:overflow' }),
+    }, { query: 'lookup' }, 2_000)
+
+    expect(result).toMatchObject({ kind: 'unavailable', reason: 'source_capacity_exceeded' })
+  })
+
   it('does not select geocoding or cat operations from generic web-search words', () => {
     const ranked = rankOperationSearchText('Search the web for the latest on electric cars', [
       {
@@ -348,7 +357,7 @@ describe('capability operation search ranking', () => {
     const projected = projectCapabilityOperation(record, 2_000)
     const port = {
       navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
-      listCurrent: async () => ({ operations: [record], snapshotKey: 'snapshot:coherence' }),
+      listCurrent: async () => ({ operations: [record], sourceCount: 1, snapshotKey: 'snapshot:coherence' }),
       loadCurrent: async (operationRef: string) => operationRef === projected.operationRef ? record : null,
     }
 

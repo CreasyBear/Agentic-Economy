@@ -1,13 +1,5 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Input } from '@/components/ui/input'
-import { Field as UiField, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
 import {
   BotIcon,
   CheckCircle2Icon,
@@ -15,6 +7,21 @@ import {
   FilePenLineIcon,
   Link2Icon,
 } from 'lucide-react'
+
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeSection } from '@/components/ae/layout/AeSection'
+import {
+  AeOperatorSortableHeader,
+  AeRecordTable,
+} from '@/components/ae/operator/AeOperatorDataTable'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Field as UiField, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 
 import { cn } from '@/lib/utils'
 import {
@@ -111,80 +118,87 @@ export function AeOwnerOfferingsList({
   projectionState?: 'current' | 'projection_pending'
   onRetryProjection?: () => void
 }) {
-  const publishedCount = offerings.filter((item) => item.status === 'published').length
-  const reachableCount = offerings.filter((item) => item.accessPathCount > 0).length
-  const supportedCount = offerings.filter((item) => item.support?.routeable === true).length
+  const columns = useMemo<ColumnDef<OwnerOfferingSummary, unknown>[]>(
+    () => [
+      {
+        id: 'name',
+        accessorFn: (item) => item.offering.name,
+        header: ({ column }) => <AeOperatorSortableHeader label="Operation" column={column} />,
+        cell: ({ row }) => (
+          <div className="grid min-w-[12rem] gap-0.5">
+            <span className="font-medium">{row.original.offering.name}</span>
+            <span className="line-clamp-2 text-xs text-muted-foreground">{row.original.offering.summary}</span>
+          </div>
+        ),
+      },
+      {
+        id: 'status',
+        accessorFn: (item) => statusLabel(item.status),
+        header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+        cell: ({ row }) => <Badge variant="outline">{statusLabel(row.original.status)}</Badge>,
+      },
+      {
+        id: 'routes',
+        accessorFn: (item) => item.accessPathCount,
+        header: 'Access',
+        cell: ({ row }) => (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Link2Icon className="size-3.5" aria-hidden="true" />
+            {row.original.accessPathCount === 0
+              ? 'No access route'
+              : `${row.original.accessPathCount} ${row.original.accessPathCount === 1 ? 'route' : 'routes'}`}
+          </span>
+        ),
+      },
+      {
+        id: 'ready',
+        accessorFn: (item) => item.support?.routeable === true,
+        header: 'Readiness',
+        cell: ({ row }) =>
+          row.original.support?.routeable === true ? (
+            <span className="inline-flex items-center gap-1.5 text-xs">
+              <BotIcon className="size-3.5" aria-hidden="true" /> Ready now
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
+      },
+    ],
+    [],
+  )
 
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-4">
       {projectionState === 'current' ? null : (
         <Alert>
           <AlertTitle>Your public page is still updating</AlertTitle>
           <AlertDescription>
             <p>Your changes are saved. People still see the last safe page until this update finishes.</p>
             {onRetryProjection === undefined ? null : (
-              <Button type="button" variant="secondary" onClick={onRetryProjection}>Try publishing again</Button>
+              <Button type="button" variant="secondary" className="min-h-touch" onClick={onRetryProjection}>Try publishing again</Button>
             )}
           </AlertDescription>
         </Alert>
       )}
-      <section className="grid gap-4 border-y border-border py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" aria-labelledby="operation-inventory-title">
-          <div className="grid gap-1">
-            <p className="font-mono text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Supplier inventory</p>
-            <h2 id="operation-inventory-title" className="text-lg font-semibold text-foreground">{offerings.length === 0 ? 'Publish your first Operation' : 'Operation inventory'}</h2>
-            <p className="max-w-2xl text-sm text-muted-foreground">Each Operation is one exact tool agents can inspect and call.</p>
-          </div>
-          <dl className="grid grid-cols-3 gap-2" aria-label="Operation summary">
-            <OwnerSummaryStat value={publishedCount} label="Published" />
-            <OwnerSummaryStat value={reachableCount} label="Access routes" />
-            <OwnerSummaryStat value={supportedCount} label="Ready now" />
-          </dl>
-      </section>
       {offerings.length === 0 ? (
-        <Card className="grid gap-4 border-dashed p-5 shadow-none md:grid-cols-[1fr_auto] md:items-center">
-          <div className="grid gap-1">
-            <h2 className="text-base font-semibold text-foreground">No Operations yet</h2>
-            <p className="block max-w-2xl text-muted-foreground">
-              Describe one exact tool, then add its price and access route.
-            </p>
-          </div>
-          <Button asChild variant="default">
-            <a href="/owner/offerings/new">Add Operation</a>
-          </Button>
-        </Card>
+        <AeEmptyState
+          title="No Operations yet"
+          description="Describe one exact tool, then add its price and access route."
+          action={
+            <Button asChild className="min-h-touch">
+              <a href="/owner/offerings/new">Add Operation</a>
+            </Button>
+          }
+        />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          {offerings.map((item) => (
-            <div key={item.offering.offeringRef} className="group grid gap-4 border-b border-border p-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-              <div className="grid min-w-0 gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-semibold text-foreground">{item.offering.name}</h2>
-                  <Badge variant="outline">{statusLabel(item.status)}</Badge>
-                </div>
-                <p className="line-clamp-2 text-muted-foreground">{item.offering.summary}</p>
-                <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                  <span className="inline-flex min-h-8 items-center gap-1.5 font-mono text-xs">
-                    <Link2Icon className="size-3.5" aria-hidden="true" />
-                    {item.accessPathCount === 0 ? 'No access route' : `${item.accessPathCount} access ${item.accessPathCount === 1 ? 'route' : 'routes'}`}
-                  </span>
-                  {item.support?.routeable === true ? (
-                    <span className="inline-flex min-h-8 items-center gap-1.5 font-mono text-xs font-medium text-foreground">
-                      <BotIcon className="size-3.5" aria-hidden="true" /> Ready now
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:flex">
-                <Button asChild variant="secondary" size="sm" className="min-h-11">
-                  <a href={`/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}?preview=true`}>Inspect</a>
-                </Button>
-                <Button asChild variant="default" size="sm" className="min-h-11">
-                  <a href={`/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}`}>Edit</a>
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <AeRecordTable
+          columns={columns}
+          data={offerings}
+          caption="Operations"
+          countLabel="Operations"
+          filterPlaceholder="Filter Operations…"
+          getRowHref={(item) => `/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}`}
+        />
       )}
     </div>
   )
@@ -309,12 +323,7 @@ export function AeOwnerOfferingEditor({
           <p className="text-sm text-muted-foreground">Fills the details below. You can change every field.</p>
         </div>
       )}
-      <Card className="grid gap-5 p-5 shadow-none">
-        <div className="grid gap-1">
-          <p className="font-mono text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">01 · Operation</p>
-          <h2 className="text-lg font-semibold text-foreground">Public details</h2>
-          <p className="block max-w-2xl text-muted-foreground">Describe the exact tool and outcome agents can inspect before calling it.</p>
-        </div>
+      <AeSection title="Public details" description="Describe the exact tool and outcome agents can inspect before calling it.">
         <FieldGroup className="gap-4">
           <TextInput label="Name" value={value.name} onChange={(name) => update({ name })} disabled={editorDisabled} inputRef={firstFieldRef} {...(invalidField === 'name' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
           <TextInput label="Category" value={value.category} onChange={(category) => update({ category })} disabled={editorDisabled} inputRef={categoryFieldRef} {...(invalidField === 'category' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
@@ -329,7 +338,7 @@ export function AeOwnerOfferingEditor({
             </div>
             <Field label="Currency" inputID="offering-price-currency" description="Choose the currency for this exact amount.">
               <Select value={priceDraft.currency} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ currency: isSupportedOfferingCurrency(chosen) ? chosen : DEFAULT_OFFERING_PRICE_CURRENCY })}>
-                <SelectTrigger id="offering-price-currency" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                <SelectTrigger id="offering-price-currency" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                 <SelectContent><SelectGroup>
                   {SUPPORTED_OFFERING_CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
                 </SelectGroup></SelectContent>
@@ -337,7 +346,7 @@ export function AeOwnerOfferingEditor({
             </Field>
             <Field label="Price type" inputID="offering-price-kind" description="Leave unpublished to keep only the note above.">
               <Select value={priceDraft.kind === '' ? unsetOptionValue : priceDraft.kind} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ kind: OfferingPriceKindValues.find((kind) => kind === chosen) ?? '' })}>
-                <SelectTrigger id="offering-price-kind" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                <SelectTrigger id="offering-price-kind" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                 <SelectContent><SelectGroup>
                   <SelectItem value={unsetOptionValue}>Not published</SelectItem>
                   <SelectItem value="fixed">Fixed price</SelectItem>
@@ -357,7 +366,7 @@ export function AeOwnerOfferingEditor({
                 ) : null}
                 <Field label="Charged per" inputID="offering-price-unit" description="Optional">
                   <Select value={priceDraft.unit === '' ? unsetOptionValue : priceDraft.unit} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ unit: OfferingPriceUnitValues.find((unit) => unit === chosen) ?? '' })}>
-                    <SelectTrigger id="offering-price-unit" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectTrigger id="offering-price-unit" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                     <SelectContent><SelectGroup>
                       <SelectItem value={unsetOptionValue}>Not per unit</SelectItem>
                       <SelectItem value="call">Call</SelectItem>
@@ -373,7 +382,7 @@ export function AeOwnerOfferingEditor({
                 </Field>
                 <Field label="Tax" inputID="offering-price-tax">
                   <Select value={priceDraft.taxTreatment} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ taxTreatment: OfferingPriceTaxTreatmentValues.find((treatment) => treatment === chosen) ?? 'unstated' })}>
-                    <SelectTrigger id="offering-price-tax" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectTrigger id="offering-price-tax" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                     <SelectContent><SelectGroup>
                       <SelectItem value="inclusive">Includes tax</SelectItem>
                       <SelectItem value="exclusive">Excludes tax</SelectItem>
@@ -386,7 +395,7 @@ export function AeOwnerOfferingEditor({
           </div>
           <Field label="Public state" inputID="offering-status" description="Draft stays private. Paused and retired Operations are removed from the market.">
             <Select value={value.status} disabled={editorDisabled} onValueChange={(status) => update({ status: toStatus(status) })}>
-              <SelectTrigger id="offering-status" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+              <SelectTrigger id="offering-status" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
               <SelectContent><SelectGroup>
                 <SelectItem value="draft">Draft</SelectItem>
                 <SelectItem value="published">Published</SelectItem>
@@ -396,15 +405,15 @@ export function AeOwnerOfferingEditor({
             </Select>
           </Field>
         </FieldGroup>
-      </Card>
+      </AeSection>
 
       <OwnerAccessPathsEditor paths={value.accessPaths} disabled={editorDisabled} onChange={(accessPaths) => update({ accessPaths })} />
 
-      <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-canvas/95 py-4 backdrop-blur sm:flex-row sm:justify-end">
-        <Button asChild variant="secondary" className="min-h-11">
+      <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-card py-4 sm:flex-row sm:justify-end">
+        <Button asChild variant="secondary" className="min-h-touch">
           <a href="/owner/offerings">Back to Operations</a>
         </Button>
-        <Button type="submit" variant="default" disabled={pending || !dirty} aria-busy={pending} className="min-h-11">
+        <Button type="submit" variant="default" disabled={pending || !dirty} aria-busy={pending} className="min-h-touch">
           {retryingPartialSave ? 'Retry save' : value.status === 'published' ? 'Publish Operation' : 'Save draft'}
         </Button>
       </div>
@@ -421,12 +430,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
   const [websiteUrlError, setWebsiteUrlError] = useState<string | undefined>()
 
   return (
-    <Card className="grid gap-5 p-5">
-      <div className="grid gap-1">
-        <p className="block text-sm font-semibold text-muted-foreground">2 · WAYS TO BEGIN</p>
-        <h2 className="text-lg font-semibold text-foreground">Access routes</h2>
-        <p className="block max-w-2xl text-muted-foreground">Give agents a clear route to call the Operation. Each route stands on its own.</p>
-      </div>
+    <AeSection title="Access routes" description="Give agents a clear route to call the Operation. Each route stands on its own.">
       {paths.length === 0 ? <p className="text-muted-foreground">Add a phone, website, or message route.</p> : (
         <ul className="m-0 grid list-none gap-2 p-0">
           {paths.map((path) => (
@@ -443,7 +447,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
       <FieldGroup className="gap-4 rounded-lg border border-border p-4">
         <Field label="Add a contact route" inputID="access-path-kind">
           <Select value={selectedKind} disabled={disabled} onValueChange={(kind) => { setSelectedKind(toAccessKind(kind)); setTechnicalExpanded(false) }}>
-            <SelectTrigger id="access-path-kind" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+            <SelectTrigger id="access-path-kind" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
             <SelectContent><SelectGroup>
               <SelectItem value="phone">Call</SelectItem>
               <SelectItem value="website">Website</SelectItem>
@@ -466,7 +470,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
         {selectedKind === 'external_operation' ? (
           <Collapsible open={technicalExpanded} onOpenChange={setTechnicalExpanded} className="grid gap-3">
             <CollapsibleTrigger asChild>
-              <Button type="button" variant="link" className="h-auto min-h-11 justify-self-start px-0 font-semibold text-foreground underline">
+              <Button type="button" variant="link" className="h-auto min-h-touch justify-self-start px-0 font-semibold text-foreground underline">
                 {technicalExpanded ? 'Hide request details' : 'Add request details'}
               </Button>
             </CollapsibleTrigger>
@@ -476,7 +480,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
                 <TextInput label="Request URL" value={endpoint.url} onChange={(url) => setEndpoint((current) => ({ ...current, url }))} disabled={disabled} inputMode="url" />
                 <Field label="Method" inputID="access-path-method" description="Optional">
                   <Select value={endpoint.method === '' ? unsetOptionValue : endpoint.method} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, method: ownerEndpointMethods.find((method) => method === chosen) ?? '' }))}>
-                    <SelectTrigger id="access-path-method" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectTrigger id="access-path-method" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                     <SelectContent><SelectGroup>
                       <SelectItem value={unsetOptionValue}>Not stated</SelectItem>
                       <SelectItem value="GET">GET</SelectItem>
@@ -490,7 +494,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
                 <TextInput label="Instructions URL" value={endpoint.documentationUrl} onChange={(documentationUrl) => setEndpoint((current) => ({ ...current, documentationUrl }))} disabled={disabled} inputMode="url" optional />
                 <Field label="Interface description" inputID="access-path-interface-format" description="Optional">
                   <Select value={endpoint.interfaceFormat === '' ? unsetOptionValue : endpoint.interfaceFormat} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, interfaceFormat: ownerInterfaceFormats.find((format) => format === chosen) ?? '' }))}>
-                    <SelectTrigger id="access-path-interface-format" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
+                    <SelectTrigger id="access-path-interface-format" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                     <SelectContent><SelectGroup>
                       <SelectItem value={unsetOptionValue}>Not stated</SelectItem>
                       <SelectItem value="OpenAPI">OpenAPI</SelectItem>
@@ -532,16 +536,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
           Add this way
         </Button>
       </FieldGroup>
-    </Card>
-  )
-}
-
-function OwnerSummaryStat({ value, label }: { value: number; label: string }) {
-  return (
-    <div className="grid min-w-0 gap-1 rounded-lg border border-border bg-muted/40 p-3 text-center">
-      <dd className="m-0 text-2xl font-semibold tabular-nums text-foreground">{value}</dd>
-      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-    </div>
+    </AeSection>
   )
 }
 
@@ -625,7 +620,7 @@ function TextInput({
         {...(invalid ? { 'aria-invalid': true } : {})}
         {...(describedByValue.length === 0 ? {} : { 'aria-describedby': describedByValue })}
         onChange={(event) => onChange(event.currentTarget.value)}
-        className="min-h-11 bg-card"
+        className="min-h-touch bg-card"
       />
     </Field>
   )

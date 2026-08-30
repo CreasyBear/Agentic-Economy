@@ -7,14 +7,16 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type Row,
   type SortingState,
 } from '@tanstack/react-table'
+import { useRouter } from '@tanstack/react-router'
 import { ArrowUpDownIcon } from 'lucide-react'
-import { useId, useState } from 'react'
+import { type KeyboardEvent, type MouseEvent, type ReactNode, useState } from 'react'
 
+import { AeViewBar } from '@/components/ae/data/AeViewBar'
 import { Button } from '@/components/ui/button'
-import { Field, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { useFirstLoadPending } from '@/components/ui/data-state'
 import {
   Table,
   TableBody,
@@ -24,28 +26,42 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-type AeOperatorDataTableProps<TData> = {
+type AeRecordTableProps<TData> = {
   columns: ColumnDef<TData, unknown>[]
   data: readonly TData[]
-  filterColumnId?: string
   filterPlaceholder?: string
   emptyMessage?: string
   caption?: string
   maxHeight?: string
+  hideFilter?: boolean
+  countLabel?: string
+  action?: ReactNode
+  onRowClick?: (row: TData) => void
+  /** When provided, each row resolves to this href and renders as a link row. */
+  getRowHref?: (row: TData) => string
+  /**
+   * True while a load is in flight. Skeletons render only before the first
+   * settled result; refreshing an already-populated table keeps its rows.
+   */
+  loading?: boolean
 }
 
-export function AeOperatorDataTable<TData>({
+export function AeRecordTable<TData>({
   columns,
   data,
-  filterColumnId,
   filterPlaceholder = 'Filter rows…',
-  emptyMessage = 'No rows match this filter. Adjust the filter or search to see results.',
-  caption = 'Operator data',
-  maxHeight = 'min(70vh, 40rem)',
-}: AeOperatorDataTableProps<TData>) {
+  emptyMessage = 'No rows match this filter.',
+  caption = 'Records',
+  maxHeight,
+  hideFilter = false,
+  countLabel = 'rows',
+  action,
+  onRowClick,
+  getRowHref,
+  loading = false,
+}: AeRecordTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
-  const filterInputId = useId()
 
   const table = useReactTable({
     data: [...data],
@@ -61,36 +77,36 @@ export function AeOperatorDataTable<TData>({
     getFilteredRowModel: getFilteredRowModel(),
   })
 
-  const showFilter = filterColumnId !== undefined || data.length > 6
+  const showFilter = !hideFilter && (data.length > 1 || globalFilter.length > 0)
+  const rowCount = table.getRowModel().rows.length
+  const showSkeleton = useFirstLoadPending(loading)
+  const interactive = onRowClick !== undefined || getRowHref !== undefined
 
   return (
-    <div className="grid gap-3">
-      {showFilter ? (
-        <Field>
-          <FieldLabel htmlFor={filterInputId} className="sr-only">
-            {filterPlaceholder}
-          </FieldLabel>
-          <Input
-            id={filterInputId}
-            value={globalFilter}
-            onChange={(event) => setGlobalFilter(event.currentTarget.value)}
-            placeholder={filterPlaceholder}
-            aria-label={filterPlaceholder}
-            className="w-full max-w-[24rem]"
-          />
-        </Field>
+    <div {...(showSkeleton ? { 'aria-busy': true } : {})} className="grid">
+      {showFilter || action !== undefined ? (
+        <AeViewBar
+          filterValue={globalFilter}
+          {...(showFilter ? { onFilterChange: setGlobalFilter } : {})}
+          filterPlaceholder={filterPlaceholder}
+          count={rowCount}
+          countLabel={countLabel}
+          {...(action === undefined ? {} : { action })}
+        />
       ) : null}
-      <div className="overflow-auto rounded-md border border-border" style={{ maxHeight }}>
+      <div
+        {...(maxHeight === undefined ? {} : { className: 'overflow-auto', style: { maxHeight } })}
+      >
         <Table>
           <caption className="sr-only">{caption}</caption>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
+              <TableRow key={headerGroup.id} className="hover:bg-transparent">
                 {headerGroup.headers.map((header) => (
                   <TableHead
                     key={header.id}
                     scope="col"
-                    className="sticky top-0 z-10 bg-card"
+                    className="sticky top-0 z-10 bg-container"
                     aria-sort={
                       !header.column.getCanSort()
                         ? undefined
@@ -101,33 +117,157 @@ export function AeOperatorDataTable<TData>({
                             : 'none'
                     }
                   >
-                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
                   </TableHead>
                 ))}
               </TableRow>
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+            {showSkeleton ? (
+              Array.from({ length: 5 }, (_, index) => (
+                <TableRow key={`skeleton-${String(index)}`} className="hover:bg-transparent">
+                  {columns.map((column, cellIndex) => (
+                    <TableCell key={`${String(column.id ?? cellIndex)}-skeleton`}>
+                      <span className="block h-4 w-24 max-w-full animate-pulse rounded-sm bg-muted" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : rowCount === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={columns.length} className="h-24 text-muted-foreground">
                   {emptyMessage}
                 </TableCell>
               </TableRow>
             ) : (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                  ))}
-                </TableRow>
-              ))
+              table.getRowModel().rows.map((row) => {
+                const href = getRowHref?.(row.original)
+                if (href === undefined) {
+                  return (
+                    <RecordTableRow
+                      key={row.id}
+                      row={row}
+                      interactive={interactive}
+                      {...(onRowClick === undefined ? {} : { onRowClick })}
+                    />
+                  )
+                }
+                return (
+                  <RecordTableLinkRow
+                    key={row.id}
+                    row={row}
+                    href={href}
+                    {...(onRowClick === undefined ? {} : { onRowClick })}
+                  />
+                )
+              })
             )}
           </TableBody>
         </Table>
       </div>
     </div>
   )
+}
+
+function isControlTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('a, button, input, select, textarea, [role="button"]') !== null
+}
+
+function RecordTableRow<TData>({
+  row,
+  interactive,
+  onRowClick,
+}: {
+  row: Row<TData>
+  interactive: boolean
+  onRowClick?: (row: TData) => void
+}) {
+  function handleClick(event: MouseEvent<HTMLTableRowElement>) {
+    if (!interactive || isControlTarget(event.target)) return
+    onRowClick?.(row.original)
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTableRowElement>) {
+    if (!interactive) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    onRowClick?.(row.original)
+  }
+
+  return (
+    <TableRow
+      {...(interactive ? { className: 'cursor-pointer', tabIndex: 0, onClick: handleClick, onKeyDown: handleKeyDown } : {})}
+    >
+      {row.getVisibleCells().map((cell) => (
+        <TableCell key={cell.id} className="whitespace-normal">
+          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        </TableCell>
+      ))}
+    </TableRow>
+  )
+}
+
+function RecordTableLinkRow<TData>({
+  row,
+  href,
+  onRowClick,
+}: {
+  row: Row<TData>
+  href: string
+  onRowClick?: (row: TData) => void
+}) {
+  const router = useRouter()
+
+  function followHref(event?: MouseEvent<HTMLTableRowElement>) {
+    if (event !== undefined && (event.metaKey || event.ctrlKey)) {
+      window.open(href, '_blank', 'noopener,noreferrer')
+      return
+    }
+    void router.navigate({ to: href })
+  }
+
+  function handleClick(event: MouseEvent<HTMLTableRowElement>) {
+    if (isControlTarget(event.target)) return
+    if (onRowClick !== undefined) {
+      event.preventDefault()
+      onRowClick(row.original)
+      return
+    }
+    followHref(event)
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTableRowElement>) {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    if (onRowClick !== undefined) {
+      onRowClick(row.original)
+      return
+    }
+    followHref()
+  }
+
+  return (
+    <TableRow
+      className="cursor-pointer"
+      tabIndex={0}
+      data-href={href}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+    >
+      {row.getVisibleCells().map((cell) => (
+        <TableCell key={cell.id} className="whitespace-normal">
+          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        </TableCell>
+      ))}
+    </TableRow>
+  )
+}
+
+export function AeOperatorDataTable<TData>(props: AeRecordTableProps<TData>) {
+  return <AeRecordTable {...props} />
 }
 
 export function AeOperatorSortableHeader({
@@ -142,7 +282,7 @@ export function AeOperatorSortableHeader({
       type="button"
       variant="ghost"
       size="sm"
-      className="-ml-2 h-8 px-2"
+      className="-ms-2 h-8 min-h-8 px-2"
       onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
       aria-label={`Sort by ${label}`}
     >

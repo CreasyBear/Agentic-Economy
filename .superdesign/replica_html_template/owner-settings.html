@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Owner settings — current</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            canvas: 'oklch(0.9663 0.004 106.47)',
+            ink: 'oklch(0.2178 0 0)',
+            mute: 'oklch(0.493 0 0)',
+            sunken: 'oklch(0.9546 0.0027 106.45)',
+            line: 'oklch(0.215 0.004 106 / 0.12)',
+          },
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    html { font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="flex min-h-screen bg-canvas font-sans text-ink">
+    <aside class="flex w-[16rem] shrink-0 flex-col border-r border-line p-2">
+      <a id="nav-workspace-home" href="#offerings" class="mb-2 flex items-center gap-2 rounded-md p-2">
+        <span class="inline-flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-white" data-ae-logo-slot="sidebar"></span>
+        <span class="grid min-w-0 gap-0.5">
+          <span class="truncate text-sm font-semibold">Agentic Economy</span>
+          <span class="truncate text-xs text-mute">Supplier workspace</span>
+        </span>
+      </a>
+      <a id="nav-search" href="#search" class="mb-2 flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm">
+        <iconify-icon icon="lucide:search" width="16"></iconify-icon>
+        <span class="flex-1">Search</span>
+        <kbd class="font-mono text-[0.6875rem] text-mute">/</kbd>
+      </a>
+      <p class="px-2 pb-1 text-xs font-medium text-mute">Records</p>
+      <a id="nav-operations" href="#offerings" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm text-mute">
+        <iconify-icon icon="lucide:boxes" width="16"></iconify-icon>Operations
+      </a>
+      <a id="nav-calls" href="#activity" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm text-mute">
+        <iconify-icon icon="lucide:activity" width="16"></iconify-icon>Calls
+      </a>
+      <a id="nav-keys" href="#keys" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm text-mute">
+        <iconify-icon icon="lucide:key-round" width="16"></iconify-icon>Keys
+      </a>
+      <a id="nav-credit" href="#credit" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm text-mute">
+        <iconify-icon icon="lucide:wallet" width="16"></iconify-icon>Credit
+      </a>
+      <a id="nav-supplier" href="#status" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm text-mute">
+        <iconify-icon icon="lucide:building-2" width="16"></iconify-icon>Supplier
+      </a>
+      <p class="mt-2 px-2 pb-1 text-xs font-medium text-mute">Work</p>
+      <a id="nav-publish" href="#supply" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm text-mute">
+        <iconify-icon icon="lucide:upload-cloud" width="16"></iconify-icon>Publish
+      </a>
+      <p class="mt-2 px-2 pb-1 text-xs font-medium text-mute">Account</p>
+      <a id="nav-settings" href="#settings" class="flex min-h-[44px] items-center gap-2 rounded-md bg-white px-2 text-sm font-medium">
+        <iconify-icon icon="lucide:settings" width="16"></iconify-icon>Settings
+      </a>
+      <div class="mt-auto">
+        <p class="px-2 pb-1 text-xs font-medium text-mute">Resources</p>
+        <a id="nav-catalog" href="#catalog" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm text-mute">
+          <iconify-icon icon="lucide:store" width="16"></iconify-icon>Catalog
+        </a>
+        <a id="nav-home" href="#home" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm text-mute">
+          <iconify-icon icon="lucide:gauge" width="16"></iconify-icon>Home
+        </a>
+        <a id="nav-agent-setup" href="#for-agents" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm text-mute">
+          <iconify-icon icon="lucide:bot" width="16"></iconify-icon>Agent setup
+        </a>
+        <a id="nav-help" href="#help" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 text-sm text-mute">
+          <iconify-icon icon="lucide:circle-help" width="16"></iconify-icon>Help &amp; corrections
+        </a>
+      </div>
+    </aside>
+    <div class="flex min-w-0 flex-1 flex-col bg-white">
+      <header class="flex min-h-[44px] shrink-0 items-center gap-2 border-b border-line px-4">
+        <button type="button" class="inline-flex size-8 items-center justify-center rounded-md" aria-label="Close operator navigation">
+          <iconify-icon icon="lucide:panel-left" width="16"></iconify-icon>
+        </button>
+        <span class="ms-auto text-sm text-mute">Search</span>
+      </header>
+      <div class="flex min-h-0 flex-1 flex-col px-4 pb-4">
+        <div class="flex min-h-[44px] items-start gap-4 border-b border-line py-2">
+          <span class="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-line text-mute">
+            <iconify-icon icon="lucide:settings" width="16"></iconify-icon>
+          </span>
+          <div class="grid gap-2">
+            <h1 class="text-base font-semibold tracking-tight">Settings</h1>
+            <p class="text-sm text-mute">Manage your account, supplier workspace, callers, and connections.</p>
+          </div>
+        </div>
+        <nav aria-label="Settings" class="flex flex-col gap-4 border-b border-line py-2 sm:flex-row sm:flex-wrap sm:gap-8">
+          <div class="grid gap-2">
+            <p class="text-xs font-medium text-mute">User</p>
+            <div class="flex gap-2">
+              <a id="tab-profile" href="#settings" class="inline-flex min-h-[44px] items-center border-b-2 border-ink px-4 text-sm font-medium">Profile</a>
+            </div>
+          </div>
+          <div class="grid gap-2">
+            <p class="text-xs font-medium text-mute">Workspace</p>
+            <div class="flex flex-wrap gap-2">
+              <a id="tab-general" href="#workspace" class="inline-flex min-h-[44px] items-center border-b-2 border-transparent px-4 text-sm text-mute">General</a>
+              <a id="tab-members" href="#members" class="inline-flex min-h-[44px] items-center border-b-2 border-transparent px-4 text-sm text-mute">Members</a>
+              <a id="tab-connections" href="#connections" class="inline-flex min-h-[44px] items-center border-b-2 border-transparent px-4 text-sm text-mute">Connections</a>
+              <a id="tab-credit" href="#credit" class="inline-flex min-h-[44px] items-center border-b-2 border-transparent px-4 text-sm text-mute">Credit</a>
+              <a id="tab-payouts" href="#payouts" class="inline-flex min-h-[44px] items-center border-b-2 border-transparent px-4 text-sm text-mute">Payouts</a>
+            </div>
+          </div>
+          <div class="grid gap-2">
+            <p class="text-xs font-medium text-mute">Developers</p>
+            <div class="flex gap-2">
+              <a id="tab-developers" href="#developers" class="inline-flex min-h-[44px] items-center border-b-2 border-transparent px-4 text-sm text-mute">Keys &amp; APIs</a>
+            </div>
+          </div>
+        </nav>
+        <div class="mx-auto grid w-full max-w-3xl gap-8 pt-2 pb-12">
+          <section class="grid gap-4">
+            <div class="grid gap-2">
+              <h2 class="text-base font-semibold tracking-tight">Profile</h2>
+              <p class="text-sm text-mute">Name, email, security, and active sessions for this owner.</p>
+            </div>
+            <div class="grid w-full rounded-lg border border-line bg-white px-4 py-3 text-sm">
+              <p class="font-medium tracking-tight">Account settings are unavailable in local preview</p>
+              <p class="text-sm text-mute">This browser journey does not connect a Clerk account. Sign in outside local preview to manage your profile and sessions.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

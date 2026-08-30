@@ -1,10 +1,12 @@
 import type { Doc } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
 import {
+  CHARGE_JOURNAL_DIGEST_FORMAT,
   accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
   amountFromParts,
+  chargeJournalDigest,
   paidChargeContractInput,
   payoutAccrualFromChargeAmounts,
   selectChargeEntries,
@@ -125,6 +127,112 @@ export function validateChargeJournal(
   })
 }
 
+/** Dual-path reconstruct until true. After cutoff, missing digest refuses. */
+export const CHARGE_JOURNAL_DIGEST_REQUIRED = false
+
+function sealedChargeJournalDigest(
+  original: Doc<'moneyTransactions'>,
+  usage: Doc<'moneyUsageEvents'>,
+  journal: ValidatedChargeJournal,
+): string {
+  return chargeJournalDigest(
+    {
+      original: {
+        transactionRef: original.transactionRef,
+        kind: original.kind,
+        idempotencyKey: original.idempotencyKey,
+        principalId: original.principalId,
+        ...(original.accountId === undefined ? {} : { accountId: original.accountId }),
+        ...(original.credentialId === undefined
+          ? {}
+          : { credentialId: original.credentialId }),
+        currency: original.currency,
+        exponent: original.exponent,
+        amount: journal.chargeAmount,
+        createdAt: original.createdAt,
+      },
+      usage: journal.usage,
+      selected: journal.selected,
+      operator: journal.operator,
+      provider: journal.provider,
+      rake: journal.rake,
+    },
+    {
+      usageRef: usage.usageRef,
+      operationKey: usage.operationKey,
+      priceDigest: usage.priceDigest,
+    },
+  )
+}
+
+export function loadSealedChargeJournal(
+  original: Doc<'moneyTransactions'>,
+  usage: Doc<'moneyUsageEvents'> | undefined,
+  entries: readonly MoneyLedgerEntryRow[],
+): ValidatedChargeJournal | undefined {
+  const journal = validateChargeJournal(original, usage, entries)
+  if (journal === undefined) return undefined
+  const stored = original.journalDigest
+  if (stored === undefined) {
+    if (CHARGE_JOURNAL_DIGEST_REQUIRED) return undefined
+    return journal
+  }
+  if (
+    stored.length === 0
+    || original.digestFormat !== CHARGE_JOURNAL_DIGEST_FORMAT
+    || stored === original.inputDigest
+    || usage === undefined
+  )
+    return undefined
+  let computed: string
+  try {
+    computed = sealedChargeJournalDigest(original, usage, journal)
+  } catch {
+    return undefined
+  }
+  if (computed !== stored) return undefined
+  return journal
+}
+
+export async function sealPersistedChargeJournal(
+  ctx: Pick<MutationCtx, 'db'>,
+  transactionRef: string,
+): Promise<void> {
+  const original = await ctx.db
+    .query('moneyTransactions')
+    .withIndex('by_transactionRef', (query) =>
+      query.eq('transactionRef', transactionRef),
+    )
+    .unique()
+  if (original === null) throw new Error('charge_journal_seal_failed')
+  const entries = await ctx.db
+    .query('moneyLedgerEntries')
+    .withIndex('by_transactionRef', (query) =>
+      query.eq('transactionRef', transactionRef),
+    )
+    .take(5)
+  const mappedEntries = mappedChargeEntries(entries)
+  const selected =
+    mappedEntries === undefined ? undefined : selectChargeEntries(mappedEntries)
+  const invocationRef = selected?.charge.invocationRef
+  if (invocationRef === undefined) throw new Error('charge_journal_seal_failed')
+  const usageRows = await ctx.db
+    .query('moneyUsageEvents')
+    .withIndex('by_invocationRef', (query) =>
+      query.eq('invocationRef', invocationRef),
+    )
+    .take(2)
+  const usage = usageRows.length === 1 ? usageRows[0] : undefined
+  const journal = validateChargeJournal(original, usage, entries)
+  if (journal === undefined || usage === undefined)
+    throw new Error('charge_journal_seal_failed')
+  const digest = sealedChargeJournalDigest(original, usage, journal)
+  await ctx.db.patch(original._id, {
+    journalDigest: digest,
+    digestFormat: CHARGE_JOURNAL_DIGEST_FORMAT,
+  })
+}
+
 export function chargeJournalRecoveryAmount(
   journal: ValidatedChargeJournal,
 ): ExactAmount | undefined {
@@ -159,7 +267,7 @@ export async function readPayoutAccrualAmounts(
       query.eq('invocationRef', invocationRef),
     )
     .take(2)
-  const journal = validateChargeJournal(
+  const journal = loadSealedChargeJournal(
     transaction,
     usageRows.length === 1 ? usageRows[0] : undefined,
     entries,

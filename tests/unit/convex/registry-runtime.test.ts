@@ -239,7 +239,7 @@ async function seedCanonicalOffering(
     networkId: 'ae:public',
     ...contractRef,
     endpointUrl: `https://${offering.slug}.example.test/lookup`,
-    authority: { kind: 'keyless' },
+    authority: { kind: 'public_upstream' },
     continuation: { kind: 'single_response', evidenceRefs: [] },
     cancellation: { kind: 'unsupported', evidenceRefs: [] },
     adapterId: 'http-json:v1',

@@ -46,7 +46,7 @@ describe('agentic.market Service mapping', () => {
   it('mirrors the v2 Service/Endpoint core keys and nests AE-only data', () => {
     const result = projectPublicServicesPage(mappingPage())
 
-    expect(result.schemaVersion).toBe('public-services-api:v2')
+    expect(result.schemaVersion).toBe('public-services-api:v3')
     expect(result.services).toHaveLength(1)
     const service = result.services[0]!
     const firstEndpoint = service.endpoints[0]!
@@ -206,8 +206,8 @@ describe('agentic.market Service mapping', () => {
       offeringRef: 'offering:api-exa-ai:search',
       provenance: 'business_declared',
       access: 'external',
-      authentication: { kind: 'keyless' },
-      execution: 'request_route',
+      authentication: { kind: 'ae_api_key' },
+      execution: 'operation_call',
       authorityMode: 'ae_curated_external',
       sourceKind: 'openapi_http',
       settlementSupport: 'catalog_only',
@@ -321,15 +321,15 @@ describe('agentic.market Service mapping', () => {
     expect(JSON.stringify(endpoints)).not.toMatch(/credentialRef|credentialValue|env:/)
   })
 
-  it('uses the canonical answer_tool execution enum only for linked keyless operations', () => {
+  it('uses the canonical operation_call execution enum only for linked ae_api_key operations', () => {
     const entry = linkedOperationEntry('offering:api-exa-ai:search')
     const endpoint = projectPublicServicesPage(mappingPage(), {
-      'offering:api-exa-ai:search': [{ ...entry, answerExecutable: true }],
+      'offering:api-exa-ai:search': [{ ...entry }],
     }).services[0]!.endpoints[0]!
 
     expect(endpoint.ae).toMatchObject({
       access: 'external',
-      execution: 'answer_tool',
+      execution: 'operation_call',
       operationRef: entry.operationRef,
     })
   })
@@ -530,7 +530,7 @@ describe('public services API projection', () => {
 
     expect(result).toMatchObject({
       kind: 'ok',
-      schemaVersion: 'public-services-api:v2',
+      schemaVersion: 'public-services-api:v3',
       isDone: false,
       continueCursor: 'cursor-out',
     })
@@ -658,7 +658,6 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
         ...linkedOperationEntry('offering:api-exa-ai:search'),
         authorityMode: 'provider_owned',
         authentication: { kind: 'platform_credential', scheme: 'api_key', in: 'header', name: 'X-API-Key' },
-        answerExecutable: true,
       }],
     }
     const service = projectPublicServicesPage(oneOfferingPage, operationMap).services[0]!
@@ -673,14 +672,13 @@ describe('sub-cent catalog price representation (CAVEAT 3)', () => {
       authorityMode: 'provider_owned',
       sourceKind: 'openapi_http',
     })
-    const keylessAnswerService = projectPublicServicesPage(oneOfferingPage, {
+    const operationCallService = projectPublicServicesPage(oneOfferingPage, {
       'offering:api-exa-ai:search': [{
         ...linkedOperationEntry('offering:api-exa-ai:search'),
         authorityMode: 'provider_owned',
-        answerExecutable: true,
       }],
     }).services[0]!
-    expect(keylessAnswerService.endpoints[0]!.ae.execution).toBe('answer_tool')
+    expect(operationCallService.endpoints[0]!.ae.execution).toBe('operation_call')
     expect(JSON.stringify(endpoint)).not.toMatch(/credentialRef|secret|env/i)
 
     const unlinked = projectPublicServicesPage(oneOfferingPage).services[0]!
@@ -949,9 +947,8 @@ function linkedOperationEntry(
     method: contents ? 'POST' : 'GET',
     authorityMode: 'ae_curated_external',
     sourceKind: 'openapi_http',
-    authentication: payment === undefined ? { kind: 'keyless' } : { kind: 'x402' },
+    authentication: payment === undefined ? { kind: 'ae_api_key' } : { kind: 'x402' },
     routeable: true,
-    answerExecutable: false,
     readiness: { observedAt: 1_700_000_000_001 },
     operationRef: 'operation:v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' as CatalogOfferingOperationMapEntry['operationRef'],
     parameters: [{ group: 'body', name: 'query', type: 'string', description: 'Search query', required: true }],

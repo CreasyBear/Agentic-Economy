@@ -7,6 +7,7 @@ import { OPERATION_MARKET_COMPARE_PATH } from '@/modules/registry/operation-entr
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
+import { usageFailure } from '../lib/help'
 import {
   formatOperationAvailability,
   formatOperationPrice,
@@ -27,10 +28,7 @@ const FACT_LABELS: Record<string, string> = {
 /** Compare exact current Operation references through the anonymous market route. */
 export async function runCompareCommand(args: readonly string[], options: CliOptions): Promise<void> {
   if (args.length < 1 || args.length > 4) {
-    throw new CliFailure('Usage: npm run -s ae -- compare <operation-ref> [operation-ref ...]', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'compare-usage',
-    })
+    throw usageFailure('compare', 'compare-usage')
   }
 
   const parsedInput = compareCommandDescriptor.inputSchema.safeParse({

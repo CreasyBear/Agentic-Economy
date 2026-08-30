@@ -22,7 +22,7 @@ export function AeFactList({
   return (
     <dl
       className={cn(
-        density === "compact" ? "grid gap-x-4 gap-y-3" : "grid gap-3",
+        density === "compact" ? "grid gap-x-related gap-y-intra" : "grid gap-related",
         className,
       )}
     >
@@ -32,15 +32,13 @@ export function AeFactList({
           className={cn(
             "min-w-0",
             density === "default" &&
-              "grid gap-1 sm:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] sm:gap-4",
+              "grid gap-intra sm:grid-cols-[minmax(8rem,0.45fr)_minmax(0,1fr)] sm:gap-related",
           )}
         >
           <dt
             className={cn(
               "text-muted-foreground",
-              density === "compact"
-                ? "text-[0.6875rem] font-medium uppercase tracking-wide"
-                : "text-sm",
+              density === "compact" ? "text-xs" : "text-sm",
             )}
             aria-description={fact.definition}
           >
@@ -49,9 +47,7 @@ export function AeFactList({
           <dd
             className={cn(
               "min-w-0 font-medium tabular-nums",
-              density === "compact"
-                ? "mt-0.5 break-words text-xs"
-                : "text-sm",
+              density === "compact" ? "mt-0.5 break-words text-sm" : "text-sm",
               fact.mono && "font-mono",
               fact.muted ? "text-muted-foreground" : "text-foreground",
             )}

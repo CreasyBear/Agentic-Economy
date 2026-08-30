@@ -26,8 +26,11 @@ export type {
 
 export {
   isProviderConnectionAuthorityCurrent,
+  providerConnectionAuthorityProvenanceIsValid,
   providerConnectionAuthorityDigest,
+  withProviderConnectionAuthority,
 } from './internal/provider-connection/shared'
+export type { ProviderConnectionAuthorityProvenance } from './internal/provider-connection/shared'
 
 export {
   beginProviderConnectionRevocation,

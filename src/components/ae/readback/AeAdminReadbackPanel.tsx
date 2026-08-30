@@ -1,14 +1,14 @@
 import { ChevronDown, ShieldAlert, ShieldCheck } from 'lucide-react'
-import { useId, useMemo } from 'react'
+import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
+import { AeFactList } from '@/components/ae/data/AeFactList'
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeOperatorDataTable, AeOperatorSortableHeader } from '@/components/ae/operator/AeOperatorDataTable'
-import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Card } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import type { AdminReadbackRow, AdminReadbackSurface, AdminShellReadback } from '@/modules/security/public'
 
 const surfaceLabels = {
@@ -41,8 +41,6 @@ type AeAdminReadbackPanelProps = {
 
 export function AeAdminReadbackPanel({ title, description, readback }: AeAdminReadbackPanelProps) {
   const accessLabel = `HTTP ${readback.httpStatus}`
-  const titleId = useId()
-  const descriptionId = useId()
 
   return (
     <>
@@ -61,26 +59,22 @@ export function AeAdminReadbackPanel({ title, description, readback }: AeAdminRe
         </AlertDescription>
       </Alert>
 
-      <Card aria-labelledby={titleId} aria-describedby={descriptionId} className="p-5">
-        <div className="border-b border-border pb-4">
-          <h2 className="text-lg font-semibold text-foreground" id={titleId}>{title}</h2>
-          <p className="text-sm leading-6 text-muted-foreground" id={descriptionId}>{description}</p>
-        </div>
-        <div className="pt-4">
-          {readback.kind === 'denied' ? <DeniedReadback readback={readback} /> : <AllowedReadback readback={readback} />}
-        </div>
-      </Card>
+      <AeSection title={title} description={description}>
+        {readback.kind === 'denied' ? <DeniedReadback readback={readback} /> : <AllowedReadback readback={readback} />}
+      </AeSection>
     </>
   )
 }
 
 function DeniedReadback({ readback }: { readback: Extract<AdminShellReadback, { kind: 'denied' }> }) {
   return (
-    <div className="grid gap-3 md:grid-cols-3">
-      <ReadbackStat label="Surface" value={surfaceLabels[readback.surface]} />
-      <ReadbackStat label="Decision" value={readback.reason.replaceAll('_', ' ')} />
-      <ReadbackStat label="Private rows returned" value={String(readback.rows.length)} />
-    </div>
+    <AeFactList
+      facts={[
+        { label: 'Surface', value: surfaceLabels[readback.surface] },
+        { label: 'Decision', value: readback.reason.replaceAll('_', ' ') },
+        { label: 'Private rows returned', value: String(readback.rows.length) },
+      ]}
+    />
   )
 }
 
@@ -89,22 +83,19 @@ function AllowedReadback({ readback }: { readback: Extract<AdminShellReadback, {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 md:grid-cols-4">
-        <ReadbackStat label="Queued" value={String(readback.summary.queued)} />
-        <ReadbackStat label="Needs attention" value={String(readback.summary.attention)} />
-        <ReadbackStat label="Stale" value={String(readback.summary.stale)} />
-        <ReadbackStat label="Suppressed" value={String(readback.summary.suppressed)} />
-      </div>
+      <AeFactList
+        facts={[
+          { label: 'Queued', value: String(readback.summary.queued) },
+          { label: 'Needs attention', value: String(readback.summary.attention) },
+          { label: 'Stale', value: String(readback.summary.stale) },
+          { label: 'Suppressed', value: String(readback.summary.suppressed) },
+        ]}
+      />
       {readback.rows.length === 0 ? (
-        <Empty className="border border-border bg-card p-4">
-          <EmptyHeader>
-            <EmptyTitle>No operational rows yet</EmptyTitle>
-            <EmptyDescription>No source-owned operational rows exist for this surface yet.</EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <AeStatusBadge status="not_queued" />
-          </EmptyContent>
-        </Empty>
+        <AeEmptyState
+          title="No operational rows yet"
+          description="No source-owned operational rows exist for this surface yet."
+        />
       ) : (
         <AeOperatorDataTable
           columns={columns}
@@ -165,15 +156,6 @@ function useAdminReadbackColumns(surface: AdminReadbackSurface): ColumnDef<Admin
       },
     ],
     [surface],
-  )
-}
-
-function ReadbackStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-border bg-card p-3">
-      <span className="block text-xs font-medium uppercase tracking-normal text-muted-foreground">{label}</span>
-      <span className="mt-1 block break-words text-sm font-medium text-foreground" data-numeric>{value}</span>
-    </div>
   )
 }
 

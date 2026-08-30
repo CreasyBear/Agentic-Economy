@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { connectionAuthoritySnapshotValue } from '@/modules/capability-supply/convex'
 import {
   readCapabilityProbeTarget as readCapabilityProbeTargetFromModule,
@@ -9,22 +10,193 @@ import {
 } from '@/modules/capability-supply/public'
 
 import { internal } from './_generated/api'
-import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
+import {
+  parseWorkloadCronSnapshot,
+  reconcileWorkloadCronSnapshot,
+} from './workloadCron'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import {
   convexPublicationLifecycle,
   contextFields,
-  keylessAuthorityValue,
+  publicUpstreamAuthorityValue,
   providerConnectionAuthorityValue,
   publicationLifecycleValue,
-  rebuildCapabilityOriginSupplyProjection,
 } from './capabilitySupplyShared'
 import { syncMarketOperationPresence } from './marketPresence'
-import { rebuildCurrentOperationProjection } from './capabilitySupplyOperationProjection'
+import {
+  type AgentAccessPrincipalValue,
+  verifySupplyAgentPrincipal,
+} from './agentAccessPrincipals'
 
-const READINESS_REFRESH_LEAD_MS = 90_000
+const READINESS_REFRESH_LEAD_MS = 30 * 60_000
 const MAX_READINESS_REFRESH_BATCH = 20
+
+const capabilityProbeAuthorityBaseFields = {
+  publicationRef: v.string(),
+  publicationRevision: v.number(),
+  businessId: v.id('businesses'),
+  publisherPrincipalRef: v.string(),
+  ownerPrincipalRef: v.string(),
+  owningAccountRef: v.string(),
+  ownershipRef: v.string(),
+  accountRevision: v.number(),
+}
+export const capabilityProbeAuthorityValue = v.union(
+  v.object({
+    ...capabilityProbeAuthorityBaseFields,
+    mode: v.literal('human_owner'),
+    publisherPrincipalRevision: v.number(),
+    authorityDigest: v.string(),
+  }),
+  v.object({
+    ...capabilityProbeAuthorityBaseFields,
+    mode: v.literal('agent_grant'),
+    grantRef: v.string(),
+    grantGeneration: v.number(),
+    grantPolicyDigest: v.string(),
+    authorityExpiresAt: v.number(),
+    authorityDigest: v.string(),
+  }),
+)
+export type CapabilityProbeAuthority = Infer<typeof capabilityProbeAuthorityValue>
+
+type CapabilityProbeAuthorityReadArgs = Readonly<{
+  publicationRef: string
+  expectedRevision: number
+  now: number
+}>
+
+function withCapabilityProbeAuthorityDigest<T extends Omit<CapabilityProbeAuthority, 'authorityDigest'>>(
+  authority: T,
+): T & Readonly<{ authorityDigest: string }> {
+  return {
+    ...authority,
+    authorityDigest: canonicalDigest({
+      format: 'ae.capability-probe-authority:v1',
+      ...authority,
+    }),
+  }
+}
+
+export async function readCurrentCapabilityProbeAuthority(
+  ctx: Pick<MutationCtx | QueryCtx, 'db'>,
+  args: CapabilityProbeAuthorityReadArgs,
+): Promise<CapabilityProbeAuthority | null> {
+  if (!Number.isSafeInteger(args.now) || args.now < 0) return null
+  const publication = await ctx.db
+    .query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', (index) =>
+      index.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision))
+    .unique()
+  if (publication === null || publication.disposition !== 'current') return null
+  const business = await ctx.db.get(publication.businessId)
+  if (business === null
+    || business.publicStatus !== 'published'
+    || business.suppressedAt !== undefined) return null
+  const account = await ctx.db
+    .query('accounts')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
+    .unique()
+  if (account === null || account.lifecycle !== 'active') return null
+  const ownership = await ctx.db.query('accountOwnerships')
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+    .unique()
+  if (ownership === null
+    || ownership.lifecycle !== 'active'
+    || ownership.accountRef !== account.accountRef) return null
+  const ownerPrincipal = await ctx.db.query('principals')
+    .withIndex('by_principalRef', (query) => query.eq('principalRef', ownership.ownerPrincipalRef))
+    .unique()
+  if (ownerPrincipal === null
+    || ownerPrincipal.kind !== 'human'
+    || ownerPrincipal.lifecycle !== 'active') return null
+
+  const base = {
+    publicationRef: publication.publicationRef,
+    publicationRevision: publication.revision,
+    businessId: publication.businessId,
+    publisherPrincipalRef: publication.publisherRef,
+    ownerPrincipalRef: ownerPrincipal.principalRef,
+    owningAccountRef: account.accountRef,
+    ownershipRef: ownership.ownershipRef,
+    accountRevision: account.revision,
+  }
+  if (publication.publisherRef === ownerPrincipal.principalRef) {
+    return withCapabilityProbeAuthorityDigest({
+      ...base,
+      mode: 'human_owner' as const,
+      publisherPrincipalRevision: ownerPrincipal.revision,
+    })
+  }
+
+  const storedAgent = await ctx.db.query('agentAccessPrincipals')
+    .withIndex('by_principalId', (query) => query.eq('principalId', publication.publisherRef))
+    .unique()
+  if (storedAgent === null || storedAgent.ownerId !== account.accountRef) return null
+  const agentPrincipal: AgentAccessPrincipalValue = {
+    principalId: storedAgent.principalId,
+    ownerId: storedAgent.ownerId,
+    credentialId: storedAgent.credentialId,
+    applicationRef: storedAgent.applicationRef,
+    environment: storedAgent.environment,
+    scopes: [...storedAgent.scopes],
+    authorityMode: storedAgent.authorityMode,
+  }
+  const exactGrants = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_credentialId_and_environment_and_generation', (query) => query
+      .eq('credentialId', storedAgent.credentialId)
+      .eq('environment', storedAgent.environment)
+      .eq('generation', storedAgent.grantGeneration))
+    .take(2)
+  if (exactGrants.length !== 1) return null
+  const grant = exactGrants[0]
+  if (grant === undefined
+    || grant.lifecycle !== 'active'
+    || grant.principalId !== storedAgent.principalId
+    || grant.ownerId !== account.accountRef
+    || grant.applicationRef !== storedAgent.applicationRef
+    || grant.credentialId !== storedAgent.credentialId
+    || grant.authorityMode !== storedAgent.authorityMode
+    || grant.operationAccess !== 'all_admitted'
+    || grant.policyDigest !== storedAgent.policyDigest
+    || grant.expiresAt <= args.now) return null
+  const admission = await verifySupplyAgentPrincipal(ctx, agentPrincipal)
+  if (admission.kind !== 'allowed') return null
+  const authorityExpiresAt = Math.min(grant.expiresAt, storedAgent.expiresAt ?? grant.expiresAt)
+  if (authorityExpiresAt <= args.now) return null
+  return withCapabilityProbeAuthorityDigest({
+    ...base,
+    mode: 'agent_grant' as const,
+    grantRef: grant.grantRef,
+    grantGeneration: grant.generation,
+    grantPolicyDigest: grant.policyDigest,
+    authorityExpiresAt,
+  })
+}
+
+export function capabilityProbeAuthorityMatches(
+  pinned: CapabilityProbeAuthority,
+  current: CapabilityProbeAuthority,
+): boolean {
+  if (pinned.authorityDigest !== current.authorityDigest
+    || pinned.publicationRef !== current.publicationRef
+    || pinned.publicationRevision !== current.publicationRevision
+    || pinned.businessId !== current.businessId
+    || pinned.publisherPrincipalRef !== current.publisherPrincipalRef
+    || pinned.ownerPrincipalRef !== current.ownerPrincipalRef
+    || pinned.owningAccountRef !== current.owningAccountRef
+    || pinned.ownershipRef !== current.ownershipRef
+    || pinned.accountRevision !== current.accountRevision
+    || pinned.mode !== current.mode) return false
+  return pinned.mode === 'human_owner' && current.mode === 'human_owner'
+    ? pinned.publisherPrincipalRevision === current.publisherPrincipalRevision
+    : pinned.mode === 'agent_grant' && current.mode === 'agent_grant'
+      && pinned.grantRef === current.grantRef
+      && pinned.grantGeneration === current.grantGeneration
+      && pinned.grantPolicyDigest === current.grantPolicyDigest
+      && pinned.authorityExpiresAt === current.authorityExpiresAt
+}
 
 const capabilityProbeTargetFields = {
   publicationRef: v.string(),
@@ -46,11 +218,12 @@ const capabilityProbeTargetFields = {
   outputSchemaJson: v.optional(v.string()),
   expectedPaymentJson: v.optional(v.string()),
   targetDigest: v.string(),
+  resourceAuthority: capabilityProbeAuthorityValue,
 }
 const capabilityProbeTargetValue = v.union(
   v.object({
     ...capabilityProbeTargetFields,
-    authority: keylessAuthorityValue,
+    authority: publicUpstreamAuthorityValue,
   }),
   v.object({
     ...capabilityProbeTargetFields,
@@ -99,6 +272,7 @@ export const observeCapabilityReadinessReturns = v.union(
 export const readCapabilityProbeTargetArgs = {
   publicationRef: v.string(),
   expectedRevision: v.number(),
+  now: v.number(),
 } as const
 export const readCapabilityProbeTargetReturns = v.union(
   v.object({
@@ -125,6 +299,7 @@ export const recordCapabilityProbeResultArgs = {
   observedAt: v.number(),
   validUntil: v.number(),
   evidenceRefs: v.array(v.string()),
+  resourceAuthority: capabilityProbeAuthorityValue,
 } as const
 export const recordCapabilityProbeResultReturns = v.union(
   v.object({
@@ -193,11 +368,6 @@ export async function observeCapabilityReadinessHandler(
     readinessValidUntil: args.validUntil,
     updatedAt: now,
   })
-  await rebuildCurrentOperationProjection(ctx, {
-    publicationRef: publication.publicationRef,
-    publicationRevision: publication.revision,
-    now,
-  })
   await syncMarketOperationPresence(ctx, {
     operationRef: publication.operationRef,
     businessId: publication.businessId,
@@ -239,17 +409,12 @@ export async function observeCapabilityReadinessHandler(
       ),
     ),
   }
-  await rebuildCapabilityOriginSupplyProjection(
-    ctx,
-    publication.businessId,
-    now,
-  )
   return result
 }
 
 export async function readCapabilityProbeTargetHandler(
   ctx: QueryCtx,
-  args: { publicationRef: string; expectedRevision: number },
+  args: { publicationRef: string; expectedRevision: number; now: number },
 ) {
   const result = await readCapabilityProbeTargetFromModule(
     capabilitySupplyGraphPorts(ctx.db),
@@ -264,6 +429,18 @@ export async function readCapabilityProbeTargetHandler(
   }
 
   const { target } = result
+  const resourceAuthority = await readCurrentCapabilityProbeAuthority(ctx, {
+    publicationRef: args.publicationRef,
+    expectedRevision: args.expectedRevision,
+    now: args.now,
+  })
+  if (resourceAuthority === null) {
+    return {
+      kind: 'unavailable' as const,
+      reason: 'authority_stale' as const,
+      evidenceRefs: ['probe-target:authority-stale'],
+    }
+  }
   const targetFields = {
     publicationRef: target.publicationRef,
     revision: target.revision,
@@ -285,6 +462,7 @@ export async function readCapabilityProbeTargetHandler(
       ? {}
       : { expectedPaymentJson: target.expectedPaymentJson }),
     targetDigest: target.targetDigest,
+    resourceAuthority,
   }
   if (target.authority.kind === 'provider_connection') {
     if (!('connectionAuthority' in target)) {
@@ -320,7 +498,7 @@ export async function readCapabilityProbeTargetHandler(
     kind: 'available' as const,
     target: {
       ...targetFields,
-      authority: { kind: 'keyless' as const },
+      authority: { kind: 'public_upstream' as const },
     },
   }
 }
@@ -341,44 +519,41 @@ export async function recordCapabilityProbeResultHandler(
     observedAt: number
     validUntil: number
     evidenceRefs: string[]
+    resourceAuthority: CapabilityProbeAuthority
   },
 ) {
-  const [publication, result] = await Promise.all([
-    ctx.db
-      .query('capabilityPublications')
-      .withIndex('by_publicationRef_and_revision', (index) =>
-        index
-          .eq('publicationRef', args.publicationRef)
-          .eq('revision', args.expectedRevision),
-      )
-      .unique(),
-    recordCapabilityProbeResultFromModule(
-      capabilitySupplyGraphPorts(ctx.db),
-      {
-        ...args,
-        now: Date.now(),
-      },
-    ),
-  ])
-  if (result.kind === 'observed' && publication !== null) {
-    const now = Date.now()
-    await rebuildCurrentOperationProjection(ctx, {
-      publicationRef: publication.publicationRef,
-      publicationRevision: publication.revision,
-      now,
-    })
-    await rebuildCapabilityOriginSupplyProjection(
-      ctx,
-      publication.businessId as Id<'businesses'>,
-      now,
-    )
+  const currentAuthority = await readCurrentCapabilityProbeAuthority(ctx, {
+    publicationRef: args.publicationRef,
+    expectedRevision: args.expectedRevision,
+    now: Date.now(),
+  })
+  if (currentAuthority === null
+    || !capabilityProbeAuthorityMatches(args.resourceAuthority, currentAuthority)) {
+    return { kind: 'refused' as const, reason: 'target_changed' as const }
   }
+  const { resourceAuthority: _resourceAuthority, ...observation } = args
+  const result = await recordCapabilityProbeResultFromModule(
+    capabilitySupplyGraphPorts(ctx.db),
+    {
+      ...observation,
+      now: Date.now(),
+    },
+  )
   return result.kind === 'observed'
     ? { ...result, lifecycle: convexPublicationLifecycle(result.lifecycle) }
     : result
 }
 
-export async function scheduleDueCapabilityProbesHandler(ctx: MutationCtx) {
+export async function scheduleDueCapabilityProbesHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ workload: unknown }>,
+) {
+  const workload = parseWorkloadCronSnapshot(args.workload)
+  await reconcileWorkloadCronSnapshot(
+    ctx,
+    'refresh capability supply readiness',
+    workload,
+  )
   const due = await ctx.db
     .query('capabilityPublications')
     .withIndex('by_disposition_and_readinessValidUntil', (index) =>
@@ -389,9 +564,10 @@ export async function scheduleDueCapabilityProbesHandler(ctx: MutationCtx) {
     .take(MAX_READINESS_REFRESH_BATCH)
   const scheduledFunctionIds = await Promise.all(
     due.map((publication) =>
-      ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+      ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probeFromCron, {
         publicationRef: publication.publicationRef,
         expectedRevision: publication.revision,
+        workload,
       }),
     ),
   )

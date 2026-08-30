@@ -105,7 +105,7 @@ export async function importX402Capability(
           ? contractForBazaarSchemas(input.contract)
           : input.contract,
       authority: input.commercial.authority,
-      credential: { kind: "keyless" },
+      credential: { kind: "public_upstream" },
       resolutionRoot: input.resource,
       credentialParameterNames: [],
     },

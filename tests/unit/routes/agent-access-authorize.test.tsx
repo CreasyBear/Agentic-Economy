@@ -79,4 +79,27 @@ describe('/agent-access/authorize consent loading', () => {
     expect(String(request?.body)).toContain('authority_mode=bounded_mandate')
     expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
   })
+
+  it('shows a fixed, separate supplier permission instead of buyer authority choices', async () => {
+    vi.spyOn(AgentAccessAuthorizeRoute, 'useSearch').mockReturnValue({ user_code: 'SUPP-LIER' })
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(
+        '<main data-ae-consent data-grant-ref="grant-supplier" data-client-name="Supplier CLI" data-authority-mode="bounded_mandate" data-access-profile="supplier"></main>',
+        { status: 200 },
+      ))
+      .mockResolvedValueOnce(new Response('Approved', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<Component />)
+
+    expect(await screen.findByText('Supplier management')).toBeTruthy()
+    expect(screen.getByText(/cannot spend buyer credit/)).toBeTruthy()
+    expect(screen.queryByRole('radio')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    const request = fetchMock.mock.calls[1]?.[1]
+    expect(String(request?.body)).toContain('authority_mode=bounded_mandate')
+    expect(await screen.findByText(/separate supplier key/)).toBeTruthy()
+  })
 })

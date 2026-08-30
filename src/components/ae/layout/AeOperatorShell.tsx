@@ -1,7 +1,8 @@
 'use client'
 
-import { createContext, use, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createContext, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useServerFn } from '@tanstack/react-start'
 import { Separator } from '@/components/ui/separator'
 import {
   SidebarInset,
@@ -11,20 +12,19 @@ import {
 } from '@/components/ui/sidebar'
 
 import { AeOperatorBreadcrumbs } from '@/components/ae/layout/AeOperatorBreadcrumbs'
-import { AeOperatorCommandMenu } from '@/components/ae/layout/AeOperatorCommandMenu'
+import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
 import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
+import { AeRecordHeader } from '@/components/ae/layout/AeRecordHeader'
+import { OperatorCommandOpenContext } from '@/components/ae/layout/operator-command-context'
 import {
   resolveOperatorListCrumb,
   type OperatorBreadcrumbItem,
   type OperatorNavBadges,
   type OperatorRole,
 } from '@/lib/operator/navigation'
+import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
+import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 
-
-
-export type OperatorDensity = 'compact' | 'comfortable'
-
-const OperatorDensityContext = createContext<OperatorDensity>('comfortable')
 type OperatorShellChrome = Omit<AeOperatorShellProps, 'children'>
 
 type OperatorShellChromeRegistration = {
@@ -34,13 +34,17 @@ type OperatorShellChromeRegistration = {
 
 const OperatorShellChromeContext = createContext<OperatorShellChromeRegistration | null>(null)
 
+export function useOperatorShellChrome(): OperatorShellChromeRegistration | null {
+  return use(OperatorShellChromeContext)
+}
+
 
 export type AeOperatorShellProps = {
   operatorRole: OperatorRole
   title: string
   description: string
-  eyebrow?: string
   actions?: ReactNode
+  secondaryBar?: ReactNode
   currentPath: string
   mainContentId?: string
   breadcrumbs?: readonly OperatorBreadcrumbItem[]
@@ -63,8 +67,8 @@ function NestedOperatorShell({
   operatorRole,
   title,
   description,
-  eyebrow,
   actions,
+  secondaryBar,
   currentPath,
   mainContentId,
   breadcrumbs,
@@ -77,13 +81,13 @@ function NestedOperatorShell({
       title,
       description,
       currentPath,
-      ...(eyebrow === undefined ? {} : { eyebrow }),
       ...(actions === undefined ? {} : { actions }),
+      ...(secondaryBar === undefined ? {} : { secondaryBar }),
       ...(mainContentId === undefined ? {} : { mainContentId }),
       ...(breadcrumbs === undefined ? {} : { breadcrumbs }),
       ...(navBadges === undefined ? {} : { navBadges }),
     }),
-    [operatorRole, title, description, eyebrow, actions, currentPath, mainContentId, breadcrumbs, navBadges],
+    [operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, breadcrumbs, navBadges],
   )
 
   useLayoutEffect(() => {
@@ -116,7 +120,7 @@ function OperatorSidebarToggle() {
       aria-label={expanded ? 'Close operator navigation' : 'Open operator navigation'}
       aria-controls="operator-sidebar-navigation"
       aria-expanded={expanded}
-      className="min-h-11 min-w-11"
+      className="-ms-1"
     />
   )
 }
@@ -138,18 +142,26 @@ function RootOperatorShell(props: AeOperatorShellProps) {
     operatorRole,
     title,
     description,
-    eyebrow,
     actions,
+    secondaryBar,
     currentPath,
     mainContentId,
     breadcrumbs: providedBreadcrumbs,
     navBadges,
   } = registeredChrome ?? props
   const { children } = props
-  const titleId = useId()
-  const descriptionId = useId()
   const resolvedMainContentId = mainContentId ?? 'operator-main-content'
-  const density: OperatorDensity = operatorRole === 'owner' ? 'compact' : 'comfortable'
+  const [commandOpen, setCommandOpen] = useState(false)
+  const readAgentKeys = useServerFn(listAgentAccessKeysServer)
+  const readBuyerCredentialPresence = useCallback(async () => {
+    const keys = await readAgentKeys()
+    return keys.some((key) => (
+      !key.revoked
+      && !key.expired
+      && key.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+    ))
+  }, [readAgentKeys])
+  const openCommand = useCallback(() => setCommandOpen(true), [])
   const shellRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -180,66 +192,53 @@ function RootOperatorShell(props: AeOperatorShellProps) {
     const listCrumb = resolveOperatorListCrumb(operatorRole, currentPath)
     return providedBreadcrumbs ?? (listCrumb === undefined ? [] : [listCrumb, { label: title }])
   }, [currentPath, operatorRole, providedBreadcrumbs, title])
-  const sidebar = (
-    <AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} navBadges={navBadges ?? {}} />
-  )
-
-  const topNav = useMemo(
-    () => (
-      <div className="flex min-h-13 items-center gap-3 px-4 md:px-5">
-        <OperatorSidebarToggle />
-        {breadcrumbs.length === 0 ? null : (
-          <div className="hidden min-w-0 flex-1 md:block">
-            <AeOperatorBreadcrumbs items={breadcrumbs} />
-          </div>
-        )}
-        <div className="ml-auto flex items-center gap-2">
-          <AeOperatorCommandMenu operatorRole={operatorRole} />
-        </div>
-      </div>
-    ),
-    [breadcrumbs, operatorRole],
-  )
 
   return (
-    <OperatorDensityContext.Provider value={density}>
+    <OperatorCommandOpenContext.Provider value={openCommand}>
       <OperatorShellChromeContext.Provider value={registration}>
-        <SidebarProvider>
-          <div ref={shellRef} className="flex min-h-dvh w-full bg-background">
-            <a
-              data-testid="skip-to-content"
-              href={`#${resolvedMainContentId}`}
-              className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-20 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground"
-            >
-              Skip to content
-            </a>
-            {sidebar}
-            <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
-              <header className="border-b border-border bg-background">
-                {topNav}
-              </header>
-              <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="min-h-0">
-                <div className="mx-auto flex w-full max-w-[80rem] flex-1 flex-col gap-5 px-4 py-5 md:px-6 md:py-6">
-                  {breadcrumbs.length === 0 ? null : (
-                    <div className="md:hidden">
-                      <AeOperatorBreadcrumbs items={breadcrumbs} />
-                    </div>
-                  )}
-
-                  <section aria-labelledby={titleId} aria-describedby={descriptionId} className="grid max-w-3xl gap-1.5">
-                    {eyebrow ? <p className="font-mono text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-muted-foreground">{eyebrow}</p> : null}
-                    <h1 id={titleId} className="text-2xl font-medium tracking-tight text-balance text-foreground">{title}</h1>
-                    <p id={descriptionId} className="text-sm leading-5 text-pretty text-muted-foreground">{description}</p>
-                    {actions ? <div className="flex flex-wrap items-center gap-3 pt-1">{actions}</div> : null}
-                  </section>
-                  <Separator />
-                  <section className="grid min-w-0 gap-4">{children}</section>
-                </div>
-              </SidebarInset>
+        <SidebarProvider ref={shellRef}>
+          <a
+            data-testid="skip-to-content"
+            href={`#${resolvedMainContentId}`}
+            className="sr-only focus:not-sr-only focus:absolute focus:start-gutter focus:top-gutter focus:z-20 focus:rounded-md focus:bg-container focus:px-gutter focus:py-intra focus:text-sm focus:font-medium focus:text-foreground"
+          >
+            Skip to content
+          </a>
+          <AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} navBadges={navBadges ?? {}} />
+          <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="bg-card">
+            <header className="flex min-h-touch shrink-0 items-center gap-intra border-b border-border">
+              <div className="flex min-w-0 items-center gap-intra px-gutter">
+                <OperatorSidebarToggle />
+                {breadcrumbs.length === 0 ? null : (
+                  <>
+                    <Separator orientation="vertical" className="me-intra data-[orientation=vertical]:h-4" />
+                    <AeOperatorBreadcrumbs items={breadcrumbs} />
+                  </>
+                )}
+              </div>
+              <div className="ms-auto px-gutter">
+                <CommandPanelProvider
+                  open={commandOpen}
+                  onOpenChange={setCommandOpen}
+                  readBuyerCredentialPresence={readBuyerCredentialPresence}
+                >
+                  <AeCommandPanel />
+                </CommandPanelProvider>
+              </div>
+            </header>
+            <div className="flex min-h-0 flex-1 flex-col px-gutter pb-gutter">
+              <AeRecordHeader
+                title={title}
+                description={description}
+                {...(secondaryBar === undefined ? {} : { className: 'border-b-0 pb-0' })}
+                {...(actions === undefined ? {} : { actions })}
+              />
+              {secondaryBar === undefined ? null : secondaryBar}
+              <div className="min-h-0 flex-1 pt-intra">{children}</div>
             </div>
-          </div>
+          </SidebarInset>
         </SidebarProvider>
       </OperatorShellChromeContext.Provider>
-    </OperatorDensityContext.Provider>
+    </OperatorCommandOpenContext.Provider>
   )
 }

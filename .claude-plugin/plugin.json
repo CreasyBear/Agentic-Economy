@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "agentic-economy",
+  "displayName": "Agentic Economy",
+  "version": "0.1.0",
+  "description": "One connection for your agent: search the Operation catalog, inspect exact inputs and price, then call Operations per use from one wallet.",
+  "author": {
+    "name": "Agentic Economy"
+  },
+  "repository": "https://github.com/CreasyBear/Agentic-Economy",
+  "license": "UNLICENSED",
+  "keywords": [
+    "agents",
+    "mcp",
+    "operations",
+    "pay-per-use",
+    "marketplace"
+  ]
+}

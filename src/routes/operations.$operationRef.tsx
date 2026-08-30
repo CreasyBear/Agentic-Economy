@@ -1,11 +1,14 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
-import { Badge } from '@/components/ui/badge'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
+import { AeFactList } from '@/components/ae/data/AeFactList'
+import { AeOperationPrice } from '@/components/ae/market/AeOperationPrice'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type {
   PublicOperationDescriptor,
@@ -13,24 +16,43 @@ import type {
   PublicOperationPrice,
 } from '@/modules/capability-supply/public'
 import { formatCurrencyAmount } from '@/modules/money/public'
+import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
+import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import {
+  continuationForOperationFacts,
+  type SuggestedContinuation,
+} from '@/modules/market/suggested-continuation'
 import {
   readPublicOperationDetailRouteServer,
   type PublicOperationDetailRouteResult,
 } from '@/modules/registry/operation-detail-route.functions'
 
 export const Route = createFileRoute('/operations/$operationRef')({
-  loader: ({ params }) => readPublicOperationDetailRouteServer({ data: { operationRef: params.operationRef } })
-    .catch((): PublicOperationDetailRouteResult => ({ kind: 'source_unavailable', operationRef: params.operationRef })),
+  loader: async ({ params }) => {
+    const [result, keys] = await Promise.all([
+      readPublicOperationDetailRouteServer({ data: { operationRef: params.operationRef } })
+        .catch((): PublicOperationDetailRouteResult => ({ kind: 'source_unavailable', operationRef: params.operationRef })),
+      listAgentAccessKeysServer().catch(() => []),
+    ])
+    return {
+      result,
+      hasBuyerCredential: keys.some((key) => (
+        !key.revoked
+        && !key.expired
+        && key.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+      )),
+    }
+  },
   head: ({ loaderData }) => {
-    if (loaderData?.kind !== 'found') {
+    if (loaderData?.result.kind !== 'found') {
       return { meta: [
         { title: 'Operation unavailable | Agentic Economy' },
         { name: 'robots', content: 'noindex' },
       ] }
     }
     return { meta: [
-      { title: `${loaderData.operation.offering.label} | Agentic Economy` },
-      { name: 'description', content: loaderData.operation.summary },
+      { title: `${loaderData.result.operation.offering.label} | Agentic Economy` },
+      { name: 'description', content: loaderData.result.operation.summary },
     ] }
   },
   pendingComponent: OperationDetailPending,
@@ -39,65 +61,92 @@ export const Route = createFileRoute('/operations/$operationRef')({
 })
 
 function OperationDetailRoute() {
-  return <PublicOperationDetail result={Route.useLoaderData()} />
+  const data = Route.useLoaderData()
+  return (
+    <PublicOperationDetail
+      result={data.result}
+      hasBuyerCredential={data.hasBuyerCredential}
+    />
+  )
 }
 
-export function PublicOperationDetail({ result }: Readonly<{ result: PublicOperationDetailRouteResult }>) {
+export function PublicOperationDetail({
+  result,
+  hasBuyerCredential = false,
+}: Readonly<{
+  result: PublicOperationDetailRouteResult
+  hasBuyerCredential?: boolean
+}>) {
   if (result.kind !== 'found') return <OperationUnavailable result={result} />
-  return <CurrentOperationDetail operation={result.operation} />
+  return (
+    <CurrentOperationDetail
+      operation={result.operation}
+      hasBuyerCredential={hasBuyerCredential}
+    />
+  )
 }
 
-function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
+function CurrentOperationDetail({
+  operation,
+  hasBuyerCredential,
+}: Readonly<{
+  operation: PublicOperationDescriptor
+  hasBuyerCredential: boolean
+}>) {
   const requiredParameters = operation.parameters?.filter(({ required }) => required) ?? []
   const optionalParameters = operation.parameters?.filter(({ required }) => !required) ?? []
   const inputExample = operation.contract.inputExamples?.[0]
-  const mcpInput = inputExample === undefined
-    ? '<JSON matching the published schema>'
-    : JSON.stringify(inputExample.input)
   const invokeInput = inputExample === undefined
     ? '"$AE_INPUT_JSON"'
     : `'${JSON.stringify(inputExample.input).replaceAll("'", "'\\''")}'`
-  const accessMode = operation.availability.posture !== 'routeable'
-    ? 'inspect_only'
-    : operation.navigation.some(({ relation }) => relation === 'execute')
-      ? 'anonymous_execute'
-      : operation.navigation.some(({ relation }) => relation === 'invoke')
-        ? 'authenticated_invoke'
-        : 'inspect_only'
+  const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
+  const continuation = continuationForOperationFacts({
+    operationRef: operation.operationRef,
+    availabilityPosture: operation.availability.posture === 'routeable' && invokeNavigation === undefined
+      ? 'integrated'
+      : operation.availability.posture,
+    // The page copies the installed CLI command, which uses the authenticated
+    // brokered invoke rail even when the upstream provider itself is public.
+    requiresBuyerCredential: invokeNavigation !== undefined,
+    hasBuyerCredential,
+  })
   const lastVerifiedAt = operation.availability.observedAt
     ?? operation.commercial.priceEvidence?.observedAt
   return (
-    <AePublicShell>
-      <article className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 md:px-6 md:py-8">
-        <nav aria-label="Breadcrumb">
-          <Button asChild variant="ghost" size="sm" className="min-h-11 px-2">
-            <Link to="/market" search={{ window: '30d' }} hash="operations">← Back to catalog</Link>
-          </Button>
-        </nav>
-        <header className="grid max-w-4xl gap-4 border-b border-border pb-6">
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">Capability</Badge>
-            <Badge variant={operation.availability.posture === 'routeable' ? 'success' : 'warning'}>
-              {label(operation.availability.posture)}
-            </Badge>
-          </div>
-          <div className="grid gap-2">
-            <p className="font-mono text-xs font-medium uppercase tracking-widest text-muted-foreground">{operation.business.name}</p>
-            <h1 className="text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-4xl">{operation.offering.label}</h1>
-            <p className="max-w-3xl text-base leading-7 text-muted-foreground">{operation.summary}</p>
-          </div>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <Fact label="Provider"><BusinessLink operation={operation} /></Fact>
-            <Fact label="Total price" value={totalPrice(operation)} />
-            <Fact label="Readiness" value={label(operation.availability.posture)} />
-            <Fact label="Authentication" value={authenticationLabel(operation)} />
-            <TimeFact label="Last verified" value={lastVerifiedAt} />
-          </dl>
+    <AePublicPage
+      kind="tool"
+      eyebrow="Operation"
+      title={operation.offering.label}
+      description={operation.summary}
+      actions={
+        <Button asChild variant="ghost" className="min-h-touch">
+          <Link to="/market" search={{ window: '30d' }} hash="operations">Catalog</Link>
+        </Button>
+      }
+      meta={label(operation.availability.posture)}
+    >
+      <article className="ae-rail grid gap-8 pb-page">
+        <header className="grid gap-4">
+          <p className="text-sm text-muted-foreground">{operation.business.name}</p>
+          <OperationDecision operation={operation} continuation={continuation} />
+          <AeFactList
+            className="sm:grid-cols-3"
+            facts={[
+              { label: 'Provider', value: <BusinessLink operation={operation} /> },
+              {
+                label: 'Last verified',
+                value: lastVerifiedAt === undefined
+                  ? 'Not published'
+                  : <time dateTime={timestampIso(lastVerifiedAt)}>{formatUtcTimestamp(lastVerifiedAt)} UTC</time>,
+              },
+              { label: 'Authentication', value: authenticationLabel(operation) },
+            ]}
+          />
         </header>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
           <div className="grid min-w-0 gap-6">
-            <Section title="Parameters" description="The fields your agent needs before it calls this Operation.">
+            <AeSection id="parameters" title="Parameters" description="The fields your agent needs before it calls this Operation.">
               {operation.parameters === undefined ? (
                 <p className="text-sm text-muted-foreground">No flat parameter list is published. <a href="#technical-contract" className="font-medium text-foreground underline underline-offset-4">Read the input JSON Schema</a> before calling.</p>
               ) : (
@@ -106,9 +155,9 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
                   <ParameterList title="Optional parameters" parameters={optionalParameters} empty="No optional parameters." />
                 </div>
               )}
-            </Section>
+            </AeSection>
 
-            <Section title="Example input and output" description="Published examples only. Missing examples are never inferred.">
+            <AeSection title="Example input and output" description="Published examples only. Missing examples are never inferred.">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Example
                   title="Example input"
@@ -120,9 +169,9 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
                   empty="No example output is published. Validate the response against the output schema below."
                 />
               </div>
-            </Section>
+            </AeSection>
 
-            <Section title="Price and terms" description="The exact buyer authorization and published commercial terms for this capability.">
+            <AeSection id="price-and-terms" title="Price and terms" description="The exact buyer authorization and published commercial terms for this capability.">
               <PriceBreakdown operation={operation} />
               <dl className="grid gap-3 sm:grid-cols-2">
                 {operation.commercial.priceEvidence?.observedAt === undefined ? null : (
@@ -135,9 +184,9 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
                 <Fact label="Provider"><BusinessLink operation={operation} /></Fact>
               </dl>
               <TermList terms={operation.commercial.materialTerms} />
-            </Section>
+            </AeSection>
 
-            <Section title="Readiness and reliability" description="Current readiness, named completion evidence, and recovery behavior. Publication alone is not usage evidence.">
+            <AeSection title="Readiness and reliability" description="Current readiness, named completion evidence, and recovery behavior. Publication alone is not usage evidence.">
               <dl className="grid gap-3 sm:grid-cols-2">
                 <Fact label="Status" value={label(operation.availability.posture)} />
                 <TimeFact label="Readiness verified" value={operation.availability.observedAt} />
@@ -155,14 +204,14 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
                   </li>
                 ))}
               </ul>
-            </Section>
+            </AeSection>
           </div>
 
-          <OperationAccessSidecard operation={operation} accessMode={accessMode} invokeInput={invokeInput} mcpInput={mcpInput} />
+          <OperationAccessSidecard continuation={continuation} invokeInput={invokeInput} />
         </div>
 
         <details id="technical-contract" className="scroll-mt-6 rounded-card border border-border bg-card">
-          <summary className="flex min-h-11 cursor-pointer items-center px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <summary className="flex min-h-touch cursor-pointer items-center px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             Technical contract, schemas, digests, and references
           </summary>
           <div className="grid gap-6 border-t border-border p-4 sm:p-5">
@@ -205,151 +254,137 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
           </div>
         </details>
       </article>
-    </AePublicShell>
+    </AePublicPage>
   )
 }
 
 function OperationAccessSidecard({
-  operation,
-  accessMode,
+  continuation,
   invokeInput,
-  mcpInput,
+}: Readonly<{
+  continuation: SuggestedContinuation
+  invokeInput: string
+}>) {
+  return (
+    <aside
+      className="grid gap-related border-t border-border pt-6 lg:sticky lg:top-20 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0"
+      aria-labelledby="operation-continuation-title"
+    >
+      <div className="grid gap-1">
+        <h2 id="operation-continuation-title" className="text-lg font-semibold text-foreground">
+          What you can do next
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {continuationDescription(continuation)}
+        </p>
+      </div>
+      {continuation.label === 'Inspect Operation' && continuation.command !== undefined ? (
+        <AeCopyCommand label={continuation.label} code={continuation.command} />
+      ) : continuation.kind === 'navigate' && continuation.href !== undefined ? (
+        <Button asChild className="min-h-touch w-full">
+          <a href={continuation.href}>{continuation.label}</a>
+        </Button>
+      ) : continuation.command !== undefined ? (
+        <AeCopyCommand
+          label={continuation.label}
+          code={continuation.label === 'Call Operation'
+            ? continuation.command.replace("'<json>'", invokeInput)
+            : continuation.command}
+        />
+      ) : null}
+    </aside>
+  )
+}
+
+function continuationDescription(continuation: SuggestedContinuation): string {
+  if (continuation.warning !== undefined) return continuation.warning
+  if (continuation.label === 'Connect agent') return 'Connect an agent before making this protected call.'
+  if (continuation.label === 'Call Operation') return 'Your agent access is ready. Copy the exact call command.'
+  return 'This Operation is inspectable but not currently callable.'
+}
+
+/**
+ * First-viewport buy decision. The sidecard owns the one contextual action;
+ * this card stays factual so it cannot compete with that continuation.
+ */
+function OperationDecision({
+  operation,
+  continuation,
 }: Readonly<{
   operation: PublicOperationDescriptor
-  accessMode: 'anonymous_execute' | 'authenticated_invoke' | 'inspect_only'
-  invokeInput: string
-  mcpInput: string
+  continuation: SuggestedContinuation
 }>) {
-  if (accessMode === 'anonymous_execute') {
-    return (
-      <aside className="grid gap-4 lg:sticky lg:top-20" aria-labelledby="execution-title">
-        <Card className="gap-4 p-4">
-          <CardHeader>
-            <h2 id="execution-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
-            <CardDescription>Ready now with no provider key. Inspect the contract, then call it through MCP.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ol className="m-0 grid list-none gap-5 p-0">
-              <CommandStep number={1} title="Inspect capability" code={inspectCommand(operation.operationRef)} />
-              <CommandStep
-                number={2}
-                title="Call capability"
-                code={`ae_operation_execute\noperationRef=${operation.operationRef}\ninput=${mcpInput}`}
-              />
-            </ol>
-          </CardContent>
-          <CardContent className="border-t border-border pt-5">
-            <p className="text-sm text-muted-foreground">Pass only published input fields. Headline availability can change; the current descriptor remains authoritative.</p>
-          </CardContent>
-        </Card>
-      </aside>
-    )
-  }
-
-  if (accessMode === 'authenticated_invoke') {
-    return (
-      <aside className="grid gap-4 lg:sticky lg:top-20" aria-labelledby="execution-title">
-        <Card className="gap-4 p-4">
-          <CardHeader>
-            <h2 id="execution-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
-            <CardDescription>Connect once, call this capability, then follow the returned receipt. The CLI keeps the credential and retry identity for you.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild className="min-h-11 w-full">
-              <Link to="/for-agents">Connect an agent</Link>
-            </Button>
-          </CardContent>
-          <CardContent>
-            <ol className="m-0 grid list-none gap-5 p-0">
-              <CommandStep number={1} title="Inspect capability" code={inspectCommand(operation.operationRef)} />
-              <CommandStep number={2} title="Connect once" code="ae connect" />
-              <CommandStep number={3} title="Call capability" code={`ae call '${operation.operationRef}' --input ${invokeInput}`} />
-              <CommandStep number={4} title="Open the receipt" code="ae status <invocation-ref>" />
-            </ol>
-          </CardContent>
-          <CardContent className="border-t border-border pt-5">
-            <p className="text-sm text-muted-foreground"><code>ae connect</code> stores and validates one origin-bound agent key with user-only permissions. <code>ae call</code> generates a durable retry identity when one is not supplied.</p>
-          </CardContent>
-        </Card>
-      </aside>
-    )
-  }
-
+  const ready = continuation.label === 'Call Operation'
+  const decisionLabel = ready
+    ? 'Ready to call'
+    : continuation.label === 'Connect agent'
+      ? 'Connection required'
+      : 'Setup required'
   return (
-    <aside className="grid gap-4 lg:sticky lg:top-20" aria-labelledby="availability-title">
-      <Card className="gap-4 p-4">
-        <CardHeader>
-          <h2 id="availability-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
-          <CardDescription>
-            {operation.availability.posture === 'integrated' ? 'Setup is required before invocation.' : 'This capability is currently unavailable.'} You can still inspect its price and contract, but it cannot be called now.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <Button asChild className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse current Operations</Link></Button>
-          <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }}>Back to market</Link></Button>
-        </CardContent>
-      </Card>
-    </aside>
+    <section
+      aria-labelledby="operation-decision-title"
+      className="grid gap-3 rounded-lg border bg-card p-4 sm:flex sm:items-end sm:justify-between sm:gap-4 sm:p-5"
+    >
+      <div className="grid gap-1">
+        <p
+          id="operation-decision-title"
+          className="text-sm font-medium text-muted-foreground"
+        >
+          {decisionLabel}
+        </p>
+        <AeOperationPrice price={totalPrice(operation)} size="lg" label="Total authorization" />
+        <p className="max-w-md text-xs leading-5 text-muted-foreground">
+          {ready
+            ? 'The maximum charged for one call. Read the contract before invoking.'
+            : continuation.label === 'Connect agent'
+              ? 'Connect an agent before attempting this protected call.'
+              : 'Read the full contract before requesting access.'}
+        </p>
+      </div>
+    </section>
   )
 }
 
 function OperationUnavailable({ result }: Readonly<{ result: Exclude<PublicOperationDetailRouteResult, { kind: 'found' }> }>) {
   const presentation = result.kind === 'not_found'
     ? {
+        tone: 'neutral' as const,
         title: 'This exact Operation is unknown or no longer current',
         description: 'AE has no current descriptor for this reference, so no historical terms, price, or invocation steps are shown.',
       }
     : result.kind === 'source_unavailable'
       ? {
+          tone: 'warning' as const,
           title: 'Operation details are unavailable',
           description: 'AE cannot verify the current descriptor right now, so no commercial facts or invocation steps are shown.',
         }
       : {
+          tone: 'warning' as const,
           title: 'This Operation is not currently available',
           description: `AE reports ${label(result.reason)} for this exact reference. No commercial facts or invocation steps are shown.`,
         }
   return (
-    <AePublicShell>
-      <section className="mx-auto grid w-full max-w-3xl gap-6 px-4 py-16 md:px-6">
-        <div className="grid gap-3">
-          <Badge variant="outline">Unavailable</Badge>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">{presentation.title}</h1>
-          <p className="text-muted-foreground">{presentation.description}</p>
-          <Ref value={result.operationRef} />
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse current Operations</Link></Button>
-          <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }}>Back to market</Link></Button>
-        </div>
-      </section>
-    </AePublicShell>
+    <AePageState
+      tone={presentation.tone}
+      title={presentation.title}
+      description={presentation.description}
+      action={
+        <Button asChild className="min-h-touch">
+          <Link to="/market" search={{ window: '30d' }} hash="operations">
+            Browse current Operations
+          </Link>
+        </Button>
+      }
+    />
   )
 }
 
 function OperationDetailPending() {
-  return (
-    <AePublicShell>
-      <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6" aria-busy="true" aria-live="polite">
-        <p role="status" className="text-muted-foreground">Checking the current capability…</p>
-      </section>
-    </AePublicShell>
-  )
+  return <AePageSkeleton title="Checking the current capability…" description="Checking the current capability…" shape="detail" />
 }
 
 function OperationDetailError() {
   return <OperationUnavailable result={{ kind: 'source_unavailable', operationRef: 'Requested reference' }} />
-}
-
-function Section({ title, description, children }: Readonly<{ title: string; description: string; children: ReactNode }>) {
-  return (
-    <section className="grid gap-4 border-t border-border pt-6">
-      <div className="grid gap-1">
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-      {children}
-    </section>
-  )
 }
 
 function Fact({ label: factLabel, value, children }: Readonly<{ label: string; value?: string; children?: ReactNode }>) {
@@ -363,7 +398,7 @@ function TimeFact({ label: factLabel, value }: Readonly<{ label: string; value: 
 }
 
 function Ref({ value }: Readonly<{ value: string }>) {
-  return <code dir="ltr" className="break-all font-mono text-xs text-foreground">{value}</code>
+  return <AeCopyReference label="reference" value={value} />
 }
 
 function BusinessLink({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
@@ -435,14 +470,6 @@ function Schema({ title, value }: Readonly<{ title: string; value: Readonly<Reco
   return <section className="grid min-w-0 gap-2"><h3 className="font-semibold text-foreground">{title}</h3><pre className="max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs text-foreground"><code>{JSON.stringify(value, null, 2)}</code></pre></section>
 }
 
-function CommandStep({ number, title, code }: Readonly<{ number: number; title: string; code: string }>) {
-  return <li className="grid min-w-0 gap-2"><h3 className="text-sm font-semibold text-foreground">{number}. {title}</h3><AeCopyCommand compact label={title} code={code} /></li>
-}
-
-function inspectCommand(operationRef: string): string {
-  return `ae inspect '${operationRef}'`
-}
-
 function formatPrice(price: PublicOperationPrice): string {
   if (price.kind === 'on_request') return 'On request'
   if (price.kind === 'fixed') return formatCurrencyAmount(price.amount)
@@ -457,7 +484,7 @@ function totalPrice(operation: PublicOperationDescriptor): string {
 
 function authenticationLabel(operation: PublicOperationDescriptor): string {
   const authentication = operation.authentication
-  if (authentication.kind === 'keyless') return 'Keyless provider access'
+  if (authentication.kind === 'ae_api_key') return 'AE account invocation'
   if (authentication.kind === 'platform_credential') {
     return authentication.scheme === 'bearer'
       ? 'AE-managed bearer credential'

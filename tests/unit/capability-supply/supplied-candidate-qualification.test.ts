@@ -91,6 +91,11 @@ const priceDigest = pricingConfigDigest(pricingConfig)
 const providerConnectionCommand: CreateProviderConnectionCommand = {
   commandId: 'command:create:development-reference',
   connectionRef: 'connection:development',
+  owningAccountRef: 'account:owner',
+  installedByPrincipalRef: 'principal:owner',
+  authorityGrantRef: 'grant:connection',
+  authorityGrantGeneration: 1,
+  secretRef: 'env:DEVELOPMENT_REFERENCE_SECRET',
   businessId: candidate.businessId,
   providerRef: 'provider:development',
   providerAccountRef: 'account:development',
@@ -151,7 +156,7 @@ const admittedTransport = {
   configJson: JSON.stringify(admittedTransportConfig),
   configDigest: canonicalDigest(admittedTransportConfig),
 }
-const mcpAuthority = { kind: 'keyless' as const }
+const mcpAuthority = { kind: 'public_upstream' as const }
 const mcpRegistration = defineCapabilityTransportBindingRegistration({
   bindingId: candidate.bindingId,
   offeringId: candidate.offeringId,

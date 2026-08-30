@@ -51,9 +51,9 @@ describe('operation.invoke admit/preflight', () => {
     }
     const service = createOperationInvokeApplication(runtime({
       currentOperation: async () => ({ operation, operationRef, descriptor: staleDescriptor }),
-      createAdapter: async () => {
+      dispatch: async () => {
         adapters += 1
-        throw new Error('must_not_construct_adapter')
+        throw new Error('must_not_dispatch')
       },
     }))
 

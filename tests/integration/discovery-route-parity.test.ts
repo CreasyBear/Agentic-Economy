@@ -322,7 +322,7 @@ const MARKET_OPERATION_DETAIL_WIRE_DESCRIPTOR = {
   evidence: [],
   cancellation: { kind: 'unsupported' },
   recovery: { idempotency: 'not_applicable', recovery: 'retry_safe' },
-  authentication: { kind: 'keyless' },
+  authentication: { kind: 'ae_api_key' },
   transport: { method: 'POST', requestTimeoutMs: 1_000 },
   provenance: { publisher: 'ae_curated_external', sourceKind: 'ae_envelope' },
   availability: { posture: 'integrated' },
@@ -371,7 +371,12 @@ async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySo
     return route.method === 'GET'
   }
 
-  if (path === '/for-agents' || path === '/for-providers' || path === '/privacy/remove-business') {
+  // Literal static GETs advertised by llms/sitemap. `/market`, `/about`,
+  // `/terms`, and `/privacy` are static public routes (src/routes/*.tsx, no
+  // `$slug` data dependency), so they cannot fall through to the business-catalog
+  // pageMatch below — that lookup only resolves registered provider slugs.
+  if (path === '/for-agents' || path === '/for-providers' || path === '/privacy/remove-business'
+    || path === '/market' || path === '/about' || path === '/terms' || path === '/privacy') {
     return route.method === 'GET'
   }
 

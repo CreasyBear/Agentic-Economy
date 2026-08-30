@@ -100,6 +100,7 @@ describe("current supply funnel", () => {
         }),
       ).toBeDefined(),
     );
+    expect(document.getElementById("provider")).not.toBeNull();
     expect(saveOffering).toHaveBeenCalledOnce();
 
     nextStep = "readiness";
@@ -111,6 +112,7 @@ describe("current supply funnel", () => {
         }),
       ).toBeDefined(),
     );
+    expect(document.getElementById("readiness")).not.toBeNull();
     expect(preflight).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "openapi_http",
@@ -260,5 +262,273 @@ describe("current supply funnel", () => {
     ).toBeGreaterThan(0);
     expect(preflight).not.toHaveBeenCalled();
     expect(admit).not.toHaveBeenCalled();
+  });
+
+  it("lands an incompatible Operation on a focused revision-guarded readmission action", async () => {
+    const current = offeringAt("readiness");
+    if (current.publication === undefined)
+      throw new Error("incompatible_publication_missing");
+    window.history.replaceState(null, "", "/#incompatibility");
+
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={{
+          ...current,
+          publication: {
+            ...current.publication,
+            state: "incompatible",
+            lifecycle: {
+              state: "incompatible",
+              reasons: ["incompatible_revision"],
+            },
+          },
+          lifecycle: {
+            state: "incompatible",
+            reasons: ["incompatible_revision"],
+          },
+          actionableReason: "incompatible_revision",
+          live: { available: false, reason: "incompatible_revision" },
+        }}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        callbacks={{
+          saveOffering: async (value) => ({ kind: "saved", value, message: "Saved." }),
+          preflight: async () => ({ kind: "prepared", prepared: preparedPublication }),
+          admit: async () => ({ step: "admission", state: "completed" }),
+          runReadiness: async () => ({ step: "readiness", state: "completed" }),
+          runTest: async () => ({ step: "test", state: "completed" }),
+        }}
+      />,
+    );
+
+    const repair = screen.getByRole("button", { name: "Check and continue" });
+    expect(repair.hasAttribute("disabled")).toBe(false);
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute("id")).toBe("incompatibility"),
+    );
+    expect(screen.queryByRole("button", { name: "Check readiness" })).toBeNull();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("ignores a continuation hash when that recovery target is not present", () => {
+    window.history.replaceState(null, "", "/#credential-recovery");
+
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={offeringAt("describe")}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        callbacks={{
+          saveOffering: async (value) => ({ kind: "saved", value, message: "Saved." }),
+          preflight: async () => ({ kind: "prepared", prepared: preparedPublication }),
+          admit: async () => ({ step: "admission", state: "completed" }),
+          runReadiness: async () => ({ step: "readiness", state: "completed" }),
+          runTest: async () => ({ step: "test", state: "completed" }),
+        }}
+      />,
+    );
+
+    expect(document.getElementById("credential-recovery")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Name" })).toBeDefined();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("re-admits a credential-rejected Operation with a different compatible connection", async () => {
+    const current = offeringAt("readiness");
+    if (current.publication === undefined)
+      throw new Error("credential_recovery_publication_missing");
+    window.history.replaceState(null, "", "/#credential-recovery");
+    const rejected: SupplyAuthorityOption = {
+      connectionRef: "connection:rejected",
+      businessId: "business:one",
+      providerRef: "provider:rejected",
+      providerAccountRef: "account:rejected",
+      adapterId: "http-json:v1",
+      grantedScopes: [],
+      grantedResources: [],
+      authorityGeneration: 1,
+      authorityDigest: `sha256:${"b".repeat(64)}`,
+      lifecycle: "active",
+      available: false,
+      credentialConfigured: true,
+      observedAt: 1,
+      reasonCode: "credential_rejected",
+      evidenceRefs: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const replacement: SupplyAuthorityOption = {
+      ...rejected,
+      connectionRef: "connection:replacement",
+      providerRef: "provider:replacement",
+      providerAccountRef: "account:replacement",
+      authorityGeneration: 4,
+      authorityDigest: `sha256:${"c".repeat(64)}`,
+      available: true,
+      reasonCode: null,
+    };
+    const preflight = vi.fn(async () => ({
+      kind: "prepared" as const,
+      prepared: preparedPublication,
+    }));
+    const admit = vi.fn(async () => ({
+      step: "admission" as const,
+      state: "completed" as const,
+    }));
+
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={{
+          ...current,
+          actionableReason: "credential_rejected",
+          authority: {
+            mode: "provider_owned",
+            kind: "provider_connection",
+            providerRef: rejected.providerRef,
+            authorityGeneration: rejected.authorityGeneration,
+            authorityDigest: rejected.authorityDigest,
+          },
+          publication: {
+            ...current.publication,
+            readiness: {
+              outcome: "credential_rejected",
+              evidenceRefs: ["probe:credential_rejected"],
+            },
+          },
+          readiness: {
+            outcome: "credential_rejected",
+            evidenceRefs: ["probe:credential_rejected"],
+          },
+          live: { available: false, reason: "credential_rejected" },
+        }}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        initialSource={{
+          ...sourceValue,
+          authority: {
+            kind: "provider_connection",
+            connectionRef: rejected.connectionRef,
+            providerRef: rejected.providerRef,
+          },
+        }}
+        authorityOptions={[rejected, replacement]}
+        callbacks={{
+          saveOffering: async (value) => ({ kind: "saved", value, message: "Saved." }),
+          preflight,
+          admit,
+          runReadiness: async () => ({ step: "readiness", state: "completed" }),
+          runTest: async () => ({ step: "test", state: "completed" }),
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/refreshing a rejected or unavailable connection reuses the same credential state/i)).toBeDefined();
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute("id")).toBe("credential-recovery"),
+    );
+    fireEvent.click(screen.getByRole("combobox", { name: "Access authority" }));
+    fireEvent.click(
+      screen.getByRole("option", { name: /provider:replacement · available/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+
+    await waitFor(() => expect(admit).toHaveBeenCalledOnce());
+    expect(preflight).toHaveBeenCalledWith(expect.objectContaining({
+      commercial: expect.objectContaining({
+        authority: {
+          kind: "provider_connection",
+          connectionRef: "connection:replacement",
+          providerRef: "provider:replacement",
+        },
+      }),
+    }));
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("rebinds an authority-stale Operation to the refreshed connection", async () => {
+    const current = offeringAt("readiness");
+    if (current.publication === undefined)
+      throw new Error("authority_recovery_publication_missing");
+    window.history.replaceState(null, "", "/#provider");
+    const refreshed: SupplyAuthorityOption = {
+      connectionRef: "connection:weather",
+      businessId: "business:one",
+      providerRef: "provider:weather",
+      providerAccountRef: "account:weather",
+      adapterId: "http-json:v1",
+      grantedScopes: [],
+      grantedResources: [],
+      authorityGeneration: 2,
+      authorityDigest: `sha256:${"d".repeat(64)}`,
+      lifecycle: "active",
+      available: true,
+      credentialConfigured: true,
+      observedAt: 2,
+      reasonCode: null,
+      evidenceRefs: [],
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const preflight = vi.fn(async () => ({
+      kind: "prepared" as const,
+      prepared: preparedPublication,
+    }));
+    const admit = vi.fn(async () => ({
+      step: "admission" as const,
+      state: "completed" as const,
+    }));
+
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={{
+          ...current,
+          actionableReason: "authority_stale",
+          authority: {
+            mode: "provider_owned",
+            kind: "provider_connection",
+            providerRef: refreshed.providerRef,
+            authorityGeneration: 1,
+            authorityDigest: `sha256:${"a".repeat(64)}`,
+          },
+          live: { available: false, reason: "authority_stale" },
+        }}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        initialSource={{
+          ...sourceValue,
+          authority: {
+            kind: "provider_connection",
+            connectionRef: refreshed.connectionRef,
+            providerRef: refreshed.providerRef,
+          },
+        }}
+        authorityOptions={[refreshed]}
+        callbacks={{
+          saveOffering: async (value) => ({ kind: "saved", value, message: "Saved." }),
+          preflight,
+          admit,
+          runReadiness: async () => ({ step: "readiness", state: "completed" }),
+          runTest: async () => ({ step: "test", state: "completed" }),
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/still holds the previous provider authority snapshot/i)).toBeDefined();
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute("id")).toBe("provider"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+
+    await waitFor(() => expect(admit).toHaveBeenCalledOnce());
+    expect(preflight).toHaveBeenCalledWith(expect.objectContaining({
+      commercial: expect.objectContaining({
+        authority: {
+          kind: "provider_connection",
+          connectionRef: "connection:weather",
+          providerRef: "provider:weather",
+        },
+      }),
+    }));
+    window.history.replaceState(null, "", "/");
   });
 });

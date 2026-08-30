@@ -22,7 +22,7 @@ describe('services public route', () => {
     const body = await response.json()
     const parsed = registryServicesListAction.outputSchema.parse(body)
     expect(parsed).toEqual(expected)
-    expect(parsed.schemaVersion).toBe('public-services-api:v2')
+    expect(parsed.schemaVersion).toBe('public-services-api:v3')
     const service = parsed.services[0]
     if (service === undefined) throw new Error('Expected a projected service.')
     expect(service.networks).toEqual([])
@@ -66,7 +66,7 @@ describe('services public route', () => {
 
     const detail = {
       kind: 'found' as const,
-      schemaVersion: 'public-services-api:v2' as const,
+      schemaVersion: 'public-services-api:v3' as const,
       service: expected.services[0]!,
     }
     const detailRun = vi.spyOn(registryServicesDetailAction, 'run').mockResolvedValue(detail)

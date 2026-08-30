@@ -13,7 +13,13 @@ import {
   recordConnectAccountEvent,
   runDailySupplierSettlement,
 } from '../../../convex/moneyLedger'
+import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
 import { STRIPE_TRANSFER_RECOVERY_WINDOW_MS } from '../../../src/modules/money/public'
+import {
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
+  type WorkloadCronSnapshot,
+} from '../../../convex/workloadCron'
 
 export { canonicalDigest, STRIPE_TRANSFER_RECOVERY_WINDOW_MS }
 
@@ -42,6 +48,12 @@ export class MemoryDb {
 
   rows(table: string): Row[] {
     return [...(this.tables.get(table) ?? [])]
+  }
+
+  normalizeId(table: string, id: string): string | null {
+    return (this.tables.get(table) ?? []).some((row) => row._id === id)
+      ? id
+      : null
   }
 
   query(table: string): Query {
@@ -144,6 +156,7 @@ export class MemoryDb {
 type Handler = (
   ctx: {
     db: MemoryDb
+    scheduler?: Record<string, never>
     auth: {
       getUserIdentity: () => Promise<{ tokenIdentifier: string; subject?: string } | null>
     }
@@ -151,7 +164,11 @@ type Handler = (
   args: Record<string, unknown>,
 ) => Promise<unknown>
 type HandlerExport = { _handler: Handler }
-export const begin = (beginPayoutTransfer as unknown as HandlerExport)._handler
+const withConsequenceScheduler = (handler: Handler): Handler => async (ctx, args) =>
+  handler({ ...ctx, scheduler: {} }, args)
+export const begin = withConsequenceScheduler(
+  (beginPayoutTransfer as unknown as HandlerExport)._handler,
+)
 export const dailySettle = (runDailySupplierSettlement as unknown as HandlerExport)
   ._handler
 export const readOwnerTransfer = (
@@ -161,11 +178,15 @@ export const readStatus = (readPayoutStatus as unknown as HandlerExport)._handle
 export const readOwnerEarnings = (
   readOwnerProviderEarnings as unknown as HandlerExport
 )._handler
-export const complete = (completePayoutTransfer as unknown as HandlerExport)._handler
-export const reconcile = (reconcilePayoutTransfer as unknown as HandlerExport)._handler
-export const markUnknown = (
+export const complete = withConsequenceScheduler(
+  (completePayoutTransfer as unknown as HandlerExport)._handler,
+)
+export const reconcile = withConsequenceScheduler(
+  (reconcilePayoutTransfer as unknown as HandlerExport)._handler,
+)
+export const markUnknown = withConsequenceScheduler((
   markPayoutTransferOutcomeUnknown as unknown as HandlerExport
-)._handler
+)._handler)
 export const reserveConnect = (reserveConnectAccount as unknown as HandlerExport)
   ._handler
 export const finalizeConnect = (finalizeConnectAccount as unknown as HandlerExport)
@@ -179,13 +200,15 @@ export const sourceArgs = {
 }
 export const amount = { currency: 'USD', units: '5000', exponent: 2 }
 export const identity = {
-  getUserIdentity: async () => ({ tokenIdentifier: 'principal:test' }),
+  getUserIdentity: async () => ({
+    subject: 'owner:payout',
+    issuer: 'https://identity.example',
+    tokenIdentifier: 'https://identity.example|owner:payout',
+    exp: 8_000_000_000,
+  }),
 }
 export const ownerIdentity = {
-  getUserIdentity: async () => ({
-    tokenIdentifier: 'owner-token',
-    subject: 'owner:test',
-  }),
+  getUserIdentity: identity.getUserIdentity,
 }
 export const dailyPayoutPeriodStart = '2026-07-01T00:00:00.000Z'
 export const dailyPayoutPeriodEnd = '2026-07-02T00:00:00.000Z'
@@ -201,6 +224,24 @@ export const dailyPayoutRef = canonicalDigest({
   periodEnd: dailyPayoutPeriodEnd,
 } as const)
 export const dailyPayoutQualifiedUseRef = 'qualified-use:payout-1'
+export const payoutOwningAccountRef = 'acc_11111111111111111111111111111111'
+export const payoutAuthorityPrincipalRef = 'prn_33333333333333333333333333333333'
+export const payoutAuthorityGrantRef = 'grt_44444444444444444444444444444444'
+export const payoutAuthorityGrantGeneration = 1
+export const dailySettlementWorkload: WorkloadCronSnapshot = {
+  name: 'run daily supplier settlement',
+  workloadKind: 'cron',
+  actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+  activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+  correlationRef: 'cron:test:daily-settlement',
+  idempotencyRef: 'cron:test:daily-settlement',
+  purpose: 'run daily supplier settlement',
+  source: 'convex/workloadCron:runDailySupplierSettlement',
+  principalRevision: 1,
+  activeAccountRevision: 1,
+  accessVia: 'membership',
+  admittedAt: 1,
+}
 export const dailyPayoutMaterialDigest = 'sha256:payout-material'
 export const dailyPayoutAllocationRef = canonicalDigest({
   format: 'money-qualified-use-allocation:v1',
@@ -215,6 +256,181 @@ export function seedPayout(
     | 'transfer_pending'
     | 'outcome_unknown' = 'held_threshold',
 ): void {
+  const authorityContext = {
+    actorPrincipalRef: payoutAuthorityPrincipalRef,
+    activeAccountRef: payoutOwningAccountRef,
+    correlationRef: 'payout:test:authority',
+    idempotencyRef: 'payout:test:authority',
+  }
+  const workloadActionContext = {
+    actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    correlationRef: 'payout:test:workload-account',
+    idempotencyRef: 'payout:test:workload-account',
+  }
+  const workloadOwnershipRef = 'own_55555555555555555555555555555555'
+  const payoutOwnershipRef = 'own_66666666666666666666666666666666'
+  db.seed('principals', {
+    _id: 'principals:payout-authority',
+    principalRef: payoutAuthorityPrincipalRef,
+    kind: 'human',
+    displayName: 'Payout authority',
+    lifecycle: 'active',
+    revision: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  db.seed('principals', {
+    _id: 'principals:cron-workload',
+    principalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    kind: 'workload',
+    displayName: 'System scheduled workload',
+    lifecycle: 'active',
+    revision: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  db.seed('accounts', {
+    _id: 'accounts:payout-authority',
+    accountRef: payoutOwningAccountRef,
+    displayName: 'Payout authority account',
+    lifecycle: 'active',
+    recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+    creationActorPrincipalRef: payoutAuthorityPrincipalRef,
+    creationIdempotencyRef: authorityContext.idempotencyRef,
+    initialOwnershipRef: payoutOwnershipRef,
+    revision: 1,
+    currentOwnershipRef: payoutOwnershipRef,
+    createdAt: 1,
+    updatedAt: 1,
+    lastAction: authorityContext,
+  })
+  db.seed('accounts', {
+    _id: 'accounts:cron-workload',
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    displayName: 'System scheduled workload account',
+    lifecycle: 'active',
+    recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+    creationActorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    creationIdempotencyRef: workloadActionContext.idempotencyRef,
+    initialOwnershipRef: workloadOwnershipRef,
+    revision: 1,
+    currentOwnershipRef: workloadOwnershipRef,
+    createdAt: 1,
+    updatedAt: 1,
+    lastAction: workloadActionContext,
+  })
+  db.seed('accountOwnerships', {
+    _id: 'accountOwnerships:payout-authority',
+    ownershipRef: payoutOwnershipRef,
+    accountRef: payoutOwningAccountRef,
+    ownerPrincipalRef: payoutAuthorityPrincipalRef,
+    lifecycle: 'active',
+    changeKind: 'creation',
+    revision: 1,
+    createdAt: 1,
+    createdBy: authorityContext,
+  })
+  db.seed('accountOwnerships', {
+    _id: 'accountOwnerships:cron-workload',
+    ownershipRef: workloadOwnershipRef,
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    ownerPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    lifecycle: 'active',
+    changeKind: 'creation',
+    revision: 1,
+    createdAt: 1,
+    createdBy: workloadActionContext,
+  })
+  db.seed('memberships', {
+    _id: 'memberships:cron-workload',
+    membershipRef: 'mem_99999999999999999999999999999999',
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    memberPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    lifecycle: 'active',
+    revision: 1,
+    createdAt: 1,
+    createdBy: workloadActionContext,
+  })
+  db.seed('authorityDelegationGrants', {
+    _id: 'authorityDelegationGrants:payout-authority',
+    grantRef: payoutAuthorityGrantRef,
+    accountRef: payoutOwningAccountRef,
+    actorPrincipalRef: payoutAuthorityPrincipalRef,
+    subjectPrincipalRef: payoutAuthorityPrincipalRef,
+    scopes: ['money:payout'],
+    resourceRefs: ['operation:money'],
+    budgetLimit: 1,
+    budgetUsed: 0,
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    generation: payoutAuthorityGrantGeneration,
+    revision: 1,
+    lifecycle: 'active',
+    createdAt: 1,
+    createdBy: authorityContext,
+  })
+  const credentialExpiresAt = 8_000_000_000_000
+  const bindingRef = 'eib_77777777777777777777777777777777'
+  const credentialRef = 'crd_88888888888888888888888888888888'
+  db.seed('externalIdentityBindings', {
+    _id: 'externalIdentityBindings:payout-owner',
+    bindingRef,
+    principalRef: payoutAuthorityPrincipalRef,
+    providerNamespace: 'clerk/user',
+    providerIdentifier: 'https://identity.example|owner:payout',
+    providerState: { kind: 'known', value: 'active' },
+    lifecycle: 'active',
+    credentialGeneration: 1,
+    revision: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  db.seed('credentials', {
+    _id: 'credentials:payout-owner',
+    credentialRef,
+    bindingRef,
+    principalRef: payoutAuthorityPrincipalRef,
+    type: 'provider_token',
+    lifecycle: 'active',
+    generation: 1,
+    issueIdempotencyRef: `issue:${credentialRef}`,
+    revision: 1,
+    issuedAt: 1,
+    expiresAt: credentialExpiresAt,
+    expiryMaterialization: {
+      state: 'scheduled',
+      credentialGeneration: 1,
+      credentialExpiresAt,
+      scheduleNonce: interactiveCredentialExpiryNonce({
+        bindingRef,
+        credentialRef,
+        generation: 1,
+        expiresAt: credentialExpiresAt,
+      }),
+      scheduleRef: `scheduled:${credentialRef}`,
+      materializedAt: 1,
+    },
+    updatedAt: 1,
+  })
+  const existingBusiness = db.rows('businesses').find((row) => row._id === 'business-1')
+  if (existingBusiness === undefined) {
+    db.seed('businesses', {
+      _id: 'business-1',
+      owningAccountRef: payoutOwningAccountRef,
+      slug: 'payout-owner',
+      name: 'Payout Owner',
+      normalizedName: 'payout owner',
+      category: 'testing',
+      businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
+      publicStatus: 'published',
+      trustTier: 'listed',
+      sourceHash: 'source:payout-owner',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+  } else {
+    existingBusiness.owningAccountRef = payoutOwningAccountRef
+  }
   db.seed('moneyAccounts', {
     _id: 'moneyAccounts:1',
     accountRef: 'business:business-1:USD',
@@ -247,6 +463,11 @@ export function seedPayout(
     _id: 'moneyPayouts:1',
     payoutRef: dailyPayoutRef,
     businessId: 'business-1',
+    owningAccountRef: payoutOwningAccountRef,
+    authorityPrincipalRef: payoutAuthorityPrincipalRef,
+    authorityGrantRef: payoutAuthorityGrantRef,
+    authorityGrantGeneration: payoutAuthorityGrantGeneration,
+    authorityResourceRefs: ['operation:money'],
     currency: 'USD',
     exponent: 2,
     grossAccrualUnits: '5500',
@@ -270,6 +491,11 @@ export function seedPayout(
     transactionRef: 'transaction:payout-1',
     usageRef: 'usage:payout-1',
     businessId: 'business-1',
+    owningAccountRef: payoutOwningAccountRef,
+    authorityPrincipalRef: payoutAuthorityPrincipalRef,
+    authorityGrantRef: payoutAuthorityGrantRef,
+    authorityGrantGeneration: payoutAuthorityGrantGeneration,
+    authorityResourceRef: 'operation:money',
     currency: 'USD',
     exponent: 2,
     grossAccrualUnits: '5500',
@@ -305,6 +531,11 @@ export function seedAdditionalDailyPayout(
     _id: `moneyPayouts:${suffix}`,
     payoutRef,
     businessId: 'business-1',
+    owningAccountRef: payoutOwningAccountRef,
+    authorityPrincipalRef: payoutAuthorityPrincipalRef,
+    authorityGrantRef: payoutAuthorityGrantRef,
+    authorityGrantGeneration: payoutAuthorityGrantGeneration,
+    authorityResourceRefs: ['operation:money'],
     currency: 'USD',
     exponent: 2,
     grossAccrualUnits: '5500',
@@ -329,6 +560,11 @@ export function seedAdditionalDailyPayout(
     transactionRef: `transaction:payout-${suffix}`,
     usageRef: `usage:payout-${suffix}`,
     businessId: 'business-1',
+    owningAccountRef: payoutOwningAccountRef,
+    authorityPrincipalRef: payoutAuthorityPrincipalRef,
+    authorityGrantRef: payoutAuthorityGrantRef,
+    authorityGrantGeneration: payoutAuthorityGrantGeneration,
+    authorityResourceRef: 'operation:money',
     currency: 'USD',
     exponent: 2,
     grossAccrualUnits: '5500',
@@ -361,7 +597,7 @@ export function creditProvider(
 
 export function commandArgs(): Record<string, unknown> {
   return {
-    authority: { principalId: 'principal:test' },
+    authority: { principalId: payoutAuthorityPrincipalRef },
     businessId: 'business-1',
     amount,
     providerAccountRef: 'business:business-1:USD',

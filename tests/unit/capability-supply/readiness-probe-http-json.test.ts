@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { runCapabilityReadinessProbe } from '@/modules/capability-supply/internal/readiness-probe'
+import { HEALTHY_TTL_MS } from '@/modules/capability-supply/internal/readiness-probe-shared'
 
 import { keylessAuthority, target } from './readiness-probe-harness'
 
@@ -129,7 +130,7 @@ describe('capability readiness probe', () => {
       outcome: 'healthy',
       credentialState: 'ready',
       healthState: 'healthy',
-      validUntil: 310_000,
+      validUntil: 10_000 + HEALTHY_TTL_MS,
       evidenceRefs: ['probe:credential_not_required', 'probe:target_public', 'probe:http_2xx'],
     })
     expect(send).toHaveBeenCalledOnce()

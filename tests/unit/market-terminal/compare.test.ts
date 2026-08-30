@@ -66,7 +66,7 @@ const operation = {
   evidence: [],
   cancellation: { kind: 'unsupported' },
   recovery: { idempotency: 'required', recovery: 'retry_safe' },
-  authentication: { kind: 'keyless' },
+  authentication: { kind: 'ae_api_key' },
   transport: { method: 'GET', pathTemplate: '/lookup', responseStatus: 200, responseContentType: 'application/json', requestTimeoutMs: 5_000 },
   provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
   availability: { posture: 'integrated', observedAt: 1_000, validUntil: 10_000 },

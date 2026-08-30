@@ -16,7 +16,6 @@ import { isRecord } from '../../src/modules/common/is-record'
 
 export function createLocalE2eRegistrySourceState(): RegistrySourceState {
   const state: RegistrySourceState = {
-    owners: [],
     businesses: [],
     businessContexts: [],
     offerings: [],
@@ -36,7 +35,6 @@ export function createLocalE2eRegistrySourceState(): RegistrySourceState {
       throw new Error(`Local e2e fixture offering missing for ${fixture.requestedSlug}`)
     }
     const publishedAt = 1_777_100_000_000 + fixtureIndex * 1_000
-    const ownerId = brandNonEmpty(`owner:${fixture.requestedSlug}`, 'OwnerId')
     const businessId = brandNonEmpty(`business:${fixture.requestedSlug}`, 'BusinessId')
     const slug = brandNonEmpty(fixture.requestedSlug, 'Slug')
     const businessContext = {
@@ -46,16 +44,8 @@ export function createLocalE2eRegistrySourceState(): RegistrySourceState {
       ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
     }
     const sourceHash = canonicalDigest({ fixture, businessContext })
-    state.owners.push({
-      ownerId,
-      clerkUserId: `owner:${fixture.requestedSlug}`,
-      displayName: `${fixture.businessName} Owner`,
-      createdAt: publishedAt,
-      updatedAt: publishedAt,
-    })
     state.businesses.push({
       businessId,
-      ownerId,
       slug,
       name: fixture.businessName,
       normalizedName: fixture.businessName.toLowerCase(),
@@ -109,7 +99,6 @@ export function createDefaultPublicRegistryFixtureState(): RegistrySourceState {
   if (business === undefined) throw new Error('Default public registry fixture is required.')
   return {
     ...state,
-    owners: state.owners.filter((candidate) => candidate.ownerId === business.ownerId),
     businesses: [business],
     businessContexts: state.businessContexts.filter((candidate) => candidate.businessId === business.businessId),
     offerings: state.offerings.filter((candidate) => candidate.businessId === business.businessId),

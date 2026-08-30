@@ -25,6 +25,21 @@ const candidate = {
   probeRequest: { method: "GET" as const, url: requestUrl, headers: [] },
 };
 
+const WORKLOAD = {
+  name: "refresh Agentic Economy API registry" as const,
+  workloadKind: "cron" as const,
+  actorPrincipalRef: "prn_f2000000000000000000000000000001",
+  activeAccountRef: "acc_f2000000000000000000000000000001",
+  correlationRef: "cron:registry-graduation:test",
+  idempotencyRef: "cron:registry-graduation:test",
+  purpose: "refresh Agentic Economy API registry",
+  source: "convex/workloadCron:refreshAgenticEconomyApiRegistry",
+  principalRevision: 1,
+  activeAccountRevision: 1,
+  accessVia: "membership" as const,
+  admittedAt: 1,
+};
+
 describe("registry entry graduation", () => {
   it("graduates only a live 402 challenge carrying official Bazaar contracts", async () => {
     const paymentRequired = validatePaymentRequired(timezonePin.paymentRequired);
@@ -188,12 +203,14 @@ describe("registry entry graduation", () => {
   });
 
   it("attempts only four selected digest-pinned candidates per sweep step", async () => {
-    const runQuery = vi.fn(async () => ({
+    const runQuery = vi.fn()
+      .mockResolvedValueOnce(WORKLOAD)
+      .mockResolvedValue({
       kind: "page" as const,
       candidates: [],
       isDone: false,
       continueCursor: "ignored",
-    }));
+      });
     const runAction = vi.fn(async (
       _reference: unknown,
       _args: {
@@ -224,6 +241,7 @@ describe("registry entry graduation", () => {
         args: {
           generation: string;
           candidates: { documentId: string; sourceDigest: string }[];
+          workload: unknown;
         },
       ) => Promise<unknown>;
     })._handler;
@@ -239,6 +257,7 @@ describe("registry entry graduation", () => {
     }, {
       generation: "generation-1",
       candidates,
+      workload: WORKLOAD,
     })).resolves.toEqual({ kind: "advanced", attempted: 4, graduated: 0 });
 
     expect(runAction).toHaveBeenCalledTimes(4);
@@ -247,22 +266,27 @@ describe("registry entry graduation", () => {
         documentId: item.documentId,
         expectedSourceDigest: item.sourceDigest,
         expectedGeneration: "generation-1",
+        workload: WORKLOAD,
       })),
     );
     expect(runAfter).toHaveBeenCalledOnce();
     expect(runAfter.mock.calls[0]?.[2]).toEqual({
       generation: "generation-1",
       candidates: candidates.slice(4),
+      cursor: null,
+      workload: WORKLOAD,
     });
   });
 
   it("continues after one publication preparation failure and schedules later candidates", async () => {
-    const runQuery = vi.fn(async () => ({
+    const runQuery = vi.fn()
+      .mockResolvedValueOnce(WORKLOAD)
+      .mockResolvedValue({
       kind: "page" as const,
       candidates: [],
       isDone: false,
       continueCursor: "ignored",
-    }));
+      });
     const runAction = vi.fn()
       .mockRejectedValueOnce(new Error(
         "Unhandled Error: facilitator_discovery_publication_prepare_failed",
@@ -291,6 +315,7 @@ describe("registry entry graduation", () => {
         args: {
           generation: string;
           candidates: { documentId: string; sourceDigest: string }[];
+          workload: unknown;
         },
       ) => Promise<unknown>;
     })._handler;
@@ -306,6 +331,7 @@ describe("registry entry graduation", () => {
     }, {
       generation: "generation-1",
       candidates,
+      workload: WORKLOAD,
     })).resolves.toEqual({ kind: "advanced", attempted: 4, graduated: 0 });
 
     expect(runAction).toHaveBeenCalledTimes(4);
@@ -313,6 +339,8 @@ describe("registry entry graduation", () => {
     expect(runAfter.mock.calls[0]?.[2]).toEqual({
       generation: "generation-1",
       candidates: candidates.slice(4),
+      cursor: null,
+      workload: WORKLOAD,
     });
     expect(info).toHaveBeenCalledWith(JSON.stringify({
       event: "REGISTRY_GRADUATION_CANDIDATE_REFUSED",
@@ -322,7 +350,9 @@ describe("registry entry graduation", () => {
   });
 
   it("stops a stale generation without probing or rescheduling candidates", async () => {
-    const runQuery = vi.fn(async () => ({ kind: "stale_generation" as const }));
+    const runQuery = vi.fn()
+      .mockResolvedValueOnce(WORKLOAD)
+      .mockResolvedValueOnce({ kind: "stale_generation" as const });
     const runAction = vi.fn();
     const runAfter = vi.fn();
     const handler = (sweep as unknown as {
@@ -335,6 +365,7 @@ describe("registry entry graduation", () => {
         args: {
           generation: string;
           candidates: { documentId: string; sourceDigest: string }[];
+          workload: unknown;
         },
       ) => Promise<unknown>;
     })._handler;
@@ -349,6 +380,7 @@ describe("registry entry graduation", () => {
         documentId: "registry:selected",
         sourceDigest: "sha256:selected",
       }],
+      workload: WORKLOAD,
     })).resolves.toEqual({
       kind: "stale_generation",
       attempted: 0,
@@ -358,7 +390,7 @@ describe("registry entry graduation", () => {
     expect(runAfter).not.toHaveBeenCalled();
   });
 
-  it("finishes an already-queued legacy cursor sweep without probing", async () => {
+  it("refuses an already-queued legacy cursor sweep without explicit workload authority", async () => {
     const runQuery = vi.fn();
     const runAction = vi.fn();
     const runAfter = vi.fn();
@@ -380,7 +412,7 @@ describe("registry entry graduation", () => {
     }, {
       generation: "legacy-generation",
       cursor: null,
-    })).resolves.toEqual({ kind: "complete", attempted: 0, graduated: 0 });
+    })).rejects.toThrow("workload_snapshot_invalid");
     expect(runQuery).not.toHaveBeenCalled();
     expect(runAction).not.toHaveBeenCalled();
     expect(runAfter).not.toHaveBeenCalled();

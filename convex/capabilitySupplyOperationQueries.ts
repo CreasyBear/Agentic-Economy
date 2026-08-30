@@ -7,7 +7,6 @@ import {
   compareCapabilityOperations,
   detailCapabilityOperation,
   inspectCapabilityOperationPlan,
-  isPublicOperationRef,
   searchCapabilityOperations,
   serializeInspectPlanResult,
   serializeOperationCompareResult,
@@ -19,79 +18,17 @@ import {
   type OperationCompareInput,
   type OperationDetailInput,
   type OperationSearchInput,
-  type PublicOperationRef,
 } from '@/modules/capability-supply/public'
 
 import type { QueryCtx } from './_generated/server'
 import { toRegisteredOperationMapping } from './capabilitySupplyRowMappers'
 import {
-  CURRENT_OPERATION_PROJECTION_DROP_REASONS,
   exactAmount,
   operationRecord,
-  operationRecordProjection,
   publicAuthentication,
   publicPrice,
   publicPriceBreakdown,
 } from './capabilitySupplyOperationShared'
-import {
-  loadProjectedCurrentOperation,
-  readCurrentOperationControl,
-  readCurrentOperationMode,
-  searchProjectedCurrentOperations,
-} from './capabilitySupplyOperationProjection'
-
-const currentOperationProjectionDropReason = v.union(
-  ...CURRENT_OPERATION_PROJECTION_DROP_REASONS.map((reason) => v.literal(reason)),
-)
-const currentOperationUnavailableReason = v.union(
-  v.literal('setup_required'),
-  v.literal('temporarily_unavailable'),
-  v.literal('readiness_expired'),
-  v.literal('publisher_withdrew'),
-  v.literal('under_review'),
-  v.literal('updated_terms_require_review'),
-  v.literal('not_supported_by_ae'),
-)
-const CURRENT_OPERATION_UNAVAILABLE_REASONS = [
-  'setup_required',
-  'temporarily_unavailable',
-  'readiness_expired',
-  'publisher_withdrew',
-  'under_review',
-  'updated_terms_require_review',
-  'not_supported_by_ae',
-] as const
-export const currentProjectionDiagnosticsReturns = v.object({
-  kind: v.literal('current_operation_projection_diagnostic'),
-  schemaVersion: v.literal('current-operation-projection-diagnostic:v1'),
-  scannedCount: v.number(),
-  projectedCount: v.number(),
-  unavailableCount: v.number(),
-  dropCount: v.number(),
-  truncated: v.boolean(),
-  serializedProjectionBytes: v.number(),
-  databaseQueries: v.number(),
-  documentsRead: v.number(),
-  bytesRead: v.number(),
-  drops: v.array(v.object({ reason: currentOperationProjectionDropReason, count: v.number() })),
-  unavailable: v.array(v.object({ reason: currentOperationUnavailableReason, count: v.number() })),
-})
-export const currentSearchBenchmarkReturns = v.object({
-  kind: v.literal('current_operation_search_measurement'),
-  schemaVersion: v.literal('current-operation-search-measurement:v1'),
-  outcome: v.union(v.literal('ok'), v.literal('no_candidates'), v.literal('unavailable')),
-  refusalReason: v.optional(v.union(
-    v.literal('query_invalid'),
-    v.literal('source_unavailable'),
-    v.literal('source_capacity_exceeded'),
-  )),
-  itemCount: v.number(),
-  matchedCount: v.number(),
-  serializedResultBytes: v.number(),
-  databaseQueries: v.number(),
-  documentsRead: v.number(),
-  bytesRead: v.number(),
-})
 
 const publicMaterialTerm = v.object({ label: v.string(), value: v.string() })
 const publicRelationship = v.object({
@@ -387,57 +324,9 @@ export const inspectArgs = { operationRefs: v.array(v.string()), mappingRefs: v.
 
 export async function searchHandler(ctx: QueryCtx, args: OperationSearchInput) {
   const now = Date.now()
-  const control = await readCurrentOperationControl(ctx)
-  const projected = async (trustedCursorLastOperationRef?: PublicOperationRef) => (
-    await searchProjectedCurrentOperations(
-      ctx,
-      args,
-      now,
-      CURRENT_OPERATION_PROJECTION_NAVIGATION,
-      control.verifiedActiveCount,
-      control.verifiedProjectionDigest,
-      trustedCursorLastOperationRef,
-    ))
-  if (control.mode === 'new') return serializeOperationSearchResult(await projected())
-  const oldResult = await searchCapabilityOperations(capabilityOperationSourcePort(ctx), args, now)
-  if (control.mode === 'shadow') {
-    const trustedCursorLastOperationRef = oldResult.kind !== 'unavailable'
-      && args.cursor !== undefined
-      ? operationRefFromAcceptedCursor(args.cursor)
-      : undefined
-    const newResult = await projected(trustedCursorLastOperationRef)
-    const oldWire = serializeOperationSearchResult(oldResult)
-    const newWire = serializeOperationSearchResult(newResult)
-    console.info('CURRENT_OPERATION_SHADOW', JSON.stringify({
-      schemaVersion: 'current-operation-shadow-read:v1',
-      oldOutcome: oldWire.kind,
-      newOutcome: newWire.kind,
-      typedOutcomeMatch: oldWire.kind === newWire.kind,
-      canonicalDigestMatch: canonicalDigest(shadowComparableSearchWire(oldWire))
-        === canonicalDigest(shadowComparableSearchWire(newWire)),
-    }))
-  }
-  return serializeOperationSearchResult(oldResult)
-}
-
-function operationRefFromAcceptedCursor(cursor: string): PublicOperationRef | undefined {
-  const encodedRef = /^cursor:v1:[0-9a-f]{64}:[^:]*:(.+)$/u.exec(cursor)?.[1]
-  if (encodedRef === undefined) return undefined
-  try {
-    const operationRef = decodeURIComponent(encodedRef)
-    return isPublicOperationRef(operationRef) ? operationRef : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function shadowComparableSearchWire(result: ReturnType<typeof serializeOperationSearchResult>) {
-  if (result.kind !== 'ok') return result
-  const { nextCursor, ...pagination } = result.pagination
-  return {
-    ...result,
-    pagination: { ...pagination, cursorPresent: nextCursor !== undefined },
-  }
+  return serializeOperationSearchResult(
+    await searchCapabilityOperations(capabilityOperationSourcePort(ctx), args, now),
+  )
 }
 export async function detailHandler(ctx: QueryCtx, args: OperationDetailInput) {
   return serializeOperationDetailResult(await detailCapabilityOperation(capabilityOperationSourcePort(ctx), args))
@@ -449,95 +338,16 @@ export async function inspectPlanHandler(ctx: QueryCtx, args: InspectPlanInput) 
   return serializeInspectPlanResult(await inspectCapabilityOperationPlan(capabilityOperationSourcePort(ctx), args))
 }
 
-const MAX_CURRENT_PROJECTION_DIAGNOSTIC_ROWS = 257
-
-/**
- * Operator-only, bounded diagnostics for current rows that public projection
- * deliberately omits. Only aggregate labels and counts are returned: no query
- * text, Operation input, credentials, endpoint details, or raw source rows.
- */
-export async function currentProjectionDiagnosticsHandler(
-  ctx: QueryCtx,
-  args: Readonly<{ now: number }>,
-) {
-  const publications = await ctx.db.query('capabilityPublications')
-    .withIndex('by_disposition_and_readinessValidUntil', (query) => query.eq('disposition', 'current'))
-    .take(MAX_CURRENT_PROJECTION_DIAGNOSTIC_ROWS + 1)
-  const bounded = publications.slice(0, MAX_CURRENT_PROJECTION_DIAGNOSTIC_ROWS)
-  const projections = await Promise.all(bounded.map((publication) => (
-    operationRecordProjection(ctx, publication, args.now)
-  )))
-  const drops = new Map<string, number>()
-  const unavailable = new Map<string, number>()
-  let projectedCount = 0
-  let unavailableCount = 0
-  let serializedProjectionBytes = 0
-  for (const projection of projections) {
-    if (projection.kind === 'dropped') {
-      drops.set(projection.reason, (drops.get(projection.reason) ?? 0) + 1)
-      continue
-    }
-    projectedCount += 1
-    serializedProjectionBytes += new TextEncoder().encode(JSON.stringify(projection.record)).byteLength
-    if (projection.record.unavailableReason !== undefined) {
-      unavailableCount += 1
-      unavailable.set(
-        projection.record.unavailableReason,
-        (unavailable.get(projection.record.unavailableReason) ?? 0) + 1,
-      )
-    }
-  }
-  const transaction = await ctx.meta.getTransactionMetrics()
-  return {
-    kind: 'current_operation_projection_diagnostic' as const,
-    schemaVersion: 'current-operation-projection-diagnostic:v1' as const,
-    scannedCount: bounded.length,
-    projectedCount,
-    unavailableCount,
-    dropCount: bounded.length - projectedCount,
-    truncated: publications.length > MAX_CURRENT_PROJECTION_DIAGNOSTIC_ROWS,
-    serializedProjectionBytes,
-    databaseQueries: transaction.databaseQueries.used,
-    documentsRead: transaction.documentsRead.used,
-    bytesRead: transaction.bytesRead.used,
-    drops: CURRENT_OPERATION_PROJECTION_DROP_REASONS.flatMap((reason) => {
-      const count = drops.get(reason) ?? 0
-      return count === 0 ? [] : [{ reason, count }]
-    }),
-    unavailable: CURRENT_OPERATION_UNAVAILABLE_REASONS.flatMap((reason) => {
-      const count = unavailable.get(reason) ?? 0
-      return count === 0 ? [] : [{ reason, count }]
-    }),
-  }
-}
-
-/** Privacy-safe Wave 0 search measurement. The search query and rows stay in-process. */
-export async function currentSearchBenchmarkHandler(
-  ctx: QueryCtx,
-  args: OperationSearchInput,
-) {
-  const result = await searchHandler(ctx, args)
-  const transaction = await ctx.meta.getTransactionMetrics()
-  return {
-    kind: 'current_operation_search_measurement' as const,
-    schemaVersion: 'current-operation-search-measurement:v1' as const,
-    outcome: result.kind,
-    ...(result.kind === 'unavailable' ? { refusalReason: result.reason } : {}),
-    itemCount: result.kind === 'ok' ? result.items.length : 0,
-    matchedCount: result.kind === 'ok' || result.kind === 'no_candidates' ? result.matchedCount : 0,
-    serializedResultBytes: new TextEncoder().encode(JSON.stringify(result)).byteLength,
-    databaseQueries: transaction.databaseQueries.used,
-    documentsRead: transaction.documentsRead.used,
-    bytesRead: transaction.bytesRead.used,
-  }
-}
-
 function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSourcePort {
-  const listOld = async (
+  const listCurrent = async (
     networkId: string | undefined,
     limit: number,
     now: number,
-  ): Promise<Readonly<{ operations: readonly CapabilityOperationSourceRecord[]; snapshotKey: string }>> => {
+  ): Promise<Readonly<{
+    operations: readonly CapabilityOperationSourceRecord[]
+    sourceCount: number
+    snapshotKey: string
+  }>> => {
     const publications = networkId === undefined
       ? await ctx.db.query('capabilityPublications')
         .withIndex('by_disposition_and_readinessValidUntil', (query) => query.eq('disposition', 'current'))
@@ -545,30 +355,45 @@ function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSource
       : await ctx.db.query('capabilityPublications')
         .withIndex('by_networkId_and_disposition', (query) => query.eq('networkId', networkId).eq('disposition', 'current'))
         .take(limit)
+    if (publications.length >= limit) {
+      return {
+        operations: [],
+        sourceCount: publications.length,
+        snapshotKey: `capability-supply:capacity:${canonicalDigest(publications.map((publication) => ({
+          publicationRef: publication.publicationRef,
+          revision: publication.revision,
+        })))}`,
+      }
+    }
     const records = await Promise.all(publications.map((publication) => operationRecord(ctx, publication, now)))
+    const operations = records.flatMap((record) => record === undefined ? [] : [record])
     return {
-      operations: records.flatMap((record) => record === undefined ? [] : [record]),
-      snapshotKey: `capability-supply:current:${canonicalDigest(publications.map((publication) => ({
-        publicationRef: publication.publicationRef,
-        operationRef: publication.operationRef,
-        revision: publication.revision,
-        disposition: publication.disposition,
-        networkId: publication.networkId,
-        credentialState: publication.credentialState,
-        healthState: publication.healthState,
-        readinessTargetDigest: publication.readinessTargetDigest ?? null,
-        readinessRequestDigest: publication.readinessRequestDigest ?? null,
-        readinessResponseStatus: publication.readinessResponseStatus ?? null,
-        readinessResponseContentType: publication.readinessResponseContentType ?? null,
-        readinessResponseDigest: publication.readinessResponseDigest ?? null,
-        readinessOutcome: publication.readinessOutcome ?? null,
-        readinessObservedAt: publication.readinessObservedAt ?? null,
-        readinessValidUntil: publication.readinessValidUntil ?? null,
-        readinessEvidenceRefs: [...publication.readinessEvidenceRefs].sort(),
-      })))}`,
+      operations,
+      sourceCount: publications.length,
+      snapshotKey: `capability-supply:current:${canonicalDigest({
+        publications: publications.map((publication) => ({
+          publicationRef: publication.publicationRef,
+          operationRef: publication.operationRef,
+          revision: publication.revision,
+          disposition: publication.disposition,
+          networkId: publication.networkId,
+          credentialState: publication.credentialState,
+          healthState: publication.healthState,
+          readinessTargetDigest: publication.readinessTargetDigest ?? null,
+          readinessRequestDigest: publication.readinessRequestDigest ?? null,
+          readinessResponseStatus: publication.readinessResponseStatus ?? null,
+          readinessResponseContentType: publication.readinessResponseContentType ?? null,
+          readinessResponseDigest: publication.readinessResponseDigest ?? null,
+          readinessOutcome: publication.readinessOutcome ?? null,
+          readinessObservedAt: publication.readinessObservedAt ?? null,
+          readinessValidUntil: publication.readinessValidUntil ?? null,
+          readinessEvidenceRefs: [...publication.readinessEvidenceRefs].sort(),
+        })),
+        operationDigests: operations.map((operation) => canonicalDigest(operation)),
+      })}`,
     }
   }
-  const loadOld = async (operationRef: string) => {
+  const loadCurrent = async (operationRef: string) => {
     const publication = await ctx.db.query('capabilityPublications')
       .withIndex('by_operationRef_and_disposition', (query) => (
         query.eq('operationRef', operationRef).eq('disposition', 'current')
@@ -579,14 +404,8 @@ function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSource
   }
   return {
     navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
-    listCurrent: async (input) => {
-      return await listOld(input.networkId, input.limit, input.now)
-    },
-    loadCurrent: async (operationRef) => {
-      const mode = await readCurrentOperationMode(ctx)
-      if (mode === 'new') return await loadProjectedCurrentOperation(ctx, operationRef)
-      return await loadOld(operationRef)
-    },
+    listCurrent: async (input) => await listCurrent(input.networkId, input.limit, input.now),
+    loadCurrent,
     resolveMapping: async (mappingRef, networkId) => {
       if (networkId === undefined) return null
       const row = await ctx.db.query('registeredOperationMappings')

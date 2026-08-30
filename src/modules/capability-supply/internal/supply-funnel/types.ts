@@ -1,6 +1,7 @@
 import type { PricingConfig } from "@/modules/money/public";
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from "@/modules/security/source-write-admission";
 import type { CapabilityPublicationSourceSelector } from "../publication-importers";
+import type { PreparedPublicationMaterial } from "../publication";
 
 type BusinessOfferingStatus = "draft" | "published" | "paused" | "retired";
 type OfferingAccessPathDescriptor =
@@ -180,6 +181,7 @@ export type OwnerSupplyOfferingReadback = Readonly<{
   summary: string;
   status: BusinessOfferingStatus;
   sourceHash?: string;
+  sourceMaterial?: PreparedPublicationMaterial;
   endpointUrl?: string;
   source?: OwnerSupplyReadbackSource;
   pricing?: Readonly<{ config: PricingConfig; priceDigest: string }>;
@@ -189,7 +191,8 @@ export type OwnerSupplyOfferingReadback = Readonly<{
       | "ae_curated_external"
       | "third_party_gateway"
       | "observed_external";
-    kind: "keyless" | "provider_connection";
+    kind: "public_upstream" | "provider_connection";
+    connectionRef?: string;
     providerRef?: string;
     authorityGeneration?: number;
     authorityDigest?: string;
@@ -223,10 +226,15 @@ export type OwnerSupplyOfferingReadback = Readonly<{
       admission: "not_admitted" | "admitted";
       conformance: "not_conformant" | "conformant";
       authority: Readonly<
-        | { kind: "keyless" }
-        | { kind: "provider_connection"; providerRef: string }
+        | { kind: "public_upstream" }
+        | {
+            kind: "provider_connection";
+            connectionRef: string;
+            providerRef: string;
+          }
       >;
       authoritySnapshot?: Readonly<{
+        connectionRef: string;
         providerRef: string;
         authorityGeneration: number;
         authorityDigest: string;

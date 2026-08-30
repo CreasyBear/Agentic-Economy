@@ -26,7 +26,8 @@ invocation, payment where required, and evidence about the returned unit.
 - `/api/v1/market-operations/*` — canonical Operation discovery and inspection.
 - `/api/v1/operations/call` — consequential invocation entry.
 - `/mcp`, `/llms.txt`, and `/SKILL.md` — machine discovery.
-- `@agentic-economy/cli` — search, inspect, call, status, and recovery.
+- `@agentic-economy/cli` — search, private missing-job requests, inspect, call,
+  status, and recovery.
 - `/for-providers` — supplier publication.
 
 Chat exposes only search, detail, compare, inspect-plan, and eligible keyless
@@ -71,6 +72,7 @@ npm run test:release:source
 
 ```sh
 npx @agentic-economy/cli search "weather forecast" --limit 5
+npx @agentic-economy/cli request create "translate a handwritten invoice"
 npx @agentic-economy/cli inspect <operationRef>
 npx @agentic-economy/cli call <operationRef> --input '{"city":"Perth"}'
 ```

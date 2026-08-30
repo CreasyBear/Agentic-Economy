@@ -9,7 +9,10 @@ import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-d
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import { normalizePricingConfig, pricingConfigDigest, type PricingConfig } from '@/modules/money/public'
 
-import { connectionAuthoritySnapshotMatches } from '../binding/registration'
+import {
+  connectionAuthoritySnapshotMatches,
+  type CapabilityConnectionAuthoritySnapshot,
+} from '../binding/registration'
 import { bindingIntegrityIsValid } from '../binding/integrity'
 import { offeringIntegrityIsValid } from '../offering/integrity'
 import { beginOperation, replayOperationResult, succeedOperation } from '../operation-ledger/policy'
@@ -24,7 +27,11 @@ import {
   type CapabilityPublicationProvenance,
 } from './provenance'
 import type { CapabilityPublicationImportRefusal } from '../publication-importers'
-import { admitPublicationDraft, type PreparedPublicationMaterial } from './draft'
+import {
+  admitPublicationDraft,
+  type AdmittedPublicationDraft,
+  type PreparedPublicationMaterial,
+} from './draft'
 import { publicationProjection, type PublicationLifecycle } from './lifecycle'
 import type { PublicationCommandPorts, PublicationCommandRow } from './ports'
 
@@ -114,6 +121,124 @@ type PreparedPublicationCommitInput = PublishPreparedCapabilityCommandInput & Re
 type PreparedValidation =
   | Readonly<{ kind: 'valid'; pricing: PricingConfig }>
   | Readonly<{ kind: 'refused'; reason: 'source_invalid' | 'pricing_config_invalid' }>
+
+const allPublicationFacts = (facts: readonly boolean[]): boolean =>
+  facts.every(Boolean)
+
+function publicationMetadataMatches(input: Readonly<{
+  metadata: CapabilityPublicationProvenance
+  actor: SupplyCommandActor
+  sourceRevision: string
+  sourceDigest: string
+}>): boolean {
+  const { metadata, actor, sourceRevision, sourceDigest } = input
+  return allPublicationFacts([
+    metadata.publisherRef === actor.ref,
+    metadata.sourceRevision === sourceRevision,
+    metadata.provenanceDigest === capabilityPublicationProvenanceDigest({
+      publisherRef: metadata.publisherRef,
+      authorityMode: metadata.authorityMode,
+      sourceRevision,
+      sourceDigest,
+    }),
+  ])
+}
+
+function previousPublicationMatchesRegistration(
+  previous: PublicationCommandRow,
+  admitted: AdmittedPublicationDraft,
+  businessId: string,
+): boolean {
+  return allPublicationFacts([
+    previous.capabilityId === admitted.encoded.contract.ref.capabilityId,
+    previous.version === admitted.encoded.contract.ref.version,
+    previous.contractDigest === admitted.encoded.contract.ref.contractDigest,
+    previous.offeringId === admitted.offering.offeringId,
+    previous.businessId === businessId,
+  ])
+}
+
+function connectionAuthoritySnapshotsAgree(
+  previous: PublicationCommandRow['connectionAuthority'],
+  persisted: CapabilityConnectionAuthoritySnapshot | undefined,
+): boolean {
+  if (previous === undefined || persisted === undefined) {
+    return previous === persisted
+  }
+  return canonicalDigest(previous as StableHashValue)
+    === canonicalDigest(persisted as StableHashValue)
+}
+
+function initialTargetPublicationMatches(input: Readonly<{
+  target: PublicationCommandRow
+  runtimeEnvironment: PublishPreparedCapabilityCommandInput['runtimeEnvironment']
+  sourceDigest: string
+  offeringId: string
+  bindingId: string
+  priceDigest: string
+}>): boolean {
+  return allPublicationFacts([
+    input.target.runtimeEnvironment === input.runtimeEnvironment,
+    input.target.sourceDigest === input.sourceDigest,
+    input.target.offeringId === input.offeringId,
+    input.target.bindingId === input.bindingId,
+    input.target.priceDigest === input.priceDigest,
+  ])
+}
+
+function republishTargetMatches(input: Readonly<{
+  target: PublicationCommandRow
+  previous: PublicationCommandRow
+  admitted: AdmittedPublicationDraft
+  prepared: PreparedPublicationMaterial
+  bindingId: string
+  businessId: string
+  runtimeEnvironment: PublishPreparedCapabilityCommandInput['runtimeEnvironment']
+  revision: number
+  operationRef: string
+  metadata: CapabilityPublicationProvenance
+}>): boolean {
+  const {
+    target,
+    previous,
+    admitted,
+    prepared,
+    bindingId,
+    businessId,
+    runtimeEnvironment,
+    revision,
+    operationRef,
+    metadata,
+  } = input
+  const { encoded, offering } = admitted
+  return allPublicationFacts([
+    target.operationRef === operationRef,
+    target.revision === revision,
+    target.businessId === businessId,
+    target.networkId === offering.networkId,
+    target.runtimeEnvironment === runtimeEnvironment,
+    target.capabilityId === encoded.contract.ref.capabilityId,
+    target.version === encoded.contract.ref.version,
+    target.contractDigest === encoded.contract.ref.contractDigest,
+    target.offeringId === offering.offeringId,
+    target.bindingId === bindingId,
+    target.disposition === 'current',
+    target.supersedesRevision === previous.revision,
+    target.sourceKind === prepared.sourceKind,
+    target.sourceSelector !== undefined,
+    target.sourceSelector !== undefined
+      && stableStringify(target.sourceSelector as StableHashValue)
+        === stableStringify(prepared.sourceSelector as StableHashValue),
+    target.sourceDescriptorJson === prepared.sourceDescriptorJson,
+    target.sourceRevision === prepared.sourceRevision,
+    target.sourceDigest === prepared.sourceDigest,
+    target.pricingConfigJson === prepared.pricingConfigJson,
+    target.priceDigest === prepared.priceDigest,
+    target.publisherRef === metadata.publisherRef,
+    target.authorityMode === metadata.authorityMode,
+    target.provenanceDigest === metadata.provenanceDigest,
+  ])
+}
 
 export async function publishPreparedCapabilityCommand(
   input: PublishPreparedCapabilityCommandInput,
@@ -227,6 +352,214 @@ export async function republishPreparedCapabilityCommand(
   return result
 }
 
+type PublicationCommitRefusal = Readonly<{
+  kind: 'refused'
+  reason: PublishPreparedCapabilityRefusal
+}>
+
+async function validatePublicationContractContinuity(
+  input: PreparedPublicationCommitInput,
+  ports: PublicationCommandPorts,
+  admitted: AdmittedPublicationDraft,
+): Promise<PublicationCommitRefusal | undefined> {
+  const { offering, encoded } = admitted
+  if (offering.origin?.kind === 'catalog_offering') {
+    if (
+      ports.catalogOriginIsCurrent === undefined
+      || !await ports.catalogOriginIsCurrent(offering.origin, input.businessId)
+    ) return { kind: 'refused', reason: 'catalog_offering_origin_changed' }
+  }
+  const existingContractDigest = await ports.findContractDigest(
+    encoded.contract.ref.capabilityId,
+    encoded.contract.ref.version,
+  )
+  if (
+    existingContractDigest !== null
+    && existingContractDigest !== encoded.contract.ref.contractDigest
+  ) return { kind: 'refused', reason: 'contract_identity_conflict' }
+  if (input.previousPublication === undefined) return undefined
+  const exactContract = await ports.getExactRegisteredContract(encoded.contract.ref)
+  if (
+    exactContract.kind !== 'found'
+    || canonicalDigest(exactContract.contract) !== canonicalDigest(encoded.contract)
+  ) return { kind: 'refused', reason: 'contract_integrity_failure' }
+  if (!previousPublicationMatchesRegistration(
+    input.previousPublication,
+    admitted,
+    input.businessId,
+  )) return { kind: 'refused', reason: 'registration_changed' }
+  return undefined
+}
+
+async function validatePublicationOfferingIdentity(
+  ports: PublicationCommandPorts,
+  admitted: AdmittedPublicationDraft,
+  previousPublication: PublicationCommandRow | undefined,
+): Promise<PublicationCommitRefusal | undefined> {
+  const offeringHash = capabilityOfferingRegistrationHash(admitted.offering)
+  const existing = await ports.loadOfferingByOfferingId(admitted.offering.offeringId)
+  if (previousPublication !== undefined && existing === null) {
+    return { kind: 'refused', reason: 'registration_changed' }
+  }
+  if (existing === null) return undefined
+  if (!offeringIntegrityIsValid(existing)) {
+    return { kind: 'refused', reason: 'offering_integrity_failure' }
+  }
+  return existing.registrationHash === offeringHash
+    ? undefined
+    : { kind: 'refused', reason: 'offering_identity_conflict' }
+}
+
+async function preparePublicationBinding(input: Readonly<{
+  command: PreparedPublicationCommitInput
+  ports: PublicationCommandPorts
+  admitted: AdmittedPublicationDraft
+}>): Promise<
+  | PublicationCommitRefusal
+  | Readonly<{ kind: 'valid'; binding: AdmittedPublicationDraft['binding'] }>
+> {
+  const { command, ports, admitted } = input
+  const { binding: originalBinding, admittedTransport } = admitted
+  const originalBindingHash = capabilityBindingRegistrationHash(
+    originalBinding,
+    admittedTransport.transport,
+  )
+  const existingBinding = await ports.loadBindingByBindingId(originalBinding.bindingId)
+  if (command.previousPublication !== undefined && existingBinding === null) {
+    return { kind: 'refused', reason: 'registration_changed' }
+  }
+  if (existingBinding !== null) {
+    if (!bindingIntegrityIsValid(existingBinding)) {
+      return { kind: 'refused', reason: 'binding_integrity_failure' }
+    }
+    if (existingBinding.registrationHash !== originalBindingHash) {
+      return { kind: 'refused', reason: 'binding_identity_conflict' }
+    }
+  }
+  let binding = originalBinding
+  if (command.previousPublication !== undefined) {
+    const previousAuthority = command.previousPublication.connectionAuthority
+    const persistedAuthority = existingBinding?.connectionAuthority
+    if (!connectionAuthoritySnapshotsAgree(previousAuthority, persistedAuthority)) {
+      return { kind: 'refused', reason: 'connection_authority_stale' }
+    }
+    if (persistedAuthority !== undefined) {
+      if (ports.loadProviderConnection === undefined) {
+        return { kind: 'refused', reason: 'connection_authority_stale' }
+      }
+      const connection = await ports.loadProviderConnection(persistedAuthority.connectionRef)
+      if (!connectionAuthoritySnapshotMatches(
+        persistedAuthority,
+        connection,
+        {
+          businessId: command.businessId,
+          operationRef: command.previousPublication.operationRef,
+          adapterId: originalBinding.adapter.adapterId,
+          now: command.now,
+        },
+      )) return { kind: 'refused', reason: 'connection_authority_stale' }
+      if (persistedAuthority.operationRef !== command.previousPublication.operationRef) {
+        return { kind: 'refused', reason: 'connection_authority_stale' }
+      }
+      binding = {
+        ...originalBinding,
+        bindingId: revisionSpecificBindingId(originalBinding.bindingId, command.revision),
+      }
+      const nextExisting = await ports.loadBindingByBindingId(binding.bindingId)
+      if (nextExisting !== null && !command.allowExistingTargetForReplay) {
+        return { kind: 'refused', reason: 'binding_identity_conflict' }
+      }
+    }
+  }
+  const bindingHash = capabilityBindingRegistrationHash(
+    binding,
+    admittedTransport.transport,
+  )
+  const targetBinding = binding.bindingId === originalBinding.bindingId
+    ? existingBinding
+    : await ports.loadBindingByBindingId(binding.bindingId)
+  if (targetBinding !== null) {
+    if (!bindingIntegrityIsValid(targetBinding)) {
+      return { kind: 'refused', reason: 'binding_integrity_failure' }
+    }
+    if (targetBinding.registrationHash !== bindingHash) {
+      return { kind: 'refused', reason: 'binding_identity_conflict' }
+    }
+  }
+  return { kind: 'valid', binding }
+}
+
+async function preparePublicationTarget(input: Readonly<{
+  command: PreparedPublicationCommitInput
+  ports: PublicationCommandPorts
+  admitted: AdmittedPublicationDraft
+  binding: AdmittedPublicationDraft['binding']
+  metadata: CapabilityPublicationProvenance
+}>): Promise<
+  | PublicationCommitRefusal
+  | Readonly<{
+      kind: 'valid'
+      publicationRef: string
+      targetPublication: PublicationCommandRow | null
+      operationRef: ReturnType<typeof createPublicOperationRef>
+    }>
+> {
+  const { command, ports, admitted, binding, metadata } = input
+  const { offering, encoded } = admitted
+  const prepared = command.prepared
+  const publicationRef = command.previousPublication?.publicationRef
+    ?? offering.offeringId
+  const targetPublication = await ports.loadPublicationAtRevision(
+    publicationRef,
+    command.revision,
+  )
+  if (
+    command.previousPublication !== undefined
+    && targetPublication !== null
+    && !command.allowExistingTargetForReplay
+  ) return { kind: 'refused', reason: 'registration_changed' }
+  if (
+    command.previousPublication === undefined
+    && targetPublication !== null
+    && !initialTargetPublicationMatches({
+      target: targetPublication,
+      runtimeEnvironment: command.runtimeEnvironment,
+      sourceDigest: prepared.sourceDigest,
+      offeringId: offering.offeringId,
+      bindingId: binding.bindingId,
+      priceDigest: prepared.priceDigest,
+    })
+  ) return { kind: 'refused', reason: 'offering_identity_conflict' }
+  const operationRef = createPublicOperationRef({
+    operationId: capabilityOperationId(encoded.contract.ref.capabilityId),
+    publicationRef,
+    publicationRevision: command.revision,
+    contractRef: encoded.contract.ref,
+  })
+  if (
+    command.previousPublication === undefined
+    && targetPublication !== null
+    && targetPublication.operationRef !== operationRef
+  ) throw new Error('capability_publication_operation_ref_invalid')
+  if (
+    command.previousPublication !== undefined
+    && targetPublication !== null
+    && !republishTargetMatches({
+      target: targetPublication,
+      previous: command.previousPublication,
+      admitted,
+      prepared,
+      bindingId: binding.bindingId,
+      businessId: command.businessId,
+      runtimeEnvironment: command.runtimeEnvironment,
+      revision: command.revision,
+      operationRef,
+      metadata,
+    })
+  ) return { kind: 'refused', reason: 'registration_changed' }
+  return { kind: 'valid', publicationRef, targetPublication, operationRef }
+}
+
 async function commitPreparedPublicationCommand(
   input: PreparedPublicationCommitInput,
   ports: PublicationCommandPorts,
@@ -246,7 +579,7 @@ async function commitPreparedPublicationCommand(
     origin: input.origin,
   })
   if (admitted.kind === 'refused') return { kind: 'refused', reason: mapAdmissionRefusal(admitted.reason) }
-  const { encoded, offering, binding: originalBinding, admittedTransport } = admitted
+  const { encoded, offering } = admitted
   const sourceRevision = prepared.sourceRevision
   const sourceDigest = prepared.sourceDigest
   const derivedAuthorityMode: CapabilityPublicationAuthorityMode =
@@ -259,174 +592,44 @@ async function commitPreparedPublicationCommand(
         sourceDigest,
       })
     : input.publicationMetadata
-  if (
-    publicationMetadata.publisherRef !== input.actor.ref
-    || publicationMetadata.sourceRevision !== sourceRevision
-    || publicationMetadata.provenanceDigest !== capabilityPublicationProvenanceDigest({
-      publisherRef: publicationMetadata.publisherRef,
-      authorityMode: publicationMetadata.authorityMode,
-      sourceRevision,
-      sourceDigest,
-    })
-  ) {
+  if (!publicationMetadataMatches({
+    metadata: publicationMetadata,
+    actor: input.actor,
+    sourceRevision,
+    sourceDigest,
+  })) {
     return { kind: 'refused', reason: 'source_invalid' }
   }
 
-  if (offering.origin?.kind === 'catalog_offering') {
-    if (ports.catalogOriginIsCurrent === undefined
-      || !await ports.catalogOriginIsCurrent(offering.origin, input.businessId)) {
-      return { kind: 'refused', reason: 'catalog_offering_origin_changed' }
-    }
-  }
-
-  const existingContractDigest = await ports.findContractDigest(
-    encoded.contract.ref.capabilityId,
-    encoded.contract.ref.version,
+  const contractRefusal = await validatePublicationContractContinuity(
+    input,
+    ports,
+    admitted,
   )
-  if (existingContractDigest !== null && existingContractDigest !== encoded.contract.ref.contractDigest) {
-    return { kind: 'refused', reason: 'contract_identity_conflict' }
-  }
-  if (input.previousPublication !== undefined) {
-    const exactContract = await ports.getExactRegisteredContract(encoded.contract.ref)
-    if (exactContract.kind !== 'found'
-      || canonicalDigest(exactContract.contract)
-        !== canonicalDigest(encoded.contract)) {
-      return { kind: 'refused', reason: 'contract_integrity_failure' }
-    }
-    if (
-      input.previousPublication.capabilityId !== encoded.contract.ref.capabilityId
-      || input.previousPublication.version !== encoded.contract.ref.version
-      || input.previousPublication.contractDigest !== encoded.contract.ref.contractDigest
-      || input.previousPublication.offeringId !== offering.offeringId
-      || input.previousPublication.businessId !== input.businessId
-    ) {
-      return { kind: 'refused', reason: 'registration_changed' }
-    }
-  }
-
-  const offeringHash = capabilityOfferingRegistrationHash(offering)
-  const existingOffering = await ports.loadOfferingByOfferingId(offering.offeringId)
-  if (input.previousPublication !== undefined && existingOffering === null) {
-    return { kind: 'refused', reason: 'registration_changed' }
-  }
-  if (existingOffering !== null) {
-    if (!offeringIntegrityIsValid(existingOffering)) return { kind: 'refused', reason: 'offering_integrity_failure' }
-    if (existingOffering.registrationHash !== offeringHash) return { kind: 'refused', reason: 'offering_identity_conflict' }
-  }
-
-  const originalBindingHash = capabilityBindingRegistrationHash(originalBinding, admittedTransport.transport)
-  const existingBinding = await ports.loadBindingByBindingId(originalBinding.bindingId)
-  if (input.previousPublication !== undefined && existingBinding === null) {
-    return { kind: 'refused', reason: 'registration_changed' }
-  }
-  if (existingBinding !== null) {
-    if (!bindingIntegrityIsValid(existingBinding)) return { kind: 'refused', reason: 'binding_integrity_failure' }
-    if (existingBinding.registrationHash !== originalBindingHash) return { kind: 'refused', reason: 'binding_identity_conflict' }
-  }
-
-  let binding = originalBinding
-  if (input.previousPublication !== undefined) {
-    const previousAuthority = input.previousPublication.connectionAuthority
-    const persistedAuthority = existingBinding?.connectionAuthority
-    if (
-      (previousAuthority === undefined) !== (persistedAuthority === undefined)
-      || (previousAuthority !== undefined && persistedAuthority !== undefined
-        && canonicalDigest(previousAuthority as StableHashValue) !== canonicalDigest(persistedAuthority as StableHashValue))
-    ) {
-      return { kind: 'refused', reason: 'connection_authority_stale' }
-    }
-    if (persistedAuthority !== undefined) {
-      if (
-        ports.loadProviderConnection === undefined
-        || !connectionAuthoritySnapshotMatches(
-          persistedAuthority,
-          await ports.loadProviderConnection(persistedAuthority.connectionRef),
-          {
-            businessId: input.businessId,
-            operationRef: input.previousPublication.operationRef,
-            adapterId: originalBinding.adapter.adapterId,
-            now: input.now,
-          },
-        )
-      ) {
-        return { kind: 'refused', reason: 'connection_authority_stale' }
-      }
-      if (persistedAuthority.operationRef !== input.previousPublication.operationRef) {
-        return { kind: 'refused', reason: 'connection_authority_stale' }
-      }
-      binding = {
-        ...originalBinding,
-        bindingId: revisionSpecificBindingId(originalBinding.bindingId, input.revision),
-      }
-      const nextExistingBinding = await ports.loadBindingByBindingId(binding.bindingId)
-      if (nextExistingBinding !== null && !input.allowExistingTargetForReplay) {
-        return { kind: 'refused', reason: 'binding_identity_conflict' }
-      }
-    }
-  }
-  const bindingHash = capabilityBindingRegistrationHash(binding, admittedTransport.transport)
-  const targetBinding = binding.bindingId === originalBinding.bindingId
-    ? existingBinding
-    : await ports.loadBindingByBindingId(binding.bindingId)
-  if (targetBinding !== null) {
-    if (!bindingIntegrityIsValid(targetBinding)) return { kind: 'refused', reason: 'binding_integrity_failure' }
-    if (targetBinding.registrationHash !== bindingHash) return { kind: 'refused', reason: 'binding_identity_conflict' }
-  }
-
-  const publicationRef = input.previousPublication?.publicationRef ?? offering.offeringId
-  const targetPublication = await ports.loadPublicationAtRevision(publicationRef, input.revision)
-  if (
-    input.previousPublication !== undefined
-    && targetPublication !== null
-    && !input.allowExistingTargetForReplay
-  ) {
-    return { kind: 'refused', reason: 'registration_changed' }
-  }
-  if (input.previousPublication === undefined && targetPublication !== null && (
-    targetPublication.runtimeEnvironment !== input.runtimeEnvironment
-    || targetPublication.sourceDigest !== sourceDigest
-    || targetPublication.offeringId !== offering.offeringId
-    || targetPublication.bindingId !== binding.bindingId
-    || targetPublication.priceDigest !== prepared.priceDigest
-  )) {
-    return { kind: 'refused', reason: 'offering_identity_conflict' }
-  }
-
-  const operationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(encoded.contract.ref.capabilityId),
-    publicationRef,
-    publicationRevision: input.revision,
-    contractRef: encoded.contract.ref,
+  if (contractRefusal !== undefined) return contractRefusal
+  const offeringRefusal = await validatePublicationOfferingIdentity(
+    ports,
+    admitted,
+    input.previousPublication,
+  )
+  if (offeringRefusal !== undefined) return offeringRefusal
+  const preparedBinding = await preparePublicationBinding({
+    command: input,
+    ports,
+    admitted,
   })
-  if (input.previousPublication === undefined && targetPublication !== null && targetPublication.operationRef !== operationRef) {
-    throw new Error('capability_publication_operation_ref_invalid')
-  }
-  if (input.previousPublication !== undefined && targetPublication !== null) {
-    const targetMatches = targetPublication.operationRef === operationRef
-      && targetPublication.revision === input.revision
-      && targetPublication.businessId === input.businessId
-      && targetPublication.networkId === offering.networkId
-      && targetPublication.runtimeEnvironment === input.runtimeEnvironment
-      && targetPublication.capabilityId === encoded.contract.ref.capabilityId
-      && targetPublication.version === encoded.contract.ref.version
-      && targetPublication.contractDigest === encoded.contract.ref.contractDigest
-      && targetPublication.offeringId === offering.offeringId
-      && targetPublication.bindingId === binding.bindingId
-      && targetPublication.disposition === 'current'
-      && targetPublication.supersedesRevision === input.previousPublication.revision
-      && targetPublication.sourceKind === prepared.sourceKind
-      && targetPublication.sourceSelector !== undefined
-      && stableStringify(targetPublication.sourceSelector as StableHashValue) === stableStringify(prepared.sourceSelector as StableHashValue)
-      && targetPublication.sourceDescriptorJson === prepared.sourceDescriptorJson
-      && targetPublication.sourceRevision === sourceRevision
-      && targetPublication.sourceDigest === sourceDigest
-      && targetPublication.pricingConfigJson === prepared.pricingConfigJson
-      && targetPublication.priceDigest === prepared.priceDigest
-      && targetPublication.publisherRef === publicationMetadata.publisherRef
-      && targetPublication.authorityMode === publicationMetadata.authorityMode
-      && targetPublication.provenanceDigest === publicationMetadata.provenanceDigest
-    if (!targetMatches) return { kind: 'refused', reason: 'registration_changed' }
-  }
+  if (preparedBinding.kind === 'refused') return preparedBinding
+  const binding = preparedBinding.binding
+
+  const preparedTarget = await preparePublicationTarget({
+    command: input,
+    ports,
+    admitted,
+    binding,
+    metadata: publicationMetadata,
+  })
+  if (preparedTarget.kind === 'refused') return preparedTarget
+  const { publicationRef, targetPublication, operationRef } = preparedTarget
   const expected = {
     ...publicationProjection(encoded.contract.ref, offering.offeringId, binding.bindingId),
     publicationRef,

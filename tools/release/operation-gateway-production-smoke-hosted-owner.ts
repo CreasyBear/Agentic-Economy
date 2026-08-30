@@ -294,7 +294,7 @@ function ownerSourceForRun(
       commercial: {
         offering,
         bindingId: ids.bindingId,
-        authority: { kind: "keyless" },
+        authority: { kind: "public_upstream" },
         registrationEvidenceRefs: [ids.evidenceRef],
         requestTimeoutMs: 5_000,
       },
@@ -883,7 +883,7 @@ export function createHostedOwnerRuntime(
     const source = record(publication.source);
     const contractRef = record(publication.contractRef);
     const binding = record(publication.binding);
-    if (record(binding?.authority)?.kind !== "keyless")
+    if (record(binding?.authority)?.kind !== "public_upstream")
       throw new GatewaySmokeError("gateway_smoke_owner_authority_malformed");
     const parsed = z
       .strictObject({

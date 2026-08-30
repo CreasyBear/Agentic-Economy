@@ -2,36 +2,14 @@ export const OperationKeyStatusValues = ['in_progress', 'succeeded', 'failed_ret
 
 import {
   ActorKindValues,
-  AuditEventTypeValues as StoredAuditEventTypeValues,
-  AuditTargetTypeValues as StoredAuditTargetTypeValues,
+  AuditEventTypeValues as AllAuditEventTypeValues,
+  AuditTargetTypeValues as AllAuditTargetTypeValues,
 } from '@/modules/common/audit-events'
 
 export { ActorKindValues }
 
-type StoredAuditEventType = (typeof StoredAuditEventTypeValues)[number]
-type StoredAuditTargetType = (typeof StoredAuditTargetTypeValues)[number]
-export type CurrentAuditEventType = Exclude<StoredAuditEventType, `business_action.${string}`>
-export type CurrentAuditTargetType = Exclude<StoredAuditTargetType, `business_action_${string}`>
-
-function requireNonEmpty<T extends string>(values: readonly T[]): readonly [T, ...T[]] {
-  const [first, ...rest] = values
-  if (first === undefined) {
-    throw new Error('Expected at least one current audit value')
-  }
-  return [first, ...rest]
-}
-
-export const AuditEventTypeValues = requireNonEmpty(
-  StoredAuditEventTypeValues.filter(
-    (value): value is CurrentAuditEventType => !value.startsWith('business_action.'),
-  ),
-)
-
-export const AuditTargetTypeValues = requireNonEmpty(
-  StoredAuditTargetTypeValues.filter(
-    (value): value is CurrentAuditTargetType => !value.startsWith('business_action_'),
-  ),
-)
+export const AuditEventTypeValues = AllAuditEventTypeValues
+export const AuditTargetTypeValues = AllAuditTargetTypeValues
 
 export const InvalidationSurfaceValues = ['public_catalog', 'registry_projection', 'discovery_manifest'] as const
 

@@ -153,6 +153,58 @@ beforeEach(() => {
 })
 
 describe('supply action runtime boundaries', () => {
+  it('projects one canonical lifecycle status without endpoint or provider authority material', async () => {
+    mocks.callPublicSourceMutation.mockResolvedValue({
+      kind: 'available',
+      businessId: 'business:supply-actions',
+      business: { name: 'Supplier', slug: 'supplier' },
+      offerings: [{
+        offeringRef: 'offering:one',
+        revision: 1,
+        name: 'Lookup',
+        summary: 'Look something up.',
+        status: 'published',
+        endpointUrl: 'https://private-provider.example/lookup',
+        authority: { kind: 'provider_connection', providerRef: 'provider:secret' },
+        admission: { state: 'admitted' },
+        publication: {
+          state: 'current',
+          publicationRef: 'publication:one',
+          publicationRevision: 1,
+          operationRef: 'operation:one',
+        },
+        lifecycle: { state: 'active', reasons: [] },
+        readiness: { outcome: 'healthy', observedAt: 10, validUntil: 20, evidenceRefs: [] },
+        live: { available: true },
+        currentStep: 'test',
+        stepStates: { describe: 'completed', admission: 'completed', readiness: 'completed', test: 'completed' },
+        accessPaths: [],
+      }],
+      callLog: [],
+      activityTruncated: false,
+      liquidity: { fillCount: 0, zeroCount: 0, depthSamples: 0, environment: 'production' },
+    })
+    const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
+
+    const result = await service.status({
+      input: { businessId: 'business:supply-actions', offeringRef: 'offering:one' },
+      principal,
+      correlationId: 'status:one',
+    })
+
+    expect(result).toMatchObject({
+      kind: 'available',
+      operations: [{
+        offeringRef: 'offering:one',
+        lifecycle: { state: 'active' },
+        readiness: { outcome: 'healthy' },
+        publication: { operationRef: 'operation:one' },
+      }],
+    })
+    expect(JSON.stringify(result)).not.toContain('private-provider')
+    expect(JSON.stringify(result)).not.toContain('provider:secret')
+  })
+
   it('refuses raw unknown apiKey material before any source mutation', async () => {
     setHappyPublishResponses()
     const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
@@ -285,6 +337,44 @@ describe('supply action runtime boundaries', () => {
     expect(call?.[1].operationKey).toBe(call?.[1].correlationId)
   })
 
+  it('rechecks and republishes through the same exact-revision maintenance seam', async () => {
+    mocks.callPublicSourceMutation
+      .mockResolvedValueOnce({
+        kind: 'refreshed',
+        publicationRef: withdrawInput.publicationRef,
+        revision: 1,
+        disposition: 'current',
+        lifecycle: { state: 'inactive', reasons: ['health_unobserved'] },
+      })
+      .mockResolvedValueOnce({
+        kind: 'republished',
+        publicationRef: withdrawInput.publicationRef,
+        revision: 2,
+        operationRef: 'operation:one',
+        bindingId: 'binding:one',
+        lifecycle: { state: 'active', reasons: [] },
+      })
+    const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
+
+    await expect(service.recheck({ input: withdrawInput, principal, correlationId: 'transport:recheck' })).resolves.toMatchObject({ kind: 'refreshed' })
+    await expect(service.republish({ input: withdrawInput, principal, correlationId: 'transport:republish' })).resolves.toMatchObject({ kind: 'republished', revision: 2 })
+
+    expect(mocks.callPublicSourceMutation.mock.calls.map(([mutation]) => mutation.name)).toEqual([
+      'capabilitySupplyOwnerFunnel:refreshOwnerCapability',
+      'capabilitySupplyOwnerFunnel:republishOwnerCapability',
+    ])
+    expect(mocks.callPublicSourceMutation.mock.calls[0]?.[1]).toMatchObject({
+      offeringRef: withdrawInput.offeringRef,
+      publicationRef: withdrawInput.publicationRef,
+      reasonCode: 'supply.recheck',
+      agentPrincipal: principal,
+    })
+    expect(mocks.callPublicSourceMutation.mock.calls[1]?.[1]).toMatchObject({
+      reasonCode: 'supply.republish',
+      agentPrincipal: principal,
+    })
+  })
+
   it('returns not_found when the requested earnings currency has no account', async () => {
     mocks.callPublicSourceMutation.mockResolvedValue({
       kind: 'available',
@@ -389,5 +479,91 @@ describe('supply action runtime boundaries', () => {
         evidence: 'source',
       },
     })
+  })
+
+  it('lists provider connections through the agent-aware source mutation without exposing credential material', async () => {
+    const connection = {
+      connectionRef: 'connection:x402:one',
+      businessId: 'business:supply-actions',
+      providerRef: 'provider:x402:provider.example',
+      providerAccountRef: 'x402:https://provider.example/pay',
+      adapterId: 'x402:v1',
+      grantedScopes: ['x402:pay'],
+      grantedResources: ['https://provider.example/pay'],
+      authorityGeneration: 1,
+      authorityDigest: 'sha256:authority',
+      lifecycle: 'active',
+      available: true,
+      credentialConfigured: false,
+      observedAt: 10,
+      reasonCode: null,
+      evidenceRefs: ['evidence:connection'],
+      createdAt: 10,
+      updatedAt: 10,
+    }
+    mocks.callPublicSourceMutation.mockResolvedValue({
+      kind: 'available',
+      businessId: 'business:supply-actions',
+      connections: [connection],
+    })
+    const service = createSupplyManagementService(new Request('https://agent.example/api/v1/supply/connections/list'), '{}')
+
+    const result = await service.connectionList({
+      input: { businessId: 'business:supply-actions', limit: 25 },
+      principal,
+      correlationId: 'transport:connections',
+    })
+
+    expect(result).toEqual({ kind: 'available', businessId: 'business:supply-actions', connections: [connection] })
+    expect(mocks.callPublicSourceMutation).toHaveBeenCalledWith(
+      { name: 'capabilityProviderConnectionAgents:list' },
+      expect.objectContaining({
+        businessId: 'business:supply-actions',
+        limit: 25,
+        agentPrincipal: principal,
+      }),
+    )
+    expect(JSON.stringify(result)).not.toContain('credentialRef')
+  })
+
+  it('uses one durable command identity for connection writes and preserves typed stale-authority refusal', async () => {
+    mocks.callPublicSourceMutation.mockResolvedValue({ kind: 'refused', code: 'invalid_generation' })
+    const service = createSupplyManagementService(new Request('https://agent.example/api/v1/supply/connections/reconnect'), '{}')
+
+    const result = await service.connectionReconnect({
+      input: {
+        connectionRef: 'connection:x402:one',
+        expectedAuthorityGeneration: 7,
+        expectedAuthorityDigest: 'sha256:authority',
+        evidenceRefs: [],
+        idempotencyKey: 'reconnect-command-one',
+      },
+      principal,
+      correlationId: 'transport-only-correlation',
+    })
+
+    expect(result).toEqual({ kind: 'refused', reason: 'invalid_generation' })
+    const command = mocks.callPublicSourceMutation.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(mocks.callPublicSourceMutation.mock.calls[0]?.[0]).toEqual({ name: 'capabilityProviderConnectionAgents:reconnect' })
+    expect(command.commandId).toBe(command.operationKey)
+    expect(command.correlationId).toBe(command.operationKey)
+    expect(command).not.toHaveProperty('idempotencyKey')
+  })
+
+  it('fails closed when a connection detail source attempts to return a credential reference', async () => {
+    mocks.callPublicSourceMutation.mockResolvedValue({
+      kind: 'found',
+      connection: {
+        connectionRef: 'connection:x402:one',
+        credentialRef: 'secret:must-not-cross-boundary',
+      },
+    })
+    const service = createSupplyManagementService(new Request('https://agent.example/api/v1/supply/connections/detail'), '{}')
+
+    await expect(service.connectionDetail({
+      input: { connectionRef: 'connection:x402:one' },
+      principal,
+      correlationId: 'transport:connection-detail',
+    })).resolves.toEqual({ kind: 'error', code: 'source_unavailable' })
   })
 })

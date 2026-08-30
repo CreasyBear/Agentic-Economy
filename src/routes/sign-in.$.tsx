@@ -1,8 +1,13 @@
 import { SignIn } from '@clerk/tanstack-react-start'
-import { createFileRoute } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
+import { Link, createFileRoute } from '@tanstack/react-router'
 
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import {
+  AeSiteAuthPanel,
+  AeSiteAuthStage,
+  AeSiteButton,
+  clerkAuthSurfaceAppearance,
+} from '@/components/ae/website'
 import { sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 
@@ -29,36 +34,64 @@ function SignInRoute() {
   const isLocalE2E = isLocalE2EAuthBypassEnabled()
   const isAgentAccessFlow = redirect?.startsWith('/agent-access') ?? false
   const isProviderFlow = redirect === undefined || redirect.startsWith('/owner')
-  const contextHeading = isAgentAccessFlow ? 'Sign in to connect an agent' : 'Sign in to manage Operations'
-  const contextText = isAgentAccessFlow
-    ? 'After you sign in, you’ll return to Access and create a caller identity.'
-    : 'After you sign in, you’ll return to your supplier workspace.'
+  const heading = isLocalE2E
+    ? 'Local preview sign-in is off'
+    : isAgentAccessFlow
+      ? 'Sign in to connect an agent'
+      : isProviderFlow
+        ? 'Sign in to manage Operations'
+        : 'Sign in'
+  const body = isLocalE2E
+    ? 'This browser journey does not connect a Clerk account. Nothing is signed in or authorized.'
+    : isAgentAccessFlow
+      ? 'After you sign in, you’ll return to Access and create a caller identity.'
+      : 'After you sign in, you’ll return to your supplier workspace.'
+  const switchSearch = redirect === undefined ? {} : { redirect }
 
   return (
-    <AePublicShell>
-      <div className="mx-auto grid min-h-[70vh] w-full max-w-lg place-items-center px-4 py-12 md:px-6">
-        <section className="grid w-full gap-6" aria-labelledby={isLocalE2E || (!isProviderFlow && !isAgentAccessFlow) ? undefined : 'sign-in-context-heading'}>
-          {isLocalE2E ? (
-            <div className="grid gap-4">
-              <div className="grid gap-1">
-                <h1 id="sign-in-context-heading" className="text-3xl font-semibold leading-tight tracking-tight text-balance text-foreground">Local preview sign-in is off</h1>
-                <p className="block text-muted-foreground">This browser journey does not connect a Clerk account. Nothing is signed in or authorized.</p>
-              </div>
-              <Button asChild variant="default" className="min-h-11 justify-self-start"><a href={isAgentAccessFlow ? '/agent-access' : '/market?window=30d#operations'}>{isAgentAccessFlow ? 'Open agent access preview' : 'Browse the catalog'}</a></Button>
-            </div>
-          ) : (
-            <>
-              {isProviderFlow || isAgentAccessFlow ? (
-                <div className="grid gap-1">
-                  <h1 id="sign-in-context-heading" className="text-3xl font-semibold leading-tight tracking-tight text-balance text-foreground">{contextHeading}</h1>
-                  <p className="block text-muted-foreground">{contextText}</p>
-                </div>
-              ) : null}
-              <SignIn fallbackRedirectUrl={redirect ?? '/owner/supply'} signUpUrl="/sign-up" />
-            </>
-          )}
-        </section>
-      </div>
-    </AePublicShell>
+    <AePublicPage>
+      <AeSiteAuthStage labelledBy="sign-in-context-heading" url="/sign-in">
+        {isLocalE2E ? (
+          <AeSiteAuthPanel
+            eyebrow="Local preview"
+            title={heading}
+            titleId="sign-in-context-heading"
+            body={body}
+          >
+            <AeSiteButton asChild>
+              <a href={isAgentAccessFlow ? '/agent-access' : '/market?window=30d#operations'}>
+                {isAgentAccessFlow ? 'Open agent access preview' : 'Browse the catalog'}
+              </a>
+            </AeSiteButton>
+          </AeSiteAuthPanel>
+        ) : (
+          <AeSiteAuthPanel
+            eyebrow="Account"
+            title={heading}
+            titleId="sign-in-context-heading"
+            body={body}
+            footer={
+              <>
+                Don’t have an account?{' '}
+                <Link
+                  to="/sign-up/$"
+                  params={{ _splat: '' }}
+                  search={switchSearch}
+                  className="inline-flex min-h-touch items-center font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  Create one
+                </Link>
+              </>
+            }
+          >
+            <SignIn
+              appearance={clerkAuthSurfaceAppearance}
+              fallbackRedirectUrl={redirect ?? '/owner/offerings'}
+              signUpUrl="/sign-up"
+            />
+          </AeSiteAuthPanel>
+        )}
+      </AeSiteAuthStage>
+    </AePublicPage>
   )
 }

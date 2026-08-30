@@ -1,0 +1,33 @@
+export {
+  DELEGATION_MAX_ANCESTRY_GRANTS,
+  DELEGATION_MAX_RESOURCES,
+  DELEGATION_MAX_SCOPES,
+  DelegationError,
+  DelegationService,
+  delegationGrantRef,
+  delegationSnapshotRef,
+  generateDelegationGrantRef,
+  generateDelegationSnapshotRef,
+  parsePersistedDelegationGrant,
+  reconstructPinnedDelegationSnapshotForReplay,
+} from './delegation'
+
+export type {
+  AdmitConsequenceRequest,
+  DelegateGrantRequest,
+  DelegationAuthorityAncestor,
+  DelegationAuthoritySnapshot,
+  DelegationCommit,
+  DelegationContextPort,
+  DelegationErrorCode,
+  DelegationGrant,
+  DelegationGrantLifecycle,
+  DelegationGrantRef,
+  DelegationGrantReplacement,
+  DelegationServiceOptions,
+  DelegationSnapshotRef,
+  DelegationStore,
+  DelegationTransaction,
+  IssueRootGrantRequest,
+  RevokeGrantRequest,
+} from './delegation'

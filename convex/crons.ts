@@ -4,73 +4,68 @@ import { internal } from './_generated/api'
 
 const crons = cronJobs()
 
+// Pre-launch cadence: keep recovery and freshness without burning included
+// Convex usage. Tighten these only when the market is actually live.
 crons.interval(
   'reconcile due facilitator invocations',
-  { minutes: 1 },
-  internal.capabilityOperationInvocationWorker.reconcileScheduled,
+  { minutes: 15 },
+  internal.workloadCron.reconcileDueFacilitatorInvocations,
   {},
 )
 
 crons.interval(
   'refresh facilitator discovery',
-  { minutes: 10 },
-  internal.facilitatorDiscoveryAction.run,
+  { hours: 12 },
+  internal.workloadCron.refreshFacilitatorDiscovery,
   {},
 )
 
 crons.interval(
   'refresh Agentic Market snapshots',
-  { minutes: 5 },
-  internal.marketExternalRefresh.run,
+  { hours: 6 },
+  internal.workloadCron.refreshAgenticMarketSnapshots,
   {},
 )
 
 crons.interval(
   'refresh Agentic Economy API registry',
   { hours: 24 },
-  internal.marketExternalRegistryRefresh.run,
-  {},
-)
-
-crons.interval(
-  'continue market aggregate backfill',
-  { hours: 1 },
-  internal.marketAggregateBackfill.run,
+  internal.workloadCron.refreshAgenticEconomyApiRegistry,
   {},
 )
 
 crons.interval(
   'refresh current market presence',
-  { minutes: 5 },
-  internal.marketPresence.refresh,
-  { cursor: null },
+  { hours: 1 },
+  internal.workloadCron.refreshCurrentMarketPresence,
+  {},
 )
 
 crons.interval(
   'refresh capability supply readiness',
-  { minutes: 1 },
-  internal.capabilitySupply.scheduleDueCapabilityProbes,
+  { hours: 1 },
+  internal.workloadCron.refreshCapabilitySupplyReadiness,
   {}
 )
 
 crons.interval(
   'cleanup expired source write nonces',
   { hours: 1 },
-  internal.sourceWriteAdmission.cleanupExpiredSourceWriteNonces,
+  internal.workloadCron.cleanupExpiredSourceWriteNonces,
   {}
 )
 
 crons.interval(
   'cleanup expired agent access oauth grants',
   { hours: 1 },
-  internal.agentAccessOAuth.cleanupExpiredOAuthGrants,
+  internal.workloadCron.cleanupExpiredAgentAccessOAuthGrants,
   {},
 )
 
 crons.cron(
   'run daily supplier settlement',
   '0 0 * * *',
-  internal.moneyLedger.runDailySupplierSettlement,
+  internal.workloadCron.runDailySupplierSettlement,
   {},
 )
 

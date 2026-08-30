@@ -28,7 +28,10 @@ export {
   readX402PaymentPayer,
   readX402PaymentPayerAndNonce,
 } from './internal/x402-payment-signer'
-export { fetchFacilitatorDiscoveryPages } from './internal/facilitator-discovery-client'
+export {
+  FACILITATOR_DISCOVERY_JOB_TIMEOUT_MS,
+  fetchFacilitatorDiscoveryPages,
+} from './internal/facilitator-discovery-client'
 export { admitOfficialBazaarFromPaymentRequired } from './internal/facilitator-discovery-client'
 export { admitFacilitatorDiscoveryItems } from './internal/facilitator-discovery-admission'
 export { admitRegistryPaymentRequiredItem } from './internal/facilitator-discovery-admission'

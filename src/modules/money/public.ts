@@ -84,7 +84,14 @@ export type MoneyRefusalCode =
   | "budget_concurrency_exhausted"
   | "budget_reconciliation_required";
 export type EntryType =
-  "topup" | "charge" | "refund" | "payout_accrual" | "rake" | "external_loss";
+  | "topup"
+  | "charge"
+  | "refund"
+  | "payout_accrual"
+  | "rake"
+  | "external_loss"
+  | "promo_grant"
+  | "topup_bonus";
 export type EntryDirection = "credit" | "debit";
 export type AccountKind = "operator_credit" | "provider_earnings" | "ae_rake" | "ae_external_loss";
 export type AccountState = "active" | "locked";
@@ -629,6 +636,8 @@ export {
   selectChargeEntries,
   recoveryExceedsProvider,
   validateChargeContract,
+  CHARGE_JOURNAL_DIGEST_FORMAT,
+  chargeJournalDigest,
 } from "./internal/ledger";
 export type {
   LedgerState,
@@ -652,6 +661,7 @@ export type {
   ChargeContractEntry,
   ChargeContractOriginal,
   ChargeContractUsage,
+  ChargeJournalUsageIdentity,
   ValidateChargeContractInput,
   ValidatedChargeContract,
 } from "./internal/ledger";
@@ -791,3 +801,16 @@ export type {
   QualifiedUseReceipt,
   QualifiedUseWriteDecision,
 } from "./internal/delivery";
+export {
+  calculateTopupBonusAmount,
+  OWNER_TRIAL_PROMO_EVIDENCE_REF,
+  OWNER_TRIAL_PROMO_GRANT,
+  ownerTrialPromoInputDigest,
+  ownerTrialPromoTransactionRef,
+  resolveTopupBonusBps,
+  TOPUP_BONUS_EVIDENCE_REF,
+  topupBonusInputDigest,
+  topupBonusTransactionRef,
+  TOPUP_BONUS_LADDER,
+} from "./internal/promotions";
+export type { TopupBonusTier } from "./internal/promotions";

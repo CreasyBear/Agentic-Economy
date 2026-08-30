@@ -1,9 +1,10 @@
 import { v } from 'convex/values'
 
 import {
-  isAnonymousKeylessOperationEligible,
   capabilityOperationId,
   createPublicOperationRef,
+  defineCapabilityTransportBindingRegistration,
+  offeringRegistrationFromRow,
   parseHttpJsonTransportConfiguration,
   parseMcpJsonRpcTransportConfiguration,
   parseAdmittedX402CatalogPayment,
@@ -41,7 +42,7 @@ export const publicPriceBreakdown = v.object({
   asset: v.literal('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
 })
 export const publicAuthentication = v.union(
-  v.object({ kind: v.literal('keyless') }),
+  v.object({ kind: v.literal('ae_api_key') }),
   v.object({ kind: v.literal('platform_credential'), scheme: v.literal('api_key'), in: v.union(v.literal('query'), v.literal('header')), name: v.string() }),
   v.object({ kind: v.literal('platform_credential'), scheme: v.literal('bearer') }),
   v.object({ kind: v.literal('x402') }),
@@ -56,6 +57,8 @@ export const CURRENT_OPERATION_PROJECTION_DROP_REASONS = [
   'missing_contract',
   'business_unpublished',
   'invalid_transport',
+  'malformed_offering',
+  'malformed_binding',
   'malformed_price',
 ] as const
 
@@ -72,7 +75,6 @@ export async function operationRecord(
   const projection = await operationRecordProjection(ctx, publication, now)
   return projection.kind === 'projected' ? projection.record : undefined
 }
-
 /**
  * Build the current public Operation projection while retaining a bounded,
  * privacy-safe reason when malformed source material has to fail closed.
@@ -113,8 +115,34 @@ export async function operationRecordProjection(
   if (bindingDoc === null) return { kind: 'dropped', reason: 'missing_binding' }
   if (business === null) return { kind: 'dropped', reason: 'missing_business' }
   if (contractResult.kind !== 'found') return { kind: 'dropped', reason: 'missing_contract' }
-  const offering = toCapabilityOfferingRow(offeringDoc)
-  const binding = toCapabilityBindingRow(bindingDoc)
+  let offering
+  let binding
+  try {
+    offering = offeringRegistrationFromRow(toCapabilityOfferingRow(offeringDoc))
+  } catch {
+    return { kind: 'dropped', reason: 'malformed_offering' }
+  }
+  const bindingRow = toCapabilityBindingRow(bindingDoc)
+  try {
+    binding = defineCapabilityTransportBindingRegistration({
+      bindingId: bindingRow.bindingId,
+      offeringId: bindingRow.offeringId,
+      networkId: bindingRow.networkId,
+      contractRef: {
+        capabilityId: bindingRow.capabilityId,
+        version: bindingRow.version,
+        contractDigest: bindingRow.contractDigest,
+      },
+      endpointUrl: bindingRow.endpointUrl,
+      authority: bindingRow.authority,
+      continuation: bindingRow.continuation,
+      cancellation: bindingRow.cancellation,
+      adapter: { adapterId: bindingRow.adapterId, config: JSON.parse(bindingRow.configJson) as unknown },
+      registrationEvidenceRefs: bindingRow.registrationEvidenceRefs,
+    })
+  } catch {
+    return { kind: 'dropped', reason: 'malformed_binding' }
+  }
   const qualification = await qualifySuppliedCandidate(capabilitySupplyGraphPorts(ctx.db), {
     candidate: {
       publicationRef: publication.publicationRef,
@@ -123,36 +151,24 @@ export async function operationRecordProjection(
       businessId: String(business._id),
       offeringId: offering.offeringId,
       bindingId: binding.bindingId,
-      contractRef: {
-        capabilityId: binding.capabilityId,
-        version: binding.version,
-        contractDigest: binding.contractDigest,
-      },
+      contractRef: binding.contractRef,
     },
     now,
   })
   if (qualification.reasons.includes('business_not_currently_published')) {
     return { kind: 'dropped', reason: 'business_unpublished' }
   }
-  const integrated = offering.status === 'active'
-    && binding.admission === 'admitted'
-    && binding.conformance === 'conformant'
+  const integrated = offeringDoc.status === 'active'
+    && bindingRow.admission === 'admitted'
+    && bindingRow.conformance === 'conformant'
   const routeable = qualification.status === 'eligible'
   const unavailableReason = routeable ? undefined : publicUnavailableReason(publication, qualification)
   const authorityMode = publication.authorityMode
   const sourcePrice = offering.presentation.price
-  const transport = publicOperationTransportFor(binding.endpointUrl, binding.adapterId, binding.configJson)
+  const transport = publicOperationTransportFor(binding.endpointUrl, binding.adapter.adapterId, bindingRow.configJson)
   if (transport === undefined) return { kind: 'dropped', reason: 'invalid_transport' }
-  const answerExecutable = isAnonymousKeylessOperationEligible({
-    authority: binding.authority,
-    adapterId: binding.adapterId,
-    method: transport.method,
-    sourceKind: publication.sourceKind,
-    price: sourcePrice,
-    effects: contractResult.contract.effects,
-  })
   const pricingSource = qualification.sources.find(({ kind }) => kind === 'pricing')
-  const priceBreakdown = priceBreakdownFor(publication, binding.adapterId, binding.configJson, sourcePrice)
+  const priceBreakdown = priceBreakdownFor(publication, binding.adapter.adapterId, bindingRow.configJson, sourcePrice)
   if (priceBreakdown === null) return { kind: 'dropped', reason: 'malformed_price' }
   const priceEvidence = publication.priceDigest === undefined
     ? undefined
@@ -161,7 +177,7 @@ export async function operationRecordProjection(
         ...(pricingSource?.ref === undefined ? {} : { sourceRef: pricingSource.ref }),
         evidenceRefs: [...(pricingSource?.evidenceRefs ?? publication.registrationEvidenceRefs)],
       }
-  const parameterMappings = publicOperationParameterMappingsFor(binding.adapterId, binding.configJson)
+  const parameterMappings = publicOperationParameterMappingsFor(binding.adapter.adapterId, bindingRow.configJson)
   return { kind: 'projected', record: {
     operationId,
     publicationRef: publication.publicationRef,
@@ -184,13 +200,12 @@ export async function operationRecordProjection(
       summary: offering.presentation.commercialRelationship.summary,
     },
     cancellation: { kind: binding.cancellation.kind },
-    authentication: publicAuthenticationFor(binding.authority, publication.sourceKind, binding.adapterId, binding.configJson),
+    authentication: publicAuthenticationFor(binding.authority, publication.sourceKind, binding.adapter.adapterId, bindingRow.configJson),
     transport,
     ...(parameterMappings === undefined ? {} : { parameterMappings }),
     provenance: { publisher: authorityMode, sourceKind: publication.sourceKind },
     integrated,
     routeable,
-    answerExecutable,
     ...(unavailableReason === undefined ? {} : { unavailableReason }),
     readiness: {
       ...(publication.readinessObservedAt === undefined ? {} : { observedAt: publication.readinessObservedAt }),
@@ -253,8 +268,8 @@ export function publicAuthenticationFor(
       return { kind: 'platform_credential', scheme: 'api_key', in: parsed.credential.location, name: parsed.credential.name }
     }
     if (parsed?.credential?.kind === 'bearer') return { kind: 'platform_credential', scheme: 'bearer' }
-    if (parsed?.credential?.kind === 'none') return authority.kind === 'keyless' ? { kind: 'keyless' } : { kind: 'unknown' }
-    if (parsed?.credential === undefined && authority.kind === 'keyless') return { kind: 'keyless' }
+    if (parsed?.credential?.kind === 'none') return authority.kind === 'public_upstream' ? { kind: 'ae_api_key' } : { kind: 'unknown' }
+    if (parsed?.credential === undefined && authority.kind === 'public_upstream') return { kind: 'ae_api_key' }
   }
   if (adapterId === 'mcp-jsonrpc:v1') {
     const parsed = parseMcpJsonRpcTransportConfiguration(config)
@@ -262,7 +277,7 @@ export function publicAuthenticationFor(
       return { kind: 'platform_credential', scheme: 'api_key', in: parsed.credential.location, name: parsed.credential.name }
     }
     if (parsed?.credential?.kind === 'bearer') return { kind: 'platform_credential', scheme: 'bearer' }
-    if (parsed?.credential === undefined && authority.kind === 'keyless') return { kind: 'keyless' }
+    if (parsed?.credential === undefined && authority.kind === 'public_upstream') return { kind: 'ae_api_key' }
   }
   return { kind: 'unknown' }
 }

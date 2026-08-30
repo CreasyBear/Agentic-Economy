@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { AeFactList } from '@/components/ae/data/AeFactList'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeOwnerOfferingEditor, type OwnerOfferingEditorValue, type OwnerOfferingSaveResult } from '@/components/ae/offerings/AeOwnerOfferings'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeOwnerOperationFacts } from './AeSupplyPublisherHome'
@@ -82,6 +83,28 @@ export function AeSupplyFunnel({
   const actionContext = contextForOffering(businessId, offering)
   const currentStep = offering.currentStep
   const isX402Test = offering.publication?.source.kind === 'x402'
+  const incompatible = offering.publication?.state === 'incompatible'
+    || offering.lifecycle.state === 'incompatible'
+  const credentialNeedsReplacement = offering.readiness.outcome === 'credential_rejected'
+    || offering.readiness.outcome === 'credential_unavailable'
+    || offering.actionableReason === 'credential_rejected'
+    || offering.actionableReason === 'credential_unavailable'
+  const authorityNeedsRebind = offering.actionableReason === 'authority_stale'
+
+  useEffect(() => {
+    const targetId = window.location.hash === '#incompatibility'
+      ? 'incompatibility'
+      : window.location.hash === '#credential-recovery'
+        ? 'credential-recovery'
+        : window.location.hash === '#provider' && authorityNeedsRebind
+          ? 'provider'
+        : undefined
+    if (targetId === undefined) return
+    const target = document.getElementById(targetId)
+    if (target === null) return
+    target.scrollIntoView({ block: 'start' })
+    target.focus({ preventScroll: true })
+  }, [authorityNeedsRebind])
 
   async function reload() {
     setConfirmTest(false)
@@ -115,6 +138,31 @@ export function AeSupplyFunnel({
         </Alert>
       )}
       <SupplyTruthCard offering={offering} />
+      {credentialNeedsReplacement ? (
+        <div
+          id="credential-recovery"
+          tabIndex={-1}
+          className="scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <Alert>
+            <AlertTitle>Choose a replacement connection</AlertTitle>
+            <AlertDescription className="grid gap-3">
+              Refreshing a rejected or unavailable connection reuses the same credential state. Choose a different available owner-scoped connection below, then check and re-admit this exact Operation. If no compatible replacement appears, ask the connection owner to create one; never paste a raw credential here.
+              <Button asChild variant="secondary" className="min-h-touch justify-self-start">
+                <a href="#provider">Choose replacement connection</a>
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      ) : null}
+      {authorityNeedsRebind ? (
+        <Alert>
+          <AlertTitle>Re-admit the refreshed authority</AlertTitle>
+          <AlertDescription>
+            This Operation still holds the previous provider authority snapshot. Check and re-admit the source below; the current Operation revision and source hash guards still apply.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <ol className="m-0 grid list-none gap-2 p-0 sm:grid-cols-4" aria-label="Your four setup steps">
         {steps.map((step) => {
           const state = offering.stepStates[step]
@@ -130,33 +178,41 @@ export function AeSupplyFunnel({
         })}
       </ol>
       {currentStep === 'describe' ? (
-        <AeOwnerOfferingEditor
-          initialValue={initialOffering}
-          onSave={async (value) => {
-            const result = await callbacks.saveOffering(value)
-            if (result.kind === 'saved') {
-              setFeedback({ message: 'Operation details saved. Next, connect its API.', variant: 'default' })
-              await reload()
-            }
-            return result
-          }}
-          draftKey={businessId}
-        />
+        <div id="description" className="scroll-mt-6">
+          <AeOwnerOfferingEditor
+            initialValue={initialOffering}
+            onSave={async (value) => {
+              const result = await callbacks.saveOffering(value)
+              if (result.kind === 'saved') {
+                setFeedback({ message: 'Operation details saved. Next, connect its API.', variant: 'default' })
+                await reload()
+              }
+              return result
+            }}
+            draftKey={businessId}
+          />
+        </div>
       ) : null}
-      {currentStep === 'admission' ? (
-        <AeSupplyEndpointConfigStep
-          {...(initialSource === undefined ? {} : { initialValue: initialSource })}
-          {...(initialDocumentPreflight === undefined ? {} : { initialDocumentPreflight })}
-          {...(callbacks.preflightDocument === undefined ? {} : { onPreflightDocument: callbacks.preflightDocument })}
-          {...(callbacks.saveSourceDraft === undefined ? {} : { onSaveDraft: callbacks.saveSourceDraft })}
-          onPreflight={callbacks.preflight}
-          authorityOptions={authorityOptions}
-          onSubmit={async (value) => {
-            await showCompletion(await callbacks.admit(value))
-          }}
-        />
+      {currentStep === 'admission' || incompatible || credentialNeedsReplacement || authorityNeedsRebind ? (
+        <div
+          id="provider"
+          tabIndex={authorityNeedsRebind ? -1 : undefined}
+          className="scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <AeSupplyEndpointConfigStep
+            {...(initialSource === undefined ? {} : { initialValue: initialSource })}
+            {...(initialDocumentPreflight === undefined ? {} : { initialDocumentPreflight })}
+            {...(callbacks.preflightDocument === undefined ? {} : { onPreflightDocument: callbacks.preflightDocument })}
+            {...(callbacks.saveSourceDraft === undefined ? {} : { onSaveDraft: callbacks.saveSourceDraft })}
+            onPreflight={callbacks.preflight}
+            authorityOptions={authorityOptions}
+            onSubmit={async (value) => {
+              await showCompletion(await callbacks.admit(value))
+            }}
+          />
+        </div>
       ) : null}
-      {currentStep === 'readiness' ? (
+      {currentStep === 'readiness' && !incompatible && !credentialNeedsReplacement && !authorityNeedsRebind ? (
         <ActionStep
           title="3 · CHECK READINESS"
           heading="Check that the admitted operation works"
@@ -172,7 +228,7 @@ export function AeSupplyFunnel({
           }}
         />
       ) : null}
-      {currentStep === 'test' ? (
+      {currentStep === 'test' && !incompatible && !credentialNeedsReplacement && !authorityNeedsRebind ? (
         <ActionStep
           title="4 · RUN A TEST"
           heading={isX402Test ? 'Check the payment challenge' : 'Run a real test'}
@@ -214,31 +270,33 @@ export function AeSupplyFunnel({
 
 function SupplyTruthCard({ offering }: Readonly<{ offering: OwnerSupplyOfferingReadback }>) {
   const publication = offering.publication
+  const incompatible = publication?.state === 'incompatible'
+    || offering.lifecycle.state === 'incompatible'
   return (
-    <Card className="shadow-none">
-      <CardHeader className="p-5 pb-0">
-        <CardTitle><h2 className="text-xl font-semibold text-foreground">Operation control</h2></CardTitle>
-        <CardDescription><p>Canonical identifiers and states from the current owner readback. Credentials are never shown here.</p></CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4 p-5">
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <TruthItem label="Admission" value={offering.admission.state} {...(offering.admission.reason === undefined ? {} : { reason: offering.admission.reason })} />
-          <TruthItem label="Publication" value={publication?.state ?? 'not published'} />
-          <TruthItem label="Readiness" value={offering.readiness.outcome} />
-          <TruthItem label="Live" value={offering.live.available ? 'available' : 'unavailable'} {...(offering.live.reason === undefined ? {} : { reason: offering.live.reason })} />
-        </dl>
+    <div
+      id="incompatibility"
+      tabIndex={-1}
+      className="scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      <AeSection title="Operation control" description="Canonical identifiers and states from the current owner readback. Credentials are never shown here.">
+        {incompatible ? (
+          <Alert>
+            <AlertTitle>Readmission required</AlertTitle>
+            <AlertDescription>
+              This publication no longer matches the current Operation revision. Reconnect and re-admit the intended source below; the existing revision and source guards still apply.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <AeFactList
+          facts={[
+            { label: 'Admission', value: offering.admission.state },
+            { label: 'Publication', value: publication?.state ?? 'not published' },
+            { label: 'Readiness', value: offering.readiness.outcome },
+            { label: 'Live', value: offering.live.available ? 'available' : 'unavailable' },
+          ]}
+        />
         <AeOwnerOperationFacts offering={offering} detail />
-      </CardContent>
-    </Card>
-  )
-}
-
-function TruthItem({ label, value, reason }: Readonly<{ label: string; value: string; reason?: string }>) {
-  return (
-    <div className="grid gap-1">
-      <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-      <dd className="m-0 font-semibold text-foreground">{value}</dd>
-      {reason === undefined ? null : <dd className="m-0 break-words text-xs text-muted-foreground">{reason}</dd>}
+      </AeSection>
     </div>
   )
 }
@@ -275,16 +333,12 @@ function MaintenanceActions({
     }
   }
   return (
-    <Card>
-      <CardHeader className="p-5 pb-0">
-        <CardTitle><h2 className="text-lg font-semibold text-foreground">Publication maintenance</h2></CardTitle>
-        <CardDescription><p>Each action rechecks the current Operation and publication revision before it changes anything.</p></CardDescription>
-      </CardHeader>
-      <CardFooter className="flex flex-wrap gap-3 p-5 pt-0">
+    <AeSection id={publicationState === 'withdrawn' ? 'publication-maintenance' : 'readiness'} title="Publication maintenance" description="Each action rechecks the current Operation and publication revision before it changes anything.">
+      <div className="flex flex-wrap gap-3">
         {publicationState === 'current' && recheck !== undefined ? <MaintenanceButton label="Recheck readiness" callback={recheck} context={context} onResult={onResult} /> : null}
         {publicationState === 'current' && withdraw !== undefined ? (
           <>
-            <Button type="button" variant="secondary" disabled={withdrawPending} onClick={() => setWithdrawOpen(true)} className="min-h-11">
+            <Button type="button" variant="secondary" disabled={withdrawPending} onClick={() => setWithdrawOpen(true)} className="min-h-touch">
               Withdraw publication
             </Button>
             <AeConfirmDialog
@@ -300,8 +354,8 @@ function MaintenanceActions({
           </>
         ) : null}
         {publicationState === 'withdrawn' && republish !== undefined ? <MaintenanceButton label="Republish" callback={republish} context={context} onResult={onResult} /> : null}
-      </CardFooter>
-    </Card>
+      </div>
+    </AeSection>
   )
 }
 
@@ -316,10 +370,10 @@ function MaintenanceButton({ label, callback, context, onResult, variant = 'defa
       setPending(false)
     }
   }
-  return <Button type="button" variant={variant} disabled={pending || callback === undefined} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-11">{pending ? 'Working' : label}</Button>
+  return <Button type="button" variant={variant} disabled={pending || callback === undefined} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-touch">{pending ? 'Working' : label}</Button>
 }
 
-function ActionStep({ title, heading, detail, actionLabel, onAction, disabled = false }: Readonly<{ title: string; heading: string; detail: string; actionLabel: string; onAction: () => Promise<void>; disabled?: boolean }>) {
+function ActionStep({ heading, detail, actionLabel, onAction, disabled = false }: Readonly<{ title: string; heading: string; detail: string; actionLabel: string; onAction: () => Promise<void>; disabled?: boolean }>) {
   const [pending, setPending] = useState(false)
   async function run() {
     setPending(true)
@@ -330,20 +384,11 @@ function ActionStep({ title, heading, detail, actionLabel, onAction, disabled = 
     }
   }
   return (
-    <Card className="shadow-none">
-      <CardHeader className="p-5 pb-0">
-        <CardTitle>
-          <p className="block text-sm font-semibold text-muted-foreground">{title}</p>
-          <h2 className="mt-1 text-xl font-semibold text-foreground">{heading}</h2>
-        </CardTitle>
-        <CardDescription><p>{detail}</p></CardDescription>
-      </CardHeader>
-      <CardFooter className="p-5 pt-0">
-        <Button type="button" variant="default" disabled={pending || disabled} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-11">
-          {pending ? 'Working' : actionLabel}
-        </Button>
-      </CardFooter>
-    </Card>
+    <AeSection title={heading} description={detail}>
+      <Button type="button" variant="default" disabled={pending || disabled} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-touch w-fit">
+        {pending ? 'Working' : actionLabel}
+      </Button>
+    </AeSection>
   )
 }
 

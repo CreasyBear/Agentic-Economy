@@ -72,7 +72,7 @@ describe('capability supply boundaries', () => {
     expect(seed).toContain('rebuildBusinessSupplyProjectionSnapshotCommand')
     expect(seed).not.toContain('claimBusinessCommand')
     expect(seed).not.toContain('publishBusinessCatalogCommand')
-    expect(seed).not.toMatch(/ctx\.db\.(?:insert|patch|replace)|db\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/)
+    expect(seed).not.toMatch(/(?:ctx\.db|db)\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/)
   })
 
   it('keeps publication importers production-owned and fixture-independent', () => {
@@ -92,13 +92,14 @@ describe('capability supply boundaries', () => {
     expect(readiness).not.toContain('makeFunctionReference')
   })
 
-  it('keeps active detail parity on the bounded active-first index', () => {
+  it('reads canonical Operations directly without a cutover read model', () => {
     const schema = readFileSync('src/modules/capability-supply/internal/convex-schema.ts', 'utf8')
-    const projection = readFileSync('convex/capabilitySupplyOperationProjection.ts', 'utf8')
+    const queries = readFileSync('convex/capabilitySupplyOperationQueries.ts', 'utf8')
 
-    expect(schema).toMatch(/capabilityCurrentOperationDetails:[\s\S]*\.index\('by_active_and_operationRef', \['active', 'operationRef'\]\)/)
-    expect(projection).toMatch(/query\('capabilityCurrentOperationDetails'\)[\s\S]*?\.withIndex\('by_active_and_operationRef', \(query\) => query\.eq\('active', true\)\)[\s\S]*?\.take\(258\)/)
-    expect(projection).not.toContain(".filter((query) => query.eq(query.field('active'), true))")
+    expect(schema).not.toContain('capabilityCurrentOperationReadControls')
+    expect(schema).not.toContain('capabilityCurrentOperationDetails')
+    expect(queries).toMatch(/query\('capabilityPublications'\)[\s\S]*?\.withIndex\('by_operationRef_and_disposition'/)
+    expect(queries).not.toContain('CURRENT_OPERATION_SHADOW')
   })
 })
 

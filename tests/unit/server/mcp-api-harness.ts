@@ -3,24 +3,13 @@ import { afterEach, beforeEach, vi } from 'vitest'
 import { z } from 'zod'
 
 import { handleMcpRequest as handleMcpRequestImpl } from '@/lib/server/mcp-api'
+import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 
 export function handleMcpRequest(
   ...args: Parameters<typeof handleMcpRequestImpl>
 ): ReturnType<typeof handleMcpRequestImpl> {
   return handleMcpRequestImpl(...args)
 }
-
-const hoistedMcpApiMocks = vi.hoisted(() => ({
-  executeKeylessOperation: vi.fn(),
-}))
-
-export const operationExecuteMocks = {
-  executeKeylessOperation: hoistedMcpApiMocks.executeKeylessOperation,
-}
-
-vi.mock('@/modules/capability-execution/operation-execute.server', () => ({
-  executeKeylessOperation: hoistedMcpApiMocks.executeKeylessOperation,
-}))
 
 export type JsonRpcBody = {
   result?: Record<string, unknown>
@@ -45,6 +34,12 @@ export function authenticateWithScopes(scopes: readonly string[]) {
   })
 }
 
+const resolveCanonicalPrincipal: AgentAccessPrincipalResolver = async (projection) => ({
+  ...projection,
+  principalId: 'prn_00000000000040008000000000000044',
+  ownerId: 'acc_00000000000040008000000000000044',
+})
+
 export async function postMcp(
   body: object,
   options: Parameters<typeof handleMcpRequest>[1] = {},
@@ -59,7 +54,12 @@ export async function postMcp(
     },
     body: JSON.stringify(body),
   })
-  return handleMcpRequest(request, options)
+  return handleMcpRequest(request, {
+    ...(options.authenticate === undefined || options.resolvePrincipal !== undefined
+      ? {}
+      : { resolvePrincipal: resolveCanonicalPrincipal }),
+    ...options,
+  })
 }
 
 export async function readMcpBody(response: Response): Promise<JsonRpcBody> {
@@ -82,7 +82,6 @@ export async function readMcpBody(response: Response): Promise<JsonRpcBody> {
 
 beforeEach(() => {
   vi.restoreAllMocks()
-  operationExecuteMocks.executeKeylessOperation.mockReset()
   pinEnv()
 })
 

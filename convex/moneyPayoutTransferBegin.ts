@@ -16,7 +16,7 @@ import {
   dailyPayoutIdentityFromRow,
   readDailyPayoutComposition,
   type DailyPayoutComposition,
-} from './moneyQualifiedUsePayout'
+} from './lib/qualifiedUsePayout'
 import {
   amountAtScale,
   amountFromParts,

@@ -52,6 +52,32 @@ describe('money ledger qualified use payout adjustment', () => {
     }).toEqual(before)
   })
 
+  it('refuses payout allocation when journalDigest does not match the loaded journal', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const transaction = db.rows('moneyTransactions').find(
+      (row) => row._id === 'transaction:charge',
+    )
+    if (transaction === undefined) throw new Error('charge_transaction_fixture_missing')
+    transaction.journalDigest = 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+    transaction.digestFormat = 'charge-journal:v1'
+    const before = {
+      receipts: structuredClone(db.rows('qualifiedUseReceipts')),
+      allocations: structuredClone(db.rows('moneyPayoutAllocations')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+    }
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect({
+      receipts: db.rows('qualifiedUseReceipts'),
+      allocations: db.rows('moneyPayoutAllocations'),
+      payouts: db.rows('moneyPayouts'),
+    }).toEqual(before)
+  })
+
   it('decrements a held daily payout once and replays refund without subtracting twice', async () => {
     const db = new MemoryDb()
     seedBudget(db)

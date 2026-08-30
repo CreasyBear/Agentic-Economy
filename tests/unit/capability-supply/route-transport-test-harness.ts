@@ -37,7 +37,7 @@ export const authority = {
     authorityGeneration: 1,
   }),
 } as const
-export const keylessAuthority = { kind: 'keyless' } as const
+export const keylessAuthority = { kind: 'public_upstream' } as const
 
 type ProviderInvocation = Extract<
   RouteTransportInvocation,
@@ -49,7 +49,7 @@ type ProviderInvocation = Extract<
 >
 type KeylessInvocation = Extract<
   RouteTransportInvocation,
-  { readonly binding: { readonly authority: { readonly kind: 'keyless' } } }
+  { readonly binding: { readonly authority: { readonly kind: 'public_upstream' } } }
 >
 type ProviderInvocationOverrides = Readonly<{
   binding?: ProviderInvocation['binding']
@@ -146,7 +146,7 @@ export async function invokeRouteTransport(
             (() => X402_PAYMENT_CREDENTIAL_REF),
         }
       : runtime
-  if (routeInvocation.binding.authority.kind === 'keyless') {
+  if (routeInvocation.binding.authority.kind === 'public_upstream') {
     return invokePreparedRouteTransport(preparation.prepared, effectiveRuntime)
   }
   return invokePreparedRouteTransport(preparation.prepared, {

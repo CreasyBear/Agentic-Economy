@@ -67,7 +67,7 @@ export type RouteTransportAuthorityCommon = Readonly<{
   callIdentity: Readonly<{ keyId: string; signature: string }>
 }>
 
-export type KeylessRouteTransportAuthority = RouteTransportAuthorityCommon &
+export type PublicUpstreamRouteTransportAuthority = RouteTransportAuthorityCommon &
   Readonly<{
     authorityGeneration?: never
     authorityDigest?: never
@@ -87,7 +87,7 @@ export type ProviderRouteTransportAuthority = RouteTransportAuthorityCommon &
   }>
 
 export function isProviderRouteTransportAuthority(
-  authority: KeylessRouteTransportAuthority | ProviderRouteTransportAuthority,
+  authority: PublicUpstreamRouteTransportAuthority | ProviderRouteTransportAuthority,
 ): authority is ProviderRouteTransportAuthority {
   return (
     Number.isSafeInteger(authority.authorityGeneration) &&

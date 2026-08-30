@@ -1,55 +1,43 @@
-import { UserProfile } from '@clerk/tanstack-react-start'
-import { Link } from '@tanstack/react-router'
+import { SignOutButton, UserProfile } from '@clerk/tanstack-react-start'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 
+import { AeSection } from '@/components/ae/layout/AeSection'
+import { AeSiteAuthPanel, AeSiteAuthSubmit } from '@/components/ae/website'
+import { OwnerSettingsNav } from '@/components/ae/settings/OwnerSettingsNav'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
+
+export type { OwnerSettingsNavCurrent } from '@/lib/operator/settings-navigation'
+export { OwnerSettingsNav }
 
 export function AccountSettingsSection() {
   const localPreview = isLocalE2EAuthBypassEnabled()
 
   return (
-    <Card className="grid gap-4 p-5">
-      <SectionHeader
-        title="Account"
-        description="Update your Clerk profile, email addresses, security settings, and active sessions."
-      />
+    <AeSection
+      title="Profile"
+      description="Name, email, security, and active sessions for this owner."
+    >
       {localPreview ? (
         <Alert>
           <AlertTitle>Account settings are unavailable in local preview</AlertTitle>
           <AlertDescription>This browser journey does not connect a Clerk account. Sign in outside local preview to manage your profile and sessions.</AlertDescription>
         </Alert>
       ) : (
-        <div className="overflow-hidden rounded-md border border-border bg-card p-2">
+        <div className="grid gap-section">
           <UserProfile />
+          <AeSiteAuthPanel
+            eyebrow="Session"
+            title="Sign out"
+            titleId="owner-sign-out"
+            titleAs="h3"
+            body="This browser returns to the public site. Operations, credit, and listed tools stay as they are."
+          >
+            <SignOutButton redirectUrl="/">
+              <AeSiteAuthSubmit>Sign out</AeSiteAuthSubmit>
+            </SignOutButton>
+          </AeSiteAuthPanel>
         </div>
       )}
-    </Card>
-  )
-}
-
-export function BusinessSettingsSection() {
-  return (
-    <Card className="grid gap-4 p-5">
-      <SectionHeader
-        title="Supplier workspace"
-        description="Manage the supplier profile, Operations, and publication setup."
-      />
-      <div className="flex flex-wrap gap-3">
-        <Button asChild variant="default"><Link to="/owner/status">Supplier profile</Link></Button>
-        <Button asChild variant="secondary"><Link to="/owner/offerings">Operations</Link></Button>
-        <Button asChild variant="secondary"><Link to="/for-providers">Review supplier setup</Link></Button>
-      </div>
-    </Card>
-  )
-}
-
-function SectionHeader({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="grid gap-1">
-      <h2 className="text-base font-semibold">{title}</h2>
-      <p className="text-muted-foreground">{description}</p>
-    </div>
+    </AeSection>
   )
 }

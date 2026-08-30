@@ -77,7 +77,7 @@ function capabilityTransportAuthority(
   value: unknown,
 ): value is CapabilityImporterCommercialInput["authority"] {
   if (!isRecord(value)) return false;
-  if (value.kind === "keyless") return true;
+  if (value.kind === "public_upstream") return true;
   return (
     value.kind === "provider_connection" &&
     boundedSourceText(value.connectionRef, 200) &&

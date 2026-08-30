@@ -97,11 +97,55 @@ describe('MCP host adapter operation recovery', () => {
     expect(body.result).toMatchObject({
       tools: expect.arrayContaining([
         expect.objectContaining({ name: 'ae_operation_invoke' }),
+        expect.objectContaining({ name: 'ae_operation_list' }),
         expect.objectContaining({ name: 'ae_operation_status' }),
         expect.objectContaining({ name: 'ae_operation_cancel' }),
         expect.objectContaining({ name: 'ae_operation_reconcile' }),
       ]),
     })
+  })
+
+  it('delegates one bounded history page without exposing invocation input or output', async () => {
+    const historyResult = {
+      kind: 'available' as const,
+      items: [{
+        invocationRef,
+        operationRef: currentOperationRef,
+        state: 'completed' as const,
+        createdAt: 10,
+        updatedAt: 20,
+      }],
+      hasMore: false,
+    }
+    const operationInvokeService = {
+      invokeOperation: vi.fn(),
+      listInvocations: vi.fn().mockResolvedValue(historyResult),
+      readInvocationStatus: vi.fn(),
+      cancelInvocation: vi.fn(),
+      reconcileInvocation: vi.fn(),
+    }
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 'operation-list',
+      method: 'tools/call',
+      params: {
+        name: 'ae_operation_list',
+        arguments: { limit: 5, state: 'completed' },
+      },
+    }, {
+      authenticate: authenticateWithScopes(['market_operations:invoke']),
+      operationInvokeService,
+    }, {
+      authorization: 'Bearer operation-recovery',
+    })
+
+    expect(response.status).toBe(200)
+    const body = await readMcpBody(response)
+    expect(body.result).toMatchObject({ structuredContent: { result: historyResult } })
+    expect(JSON.stringify(body)).not.toContain('previousInput')
+    expect(operationInvokeService.listInvocations).toHaveBeenCalledWith(expect.objectContaining({
+      input: { limit: 5, state: 'completed' },
+    }))
   })
 
   it('delegates authenticated status once and returns a structured found reconciliation state', async () => {
@@ -144,7 +188,7 @@ describe('MCP host adapter operation recovery', () => {
       invocationRef,
       principal: expect.objectContaining({
         credentialId: 'key:test',
-        ownerId: 'user_test',
+        ownerId: 'acc_00000000000040008000000000000044',
       }),
       correlationId: expect.any(String),
     }))

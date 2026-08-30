@@ -12,6 +12,7 @@ import {
 import type { OperationCompareResult } from '@/modules/capability-supply/public'
 
 const ownerId = 'owner-console-1'
+const principalId = `prn_${'1'.repeat(32)}`
 
 const key: AgentAccessKeyInventoryItem = {
   keyId: 'key_console_1',
@@ -38,7 +39,7 @@ const account: MoneyAccount = {
 
 const usage: MoneyUsageEvent = {
   usageRef: 'usage-console-1',
-  principalId: `clerk_api_key:${key.keyId}`,
+  principalId,
   accountId: ownerId,
   credentialId: key.keyId,
   serviceRef: 'service:quote',
@@ -54,16 +55,33 @@ const usage: MoneyUsageEvent = {
   observedAt: 10,
 }
 
+const grant = {
+  principalId,
+  credentialId: key.keyId,
+  applicationRef: key.applicationRef,
+  environment: key.environment,
+  authorityMode: key.authorityMode,
+  lifecycle: 'active' as const,
+  expiresAt: 10_000,
+  budget: {
+    maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+    maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
+    maximumMonthlySpend: { currency: 'USD', units: '2000', exponent: 2 },
+    maximumConcurrentInvocations: 1,
+  },
+  rate: { maximumCallsPerMinute: 10, maximumCallsPerHour: 100 },
+}
+
 describe('agent access money seam', () => {
   it('reads exact key balance, bounded activity, and per-key spend from the public query port', async () => {
     const ledger = { ...createLedgerState([account]), usageEvents: [usage], usageSummaries: new Map([[`${usage.principalId}\u0000${usage.credentialId}\u0000${usage.amount.currency}`, { principalId: usage.principalId, credentialId: usage.credentialId, callCount: 1, paidCallCount: 1, freeCallCount: 0, grossSpend: { currency: 'USD', units: '500', exponent: 2 }, states: ['paid'] as const }]]) }
     const [result] = await readAgentAccessMoneyReadback([key], createInMemoryMoneyQueryPort({
       ledger,
-      resolveOwnerId: (principalId) => principalId === `clerk_api_key:${key.keyId}` ? ownerId : undefined,
-    }))
+      resolveOwnerId: (candidate) => candidate === principalId ? ownerId : undefined,
+    }), [grant])
 
     expect(result).toMatchObject({
-      principalId: 'clerk_api_key:key_console_1',
+      principalId,
       account: { balance: { currency: 'USD', units: '2500', exponent: 2 }, evidence: 'labelled_local_dev' },
       dataState: 'source',
     })
@@ -77,7 +95,7 @@ describe('agent access money seam', () => {
     const [readback] = await readAgentAccessMoneyReadback([key], createInMemoryMoneyQueryPort({
       ledger: { ...createLedgerState([account]), usageEvents: [{ ...usage, operationKey: operationRef }] },
       resolveOwnerId: () => ownerId,
-    }))
+    }), [grant])
     if (readback === undefined) throw new Error('expected agent readback')
     const enriched = await enrichAgentAccessActivity([readback], {
       isOperationRef: (value) => value === operationRef,

@@ -275,7 +275,7 @@ function sanitizedTelemetryErrorRecord(error: Error): Record<string, unknown> {
   if (error.stack !== undefined) record.stack = error.stack
   const errorRecord = error as Error & Record<string, unknown>
   for (const metadataKey of sanitizedErrorMetadataKeys) {
-    if (Object.prototype.hasOwnProperty.call(errorRecord, metadataKey)) {
+    if (Object.hasOwn(errorRecord, metadataKey)) {
       record[metadataKey] = errorRecord[metadataKey]
     }
   }
@@ -348,4 +348,3 @@ function privateRecordThreadId(pathname: string): string | undefined {
     return encodedThreadId
   }
 }
-

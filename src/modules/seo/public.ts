@@ -36,5 +36,13 @@ export type BuildPublicBusinessSeoInput = {
   options?: BuildPublicBusinessSeoOptions
 }
 export { buildPublicBusinessSeo } from './internal/public-business-seo'
+export {
+  SeoSiteName,
+  buildFaqPageJsonLd,
+  buildPublicPageHead,
+  buildSiteJsonLd,
+} from './internal/public-page-seo'
+export type { PublicPageHead, PublicPageSeoInput } from './internal/public-page-seo'
+export { indexedPublicPagePaths } from './internal/indexed-public-paths'
 
 export type { JsonLdObject }

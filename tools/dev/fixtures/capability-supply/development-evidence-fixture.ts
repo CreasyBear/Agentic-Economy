@@ -135,7 +135,7 @@ const bindingRegistration = defineCapabilityTransportBindingRegistration({
   networkId: 'mock:network',
   contractRef: contract.ref,
   endpointUrl: 'https://development.invalid/quote',
-  authority: { kind: 'keyless' },
+  authority: { kind: 'public_upstream' },
   continuation: { kind: 'single_response', evidenceRefs: ['mock:continuation'] },
   cancellation: { kind: 'unsupported', evidenceRefs: ['mock:cancellation'] },
   adapter: { adapterId: 'http-json:v1', config: null },

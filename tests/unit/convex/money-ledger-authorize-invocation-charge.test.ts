@@ -33,6 +33,7 @@ import {
   reconcileHandler,
   reconciliationArgs,
   transactionRef,
+  type Row,
 } from './money-ledger-test-harness'
 import {
   materializeRuntimePublishedOperation,
@@ -790,6 +791,116 @@ describe('money authorization account version', () => {
     expect(db.rows('moneyUsageEvents')[0]).toMatchObject({ chargeState: 'paid' })
     expect(db.rows('moneyTransactions')).toHaveLength(1)
     expect(db.rows('moneyLedgerEntries')).toHaveLength(3)
+  })
+})
+
+describe('money authorization offering liveness', () => {
+  it('refuses after the offering is unpublished between claim and charge without money writes', async () => {
+    const db = new MemoryDb()
+    const fixture = brokeredFixture(db)
+    const offering = db.rows('capabilityOfferings').find(
+      (row) => row._id === 'offering:money',
+    )
+    if (offering === undefined) throw new Error('offering_fixture_missing')
+    offering.status = 'inactive'
+    const before = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      budgets: structuredClone(db.rows('moneyCredentialBudgetStates')),
+      usage: structuredClone(db.rows('moneyUsageEvents')),
+      summaries: structuredClone(db.rows('moneyCredentialUsageSummaries')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+    }
+
+    await expect(authorizeHandler({ db }, fixture.args)).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'price_unavailable',
+    })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      budgets: db.rows('moneyCredentialBudgetStates'),
+      usage: db.rows('moneyUsageEvents'),
+      summaries: db.rows('moneyCredentialUsageSummaries'),
+      entries: db.rows('moneyLedgerEntries'),
+      transactions: db.rows('moneyTransactions'),
+    }).toEqual(before)
+  })
+})
+
+describe('sealed charge journal', () => {
+  async function authorizePaidCharge(db: MemoryDb): Promise<void> {
+    const fixture = brokeredFixture(db)
+    await expect(authorizeHandler({ db }, fixture.args)).resolves.toMatchObject({
+      kind: 'accepted',
+      chargeState: 'paid',
+    })
+  }
+
+  it('stores a journalDigest after a paid charge', async () => {
+    const db = new MemoryDb()
+    await authorizePaidCharge(db)
+    expect(db.rows('moneyTransactions')).toEqual([
+      expect.objectContaining({
+        digestFormat: 'charge-journal:v1',
+        journalDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      }),
+    ])
+  })
+
+  it.each([
+    {
+      name: 'a digest that does not match the loaded journal',
+      mutate: (transaction: Row) => {
+        transaction.journalDigest =
+          'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+        transaction.digestFormat = 'charge-journal:v1'
+      },
+    },
+    {
+      name: 'an empty journalDigest',
+      mutate: (transaction: Row) => {
+        transaction.journalDigest = ''
+        transaction.digestFormat = 'charge-journal:v1'
+      },
+    },
+    {
+      name: 'inputDigest reused as journalDigest',
+      mutate: (transaction: Row) => {
+        transaction.journalDigest = transaction.inputDigest
+        transaction.digestFormat = 'charge-journal:v1'
+      },
+    },
+    {
+      name: 'usage observedAt that does not match transaction createdAt',
+      mutate: (_transaction: Row, usage: Row) => {
+        usage.observedAt = now + 1
+      },
+    },
+  ])('refuses reconciliation for $name', async ({ mutate }) => {
+    const db = new MemoryDb()
+    await authorizePaidCharge(db)
+    const transaction = db.rows('moneyTransactions').find(
+      (row) => row.kind === 'charge',
+    )
+    const usage = db.rows('moneyUsageEvents')[0]
+    if (transaction === undefined || usage === undefined)
+      throw new Error('sealed_journal_fixture_missing')
+    mutate(transaction, usage)
+    const before = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      budgets: structuredClone(db.rows('moneyCredentialBudgetStates')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+    }
+    await expect(
+      reconcileHandler({ db }, reconciliationArgs('not_released')),
+    ).resolves.toEqual({ kind: 'reconciliation_required' })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      budgets: db.rows('moneyCredentialBudgetStates'),
+      entries: db.rows('moneyLedgerEntries'),
+      transactions: db.rows('moneyTransactions'),
+    }).toEqual(before)
   })
 })
 

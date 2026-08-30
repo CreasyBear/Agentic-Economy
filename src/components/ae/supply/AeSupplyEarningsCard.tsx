@@ -1,13 +1,8 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
+import { AeFactList } from "@/components/ae/data/AeFactList";
 import type { OwnerProviderEarningsReadback } from "@/modules/capability-supply/supply-funnel.functions";
 import {
   createOwnerConnectAccountServer,
@@ -27,50 +22,31 @@ export function AeSupplyEarningsCard({
   onStatusRefreshed?: () => void | Promise<void>;
 }>) {
   return (
-    <Card className="shadow-none">
-      <CardHeader className="p-5 pb-0">
-        <CardTitle>
-          <h3 className="text-lg font-semibold text-foreground">
-            Earnings and payouts
-          </h3>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-5">
-        {readback.kind === "error" ? (
-          <Empty className="border border-dashed">
-            <EmptyHeader>
-              <EmptyTitle>
-                {readback.code === "unauthenticated"
-                  ? "Earnings are unavailable for this session."
-                  : "Earnings source is unavailable."}
-              </EmptyTitle>
-              <EmptyDescription>
-                {readback.code === "unauthenticated"
-                  ? "An authenticated owner session is required to read supplier earnings."
-                  : "We could not read source earnings and payout data. Try again later."}
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+    <div className="grid gap-4">
+      {readback.kind === "error" ? (
+          <AeEmptyState
+            role="alert"
+            title={
+              readback.code === "unauthenticated"
+                ? "Earnings are unavailable for this session."
+                : "Earnings source is unavailable."
+            }
+            description={
+              readback.code === "unauthenticated"
+                ? "An authenticated owner session is required to read supplier earnings."
+                : "We could not read source earnings and payout data. Try again later."
+            }
+          />
         ) : readback.kind === "not_found" ? (
-          <Empty className="border border-dashed">
-            <EmptyHeader>
-              <EmptyTitle>No earnings have been recorded.</EmptyTitle>
-              <EmptyDescription>
-                This supplier does not have an earnings account yet. Setup or
-                test calls do not create earnings.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <AeEmptyState
+            title="No earnings have been recorded."
+            description="This supplier does not have an earnings account yet. Setup or test calls do not create earnings."
+          />
         ) : readback.accounts.length === 0 ? (
-          <Empty className="border border-dashed">
-            <EmptyHeader>
-              <EmptyTitle>No earnings have been recorded.</EmptyTitle>
-              <EmptyDescription>
-                No supplier earnings account exists yet.
-                Setup or test calls do not create earnings.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <AeEmptyState
+            title="No earnings have been recorded."
+            description="No supplier earnings account exists yet. Setup or test calls do not create earnings."
+          />
         ) : (
           <div className="grid gap-4">
             {readback.accounts.map((account) => (
@@ -93,8 +69,7 @@ export function AeSupplyEarningsCard({
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 
@@ -267,7 +242,7 @@ function EarningsCurrencyCard({
   }
 
   return (
-    <section className="grid gap-4 rounded-md border border-border p-4">
+    <section className="grid gap-4">
       <div className="grid gap-1">
         <h4 className="font-semibold text-foreground">
           {account.currency} earnings
@@ -276,145 +251,48 @@ function EarningsCurrencyCard({
           Source-recorded supplier earnings and payout state.
         </p>
       </div>
-      <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="grid gap-1">
-          <dt className="text-sm font-medium text-muted-foreground">
-            Gross accrued
-          </dt>
-          <dd className="m-0 text-foreground">
-            {formatCurrencyAmount(account.earnings.grossAccrual)}
-          </dd>
-        </div>
-        <div className="grid gap-1">
-          <dt className="text-sm font-medium text-muted-foreground">
-            AE fee / rake
-          </dt>
-          <dd className="m-0 text-foreground">
-            {formatCurrencyAmount(account.earnings.rake)}
-          </dd>
-        </div>
-        <div className="grid gap-1">
-          <dt className="text-sm font-medium text-muted-foreground">
-            Supplier net
-          </dt>
-          <dd className="m-0 text-foreground">
-            {formatCurrencyAmount(account.earnings.providerNet)}
-          </dd>
-        </div>
-        <div className="grid gap-1">
-          <dt className="text-sm font-medium text-muted-foreground">
-            Paid out
-          </dt>
-          <dd className="m-0 text-foreground">
-            {formatCurrencyAmount(account.earnings.paidOut)}
-          </dd>
-        </div>
-        <div className="grid gap-1">
-          <dt className="text-sm font-medium text-muted-foreground">Held</dt>
-          <dd className="m-0 text-foreground">
-            {formatCurrencyAmount(account.earnings.held)}
-          </dd>
-        </div>
-        <div className="grid gap-1">
-          <dt className="text-sm font-medium text-muted-foreground">
-            Payout account
-          </dt>
-          <dd className="m-0 text-foreground">
-            {payoutAccountLabel(accountState)}
-          </dd>
-        </div>
-        <div className="grid gap-1">
-          <dt className="text-sm font-medium text-muted-foreground">
-            Payout state
-          </dt>
-          <dd className="m-0 text-foreground">
-            {verifiedPaidEvidence
+      <AeFactList
+        facts={[
+          { label: "Gross accrued", value: formatCurrencyAmount(account.earnings.grossAccrual) },
+          { label: "AE fee / rake", value: formatCurrencyAmount(account.earnings.rake) },
+          { label: "Supplier net", value: formatCurrencyAmount(account.earnings.providerNet) },
+          { label: "Paid out", value: formatCurrencyAmount(account.earnings.paidOut) },
+          { label: "Held", value: formatCurrencyAmount(account.earnings.held) },
+          { label: "Payout account", value: payoutAccountLabel(accountState) },
+          {
+            label: "Payout state",
+            value: verifiedPaidEvidence
               ? "Transferred to Stripe"
-              : payoutStateLabel(payoutState)}
-          </dd>
-        </div>
-      </dl>
+              : payoutStateLabel(payoutState),
+          },
+        ]}
+      />
       {!hasPersistedPayout ? null : (
-        <div className="grid gap-2 rounded-md border border-border p-3">
-          <p className="m-0 text-sm font-medium text-foreground">
+        <details className="grid gap-2">
+          <summary className="flex min-h-touch cursor-pointer items-center text-sm font-medium text-foreground">
             Durable transfer evidence
-          </p>
-          <dl className="grid gap-3 sm:grid-cols-2">
-            {payoutCommandId === undefined ? null : (
-              <div className="grid gap-1">
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Command
-                </dt>
-                <dd className="m-0 break-all font-mono text-xs text-foreground">
-                  {payoutCommandId}
-                </dd>
-              </div>
-            )}
-            {stripeTransferId === undefined ? null : (
-              <div className="grid gap-1">
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Stripe transfer
-                </dt>
-                <dd className="m-0 break-all font-mono text-xs text-foreground">
-                  {stripeTransferId}
-                </dd>
-              </div>
-            )}
-            {destinationAccountId === undefined ? null : (
-              <div className="grid gap-1">
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Destination
-                </dt>
-                <dd className="m-0 break-all font-mono text-xs text-foreground">
-                  {destinationAccountId}
-                </dd>
-              </div>
-            )}
-            {requestDigest === undefined ? null : (
-              <div className="grid gap-1">
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Request digest
-                </dt>
-                <dd className="m-0 break-all font-mono text-xs text-foreground">
-                  {requestDigest}
-                </dd>
-              </div>
-            )}
-            {evidenceDigest === undefined ? null : (
-              <div className="grid gap-1">
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Supplier evidence digest
-                </dt>
-                <dd className="m-0 break-all font-mono text-xs text-foreground">
-                  {evidenceDigest}
-                </dd>
-              </div>
-            )}
-            {providerHeldBefore === undefined ||
-            providerHeldAfter === undefined ? null : (
-              <div className="grid gap-1">
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Held balance
-                </dt>
-                <dd className="m-0 text-sm text-foreground">
-                  {formatCurrencyAmount(providerHeldBefore)} →{" "}
-                  {formatCurrencyAmount(providerHeldAfter)}
-                </dd>
-              </div>
-            )}
-            {providerPaidBefore === undefined ||
-            providerPaidAfter === undefined ? null : (
-              <div className="grid gap-1">
-                <dt className="text-xs font-medium text-muted-foreground">
-                  Paid total
-                </dt>
-                <dd className="m-0 text-sm text-foreground">
-                  {formatCurrencyAmount(providerPaidBefore)} →{" "}
-                  {formatCurrencyAmount(providerPaidAfter)}
-                </dd>
-              </div>
-            )}
-          </dl>
+          </summary>
+          <AeFactList
+            facts={[
+              ...(payoutCommandId === undefined ? [] : [{ label: "Command", value: payoutCommandId, mono: true }]),
+              ...(stripeTransferId === undefined ? [] : [{ label: "Stripe transfer", value: stripeTransferId, mono: true }]),
+              ...(destinationAccountId === undefined ? [] : [{ label: "Destination", value: destinationAccountId, mono: true }]),
+              ...(requestDigest === undefined ? [] : [{ label: "Request digest", value: requestDigest, mono: true }]),
+              ...(evidenceDigest === undefined ? [] : [{ label: "Supplier evidence digest", value: evidenceDigest, mono: true }]),
+              ...(providerHeldBefore === undefined || providerHeldAfter === undefined
+                ? []
+                : [{
+                    label: "Held balance",
+                    value: `${formatCurrencyAmount(providerHeldBefore)} → ${formatCurrencyAmount(providerHeldAfter)}`,
+                  }]),
+              ...(providerPaidBefore === undefined || providerPaidAfter === undefined
+                ? []
+                : [{
+                    label: "Paid total",
+                    value: `${formatCurrencyAmount(providerPaidBefore)} → ${formatCurrencyAmount(providerPaidAfter)}`,
+                  }]),
+            ]}
+          />
           {recoveryGuidance === undefined ? null : (
             <p className="m-0 text-sm text-muted-foreground">
               {recoveryGuidance}
@@ -424,7 +302,7 @@ function EarningsCurrencyCard({
             <Button
               type="button"
               variant="secondary"
-              className="min-h-11 w-fit"
+              className="min-h-touch w-fit"
               disabled={busy !== undefined}
               onClick={() => void refreshRecordedStatus()}
             >
@@ -433,9 +311,9 @@ function EarningsCurrencyCard({
                 : "Refresh recorded status"}
             </Button>
           ) : null}
-        </div>
+        </details>
       )}
-      <div className="grid gap-2 rounded-md bg-muted/40 p-3">
+      <div className="grid gap-2">
         <p className="m-0 text-sm text-muted-foreground">
           Payouts become available when your payout account and supplier configuration are ready.
         </p>
@@ -444,7 +322,7 @@ function EarningsCurrencyCard({
             <Button
               type="button"
               variant="secondary"
-              className="min-h-11"
+              className="min-h-touch"
               disabled={busy !== undefined}
               onClick={() => void createAccount()}
             >
@@ -456,7 +334,7 @@ function EarningsCurrencyCard({
             <Button
               type="button"
               variant="secondary"
-              className="min-h-11"
+              className="min-h-touch"
               disabled={busy !== undefined}
               onClick={() => void openOnboarding()}
             >

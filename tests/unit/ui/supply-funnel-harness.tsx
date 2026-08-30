@@ -141,7 +141,7 @@ export const preparedPublication: PreparedPublicationMaterial = {
   binding: {
     bindingId: "binding:one",
     endpointUrl: "https://example.test/quote",
-    authority: { kind: "keyless" },
+    authority: { kind: "public_upstream" },
     continuation: {
       kind: "single_response",
       evidenceRefs: ["evidence:continuation"],
@@ -202,7 +202,7 @@ export const sourceValue: SupplyEndpointConfigValue = {
   },
   evidenceRefs: ["evidence:source"],
   requestTimeoutMs: 5_000,
-  authority: { kind: "keyless" },
+  authority: { kind: "public_upstream" },
   documentJson: JSON.stringify(openApiDocument),
   operation: { path: "/quote", method: "post" },
   fixedQuery: [],
@@ -215,7 +215,7 @@ export const x402SourceValue: SupplyEndpointConfigValue = {
   commercial: sourceValue.commercial,
   evidenceRefs: sourceValue.evidenceRefs,
   requestTimeoutMs: 5_000,
-  authority: { kind: "keyless" },
+  authority: { kind: "public_upstream" },
   resourceJson: JSON.stringify({
     resourceUrl: "https://example.test/paid-quote",
     inputSchema: { type: "object", properties: {} },
@@ -308,7 +308,7 @@ export function offeringAt(step: SupplyFunnelStep): OwnerSupplyOfferingReadback 
     source: sourceReadback,
     admission: { state: "admitted" },
     pricing: { config: pricingConfig, priceDigest },
-    authority: { mode: "provider_owned", kind: "keyless" },
+    authority: { mode: "provider_owned", kind: "public_upstream" },
     publication: {
       state: "current",
       publicationRef: "publication:one",
@@ -329,7 +329,7 @@ export function offeringAt(step: SupplyFunnelStep): OwnerSupplyOfferingReadback 
         adapterId: "http-json:v1",
         admission: "admitted",
         conformance: "conformant",
-        authority: { kind: "keyless" },
+        authority: { kind: "public_upstream" },
       },
       lifecycle: { state: "active", reasons: [] },
       readiness: publicationReadiness,
@@ -358,6 +358,7 @@ export function x402OfferingAtTest(): OwnerSupplyOfferingReadback {
     authority: {
       mode: "provider_owned",
       kind: "provider_connection",
+      connectionRef: "connection:x402",
       providerRef: "provider:x402",
       authorityGeneration: 1,
       authorityDigest: sourceHash,
@@ -371,6 +372,7 @@ export function x402OfferingAtTest(): OwnerSupplyOfferingReadback {
         adapterId: "x402-fetch:v2",
         authority: {
           kind: "provider_connection",
+          connectionRef: "connection:x402",
           providerRef: "provider:x402",
         },
       },

@@ -123,6 +123,11 @@ describe('catalogue support derivation', () => {
       const connectionResult = createProviderConnection({
         commandId: 'command:create:connection:test',
         connectionRef: 'connection:test',
+        owningAccountRef: 'account:owner',
+        installedByPrincipalRef: 'principal:owner',
+        authorityGrantRef: 'grant:connection',
+        authorityGrantGeneration: 1,
+        secretRef: 'env:TEST_PROVIDER_SECRET',
         businessId: String(businessId),
         providerRef: 'provider:test',
         providerAccountRef: 'account:test',
@@ -223,6 +228,11 @@ describe('catalogue support derivation', () => {
       })
       await ctx.db.insert('capabilityProviderConnections', {
         connectionRef: connection.connectionRef,
+        owningAccountRef: connection.owningAccountRef,
+        installedByPrincipalRef: connection.installedByPrincipalRef,
+        authorityGrantRef: connection.authorityGrantRef,
+        authorityGrantGeneration: connection.authorityGrantGeneration,
+        ...(connection.secretRef === undefined ? {} : { secretRef: connection.secretRef }),
         businessId,
         providerRef: connection.providerRef,
         providerAccountRef: connection.providerAccountRef,
@@ -328,5 +338,74 @@ describe('catalogue support derivation', () => {
     }))).resolves.toEqual({ kind: 'error', code: 'business_not_public' })
     const snapshot = await backend.run(async () => null)
     expect(snapshot).toBeNull()
+  })
+
+  it('does not replace an unchanged registry search document when only observedAt moved', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId } = await publishedBusinessOwner(backend, 'search-doc-noop')
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('businessOfferings', {
+        businessId,
+        offeringRef: catalogOrigin.offeringRef,
+        currentRevision: catalogOrigin.offeringRevision,
+        status: 'published',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await ctx.db.insert('businessOfferingRevisions', {
+        businessId,
+        offeringRef: catalogOrigin.offeringRef,
+        revision: catalogOrigin.offeringRevision,
+        name: 'Lookup',
+        category: 'Data',
+        summary: 'Lookup one record.',
+        price: { kind: 'fixed', amount: exactPrice, taxTreatment: 'inclusive' },
+        sourceHash: catalogOrigin.offeringSourceHash,
+        createdAt: 1,
+      })
+      await ctx.db.insert('offeringAccessPaths', {
+        accessPathRef: catalogOrigin.declaredAccessPathRef,
+        businessId,
+        offeringRef: catalogOrigin.offeringRef,
+        offeringRevision: catalogOrigin.offeringRevision,
+        offeringSourceHash: catalogOrigin.offeringSourceHash,
+        status: 'published',
+        descriptor: {
+          kind: 'external_operation',
+          name: 'Lookup',
+          summary: 'Lookup one record.',
+          url: 'https://example.test',
+          method: 'GET',
+          provenance: 'business_declared',
+        },
+        sourceHash: catalogOrigin.accessPathSourceHash,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+    })
+
+    await expect(backend.run((ctx) => rebuildBusinessSupplyProjectionSnapshotCommand({
+      db: ctx.db, sourceDb: ctx.db, businessId, support: {}, now: 10,
+    }))).resolves.toMatchObject({ kind: 'ok' })
+    const first = await backend.run(async (ctx) => {
+      const documents = await ctx.db.query('registrySearchDocuments')
+        .withIndex('by_business', (query) => query.eq('businessSlug', 'search-doc-noop'))
+        .take(2)
+      return documents[0]
+    })
+    expect(first).toBeDefined()
+
+    await expect(backend.run((ctx) => rebuildBusinessSupplyProjectionSnapshotCommand({
+      db: ctx.db, sourceDb: ctx.db, businessId, support: {}, now: 20,
+    }))).resolves.toMatchObject({ kind: 'ok' })
+    const second = await backend.run(async (ctx) => {
+      const documents = await ctx.db.query('registrySearchDocuments')
+        .withIndex('by_business', (query) => query.eq('businessSlug', 'search-doc-noop'))
+        .take(2)
+      return documents[0]
+    })
+    expect(second?._id).toBe(first?._id)
+    expect(second?.updatedAt).toBe(first?.updatedAt)
+    expect(second?.sourceHash).toBe(first?.sourceHash)
   })
 })

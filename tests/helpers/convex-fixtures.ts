@@ -3,9 +3,10 @@ import { register as registerWorkpool } from '@convex-dev/workpool/test'
 import { register as registerRateLimiter } from '@convex-dev/rate-limiter/test'
 import { register as registerAggregate } from '@convex-dev/aggregate/test'
 import agentTest from '@convex-dev/agent/test'
-import { components } from '../../convex/_generated/api'
+import { api, components } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   decodeConvexPublicationSource,
   preparePublicationDraft,
@@ -59,12 +60,100 @@ export async function ownerAdmin(
   backend: ConvexFixtureBackend,
   subject: string,
 ) {
+  const credentialExpirySeconds = Math.floor(Date.now() / 1_000) + 86_400
   const identity = {
     subject,
     issuer: 'https://identity.example',
     tokenIdentifier: subject.replace(/^user_/u, 'token_'),
+    exp: credentialExpirySeconds,
   }
+  const suffix = canonicalDigest({
+    format: 'test-owner-admin-authority:v1',
+    tokenIdentifier: identity.tokenIdentifier,
+  }).slice('sha256:'.length, 'sha256:'.length + 32)
+  const canonicalPrincipalRef = `prn_${suffix}`
+  const canonicalAccountRef = `acc_${suffix}`
+  const ownershipRef = `own_${suffix}`
+  const bindingRef = `eib_${suffix}`
+  const credentialRef = `crd_${suffix}`
+  const credentialExpiresAt = credentialExpirySeconds * 1_000
   await backend.run(async (ctx) => {
+    const existingBinding = await ctx.db.query('externalIdentityBindings')
+      .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+        .eq('providerNamespace', 'clerk/user')
+        .eq('providerIdentifier', identity.tokenIdentifier))
+      .unique()
+    if (existingBinding === null) {
+      await ctx.db.insert('principals', {
+        principalRef: canonicalPrincipalRef,
+        kind: 'human',
+        displayName: `${subject} admin`,
+        lifecycle: 'active',
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await ctx.db.insert('accounts', {
+        accountRef: canonicalAccountRef,
+        displayName: `${subject} account`,
+        lifecycle: 'active',
+        recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+        creationActorPrincipalRef: canonicalPrincipalRef,
+        creationIdempotencyRef: `create:${canonicalAccountRef}`,
+        initialOwnershipRef: ownershipRef,
+        currentOwnershipRef: ownershipRef,
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        lastAction: {
+          actorPrincipalRef: canonicalPrincipalRef,
+          activeAccountRef: canonicalAccountRef,
+          correlationRef: `create:${canonicalAccountRef}`,
+          idempotencyRef: `create:${canonicalAccountRef}`,
+        },
+      })
+      await ctx.db.insert('accountOwnerships', {
+        ownershipRef,
+        accountRef: canonicalAccountRef,
+        ownerPrincipalRef: canonicalPrincipalRef,
+        lifecycle: 'active',
+        changeKind: 'creation',
+        revision: 1,
+        createdAt: 1,
+        createdBy: {
+          actorPrincipalRef: canonicalPrincipalRef,
+          activeAccountRef: canonicalAccountRef,
+          correlationRef: `create:${ownershipRef}`,
+          idempotencyRef: `create:${ownershipRef}`,
+        },
+      })
+      await ctx.db.insert('externalIdentityBindings', {
+        bindingRef,
+        principalRef: canonicalPrincipalRef,
+        providerNamespace: 'clerk/user',
+        providerIdentifier: identity.tokenIdentifier,
+        providerState: { kind: 'known', value: 'active' },
+        lifecycle: 'active',
+        credentialGeneration: 1,
+        bindIdempotencyRef: `bind:${bindingRef}`,
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await ctx.db.insert('credentials', {
+        credentialRef,
+        bindingRef,
+        principalRef: canonicalPrincipalRef,
+        type: 'provider_token',
+        lifecycle: 'active',
+        generation: 1,
+        issueIdempotencyRef: `issue:${credentialRef}`,
+        revision: 1,
+        issuedAt: 1,
+        expiresAt: credentialExpiresAt,
+        updatedAt: 1,
+      })
+    }
     const existing = await ctx.db
       .query('adminMemberships')
       .withIndex('by_tokenIdentifier_and_state', (query) =>
@@ -82,7 +171,13 @@ export async function ownerAdmin(
       })
     }
   })
-  return backend.withIdentity(identity)
+  const owner = backend.withIdentity(identity)
+  const materialized = await owner.mutation(
+    api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+    {},
+  )
+  if (!materialized) throw new Error('test owner authority materialization failed')
+  return owner
 }
 
 export type PublishedBusinessOwnerOptions = Readonly<{
@@ -103,19 +198,109 @@ export async function publishedBusinessOwner(
       ? slug
       : `${prefixLabel.charAt(0).toUpperCase()}${prefixLabel.slice(1)} ${slug}`
   const identitySlug = `${identityPrefix}${slug}`
+  const credentialExpirySeconds = 8_000_000_000
+  const credentialExpiresAt = credentialExpirySeconds * 1_000
   const identity = {
     subject: `user_${identitySlug}`,
     issuer: 'https://identity.example',
-    tokenIdentifier: `token_${identitySlug}`,
+    exp: credentialExpirySeconds,
   }
+  const tokenIdentifier = `${identity.issuer}|${identity.subject}`
+  const authorityDigest = canonicalDigest({
+    format: 'test-published-business-owner-authority:v1',
+    tokenIdentifier,
+  }).slice('sha256:'.length, 'sha256:'.length + 32)
+  const canonicalPrincipalRef = `prn_${authorityDigest}`
+  const canonicalAccountRef = `acc_${authorityDigest}`
+  const ownershipRef = `own_${authorityDigest}`
+  const bindingRef = `eib_${authorityDigest}`
+  const credentialRef = `crd_${authorityDigest}`
   const businessId = (await backend.run(async (ctx) => {
-    const ownerId = await ctx.db.insert('owners', {
-      clerkUserId: identity.subject,
+    await ctx.db.insert('principals', {
+      principalRef: canonicalPrincipalRef,
+      kind: 'human',
+      displayName: `${businessName} owner`,
+      lifecycle: 'active',
+      revision: 1,
       createdAt: 1,
       updatedAt: 1,
     })
+    await ctx.db.insert('accounts', {
+      accountRef: canonicalAccountRef,
+      displayName: `${businessName} Account`,
+      lifecycle: 'active',
+      recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+      creationActorPrincipalRef: canonicalPrincipalRef,
+      creationIdempotencyRef: `create:${canonicalAccountRef}`,
+      initialOwnershipRef: ownershipRef,
+      currentOwnershipRef: ownershipRef,
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      lastAction: {
+        actorPrincipalRef: canonicalPrincipalRef,
+        activeAccountRef: canonicalAccountRef,
+        correlationRef: `create:${canonicalAccountRef}`,
+        idempotencyRef: `create:${canonicalAccountRef}`,
+      },
+    })
+    await ctx.db.insert('accountOwnerships', {
+      ownershipRef,
+      accountRef: canonicalAccountRef,
+      ownerPrincipalRef: canonicalPrincipalRef,
+      lifecycle: 'active',
+      changeKind: 'creation',
+      revision: 1,
+      createdAt: 1,
+      createdBy: {
+        actorPrincipalRef: canonicalPrincipalRef,
+        activeAccountRef: canonicalAccountRef,
+        correlationRef: `create:${ownershipRef}`,
+        idempotencyRef: `create:${ownershipRef}`,
+      },
+    })
+    await ctx.db.insert('externalIdentityBindings', {
+      bindingRef,
+      principalRef: canonicalPrincipalRef,
+      providerNamespace: 'clerk/user',
+      providerIdentifier: tokenIdentifier,
+      providerState: { kind: 'known', value: 'active' },
+      lifecycle: 'active',
+      credentialGeneration: 1,
+      bindIdempotencyRef: `bind:${bindingRef}`,
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert('credentials', {
+      credentialRef,
+      bindingRef,
+      principalRef: canonicalPrincipalRef,
+      type: 'provider_token',
+      lifecycle: 'active',
+      generation: 1,
+      issueIdempotencyRef: `issue:${credentialRef}`,
+      revision: 1,
+      issuedAt: 1,
+      expiresAt: credentialExpiresAt,
+      expiryMaterialization: {
+        state: 'scheduled' as const,
+        credentialGeneration: 1,
+        credentialExpiresAt,
+        scheduleNonce: canonicalDigest({
+          kind: 'interactive_credential_expiry:v1',
+          bindingRef,
+          credentialRef,
+          generation: 1,
+          expiresAt: credentialExpiresAt,
+        }),
+        scheduleRef: `scheduled:${credentialRef}`,
+        materializedAt: 1,
+      },
+      updatedAt: 1,
+    })
     return await ctx.db.insert('businesses', {
-      ownerId,
+      owningAccountRef: canonicalAccountRef,
       slug: `${slugPrefix}${slug}`,
       name: businessName,
       normalizedName: businessName.toLowerCase(),
@@ -132,7 +317,12 @@ export async function publishedBusinessOwner(
       updatedAt: 1,
     })
   })) as Id<'businesses'>
-  return { businessId, owner: backend.withIdentity(identity) }
+  return {
+    businessId,
+    owner: backend.withIdentity(identity),
+    canonicalPrincipalRef,
+    canonicalAccountRef,
+  }
 }
 export type CapabilityPublicationMutationFixture = Readonly<{
   businessId: Id<'businesses'>

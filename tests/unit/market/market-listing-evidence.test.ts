@@ -84,4 +84,27 @@ describe("market listing evidence", () => {
       minimumSampleSize: 5,
     });
   });
+
+  it("categorizes from the job name and summary, not only the capability id", () => {
+    expect(
+      emptyMarketListingEvidence(
+        "operation:v1:amazon",
+        "post.glim-sh.api-v1-amazon-search",
+        "Amazon Search Search Amazon product listings.",
+      ).category.id,
+    ).toBe("commerce");
+    expect(
+      emptyMarketListingEvidence(
+        "operation:v1:tides",
+        "generic.capability",
+        "Ocean tides from NOAA stations.",
+      ).category.id,
+    ).toBe("data-research");
+    expect(
+      emptyMarketListingEvidence(
+        "operation:v1:gas",
+        "post.oracle.gas",
+      ).category.id,
+    ).toBe("developer-tools");
+  });
 });

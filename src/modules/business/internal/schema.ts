@@ -9,16 +9,8 @@ import {
 } from '@/modules/business/public'
 
 export const businessTables = {
-  owners: defineTable({
-    clerkUserId: v.string(),
-    displayName: v.optional(v.string()),
-    emailHash: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index('by_clerkUserId', ['clerkUserId']),
-
   businesses: defineTable({
-    ownerId: v.id('owners'),
+    owningAccountRef: v.string(),
     slug: v.string(),
     name: v.string(),
     normalizedName: v.string(),
@@ -27,14 +19,11 @@ export const businessTables = {
     publicStatus: literalUnion(PublicStatusValues),
     trustTier: literalUnion(TrustTierValues),
     sourceHash: v.string(),
-    // Legacy development rows may retain the pre-publicStatus claim field.
-    // Keep it optional until every deployment has completed the data migration.
-    claimStatus: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     suppressedAt: v.optional(v.number()),
   })
     .index('by_slug', ['slug'])
-    .index('by_owner_updatedAt', ['ownerId', 'updatedAt'])
+    .index('by_owningAccountRef_and_updatedAt', ['owningAccountRef', 'updatedAt'])
     .index('by_publicStatus_slug', ['publicStatus', 'slug']),
 } as const

@@ -257,7 +257,7 @@ describe("hosted Operation gateway smoke receipt", () => {
       });
     };
 
-    expect(() => parseWithAuthentication({ kind: "keyless" })).toThrow(
+    expect(() => parseWithAuthentication({ kind: "ae_api_key" })).toThrow(
       "authentication evidence mismatch",
     );
     expect(

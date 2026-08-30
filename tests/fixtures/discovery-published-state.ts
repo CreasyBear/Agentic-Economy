@@ -13,21 +13,13 @@ export function createDurablePublishedDiscoveryState(input: {
   idPrefix: string
 }): DiscoverySourceState {
   const state = emptyDiscoverySourceState()
-  const ownerId = brandNonEmpty(`owner:${input.idPrefix}`, 'OwnerId')
+  const owningAccountRef = `account:test-owner:${input.requestedSlug}`
   const businessId = brandNonEmpty(`business:${input.requestedSlug}`, 'BusinessId')
   const slug = brandNonEmpty(input.requestedSlug, 'Slug')
   const businessContext = { kind: 'local_human' as const, suburb: input.suburb, stateTerritory: 'WA' }
   const sourceHash = canonicalDigest({ input, businessContext })
-  state.owners.push({
-    ownerId,
-    clerkUserId: `owner:${input.requestedSlug}`,
-    displayName: input.businessName,
-    createdAt: 10_000,
-    updatedAt: 10_000,
-  })
   state.businesses.push({
     businessId,
-    ownerId,
     slug,
     name: input.businessName,
     normalizedName: input.businessName.toLowerCase(),
@@ -74,7 +66,7 @@ export function createDurablePublishedDiscoveryState(input: {
     operations: [],
   }, {
     businessId,
-    authority: { actorRef: ownerId, ownerRef: ownerId, businessOwnerRef: ownerId },
+    authority: { actorRef: owningAccountRef, ownerRef: owningAccountRef, businessOwnerRef: owningAccountRef },
     services: services.services,
     operationKey: `op:${input.idPrefix}:publish`,
     now: 11_000,

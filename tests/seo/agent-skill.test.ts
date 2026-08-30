@@ -20,7 +20,7 @@ describe('public agent skill', () => {
       'ae inspect "$AE_OPERATION_REF" --json',
       'ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --json',
       'ae connect --json',
-      'ae status "$AE_INVOCATION_REF" --json',
+      'ae wait "$AE_INVOCATION_REF" --json',
       'ae recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json',
     ]
     let previous = -1
@@ -30,13 +30,56 @@ describe('public agent skill', () => {
       previous = current
     }
   })
+  it('opens with the activation funnel before the market loop', () => {
+    const funnelMarkers = [
+      '## 1. Pick your path',
+      '/llms.txt',
+      '/for-agents',
+      'npm install --global @agentic-economy/cli',
+      'tell your human what you needed',
+      '## 2. Price rule — before any paid call',
+      'state the total price and the required inputs',
+      '## 3. Search by job',
+    ]
+    let previous = -1
+    for (const marker of funnelMarkers) {
+      const current = body.indexOf(marker)
+      expect(current).toBeGreaterThan(previous)
+      previous = current
+    }
+    expect(body).toMatch(/names begin with `ae_`/u)
+    expect(body).toContain('anonymously and free')
+  })
 
+  it('gives supplier agents a bounded owner-approved onboarding path', () => {
+    expect(body).toContain('## Supplier path')
+    expect(body).toContain('Operation: one job')
+    expect(body).toContain('ae connect --supplier --json')
+    expect(body).toContain('ae doctor "$AE_BUSINESS_ID" --supplier --json')
+    expect(body).toContain('never submit provider keys or count setup tests as earnings')
+  })
+
+  it('recovers from insufficient credit through the served operator page', () => {
+    expect(body).toContain('## If credit runs short')
+    expect(body).toContain('`insufficient_credit`')
+    expect(body).toContain('`retryable: false`')
+    expect(body).toContain('https://ae.example/owner/credit')
+    expect(body).toContain('add credit at https://ae.example/owner/credit')
+  })
+
+  it('closes on the evidence expectation', () => {
+    expect(body).toContain('## What counts as proof')
+    expect(body).toContain('literal output plus an `evidenceHash`')
+    expect(body).toContain('job stays unproven')
+  })
   it('distinguishes invoke outcomes from status diagnostics', () => {
+    expect(body).toContain('it cannot call, retry, or grant authority')
+    expect(body).toContain('ae status "$AE_INVOCATION_REF" --json` reads once')
     expect(body).toContain(
-      'Only `result.kind` is the operation outcome when present: `completed | pending | needs_authority | reconciliation_required | refused`.',
+      'Outcomes (`result.kind`): `completed | pending | needs_authority | reconciliation_required | refused`.',
     )
     expect(body).toContain(
-      "A status response's `found.state` is a recovery diagnostic, not an extra operation outcome: `gathering_information | awaiting_authority | authorized | leased | in_progress | retryable | reconciliation_required | terminal | cancelled | invalidated`.",
+      'Diagnostics (`found.state`): `gathering_information | awaiting_authority | authorized | leased | in_progress | retryable | reconciliation_required | terminal | cancelled | invalidated`.',
     )
   })
 
@@ -78,9 +121,9 @@ describe('public agent skill', () => {
       .filter((name): name is string => name !== undefined)
     const projection = `Endpoint: \`https://ae.example/mcp\`. Anonymous tools: ${anonymousToolNames.map((name) => `\`${name}\``).join(', ')}. Authenticated tools: ${authenticatedToolNames.map((name) => `\`${name}\``).join(', ')}.`
     expect(body).toContain(projection)
-    expect(body).toContain('executionModes.directKeyless')
-    expect(body).toContain('not a guarantee for every Operation')
-    expect(body).toContain('compiled `ae call` command uses the official MCP client')
+    expect(body).toContain('Connect once with AE')
+    expect(body).toContain('price may be zero')
+    expect(body).toContain('explicit authority approval')
     expect(body).toContain('return literal output plus an `evidenceHash`')
   })
   it('documents the installed MCP lifecycle and the business-only catalog boundary', () => {

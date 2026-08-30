@@ -3,16 +3,7 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import {
-  createDevelopmentDurablePort,
-  createDevelopmentDurableState,
-  createDevelopmentDynamicPublishedSource,
-  createDynamicPublishedActionInvocationAdapter,
-  type DynamicPublishedInvocationResult,
-} from '@/modules/capability-execution/legacy-dynamic'
-import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import schema from '../../../convex/schema'
-import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
 
 const convexModules = Object.fromEntries(
   Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
@@ -41,7 +32,23 @@ const SchemaExport = z.object({
 })
 
 const durableTables = [
-  'owners',
+  'principals',
+  'accounts',
+  'accountOwnerships',
+  'memberships',
+  'accountRecoveryParticipantApprovals',
+  'accountSuccessionAuthorizations',
+  'accountSuccessionAuthorizationParticipants',
+  'externalIdentityBindings',
+  'credentials',
+  'authorityDelegationGrants',
+  'authorityDelegationSnapshots',
+  'authorityDelegationSnapshotAncestors',
+  'secretPointers',
+  'secretPointerCommands',
+  'secretLifecycleJournal',
+  'recoveryBreakGlassApprovals',
+  'recoveryBreakGlassAdmissions',
   'businesses',
   'businessOfferings',
   'businessOfferingRevisions',
@@ -61,12 +68,9 @@ const durableTables = [
   'moneyPayoutAllocations',
   'qualifiedUseReceipts',
   'capabilityContractDocuments',
-  'capabilityCurrentOperations',
-  'capabilityCurrentOperationDetails',
-  'capabilityCurrentOperationReadControls',
-  'capabilityCurrentOperationMismatchExplanations',
   'capabilityOfferings',
   'capabilityOperationInvocations',
+  'providerConsequenceJournal',
   'capabilityPublications',
   'capabilityTransportBindings',
   'capabilityProviderConnections',
@@ -91,7 +95,6 @@ const durableTables = [
   'actionInvocationHistory',
   'marketActiveOperations',
   'marketActiveSuppliers',
-  'marketAggregateBackfills',
   'marketEvidenceFacts',
   'marketExternalRegistryEntries',
   'marketExternalRegistryGenerations',
@@ -99,9 +102,81 @@ const durableTables = [
   'marketExternalSnapshots',
   'marketOperationCategories',
   'marketOperationRatings',
+  'marketDemandSignals',
 ] as const
 
 const requiredIndexes = {
+  principals: ['by_principalRef', 'by_kind_and_lifecycle', 'by_lifecycle_and_updatedAt'],
+  accounts: [
+    'by_accountRef',
+    'by_creationActorPrincipalRef_and_creationIdempotencyRef',
+    'by_lifecycle_and_updatedAt',
+  ],
+  accountOwnerships: [
+    'by_ownershipRef',
+    'by_accountRef_and_lifecycle',
+    'by_ownerPrincipalRef_and_lifecycle',
+    'by_accountRef_and_ownerPrincipalRef_and_lifecycle',
+  ],
+  memberships: [
+    'by_membershipRef',
+    'by_accountRef_and_lifecycle',
+    'by_memberPrincipalRef_and_lifecycle',
+    'by_accountRef_and_memberPrincipalRef_and_lifecycle',
+  ],
+  accountRecoveryParticipantApprovals: [
+    'by_approvalRef',
+    'by_accountRef_and_lifecycle',
+    'by_participantPrincipalRef_and_lifecycle',
+  ],
+  accountSuccessionAuthorizations: [
+    'by_authorizationRef',
+    'by_accountRef_and_lifecycle',
+    'by_accountRef_and_successorOwnerPrincipalRef_and_lifecycle',
+  ],
+  accountSuccessionAuthorizationParticipants: [
+    'by_authorizationRef',
+    'by_accountRef_and_createdAt',
+    'by_participantPrincipalRef_and_createdAt',
+  ],
+  externalIdentityBindings: [
+    'by_bindingRef',
+    'by_providerNamespace_and_providerIdentifier',
+    'by_principalRef_and_lifecycle',
+    'by_principalRef_and_bindIdempotencyRef',
+  ],
+  credentials: [
+    'by_credentialRef',
+    'by_bindingRef_and_generation_and_lifecycle',
+    'by_principalRef_and_lifecycle',
+    'by_principalRef_and_issueIdempotencyRef',
+    'by_predecessorCredentialRef',
+  ],
+  authorityDelegationGrants: [
+    'by_grantRef',
+    'by_subjectPrincipalRef_and_lifecycle',
+    'by_accountRef_and_actorPrincipalRef_and_createdBy_idempotencyRef',
+  ],
+  authorityDelegationSnapshots: [
+    'by_snapshotRef',
+    'by_accountRef_and_actorPrincipalRef_and_idempotencyRef',
+  ],
+  authorityDelegationSnapshotAncestors: ['by_snapshotRef_and_position'],
+  secretPointers: ['by_secretRef'],
+  secretPointerCommands: [
+    'by_accountRef_and_idempotencyRef',
+    'by_secretRef_and_newRevision',
+  ],
+  secretLifecycleJournal: ['by_idempotencyRef', 'by_operationRef'],
+  recoveryBreakGlassApprovals: [
+    'by_approvalRef',
+    'by_verificationRef',
+    'by_accountRef_and_lifecycle',
+  ],
+  recoveryBreakGlassAdmissions: [
+    'by_admissionRef',
+    'by_accountRef_and_operatorPrincipalRef_and_idempotencyRef',
+  ],
   moneyAccounts: ['by_accountRef', 'by_accountId_and_currency', 'by_businessId_and_currency'],
   moneyLedgerEntries: [
     'by_transactionRef',
@@ -125,9 +200,7 @@ const requiredIndexes = {
   moneyPayoutAccounts: ['by_businessId_and_currency', 'by_stripeAccountId'],
   moneyPayouts: ['by_businessId_and_currency_and_state', 'by_businessId_and_currency_and_state_and_updatedAt', 'by_periodStart_and_state', 'by_stripeTransferId', 'by_payoutRef', 'by_businessId_and_currency_and_updatedAt', 'by_businessId_and_currency_and_cadence_and_updatedAt'],
   moneyPayoutAllocations: ['by_allocationRef', 'by_qualifiedUseRef', 'by_transactionRef', 'by_payoutRef_and_qualifiedAt', 'by_businessId_and_currency_and_qualifiedAt'],
-  qualifiedUseReceipts: ['by_qualifiedUseRef', 'by_businessId_and_qualifiedAt', 'by_invocationRef', 'by_operationRef_and_qualifiedAt'],
-  owners: ['by_clerkUserId'],
-  businesses: ['by_slug', 'by_owner_updatedAt', 'by_publicStatus_slug'],
+  businesses: ['by_slug', 'by_owningAccountRef_and_updatedAt', 'by_publicStatus_slug'],
   businessOfferings: ['by_offeringRef', 'by_businessId_and_status'],
   businessOfferingRevisions: ['by_offeringRef_and_revision', 'by_businessId_and_createdAt'],
   offeringAccessPaths: [
@@ -147,6 +220,13 @@ const requiredIndexes = {
   registrySearchDocuments: ['by_documentId', 'by_business', 'by_offering', 'by_publicStatus_updatedAt'],
   disputes: ['by_business_status'],
   capabilityOperationInvocations: ['by_invocationRef', 'by_credentialId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_invocationRef', 'by_ownerId_and_state_and_createdAt'],
+  providerConsequenceJournal: [
+    'by_ticketRef',
+    'by_effectRef',
+    'by_commandId',
+    'by_claimRef',
+    'by_state_and_expiresAt',
+  ],
   capabilityProviderConnectionLeases: [
     'by_leaseRef',
     'by_connectionRef_and_state',
@@ -178,21 +258,6 @@ const requiredIndexes = {
   ],
   agentAccessOAuthClients: ['by_clientId'],
   capabilityContractDocuments: ['by_capabilityId_and_version', 'by_status_and_capabilityId_and_version'],
-  capabilityCurrentOperations: [
-    'by_operationRef_and_active',
-    'by_publicationRef_and_publicationRevision',
-    'by_active_and_networkId',
-    'by_active_and_operationRef',
-  ],
-  capabilityCurrentOperationDetails: [
-    'by_operationRef_and_active',
-    'by_publicationRef_and_publicationRevision',
-  ],
-  capabilityCurrentOperationReadControls: ['by_controlRef'],
-  capabilityCurrentOperationMismatchExplanations: [
-    'by_operationRef_and_mismatchKind',
-    'by_expiresAt',
-  ],
   capabilityPublications: [
     'by_publicationRef_and_revision',
     'by_operationRef_and_disposition',
@@ -222,6 +287,11 @@ const requiredIndexes = {
     'by_connectionRef_and_authorityGeneration',
   ],
   registeredOperationMappings: ['by_networkId_and_mappingRef'],
+  marketDemandSignals: [
+    'by_requestRef',
+    'by_credentialId_and_idempotencyKey',
+    'by_principalId_and_credentialId_and_createdAt',
+  ],
 } satisfies Record<string, readonly string[]>
 
 describe('Convex schema', () => {
@@ -232,7 +302,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(58)
+    expect(durableTables).toHaveLength(71)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
@@ -410,13 +480,8 @@ describe('Convex schema', () => {
   it('refuses the obsolete aggregate registry search document envelope after the per-Offering cutover', async () => {
     const backend = convexTest(schema, convexModules)
     const businessId = await backend.run(async (ctx) => {
-      const ownerId = await ctx.db.insert('owners', {
-        clerkUserId: 'user_registry_schema_compatibility',
-        createdAt: 1_784_764_800_000,
-        updatedAt: 1_784_764_800_000,
-      })
       return ctx.db.insert('businesses', {
-        ownerId,
+        owningAccountRef: `acc_${'7'.repeat(32)}`,
         slug: 'sandbox-phase5-web-starter',
         name: 'Phase 5 Demo Website Starter',
         normalizedName: 'phase 5 demo website starter',
@@ -620,104 +685,5 @@ describe('Convex schema', () => {
       control: expect.objectContaining({ acceptedAuthority }),
     }))
     expect(row).not.toHaveProperty('acceptedAuthority')
-  })
-  it('validates current begin and answer gathering-information writes', async () => {
-    const backend = convexTest(schema, convexModules)
-    const fixture = buildDevelopmentPublishedOperationEvidence()
-    const now = fixture.operation.readiness.observedAt + 1_000
-    const actor = { callerRef: 'caller:schema-input', principalRef: 'principal:schema-input' }
-    const durableState = createDevelopmentDurableState<DynamicPublishedInvocationResult>()
-    const adapter = createDynamicPublishedActionInvocationAdapter({
-      operation: fixture.operation,
-      source: createDevelopmentDynamicPublishedSource([fixture.operation]),
-      runtime: {
-        send: async () => { throw new Error('schema regression must not execute transport') },
-        resolveCredential: () => undefined,
-      },
-      now: () => now,
-      nextInvocationRef: () => 'invocation:schema-input',
-      nextAuthorityRef: () => 'authority:schema-input',
-      nextAttemptRef: () => 'attempt:schema-input',
-      paymentAttemptPort: createInMemoryX402PaymentAttemptPort(),
-      durablePort: createDevelopmentDurablePort(durableState),
-      developmentSnapshot: durableState,
-    })
-    const origin = { kind: 'standalone' as const, ...actor }
-
-    const began = await adapter.begin({ origin, actor, partial: {} })
-    expect(began.state).toBe('gathering_information')
-    const beginControl = adapter.exportDevelopmentSnapshot().controls.find(
-      ({ invocationRef }) => invocationRef === began.invocationRef,
-    )
-    if (beginControl === undefined) throw new Error('begin control was not persisted')
-    const toConvexControlRow = (row: Exclude<typeof beginControl, undefined>) => {
-      const { control } = row
-      const state = control.control
-      if (state.state !== 'gathering_information') {
-        throw new Error('expected gathering-information control')
-      }
-      return {
-        invocationRef: row.invocationRef,
-        invocationVersion: row.invocationVersion,
-        sourceRef: row.sourceRef,
-        control: {
-          invocationRef: control.invocationRef,
-          invocationVersion: control.invocationVersion,
-          origin: control.origin,
-          owner: control.owner,
-          action: control.action,
-          desired: control.desired,
-          ...(control.authority === undefined ? {} : { authority: control.authority }),
-          ...(control.acceptedAuthority === undefined ? {} : { acceptedAuthority: control.acceptedAuthority }),
-          freshness: control.freshness,
-          control: {
-            state: 'gathering_information' as const,
-            missingFields: [...state.missingFields],
-          },
-        },
-        ...(row.sourceResultRef === undefined ? {} : { sourceResultRef: row.sourceResultRef }),
-        ...(row.sourceResultDigest === undefined ? {} : { sourceResultDigest: row.sourceResultDigest }),
-        ...(row.terminalBusinessOutcome === undefined ? {} : { terminalBusinessOutcome: row.terminalBusinessOutcome }),
-        ...(row.terminalResultReferenceable === undefined ? {} : { terminalResultReferenceable: row.terminalResultReferenceable }),
-        ...(row.preparedMaterialDigest === undefined ? {} : { preparedMaterialDigest: row.preparedMaterialDigest }),
-        ...(row.preparedTargetDigest === undefined ? {} : { preparedTargetDigest: row.preparedTargetDigest }),
-        ...(row.consequence === undefined ? {} : { consequence: row.consequence }),
-        ...(row.dataLimitSummary === undefined ? {} : { dataLimitSummary: row.dataLimitSummary }),
-        ...(row.authorityBinding === undefined ? {} : { authorityBinding: row.authorityBinding }),
-        ...(row.authorityDecisionAt === undefined ? {} : { authorityDecisionAt: row.authorityDecisionAt }),
-        ...(row.currentAttemptRef === undefined ? {} : { currentAttemptRef: row.currentAttemptRef }),
-        ...(row.currentEffectGeneration === undefined ? {} : { currentEffectGeneration: row.currentEffectGeneration }),
-        ...(row.currentLeaseOwner === undefined ? {} : { currentLeaseOwner: row.currentLeaseOwner }),
-        ...(row.currentLeaseExpiresAt === undefined ? {} : { currentLeaseExpiresAt: row.currentLeaseExpiresAt }),
-        updatedAt: row.updatedAt,
-      }
-    }
-    const controlId = await backend.run(async (ctx) => (
-      ctx.db.insert('actionInvocationControls', toConvexControlRow(beginControl))
-    ))
-
-    const answered = await adapter.answer({
-      invocationRef: began.invocationRef,
-      actor,
-      answers: { symbol: 'BTC' },
-      freshnessMs: 30_000,
-    })
-    if (!('state' in answered) || answered.state !== 'gathering_information') {
-      throw new Error('answer should remain in gathering state')
-    }
-    const answerControl = adapter.exportDevelopmentSnapshot().controls.find(
-      ({ invocationRef }) => invocationRef === began.invocationRef,
-    )
-    if (answerControl === undefined) throw new Error('answer control was not persisted')
-    await backend.run(async (ctx) => {
-      await ctx.db.replace(controlId, toConvexControlRow(answerControl))
-    })
-
-    const persisted = await backend.run(async (ctx) => ctx.db.get(controlId))
-    expect(persisted?.control.control).toEqual({
-      state: 'gathering_information',
-      missingFields: ['convert'],
-    })
-    expect(persisted?.invocationVersion).toBe(2)
   })
 })

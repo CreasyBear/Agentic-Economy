@@ -1,16 +1,15 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
 import { loadSupplyLandingReadbackServer } from '@/lib/server/supply-landing.functions'
+import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/for-providers')({
   loader: () => loadSupplyLandingReadbackServer(),
-  head: () => ({
-    meta: [
-      { title: 'List your API or service | Agentic Economy' },
-      { name: 'description', content: 'Publish the capability, price and access terms agents need to discover, compare and call your tool.' },
-      { name: 'robots', content: 'noindex' },
-    ],
+  head: () => buildPublicPageHead({
+    path: '/for-providers',
+    title: 'Publish an Operation | Agentic Economy',
+    description: 'Publish one bounded job, its price, access terms, readiness, and evidence.',
   }),
   component: SupplyLandingRoute,
 })
@@ -25,12 +24,12 @@ function SupplyLandingRoute() {
       }
     : {}
   return (
-    <AePublicShell>
+    <AePublicPage>
       <AeSupplyLanding
         tools={readback.kind === 'available' ? readback.tools : []}
         services={readback.kind === 'available' ? readback.services.services : []}
         {...recoveryProps}
       />
-    </AePublicShell>
+    </AePublicPage>
   )
 }

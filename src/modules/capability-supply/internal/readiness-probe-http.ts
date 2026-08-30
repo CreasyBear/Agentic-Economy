@@ -58,7 +58,7 @@ export function authorityCredentialPlacement(
 ): Readonly<{ kind: "required" | "none" | "mismatch" }> {
   const requiresCredential =
     placement !== undefined && placement.kind !== "none";
-  if (target.authority.kind === "keyless")
+  if (target.authority.kind === "public_upstream")
     return requiresCredential ? { kind: "mismatch" } : { kind: "none" };
   return requiresCredential ? { kind: "required" } : { kind: "mismatch" };
 }

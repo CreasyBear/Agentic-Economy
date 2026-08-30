@@ -6,11 +6,11 @@ vi.mock('../../../convex/sourceWriteAdmission', () => ({
 }))
 
 import {
-  applyCreditTopup,
-  markCreditTopupOutcomeUnknown,
-  readCreditTopupCommand,
-  reserveCreditTopup,
-} from '../../../convex/moneyLedger'
+  applyCreditTopupHandler,
+  markCreditTopupOutcomeUnknownHandler,
+  readCreditTopupCommandHandler,
+  reserveCreditTopupHandler,
+} from '../../../convex/moneyCreditTopup'
 import { accountRefForOwner } from '@/modules/money/public'
 
 type Row = Record<string, unknown> & { _id: string }
@@ -99,12 +99,10 @@ type Handler = (
   },
   args: Record<string, unknown>,
 ) => Promise<unknown>
-type HandlerExport = { _handler: Handler }
-const reserve = (reserveCreditTopup as unknown as HandlerExport)._handler
-const markUnknown = (markCreditTopupOutcomeUnknown as unknown as HandlerExport)
-  ._handler
-const read = (readCreditTopupCommand as unknown as HandlerExport)._handler
-const apply = (applyCreditTopup as unknown as HandlerExport)._handler
+const reserve = reserveCreditTopupHandler as unknown as Handler
+const markUnknown = markCreditTopupOutcomeUnknownHandler as unknown as Handler
+const read = readCreditTopupCommandHandler as unknown as Handler
+const apply = applyCreditTopupHandler as unknown as Handler
 
 const principalId = 'principal:topup'
 const ownerId = 'owner:topup'
@@ -271,12 +269,13 @@ describe('Convex credit topup recovery', () => {
       apply(context, { event, readback, ...sourceArgs }),
     ).resolves.toMatchObject({ kind: 'accepted', status: 'applied' })
     expect(db.rows('moneyTopupCommands')[0]?.state).toBe('succeeded')
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1000')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+    // $10 top-up earns no ladder bonus (< $50 tier) plus one-time $1 owner trial grant
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1100')
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
     await expect(
       apply(context, { event, readback, ...sourceArgs }),
     ).resolves.toMatchObject({ kind: 'accepted', status: 'replayed' })
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
     await expect(
       apply(context, {
         event: { ...event, payloadDigest: 'sha256:changed' },

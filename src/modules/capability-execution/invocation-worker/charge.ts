@@ -296,9 +296,9 @@ export async function authorizeAeInternalCharge(
     ownerId: input.principal.ownerId,
     currency: input.authorityMaximumSpend.currency,
   })
-  if (operatorAccountVersion === null) {
-    return { kind: 'missing_billing_identity' }
-  }
+  // A first-time owner has no money account yet. Passing expectedAccountVersion
+  // 0 lets moneyChargeAdmission's prepareCanonicalMoneyAccount create it; price
+  // zero then settles as free_tier usage without any transaction movement.
 
   const authorizedCharge = await ctx.runMutation(internal.moneyLedger.authorizeInvocationCharge, {
     principalId: input.principal.principalId,
@@ -309,7 +309,7 @@ export async function authorizeAeInternalCharge(
     transactionRef: `operation-money:${input.dispatch.invocationRef}:${input.durableAttemptRef}:1`,
     idempotencyKey: `operation-money:${input.dispatch.invocationRef}:${input.durableAttemptRef}:1`,
     inputDigest: input.dispatch.inputDigest,
-    expectedAccountVersion: operatorAccountVersion,
+    expectedAccountVersion: operatorAccountVersion ?? 0,
     rakeBps: 1_000,
     priceDigest: pricingConfigDigest({ version: 'pricing:v2', unit: 'call', paidAmount: input.authorityMaximumSpend }),
     priceSourceDigest: pricingConfigDigest({ version: 'pricing:v2', unit: 'call', paidAmount: input.authorityMaximumSpend }),

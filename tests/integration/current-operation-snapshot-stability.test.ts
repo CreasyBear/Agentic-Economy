@@ -3,7 +3,7 @@ import { expect, it } from 'vitest'
 import { createCurrentOperationCommitment } from '@/modules/capability-supply/current-operation'
 
 import { api, internal } from '../../convex/_generated/api'
-import { readCurrentPublishedOperation } from '../../convex/capabilitySupplyOperationKeyless'
+import { readCurrentPublishedOperation } from '../../convex/capabilitySupplyCurrentOperation'
 import {
   convexTestWithMarketComponents,
   publishedBusinessOwner,
@@ -25,7 +25,7 @@ it('keeps strict currentDigest stable before expiry and refuses expired or chang
     api.capabilitySupply.publishPreparedCapability,
     await preparedPublicationArgs(backend, {
       ...input,
-      binding: { ...input.binding, authority: { kind: 'keyless' } },
+      binding: { ...input.binding, authority: { kind: 'public_upstream' } },
     }),
   )
   if ('reason' in published) throw new Error(`snapshot_publication_refused:${published.reason}`)

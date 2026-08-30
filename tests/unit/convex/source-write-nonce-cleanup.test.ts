@@ -1,24 +1,33 @@
 import { describe, expect, it } from 'vitest'
 
 import { cleanupExpiredSourceWriteNonces } from '../../../convex/sourceWriteAdmission'
+import {
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
+  type WorkloadCronSnapshot,
+} from '../../../convex/workloadCron'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type LtFilter = { kind: 'lt'; field: string; value: unknown }
+type EqFilter = { kind: 'eq'; field: string; value: unknown }
+type Filter = LtFilter | EqFilter
 
 type IndexBuilder = {
   lt: (field: string, value: unknown) => IndexBuilder
+  eq: (field: string, value: unknown) => IndexBuilder
 }
 
 type ReadTrace = {
   tableName: string
   indexName: string
-  filters: readonly LtFilter[]
+  filters: readonly Filter[]
   limit: number
 }
 
 type Query = {
   withIndex: (indexName: string, callback: (query: IndexBuilder) => IndexBuilder) => Query
   take: (limit: number) => Promise<Row[]>
+  unique: () => Promise<Row | null>
 }
 
 type Db = {
@@ -43,6 +52,7 @@ type CleanupCtx = {
 type CleanupArgs = {
   now?: number
   batchSize?: number
+  workload?: WorkloadCronSnapshot
 }
 
 type CleanupResult = {
@@ -59,6 +69,25 @@ const cleanupMutation = cleanupExpiredSourceWriteNonces as unknown as {
 const cleanupHandler = cleanupMutation._handler
 
 describe('Convex source write nonce cleanup', () => {
+  it('rejects missing or forged workload snapshots before deleting or scheduling anything', async () => {
+    const db = new FakeDb()
+    const scheduler = new FakeScheduler()
+    db.seed('sourceWriteNonces', nonce('nonce:expired-denial', 900))
+
+    await expect(cleanupHandler({ db, scheduler }, { now: 1_000, batchSize: 1 }))
+      .rejects.toThrow('workload_snapshot_invalid')
+    await expect(cleanupHandler({ db, scheduler }, {
+      now: 1_000,
+      batchSize: 1,
+      workload: {
+        ...workloadSnapshot('cleanup expired source write nonces', 'cleanupExpiredSourceWriteNonces'),
+        actorPrincipalRef: 'prn_ffffffffffffffffffffffffffffffff' as WorkloadCronSnapshot['actorPrincipalRef'],
+      },
+    })).rejects.toThrow('workload_snapshot_invalid')
+    expect(db.dump('sourceWriteNonces').map((row) => row._id)).toEqual(['nonce:expired-denial'])
+    expect(scheduler.calls).toEqual([])
+  })
+
   it('deletes only expired nonces in a bounded, index-scoped batch and reschedules on a full batch', async () => {
     const db = new FakeDb()
     const scheduler = new FakeScheduler()
@@ -68,7 +97,11 @@ describe('Convex source write nonce cleanup', () => {
     db.seed('sourceWriteNonces', nonce('nonce:at-cutoff', 1_000))
     db.seed('sourceWriteNonces', nonce('nonce:future', 1_100))
 
-    const result = await cleanupHandler({ db, scheduler }, { now: 1_000, batchSize: 2 })
+    const result = await cleanupHandler({ db, scheduler }, {
+      now: 1_000,
+      batchSize: 2,
+      workload: workloadSnapshot('cleanup expired source write nonces', 'cleanupExpiredSourceWriteNonces'),
+    })
 
     expect(result).toEqual({ deleted: 2, cutoff: 1_000, rescheduled: true })
     expect(
@@ -89,7 +122,11 @@ describe('Convex source write nonce cleanup', () => {
     ])
 
     const nextScheduler = new FakeScheduler()
-    const next = await cleanupHandler({ db, scheduler: nextScheduler }, { now: 1_000, batchSize: 10 })
+    const next = await cleanupHandler({ db, scheduler: nextScheduler }, {
+      now: 1_000,
+      batchSize: 10,
+      workload: workloadSnapshot('cleanup expired source write nonces', 'cleanupExpiredSourceWriteNonces'),
+    })
 
     expect(next).toEqual({ deleted: 1, cutoff: 1_000, rescheduled: false })
     expect(nextScheduler.calls).toEqual([])
@@ -104,7 +141,11 @@ describe('Convex source write nonce cleanup', () => {
     db.seed('sourceWriteNonces', nonce('nonce:at-cutoff', 1_000))
     db.seed('sourceWriteNonces', nonce('nonce:future', 1_100))
 
-    const result = await cleanupHandler({ db, scheduler }, { now: 1_000, batchSize: 10 })
+    const result = await cleanupHandler({ db, scheduler }, {
+      now: 1_000,
+      batchSize: 10,
+      workload: workloadSnapshot('cleanup expired source write nonces', 'cleanupExpiredSourceWriteNonces'),
+    })
 
     expect(result).toEqual({ deleted: 2, cutoff: 1_000, rescheduled: false })
     expect(scheduler.calls).toEqual([])
@@ -122,7 +163,9 @@ describe('Convex source write nonce cleanup', () => {
     const before = Date.now()
     db.seed('sourceWriteNonces', nonce('nonce:long-expired', before - 1))
 
-    const result = await cleanupHandler({ db, scheduler }, {})
+    const result = await cleanupHandler({ db, scheduler }, {
+      workload: workloadSnapshot('cleanup expired source write nonces', 'cleanupExpiredSourceWriteNonces'),
+    })
 
     expect(result.deleted).toBe(1)
     expect(result.rescheduled).toBe(false)
@@ -132,10 +175,15 @@ describe('Convex source write nonce cleanup', () => {
 })
 
 class FakeIndexBuilder implements IndexBuilder {
-  readonly filters: LtFilter[] = []
+  readonly filters: Filter[] = []
 
   lt(field: string, value: unknown): IndexBuilder {
     this.filters.push({ kind: 'lt', field, value })
+    return this
+  }
+
+  eq(field: string, value: unknown): IndexBuilder {
+    this.filters.push({ kind: 'eq', field, value })
     return this
   }
 }
@@ -145,7 +193,7 @@ class FakeQuery implements Query {
     private readonly db: FakeDb,
     private readonly tableName: string,
     private readonly rows: readonly Row[],
-    private readonly filters: readonly LtFilter[] = [],
+    private readonly filters: readonly Filter[] = [],
     private readonly indexName?: string
   ) {}
 
@@ -173,10 +221,18 @@ class FakeQuery implements Query {
       .slice(0, limit)
   }
 
+  async unique(): Promise<Row | null> {
+    const matched = this.rows.filter((row) => this.matches(row))
+    if (matched.length > 1) throw new Error(`expected_unique:${this.tableName}`)
+    return matched[0] ?? null
+  }
+
   private matches(row: Row): boolean {
     return this.filters.every((filter) => {
       const value = row[filter.field]
-      return typeof value === 'number' && typeof filter.value === 'number' && value < filter.value
+      return filter.kind === 'eq'
+        ? value === filter.value
+        : typeof value === 'number' && typeof filter.value === 'number' && value < filter.value
     })
   }
 }
@@ -184,6 +240,10 @@ class FakeQuery implements Query {
 class FakeDb implements Db {
   readonly reads: ReadTrace[] = []
   private readonly tables: Record<string, Row[]> = {}
+
+  constructor() {
+    seedWorkloadAuthority(this)
+  }
 
   query(tableName: string): Query {
     return new FakeQuery(this, tableName, this.table(tableName))
@@ -246,4 +306,90 @@ function nonce(id: string, expiresAt: number): Row {
 function numericField(row: Row, field: string): number {
   const value = row[field]
   return typeof value === 'number' ? value : 0
+}
+
+function workloadSnapshot(
+  name: WorkloadCronSnapshot['name'],
+  handler: string,
+): WorkloadCronSnapshot {
+  return {
+    name,
+    workloadKind: 'cron',
+    actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    correlationRef: `cron:${handler}:test`,
+    idempotencyRef: `cron:${handler}:test`,
+    purpose: name,
+    source: `convex/workloadCron:${handler}`,
+    principalRevision: 1,
+    activeAccountRevision: 1,
+    accessVia: 'membership',
+    admittedAt: 1,
+  }
+}
+
+function seedWorkloadAuthority(db: FakeDb): void {
+  const ownerPrincipalRef = 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  const ownershipRef = 'own_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  const action = {
+    actorPrincipalRef: ownerPrincipalRef,
+    activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    correlationRef: 'source-write-cleanup-test:account',
+    idempotencyRef: 'source-write-cleanup-test:account',
+  }
+  db.seed('principals', row('principals:workload', {
+    principalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    kind: 'workload',
+    displayName: 'Source-write cleanup workload',
+    lifecycle: 'active',
+    revision: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  }))
+  db.seed('principals', row('principals:owner', {
+    principalRef: ownerPrincipalRef,
+    kind: 'human',
+    displayName: 'System operations owner',
+    lifecycle: 'active',
+    revision: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  }))
+  db.seed('accounts', row('accounts:workload', {
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    displayName: 'System operations',
+    lifecycle: 'active',
+    recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+    creationActorPrincipalRef: ownerPrincipalRef,
+    creationIdempotencyRef: action.idempotencyRef,
+    initialOwnershipRef: ownershipRef,
+    currentOwnershipRef: ownershipRef,
+    revision: 1,
+    createdAt: 1,
+    updatedAt: 1,
+    lastAction: action,
+  }))
+  db.seed('accountOwnerships', row('accountOwnerships:workload', {
+    ownershipRef,
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    ownerPrincipalRef,
+    lifecycle: 'active',
+    changeKind: 'creation',
+    revision: 1,
+    createdAt: 1,
+    createdBy: action,
+  }))
+  db.seed('memberships', row('memberships:workload', {
+    membershipRef: 'mem_cccccccccccccccccccccccccccccccc',
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    memberPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    lifecycle: 'active',
+    revision: 1,
+    createdAt: 1,
+    createdBy: action,
+  }))
+}
+
+function row(id: string, value: Record<string, unknown>): Row {
+  return { _id: id, _creationTime: 1, ...value }
 }

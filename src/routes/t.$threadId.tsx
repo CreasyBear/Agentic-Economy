@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { AePageState } from '@/components/ae/layout/AePageState'
 import { OperationChat } from '@/components/ae/operation-chat'
 
 export const Route = createFileRoute('/t/$threadId')({
@@ -37,14 +38,11 @@ function ThreadPage() {
 
 function ChatUnavailable() {
   return (
-    <main className="grid min-h-[36rem] place-items-center p-6">
-      <section className="max-w-md text-center" role="alert">
-        <h1 className="text-lg font-semibold">Chat unavailable</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This conversation could not be opened.
-        </p>
-      </section>
-    </main>
+    <AePageState
+      tone="danger"
+      title="Chat unavailable"
+      description="This conversation could not be opened."
+    />
   )
 }
 

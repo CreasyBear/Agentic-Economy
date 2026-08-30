@@ -25,6 +25,14 @@ export const OPERATION_INVOKE_ROUTE_CONTRACT = {
     routerPath: CURRENT_OPERATION_CALL_VIA,
     requiredHeaders: ['Authorization', 'Content-Type'] as const,
   },
+  list: {
+    actionId: 'operation.list',
+    contractVersion: 'operation.list:v1',
+    method: 'GET',
+    path: '/api/v1/operations',
+    routerPath: '/api/v1/operations',
+    requiredHeaders: ['Authorization'] as const,
+  },
   status: {
     actionId: 'operation.status',
     contractVersion: 'operation.status:v1',

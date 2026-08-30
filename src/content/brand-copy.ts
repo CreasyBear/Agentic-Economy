@@ -1,50 +1,109 @@
 /**
  * Brand-core voice strings for primary public surfaces.
  * Functional labels, accessibility copy, and machine descriptors stay with
- * their owning feature modules. Example asks can change independently.
+ * their owning feature modules.
+ *
+ * Voice: sell Agentic Economy. Agent-first, short, concrete. Price before
+ * the call. One connection, one wallet. Named jobs, not internal unit names.
+ * Do not invent catalog counts, waitlists, or fees.
  */
 
 /** Canonical category sentence, kept for public metadata rather than the person-facing hero. */
 const CORE_SENTENCE =
-  'Agentic Economy is the market and controlled transaction layer where authorized agents discover, buy and invoke admitted third-party Market Operations, and suppliers are paid after contract-valid delivery.'
+  'The marketplace built for agents. Discover, compare, and call. Pay per use. No per-provider accounts.'
 
 /** Public market entry (`/`). */
 export const HOME = {
-  metaTitle: 'APIs and services for agents | Agentic Economy',
+  metaTitle: 'The marketplace built for agents | Agentic Economy',
   metaDescription: CORE_SENTENCE,
-  heroHeading: 'APIs your agent can discover and call.',
+  heroHeading: 'The marketplace built for agents.',
   heroSubhead:
-    'Search live tools for research, finance, compliance, commerce and more. Compare the price and evidence before your agent makes a call.',
-  exampleAsks: [
-    'weather forecast',
-    'financial market data',
-    'extract data from documents',
-  ],
+    'Search first. Inspect the price and access terms. Connect only when the selected call needs it.',
+  catalogHeading: 'Current Operations',
+  catalogBody: 'Current Operations, priced before the call. Open one to compare.',
+  catalogUnavailable: 'The Operation catalog is temporarily unavailable',
+  catalogUnavailableBody: 'Try again shortly. Existing Operation links continue to work.',
+  catalogEmpty: 'No Operations are available right now',
+  catalogEmptyBody: 'Browse the current catalog, including Operations that still need setup.',
+  closeBody: 'Paste one instruction. Your agent gets the catalog, the price, and the call.',
+  aboutLink: 'About',
 } as const
+
+export type AgentPasteInstruction = {
+  heading: string
+  body: string
+  label: string
+  code: string
+  copyText: string
+}
+
+/** Market paste on `/`. Do not rewrite `copyText`. */
+export const AGENT_INSTRUCTION: AgentPasteInstruction = {
+  heading: 'Give this to your agent',
+  body: 'One paste. It searches the live catalog, compares, shows the price, then calls only what you approve.',
+  label: 'agent setup instruction',
+  code: 'Search the catalog for my task. Compare. Show total price and inputs. Then use the one I approve.',
+  copyText:
+    'Read $ORIGIN/llms.txt. Preserve my full task, find viable capabilities, compare the real differences, show me total price and inputs, then use the one I approve. Connect only if that capability requires it.',
+}
+
+/** Setup paste on `/for-agents`. Connect first. Then the market loop. */
+export const AGENT_SETUP_INSTRUCTION: AgentPasteInstruction = {
+  heading: 'Set this up with your agent',
+  body: 'Paste this. Claude Code, Cursor, or Codex connects once, then can search the catalog and pay per call.',
+  label: 'agent setup instruction',
+  code: 'Help me connect to Agentic Economy. One connection for Claude Code, Cursor, or Codex. Then I can search, compare, and call from this wallet.',
+  copyText:
+    'Help me connect to Agentic Economy at $ORIGIN. Read $ORIGIN/llms.txt and $ORIGIN/SKILL.md. Add $ORIGIN/mcp so Claude Code, Cursor, or Codex can use one connection. After it is connected, preserve my full task, search the live catalog, compare, show total price and inputs, then use the one I approve. Connect the wallet only if that call requires it. Do not create per-provider accounts.',
+}
 
 /** Agent/Runtime door on `/` (routes to /for-agents). */
 export const AGENT_DOOR = {
-  heading: 'Connect your agent',
-  body: 'Search and inspect without a key. Connect once when your agent is ready to call a tool.',
-  cta: 'Agent setup',
+  heading: 'For your agent',
+  body: 'Search and inspect without a key. Connect once when a call needs it.',
+  cta: 'Connect your agent',
   href: '/for-agents',
 } as const
 
-/** Agent/Runtime landing (`/for-agents`) — the machine-facing expression of the market. */
+/** Agent/Runtime landing (`/for-agents`) — setup for named harnesses, then the market. */
 export const AGENT_PAGE = {
-  metaTitle: 'Connect your agent | Agentic Economy',
+  metaTitle: 'One connection, every tool | Agentic Economy',
   metaDescription:
-    'Connect once, find a live capability, inspect its total price and inputs, call it, and retain one durable receipt.',
+    'Claude Code, Cursor, and Codex connect once. Then search, compare, and call listed tools from one wallet. No per-provider accounts.',
   eyebrow: 'Connections',
-  heading: 'Connect once. Use the whole market.',
-  subhead:
-    'One command stores a bounded agent key and configures MCP. Search, inspect, call, and recover through one catalogue and one receipt.',
+  heading: 'One connection. Every tool.',
+  harnesses: 'Claude Code, Cursor, and Codex',
+  subhead: 'One connection. Then the catalog and a wallet.',
 } as const
 
 /** Supplier door on `/` (routes to the existing supply mode). */
 export const BUSINESS_DOOR = {
-  heading: 'List your API or service',
-  body: 'Publish the capability, price and access terms agents need to find and choose your tool.',
-  cta: 'Supplier setup',
+  heading: 'Publish an Operation',
+  body: 'Publish one bounded job, its price, readiness, and access terms. Agents inspect before they call.',
+  cta: 'Publish an Operation',
   href: '/for-providers',
+} as const
+
+/** Company page (`/about`). No team roster, logos, or invented customers. */
+export const ABOUT = {
+  metaTitle: 'About | Agentic Economy',
+  metaDescription: CORE_SENTENCE,
+  eyebrow: 'About',
+  heading: 'Who this market is for.',
+  subhead:
+    'Agents find, compare, and call. Suppliers publish the job, the price, and the access terms, and get paid after delivery.',
+  doorsHeading: 'Agents and suppliers',
+  settlementHeading: 'Pay per call',
+  settlementBody:
+    'Browse and inspect without a provider account. The price sits on the card before a call. Suppliers are paid when the job is delivered.',
+  suppliersHeading: 'Listed suppliers',
+  suppliersBody:
+    'A supplier is listed when it publishes a job agents can inspect in the live catalog.',
+  machinesHeading: 'Files for agents',
+  machinesBody: 'The same facts the site shows: an index, a skill file, and a handshake.',
+} as const
+
+/** Public footer wordmark line. */
+export const FOOTER = {
+  tagline: 'The marketplace built for agents.',
 } as const

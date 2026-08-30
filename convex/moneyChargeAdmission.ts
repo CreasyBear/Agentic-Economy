@@ -1,15 +1,6 @@
 import type { Doc } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
-import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import { isRecord } from '../src/modules/common/is-record'
-import { isBoundedJsonValue } from '../src/modules/capability-contract/public'
-import {
-  createPublicOperationRef,
-  materializeRuntimePublishedOperation,
-  type PublishedOperation,
-  type RuntimePublishedOperationDescriptor,
-} from '../src/modules/capability-supply/public'
-import type { StableHashValue } from '../src/modules/common/stable-hash'
+import { parsePublishedOperationSnapshot } from '../src/modules/capability-supply/public'
 import {
   accountRefForOwner,
   accountRefForProvider,
@@ -61,55 +52,6 @@ export type AuthorizeInvocationChargeArgs = Readonly<{
   credentialBudgetGrantRef?: string
   credentialBudgetGeneration?: number
 }>
-
-type ReservedOperationMaterial = Readonly<{
-  operation: PublishedOperation
-  descriptor: RuntimePublishedOperationDescriptor
-}>
-
-function parseReservedOperation(
-  operationJson: string,
-): ReservedOperationMaterial | undefined {
-  try {
-    const parsed: unknown = JSON.parse(operationJson)
-    if (
-      !isRecord(parsed)
-      || !isBoundedJsonValue(parsed)
-      || parsed.kind !== 'published_operation'
-      || parsed.environment !== 'SOURCE-OWNED DEVELOPMENT EVIDENCE'
-      || (parsed.runtimeEnvironment !== 'sandbox' && parsed.runtimeEnvironment !== 'production')
-      || typeof parsed.operationId !== 'string'
-      || typeof parsed.materialDigest !== 'string'
-      || !isRecord(parsed.identity)
-      || parsed.identity.runtimeEnvironment !== parsed.runtimeEnvironment
-      || !isRecord(parsed.contract)
-      || !isRecord(parsed.offering)
-      || !isRecord(parsed.binding)
-      || !isRecord(parsed.transport)
-      || !isRecord(parsed.readiness)
-    ) return undefined
-    const operation = parsed as PublishedOperation
-    if (
-      canonicalDigest(operation.identity as StableHashValue)
-      !== operation.materialDigest
-    ) return undefined
-    const descriptor = materializeRuntimePublishedOperation(operation)
-    return { operation, descriptor }
-  } catch {
-    return undefined
-  }
-}
-
-function parseReservedInput(
-  inputJson: string,
-): Record<string, unknown> | undefined {
-  try {
-    const parsed: unknown = JSON.parse(inputJson)
-    return isRecord(parsed) && isBoundedJsonValue(parsed) ? parsed : undefined
-  } catch {
-    return undefined
-  }
-}
 
 export type AdmittedInvocationCharge = Readonly<{
   kind: 'admitted'
@@ -173,43 +115,18 @@ export async function admitInvocationCharge(
   if (
     invocation === null
     || invocation.operationJson === undefined
-    || invocation.inputJson === undefined
   )
     return {
       kind: 'refused' as const,
       code: 'billing_identity_missing' as const,
       retryable: false,
     }
-  const reserved = parseReservedOperation(invocation.operationJson)
-  const persistedInput = parseReservedInput(invocation.inputJson)
+  const operation = parsePublishedOperationSnapshot(invocation.operationJson)
   if (
-    reserved === undefined
-    || persistedInput === undefined
-    || canonicalDigest(persistedInput as StableHashValue) !== invocation.inputDigest
-    || canonicalDigest({
-      operationRef: invocation.operationRef,
-      input: persistedInput,
-    } as StableHashValue) !== invocation.requestDigest
-  )
-    return {
-      kind: 'refused' as const,
-      code: 'billing_identity_mismatch' as const,
-      retryable: false,
-    }
-  const { operation, descriptor } = reserved
-  if (
-    createPublicOperationRef({
-      operationId: operation.operationId,
-      publicationRef: operation.identity.publicationRef,
-      publicationRevision: operation.identity.publicationRevision,
-      contractRef: operation.contract.ref,
-    }) !== invocation.operationRef
-    || operation.runtimeEnvironment !== invocation.environment
-    || operation.identity.businessId.length === 0
-    || operation.identity.offeringId.length === 0
+    operation === undefined
     || operation.identity.price.kind !== 'fixed'
-    || descriptor.price.kind !== 'fixed'
-    || operation.identity.priceDigest !== operation.priceDigest
+    || operation.identity.offeringId.length === 0
+    || operation.identity.businessId.length === 0
   )
     return {
       kind: 'refused' as const,
@@ -225,13 +142,10 @@ export async function admitInvocationCharge(
     }
   const pricingConfig = normalizedPricing.config
   const operationAmount = readExactAmount(operation.identity.price.amount)
-  const descriptorAmount = readExactAmount(descriptor.price.amount)
   const pricingAmount = readExactAmount(pricingConfig.paidAmount)
   if (
     operationAmount === undefined
-    || descriptorAmount === undefined
     || pricingAmount === undefined
-    || compareExactAmounts(operationAmount, descriptorAmount) !== 0
     || compareExactAmounts(operationAmount, pricingAmount) !== 0
     || compareExactAmounts(requestedAmount, operationAmount) !== 0
     || compareExactAmounts(requestedMaximumSpend, operationAmount) !== 0
@@ -297,16 +211,10 @@ export async function admitInvocationCharge(
   if (
     publishedAmount === undefined
     || compareExactAmounts(publishedAmount, operationAmount) !== 0
-    || args.offeringRef !== operation.identity.offeringId
-    || args.businessId !== operation.identity.businessId
-    || args.serviceRef !== operation.operationId
-    || args.sourceDigest !== operation.materialDigest
-    || canonicalDigest(args.evidenceRefs as StableHashValue)
-      !== canonicalDigest(operation.readiness.evidenceRefs as StableHashValue)
   )
     return {
       kind: 'refused' as const,
-      code: 'billing_identity_mismatch' as const,
+      code: 'price_changed' as const,
       retryable: false,
     }
   const [principal, grant, canonicalControl] = await Promise.all([
@@ -336,179 +244,27 @@ export async function admitInvocationCharge(
       retryable: false,
     }
   const durableAttemptRef = invocation.attemptRef
+  const authority = invocation.authority
+  const authorityExpiresAt =
+    authority === undefined ? Number.NaN : Date.parse(authority.expiresAt)
+  const authorityAmount =
+    authority === undefined ? undefined : readExactAmount(authority.limits.amount)
+  const canonicalState = canonicalControl.control.control
   if (
     durableAttemptRef === undefined
     || canonicalControl.currentAttemptRef !== durableAttemptRef
-  )
-    return {
-      kind: 'refused' as const,
-      code: 'billing_identity_mismatch' as const,
-      retryable: false,
-    }
-  const canonicalAttempt = await ctx.db
-    .query('actionInvocationAttempts')
-    .withIndex('by_invocationRef_and_attemptRef', (query) =>
-      query
-        .eq('invocationRef', invocation.invocationRef)
-        .eq('attemptRef', durableAttemptRef),
-    )
-    .unique()
-  const authority = invocation.authority
-  const authorityBinding = canonicalControl.authorityBinding
-  const acceptedAuthority = canonicalControl.control.acceptedAuthority
-  if (
-    authority === undefined
-    || authorityBinding === undefined
-    || acceptedAuthority === undefined
-    || canonicalAttempt === null
-  )
-    return {
-      kind: 'refused' as const,
-      code: 'billing_identity_mismatch' as const,
-      retryable: false,
-    }
-  let authorityDigestMatches = false
-  try {
-    const authorityExpiresAt = Date.parse(authority.expiresAt)
-    const authorityAmount = readExactAmount(authority.limits.amount)
-    const expectedDecisionDigest = canonicalDigest({
-      format: 'operation-invoke-authority:v1',
-      invocationRef: authority.invocationRef,
-      operationRef: authority.operationRef,
-      inputDigest: authority.inputDigest,
-      grantRef: authority.grantRef,
-      grantGeneration: authority.grantGeneration,
-      grantDigest: authority.grantDigest,
-      reference: authority.reference,
-      targetDigest: authority.targetDigest,
-      consequence: authority.consequence,
-      limits: authority.limits,
-      expiresAt: authority.expiresAt,
-      acceptedBasis: authority.acceptedBasis,
-    } as StableHashValue)
-    const authorityBasis = authority.acceptedBasis
-    const basisMatches = authorityBasis.kind === 'approve_each'
-      ? authority.reference === authorityBasis.authorityRef
-      : authorityBasis.kind === 'standing_mandate_use'
-        && authorityBasis.mandateRef.length > 0
-        && authorityBasis.authorityUseRef.length > 0
-        && authorityBasis.grantEvidenceRef.length > 0
-        && authorityBasis.mandateGeneration === grant.generation
-        && authority.reference === `operation-authority:${invocation.invocationRef}`
-        && (principal.authorityMode !== 'full_yolo'
-          || (
-            authorityBasis.mandateRef === `agent-access-grant:${grant.grantRef}`
-            && authorityBasis.mandateVersion === 1
-            && authorityBasis.authorityUseRef === `operation-authority-use:${invocation.invocationRef}`
-            && authorityBasis.grantEvidenceRef === `agent-access-grant-evidence:${grant.policyDigest}`
-          ))
-    authorityDigestMatches =
-      authorityExpiresAt > args.observedAt
-      && authorityExpiresAt <= operation.readiness.validUntil
-      && authorityExpiresAt <= grant.expiresAt
-      && authority.invocationRef === invocation.invocationRef
-      && authority.operationRef === invocation.operationRef
-      && authority.inputDigest === invocation.inputDigest
-      && authority.grantRef === grant.grantRef
-      && authority.grantGeneration === invocation.grantGeneration
-      && authority.grantGeneration === grant.generation
-      && authority.grantDigest === grant.policyDigest
-      && authority.consequence === descriptor.consequenceClass
-      && authority.targetDigest === canonicalDigest(operation.identity as StableHashValue)
-      && authorityAmount !== undefined
-      && compareExactAmounts(authorityAmount, operationAmount) === 0
-      && canonicalDigest(authority.limits as StableHashValue)
-        === canonicalDigest({ amount: operationAmount } as StableHashValue)
-      && authority.decisionDigest === expectedDecisionDigest
-      && basisMatches
-  } catch {
-    authorityDigestMatches = false
-  }
-  if (!authorityDigestMatches)
-    return {
-      kind: 'refused' as const,
-      code: 'billing_identity_mismatch' as const,
-      retryable: false,
-    }
-  const canonicalState = canonicalControl.control.control
-  if (
-    invocation.invocationRef !== args.invocationRef
-    || invocation.principalId !== args.principalId
-    || invocation.credentialId !== args.credentialId
-    || invocation.applicationRef !== args.applicationRef
-    || invocation.ownerId !== principal.ownerId
-    || invocation.environment !== principal.environment
-    || invocation.ownerId !== grant.ownerId
-    || invocation.principalId !== grant.principalId
-    || invocation.credentialId !== grant.credentialId
-    || invocation.applicationRef !== grant.applicationRef
-    || invocation.environment !== grant.environment
-    || invocation.grantRef !== grant.grantRef
-    || invocation.grantGeneration !== grant.generation
-    || invocation.policyDigest !== grant.policyDigest
-    || invocation.grantExpiresAt !== grant.expiresAt
-    || invocation.attemptRef !== durableAttemptRef
-    || canonicalControl.invocationRef !== invocation.invocationRef
-    || canonicalControl.sourceRef !== `operation-invocation-source:${invocation.invocationRef}`
+    || canonicalControl.preparedMaterialDigest === undefined
     || canonicalControl.preparedMaterialDigest !== invocation.inputDigest
-    || canonicalControl.preparedTargetDigest !== authority.targetDigest
-    || canonicalControl.consequence !== authority.consequence
-    || canonicalControl.currentAttemptRef !== durableAttemptRef
+    || authority === undefined
+    || !Number.isFinite(authorityExpiresAt)
+    || authorityExpiresAt <= args.observedAt
+    || authority.grantGeneration !== grant.generation
+    || invocation.grantGeneration !== grant.generation
     || grant.policy.budget.generation !== grant.generation
-    || canonicalControl.currentEffectGeneration !== canonicalAttempt.effectGeneration
-    || canonicalControl.control.invocationRef !== invocation.invocationRef
-    || canonicalControl.control.owner.principalRef !== invocation.principalId
-    || canonicalControl.control.owner.callerRef !== invocation.credentialId
-    || canonicalControl.control.origin.kind !== 'standalone'
-    || canonicalControl.control.origin.principalRef !== invocation.principalId
-    || canonicalControl.control.origin.callerRef !== invocation.credentialId
-    || canonicalControl.control.action.id !== operation.operationId
-    || canonicalControl.control.action.contractVersion !== descriptor.version
-    || canonicalControl.control.desired.state !== 'invoke'
-    || canonicalControl.control.freshness.state !== 'current'
-    || canonicalControl.control.authority?.reference !== authority.reference
-    || canonicalControl.control.authority?.expiresAt !== authority.expiresAt
-    || authorityBinding.invocationRef !== invocation.invocationRef
-    || authorityBinding.actor.principalRef !== invocation.principalId
-    || authorityBinding.actor.callerRef !== invocation.credentialId
-    || authorityBinding.origin.kind !== 'standalone'
-    || authorityBinding.origin.principalRef !== invocation.principalId
-    || authorityBinding.origin.callerRef !== invocation.credentialId
-    || authorityBinding.invocationVersion !== canonicalControl.invocationVersion
-    || authorityBinding.actionId !== operation.operationId
-    || authorityBinding.contractVersion !== descriptor.version
-    || authorityBinding.digest !== authority.decisionDigest
-    || authorityBinding.targetDigest !== authority.targetDigest
-    || authorityBinding.consequence !== authority.consequence
-    || canonicalDigest(authorityBinding.limits as StableHashValue)
-      !== canonicalDigest(authority.limits as StableHashValue)
-    || authorityBinding.expiresAt !== authority.expiresAt
-    || authorityBinding.acceptedBasis === undefined
-    || canonicalDigest(authorityBinding.acceptedBasis as StableHashValue)
-      !== canonicalDigest(authority.acceptedBasis as StableHashValue)
-    || canonicalControl.control.acceptedAuthority === undefined
-    || canonicalDigest(canonicalControl.control.acceptedAuthority as StableHashValue)
-      !== canonicalDigest(authority.acceptedBasis as StableHashValue)
+    || authorityAmount === undefined
+    || compareExactAmounts(authorityAmount, operationAmount) !== 0
     || canonicalState.state !== 'leased'
     || canonicalState.attemptRef !== durableAttemptRef
-    || canonicalState.release !== 'not_started'
-    || canonicalState.effectGeneration !== canonicalAttempt.effectGeneration
-    || canonicalAttempt.invocationRef !== invocation.invocationRef
-    || canonicalAttempt.attemptRef !== durableAttemptRef
-    || canonicalAttempt.actor.principalRef !== invocation.principalId
-    || canonicalAttempt.actor.callerRef !== invocation.credentialId
-    || canonicalAttempt.effectGeneration !== canonicalControl.currentEffectGeneration
-    || canonicalAttempt.idempotency.operationKey !== invocation.operationRef
-    || canonicalAttempt.idempotency.materialInputDigest !== invocation.inputDigest
-    || canonicalAttempt.idempotency.effectIdentity !== canonicalDigest({
-      actionId: operation.operationId,
-      operationKey: invocation.operationRef,
-      materialInputDigest: invocation.inputDigest,
-    } as StableHashValue)
-    || canonicalAttempt.lease.owner !== `operation-worker:${invocation.invocationRef}`
-    || canonicalAttempt.lease.expiresAt !== authority.expiresAt
-    || canonicalAttempt.release.state !== 'not_released'
-    || canonicalAttempt.outcome.state !== 'running'
   )
     return {
       kind: 'refused' as const,
@@ -734,7 +490,7 @@ export async function admitInvocationCharge(
     offeringRef: durableOfferingRef,
     businessId: durableBusinessId,
     invocationRef: invocation.invocationRef,
-    attemptRef: canonicalAttempt.attemptRef,
+    attemptRef: durableAttemptRef,
     operationKey: invocation.operationRef,
     inputDigest: invocation.inputDigest,
     sourceDigest: durableSourceDigest,

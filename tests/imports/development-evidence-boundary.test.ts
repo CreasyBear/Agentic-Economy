@@ -66,19 +66,11 @@ describe('development evidence boundary', () => {
 
   it('keeps development fixtures owned by tools/dev/fixtures', () => {
     const expectedCapabilitySupplyFixtures = [
-      'tools/dev/fixtures/capability-supply/btc-usd-quote-result.ts',
-      'tools/dev/fixtures/capability-supply/development-alternate-btc-usd-quote-result.ts',
       'tools/dev/fixtures/capability-supply/development-alternate-published-operation-evidence.ts',
-      'tools/dev/fixtures/capability-supply/development-dynamic-invocation-evidence.ts',
       'tools/dev/fixtures/capability-supply/development-evidence-continuity.ts',
       'tools/dev/fixtures/capability-supply/development-evidence-fixture.ts',
       'tools/dev/fixtures/capability-supply/development-evidence-invocations.ts',
       'tools/dev/fixtures/capability-supply/development-evidence-scenario.ts',
-      'tools/dev/fixtures/capability-supply/development-host-parity-evidence.ts',
-      'tools/dev/fixtures/capability-supply/development-host-parity-verifier.ts',
-      'tools/dev/fixtures/capability-supply/development-host-scenario-runtime.ts',
-      'tools/dev/fixtures/capability-supply/development-host-scenarios.ts',
-      'tools/dev/fixtures/capability-supply/development-provider-conformance-scenario.ts',
       'tools/dev/fixtures/capability-supply/development-published-operation-evidence.ts',
     ].sort()
 

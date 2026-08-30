@@ -5,7 +5,19 @@ import type { MutationCtx } from './_generated/server'
 import { requireBillingSourceWrite } from './moneyBillingAuthorization'
 import { accountFromRow } from './moneyCanonicalAccounts'
 import { identifier } from './moneyLedgerValues'
-import { utcPeriodStartIso } from './moneyQualifiedUsePayout'
+import {
+  requireCanonicalPayoutAuthority,
+  utcPeriodStartIso,
+} from './lib/qualifiedUsePayout'
+import {
+  reconcileWorkloadCronResourceAccount,
+  reconcileWorkloadCronSnapshot,
+  parseWorkloadCronSnapshot,
+} from './workloadCron'
+import {
+  AccountRegistryError,
+  WorkloadContextError,
+} from '../src/modules/principal-account/public'
 import {
   amountAtScale,
   amountFromParts,
@@ -41,6 +53,7 @@ export type MarkPayoutTransferOutcomeUnknownArgs = BeginPayoutTransferArgs & {
 
 export type DailySupplierSettlementArgs = {
   now?: number
+  workload: unknown
 }
 
 export type DailySettlementResult = {
@@ -88,6 +101,11 @@ export async function runDailySupplierSettlementHandler(
   ctx: MutationCtx,
   args: DailySupplierSettlementArgs,
 ): Promise<DailySettlementResult> {
+    let workload = await reconcileWorkloadCronSnapshot(
+      ctx,
+      'run daily supplier settlement',
+      parseWorkloadCronSnapshot(args.workload),
+    )
     const now = args.now ?? Date.now()
     const periodStart = utcPeriodStartIso(now, 1)
     const unresolvedKeys = new Set<string>()
@@ -145,6 +163,23 @@ export async function runDailySupplierSettlementHandler(
       ) {
         notReadyCount += 1
         continue
+      }
+      try {
+        const authority = await requireCanonicalPayoutAuthority(ctx, payout)
+        workload = await reconcileWorkloadCronResourceAccount(
+          ctx,
+          'run daily supplier settlement',
+          workload,
+          authority.owningAccountRef,
+        )
+      } catch (error) {
+        if ((error instanceof Error && error.message === 'qualified_use_authority_invalid')
+          || error instanceof AccountRegistryError
+          || error instanceof WorkloadContextError) {
+          notReadyCount += 1
+          continue
+        }
+        throw error
       }
       const command = payoutTransferCommand({
         businessId: payout.businessId,

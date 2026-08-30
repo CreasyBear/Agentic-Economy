@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Link, Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
+import { Link, Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
 import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
@@ -18,14 +18,12 @@ import {
   listPendingOperationApprovalsServer,
   type PendingOperationApproval,
 } from '@/modules/capability-execution/operation-approval.functions'
-import type { CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
-import { beginCreditTopupServer, readCreditPaymentServer } from '@/modules/money/server'
 
 export const Route = createFileRoute('/_operator/agent-access')({
   ...operatorRouteOptions,
   loader: () => readCanonicalBaseUrlServer(),
   head: () => ({ meta: [
-    { title: 'Agent access | Agentic Economy' },
+    { title: 'Keys | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
   ] }),
   component: AgentAccessRoute,
@@ -38,15 +36,11 @@ function AgentAccessRoute() {
 
 function AgentAccessHome() {
   const canonicalBaseUrl = Route.useLoaderData()
+  const location = useLocation()
+  const navigate = useNavigate()
   const readConsole = useServerFn(readAgentAccessConsoleServer)
   const localE2E = isLocalE2EAuthBypassEnabled()
   const revokeKey = useServerFn(revokeAgentAccessKeyServer)
-  const beginCreditTopup = useServerFn(beginCreditTopupServer)
-  const readCreditPayment = useServerFn(readCreditPaymentServer)
-  const creditTopupPort = useMemo<CreditTopupPort>(() => ({
-    begin: (data) => beginCreditTopup({ data }),
-    read: (data) => readCreditPayment({ data }),
-  }), [beginCreditTopup, readCreditPayment])
   const [items, setItems] = useState<AgentAccessConsoleReadback>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
@@ -102,6 +96,13 @@ function AgentAccessHome() {
     void loadApprovals()
   }, [loadApprovals, localE2E])
 
+  useEffect(() => {
+    const hash = location.hash.replace(/^#/, '')
+    if (hash === 'fund') {
+      void navigate({ to: '/owner/credit', hash: 'fund', replace: true })
+    }
+  }, [location.hash, navigate])
+
   async function revoke(keyId: string) {
     setRevoking(keyId)
     try {
@@ -139,10 +140,9 @@ function AgentAccessHome() {
   return (
     <AeOperatorShell
       operatorRole="owner"
-      title="Agent access"
-      description="Connect an agent, review its permissions, and manage keys, usage, and credit."
+      title="Keys"
+      description="Connect an agent, review its permissions, and revoke caller keys."
       currentPath="/agent-access"
-      eyebrow="ACCESS"
     >
       {localE2E ? (
         <div className="grid gap-3">
@@ -150,7 +150,7 @@ function AgentAccessHome() {
             <AlertTitle>Local preview — no agent is connected</AlertTitle>
             <AlertDescription>
               <p>This browser journey does not sign in, create access, or authorize work. Browse the public demo to explore the customer experience.</p>
-              <Button asChild variant="secondary" className="mt-2 min-h-11"><Link to="/">Browse public demo</Link></Button>
+              <Button asChild variant="secondary" className="mt-2 min-h-touch"><Link to="/">Browse public demo</Link></Button>
             </AlertDescription>
           </Alert>
         </div>
@@ -170,8 +170,6 @@ function AgentAccessHome() {
         onRevoke={(keyId) => void revoke(keyId)}
         {...(revoking === undefined ? {} : { revokingKeyId: revoking })}
         accessUnavailable={error !== undefined}
-        creditTopupPort={creditTopupPort}
-        onCreditRefresh={load}
         approvals={approvals}
         approvalsLoading={approvalsLoading}
         {...(approvalsError === undefined ? {} : { approvalsError })}

@@ -230,17 +230,9 @@ export async function getCurrentOwnerPublicCatalogHandler(ctx: QueryCtx) {
     return catalogReadNotFound()
   }
 
-  const owner = await ctx.db
-    .query('owners')
-    .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', actor.clerkUserId))
-    .unique()
-  if (owner === null) {
-    return catalogReadNotFound()
-  }
-
   const businesses = await ctx.db
     .query('businesses')
-    .withIndex('by_owner_updatedAt', (query) => query.eq('ownerId', owner._id))
+    .withIndex('by_owningAccountRef_and_updatedAt', (query) => query.eq('owningAccountRef', actor.canonicalAccountRef))
     .order('desc')
     .take(20)
   const published = businesses.find((row) => row.publicStatus === 'published')
@@ -255,11 +247,9 @@ export async function getCurrentOwnerPublicCatalogHandler(ctx: QueryCtx) {
 export async function getCurrentOwnerOfferingSupplyHandler(ctx: QueryCtx) {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return { kind: 'error' as const, code: 'unauthenticated' as const }
-  const owner = await ctx.db.query('owners').withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', actor.clerkUserId)).unique()
-  if (owner === null) return { kind: 'not_found' as const }
   const business = await ctx.db
     .query('businesses')
-    .withIndex('by_owner_updatedAt', (query) => query.eq('ownerId', owner._id))
+    .withIndex('by_owningAccountRef_and_updatedAt', (query) => query.eq('owningAccountRef', actor.canonicalAccountRef))
     .order('desc')
     .first()
   if (business === null) return { kind: 'not_found' as const }

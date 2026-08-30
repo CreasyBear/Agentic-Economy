@@ -20,7 +20,7 @@ import type {
  */
 
 export type ServiceEndpointAuthenticationDto = PublicOperationAuthentication
-export type ServiceEndpointExecutionDto = 'answer_tool' | 'request_route' | 'catalog_only'
+export type ServiceEndpointExecutionDto = 'operation_call' | 'request_route' | 'catalog_only'
 export type ServiceEndpointAuthorityModeDto =
   | 'provider_owned'
   | 'ae_curated_external'

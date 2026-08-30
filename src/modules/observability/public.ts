@@ -31,10 +31,6 @@ import {
   InvalidationSurfaceValues,
   OperationKeyStatusValues,
 } from './internal/literals'
-import type {
-  CurrentAuditEventType,
-  CurrentAuditTargetType,
-} from './internal/literals'
 
 export {
   ActivationStageValues,
@@ -52,11 +48,7 @@ export type InvalidationSurface = (typeof InvalidationSurfaceValues)[number]
 export type InvalidationIntentStatus = (typeof InvalidationIntentStatusValues)[number]
 export type FunnelEventType = (typeof FunnelEventTypeValues)[number]
 export type ActivationStage = (typeof ActivationStageValues)[number]
-export type CurrentOperationAuditEventType = CurrentAuditEventType
-export type CurrentOperationAuditTargetType = CurrentAuditTargetType
-export type CurrentAuditValidationResult =
-  | AuditValidationResult
-  | { valid: false; reason: 'retired_compatibility_event' }
+export type CurrentAuditValidationResult = AuditValidationResult
 
 export type OperationKeyRecord = {
   actorRef: string
@@ -102,17 +94,6 @@ export const markOperationSucceeded = markOperationSucceededImpl
 
 export const reserveOperationKey = reserveOperationKeyImpl
 
-export function validateAuditEvent(input: AuditEventInput): CurrentAuditValidationResult {
-  if (
-    !currentAuditEventTypes.has(input.eventType) ||
-    !currentAuditTargetTypes.has(input.targetType)
-  ) {
-    return { valid: false, reason: 'retired_compatibility_event' }
-  }
-  return validateStoredAuditEvent(input)
-}
-
-const currentAuditEventTypes = new Set<string>(AuditEventTypeValues)
-const currentAuditTargetTypes = new Set<string>(AuditTargetTypeValues)
+export const validateAuditEvent = validateStoredAuditEvent
 
 export const recordInvalidationIntent = recordInvalidationIntentImpl

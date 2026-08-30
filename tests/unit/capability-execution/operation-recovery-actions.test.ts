@@ -71,10 +71,11 @@ describe('operation recovery actions', () => {
         scope: 'market_operations:invoke',
         authority: 'descriptor_classified',
       })
-      expect(action.surfaces).toEqual(operationInvokeAction.surfaces)
+      expect(action.surfaces).toEqual(['http', 'mcp', 'cli'])
     }
   })
   it('keeps the route/action graph and optional evidence fields in parity', () => {
+    expect(operationInvokeAction.id).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId)
     expect(operationStatusAction.id).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId)
     expect(operationCancelAction.id).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.cancel.actionId)
     expect(operationReconcileAction.id).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId)

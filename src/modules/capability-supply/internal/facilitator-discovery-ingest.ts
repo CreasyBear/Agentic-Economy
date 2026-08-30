@@ -161,6 +161,9 @@ export function decideFacilitatorDiscoveryItem(
     exponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
   };
   const capabilityId = capabilityIdFromIdentity(identity);
+  const offeringLabel = discoveryOfferingLabel(resource, capabilityId);
+  const offeringSummary = boundedResourceText(resource?.description, 1_000) ??
+    "Facilitator-discovered Market Operation.";
   const sourceImport: Extract<CapabilityPublicationImport, { kind: "x402" }> = {
     kind: "x402",
     resource: {
@@ -181,9 +184,8 @@ export function decideFacilitatorDiscoveryItem(
     contract: {
       capabilityId,
       version: 1,
-      name: boundedResourceText(resource?.serviceName, 160) ?? capabilityId,
-      description: boundedResourceText(resource?.description, 1_000) ??
-        "Facilitator-discovered Market Operation.",
+      name: offeringLabel,
+      description: offeringSummary,
       customerAnnotations: [],
       dataUse: [],
       effects: [],
@@ -195,9 +197,8 @@ export function decideFacilitatorDiscoveryItem(
         offeringId: `offering:facilitator-discovery:${capabilityId}`,
         networkId: "ae:public",
         presentation: {
-          label: boundedResourceText(resource?.serviceName, 160) ?? capabilityId,
-          summary: boundedResourceText(resource?.description, 1_000) ??
-            "Facilitator-discovered Market Operation.",
+          label: offeringLabel,
+          summary: offeringSummary,
           price: { kind: "fixed", amount: providerPrice },
           materialTerms: [],
           commercialRelationship: {
@@ -209,7 +210,7 @@ export function decideFacilitatorDiscoveryItem(
             evidenceRefs: [DISCOVERY_EVIDENCE_REF],
           },
         },
-        searchTerms: searchTermsFromResource(resource),
+        searchTerms: [...searchTermsForOffering(resource, capabilityId)],
         registrationEvidenceRefs: [DISCOVERY_EVIDENCE_REF],
       },
       bindingId: `binding:facilitator-discovery:${capabilityId}`,
@@ -247,21 +248,31 @@ export function paymentRequiredFromDiscoveryItem(
   item: unknown,
 ): Readonly<Record<string, unknown>> | undefined {
   if (!isRecord(item)) return undefined;
-  if (item.x402Version !== undefined) {
-    return item.x402Version === 2 && isRecord(item.resource) && Array.isArray(item.accepts)
-      ? item
-      : undefined;
+  const resource = discoveryResourceRecord(item);
+  if (resource === undefined || !Array.isArray(item.accepts) || item.accepts.length < 1) {
+    return undefined;
   }
-  if (!Array.isArray(item.accepts) || item.accepts.length < 1) return undefined;
-  const resource = isRecord(item.resource)
-    ? item.resource
-    : typeof item.resource === "string" ? { url: item.resource } : undefined;
-  if (resource === undefined) return undefined;
+  if (item.x402Version !== undefined) {
+    return item.x402Version === 2 ? { ...item, resource } : undefined;
+  }
   return {
     x402Version: 2,
     resource,
     accepts: item.accepts,
     ...(isRecord(item.extensions) ? { extensions: item.extensions } : {}),
+  };
+}
+
+function discoveryResourceRecord(
+  item: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> | undefined {
+  if (isRecord(item.resource)) return item.resource;
+  if (typeof item.resource !== "string") return undefined;
+  return {
+    url: item.resource,
+    ...(typeof item.description === "string" ? { description: item.description } : {}),
+    ...(typeof item.serviceName === "string" ? { serviceName: item.serviceName } : {}),
+    ...(Array.isArray(item.tags) ? { tags: item.tags } : {}),
   };
 }
 
@@ -413,6 +424,88 @@ function searchTermsFromResource(resource: Readonly<Record<string, unknown>> | u
     : [];
   const name = boundedResourceText(resource?.serviceName, 160);
   return [...new Set([...(name === undefined ? [] : [name]), ...tags])].slice(0, 16);
+}
+
+function searchTermsForOffering(
+  resource: Readonly<Record<string, unknown>> | undefined,
+  capabilityId: string,
+): readonly string[] {
+  const terms = searchTermsFromResource(resource);
+  const label = discoveryOfferingLabel(resource, capabilityId);
+  const description = boundedResourceText(resource?.description, 120);
+  const named = [
+    ...terms,
+    ...(label === capabilityId ? [] : [label]),
+    ...(description === undefined ? [] : [description]),
+  ];
+  const unique = [...new Set(named.filter((term) => term.trim().length > 0))];
+  return unique.length > 0 ? unique.slice(0, 16) : [capabilityId];
+}
+
+const DISCOVERY_PATH_LIKE =
+  /^(?:https?:\/\/|(?:get|post|put|patch|delete|head|options)\.)/iu;
+const DISCOVERY_NOISE_TOKENS = new Set([
+  "get",
+  "post",
+  "put",
+  "patch",
+  "delete",
+  "head",
+  "options",
+  "api",
+  "http",
+  "https",
+  "www",
+  "json",
+  "v0",
+  "v1",
+  "v2",
+  "v3",
+  "v4",
+]);
+
+function discoveryOfferingLabel(
+  resource: Readonly<Record<string, unknown>> | undefined,
+  capabilityId: string,
+): string {
+  const named = boundedResourceText(resource?.serviceName, 160);
+  if (
+    named !== undefined &&
+    named !== capabilityId &&
+    named.length >= 3 &&
+    !DISCOVERY_PATH_LIKE.test(named) &&
+    !named.includes("/") &&
+    !/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/iu.test(named)
+  ) {
+    return named;
+  }
+  const fromId = humanizeDiscoveryCapabilityId(capabilityId);
+  if (fromId.length >= 3) return fromId;
+  const fromDescription = firstDiscoveryPhrase(
+    boundedResourceText(resource?.description, 160),
+  );
+  if (fromDescription !== undefined) return fromDescription;
+  return named ?? capabilityId;
+}
+
+function humanizeDiscoveryCapabilityId(capabilityId: string): string {
+  const path = capabilityId.split(".").slice(2).join("-");
+  const tokens = path
+    .split(/[-_]+/u)
+    .map((token) => token.trim().toLowerCase())
+    .filter((token) => token.length > 0 && !DISCOVERY_NOISE_TOKENS.has(token));
+  return tokens
+    .join(" ")
+    .replace(/\b\w/gu, (letter) => letter.toUpperCase());
+}
+
+function firstDiscoveryPhrase(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const sentence = value.split(/(?<=[.!?])\s+/u)[0]?.replace(/[.]+$/u, "").trim();
+  if (sentence === undefined || sentence.length < 3 || sentence.length > 80) {
+    return undefined;
+  }
+  return sentence;
 }
 
 export function mapFacilitatorDiscoveryImporterRefusal(

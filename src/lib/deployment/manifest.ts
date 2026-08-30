@@ -182,7 +182,6 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
       jobs: Object.freeze([
         'cleanup expired agent access oauth grants',
         'cleanup expired source write nonces',
-        'continue market aggregate backfill',
         'reconcile due facilitator invocations',
         'refresh Agentic Economy API registry',
         'refresh Agentic Market snapshots',

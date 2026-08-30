@@ -30,15 +30,10 @@ describe('Convex payout persistence — transfer replay tamper', () => {
       idempotencyKey: 'payout-idempotency-1',
     }
     const seedOwner = (db: MemoryDb): void => {
-      db.seed('owners', {
-        _id: 'owners:terminal-tamper',
-        clerkUserId: 'owner:test',
-        createdAt: 1,
-        updatedAt: 1,
-      })
+      
       db.seed('businesses', {
         _id: 'business-1',
-        ownerId: 'owners:terminal-tamper',
+        ownerId: 'principal:terminal-tamper',
         updatedAt: 1,
       })
     }

@@ -11,16 +11,14 @@ import {
 import { Button } from '@/components/ui/button'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/terms')({
-  head: () => ({
-    meta: [
-      { title: 'Terms | Agentic Economy' },
-      { name: 'robots', content: 'noindex' },
-      { name: 'description', content: 'Plain-language terms for finding, comparing, paying for, and calling Agentic Economy Operations.' },
-    ],
+  head: () => buildPublicPageHead({
+    path: '/terms',
+    title: 'Terms | Agentic Economy',
+    description: 'Plain-language terms for finding, comparing, paying for, and calling Agentic Economy Operations.',
   }),
   component: TermsRoute,
 })
@@ -63,16 +61,17 @@ const termsItems = [
 
 function TermsRoute() {
   return (
-    <AePublicShell>
-      <AePageHeader
-        title="Terms"
-        description="Use Agentic Economy to find, inspect, pay for, and call published Operations."
-      />
-      <div className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
-        <section className="grid gap-4">
+    <AePublicPage
+      kind="document"
+      eyebrow="Legal"
+      title="Terms"
+      description="Use Agentic Economy to find, inspect, pay for, and call published Operations."
+    >
+      <div className="ae-rail grid max-w-prose gap-page pb-page">
+        <section className="grid gap-related">
           {canDoItems.map(({ icon: Icon, title, body }) => (
-            <div key={title} className="grid gap-1">
-              <p className="flex items-center gap-2 font-semibold text-foreground">
+            <div key={title} className="grid gap-intra">
+              <p className="flex items-center gap-intra font-semibold text-foreground">
                 <Icon className="size-4 text-foreground" aria-hidden="true" /> {title}
               </p>
               <p className="text-muted-foreground">{body}</p>
@@ -80,19 +79,19 @@ function TermsRoute() {
           ))}
         </section>
 
-        <section className="border-t border-border pt-8">
-          <h2 className="mb-4 text-2xl font-semibold tracking-tight text-foreground">
+        <section className="border-t border-border pt-section">
+          <h2 className="mb-related text-2xl font-semibold tracking-tight text-foreground">
             What these terms mean in practice
           </h2>
           <TermsAccordion />
         </section>
 
-        <section className="flex flex-wrap gap-3 border-t border-border pt-8">
-          <Button asChild variant="default" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse catalog</Link></Button>
-          <Button asChild variant="secondary" className="min-h-11"><Link to="/for-providers">Publish an Operation <ArrowRightIcon aria-hidden="true" /></Link></Button>
+        <section className="flex flex-wrap gap-related border-t border-border pt-section">
+          <Button asChild variant="default" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse catalog</Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/for-providers">Publish an Operation <ArrowRightIcon aria-hidden="true" /></Link></Button>
         </section>
       </div>
-    </AePublicShell>
+    </AePublicPage>
   )
 }
 
@@ -102,16 +101,16 @@ function TermsAccordion() {
       type="single"
       collapsible
       defaultValue={termsItems[0]?.title ?? ''}
-      className="grid gap-2"
+      className="grid gap-intra"
     >
       {termsItems.map(({ icon: Icon, title, body }) => (
-        <AccordionItem key={title} value={title} className="rounded-sm border bg-card">
-          <AccordionTrigger className="flex min-h-12 w-full items-center justify-start gap-3 px-4 py-0 text-left hover:no-underline [&>svg:last-child]:hidden [&[data-state=open]>svg]:rotate-0">
+        <AccordionItem key={title} value={title} className="rounded-card border bg-card">
+          <AccordionTrigger className="flex min-h-touch w-full items-center justify-start gap-related px-gutter py-0 text-start hover:no-underline [&>svg:last-child]:hidden [&[data-state=open]>svg]:rotate-0">
             <Icon className="size-4 shrink-0 text-foreground" aria-hidden="true" />
             <span className="text-lg font-medium text-foreground">{title}</span>
           </AccordionTrigger>
           <AccordionContent className="pb-0">
-            <p className="block px-4 pb-4 pl-11 text-muted-foreground">{body}</p>
+            <p className="block px-gutter pb-gutter ps-[calc(var(--spacing-gutter)+var(--spacing-related)+1rem)] text-muted-foreground">{body}</p>
           </AccordionContent>
         </AccordionItem>
       ))}

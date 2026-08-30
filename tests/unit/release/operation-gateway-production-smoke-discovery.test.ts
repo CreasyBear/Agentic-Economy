@@ -43,7 +43,7 @@ describe("hosted Operation gateway smoke discovery", () => {
     expect(discovered.operations.get(operationRef)).toEqual({
       serviceId: "service:owner",
       offeringRef: operation.offering.offeringRef,
-      authentication: { kind: "keyless" },
+      authentication: { kind: "ae_api_key" },
     });
     expect(discovered.operations.get(controlOperationRef)?.serviceId).toBe(
       "service:control",
@@ -109,7 +109,7 @@ describe("hosted Operation gateway smoke discovery", () => {
     };
     expect(() =>
       matchGatewayServiceOperation(ownerKeyedDiscovery, ownerKeyed, "owner"),
-    ).toThrow("owner_operation_not_keyless");
+    ).toThrow("gateway_smoke_owner_operation_not_brokered");
     const controlKeylessDiscovery = {
       operations: new Map([
         [
@@ -117,7 +117,7 @@ describe("hosted Operation gateway smoke discovery", () => {
           {
             serviceId: "service:control",
             offeringRef: operation.offering.offeringRef,
-            authentication: { kind: "keyless" as const },
+            authentication: { kind: "ae_api_key" as const },
           },
         ],
       ]),

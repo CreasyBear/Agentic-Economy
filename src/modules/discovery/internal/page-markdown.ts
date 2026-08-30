@@ -1,3 +1,4 @@
+import { ABOUT } from '@/content/brand-copy'
 import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import type { BusinessContext } from '@/modules/business/public'
 import { formatOfferingPrice } from '@/modules/catalog/public'
@@ -40,7 +41,7 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
   const reconcile = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId)
   const cli = 'ae'
   return [
-    '# Agentic Economy — capability market',
+    '# Agentic Economy',
     '',
     `1. Search by outcome: \`${cli} search "<job>" --base-url "${base}" --json\` or \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`.`,
     `2. Inspect one result: \`${cli} inspect "$AE_OPERATION_REF" --base-url "${base}" --json\` or \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`. Read exact inputs, total price, authentication, readiness, provider, and last verification.`,
@@ -73,6 +74,8 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
     `- \`${base}/SKILL.md\` — the full Operation procedure`,
     `- \`${base}/.well-known/ucp\` — the raw machine contract`,
     `- \`${base}/for-agents\` — the machine guide when requested as markdown`,
+    `- \`${base}/about\` — what AE is, for people`,
+    `- \`${base}/market\` — the live Operation catalogue`,
     '',
   ].join('\n')
 }
@@ -117,6 +120,32 @@ export function buildForAgentsMarkdown(options: AgentPageMarkdownOptions): strin
     '## Safe recovery',
     '',
     `Use \`${cli} cancel\` only when the current receipt offers cancellation. Use \`${cli} recover\` only when that receipt requires reconciliation.`,
+    '',
+  ].join('\n')
+}
+
+export function buildAboutMarkdown(options: AgentPageMarkdownOptions): string {
+  const base = trimTrailingSlashes(options.canonicalBaseUrl)
+  return [
+    '# About Agentic Economy',
+    '',
+    ABOUT.heading,
+    '',
+    ABOUT.subhead,
+    '',
+    '## Agents and suppliers',
+    '',
+    `- Agents: \`${base}/for-agents\``,
+    `- Suppliers: \`${base}/for-providers\``,
+    `- Live catalog: \`${base}/market\``,
+    '',
+    ABOUT.suppliersBody,
+    '',
+    '## Machine files',
+    '',
+    `- \`${base}/llms.txt\``,
+    `- \`${base}/SKILL.md\``,
+    `- \`${base}/.well-known/ucp\``,
     '',
   ].join('\n')
 }

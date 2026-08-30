@@ -11,24 +11,19 @@ const readAdminIndexHealthQuery = sourceQuery<Record<string, never>, AdminShellR
   'security:readAdminIndexHealth'
 )
 
-export function readAdminAuditEventsThroughSource(): Promise<AdminShellReadback> {
-  return readAdminSurfaceThroughSource('audit_events')
-}
-
-export function readAdminIndexHealthThroughSource(): Promise<AdminShellReadback> {
-  return readAdminSurfaceThroughSource('index_health')
-}
-
-async function readAdminSurfaceThroughSource(surface: AdminReadbackSurface): Promise<AdminShellReadback> {
+export async function readAdminAuditEventsThroughSource(): Promise<AdminShellReadback> {
   try {
-    switch (surface) {
-      case 'audit_events':
-        return await callSourceQuery(readAdminAuditEventsQuery, {})
-      case 'index_health':
-        return await callSourceQuery(readAdminIndexHealthQuery, {})
-    }
+    return await callSourceQuery(readAdminAuditEventsQuery, {})
   } catch {
-    return deniedAdminReadback(surface)
+    return deniedAdminReadback('audit_events')
+  }
+}
+
+export async function readAdminIndexHealthThroughSource(): Promise<AdminShellReadback> {
+  try {
+    return await callSourceQuery(readAdminIndexHealthQuery, {})
+  } catch {
+    return deniedAdminReadback('index_health')
   }
 }
 

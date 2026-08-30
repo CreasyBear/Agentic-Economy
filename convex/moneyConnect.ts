@@ -373,16 +373,9 @@ export async function readOwnerPayoutAccountHandler(
 ) {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return null
-  const owner = await ctx.db
-    .query('owners')
-    .withIndex('by_clerkUserId', (q) =>
-      q.eq('clerkUserId', actor.clerkUserId),
-    )
-    .unique()
-  if (owner === null) return null
   const businesses = await ctx.db
     .query('businesses')
-    .withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id))
+    .withIndex('by_owningAccountRef_and_updatedAt', (q) => q.eq('owningAccountRef', actor.canonicalAccountRef))
     .order('desc')
     .take(20)
   if (

@@ -248,7 +248,7 @@ export async function beginCreditTopupThroughSource(
     amount: input.amount,
     idempotencyKey: input.idempotencyKey,
   })
-  const successReturnRef = `${resolveCanonicalBaseUrl().baseUrl}/agent-access`
+  const successReturnRef = `${resolveCanonicalBaseUrl().baseUrl}/owner/credit`
   const operationKey = 'moneyLedger:reserveCreditTopup'
   const correlationId = commandRef
   const commandArgs = {

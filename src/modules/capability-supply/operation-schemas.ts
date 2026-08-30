@@ -82,7 +82,7 @@ export const publicOperationAvailabilitySchema = z.strictObject({
 })
 const provenance = z.strictObject({ publisher: z.enum(['provider_owned', 'ae_curated_external', 'third_party_gateway', 'observed_external']), sourceKind: z.enum(['ae_envelope', 'openapi_http', 'mcp', 'agent_plugin_mcp', 'x402']) })
 export const publicOperationAuthenticationSchema = z.union([
-  z.strictObject({ kind: z.literal('keyless') }),
+  z.strictObject({ kind: z.literal('ae_api_key') }),
   z.strictObject({ kind: z.literal('platform_credential'), scheme: z.literal('api_key'), in: z.enum(['query', 'header']), name: z.string() }),
   z.strictObject({ kind: z.literal('platform_credential'), scheme: z.literal('bearer') }),
   z.strictObject({ kind: z.literal('x402') }),

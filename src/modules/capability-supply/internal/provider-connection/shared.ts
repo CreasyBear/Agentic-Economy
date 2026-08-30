@@ -10,7 +10,42 @@ import {
   type ProviderConnectionRefusalCode,
 } from './types'
 
+export type ProviderConnectionAuthorityProvenance = Readonly<{
+  owningAccountRef: string
+  installedByPrincipalRef: string
+  authorityGrantRef: string
+  authorityGrantGeneration: number
+  secretRef?: string
+}>
+
 const VALID_LIFECYCLES = new Set<string>(PROVIDER_CONNECTION_LIFECYCLES)
+
+/** Pins current Account and delegation authority directly onto the provider connection. */
+export function withProviderConnectionAuthority(
+  connection: Omit<ProviderConnection, keyof ProviderConnectionAuthorityProvenance>,
+  authority: ProviderConnectionAuthorityProvenance,
+): ProviderConnection {
+  const rebound = {
+    ...connection,
+    ...authority,
+  }
+  return Object.freeze({
+    ...rebound,
+    authorityDigest: providerConnectionAuthorityDigest(rebound),
+  })
+}
+
+/** The provider row is self-contained; no shadow Connection row is consulted. */
+export function providerConnectionAuthorityProvenanceIsValid(
+  connection: ProviderConnection,
+): boolean {
+  return validIdentity(connection.owningAccountRef)
+    && validIdentity(connection.installedByPrincipalRef)
+    && validIdentity(connection.authorityGrantRef)
+    && validGeneration(connection.authorityGrantGeneration)
+    && connection.credentialRef === (connection.secretRef ?? null)
+    && isProviderConnectionAuthorityCurrent(connection)
+}
 
 export function refusal(code: ProviderConnectionRefusalCode): Readonly<{ kind: 'refused'; code: ProviderConnectionRefusalCode }> {
   return { kind: 'refused', code }
@@ -39,9 +74,15 @@ export function normalizeReasonCode(value: string | undefined):
   return { kind: 'ok', ...(value === undefined ? {} : { value }) }
 }
 
-export function providerConnectionAuthorityDigest(connection: Pick<ProviderConnection, 'connectionRef' | 'businessId' | 'providerRef' | 'providerAccountRef' | 'adapterId' | 'credentialRef' | 'grantedScopes' | 'grantedResources' | 'authorityGeneration' | 'expiresAt'>): string {
+export function providerConnectionAuthorityDigest(connection: Pick<ProviderConnection, 'connectionRef' | 'owningAccountRef' | 'installedByPrincipalRef' | 'authorityGrantRef' | 'authorityGrantGeneration' | 'secretRef' | 'businessId' | 'providerRef' | 'providerAccountRef' | 'adapterId' | 'credentialRef' | 'grantedScopes' | 'grantedResources' | 'authorityGeneration' | 'expiresAt'>): string {
   return canonicalDigest({
-    connectionRef: connection.connectionRef, businessId: connection.businessId, providerRef: connection.providerRef,
+    connectionRef: connection.connectionRef,
+    owningAccountRef: connection.owningAccountRef,
+    installedByPrincipalRef: connection.installedByPrincipalRef,
+    authorityGrantRef: connection.authorityGrantRef,
+    authorityGrantGeneration: connection.authorityGrantGeneration,
+    secretRef: connection.secretRef ?? null,
+    businessId: connection.businessId, providerRef: connection.providerRef,
     providerAccountRef: connection.providerAccountRef, adapterId: connection.adapterId, credentialRef: connection.credentialRef,
     grantedScopes: uniqueSorted(connection.grantedScopes), grantedResources: uniqueSorted(connection.grantedResources),
     authorityGeneration: connection.authorityGeneration, expiresAt: connection.expiresAt ?? null,

@@ -28,7 +28,7 @@ export function resolveJsonPointer(
     }
 
     if (current === null || typeof current !== 'object'
-      || !Object.prototype.hasOwnProperty.call(current, segment)) return { found: false }
+      || !Object.hasOwn(current, segment)) return { found: false }
     current = (current as Record<string, unknown>)[segment]
   }
   return { found: true, value: current }

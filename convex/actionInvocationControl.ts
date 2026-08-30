@@ -3,13 +3,9 @@ import { internalMutation, internalQuery, mutation, query, type MutationCtx, typ
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
   requireSourceWrite,
+  requireSourceRead,
   sourceWriteArgs,
 } from './sourceWriteAdmission'
-import {
-  sourceWriteCommandDigest,
-  verifySourceWriteAdmission,
-  type SourceWriteAdmission,
-} from '../src/modules/security/source-write-admission'
 import {
   attemptTransitionValue,
   attemptReleaseValue,
@@ -335,23 +331,7 @@ async function requireActionInvocationSourceWrite(
 }
 
 async function requireActionInvocationSourceRead(args: OwnerReadArgs): Promise<void> {
-  const admission = args.sourceWrite as SourceWriteAdmission | undefined
-  if (args.sourceWriteRequest === undefined) {
-    throw new ConvexError({
-      code: 'action_invocation_source_read_rejected',
-      reason: 'missing_source_write_request',
-    })
-  }
-  const verification = await verifySourceWriteAdmission({
-    ...(admission === undefined ? {} : { admission }),
-    expected: {
-      scope: 'protected_action',
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
-      commandDigest: sourceWriteCommandDigest(args),
-      request: args.sourceWriteRequest,
-    },
-  })
+  const verification = await requireSourceRead(args, 'protected_action')
   if (verification.kind === 'rejected') {
     throw new ConvexError({
       code: 'action_invocation_source_read_rejected',

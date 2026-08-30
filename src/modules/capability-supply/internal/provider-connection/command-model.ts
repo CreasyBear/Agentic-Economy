@@ -50,8 +50,13 @@ function normalizeAuthorityCommand(command: AuthorityCommandFields & Readonly<{ 
   | Readonly<{ kind: 'refused'; code: ProviderConnectionRefusalCode }> {
   if (!validTimestamp(now)) return { kind: 'refused', code: 'invalid_time' }
   if (!validIdentity(command.commandId) || !validIdentity(command.connectionRef) || !validIdentity(command.businessId)
-    || !validIdentity(command.providerRef) || !validIdentity(command.providerAccountRef) || !validIdentity(command.adapterId)) return { kind: 'refused', code: 'invalid_identity' }
+    || !validIdentity(command.providerRef) || !validIdentity(command.providerAccountRef) || !validIdentity(command.adapterId)
+    || !validIdentity(command.owningAccountRef) || !validIdentity(command.installedByPrincipalRef)
+    || !validIdentity(command.authorityGrantRef) || !validGeneration(command.authorityGrantGeneration)) return { kind: 'refused', code: 'invalid_identity' }
   if (command.credentialRef !== null && !isProviderConnectionCredentialRef(command.credentialRef)) return { kind: 'refused', code: 'invalid_identity' }
+  if (command.secretRef !== command.credentialRef && !(command.secretRef === undefined && command.credentialRef === null)) {
+    return { kind: 'refused', code: 'invalid_identity' }
+  }
   const requestedScopes = normalizeValues(command.requestedScopes, 'invalid_scope')
   const grantedScopes = normalizeValues(command.grantedScopes, 'invalid_scope')
   const requestedResources = normalizeValues(command.requestedResources, 'invalid_resource')
@@ -68,7 +73,10 @@ function normalizeAuthorityCommand(command: AuthorityCommandFields & Readonly<{ 
   const evidenceRefs = normalizeEvidenceRefs(command.evidenceRefs)
   if (evidenceRefs.kind === 'refused') return evidenceRefs
   return { kind: 'ok', command: {
-    commandId: command.commandId, connectionRef: command.connectionRef, businessId: command.businessId,
+    commandId: command.commandId, connectionRef: command.connectionRef,
+    owningAccountRef: command.owningAccountRef, installedByPrincipalRef: command.installedByPrincipalRef,
+    authorityGrantRef: command.authorityGrantRef, authorityGrantGeneration: command.authorityGrantGeneration,
+    ...(command.secretRef === undefined ? {} : { secretRef: command.secretRef }), businessId: command.businessId,
     providerRef: command.providerRef, providerAccountRef: command.providerAccountRef, adapterId: command.adapterId,
     credentialRef: command.credentialRef, requestedScopes: requestedScopes.values, grantedScopes: grantedScopes.values,
     requestedResources: requestedResources.values, grantedResources: grantedResources.values,
@@ -181,6 +189,11 @@ export function createProviderConnection(command: CreateProviderConnectionComman
   if (existing !== undefined) return refusal('invalid_transition')
   const connection = withAuthorityDigest({
     connectionRef: normalized.command.connectionRef,
+    owningAccountRef: normalized.command.owningAccountRef,
+    installedByPrincipalRef: normalized.command.installedByPrincipalRef,
+    authorityGrantRef: normalized.command.authorityGrantRef,
+    authorityGrantGeneration: normalized.command.authorityGrantGeneration,
+    ...(normalized.command.secretRef === undefined ? {} : { secretRef: normalized.command.secretRef }),
     businessId: normalized.command.businessId,
     providerRef: normalized.command.providerRef,
     providerAccountRef: normalized.command.providerAccountRef,
@@ -210,6 +223,10 @@ export function createX402ProviderConnection(
   return createProviderConnection({
     commandId: command.commandId,
     connectionRef: command.connectionRef,
+    owningAccountRef: command.owningAccountRef,
+    installedByPrincipalRef: command.installedByPrincipalRef,
+    authorityGrantRef: command.authorityGrantRef,
+    authorityGrantGeneration: command.authorityGrantGeneration,
     businessId: command.businessId,
     providerRef: command.providerRef,
     providerAccountRef: command.providerAccountRef,
@@ -246,9 +263,20 @@ export function reauthorizeProviderConnection(current: ProviderConnection | unde
     || normalized.command.adapterId !== current.adapterId) return refusal('invalid_identity')
   if (current.lifecycle !== 'active' && current.lifecycle !== 'reauthorization_required') return refusal('invalid_transition')
   if (current.authorityGeneration === Number.MAX_SAFE_INTEGER) return refusal('invalid_generation')
-  const { revokedAt: _revokedAt, reasonCode: _oldReasonCode, expiresAt: _oldExpiresAt, ...base } = current
+  const {
+    revokedAt: _revokedAt,
+    reasonCode: _oldReasonCode,
+    expiresAt: _oldExpiresAt,
+    secretRef: _oldSecretRef,
+    ...base
+  } = current
   const next = withAuthorityDigest({
     ...base,
+    owningAccountRef: normalized.command.owningAccountRef,
+    installedByPrincipalRef: normalized.command.installedByPrincipalRef,
+    authorityGrantRef: normalized.command.authorityGrantRef,
+    authorityGrantGeneration: normalized.command.authorityGrantGeneration,
+    ...(normalized.command.secretRef === undefined ? {} : { secretRef: normalized.command.secretRef }),
     credentialRef: normalized.command.credentialRef,
     grantedScopes: normalized.command.grantedScopes,
     grantedResources: normalized.command.grantedResources,

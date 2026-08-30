@@ -13,6 +13,14 @@ import { runInspectCommand } from '../../tools/ae/commands/inspect'
 import { runInspectPlanCommand } from '../../tools/ae/commands/inspect-plan'
 import { runSearchCommand } from '../../tools/ae/commands/search'
 import { invokeCommandDescriptor, runInvokeCommand } from '../../tools/ae/commands/invoke'
+import { ACCOUNT_COMMAND_DESCRIPTORS, accountCommandDescriptor } from '../../tools/ae/commands/account'
+import { CLI_ACTION_ADAPTERS } from '../../tools/ae/commands/action-adapters'
+import {
+  AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS,
+  AGENT_ACCOUNT_SELF_ROUTE_CONTRACT,
+} from '@/modules/agent-access/account.actions'
+import { SUPPLY_ACTION_ROUTE_CONTRACTS } from '@/modules/capability-supply/supply-actions'
+import { SUPPLY_COMMAND_DESCRIPTORS } from '../../tools/ae/commands/supply'
 
 const operationMarketCliCommands = [
   { actionId: 'registry.operations.search', command: 'search', path: '/api/v1/market-operations/search' },
@@ -33,10 +41,71 @@ const chatActionIds = [
   'registry.operations.detail',
   'registry.operations.compare',
   'registry.operations.inspectPlan',
-  'operation.execute',
+  'operation.invoke',
 ] as const
 
 describe('operation surface conformance', () => {
+  it('requires one concrete CLI adapter for every action declaring the CLI surface', () => {
+    const declared = listActions()
+      .filter(({ surfaces }) => surfaces.includes('cli'))
+      .map(({ id }) => id)
+      .toSorted()
+    const adapted = CLI_ACTION_ADAPTERS.map(({ actionId }) => actionId).toSorted()
+
+    expect(new Set(adapted).size).toBe(adapted.length)
+    expect(adapted).toEqual(declared)
+    for (const adapter of CLI_ACTION_ADAPTERS) {
+      expect(findAction(adapter.actionId), `CLI adapter ${adapter.command} has no registered action`).toBeDefined()
+      expect(adapter.path).toMatch(/^\/api\/v1\//u)
+    }
+  })
+  it('projects current agent account identity through one HTTP, MCP, and CLI contract', () => {
+    const action = findAction(AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.actionId)
+    expect(action).toBeDefined()
+    if (action === undefined) return
+
+    expect(action.surfaces).toEqual(['http', 'mcp', 'cli'])
+    expect(listMcpActions().map(({ id }) => id)).toContain(action.id)
+    expect(accountCommandDescriptor).toMatchObject({
+      actionId: action.id,
+      command: 'account',
+      subcommand: 'status',
+      method: AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.method,
+      path: AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.path,
+    })
+    expect(accountCommandDescriptor.outputSchema).toBe(action.outputSchema)
+  })
+  it('projects buyer balance and activity through one account action spine', () => {
+    const routes = Object.values(AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS)
+    expect(ACCOUNT_COMMAND_DESCRIPTORS).toHaveLength(routes.length)
+    for (const descriptor of ACCOUNT_COMMAND_DESCRIPTORS) {
+      const action = findAction(descriptor.actionId)
+      expect(action).toBeDefined()
+      if (action === undefined) continue
+      expect(action.surfaces).toEqual(['http', 'mcp', 'cli'])
+      expect(action.credentialAdmission?.scope).toBe('market_operations:invoke')
+      expect(descriptor.method).toBe('POST')
+      expect(descriptor.path).toMatch(/^\/api\/v1\/account\//u)
+      expect(descriptor.action.schema).toBe(action.schema)
+      expect(descriptor.action.outputSchema).toBe(action.outputSchema)
+    }
+  })
+  it('projects the supplier Operation lifecycle through one action spine', () => {
+    const routes = Object.values(SUPPLY_ACTION_ROUTE_CONTRACTS)
+    expect(SUPPLY_COMMAND_DESCRIPTORS).toHaveLength(routes.length)
+    for (const descriptor of SUPPLY_COMMAND_DESCRIPTORS) {
+      const action = findAction(descriptor.actionId)
+      expect(action, `Supplier action ${descriptor.actionId} is not registered`).toBeDefined()
+      if (action === undefined) continue
+      expect(action.surfaces).toEqual(['http', 'mcp', 'cli'])
+      expect(action.credentialAdmission?.scope).toBe('market_supply:manage')
+      expect(descriptor.route.actionId).toBe(action.id)
+      expect(descriptor.route.method).toBe('POST')
+      expect(descriptor.route.path).toMatch(/^\/api\/v1\/supply\//u)
+      expect(descriptor.action.schema).toBe(action.schema)
+      expect(descriptor.action.outputSchema).toBe(action.outputSchema)
+    }
+  })
   it('projects operation reads across chat, HTTP, agent JSON, MCP, and CLI', () => {
     const marketEntryIds = OPERATION_MARKET_ACTION_ENTRIES.map((entry) => entry.actionId)
     expect(operationMarketCliCommands.map(({ actionId }) => actionId)).toEqual(marketEntryIds)
@@ -69,25 +138,15 @@ describe('operation surface conformance', () => {
   })
 
   it('keeps invocation on the canonical paid lifecycle surfaces', () => {
-    const directOperationIds = ['operation.execute', 'operation.invoke'] as const
-    const [executeId, invokeId] = directOperationIds
+    const invokeId = 'operation.invoke' as const
     const mcpActionIds = listMcpActions().map((action) => action.id)
     const operationRouteDescriptors = listOperationRouteDescriptors()
     const operationRouteActionIds = operationRouteDescriptors.map((route) => route.actionId)
 
-    for (const id of directOperationIds) {
-      expect(mcpActionIds).toContain(id)
-    }
-
-    const execute = findAction(executeId)
-    expect(execute).toBeDefined()
-    expect(execute?.surfaces).toEqual(['mcp', 'chat'])
-    expect(operationRouteActionIds).not.toContain(executeId)
-
     const invoke = findAction(invokeId)
     expect(invoke).toBeDefined()
     if (invoke === undefined) return
-    expect(invoke.surfaces).toEqual(['http', 'mcp', 'cli'])
+    expect(invoke.surfaces).toEqual(['http', 'mcp', 'cli', 'chat'])
     expect(mcpActionIds).toContain(invokeId)
     expect(operationRouteActionIds).toContain(invokeId)
 

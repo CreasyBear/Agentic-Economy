@@ -7,6 +7,10 @@ import { convexModules as modules } from '../helpers/convex-fixtures'
 import { DEV_SEED_BUSINESS_COUNT, DEV_SEED_BUSINESS_FIXTURES } from '../../src/modules/dev/public'
 import { eligibleSupplyPorts } from '../../convex/capabilitySupplyEligiblePorts'
 import { listRouteableCapabilitySupply } from '../../src/modules/capability-supply/public'
+import {
+  DEV_SEED_CATALOG_ACCOUNT_REF,
+  DEV_SEED_CATALOG_PRINCIPAL_REF,
+} from '../../convex/catalogOfferingMutations'
 
 type SeedBackend = TestConvex<typeof schema>
 
@@ -45,6 +49,7 @@ type CatalogRow = {
 describe('dev-seeded public catalog decision facts', () => {
   it('publishes a catalog without retired seed rows', async () => {
     const backend = convexTest(schema, modules)
+    await seedDevCatalogAuthority(backend)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     await runOfferingCutover(backend)
 
@@ -59,12 +64,14 @@ describe('dev-seeded public catalog decision facts', () => {
 
   it('has no retired seed rows to republish after eviction', async () => {
     const backend = convexTest(schema, modules)
+    await seedDevCatalogAuthority(backend)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     await runOfferingCutover(backend)
     expect(await readEveryCatalogRow(backend)).toEqual([])
   })
   it('does not reseed retired sandbox quote supply or expose its routeable binding', async () => {
     const backend = convexTest(schema, modules)
+    await seedDevCatalogAuthority(backend)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     await runOfferingCutover(backend)
 
@@ -151,4 +158,74 @@ async function readEveryCatalogRow(backend: SeedBackend): Promise<readonly Catal
     cursor = result.continueCursor
   }
   throw new Error('dev seed catalog paging did not finish')
+}
+
+async function seedDevCatalogAuthority(backend: SeedBackend): Promise<void> {
+  await backend.run(async (ctx) => {
+    const ownershipRef = 'own_d2000000000000000000000000000001'
+    await ctx.db.insert('principals', {
+      principalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      kind: 'workload',
+      displayName: 'Agentic Economy development catalog seed workload',
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert('accounts', {
+      accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+      displayName: 'Agentic Economy development catalog seed account',
+      lifecycle: 'active',
+      recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+      creationActorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      creationIdempotencyRef: 'dev-seed-account:create',
+      initialOwnershipRef: ownershipRef,
+      currentOwnershipRef: ownershipRef,
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      lastAction: {
+        actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        correlationRef: 'dev-seed-account:create',
+        idempotencyRef: 'dev-seed-account:create',
+      },
+    })
+    await ctx.db.insert('accountOwnerships', {
+      ownershipRef,
+      accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+      ownerPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      lifecycle: 'active',
+      changeKind: 'creation',
+      revision: 1,
+      createdAt: 1,
+      createdBy: {
+        actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        correlationRef: 'dev-seed-ownership:create',
+        idempotencyRef: 'dev-seed-ownership:create',
+      },
+    })
+    await ctx.db.insert('authorityDelegationGrants', {
+      grantRef: 'grt_d2000000000000000000000000000001',
+      accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+      actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      subjectPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      scopes: ['catalog:dev_seed'],
+      resourceRefs: ['catalog:dev-seed'],
+      budgetLimit: 1,
+      budgetUsed: 0,
+      expiresAt: Date.now() + 300_000,
+      generation: 1,
+      revision: 1,
+      lifecycle: 'active',
+      createdAt: 1,
+      createdBy: {
+        actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        correlationRef: 'dev-seed-grant:create',
+        idempotencyRef: 'dev-seed-grant:create',
+      },
+    })
+  })
 }

@@ -1,14 +1,13 @@
 import { ExternalLinkIcon } from 'lucide-react'
 
+import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButton'
-import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
-import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
-import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
+import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
+import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import {
   dispositionToAeStatus,
   offeringAccessToAeStatus,
@@ -23,7 +22,6 @@ type AeStatusCardProps = {
 export function AeStatusCard({ readback }: AeStatusCardProps) {
   const isPreview = readback.projectionMode === 'local_preview'
   const titleId = `ae-status-card-${readback.catalog.slug}`
-  const hasUnavailableCapabilities = readback.unavailableCapabilities.length > 0
   const offeringStatuses = readback.catalog.offerings.map((offering) => ({
     support: offeringSupportToAeStatus(offering.support),
     access: offeringAccessToAeStatus(offering.accessPaths),
@@ -34,53 +32,69 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
       ? 'guarded'
       : 'not_live'
   const accessStatus = offeringStatuses.some(({ access }) => access === 'listed') ? 'listed' : 'not_queued'
+  const location =
+    readback.catalog.businessContext.kind === 'local_human'
+      ? `${readback.catalog.category} in ${readback.catalog.businessContext.suburb}, ${readback.catalog.businessContext.stateTerritory}`
+      : `${readback.catalog.category} — ${readback.catalog.businessContext.website}`
 
   return (
-    <Card className="p-5 shadow-none" aria-labelledby={titleId}>
-      <div className="grid gap-5">
-        <div className="grid gap-4">
-          <div className="grid gap-1">
-            <h2 className="block text-lg font-semibold text-foreground" id={titleId}>{readback.catalog.name}</h2>
-            <p className="block text-sm text-muted-foreground">
-              {readback.catalog.businessContext.kind === 'local_human'
-                ? `${readback.catalog.category} in ${readback.catalog.businessContext.suburb}, ${readback.catalog.businessContext.stateTerritory}`
-                : `${readback.catalog.category} — ${readback.catalog.businessContext.website}`}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {isPreview ? <Badge variant="outline">Preview</Badge> : (
-              <AeCopyPublicUrlButton
-                slug={readback.catalog.slug}
-                businessId={readPublicCatalogActivationRef(readback.catalog)}
-                size="sm"
-              />
-            )}
-            <Button asChild variant="secondary" size="sm">
-              <a href={readback.publicUrl}><ExternalLinkIcon aria-hidden="true" />{isPreview ? 'Open preview' : 'Open page'}</a>
-            </Button>
-          </div>
+    <section aria-labelledby={titleId} className="grid gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid min-w-0 gap-1">
+          <h2 id={titleId} className="text-base font-medium text-foreground">
+            {readback.catalog.name}
+          </h2>
+          <p className="text-sm text-muted-foreground">{location}</p>
         </div>
-        <Separator />
-        <div className="grid gap-4">
-          <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
-            <li><AeStatusBadge status={dispositionToAeStatus(readback.catalog.disposition)} /></li>
-            <li><AeStatusBadge status={trustTierToAeStatus(readback.catalog.trustTier)} /></li>
-            <li><AeStatusBadge status={supportStatus} /></li>
-            <li><AeStatusBadge status={accessStatus} /></li>
-          </ul>
-          {hasUnavailableCapabilities ? (
-            <ul className="m-0 grid list-none gap-3 p-0">
-              {readback.unavailableCapabilities.map((capability) => (
-                <li key={capability.label} className="border-b border-border py-3 last:border-b-0">
-                  <p className="block font-medium text-foreground">{capability.label}</p>
-                  <p className="block text-sm text-muted-foreground">{capability.explanation}</p>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {isPreview ? (
+            <Badge variant="outline">Preview</Badge>
+          ) : (
+            <AeCopyPublicUrlButton
+              slug={readback.catalog.slug}
+              businessId={readPublicCatalogActivationRef(readback.catalog)}
+              size="sm"
+            />
+          )}
+          <Button asChild variant="secondary" className="min-h-touch">
+            <a href={readback.publicUrl}>
+              <ExternalLinkIcon aria-hidden="true" />
+              {isPreview ? 'Open preview' : 'Open page'}
+            </a>
+          </Button>
         </div>
-        <p className="block text-sm text-muted-foreground">{readback.nextAction}</p>
       </div>
-    </Card>
+      <AeFactList
+        facts={[
+          {
+            label: 'Disposition',
+            value: <AeStatusBadge status={dispositionToAeStatus(readback.catalog.disposition)} density="cell" />,
+          },
+          {
+            label: 'Trust',
+            value: <AeStatusBadge status={trustTierToAeStatus(readback.catalog.trustTier)} density="cell" />,
+          },
+          {
+            label: 'Support',
+            value: <AeStatusBadge status={supportStatus} density="cell" />,
+          },
+          {
+            label: 'Access',
+            value: <AeStatusBadge status={accessStatus} density="cell" />,
+          },
+        ]}
+      />
+      {readback.unavailableCapabilities.length === 0 ? null : (
+        <ul className="m-0 grid list-none gap-3 border-t border-border p-0 pt-4">
+          {readback.unavailableCapabilities.map((capability) => (
+            <li key={capability.label}>
+              <p className="font-medium text-foreground">{capability.label}</p>
+              <p className="text-sm text-muted-foreground">{capability.explanation}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-sm text-muted-foreground">{readback.nextAction}</p>
+    </section>
   )
 }

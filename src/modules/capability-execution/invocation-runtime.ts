@@ -2,6 +2,10 @@
 
 import type { ActionCtx } from '../../../convex/_generated/server'
 import {
+  cancelRecovery,
+  expireAuthorizationRecovery,
+  readRecoveryStatus,
+  reconcileRecovery,
   recoverCapabilityOperationInvocation,
   recoveryArgs,
 } from './invocation-worker/recover'
@@ -17,13 +21,26 @@ export async function runCapabilityOperationInvocation(
   ctx: ActionCtx,
   args: Readonly<{ invocationRef: string }>,
 ): Promise<WorkerResult> {
+  return await runCapabilityOperationInvocationWithAuthority(ctx, args, async () => true)
+}
+
+export async function runCapabilityOperationInvocationWithAuthority(
+  ctx: ActionCtx,
+  args: Readonly<{ invocationRef: string }>,
+  admitCurrentAuthority: () => Promise<boolean>,
+): Promise<WorkerResult> {
+  if (!await admitCurrentAuthority()) return { kind: 'none' }
   const prepared = await prepareInvocationRun(ctx, args)
-  return prepared.kind === 'prepared'
-    ? await releaseInvocationRun(ctx, prepared)
-    : prepared
+  if (prepared.kind !== 'prepared') return prepared
+  if (!await admitCurrentAuthority()) return { kind: 'none' }
+  return await releaseInvocationRun(ctx, prepared)
 }
 
 export {
+  cancelRecovery,
+  expireAuthorizationRecovery,
+  readRecoveryStatus,
+  reconcileRecovery,
   recoverCapabilityOperationInvocation,
   recoveryArgs,
 }

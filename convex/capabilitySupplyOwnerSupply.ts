@@ -104,10 +104,36 @@ async function ownerSupplyOffering(
   }
 }
 
-async function isOwnerSupplyActionAuthorized(ctx: ActionCtx, businessId: Id<'businesses'>): Promise<boolean> {
+type OwnerSupplyAuthority = Extract<Awaited<ReturnType<typeof resolveBusinessActor>>, { kind: 'authenticated_owner' }>
+
+async function currentOwnerSupplyAuthority(ctx: ActionCtx, businessId: Id<'businesses'>): Promise<OwnerSupplyAuthority | null> {
   const actor = await resolveBusinessActor(ctx)
-  if (actor.kind !== 'authenticated_owner') return false
+  if (actor.kind !== 'authenticated_owner') return null
   return await ctx.runQuery(internal.capabilitySupply.authorizeOwnerSupplyAction, { businessId })
+    ? actor
+    : null
+}
+
+function sameOwnerSupplyAuthority(left: OwnerSupplyAuthority, right: OwnerSupplyAuthority | null): boolean {
+  return right !== null &&
+    ownerSupplyAuthorityFingerprint(left) === ownerSupplyAuthorityFingerprint(right)
+}
+
+function ownerSupplyAuthorityFingerprint(authority: OwnerSupplyAuthority): string {
+  return canonicalDigest({
+    principalRef: authority.canonicalPrincipalRef,
+    accountRef: authority.canonicalAccountRef,
+    revision: authority.authorityRevision,
+    provenance: {
+      providerNamespace: authority.authorityProvenance.providerNamespace,
+      bindingRef: authority.authorityProvenance.bindingRef,
+      credentialRef: authority.authorityProvenance.credentialRef,
+      credentialGeneration: authority.authorityProvenance.credentialGeneration,
+      accessKind: authority.authorityProvenance.accessKind,
+      accessRef: authority.authorityProvenance.accessRef,
+      currentOwnershipRef: authority.authorityProvenance.currentOwnershipRef,
+    },
+  })
 }
 
 function ownerSupplyRefusalFromProbe(reason: 'revision_changed' | 'target_changed'): Extract<OwnerSupplyActionResult, { state: 'refused' }>['refusal'] {
@@ -119,7 +145,7 @@ export const runOwnerSupplyReadiness = action({
   args: ownerSupplyInput,
   returns: ownerSupplyActionResultValue,
   handler: async (ctx, args): Promise<OwnerSupplyActionResult> => {
-    if (!await isOwnerSupplyActionAuthorized(ctx, args.businessId)) {
+    if (await currentOwnerSupplyAuthority(ctx, args.businessId) === null) {
       return { step: 'readiness', state: 'refused', refusal: 'authorization_denied' }
     }
     const offering = await ownerSupplyOffering(
@@ -132,10 +158,20 @@ export const runOwnerSupplyReadiness = action({
       args.publicationRevision,
     )
     if (offering === undefined) return { step: 'readiness', state: 'refused', refusal: 'revision_changed' }
+    const probeAuthority = await currentOwnerSupplyAuthority(ctx, args.businessId)
+    if (probeAuthority === null) {
+      return { step: 'readiness', state: 'refused', refusal: 'authorization_denied' }
+    }
     const result = await ctx.runAction(internal.capabilitySupplyReadiness.probe, {
       publicationRef: args.publicationRef,
       expectedRevision: args.publicationRevision,
     })
+    if (!sameOwnerSupplyAuthority(
+      probeAuthority,
+      await currentOwnerSupplyAuthority(ctx, args.businessId),
+    )) {
+      return { step: 'readiness', state: 'refused', refusal: 'authorization_denied' }
+    }
     if (result.kind === 'refused') {
       return { step: 'readiness', state: 'refused', refusal: ownerSupplyRefusalFromProbe(result.reason) }
     }
@@ -161,7 +197,7 @@ export const runOwnerSupplyTest = action({
   args: ownerSupplyInput,
   returns: ownerSupplyActionResultValue,
   handler: async (ctx, args): Promise<OwnerSupplyActionResult> => {
-    if (!await isOwnerSupplyActionAuthorized(ctx, args.businessId)) {
+    if (await currentOwnerSupplyAuthority(ctx, args.businessId) === null) {
       return { step: 'test', state: 'refused', refusal: 'authorization_denied' }
     }
     const offering = await ownerSupplyOffering(
@@ -181,6 +217,9 @@ export const runOwnerSupplyTest = action({
       if (!offering.testCompleted) {
         return { step: 'test', state: 'refused', refusal: 'health_unhealthy' }
       }
+      if (await currentOwnerSupplyAuthority(ctx, args.businessId) === null) {
+        return { step: 'test', state: 'refused', refusal: 'authorization_denied' }
+      }
       return {
         step: 'test',
         state: 'completed',
@@ -192,6 +231,10 @@ export const runOwnerSupplyTest = action({
       }
     }
     const taskStartedAt = Date.now()
+    const probeAuthority = await currentOwnerSupplyAuthority(ctx, args.businessId)
+    if (probeAuthority === null) {
+      return { step: 'test', state: 'refused', refusal: 'authorization_denied' }
+    }
     const result = await ctx.runAction(internal.capabilitySupplyReadiness.probe, {
       publicationRef: args.publicationRef,
       expectedRevision: args.publicationRevision,
@@ -216,6 +259,12 @@ export const runOwnerSupplyTest = action({
       publicationRevision: args.publicationRevision,
       operationRef: offering.operationRef,
     })
+    if (!sameOwnerSupplyAuthority(
+      probeAuthority,
+      await currentOwnerSupplyAuthority(ctx, args.businessId),
+    )) {
+      return { step: 'test', state: 'refused', refusal: 'authorization_denied' }
+    }
     await ctx.runMutation(internal.capabilitySupply.recordCapabilityCallEvent, {
       eventRef: `owner-supply-test:${taskDigest}`,
       businessId: args.businessId,

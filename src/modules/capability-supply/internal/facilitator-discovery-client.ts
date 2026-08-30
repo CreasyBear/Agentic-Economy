@@ -12,10 +12,10 @@ import {
   parseFacilitatorDiscoveryPage,
 } from './facilitator-discovery-ingest'
 
-export const FACILITATOR_DISCOVERY_MAX_PAGES = 20 as const
+export const FACILITATOR_DISCOVERY_MAX_PAGES = 4 as const
 export const FACILITATOR_DISCOVERY_MAX_BODY_BYTES = 2_097_152 as const
 export const FACILITATOR_DISCOVERY_REQUEST_TIMEOUT_MS = 10_000 as const
-export const FACILITATOR_DISCOVERY_JOB_TIMEOUT_MS = 120_000 as const
+export const FACILITATOR_DISCOVERY_JOB_TIMEOUT_MS = 20_000 as const
 
 type Fetcher = (input: string, init?: RequestInit) => Promise<Response>
 

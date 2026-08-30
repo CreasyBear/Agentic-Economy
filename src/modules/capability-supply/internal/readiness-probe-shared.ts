@@ -5,8 +5,8 @@ import type {
   X402FetchTransportConfiguration,
 } from "./transport-adapters";
 
-export const HEALTHY_TTL_MS = 5 * 60_000;
-export const UNHEALTHY_TTL_MS = 60_000;
+export const HEALTHY_TTL_MS = 6 * 60 * 60_000;
+export const UNHEALTHY_TTL_MS = 60 * 60_000;
 export const MAX_RESPONSE_BYTES = 64 * 1024;
 
 export type CapabilityProbeTarget = Readonly<{

@@ -18,7 +18,10 @@ describe('capability-supply graph/probe thinness', () => {
     expect(convexSupply).not.toMatch(/reason:\s*['"]graph_integrity_failure['"]\s+as const/)
     expect(convexSupply).not.toMatch(/kind:\s*['"]schema_compatible['"]\s+as const/)
     expect(convexSupply).not.toMatch(/probe:\$\{args\.outcome\}/)
-    expect(convexSupply).not.toMatch(/['"]target_changed['"]\s+as const/)
+    expect(probesSource.match(/['"]target_changed['"]\s+as const/g)).toHaveLength(1)
+    expect(probesSource).toMatch(
+      /capabilityProbeAuthorityMatches\(args\.resourceAuthority, currentAuthority\)[\s\S]*?reason:\s*['"]target_changed['"]\s+as const/,
+    )
   })
 
   it('delegates probe/graph via capabilitySupplyGraphPorts while keeping thin wrappers', () => {
@@ -40,6 +43,9 @@ describe('capability-supply graph/probe thinness', () => {
     expect(readinessAction).toContain('internal.capabilitySupply.readCapabilityProbeTarget')
     expect(ownerSupply).not.toContain('internal.capabilitySupply.observeCapabilityReadiness')
     expect(convexSupply).toMatch(/recordCapabilityProbeResultFromModule\(\s*capabilitySupplyGraphPorts\(ctx\.db\)/)
+  })
+  it('does not rebuild the whole-business catalogue from probe observations', () => {
+    expect(probesSource).not.toContain('rebuildCapabilityOriginSupplyProjection')
   })
   it('keeps authorization for includeInactive in the host', () => {
     expect(convexSupply).toMatch(/args\.includeInactive/)

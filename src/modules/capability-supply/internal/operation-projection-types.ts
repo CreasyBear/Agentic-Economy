@@ -115,7 +115,7 @@ export type PublicOperationCatalogPrice = Readonly<{
   currency: string;
 }>;
 export type PublicOperationAuthentication =
-  | Readonly<{ kind: "keyless" }>
+  | Readonly<{ kind: "ae_api_key" }>
   | Readonly<{
       kind: "platform_credential";
       scheme: "api_key";
@@ -154,7 +154,6 @@ export type CatalogOfferingOperationMapEntry = Readonly<{
   sourceKind: PublicOperationDescriptor["provenance"]["sourceKind"];
   authentication: PublicOperationAuthentication;
   routeable: boolean;
-  answerExecutable: boolean;
   readiness: PublicOperationReadiness;
   operationRef: PublicOperationRef;
   parameters?: readonly PublicOperationParameter[];
@@ -173,7 +172,6 @@ export type PublicOperationNavigationRelation = Readonly<{
     | "detail"
     | "compare"
     | "inspect_plan"
-    | "execute"
     | "invoke"
     | "review_route"
     | "read_status"
@@ -199,12 +197,6 @@ export type OperationProjectionNavigationContract = Readonly<{
     compare: PublicOperationNavigationFor<"compare">;
     inspectPlan: PublicOperationNavigationFor<"inspect_plan">;
   }>;
-  execute: PublicOperationNavigationFor<"execute"> &
-    Readonly<{
-      method: "POST";
-      authentication: "none";
-      precondition: "free_keyless_read_only";
-    }>;
   invoke: PublicOperationNavigationFor<"invoke"> &
     Readonly<{
       pathTemplate: typeof CURRENT_OPERATION_CALL_VIA;
@@ -298,7 +290,6 @@ export type CapabilityOperationSourceRecord = Readonly<{
   }>;
   integrated: boolean;
   routeable: boolean;
-  answerExecutable: boolean;
   unavailableReason?: PublicCapabilityUnavailableReason;
   readiness: Readonly<{ observedAt?: number; validUntil?: number }>;
   searchTerms: readonly string[];
@@ -311,6 +302,7 @@ export type CapabilityOperationSourcePort = Readonly<{
   ) => Promise<
     Readonly<{
       operations: readonly CapabilityOperationSourceRecord[];
+      sourceCount: number;
       snapshotKey: string;
     }>
   >;

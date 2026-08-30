@@ -13,9 +13,6 @@ export {
   usageValue,
   type OperationInvokePersistedAuthority,
 } from './internal/convex-schema'
-export type {
-  DynamicPublishedInvocationResult,
-} from './legacy-dynamic/dynamic-published-contract'
 export {
   buildCanonicalTerminalOutcomeCommand,
   x402PaymentReconciliationEvidenceValue,

@@ -14,6 +14,7 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { serviceAssertion } from './serviceAssertion'
 import { internal } from './_generated/api'
 import { env, internalMutation, internalQuery, mutation, query } from './_generated/server'
+import { resolveBusinessActor } from './authz'
 
 const environment = v.union(v.literal('sandbox'), v.literal('production'))
 const grantWriteResult = v.union(
@@ -66,6 +67,7 @@ type RevokeGrantForServerResult = Infer<typeof grantRevocationForServerResult>
 
 const grantReadResult = v.union(agentAccessGrantValue, v.null())
 const publicGrantReadback = v.object({
+  principalId: v.string(),
   credentialId: v.string(),
   applicationRef: v.string(),
   environment,
@@ -110,16 +112,6 @@ function grantBindingMatchesAssertion(grant: AgentAccessGrant, assertion: Custom
     && assertion.credentialId === grant.credentialId
 }
 
-function revokeBindingMatchesGrant(
-  grant: AgentAccessGrant,
-  input: Readonly<{ grantRef: string; ownerId: string; credentialId: string; principalId: string }>,
-): boolean {
-  return grant.grantRef === input.grantRef
-    && grant.ownerId === input.ownerId
-    && grant.credentialId === input.credentialId
-    && grant.principalId === input.principalId
-}
-
 function sameGrantMaterial(left: AgentAccessGrant, right: AgentAccessGrant): boolean {
   return left.grantRef === right.grantRef
     && left.principalId === right.principalId
@@ -136,16 +128,22 @@ function sameGrantMaterial(left: AgentAccessGrant, right: AgentAccessGrant): boo
     && left.expiresAt === right.expiresAt
 }
 export const listOwnerGrantReadbacks = query({
-  args: {},
+  args: { requireAuthority: v.optional(v.boolean()) },
   returns: v.array(publicGrantReadback),
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null || identity.tokenIdentifier.trim().length === 0) return []
+  handler: async (ctx, args) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') {
+      if (args.requireAuthority === true) {
+        throw new Error('agent_access_owner_authority_required')
+      }
+      return []
+    }
     const rows = await ctx.db.query('agentAccessGrants')
-      .withIndex('by_ownerId_and_updatedAt', (grantQuery) => grantQuery.eq('ownerId', identity.tokenIdentifier))
+      .withIndex('by_ownerId_and_updatedAt', (grantQuery) => grantQuery.eq('ownerId', actor.canonicalAccountRef))
       .order('desc')
       .take(64)
     return rows.map((row) => ({
+      principalId: row.principalId,
       credentialId: row.credentialId,
       applicationRef: row.applicationRef,
       environment: row.environment,
@@ -176,7 +174,18 @@ export const registerGrantForServer: RegisteredMutation<'public', RegisterGrantF
       || !await verifyServerAssertion(registerGrantServerOperation, { grant: args.grant }, args.serviceAuth)) {
       return { kind: 'refused' as const, code: 'authentication_required' as const }
     }
-    return await ctx.runMutation(internal.agentAccessPolicy.upsertGrant, { grant: args.grant })
+    const principal = await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_principalId', (principalQuery) => principalQuery.eq('principalId', args.grant.principalId))
+      .unique()
+    if (principal === null
+      || principal.credentialId !== args.grant.credentialId
+      || principal.lifecycle !== 'active'
+      || (principal.expiresAt !== undefined && principal.expiresAt <= Date.now())) {
+      return { kind: 'refused' as const, code: 'authentication_required' as const }
+    }
+    return await ctx.runMutation(internal.agentAccessPolicy.upsertGrant, {
+      grant: { ...args.grant, ownerId: principal.ownerId },
+    })
   },
 })
 export const upsertGrant = internalMutation({
@@ -324,9 +333,14 @@ export const revokeGrantForServer: RegisteredMutation<'public', RevokeGrantForSe
     }
     const row = await ctx.db.query('agentAccessGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', args.grantRef)).unique()
-    if (row !== null && !revokeBindingMatchesGrant(row, command)) {
+    if (row !== null && (row.grantRef !== command.grantRef
+      || row.credentialId !== command.credentialId
+      || row.principalId !== command.principalId)) {
       return { kind: 'binding_mismatch' as const, grantRef: row.grantRef }
     }
-    return await ctx.runMutation(internal.agentAccessPolicy.revokeGrant, command)
+    return await ctx.runMutation(internal.agentAccessPolicy.revokeGrant, {
+      ...command,
+      ownerId: row?.ownerId ?? command.ownerId,
+    })
   },
 })

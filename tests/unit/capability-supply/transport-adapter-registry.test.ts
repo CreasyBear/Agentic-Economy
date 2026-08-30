@@ -8,7 +8,7 @@ const providerAuthority = {
   connectionRef: 'connection:capability',
   providerRef: 'provider:capability',
 } as const
-const keylessAuthority = { kind: 'keyless' } as const
+const keylessAuthority = { kind: 'public_upstream' } as const
 const TEST_X402_ASSET = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
 const TEST_X402_PAY_TO = '0x209693Bc6afc0C5328bA36FaF03C514EF312287C'
 function pinnedPaymentRequiredJson(resourceUrl: string): string {

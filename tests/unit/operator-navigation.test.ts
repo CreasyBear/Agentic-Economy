@@ -9,6 +9,7 @@ import {
   listOperatorCommandDestinations,
   navGroupsForRole,
   operatorUtilityItemsForRole,
+  resolveOperatorNavItem,
   roleHomeHref,
   type OperatorRole,
 } from '@/lib/operator/navigation'
@@ -76,13 +77,14 @@ describe('operator navigation', () => {
       .toEqual([])
   })
 
-  it('offers exactly the sidebar destinations plus the public home', () => {
+  it('offers the sidebar destinations plus catalog and public utilities', () => {
     const sidebar = navGroupsForRole('owner')
       .flatMap((group) => group.items.map((item) => item.href))
+    const utilities = operatorUtilityItemsForRole('owner').map((item) => item.href)
     const command = listOperatorCommandDestinations('owner')
       .flatMap((group) => group.items.map((item) => item.href))
 
-    expect(command).toEqual([...sidebar, '/'])
+    expect(command).toEqual([...sidebar, ...utilities])
   })
 
   it('keeps the gated owner sidebar to the core working set', () => {
@@ -90,12 +92,12 @@ describe('operator navigation', () => {
       .flatMap((group) => group.items.map((item) => item.label))
 
     expect(labels).toEqual([
-      'Overview',
       'Operations',
-      'Browse marketplace',
-      'Publishing',
-      'Access & usage',
-      'Activity',
+      'Calls',
+      'Keys',
+      'Credit',
+      'Supplier',
+      'Publish',
       'Settings',
     ])
   })
@@ -106,7 +108,7 @@ describe('operator navigation', () => {
     const labels = navGroupsForRole('admin', { advanced: false })
       .flatMap((group) => group.items.map((item) => item.label))
 
-    expect(labels).toEqual(['Browse marketplace', 'Marketplace health', 'Activity'])
+    expect(labels).toEqual(['Catalog health', 'Audit'])
   })
 
   it('marks nested paths active for their nav root', () => {
@@ -115,9 +117,16 @@ describe('operator navigation', () => {
     expect(isOperatorPathActive('/owner/offeringsx', '/owner/offerings')).toBe(false)
   })
 
+  it('resolves the owning sidebar item for operator page headers', () => {
+    expect(resolveOperatorNavItem('owner', '/owner/offerings')?.label).toBe('Operations')
+    expect(resolveOperatorNavItem('owner', '/owner/settings/members')?.label).toBe('Settings')
+    expect(resolveOperatorNavItem('owner', '/activity')?.label).toBe('Calls')
+    expect(resolveOperatorNavItem('admin', '/admin/audit-events')?.label).toBe('Audit')
+  })
+
   it('exposes public utility links for operator sidebar footers', () => {
     expect(operatorUtilityItemsForRole('owner').map((item) => item.href))
-      .toEqual(['/', '/for-agents', '/privacy/remove-business'])
+      .toEqual(['/market', '/', '/for-agents', '/privacy/remove-business'])
   })
 
   it('keeps administration destinations exclusive to the admin role', () => {

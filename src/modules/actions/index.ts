@@ -16,8 +16,22 @@ export { CURRENT_OPERATION_PROJECTION_NAVIGATION } from './contract'
 import { describeActionForAgent, type AgentToolDescriptor, type AnyAction } from '@/modules/common/action'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
+  agentAccountActivityAction,
+  agentAccountBalanceAction,
+  agentAccountSelfAction,
+} from '@/modules/agent-access/account.actions'
+import {
+  supplyConnectionConnectAction,
+  supplyConnectionDetailAction,
+  supplyConnectionListAction,
+  supplyConnectionReconnectAction,
+  supplyConnectionRetryCleanupAction,
+  supplyConnectionRevokeAction,
   supplyEarningsAction,
   supplyPublishAction,
+  supplyRecheckAction,
+  supplyRepublishAction,
+  supplyStatusAction,
   supplyWithdrawAction,
 } from '@/modules/capability-supply/supply-actions'
 import {
@@ -30,13 +44,18 @@ import {
   registryOperationsInspectPlanAction,
   registryOperationsSearchAction,
 } from '@/modules/registry/operations.actions'
-import { operationExecuteAction } from '@/modules/capability-execution/operation-execute-mcp.actions'
 import {
   operationCancelAction,
   operationReconcileAction,
   operationStatusAction,
 } from '@/modules/capability-execution/operation-recovery.actions'
 import { operationInvokeAction } from '@/modules/capability-execution/operation-invoke.actions'
+import { operationListAction } from '@/modules/capability-execution/operation-history.actions'
+import {
+  marketRequestCreateAction,
+  marketRequestListAction,
+  marketRequestStatusAction,
+} from '@/modules/market-demand/market-demand.actions'
 
 const registeredActions: readonly AnyAction[] = [
   registrySearchAction,
@@ -45,14 +64,29 @@ const registeredActions: readonly AnyAction[] = [
   registryOperationsDetailAction,
   registryOperationsCompareAction,
   registryOperationsInspectPlanAction,
-  operationExecuteAction,
+  agentAccountSelfAction,
+  agentAccountBalanceAction,
+  agentAccountActivityAction,
+  marketRequestCreateAction,
+  marketRequestListAction,
+  marketRequestStatusAction,
   operationInvokeAction,
+  operationListAction,
   operationStatusAction,
   operationCancelAction,
   operationReconcileAction,
+  supplyStatusAction,
   supplyPublishAction,
   supplyWithdrawAction,
+  supplyRecheckAction,
+  supplyRepublishAction,
   supplyEarningsAction,
+  supplyConnectionListAction,
+  supplyConnectionDetailAction,
+  supplyConnectionConnectAction,
+  supplyConnectionReconnectAction,
+  supplyConnectionRevokeAction,
+  supplyConnectionRetryCleanupAction,
 ]
 
 assertUniqueActionIds(registeredActions)
@@ -89,6 +123,7 @@ export function listMcpActionDescriptors(): readonly PublicMcpActionDescriptor[]
 
 const operationRouteContracts = [
   OPERATION_INVOKE_ROUTE_CONTRACT.invoke,
+  OPERATION_INVOKE_ROUTE_CONTRACT.list,
   OPERATION_INVOKE_ROUTE_CONTRACT.status,
   OPERATION_INVOKE_ROUTE_CONTRACT.cancel,
   OPERATION_INVOKE_ROUTE_CONTRACT.reconcile,

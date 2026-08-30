@@ -14,6 +14,26 @@ import {
   openRouterProseResponse,
   startOpenRouterContractServer,
 } from '../../helpers/openrouter-contract-server'
+import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
+
+const AUTHORITY = {
+  principalRef: `prn_${'1'.repeat(32)}`,
+  accountRef: `acc_${'2'.repeat(32)}`,
+  revision: {
+    binding: 1, credential: 1, principal: 1, account: 1, access: 1,
+    currentOwnership: 1, currentOwnerPrincipal: 1, compatibilityUpdatedAt: 1,
+  },
+  provenance: {
+    providerNamespace: 'clerk/user',
+    bindingRef: `eib_${'3'.repeat(32)}`,
+    credentialRef: `crd_${'4'.repeat(32)}`,
+    credentialGeneration: 1,
+    accessKind: 'ownership',
+    accessRef: `own_${'5'.repeat(32)}`,
+    currentOwnershipRef: `own_${'5'.repeat(32)}`,
+    resolvedAt: 1,
+  },
+} as unknown as InteractiveBusinessAuthorityContext
 
 describe('Operation chat OpenRouter contract', () => {
   it('sends exactly five provider-safe names that round-trip to canonical IDs', async () => {
@@ -29,7 +49,7 @@ describe('Operation chat OpenRouter contract', () => {
     try {
       const config = openRouterGatewayConfig()
       const model = openRouterModel(config, config.model)
-      const agent = createChatAgent(model)
+      const agent = createChatAgent(model, AUTHORITY)
       const tools = agent.options.tools
       if (tools === undefined) throw new Error('Operation chat tools are unavailable')
 

@@ -12,7 +12,14 @@ import { withSourceWrite } from '../helpers/source-write-admission'
 
 describe('supplier money readback failed payout', () => {
   it('reads failed payout amount from its immutable reservation and refuses inconsistent journals', async () => {
-    const { backend, owner, businessRef, providerAccountRef } =
+    const {
+      backend,
+      owner,
+      businessRef,
+      principalId,
+      accountRef,
+      providerAccountRef,
+    } =
       await createSupplierMoneyOwner(
         'supplier-earnings-reservation-readback',
       )
@@ -40,6 +47,9 @@ describe('supplier money readback failed payout', () => {
       qualifiedUseRef,
       materialDigest,
     } as const)
+    const authorityGrantRef = `grt_${'a'.repeat(32)}`
+    const authorityGrantGeneration = 1
+    const authorityResourceRef = `operation:${businessRef}`
     await backend.run(async (ctx) => {
       await ctx.db.insert('moneyAccounts', {
         accountRef: providerAccountRef,
@@ -70,6 +80,11 @@ describe('supplier money readback failed payout', () => {
       await ctx.db.insert('moneyPayouts', {
         payoutRef,
         businessId: businessRef,
+        owningAccountRef: accountRef,
+        authorityPrincipalRef: principalId,
+        authorityGrantRef,
+        authorityGrantGeneration,
+        authorityResourceRefs: [authorityResourceRef],
         currency: 'USD',
         exponent: 2,
         grossAccrualUnits: '550',
@@ -93,6 +108,11 @@ describe('supplier money readback failed payout', () => {
         transactionRef: `allocation:${businessRef}:readback`,
         usageRef: `usage:${businessRef}:readback`,
         businessId: businessRef,
+        owningAccountRef: accountRef,
+        authorityPrincipalRef: principalId,
+        authorityGrantRef,
+        authorityGrantGeneration,
+        authorityResourceRef,
         currency: 'USD',
         exponent: 2,
         grossAccrualUnits: '550',
@@ -103,7 +123,7 @@ describe('supplier money readback failed payout', () => {
         createdAt: 1,
       })
     })
-    const beginArgs = await withSourceWrite('billing', {
+    const hostileBeginArgs = await withSourceWrite('billing', {
       authority: { principalId: `principal:${businessRef}` },
       businessId: businessRef,
       amount,
@@ -118,6 +138,38 @@ describe('supplier money readback failed payout', () => {
       observedAt,
       operationKey: `money:readback:begin:${businessRef}`,
       correlationId: `money:readback:begin:${businessRef}`,
+    })
+    const beforeHostileBegin = await backend.run(async (ctx) => ({
+      account: await ctx.db
+        .query('moneyAccounts')
+        .withIndex('by_accountRef', (q) => q.eq('accountRef', providerAccountRef))
+        .unique(),
+      transactions: await ctx.db
+        .query('moneyTransactions')
+        .withIndex('by_externalRef', (q) => q.eq('externalRef', payoutRef))
+        .take(4),
+    }))
+    await expect(
+      owner.mutation(beginPayoutTransfer, hostileBeginArgs),
+    ).resolves.toEqual({
+      kind: 'refused',
+      code: 'billing_identity_missing',
+      retryable: false,
+    })
+    const afterHostileBegin = await backend.run(async (ctx) => ({
+      account: await ctx.db
+        .query('moneyAccounts')
+        .withIndex('by_accountRef', (q) => q.eq('accountRef', providerAccountRef))
+        .unique(),
+      transactions: await ctx.db
+        .query('moneyTransactions')
+        .withIndex('by_externalRef', (q) => q.eq('externalRef', payoutRef))
+        .take(4),
+    }))
+    expect(afterHostileBegin).toEqual(beforeHostileBegin)
+    const beginArgs = await withSourceWrite('billing', {
+      ...hostileBeginArgs,
+      authority: { principalId },
     })
     await expect(
       owner.mutation(beginPayoutTransfer, beginArgs),
@@ -137,7 +189,7 @@ describe('supplier money readback failed payout', () => {
       observedAt: observedAt + 1,
     }
     const reconcileArgs = await withSourceWrite('billing', {
-      authority: { principalId: `principal:${businessRef}` },
+      authority: { principalId },
       businessId: businessRef,
       amount,
       providerAccountRef,
@@ -508,6 +560,11 @@ describe('supplier money readback failed payout', () => {
       await ctx.db.insert('moneyPayouts', {
         payoutRef: fabricatedPayoutRef,
         businessId: businessRef,
+        owningAccountRef: accountRef,
+        authorityPrincipalRef: principalId,
+        authorityGrantRef,
+        authorityGrantGeneration,
+        authorityResourceRefs: [authorityResourceRef],
         currency: 'USD',
         exponent: 2,
         grossAccrualUnits: '550',

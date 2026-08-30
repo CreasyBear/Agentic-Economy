@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "agentic-economy",
+  "description": "The marketplace built for agents. Discover, compare, and call Operations. Pay per use. No per-provider accounts.",
+  "owner": {
+    "name": "Agentic Economy"
+  },
+  "plugins": [
+    {
+      "name": "agentic-economy",
+      "source": "./",
+      "category": "developer-tools",
+      "tags": [
+        "agents",
+        "mcp",
+        "operations",
+        "pay-per-use",
+        "marketplace"
+      ]
+    }
+  ]
+}

@@ -68,7 +68,6 @@ function rankOperationSearchCandidates<T>(
   const tokens = searchTokens(query);
   const exactMatches = candidates.filter(
     ({ searchText }) =>
-      tokens.length === 0 ||
       tokens.every((token) =>
         searchableText(searchText).some(
           (term) => term === token || term.startsWith(token),
@@ -214,7 +213,7 @@ export async function searchCapabilityOperations(
     limit: MAX_SOURCE + 1,
     now,
   });
-  if (source.operations.length > MAX_SOURCE)
+  if (source.sourceCount > MAX_SOURCE)
     return searchUnavailable("source_capacity_exceeded", port.navigation);
   const cursor = decodeCursor(
     normalized.cursor,

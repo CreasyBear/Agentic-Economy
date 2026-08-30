@@ -13,6 +13,7 @@ import {
   type OwnerOfferingSupplyReadResult,
 } from "@/components/ae/offerings/owner-offering.functions";
 import { AeSupplyFunnel } from "@/components/ae/supply/AeSupplyFunnel";
+import { supplyEndpointConfigFromPrepared } from "@/components/ae/supply/supply-endpoint-config-readback";
 import {
   filterOwnerSupplyAuthorityOptions,
   admitOwnerCapabilityServer,
@@ -50,7 +51,10 @@ export const Route = createFileRoute("/_operator/owner/supply/$offeringRef")({
     }
     const [supply, authorityOptions] = await Promise.all([
       readOwnerSupplyFunnelServer({
-        data: { businessId: offerings.businessId },
+        data: {
+          businessId: offerings.businessId,
+          editorOfferingRef: params.offeringRef,
+        },
       }),
       readOwnerProviderConnectionsServer(),
     ]);
@@ -112,7 +116,7 @@ function OwnerSupplyDetailRoute() {
           <Button
             asChild
             variant="secondary"
-            className="min-h-11 justify-self-start"
+            className="min-h-touch justify-self-start"
           >
             <Link to="/owner/supply">Return to Operations</Link>
           </Button>
@@ -146,7 +150,7 @@ function OwnerSupplyDetailRoute() {
           <Button
             asChild
             variant="secondary"
-            className="min-h-11 justify-self-start"
+            className="min-h-touch justify-self-start"
           >
             <Link to="/owner/supply">Return to Operations</Link>
           </Button>
@@ -158,6 +162,9 @@ function OwnerSupplyDetailRoute() {
   const currentOfferingRef = durableOffering.offeringRef;
   const offeringRevision = durableOffering.revision;
   const initialOffering = toEditorValue(editorSource);
+  const initialSource = supplyEndpointConfigFromPrepared(
+    durableOffering.sourceMaterial,
+  );
   const context = ownerSupplyActionContext(businessId, durableOffering);
   const maintenance =
     (
@@ -187,6 +194,7 @@ function OwnerSupplyDetailRoute() {
         businessId={businessId}
         offering={durableOffering}
         initialOffering={initialOffering}
+        {...(initialSource === undefined ? {} : { initialSource })}
         authorityOptions={filterOwnerSupplyAuthorityOptions(
           businessId,
           result.authorityOptions,

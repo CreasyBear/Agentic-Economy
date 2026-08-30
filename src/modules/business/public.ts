@@ -1,6 +1,12 @@
 import { v } from 'convex/values'
 
 import type { BusinessId, OwnerId, Slug, SourceHash } from '@/modules/common/ids'
+import type {
+  AccountRef,
+  MembershipRef,
+  OwnershipRef,
+} from '@/modules/principal-account/account/public'
+import type { PrincipalRef } from '@/modules/principal-account/principal/public'
 
 export const PublicStatusValues = ['unpublished', 'published', 'suppressed'] as const
 export type PublicStatus = (typeof PublicStatusValues)[number]
@@ -103,17 +109,42 @@ export type BusinessIdentity = {
   sourceHash: SourceHash
 }
 
-export type BusinessOwnerRecord = {
-  ownerId: OwnerId
-  clerkUserId: string
-  displayName?: string
-  emailHash?: string
-  createdAt: number
-  updatedAt: number
-}
+export type BusinessAuthorityRevision = Readonly<{
+  binding: number
+  credential: number
+  principal: number
+  account: number
+  access: number
+  currentOwnership: number
+  currentOwnerPrincipal: number
+}>
+
+export type BusinessAuthorityProvenance = Readonly<{
+  providerNamespace: 'clerk/user'
+  bindingRef: string
+  credentialRef: string
+  credentialGeneration: number
+  accessKind: 'ownership' | 'membership'
+  accessRef: OwnershipRef | MembershipRef
+  currentOwnershipRef: OwnershipRef
+  resolvedAt: number
+}>
+
+export type InteractiveBusinessAuthorityContext = Readonly<{
+  principalRef: PrincipalRef
+  accountRef: AccountRef
+  revision: BusinessAuthorityRevision
+  provenance: BusinessAuthorityProvenance
+}>
 
 export type BusinessActor =
-  | { kind: 'authenticated_owner'; clerkUserId: string; displayName?: string; emailHash?: string; sessionRef?: string }
+  | Readonly<{
+    kind: 'authenticated_owner'
+    canonicalPrincipalRef: PrincipalRef
+    canonicalAccountRef: AccountRef
+    authorityRevision: BusinessAuthorityRevision
+    authorityProvenance: BusinessAuthorityProvenance
+  }>
   | { kind: 'anonymous'; anonymousBucket: string }
 
 export type BusinessSourceRef = {
@@ -141,7 +172,6 @@ export type PublicBusinessPhoto = {
 
 export type BusinessRecord = {
   businessId: BusinessId
-  ownerId: OwnerId
   slug: Slug
   name: string
   normalizedName: string
@@ -156,7 +186,6 @@ export type BusinessRecord = {
 }
 
 export type BusinessSourceState = {
-  owners: BusinessOwnerRecord[]
   businesses: BusinessRecord[]
   businessContexts: BusinessContextRecord[]
 }

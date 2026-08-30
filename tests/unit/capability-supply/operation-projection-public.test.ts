@@ -58,10 +58,9 @@ const operationRecord: CapabilityOperationSourceRecord = {
     requestTimeoutMs: 5_000,
   },
   provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
-  authentication: { kind: 'keyless' },
+  authentication: { kind: 'ae_api_key' },
   integrated: true,
   routeable: true,
-  answerExecutable: false,
   readiness: { observedAt: 1_000, validUntil: 10_000 },
   searchTerms: ['reference', 'lookup'],
   snapshotKey: 'publication:reference.lookup:3',
@@ -87,8 +86,7 @@ const populatedDataUseRecord: CapabilityOperationSourceRecord = {
 const freeKeylessRecord: CapabilityOperationSourceRecord = {
   ...operationRecord,
   price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
-  authentication: { kind: 'keyless' },
-  answerExecutable: true,
+  authentication: { kind: 'ae_api_key' },
 }
 const projectCapabilityOperation = (
   record: CapabilityOperationSourceRecord,
@@ -114,7 +112,7 @@ describe('public operation read contract', () => {
     ]
     const plan = await inspectCapabilityOperationPlan({
       navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
-      listCurrent: async () => ({ operations: [operationRecord], snapshotKey: 'snapshot:projection' }),
+      listCurrent: async () => ({ operations: [operationRecord], sourceCount: 1, snapshotKey: 'snapshot:projection' }),
       loadCurrent: async () => operationRecord,
     }, { operationRefs: [projected[0]!.operationRef] }, 2_000)
     expect(plan.kind).toBe('ok')
@@ -206,7 +204,7 @@ describe('public operation read contract', () => {
   })
   it('requires a fixed exact zero price for anonymous keyless eligibility', () => {
     const base = {
-      authority: { kind: 'keyless' },
+      authority: { kind: 'public_upstream' },
       adapterId: 'http-json:v1',
       method: 'GET',
       sourceKind: 'openapi_http',
@@ -245,9 +243,8 @@ describe('public operation read contract', () => {
       method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
       actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
       authentication: 'required',
-      surfaces: ['http', 'cli', 'mcp'],
+      surfaces: ['http', 'cli', 'mcp', 'chat'],
     })
-    expect(operation.navigation.some(({ relation }) => relation === 'execute')).toBe(false)
 
     for (const record of [
       { ...operationRecord, routeable: false, integrated: true },
@@ -258,33 +255,29 @@ describe('public operation read contract', () => {
       expect(projected.navigation.some(({ relation }) => relation === 'invoke')).toBe(false)
     }
   })
-  it('projects anonymous execute only for current free keyless read-only operations and preserves it on the wire', () => {
+  it('projects free public-upstream read-only operations through authenticated invoke on the brokered rail', () => {
     const free = projectCapabilityOperation(freeKeylessRecord, 2_000)
-    const execute = free.navigation.find(({ relation }) => relation === 'execute')
-    expect(execute).toEqual({
-      relation: 'execute',
-      method: 'POST',
-      actionId: 'operation.execute',
-      authentication: 'none',
-      surfaces: ['chat', 'mcp'],
-      precondition: 'free_keyless_read_only',
+    const invoke = free.navigation.find(({ relation }) => relation === 'invoke')
+    expect(invoke).toEqual({
+      relation: 'invoke',
+      pathTemplate: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+      method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
+      actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
+      authentication: 'required',
+      surfaces: ['http', 'cli', 'mcp', 'chat'],
     })
-    expect(CURRENT_OPERATION_PROJECTION_NAVIGATION.execute).toEqual(execute)
-    expect(new Set(execute?.surfaces)).toEqual(new Set(findAction('operation.execute')?.surfaces))
     const roundTripped = deserializeOperationDescriptor(serializeOperationDescriptor(free))
     expect(roundTripped.navigation).toEqual(free.navigation)
     expect(roundTripped.callVia).toBe(free.callVia)
     expect(roundTripped.paymentLane).toBe(free.paymentLane)
-    expect(free.navigation.some(({ relation }) => relation === 'invoke')).toBe(false)
 
     const paid = projectCapabilityOperation(operationRecord, 2_000)
-    expect(paid.navigation.some(({ relation }) => relation === 'execute')).toBe(false)
+    expect(paid.navigation.some(({ relation }) => relation === 'invoke')).toBe(true)
     const ineligibleRecords: readonly CapabilityOperationSourceRecord[] = [
-      { ...freeKeylessRecord, authentication: { kind: 'platform_credential' as const, scheme: 'bearer' as const }, answerExecutable: false },
-      { ...freeKeylessRecord, provenance: { ...freeKeylessRecord.provenance, sourceKind: 'x402' }, answerExecutable: false },
+      { ...freeKeylessRecord, authentication: { kind: 'platform_credential' as const, scheme: 'bearer' as const } },
+      { ...freeKeylessRecord, provenance: { ...freeKeylessRecord.provenance, sourceKind: 'x402' } },
       {
         ...freeKeylessRecord,
-        answerExecutable: false,
         contract: {
           ...freeKeylessRecord.contract,
           effects: [{ effectId: 'write', class: 'external_state_change', authority: 'explicit', reversibility: 'reversible' }],
@@ -293,7 +286,10 @@ describe('public operation read contract', () => {
       { ...freeKeylessRecord, routeable: false },
     ]
     for (const record of ineligibleRecords) {
-      expect(projectCapabilityOperation(record, 2_000).navigation.some(({ relation }) => relation === 'execute')).toBe(false)
+      const navigation = projectCapabilityOperation(record, 2_000).navigation
+      expect(navigation.some(({ relation }) => relation === 'invoke')).toBe(
+        record.routeable && record.authentication.kind !== 'unknown',
+      )
     }
   })
   it('never projects anonymous execute for x402 and keeps unavailable descriptors non-executable', () => {
@@ -301,12 +297,9 @@ describe('public operation read contract', () => {
       ...freeKeylessRecord,
       authentication: { kind: 'x402' },
       provenance: { ...freeKeylessRecord.provenance, sourceKind: 'x402' },
-      answerExecutable: true,
     }, 2_000)
-    expect(x402.authentication).toEqual({ kind: 'x402' })
     expect(x402.provenance.sourceKind).toBe('x402')
     expect(x402.paymentLane).toBe('brokered')
-    expect(x402.navigation.some(({ relation }) => relation === 'execute')).toBe(false)
     expect(x402.navigation.some(({ relation }) => relation === 'invoke')).toBe(true)
 
     const unavailable = projectCapabilityOperation({
@@ -315,7 +308,7 @@ describe('public operation read contract', () => {
       routeable: false,
     }, 2_000)
     expect(unavailable.navigation.some(({ relation }) => (
-      relation === 'execute' || relation === 'invoke' || relation === 'reconcile'
+      relation === 'invoke' || relation === 'reconcile'
     ))).toBe(false)
   })
 
@@ -334,7 +327,7 @@ describe('public operation read contract', () => {
     const operation = projectCapabilityOperation(populatedDataUseRecord, 2_000)
     const result = await compareCapabilityOperations({
       navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
-      listCurrent: async () => ({ operations: [populatedDataUseRecord], snapshotKey: 'snapshot:compare' }),
+      listCurrent: async () => ({ operations: [populatedDataUseRecord], sourceCount: 1, snapshotKey: 'snapshot:compare' }),
       loadCurrent: async (operationRef) => operationRef === operation.operationRef ? populatedDataUseRecord : null,
     }, { operationRefs: [operation.operationRef] }, 2_000)
 

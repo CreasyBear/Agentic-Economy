@@ -1,8 +1,11 @@
 const recoverMock = vi.hoisted(() => vi.fn())
+const expireMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/modules/capability-execution/invocation-worker/recover', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/capability-execution/invocation-worker/recover')>()),
   recoverCapabilityOperationInvocation: recoverMock,
+  readRecoveryStatus: recoverMock,
+  expireAuthorizationRecovery: expireMock,
 }))
 
 import { getFunctionName } from 'convex/server'
@@ -14,6 +17,26 @@ import {
   record,
 } from '../../../convex/capabilityOperationInvocations'
 import { reconcileScheduled } from '../../../convex/capabilityOperationInvocationWorker'
+import {
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
+  type WorkloadCronSnapshot,
+} from '../../../convex/workloadCron'
+
+const WORKLOAD: WorkloadCronSnapshot = {
+  name: 'reconcile due facilitator invocations',
+  workloadKind: 'reconciliation',
+  actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+  activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+  correlationRef: 'cron:test:reconcile',
+  idempotencyRef: 'cron:test:reconcile',
+  purpose: 'reconcile due facilitator invocations',
+  source: 'convex/workloadCron:reconcileDueFacilitatorInvocations',
+  principalRevision: 1,
+  activeAccountRevision: 1,
+  accessVia: 'membership',
+  admittedAt: 1,
+}
 
 type Reconciliation = {
   attemptCount: number
@@ -152,6 +175,27 @@ function functionPath(reference: unknown): string {
   return typeof reference === 'string' ? reference : getFunctionName(reference as never)
 }
 
+function consequence(reference: unknown, args: Record<string, unknown>) {
+  return functionPath(reference).endsWith(':dispatchConsequence')
+    ? { path: String(args.operation), args: args.payload as Record<string, unknown> }
+    : { path: functionPath(reference), args }
+}
+
+function authorizedInvocation(invocationRef: unknown) {
+  return {
+    kind: 'authorized',
+    authority: {
+      principalId: `principal:${String(invocationRef)}`,
+      accountRef: `account:${String(invocationRef)}`,
+      credentialId: `credential:${String(invocationRef)}`,
+      grantRef: `grant:${String(invocationRef)}`,
+      grantGeneration: 1,
+      policyDigest: `policy:${String(invocationRef)}`,
+      expiresAt: 9_999_999,
+    },
+  }
+}
+
 afterEach(() => {
   recoverMock.mockReset()
   vi.restoreAllMocks()
@@ -275,6 +319,39 @@ describe('scheduled capability invocation reconciliation primitives', () => {
 })
 
 describe('scheduled capability invocation reconciliation worker', () => {
+  it('does not widen cron authority when persisted invocation authority is refused', async () => {
+    const expired = [{
+      dispatchRef: 'expired:refused', attemptRef: 'attempt:refused', effectGeneration: 1,
+      custodyRef: 'custody:refused', authorizationDigest: 'authorization:refused',
+      paymentAuthorizationExpiresAt: 999,
+    }]
+    const due = [{ invocationRef: 'due:refused', attemptCount: 0, nextAttemptAt: 1_000 }]
+    const ctx = {
+      runQuery: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+        const path = functionPath(reference)
+        if (path.endsWith(':reconcile')) return WORKLOAD
+        if (path.endsWith(':listExpiredPreparedX402PaymentAttempts')) return expired
+        if (path.endsWith(':readOwnerRecovery')) return {
+          principalId: `principal:${args.invocationRef}`, credentialId: `credential:${args.invocationRef}`,
+        }
+        if (path.endsWith(':listDueAutomaticReconciliationCandidates')) return due
+        throw new Error(`unexpected_query:${path}`)
+      }),
+      runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+        const path = consequence(reference, args).path
+        if (path.endsWith(':reconcileInvocationWorkloadAuthority')) return { kind: 'refused' }
+        throw new Error(`unexpected_mutation:${path}`)
+      }),
+    }
+
+    await expect(scheduledHandler(ctx as never, { workload: WORKLOAD })).resolves.toEqual({
+      selected: 1, claimed: 0, completed: 0, retried: 0, manualReview: 0,
+      expiredSelected: 1, expiredQueued: 0, expiredManualReview: 0,
+    })
+    expect(recoverMock).not.toHaveBeenCalled()
+    expect(ctx.runMutation).toHaveBeenCalledTimes(2)
+  })
+
   it('processes candidates serially and continues after one item fails', async () => {
     const candidates = [
       { invocationRef: 'first', attemptCount: 0, nextAttemptAt: 1_000 },
@@ -296,10 +373,17 @@ describe('scheduled capability invocation reconciliation worker', () => {
     })
     const ctx = {
       runQuery: vi.fn(async (reference: unknown) => (
-        functionPath(reference).endsWith(':listExpiredPreparedX402PaymentAttempts') ? [] : candidates
+        functionPath(reference).endsWith(':reconcile')
+          ? WORKLOAD
+          : functionPath(reference).endsWith(':listExpiredPreparedX402PaymentAttempts') ? [] : candidates
       )),
       runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
-        const path = functionPath(reference)
+        const dispatched = consequence(reference, args)
+        const path = dispatched.path
+        args = dispatched.args
+        if (path.endsWith(':reconcileInvocationWorkloadAuthority')) {
+          return authorizedInvocation(args.invocationRef)
+        }
         if (path.endsWith(':claimAutomaticReconciliationCandidate')) {
           return { kind: 'claimed', principalId: `principal:${args.invocationRef}`, credentialId: `credential:${args.invocationRef}` }
         }
@@ -311,7 +395,7 @@ describe('scheduled capability invocation reconciliation worker', () => {
       }),
     }
 
-    await expect(scheduledHandler(ctx as never, {})).resolves.toEqual({
+    await expect(scheduledHandler(ctx as never, { workload: WORKLOAD })).resolves.toEqual({
       selected: 3, claimed: 3, completed: 2, retried: 1, manualReview: 0,
       expiredSelected: 0, expiredQueued: 0, expiredManualReview: 0,
     })
@@ -335,10 +419,15 @@ describe('scheduled capability invocation reconciliation worker', () => {
     })
     const ctx = {
       runQuery: vi.fn(async (reference: unknown) => (
-        functionPath(reference).endsWith(':listExpiredPreparedX402PaymentAttempts') ? [] : candidates
+        functionPath(reference).endsWith(':reconcile')
+          ? WORKLOAD
+          : functionPath(reference).endsWith(':listExpiredPreparedX402PaymentAttempts') ? [] : candidates
       )),
       runMutation: vi.fn(async (reference: unknown, _args: Record<string, unknown>) => {
-        const path = functionPath(reference)
+        const path = consequence(reference, _args).path
+        if (path.endsWith(':reconcileInvocationWorkloadAuthority')) {
+          return authorizedInvocation(_args.invocationRef)
+        }
         if (path.endsWith(':claimAutomaticReconciliationCandidate')) {
           return { kind: 'claimed', principalId: 'principal', credentialId: 'credential' }
         }
@@ -347,7 +436,7 @@ describe('scheduled capability invocation reconciliation worker', () => {
       }),
     }
 
-    await expect(scheduledHandler(ctx as never, {})).resolves.toMatchObject({ selected: 2, claimed: 1, completed: 1 })
+    await expect(scheduledHandler(ctx as never, { workload: WORKLOAD })).resolves.toMatchObject({ selected: 2, claimed: 1, completed: 1 })
     expect(claimed).toEqual(['first'])
   })
 
@@ -368,19 +457,21 @@ describe('scheduled capability invocation reconciliation worker', () => {
       invocationRef: `due:${index}`, attemptCount: 0, nextAttemptAt: 1_000,
     }))
     const recovered: string[] = []
-    recoverMock.mockImplementation(async (_ctx: unknown, args: { invocationRef: string; mode: string }) => {
-      recovered.push(`${args.mode}:${args.invocationRef}`)
-      if (args.mode === 'expire_authorization') {
-        return { kind: 'reconciliation_required', invocationRef: args.invocationRef, operationRef: 'operation', evidence: {
-          attemptRef: 'attempt', effectGeneration: 1, requiredAt: new Date(0).toISOString(),
-          retry: 'reconcile_before_retry', evidenceSource: 'x402_authorization_expired:provider_transaction_or_chain_nonce_evidence_required',
-        }, expiryDisposition: args.invocationRef === 'expired:manual' ? 'manual_review' : 'automatic' }
-      }
+    expireMock.mockImplementation(async (_ctx: unknown, args: { invocationRef: string }) => {
+      recovered.push(`expire_authorization:${args.invocationRef}`)
+      return { kind: 'reconciliation_required', invocationRef: args.invocationRef, operationRef: 'operation', evidence: {
+        attemptRef: 'attempt', effectGeneration: 1, requiredAt: new Date(0).toISOString(),
+        retry: 'reconcile_before_retry', evidenceSource: 'x402_authorization_expired:provider_transaction_or_chain_nonce_evidence_required',
+      }, expiryDisposition: args.invocationRef === 'expired:manual' ? 'manual_review' : 'automatic' }
+    })
+    recoverMock.mockImplementation(async (_ctx: unknown, args: { invocationRef: string; mode?: string }) => {
+      recovered.push(`${args.mode ?? 'status'}:${args.invocationRef}`)
       return { kind: 'found', invocationRef: args.invocationRef, operationRef: 'operation', state: 'terminal' }
     })
     const ctx = {
       runQuery: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
         const path = functionPath(reference)
+        if (path.endsWith(':reconcile')) return WORKLOAD
         if (path.endsWith(':listExpiredPreparedX402PaymentAttempts')) return expired
         if (path.endsWith(':readOwnerRecovery')) return {
           principalId: `principal:${args.invocationRef}`, credentialId: `credential:${args.invocationRef}`,
@@ -392,7 +483,12 @@ describe('scheduled capability invocation reconciliation worker', () => {
         throw new Error(`unexpected_query:${path}`)
       }),
       runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
-        const path = functionPath(reference)
+        const dispatched = consequence(reference, args)
+        const path = dispatched.path
+        args = dispatched.args
+        if (path.endsWith(':reconcileInvocationWorkloadAuthority')) {
+          return authorizedInvocation(args.invocationRef)
+        }
         if (path.endsWith(':claimAutomaticReconciliationCandidate')) {
           return { kind: 'claimed', principalId: `principal:${args.invocationRef}`, credentialId: `credential:${args.invocationRef}` }
         }
@@ -401,7 +497,7 @@ describe('scheduled capability invocation reconciliation worker', () => {
       }),
     }
 
-    await expect(scheduledHandler(ctx as never, {})).resolves.toMatchObject({
+    await expect(scheduledHandler(ctx as never, { workload: WORKLOAD })).resolves.toMatchObject({
       selected: 23,
       expiredSelected: 2,
       expiredQueued: 1,

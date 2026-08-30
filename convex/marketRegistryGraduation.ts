@@ -9,6 +9,11 @@ import { sendGuardedHttpRequest } from "@/modules/network-guard/server";
 
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import {
+  bindWorkloadCronActionContext,
+  parseWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+} from "./workloadCron";
 
 const resultValue = v.union(
   v.object({
@@ -27,6 +32,7 @@ type GraduationArgs = {
   documentId: string;
   expectedSourceDigest: string;
   expectedGeneration?: string;
+  workload: unknown;
 };
 type CandidateResult =
   | { kind: "found"; candidate: Parameters<typeof probeRegistryEntryForAdmission>[0] }
@@ -48,12 +54,26 @@ export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult>
     documentId: v.string(),
     expectedSourceDigest: v.string(),
     expectedGeneration: v.optional(v.string()),
+    workload: workloadCronSnapshotValue,
   },
   returns: resultValue,
   handler: async (ctx, args): Promise<GraduationResult> => {
+    const workload = await ctx.runQuery(internal.workloadCron.reconcile, {
+      name: "refresh Agentic Economy API registry",
+      snapshot: parseWorkloadCronSnapshot(args.workload),
+    });
+    const authorized = bindWorkloadCronActionContext(ctx, {
+      name: "refresh Agentic Economy API registry",
+      snapshot: workload,
+    });
+    const candidateArgs = {
+      documentId: args.documentId,
+      expectedSourceDigest: args.expectedSourceDigest,
+      ...(args.expectedGeneration === undefined ? {} : { expectedGeneration: args.expectedGeneration }),
+    };
     const selected: CandidateResult = await ctx.runQuery(
       internal.marketExternalRegistry.admissionCandidate,
-      args,
+      candidateArgs,
     );
     if (selected.kind !== "found") return selected;
     const result = await probeRegistryEntryForAdmission(selected.candidate, {
@@ -64,16 +84,17 @@ export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult>
 
     const current: CandidateResult = await ctx.runQuery(
       internal.marketExternalRegistry.admissionCandidate,
-      args,
+      candidateArgs,
     );
     if (current.kind !== "found") return current;
 
     let reconciled: { published: number };
     try {
-      reconciled = await ctx.runMutation(internal.facilitatorDiscovery.reconcile, {
+      reconciled = await authorized.runMutation(internal.facilitatorDiscovery.reconcile, {
         items: [structuredClone(result.draft)] as FunctionArgs<typeof internal.facilitatorDiscovery.reconcile>["items"],
         complete: false,
         deadlineAt: Date.now() + 30_000,
+        workload,
       });
     } catch (error) {
       const reason = publicationRefusalReason(error);
@@ -93,6 +114,7 @@ type SweepArgs = {
   generation: string;
   candidates?: { documentId: string; sourceDigest: string }[];
   cursor?: string | null;
+  workload: unknown;
 };
 type SweepResult = {
   kind: "advanced" | "complete" | "stale_generation";
@@ -118,13 +140,15 @@ export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = inter
       sourceDigest: v.string(),
     }))),
     cursor: v.optional(v.union(v.string(), v.null())),
+    workload: workloadCronSnapshotValue,
   },
   returns: sweepResultValue,
   handler: async (ctx, args): Promise<SweepResult> => {
-    if (args.candidates === undefined) {
-      return { kind: "complete", attempted: 0, graduated: 0 };
-    }
-    if (args.candidates.length > 100) {
+    const workload = await ctx.runQuery(internal.workloadCron.reconcile, {
+      name: "refresh Agentic Economy API registry",
+      snapshot: parseWorkloadCronSnapshot(args.workload),
+    });
+    if (args.candidates !== undefined && args.candidates.length > 100) {
       throw new Error("registry_graduation_cohort_too_large");
     }
     const selected: {
@@ -136,13 +160,14 @@ export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = inter
       continueCursor: string;
     } = await ctx.runQuery(internal.marketExternalRegistry.admissionCandidates, {
       generation: args.generation,
-      cursor: null,
-      limit: 1,
+      cursor: args.candidates === undefined ? (args.cursor ?? null) : null,
+      limit: args.candidates === undefined ? 4 : 1,
     });
     if (selected.kind === "stale_generation") {
       return { kind: "stale_generation", attempted: 0, graduated: 0 };
     }
-    const step = args.candidates.slice(0, 4);
+    const candidates = args.candidates ?? selected.candidates;
+    const step = candidates.slice(0, 4);
     let graduated = 0;
     for (const candidate of step) {
       let result: GraduationResult;
@@ -152,7 +177,8 @@ export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = inter
           {
             documentId: candidate.documentId,
             expectedSourceDigest: candidate.sourceDigest,
-            expectedGeneration: args.generation,
+            ...(args.candidates === undefined ? {} : { expectedGeneration: args.generation }),
+            workload,
           },
         );
       } catch (error) {
@@ -169,15 +195,25 @@ export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = inter
         }));
       }
     }
-    const remaining = args.candidates.slice(step.length);
+    const remaining = candidates.slice(step.length);
     if (remaining.length > 0) {
       await ctx.scheduler.runAfter(1_000, internal.marketRegistryGraduation.sweep, {
         generation: args.generation,
         candidates: remaining,
+        cursor: args.cursor ?? null,
+        workload,
+      });
+    } else if (args.candidates === undefined && !selected.isDone) {
+      await ctx.scheduler.runAfter(1_000, internal.marketRegistryGraduation.sweep, {
+        generation: args.generation,
+        cursor: selected.continueCursor,
+        workload,
       });
     }
     return {
-      kind: remaining.length === 0 ? "complete" : "advanced",
+      kind: remaining.length === 0 && (args.candidates !== undefined || selected.isDone)
+        ? "complete"
+        : "advanced",
       attempted: step.length,
       graduated,
     };

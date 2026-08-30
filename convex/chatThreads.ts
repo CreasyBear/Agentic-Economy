@@ -11,7 +11,10 @@ import { v } from 'convex/values'
 import { components } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { mutation, query } from './_generated/server'
-import type { MutationCtx, QueryCtx } from './_generated/server'
+import type { QueryCtx } from './_generated/server'
+import { resolveBusinessActor } from './authz'
+import type { BusinessActor } from '../src/modules/business/public'
+import { deleteChatThreadShares } from '../src/modules/chat-sharing/convex'
 
 const DEFAULT_PAGE_SIZE = 20
 const MAX_PAGE_SIZE = 50
@@ -28,12 +31,18 @@ const threadSummary = v.object({
 
 type ThreadContext = Pick<QueryCtx, 'auth' | 'db'>
 
-export async function requireChatOwnerId(ctx: Pick<QueryCtx, 'auth'>): Promise<string> {
-  const identity = await ctx.auth.getUserIdentity()
-  if (identity === null || identity.tokenIdentifier.trim().length === 0) {
+export async function requireChatOwnerId(ctx: ThreadContext): Promise<string> {
+  return (await requireChatOwner(ctx)).canonicalAccountRef
+}
+
+export async function requireChatOwner(
+  ctx: ThreadContext,
+): Promise<Extract<BusinessActor, { kind: 'authenticated_owner' }>> {
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') {
     throw new Error('unauthenticated')
   }
-  return identity.tokenIdentifier
+  return actor
 }
 
 export async function requireOwnedChatThread(
@@ -199,14 +208,6 @@ export const renameThread = mutation({
   },
 })
 
-async function deleteShares(ctx: MutationCtx, threadId: string): Promise<void> {
-  for await (const share of ctx.db
-    .query('chatThreadShares')
-    .withIndex('by_threadId', (index) => index.eq('threadId', threadId))) {
-    await ctx.db.delete(share._id)
-  }
-}
-
 export const deleteThread = mutation({
   args: { threadId: v.string() },
   returns: v.null(),
@@ -214,7 +215,7 @@ export const deleteThread = mutation({
     const row = await requireOwnedChatThread(ctx, args.threadId)
     if (isChatThreadBusy(row, Date.now())) throw new Error('thread_busy')
 
-    await deleteShares(ctx, row.threadId)
+    await deleteChatThreadShares(ctx, row.threadId)
     await ctx.db.delete(row._id)
     await ctx.runMutation(components.agent.threads.deleteAllForThreadIdAsync, {
       threadId: row.threadId,

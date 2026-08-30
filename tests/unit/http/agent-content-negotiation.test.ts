@@ -44,7 +44,7 @@ describe('negotiateAgentPage', () => {
   })
 
   it('never intercepts a route that already answers machines', () => {
-    for (const path of ['/api/businesses', '/api/v1/operations/call', '/llms.txt', '/SKILL.md', '/robots.txt', '/sitemap.xml', '/.well-known/ucp', '/adelaide-locksmith/ucp']) {
+    for (const path of ['/api/businesses', '/api/v1/operations/call', '/llms.txt', '/SKILL.md', '/robots.txt', '/sitemap.xml', '/.well-known/ucp', '/.well-known/api-catalog', '/adelaide-locksmith/ucp']) {
       expect(negotiateAgentPage(request(path, 'application/json')).kind).toBe('serve_html')
     }
   })

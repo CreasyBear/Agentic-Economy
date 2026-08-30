@@ -2,6 +2,7 @@ import { agentMarkdownResponse } from '@/lib/http/agent-content-negotiation'
 import {
   buildBusinessMarkdown,
   buildForAgentsMarkdown,
+  buildAboutMarkdown,
   buildMissingBusinessMarkdown,
   buildSiteBriefMarkdown,
   buildUnknownPageMarkdown,
@@ -25,6 +26,9 @@ export async function respondWithAgentPageMarkdown(
   if (path === '/for-agents' || path === 'for-agents') {
     return agentMarkdownResponse(buildForAgentsMarkdown(options))
   }
+  if (path === '/about' || path === 'about') {
+    return agentMarkdownResponse(buildAboutMarkdown(options))
+  }
 
   const slug = readSlugPath(path)
   if (slug === undefined) {
@@ -42,8 +46,8 @@ export async function respondWithAgentPageMarkdown(
  * one segment long would otherwise be reported as a missing business.
  */
 const nonBusinessPagePaths = new Set([
-  'about', 'agent-access', 'developers', 'engine', 'for-agents',
-  'help', 'privacy', 'terms',
+  'about', 'activity', 'agent-access', 'developers', 'engine', 'for-agents',
+  'for-providers', 'help', 'market', 'operations', 'privacy', 'terms',
 ])
 
 /** Only a single-segment, slug-shaped path that names no page can name a business. */

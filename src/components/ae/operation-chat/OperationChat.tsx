@@ -5,6 +5,8 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 
 import { api } from '../../../../convex/_generated/api'
 
+import { AeChatPage } from '@/components/ae/layout/AeChatPage'
+import { useStickyRows } from '@/components/ui/data-state'
 import { ChatTranscript } from './ChatTranscript'
 import { OperationChatHeader } from './OperationChatHeader'
 import { OperationComposer } from './OperationComposer'
@@ -149,7 +151,13 @@ export function OperationChat({
   const visibleMessages = isAuthenticated
     ? [...anonymousMessages, ...durableMessages]
     : anonymousMessages
-  const threads = (searchedThreads ?? listedThreads)?.page ?? []
+  const threadsPage = useStickyRows((searchedThreads ?? listedThreads)?.page)
+  const historyPending = isAuthenticated && !threadsPage.everCached
+  const threads = threadsPage.shown
+  const transcriptPending = isAuthenticated
+    && threadId !== null
+    && durable.status === 'LoadingFirstPage'
+    && durable.results.length === 0
   const anonymousMessageLimitReached = !isAuthenticated
     && anonymousMessages.length + 2 > MAX_ANONYMOUS_MESSAGES
 
@@ -197,8 +205,8 @@ export function OperationChat({
     }
   }
 
-  async function submit(forceNewThread = false): Promise<void> {
-    const nextPrompt = prompt.trim()
+  async function submit(forceNewThread = false, rawPrompt = prompt): Promise<void> {
+    const nextPrompt = rawPrompt.trim()
     if (nextPrompt.length === 0) {
       setError('Enter a message before sending.')
       return
@@ -300,6 +308,7 @@ export function OperationChat({
       threads={threads}
       search={historySearch}
       busy={busy}
+      {...historyPending ? { historyPending: true } : {}}
       onSearch={setHistorySearch}
       onOpen={onOpenThread}
       onNewChat={startNewChat}
@@ -314,9 +323,9 @@ export function OperationChat({
   )
 
   return (
-    <section className="grid min-h-[36rem] overflow-hidden rounded-xl bg-background shadow-soft lg:grid-cols-[280px_minmax(0,1fr)]" aria-label="Operation chat">
-      {isAuthenticated ? <aside className="hidden min-h-0 border-r border-border lg:block" aria-label="Conversation history">{historyPanel('desktop')}</aside> : null}
-      <div className="flex min-h-0 min-w-0 flex-col">
+    <AeChatPage
+      {...isAuthenticated ? { rail: historyPanel('desktop') } : {}}
+      header={
         <OperationChatHeader
           authenticated={isAuthenticated}
           threadId={threadId}
@@ -338,14 +347,8 @@ export function OperationChat({
           }, 'Share link revoked.')}
           onCopyShare={copyShare}
         />
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" aria-busy={busy}>
-          <ChatTranscript
-            messages={visibleMessages}
-            {...isAuthenticated && anonymousMessages.length > 0
-              ? { handoffAfter: anonymousMessages.length }
-              : {}}
-          />
-        </div>
+      }
+      dock={
         <OperationComposer
           prompt={prompt}
           busy={busy}
@@ -357,7 +360,25 @@ export function OperationChat({
           onPromptChange={(value) => setPrompt(boundPrompt(value))}
           onSubmit={() => void submit()}
         />
-      </div>
-    </section>
+      }
+      {...busy ? { busy: true } : {}}
+    >
+      <ChatTranscript
+        messages={visibleMessages}
+        {...transcriptPending ? { pending: true } : {}}
+        {...isAuthenticated && anonymousMessages.length > 0
+          ? { handoffAfter: anonymousMessages.length }
+          : {}}
+        {...busy || authLoading || anonymousMessageLimitReached
+          ? {}
+          : {
+              onSuggest: (nextPrompt) => {
+                const bounded = boundPrompt(nextPrompt)
+                setPrompt(bounded)
+                void submit(false, bounded)
+              },
+            }}
+      />
+    </AeChatPage>
   )
 }

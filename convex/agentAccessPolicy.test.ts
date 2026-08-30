@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { convexTest } from 'convex-test'
+import { convexTest, type TestConvex } from 'convex-test'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { makeFunctionReference } from 'convex/server'
@@ -26,6 +26,7 @@ type RevokeArgs = Readonly<{
   serviceAuth: CustomerRequestServiceAssertion
 }>
 type GrantWriteResult = Readonly<Record<string, unknown>>
+type Backend = TestConvex<typeof schema>
 
 const registerGrantForServer = makeFunctionReference<'mutation', RegisterArgs, GrantWriteResult>('agentAccessPolicy:registerGrantForServer')
 const revokeGrantForServer = makeFunctionReference<'mutation', RevokeArgs, GrantWriteResult>('agentAccessPolicy:revokeGrantForServer')
@@ -77,10 +78,35 @@ async function serviceAuth(
   })
 }
 
+async function seedCanonicalPrincipal(
+  backend: Backend,
+  current: AgentAccessGrant,
+  ownerId = `acc_${'a'.repeat(32)}`,
+): Promise<void> {
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('agentAccessPrincipals', {
+      principalId: current.principalId,
+      ownerId,
+      ownerTokenIdentifier: current.ownerId,
+      credentialId: current.credentialId,
+      applicationRef: current.applicationRef,
+      environment: current.environment,
+      scopes: [SERVER_SCOPE],
+      authorityMode: current.authorityMode,
+      grantGeneration: current.generation,
+      policyDigest: current.policyDigest,
+      lifecycle: 'active',
+      recordedAt: 1,
+      lastSeenAt: 1,
+    })
+  })
+}
+
 describe('agent access Convex server grant wrappers', () => {
   it('requires the server token and exact grant principal binding', async () => {
     const backend = convexTest(schema, modules)
     const current = grant()
+    await seedCanonicalPrincipal(backend, current)
     const command = { grant: current }
     const assertion = await serviceAuth('agentAccessPolicy.registerGrantForServer', command, current)
 
@@ -104,6 +130,8 @@ describe('agent access Convex server grant wrappers', () => {
     process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY
     const backend = convexTest(schema, modules)
     const current = grant()
+    const canonicalOwnerId = `acc_${'a'.repeat(32)}`
+    await seedCanonicalPrincipal(backend, current, canonicalOwnerId)
     const registerCommand = { grant: current }
     const registerAuth = await serviceAuth('agentAccessPolicy.registerGrantForServer', registerCommand, current)
     await expect(backend.mutation(registerGrantForServer, { grant: current, serviceAuth: registerAuth }))
@@ -139,6 +167,10 @@ describe('agent access Convex server grant wrappers', () => {
 
     const stored = await backend.run(async (ctx) => await ctx.db.query('agentAccessGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', current.grantRef)).unique())
-    expect(stored).toMatchObject({ lifecycle: 'revoked', updatedAt: validRevoke.updatedAt })
+    expect(stored).toMatchObject({
+      ownerId: canonicalOwnerId,
+      lifecycle: 'revoked',
+      updatedAt: validRevoke.updatedAt,
+    })
   })
 })

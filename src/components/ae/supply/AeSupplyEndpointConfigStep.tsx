@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -20,7 +20,7 @@ import type {
 
 export type SupplySourceKind = 'openapi_http' | 'mcp' | 'agent_plugin_mcp' | 'x402'
 export type SupplyAuthority = Readonly<
-  | { kind: 'keyless' }
+  | { kind: 'public_upstream' }
   | { kind: 'provider_connection'; connectionRef: string; providerRef: string }
 >
 export type SupplyAuthorityOption = ProviderConnectionOwnerProjection
@@ -229,20 +229,15 @@ export function AeSupplyEndpointConfigStep({
   }
 
   return (
-    <Card className="shadow-none">
-      <CardHeader className="p-5 pb-0">
-        <CardTitle>
-          <p className="font-mono text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">02 · Connection</p>
-          <h2 className="mt-1 text-lg font-semibold text-foreground">Connect the Operation</h2>
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">Choose the interface this Operation exposes. AE validates the source before publication changes.</p>
-      </CardHeader>
-      <CardContent className="grid gap-5 p-5">
-        <FieldGroup className="gap-4">
+    <AeSection
+      title="Connect the Operation"
+      description="Choose the interface this Operation exposes. AE validates the source before publication changes."
+    >
+      <FieldGroup className="gap-4">
           <Field {...(formDisabled ? { 'data-disabled': true } : {})}>
             <FieldLabel htmlFor="supply-source-kind">Connection type</FieldLabel>
             <Select value={value.sourceKind} disabled={formDisabled} onValueChange={(next) => changeSourceKind(sourceKindFromValue(next))}>
-              <SelectTrigger id="supply-source-kind" className="min-h-11"><SelectValue /></SelectTrigger>
+              <SelectTrigger id="supply-source-kind" className="min-h-touch"><SelectValue /></SelectTrigger>
               <SelectContent><SelectGroup>
                 <SelectItem value="openapi_http">OpenAPI HTTP API</SelectItem>
                 <SelectItem value="mcp">MCP server</SelectItem>
@@ -273,16 +268,13 @@ export function AeSupplyEndpointConfigStep({
           {value.sourceKind === 'x402' ? <X402Fields value={value} disabled={formDisabled} errors={errors} resourceUrl={resourceUrl} onResourceUrlChange={setResourceUrl} onChange={update} /> : null}
           <TextField id="supply-timeout" label="Request timeout (milliseconds)" value={value.requestTimeoutMs} disabled={formDisabled} {...(errors.requestTimeoutMs === undefined ? {} : { error: errors.requestTimeoutMs })} description="Allowed range: 100–120,000 milliseconds." onChange={(next) => update({ requestTimeoutMs: next })} type="number" />
           <AuthorityField value={value.authority} sourceKind={value.sourceKind} authorityOptions={authorityOptions} disabled={formDisabled} {...(errors.authority === undefined ? {} : { error: errors.authority })} onChange={(next) => update({ authority: next })} />
-          <p className="text-sm text-muted-foreground">Keyless access is supported. For keyed OpenAPI or MCP, choose an existing compatible provider connection; this form never asks for or stores a raw key. x402 authority is non-secret and checked on the server.</p>
+          <p className="text-sm text-muted-foreground">Public upstream access is supported. For keyed OpenAPI or MCP, choose an existing compatible provider connection; this form never asks for or stores a raw key. x402 authority is non-secret and checked on the server.</p>
           <div role="status" aria-live="polite" className="min-h-5 text-sm text-muted-foreground">{announcement}</div>
         </FieldGroup>
-      </CardContent>
-      <CardFooter className="p-5 pt-0">
-        <Button type="button" variant="default" disabled={formDisabled} aria-busy={pending || undefined} onClick={() => void submit()} className="min-h-11">
-          {pending ? 'Checking source' : 'Check and continue'}
-        </Button>
-      </CardFooter>
-    </Card>
+      <Button type="button" variant="default" disabled={formDisabled} aria-busy={pending || undefined} onClick={() => void submit()} className="min-h-touch">
+        {pending ? 'Checking source' : 'Check and continue'}
+      </Button>
+    </AeSection>
   )
 }
 
@@ -452,7 +444,7 @@ function JsonField({ id, label, value, disabled, error, description, onChange }:
 function TextField({ id, label, value, disabled, error, description, onChange, type = 'text' }: Readonly<{ id: string; label: string; value: string; disabled: boolean; error?: string; description: string; onChange: (value: string) => void; type?: string }>) {
   return <Field {...(error === undefined ? {} : { 'data-invalid': true })}>
     <FieldLabel htmlFor={id}>{label}</FieldLabel>
-    <Input id={id} type={type} value={value} disabled={disabled} aria-invalid={error !== undefined || undefined} aria-describedby={`${id}-description`} onChange={(event) => onChange(event.currentTarget.value)} className="min-h-11" />
+    <Input id={id} type={type} value={value} disabled={disabled} aria-invalid={error !== undefined || undefined} aria-describedby={`${id}-description`} onChange={(event) => onChange(event.currentTarget.value)} className="min-h-touch" />
     <FieldDescription id={`${id}-description`}>{description}</FieldDescription>
     {error === undefined ? null : <FieldError>{error}</FieldError>}
   </Field>
@@ -462,7 +454,7 @@ function SelectField({ id, label, value, disabled, error, options, onChange }: R
   return <Field {...(error === undefined ? {} : { 'data-invalid': true })}>
     <FieldLabel htmlFor={id}>{label}</FieldLabel>
     <Select value={value} disabled={disabled} onValueChange={onChange}>
-      <SelectTrigger id={id} className="min-h-11"><SelectValue /></SelectTrigger>
+      <SelectTrigger id={id} className="min-h-touch"><SelectValue /></SelectTrigger>
       <SelectContent><SelectGroup>{options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectGroup></SelectContent>
     </Select>
     {error === undefined ? null : <FieldError>{error}</FieldError>}
@@ -471,19 +463,19 @@ function SelectField({ id, label, value, disabled, error, options, onChange }: R
 
 function AuthorityField({ value, sourceKind, authorityOptions, disabled, error, onChange }: Readonly<{ value: SupplyAuthority; sourceKind: SupplySourceKind; authorityOptions: readonly SupplyAuthorityOption[]; disabled: boolean; error?: string; onChange: (value: SupplyAuthority) => void }>) {
   const compatible = authorityOptions.filter((option) => option.adapterId === authorityAdapterId(sourceKind))
-  const selected = value.kind === 'keyless' ? 'keyless' : `provider_connection:${value.connectionRef}`
+  const selected = value.kind === 'public_upstream' ? 'public_upstream' : `provider_connection:${value.connectionRef}`
   return <Field {...(error === undefined ? {} : { 'data-invalid': true })}>
     <FieldLabel htmlFor="supply-authority">Access authority</FieldLabel>
     <Select value={selected} disabled={disabled} onValueChange={(next) => {
-      if (next === 'keyless') onChange({ kind: 'keyless' })
+      if (next === 'public_upstream') onChange({ kind: 'public_upstream' })
       else {
         const option = compatible.find((item) => `provider_connection:${item.connectionRef}` === next)
         if (option !== undefined) onChange({ kind: 'provider_connection', connectionRef: option.connectionRef, providerRef: option.providerRef })
       }
     }}>
-      <SelectTrigger id="supply-authority" className="min-h-11"><SelectValue /></SelectTrigger>
+      <SelectTrigger id="supply-authority" className="min-h-touch"><SelectValue /></SelectTrigger>
       <SelectContent><SelectGroup>
-        <SelectItem value="keyless">{sourceKind === 'x402' ? 'Choose an x402 provider connection' : 'Keyless (no supplier secret)'}</SelectItem>
+        <SelectItem value="public_upstream">{sourceKind === 'x402' ? 'Choose an x402 provider connection' : 'Public upstream (no supplier secret)'}</SelectItem>
         {compatible.map((option) => <SelectItem key={option.connectionRef} value={`provider_connection:${option.connectionRef}`} disabled={!option.available}>{option.providerRef} · {option.available ? 'available' : 'needs reconnection'}</SelectItem>)}
       </SelectGroup></SelectContent>
     </Select>
@@ -508,7 +500,7 @@ function editableSource(value?: SupplyEndpointConfigValue): EditableSource {
 }
 
 function emptyEditable(sourceKind: SupplySourceKind): EditableSource {
-  return { sourceKind, sourceRevision: '', contractJson: '', commercialJson: '', evidenceRefsJson: '[]', requestTimeoutMs: '10000', authority: { kind: 'keyless' }, documentJson: '', operationPath: '', operationMethod: 'post', fixedQueryJson: '[]', serverUrl: '', toolJson: '', protocolVersion: '', manifestJson: '', serverName: '', resourceJson: '' }
+  return { sourceKind, sourceRevision: '', contractJson: '', commercialJson: '', evidenceRefsJson: '[]', requestTimeoutMs: '10000', authority: { kind: 'public_upstream' }, documentJson: '', operationPath: '', operationMethod: 'post', fixedQueryJson: '[]', serverUrl: '', toolJson: '', protocolVersion: '', manifestJson: '', serverName: '', resourceJson: '' }
 }
 
 function initialToolName(value?: SupplyEndpointConfigValue): string {
@@ -545,7 +537,7 @@ function buildEndpointValue(value: EditableSource, extras: PreflightExtras): Rea
   if (evidenceRefs === undefined) return invalid('evidenceRefsJson', 'Enter evidence references as a JSON array of non-empty strings.')
   const requestTimeoutMs = Number(value.requestTimeoutMs)
   if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs < 100 || requestTimeoutMs > 120_000) return invalid('requestTimeoutMs', 'Use a whole-number timeout from 100 to 120,000 milliseconds.')
-  if (value.sourceKind === 'x402' && value.authority.kind === 'keyless') return invalid('authority', 'Choose an existing x402 supplier connection before checking this Operation.')
+  if (value.sourceKind === 'x402' && value.authority.kind === 'public_upstream') return invalid('authority', 'Choose an existing x402 supplier connection before checking this Operation.')
   if (value.authority.kind === 'provider_connection' && (value.authority.connectionRef.trim() === '' || value.authority.providerRef.trim() === '' || /(env:|secret|token|password|key)/i.test(`${value.authority.connectionRef} ${value.authority.providerRef}`))) return invalid('authority', 'Choose an existing owner provider connection. Raw credentials and env locators are not accepted.')
   if (!isRecord(commercial.offering) || typeof commercial.bindingId !== 'string' || commercial.bindingId.trim() === '') return invalid('commercialJson', 'Commercial metadata must include an offering object and bindingId.')
   const commercialInput: CapabilityImporterCommercialInput = {

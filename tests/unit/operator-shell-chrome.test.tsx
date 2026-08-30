@@ -9,20 +9,50 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../setup/jsdom-platform'
 
+const shellMocks = vi.hoisted(() => ({
+  readAgentKeys: vi.fn(async (): Promise<unknown[]> => []),
+  readBuyerCredentialPresence: undefined as undefined | (() => Promise<boolean>),
+}))
+
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-start')>()),
+  useServerFn: () => shellMocks.readAgentKeys,
+}))
+vi.mock('@/components/ae/command-panel', () => ({
+  CommandPanelProvider: ({
+    children,
+    readBuyerCredentialPresence,
+  }: {
+    children: ReactElement
+    readBuyerCredentialPresence: () => Promise<boolean>
+  }) => {
+    shellMocks.readBuyerCredentialPresence = readBuyerCredentialPresence
+    return children
+  },
+  AeCommandPanel: () => null,
+}))
+
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { OperatorRouteNotFound } from '@/components/ae/layout/AeOperatorRouteStates'
+import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeOperatorRouteStates'
+import { AECON_MARK_SRC } from '@/content/brand-assets'
+import { ownerSettingsChrome } from '@/lib/operator/settings-navigation'
 import { Route as OperatorLayoutRoute } from '@/routes/_operator'
 import { Route as AgentAccessRoute } from '@/routes/_operator/agent-access'
 
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  shellMocks.readAgentKeys.mockReset()
+  shellMocks.readAgentKeys.mockResolvedValue([])
+  shellMocks.readBuyerCredentialPresence = undefined
+})
 
 describe('operator shell nested chrome', () => {
   it('replaces actions, breadcrumbs, and badges when nested route chrome changes', async () => {
-    render(<OperatorShellHarness />)
+    renderAt(<OperatorShellHarness />, '/admin')
 
     expect(await screen.findByText('Action one')).toBeTruthy()
     expect(screen.getAllByText('First crumb').length).toBeGreaterThan(0)
@@ -60,8 +90,116 @@ describe('operator shell nested chrome', () => {
     expect(screen.getAllByRole('navigation', { name: 'Operator navigation' })).toHaveLength(1)
     expect(screen.queryByRole('navigation', { name: 'Public navigation' })).toBeNull()
 
-    const recovery = screen.getByRole('link', { name: 'Back to access & usage' })
+    const recovery = screen.getByRole('link', { name: 'Back to Keys' })
     expect(recovery.getAttribute('href')).toBe('/agent-access')
+  })
+
+  it('puts AECON on the operator mark and drops the nested settings record icon', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="owner"
+        title="Workspace"
+        description="Loading your latest marketplace activity."
+        currentPath="/owner/settings"
+      >
+        <AeOperatorShell
+          operatorRole="owner"
+          title={ownerSettingsChrome.title}
+          description={ownerSettingsChrome.description}
+          currentPath="/owner/settings"
+        >
+          <div>Settings body</div>
+        </AeOperatorShell>
+      </AeOperatorShell>,
+      '/owner/settings',
+    )
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Settings' })
+    expect(heading.parentElement?.previousElementSibling).toBeNull()
+    expect(screen.getByText('AECON')).toBeTruthy()
+    expect(document.querySelector(`img[src="${AECON_MARK_SRC}"]`)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Supplier workspace home' })).toBeTruthy()
+  })
+
+  it('drops the record-header icon on operator lists', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="owner"
+        title="Operations"
+        description="Publish the exact tools agents can inspect and call."
+        currentPath="/owner/offerings"
+      >
+        <div>Operations body</div>
+      </AeOperatorShell>,
+      '/owner/offerings',
+    )
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Operations' })
+    expect(heading.parentElement?.previousElementSibling).toBeNull()
+  })
+
+  it('keeps parent chrome while a nested pending state loads', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="owner"
+        title={ownerSettingsChrome.title}
+        description={ownerSettingsChrome.description}
+        currentPath="/owner/settings/workspace"
+      >
+        <OperatorRoutePending />
+      </AeOperatorShell>,
+      '/owner/settings/workspace',
+    )
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Loading workspace' })).toBeNull()
+    expect(screen.getByLabelText('Loading workspace')).toBeTruthy()
+  })
+
+  it('keeps parent chrome when a nested route fails to load', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="owner"
+        title={ownerSettingsChrome.title}
+        description={ownerSettingsChrome.description}
+        currentPath="/owner/settings/connections"
+      >
+        <OperatorRouteError error={new Error('unavailable')} />
+      </AeOperatorShell>,
+      '/owner/settings/connections',
+    )
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Couldn’t load this page' })).toBeNull()
+    expect(screen.getByText('Workspace unavailable')).toBeTruthy()
+  })
+
+  it('only reports active invoke-scoped buyer access to the shared command panel', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="owner"
+        title="Workspace"
+        description="Loading your latest marketplace activity."
+        currentPath="/owner/settings"
+      >
+        <div>Workspace body</div>
+      </AeOperatorShell>,
+      '/owner/settings',
+    )
+    const readPresence = shellMocks.readBuyerCredentialPresence
+    if (readPresence === undefined) throw new Error('buyer_presence_reader_missing')
+
+    shellMocks.readAgentKeys.mockResolvedValueOnce([
+      { revoked: true, expired: false, scopes: ['market_operations:invoke'] },
+      { revoked: false, expired: true, scopes: ['market_operations:invoke'] },
+      { revoked: false, expired: false, scopes: ['market_operations:read'] },
+    ])
+    await expect(readPresence()).resolves.toBe(false)
+
+    shellMocks.readAgentKeys.mockResolvedValueOnce([
+      { revoked: false, expired: false, scopes: ['market_operations:invoke'] },
+    ])
+    await expect(readPresence()).resolves.toBe(true)
   })
 })
 
@@ -99,8 +237,16 @@ function OperatorShellHarness() {
 function renderAt(ui: ReactElement, pathname: string) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin/audit-events' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/agent-access' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/agent-access/$' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings/new' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings/workspace' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings/connections' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/' }),
   ])
   const router = createRouter({
     routeTree,

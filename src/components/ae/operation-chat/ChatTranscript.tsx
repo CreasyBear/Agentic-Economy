@@ -1,68 +1,131 @@
+import { Bubble, BubbleContent, BubbleGroup } from '@/components/ui/bubble'
+import { Button } from '@/components/ui/button'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@/components/ui/empty'
+import { Marker, MarkerContent } from '@/components/ui/marker'
+import { Message, MessageContent } from '@/components/ui/message'
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@/components/ui/message-scroller'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  chatEmpty,
+  chatHandoffNotice,
+  chatSuggestions,
+} from '@/lib/public/chat-ia'
+
 import { OperationCard } from './OperationCard'
-import { projectOperationCard, textFromParts, type TranscriptMessage } from './presentation'
+import { projectTranscriptTurns, type TranscriptMessage } from './presentation'
 
 export function ChatTranscript({
   messages,
   handoffAfter,
+  onSuggest,
+  pending = false,
 }: {
   messages: readonly TranscriptMessage[]
   handoffAfter?: number
+  onSuggest?: (prompt: string) => void
+  /** True while the thread's first page is still loading with nothing cached. */
+  pending?: boolean
 }) {
-  if (messages.length === 0) {
+  const turns = projectTranscriptTurns(messages)
+
+  if (turns.length === 0 && pending) {
     return (
-      <div className="mx-auto flex max-w-prose flex-1 flex-col justify-center px-4 py-12 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">What operation do you need?</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Search, compare, inspect, and safely run keyless operations.</p>
+      <div className="grid min-h-0 flex-1 content-start gap-intra p-gutter" aria-busy="true">
+        <p className="sr-only" role="status">{chatEmpty.title}</p>
+        <Skeleton className="h-16 w-full max-w-prose" />
+        <Skeleton className="ml-auto h-16 w-full max-w-prose" />
       </div>
+    )
+  }
+  if (turns.length === 0) {
+    return (
+      <Empty className="min-h-0 flex-1 border-0">
+        <EmptyHeader className="max-w-prose gap-related">
+          <h1 className="text-balance font-display text-2xl font-medium tracking-tight text-foreground sm:text-3xl">
+            {chatEmpty.title}
+          </h1>
+          <EmptyDescription>{chatEmpty.description}</EmptyDescription>
+        </EmptyHeader>
+        {onSuggest === undefined ? null : (
+          <EmptyContent className="max-w-prose flex-row flex-wrap justify-center gap-related">
+            {chatSuggestions.map((suggestion) => (
+              <Button
+                key={suggestion.prompt}
+                type="button"
+                variant="outline"
+                className="min-h-touch"
+                onClick={() => onSuggest(suggestion.prompt)}
+              >
+                {suggestion.label}
+              </Button>
+            ))}
+          </EmptyContent>
+        )}
+      </Empty>
     )
   }
 
   return (
-    <ol
-      className="mx-auto flex w-full max-w-3xl list-none flex-col gap-6 px-4 py-6"
-      role="log"
-      aria-label="Chat transcript"
-      aria-live="polite"
-      aria-relevant="additions text"
-    >
-      {messages.map((message, index) => {
-        const text = textFromParts(message.parts)
-        const cards = message.parts.flatMap((part) => {
-          const card = projectOperationCard(part)
-          return card === null ? [] : [card]
-        })
-        return (
-          <li key={message.id} className="contents">
-            <article
-              aria-label={message.role === 'user' ? 'You' : 'Assistant'}
-              className={message.role === 'user' ? 'ml-auto max-w-[85%]' : 'max-w-[65ch]'}
-            >
-              <p className="mb-2 font-mono text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground">
-                {message.role === 'user' ? 'You' : 'Assistant'}
-              </p>
-              {text.length === 0 ? null : (
-                <div className={message.role === 'user'
-                  ? 'whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground'
-                  : 'whitespace-pre-wrap text-sm leading-7 text-foreground'}>
-                  {text}
-                </div>
-              )}
-              {cards.length === 0 ? null : (
-                <div className="mt-3 flex flex-col gap-2">
-                  {cards.map((card, cardIndex) => <OperationCard key={`${message.id}-${card.toolId}-${cardIndex}`} projection={card} />)}
-                </div>
-              )}
-            </article>
-            {handoffAfter === index + 1 ? (
-              <div className="flex items-center gap-3" role="status">
-                <span className="h-px flex-1 bg-border" />
-                <span className="text-xs text-muted-foreground">Signed in — messages from here are saved.</span>
-                <span className="h-px flex-1 bg-border" />
-              </div>
-            ) : null}
-          </li>
-        )
-      })}
-    </ol>
+    <MessageScrollerProvider autoScroll>
+      <MessageScroller className="flex-1">
+        <MessageScrollerViewport>
+          <MessageScrollerContent
+            className="mx-auto w-full max-w-3xl gap-section px-gutter py-section"
+            role="log"
+            aria-label="Chat transcript"
+            aria-live="polite"
+            aria-relevant="additions text"
+          >
+            {turns.map((turn, index) => (
+              <MessageScrollerItem
+                key={turn.id}
+                messageId={turn.id}
+                scrollAnchor={turn.role === 'user'}
+              >
+                <article aria-label={turn.role === 'user' ? 'You' : 'Assistant'}>
+                  <Message align={turn.role === 'user' ? 'end' : 'start'}>
+                    <MessageContent>
+                      {turn.text.length === 0 ? null : (
+                        <Bubble
+                          variant={turn.role === 'user' ? 'outline' : 'ghost'}
+                          align={turn.role === 'user' ? 'end' : 'start'}
+                        >
+                          <BubbleContent className="whitespace-pre-wrap">{turn.text}</BubbleContent>
+                        </Bubble>
+                      )}
+                      {turn.tools.length === 0 ? null : (
+                        <BubbleGroup className="w-full">
+                          {turn.tools.map((card, cardIndex) => (
+                            <OperationCard
+                              key={`${turn.id}-${card.toolId}-${cardIndex}`}
+                              projection={card}
+                            />
+                          ))}
+                        </BubbleGroup>
+                      )}
+                    </MessageContent>
+                  </Message>
+                </article>
+                {handoffAfter === index + 1 ? (
+                  <div className="mt-related">
+                    <Marker variant="separator" role="status">
+                      <MarkerContent>{chatHandoffNotice}</MarkerContent>
+                    </Marker>
+                  </div>
+                ) : null}
+              </MessageScrollerItem>
+            ))}
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+        <MessageScrollerButton />
+      </MessageScroller>
+    </MessageScrollerProvider>
   )
 }

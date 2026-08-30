@@ -11,6 +11,7 @@ import {
   type MoneyRefusal,
 } from '../src/modules/money/public'
 import type { MutationCtx } from './_generated/server'
+import type { Doc } from './_generated/dataModel'
 import {
   applyPreparedCredentialBudgetTransition,
   prepareCredentialBudgetTransition,
@@ -22,6 +23,7 @@ import {
 } from './moneyCanonicalAccounts'
 import {
   admitInvocationCharge,
+  type AdmittedInvocationCharge,
   type AuthorizeInvocationChargeArgs,
 } from './moneyChargeAdmission'
 
@@ -52,6 +54,10 @@ type BrokeredInvalidOutputLossMaterial = Readonly<{
   inputDigest: string
   sourceDigest: string
 }>
+type InvocationChargeRefusal = Extract<
+  Awaited<ReturnType<typeof admitInvocationCharge>>,
+  { kind: 'refused' }
+>
 
 function nonBlank(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
@@ -117,10 +123,177 @@ export function brokeredInvalidOutputLossMaterial(
   }
 }
 
-export async function recordBrokeredInvalidOutputLossHandler(
+const allLossFacts = (facts: readonly boolean[]): boolean => facts.every(Boolean)
+
+function lossTransactionMatches(
+  transaction: Doc<'moneyTransactions'> | undefined,
+  material: BrokeredInvalidOutputLossMaterial,
+  admitted: AdmittedInvocationCharge,
+  externalRef: string,
+): boolean {
+  if (transaction === undefined) return false
+  return allLossFacts([
+    transaction.transactionRef === material.lossTransactionRef,
+    transaction.kind === 'external_loss',
+    transaction.idempotencyKey === material.lossTransactionRef,
+    transaction.inputDigest === material.inputDigest,
+    transaction.principalId === admitted.principalId,
+    transaction.accountId === undefined,
+    transaction.currency === material.amount.currency,
+    transaction.amountUnits === material.amount.units,
+    transaction.exponent === material.amount.exponent,
+    transaction.state === 'applied',
+    Number.isFinite(transaction.expectedAccountVersion),
+    transaction.externalRef === externalRef,
+    transaction.credentialId === undefined,
+    transaction.budgetPolicyRef === undefined,
+    transaction.budgetGeneration === undefined,
+    transaction.budgetEnvironment === undefined,
+    transaction.budgetDayStart === undefined,
+    transaction.budgetMonthStart === undefined,
+    transaction.budgetState === undefined,
+    transaction.settledAt === undefined,
+    transaction.reversalOf === undefined,
+  ])
+}
+
+function lossAccountMatches(
+  account: Doc<'moneyAccounts'> | null,
+  material: BrokeredInvalidOutputLossMaterial,
+): boolean {
+  if (account === null) return false
+  return allLossFacts([
+    account.accountRef === material.lossAccountRef,
+    account.accountKind === 'ae_external_loss',
+    account.currency === material.amount.currency,
+    account.exponent === material.amount.exponent,
+    account.accountId === undefined,
+    account.businessId === undefined,
+  ])
+}
+
+function lossEntryMatches(
+  entry: Doc<'moneyLedgerEntries'> | undefined,
+  material: BrokeredInvalidOutputLossMaterial,
+  admitted: AdmittedInvocationCharge,
+): boolean {
+  if (entry === undefined) return false
+  return allLossFacts([
+    entry.entryRef === material.lossEntryRef,
+    entry.accountRef === material.lossAccountRef,
+    entry.entryType === 'external_loss',
+    entry.direction === 'credit',
+    entry.amountUnits === material.amount.units,
+    entry.currency === material.amount.currency,
+    entry.exponent === material.amount.exponent,
+    entry.transactionRef === material.lossTransactionRef,
+    entry.idempotencyKey === material.lossTransactionRef,
+    entry.principalId === admitted.principalId,
+    entry.businessId === undefined,
+    entry.invocationRef === admitted.invocationRef,
+    entry.attemptRef === admitted.attemptRef,
+    entry.sourceDigest === material.sourceDigest,
+    entry.evidenceRefs.length === material.evidenceRefs.length,
+    entry.evidenceRefs.every((ref, index) => ref === material.evidenceRefs[index]),
+    entry.payoutRef === undefined,
+    entry.allocationRef === undefined,
+    entry.allocationCorrectionUnits === undefined,
+    entry.reversalOf === undefined,
+  ])
+}
+
+function lossReplayIsExact(input: Readonly<{
+  prior: Doc<'moneyTransactions'>
+  admitted: AdmittedInvocationCharge
+  material: BrokeredInvalidOutputLossMaterial
+  externalRef: string
+  lossTransactions: readonly Doc<'moneyTransactions'>[]
+  lossEntries: readonly Doc<'moneyLedgerEntries'>[]
+  lossAccount: Doc<'moneyAccounts'> | null
+}>): boolean {
+  const {
+    prior,
+    admitted,
+    material,
+    externalRef,
+    lossTransactions,
+    lossEntries,
+    lossAccount,
+  } = input
+  return allLossFacts([
+    prior.externalRef === externalRef,
+    admitted.priorEntryRows.length === 0,
+    admitted.existingUsage === null,
+    lossTransactions.length === 1,
+    lossEntries.length === 1,
+    lossTransactionMatches(lossTransactions[0], material, admitted, externalRef),
+    lossAccountMatches(lossAccount, material),
+    lossEntryMatches(lossEntries[0], material, admitted),
+  ])
+}
+
+function pendingLossMaterialIsApplicable(input: Readonly<{
+  prior: Doc<'moneyTransactions'>
+  admitted: AdmittedInvocationCharge
+  lossTransactions: readonly Doc<'moneyTransactions'>[]
+  lossEntries: readonly Doc<'moneyLedgerEntries'>[]
+}>): boolean {
+  const { prior, admitted, lossTransactions, lossEntries } = input
+  return allLossFacts([
+    prior.state === 'pending' || prior.state === 'outcome_unknown',
+    prior.externalRef === undefined,
+    prior.budgetState === 'reserved' || prior.budgetState === 'unknown',
+    admitted.priorEntryRows.length === 0,
+    admitted.existingUsage === null,
+    lossTransactions.length === 0,
+    lossEntries.length === 0,
+  ])
+}
+
+function operatorLossSourceMatches(
+  operator: Doc<'moneyAccounts'> | null,
+  admitted: AdmittedInvocationCharge,
+): operator is Doc<'moneyAccounts'> {
+  if (operator === null) return false
+  return allLossFacts([
+    operator.accountRef === admitted.operatorAccountRef,
+    operator.accountKind === 'operator_credit',
+    operator.accountId === admitted.accountId,
+    operator.businessId === undefined,
+    operator.currency === admitted.amount.currency,
+    operator.exponent === admitted.amount.exponent,
+  ])
+}
+
+function lossAccountPreviewMatches(
+  preview: ReturnType<typeof canonicalMoneyAccountPreview>,
+  material: BrokeredInvalidOutputLossMaterial,
+): boolean {
+  return allLossFacts([
+    preview.accountRef === material.lossAccountRef,
+    preview.accountKind === 'ae_external_loss',
+    preview.currency === material.amount.currency,
+    preview.exponent === material.amount.exponent,
+    preview.accountId === undefined,
+    preview.businessId === undefined,
+    preview.heldUnits === '0',
+    preview.recoveryDueUnits === '0',
+  ])
+}
+
+async function admitBrokeredInvalidOutputLoss(
   ctx: MutationCtx,
   args: BrokeredInvalidOutputLossArgs,
-) {
+): Promise<
+  | MoneyRefusal
+  | InvocationChargeRefusal
+  | Readonly<{
+      kind: 'admitted'
+      admitted: AdmittedInvocationCharge
+      material: BrokeredInvalidOutputLossMaterial
+      prior: Doc<'moneyTransactions'>
+    }>
+> {
   if (!Number.isFinite(args.observedAt)) return reconciliationRefusal()
   const preliminaryMaterial = brokeredInvalidOutputLossMaterial({
     chargeTransactionRef: args.transactionRef,
@@ -133,14 +306,11 @@ export async function recordBrokeredInvalidOutputLossHandler(
     reconciliationEvidenceRefs: args.reconciliationEvidenceRefs,
   })
   if (preliminaryMaterial === undefined) return reconciliationRefusal()
-
   const admitted = await admitInvocationCharge(ctx, args)
   if (admitted.kind === 'refused') return admitted
-  if (
-    admitted.providerAmount === undefined
-    || admitted.platformFee === undefined
-  )
+  if (admitted.providerAmount === undefined || admitted.platformFee === undefined) {
     return reconciliationRefusal()
+  }
   const material = brokeredInvalidOutputLossMaterial({
     chargeTransactionRef: args.transactionRef,
     invocationRef: args.invocationRef,
@@ -154,13 +324,22 @@ export async function recordBrokeredInvalidOutputLossHandler(
   if (
     material === undefined
     || compareExactAmounts(admitted.providerAmount, material.amount) !== 0
-  )
-    return reconciliationRefusal()
+  ) return reconciliationRefusal()
   const pairTotal = addExactAmounts(admitted.providerAmount, admitted.platformFee)
-  if (pairTotal === undefined || compareExactAmounts(pairTotal, admitted.amount) !== 0)
+  if (pairTotal === undefined || compareExactAmounts(pairTotal, admitted.amount) !== 0) {
     return reconciliationRefusal()
-  const prior = admitted.prior
-  if (prior === null) return reconciliationRefusal()
+  }
+  if (admitted.prior === null) return reconciliationRefusal()
+  return { kind: 'admitted', admitted, material, prior: admitted.prior }
+}
+
+export async function recordBrokeredInvalidOutputLossHandler(
+  ctx: MutationCtx,
+  args: BrokeredInvalidOutputLossArgs,
+) {
+  const admission = await admitBrokeredInvalidOutputLoss(ctx, args)
+  if (admission.kind === 'refused') return admission
+  const { admitted, material, prior } = admission
 
   const [lossTransactions, lossEntries, lossAccount] = await Promise.all([
     ctx.db
@@ -184,67 +363,15 @@ export async function recordBrokeredInvalidOutputLossHandler(
   ])
 
   if (prior.state === 'reversed' && prior.budgetState === 'released') {
-    const lossTransaction = lossTransactions[0]
-    const lossEntry = lossEntries[0]
-    const replayIsExact =
-      prior.externalRef === args.externalRef
-      && admitted.priorEntryRows.length === 0
-      && admitted.existingUsage === null
-      && lossTransactions.length === 1
-      && lossEntries.length === 1
-      && lossTransaction !== undefined
-      && lossEntry !== undefined
-      && lossAccount !== null
-      && lossTransaction.transactionRef === material.lossTransactionRef
-      && lossTransaction.kind === 'external_loss'
-      && lossTransaction.idempotencyKey === material.lossTransactionRef
-      && lossTransaction.inputDigest === material.inputDigest
-      && lossTransaction.principalId === admitted.principalId
-      && lossTransaction.accountId === undefined
-      && lossTransaction.currency === material.amount.currency
-      && lossTransaction.amountUnits === material.amount.units
-      && lossTransaction.exponent === material.amount.exponent
-      && lossTransaction.state === 'applied'
-      && Number.isFinite(lossTransaction.expectedAccountVersion)
-      && lossTransaction.externalRef === args.externalRef
-      && lossTransaction.credentialId === undefined
-      && lossTransaction.budgetPolicyRef === undefined
-      && lossTransaction.budgetGeneration === undefined
-      && lossTransaction.budgetEnvironment === undefined
-      && lossTransaction.budgetDayStart === undefined
-      && lossTransaction.budgetMonthStart === undefined
-      && lossTransaction.budgetState === undefined
-      && lossTransaction.settledAt === undefined
-      && lossTransaction.reversalOf === undefined
-      && lossAccount.accountRef === material.lossAccountRef
-      && lossAccount.accountKind === 'ae_external_loss'
-      && lossAccount.currency === material.amount.currency
-      && lossAccount.exponent === material.amount.exponent
-      && lossAccount.accountId === undefined
-      && lossAccount.businessId === undefined
-      && lossEntry.entryRef === material.lossEntryRef
-      && lossEntry.accountRef === material.lossAccountRef
-      && lossEntry.entryType === 'external_loss'
-      && lossEntry.direction === 'credit'
-      && lossEntry.amountUnits === material.amount.units
-      && lossEntry.currency === material.amount.currency
-      && lossEntry.exponent === material.amount.exponent
-      && lossEntry.transactionRef === material.lossTransactionRef
-      && lossEntry.idempotencyKey === material.lossTransactionRef
-      && lossEntry.principalId === admitted.principalId
-      && lossEntry.businessId === undefined
-      && lossEntry.invocationRef === admitted.invocationRef
-      && lossEntry.attemptRef === admitted.attemptRef
-      && lossEntry.sourceDigest === material.sourceDigest
-      && lossEntry.evidenceRefs.length === material.evidenceRefs.length
-      && lossEntry.evidenceRefs.every(
-        (ref, index) => ref === material.evidenceRefs[index],
-      )
-      && lossEntry.payoutRef === undefined
-      && lossEntry.allocationRef === undefined
-      && lossEntry.allocationCorrectionUnits === undefined
-      && lossEntry.reversalOf === undefined
-    if (!replayIsExact) return reconciliationRefusal()
+    if (!lossReplayIsExact({
+      prior,
+      admitted,
+      material,
+      externalRef: args.externalRef,
+      lossTransactions,
+      lossEntries,
+      lossAccount,
+    })) return reconciliationRefusal()
     return {
       kind: 'settled' as const,
       chargeTransactionRef: prior.transactionRef,
@@ -252,20 +379,12 @@ export async function recordBrokeredInvalidOutputLossHandler(
     }
   }
 
-  if (
-    prior.state !== 'pending'
-    && prior.state !== 'outcome_unknown'
-  )
-    return reconciliationRefusal()
-  if (
-    prior.externalRef !== undefined
-    || prior.budgetState !== 'reserved' && prior.budgetState !== 'unknown'
-    || admitted.priorEntryRows.length !== 0
-    || admitted.existingUsage !== null
-    || lossTransactions.length !== 0
-    || lossEntries.length !== 0
-  )
-    return reconciliationRefusal()
+  if (!pendingLossMaterialIsApplicable({
+    prior,
+    admitted,
+    lossTransactions,
+    lossEntries,
+  })) return reconciliationRefusal()
 
   const operatorRow = await ctx.db
     .query('moneyAccounts')
@@ -273,16 +392,7 @@ export async function recordBrokeredInvalidOutputLossHandler(
       query.eq('accountRef', admitted.operatorAccountRef),
     )
     .unique()
-  if (
-    operatorRow === null
-    || operatorRow.accountRef !== admitted.operatorAccountRef
-    || operatorRow.accountKind !== 'operator_credit'
-    || operatorRow.accountId !== admitted.accountId
-    || operatorRow.businessId !== undefined
-    || operatorRow.currency !== admitted.amount.currency
-    || operatorRow.exponent !== admitted.amount.exponent
-  )
-    return reconciliationRefusal()
+  if (!operatorLossSourceMatches(operatorRow, admitted)) return reconciliationRefusal()
   const held = amountFromParts(
     operatorRow.currency,
     operatorRow.heldUnits,
@@ -300,17 +410,9 @@ export async function recordBrokeredInvalidOutputLossHandler(
   })
   if (preparedLossAccount === undefined) return reconciliationRefusal()
   const lossAccountPreview = canonicalMoneyAccountPreview(preparedLossAccount)
-  if (
-    lossAccountPreview.accountRef !== material.lossAccountRef
-    || lossAccountPreview.accountKind !== 'ae_external_loss'
-    || lossAccountPreview.currency !== material.amount.currency
-    || lossAccountPreview.exponent !== material.amount.exponent
-    || lossAccountPreview.accountId !== undefined
-    || lossAccountPreview.businessId !== undefined
-    || lossAccountPreview.heldUnits !== '0'
-    || lossAccountPreview.recoveryDueUnits !== '0'
-  )
+  if (!lossAccountPreviewMatches(lossAccountPreview, material)) {
     return reconciliationRefusal()
+  }
   const lossBalance = amountFromParts(
     lossAccountPreview.currency,
     lossAccountPreview.balanceUnits,

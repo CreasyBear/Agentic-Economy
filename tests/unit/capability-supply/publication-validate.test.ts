@@ -424,7 +424,7 @@ describe('capability publication validate (pre-flight admission)', () => {
 function openApiAdmissionSource(overrides: {
   document?: ReturnType<typeof openApiDocument>
   operation?: { path: string; method: 'get' | 'post' }
-  authority?: { kind: 'keyless' } | { kind: 'provider_connection'; connectionRef: string; providerRef: string }
+  authority?: { kind: 'public_upstream' } | { kind: 'provider_connection'; connectionRef: string; providerRef: string }
 } = {}): Extract<CapabilityPublicationAdmissionSource, { kind: 'openapi_http' }> {
   const document = overrides.document ?? openApiDocument()
   const operation = overrides.operation ?? { path: '/lookup', method: 'post' as const }
@@ -464,8 +464,8 @@ function outputSchema() {
   return { $schema: JSON_SCHEMA, type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false }
 }
 
-function commercialInput(authority: { kind: 'keyless' } | { kind: 'provider_connection'; connectionRef: string; providerRef: string } = {
-  kind: 'keyless',
+function commercialInput(authority: { kind: 'public_upstream' } | { kind: 'provider_connection'; connectionRef: string; providerRef: string } = {
+  kind: 'public_upstream',
 }) {
   return {
     offering: {

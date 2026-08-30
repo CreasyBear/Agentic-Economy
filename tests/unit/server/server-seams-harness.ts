@@ -74,7 +74,7 @@ export function dispatchSendReadback() {
     send: {
       dispatch: dispatchProjection(),
       owner: {
-        ownerId: 'owners:1',
+        ownerId: 'principal:1',
         clerkUserId: 'user_sam',
       },
       business: {

@@ -22,6 +22,8 @@ import {
   type MarketListingEvidenceSource,
 } from "./listing-evidence";
 import {
+  catalogJobLabel,
+  catalogJobSummary,
   toOperationCardViewModel,
   type OperationCardViewModel,
 } from "./operation-view-model";
@@ -278,7 +280,7 @@ function firstPartyProjection(
     status: "live",
     sourceTimestamp: generatedAt,
     statusDetail:
-      "Counts are derived from authoritative Agentic Economy write seams. Historical totals remain gated by the aggregate backfill.",
+      "Counts are derived from authoritative Agentic Economy write seams.",
     metrics,
   };
 }
@@ -311,16 +313,26 @@ async function projectCatalog(
   return {
     kind: "ok",
     items: catalog.items.map((operation) => {
+      const summary = catalogJobSummary(
+        operation.summary || operation.offering.summary,
+      );
+      const catalogText = `${catalogJobLabel(
+        operation.contract.capabilityId,
+        operation.offering.label,
+        summary,
+      )} ${summary}`;
       const source = evidenceByOperationRef.get(operation.operationRef);
       const projection =
         source === undefined
           ? emptyMarketListingEvidence(
               operation.operationRef,
               operation.contract.capabilityId,
+              catalogText,
             )
           : projectMarketListingEvidence(
               source,
               operation.contract.capabilityId,
+              catalogText,
             );
       return toOperationCardViewModel(operation, projection);
     }),

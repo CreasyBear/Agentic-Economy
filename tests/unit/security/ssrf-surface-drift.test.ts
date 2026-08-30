@@ -21,7 +21,7 @@ const KNOWN_PROVIDER_CLIENT_FILES: Record<string, true> = {
 // quoted string (identifiers, property access, template literals, and `new URL(...)`
 // all count as non-literal). `\b` keeps this off `refetch(`/`prefetch(` call sites.
 const NON_LITERAL_FETCH_PATTERN = /\bfetch\(\s*(?!['"][^'"$]*['"]\s*[,)])/
-const NETWORK_GUARD_IMPORT_PATTERN = /from\s+['"][^'"]*network-guard(?:\/public)?['"]/
+const NETWORK_GUARD_IMPORT_PATTERN = /(?:from\s+['"][^'"]*network-guard(?:\/(?:public|server))?['"]|import\(\s*['"][^'"]*network-guard\/(?:public|server)['"]\s*\))/
 
 describe('SSRF surface drift', () => {
   it('requires every non-allowlisted fetch(nonLiteralUrl) call site to use a reviewed SSRF guard', () => {

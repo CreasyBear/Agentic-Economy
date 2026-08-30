@@ -20,7 +20,11 @@ import { problem } from '@/lib/server/problem'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { readBoundedRequestJson, readBoundedRequestText, type BoundedRequestTextResult } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
-import { authenticateAgentAccess, resolveAgentAccessPrincipal } from '@/lib/server/agent-access-auth'
+import {
+  authenticateAgentAccess,
+  resolveAgentAccessPrincipal,
+  type AgentAccessPrincipalResolver,
+} from '@/lib/server/agent-access-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
@@ -28,12 +32,15 @@ import { isRecord } from '@/modules/common/is-record'
 import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
 import {
   agentAuthorityModeAllows,
+  agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
 } from '@/modules/agent-access/contract'
 import type { ActionAgentAccessPrincipal, ActionTimingSink } from '@/modules/common/action'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
 import { createOperationInvokeService } from '@/lib/server/operation-invoke-api'
 import { createSupplyManagementService, type SupplyManagementService } from '@/modules/capability-supply/supply-actions'
+import { createAccountManagementService, type AccountManagementService } from '@/modules/agent-access/account.actions'
+import { createMarketDemandService, type MarketDemandService } from '@/modules/market-demand/market-demand.actions'
 const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
@@ -44,6 +51,8 @@ export type McpAccessTier = Readonly<{
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
   supplyManagementService?: SupplyManagementService
+  accountManagementService?: AccountManagementService
+  marketDemandService?: MarketDemandService
 }>
 
 type AeServerHandler<T extends AnyObjectSchema> = (
@@ -246,7 +255,7 @@ export function createAeMcpServer(
     : actions.filter((action) => action.surfaces.includes('mcp') && (
       (action.credentialAdmission === undefined && action.readOnly)
       || (action.credentialAdmission !== undefined
-        && access.principal?.scopes.includes(action.credentialAdmission.scope) === true)
+        && actionCredentialAdmitted(access.principal?.scopes ?? [], action.credentialAdmission))
       || (action.credentialAdmission === undefined
         && access.authorityMode !== undefined
         && agentAuthorityModeAllows(access.authorityMode, requiredModeForAction(action)))
@@ -282,6 +291,8 @@ export function createAeMcpServer(
               ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }),
               ...(access.timing === undefined ? {} : { timing: access.timing }),
               ...(access.supplyManagementService === undefined ? {} : { supplyManagementService: access.supplyManagementService }),
+              ...(access.accountManagementService === undefined ? {} : { accountManagementService: access.accountManagementService }),
+              ...(access.marketDemandService === undefined ? {} : { marketDemandService: access.marketDemandService }),
               ...(access.operationInvokeService === undefined ? {} : { operationInvokeService: access.operationInvokeService }),
             },
           })
@@ -311,13 +322,30 @@ export function createAeMcpServer(
   return server
 }
 
+function actionCredentialAdmitted(
+  scopes: readonly string[],
+  admission: NonNullable<AnyAction['credentialAdmission']>,
+): boolean {
+  return admission.anyScopes === undefined
+    ? scopes.includes(admission.scope)
+    : admission.anyScopes.some((scope) => scopes.includes(scope))
+}
+
 type McpRequestOptions = Readonly<{
   actions?: readonly AnyAction[]
   authenticate?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['authenticate']
+  resolvePrincipal?: AgentAccessPrincipalResolver
   supplyManagementService?: SupplyManagementService
+  accountManagementService?: AccountManagementService
+  marketDemandService?: MarketDemandService
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
 }>
+
+function mcpActionConsequenceResource(action: AnyAction): string {
+  const canonicalActionId = action.id.replace(/[A-Z]/g, (character) => `-${character.toLowerCase()}`)
+  return `surface:mcp:${canonicalActionId}`
+}
 
 export async function handleMcpRequest(request: Request, options: McpRequestOptions = {}): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
@@ -339,13 +367,25 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
     if (protectedTarget !== undefined) {
       const protectedAction = protectedTarget.action
       const requiredMode = requiredModeForAction(protectedAction)
-      const requiredScope = protectedTarget.generic ? null : protectedAction.credentialAdmission?.scope
+      const credentialAdmission = protectedTarget.generic ? undefined : protectedAction.credentialAdmission
+      const requiredAnyScopes = credentialAdmission?.anyScopes ?? []
+      const requiredScope = requiredAnyScopes.length > 0 ? null : credentialAdmission?.scope
+      const resolverRequiredScopes = protectedTarget.generic || requiredAnyScopes.length > 0
+        ? []
+        : [credentialAdmission?.scope ?? agentAuthorityScopeForMode(requiredMode)]
+      const resolvePrincipal = options.resolvePrincipal
+        ?? (options.authenticate === undefined
+          ? resolveAgentAccessPrincipal(boundedRequest, bounded.bodyText, correlationId)
+          : undefined)
       const admitted = await authenticateAgentAccess({
         ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
-        ...(options.authenticate === undefined
-          ? { resolvePrincipal: resolveAgentAccessPrincipal(boundedRequest, bounded.bodyText, correlationId) }
-          : {}),
+        ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
+        consequenceResource: protectedTarget.generic
+          ? 'surface:mcp:tools-list'
+          : mcpActionConsequenceResource(protectedAction),
         ...(requiredScope === undefined ? {} : { requiredScope }),
+        requiredScopes: resolverRequiredScopes,
+        requiredAnyScopes,
         requiredMode,
       })
       if (admitted.kind === 'refused') {
@@ -377,6 +417,10 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           ?? createOperationInvokeService(boundedRequest, bounded.bodyText),
         supplyManagementService: options.supplyManagementService
           ?? createSupplyManagementService(boundedRequest, bounded.bodyText),
+        accountManagementService: options.accountManagementService
+          ?? createAccountManagementService(boundedRequest, bounded.bodyText),
+        marketDemandService: options.marketDemandService
+          ?? createMarketDemandService(boundedRequest, bounded.bodyText),
       })
       return withRequestCorrelationHeader(await serveMcp(server, boundedRequest), correlationId)
     }

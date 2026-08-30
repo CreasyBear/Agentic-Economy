@@ -11,15 +11,20 @@ import { v } from 'convex/values'
 
 import { components, internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
-import { internalMutation, mutation, query } from './_generated/server'
+import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
+import type { InteractiveBusinessAuthorityContext } from '../src/modules/business/public'
 import { assertAdmission } from './lib/rateLimit'
 import {
   isChatThreadBusy,
   normalizeChatThreadTitle,
-  requireChatOwnerId,
+  requireChatOwner,
   requireOwnedChatThread,
 } from './chatThreads'
+import {
+  interactiveAuthorityContextValue,
+  resolveScheduledInteractiveAuthorityContext,
+} from './interactiveAuthority'
 
 const MAX_PROMPT_LENGTH = 2_000
 const MAX_MESSAGE_PAGE_SIZE = 50
@@ -72,7 +77,14 @@ export const sendMessage = mutation({
     promptMessageId: v.string(),
   }),
   handler: async (ctx, args) => {
-    const ownerId = await requireChatOwnerId(ctx)
+    const actor = await requireChatOwner(ctx)
+    const ownerId = actor.canonicalAccountRef
+    const authority: InteractiveBusinessAuthorityContext = Object.freeze({
+      principalRef: actor.canonicalPrincipalRef,
+      accountRef: actor.canonicalAccountRef,
+      revision: actor.authorityRevision,
+      provenance: actor.authorityProvenance,
+    })
     const prompt = normalizePrompt(args.prompt)
     if (prompt.length === 0 || Array.from(prompt).length > MAX_PROMPT_LENGTH) {
       throw new Error('invalid_input')
@@ -126,8 +138,8 @@ export const sendMessage = mutation({
     })
     await ctx.scheduler.runAfter(0, internal.chatGenerate.generate, {
       threadId: row.threadId,
-      ownerId,
       promptMessageId,
+      authority,
     })
     return { threadId: row.threadId, promptMessageId }
   },
@@ -153,6 +165,26 @@ export const clearActiveGeneration = internalMutation({
       updatedAt: Date.now(),
     })
     return true
+  },
+})
+
+export const authorizeScheduledGeneration = internalQuery({
+  args: {
+    threadId: v.string(),
+    promptMessageId: v.string(),
+    authority: interactiveAuthorityContextValue,
+  },
+  returns: v.union(v.object({ ownerId: v.string() }), v.null()),
+  handler: async (ctx, args) => {
+    const current = await resolveScheduledInteractiveAuthorityContext(ctx.db, args.authority)
+    if (current === null) return null
+    const row = await ctx.db.query('chatThreads')
+      .withIndex('by_threadId', (index) => index.eq('threadId', args.threadId))
+      .unique()
+    if (row === null
+      || row.ownerId !== current.accountRef
+      || row.activePromptMessageId !== args.promptMessageId) return null
+    return { ownerId: current.accountRef }
   },
 })
 

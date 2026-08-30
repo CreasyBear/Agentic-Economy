@@ -42,5 +42,7 @@ describe('money schema ownership', () => {
     expect(byName.has('moneyConnectAccountCommands')).toBe(false)
     const serialized = JSON.stringify(tables.filter((table) => table.tableName.startsWith('money')))
     expect(serialized).not.toMatch(/secret|paymentMethod|clientSecret/i)
+    expect(serialized).toContain('journalDigest')
+    expect(serialized).toContain('digestFormat')
   })
 })

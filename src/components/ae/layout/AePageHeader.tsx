@@ -1,48 +1,58 @@
-import { cva } from 'class-variance-authority'
 import { useId, type ReactNode } from 'react'
 
-type AePageHeaderDensity = 'public' | 'operator'
+import { AeSiteEyebrow } from '@/components/ae/website/AeSiteType'
 
 type AePageHeaderProps = {
   eyebrow?: string
   title: string
   description: string
   actions?: ReactNode
-  density?: AePageHeaderDensity
+  /**
+   * Live-data figure for the right edge of the header, e.g. the market's
+   * "2,412 matching Operations" count. Rendered mono + tabular so the
+   * number reads like a spec-sheet datum rather than prose.
+   */
+  meta?: ReactNode
 }
 
-const headerContainer = cva('mx-auto w-full max-w-6xl px-4', {
-  variants: { density: { public: 'py-8 md:px-6 md:py-10', operator: 'py-5 md:px-6 md:py-6' } },
-})
-const headerLayout = cva('flex flex-col', {
-  variants: { density: { public: 'gap-4', operator: 'gap-3' } },
-})
-const headerTitle = cva('font-semibold tracking-tight text-balance text-foreground', {
-  variants: { density: { public: 'text-3xl leading-tight sm:text-4xl', operator: 'text-2xl' } },
-})
-const headerDescription = cva('block text-pretty text-muted-foreground', {
-  variants: { density: { public: 'max-w-2xl text-base', operator: 'text-sm' } },
-})
-
-export function AePageHeader({ eyebrow, title, description, actions, density = 'public' }: AePageHeaderProps) {
+export function AePageHeader({
+  eyebrow,
+  title,
+  description,
+  actions,
+  meta,
+}: AePageHeaderProps) {
   const titleId = useId()
   const descriptionId = useId()
 
   return (
-    <section aria-labelledby={titleId} aria-describedby={descriptionId} className={headerContainer({ density })}>
-      <div className={headerLayout({ density })}>
-        <div className="grid max-w-4xl gap-2">
-          {eyebrow ? (
-            <p className="block text-sm font-medium text-muted-foreground">{eyebrow}</p>
-          ) : null}
-          <h1 id={titleId} className={headerTitle({ density })}>
-            {title}
-          </h1>
-          <p id={descriptionId} className={headerDescription({ density })}>
+    <section aria-labelledby={titleId} aria-describedby={descriptionId} className="ae-rail w-full py-section md:py-page">
+      <div className="grid gap-related border-b border-border pb-section md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <div className="grid max-w-4xl gap-related">
+          {eyebrow === undefined ? (
+            <h1 id={titleId} className="text-balance font-display text-3xl font-medium leading-[1.08] tracking-tight text-foreground sm:text-4xl">
+              {title}
+            </h1>
+          ) : (
+            <div className="grid gap-intra">
+              <AeSiteEyebrow>{eyebrow}</AeSiteEyebrow>
+              <h1 id={titleId} className="text-balance font-display text-3xl font-medium leading-[1.08] tracking-tight text-foreground sm:text-4xl">
+                {title}
+              </h1>
+            </div>
+          )}
+          <p id={descriptionId} className="max-w-prose text-pretty text-sm leading-6 text-muted-foreground">
             {description}
           </p>
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
+        <div className="flex flex-col items-start gap-related md:items-end">
+          {meta === undefined ? null : (
+            <p role="status" aria-live="polite" className="order-2 font-mono text-xs tabular-nums text-muted-foreground md:order-1">{meta}</p>
+          )}
+          {actions === undefined ? null : (
+            <div className="order-1 flex flex-wrap items-center gap-intra md:order-2">{actions}</div>
+          )}
+        </div>
       </div>
     </section>
   )

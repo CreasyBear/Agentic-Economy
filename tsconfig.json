@@ -23,7 +23,9 @@
     "paths": {
       "@/routes/owner.*": ["./src/routes/_operator/owner.*"],
       "@/routes/admin.*": ["./src/routes/_operator/admin.*"],
-      "@/routes/developers.discovery": ["./src/routes/_operator/developers.discovery"],
+      "@/routes/developers.discovery": [
+        "./src/routes/_operator/developers.discovery"
+      ],
       "@/*": ["./src/*"],
       "~/*": ["./src/*"]
     },
@@ -39,5 +41,9 @@
     "vitest.config.ts",
     "playwright.config.ts"
   ],
-  "exclude": ["node_modules", "dist", "convex/_generated"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "convex/_generated"
+  ]
 }

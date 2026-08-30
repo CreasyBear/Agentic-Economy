@@ -3,6 +3,7 @@ import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, requireOk } from '../lib/output'
+import { usageFailure } from '../lib/help'
 import {
   recoveryTransportFailure,
   renderStatusResult,
@@ -19,10 +20,7 @@ function cancelPath(invocationRef: string): string {
 export async function runCancelCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const invocationRef = args[0]?.trim()
   if (invocationRef === undefined || invocationRef.length === 0 || args.length > 1) {
-    throw new CliFailure('Usage: npm run -s ae -- cancel <invocation-ref> --idempotency-key <key>', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'cancel-usage',
-    })
+    throw usageFailure('cancel', 'cancel-usage')
   }
   const apiKey = requireAgentAccessKey('cancel', options)
   const idempotencyKey = options.idempotencyKey?.trim()

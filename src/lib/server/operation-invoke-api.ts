@@ -1,7 +1,12 @@
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
-import { authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
+import {
+  authenticateAgentAccess,
+  resolveAgentAccessPrincipal,
+  type AgentAccessPrincipal,
+  type AgentAccessPrincipalResolver,
+} from '@/lib/server/agent-access-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { ConvexSourceError, callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
 import { problem } from '@/lib/server/problem'
@@ -11,6 +16,10 @@ import { response } from '@/lib/server/no-store-response'
 import { isRecord } from '@/modules/common/is-record'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { operationInvokeAction } from '@/modules/capability-execution/operation-invoke.actions'
+import {
+  operationListInputSchema,
+  operationListResultSchema,
+} from '@/modules/capability-execution/operation-history.actions'
 import {
   operationCancelInputSchema,
   operationInvokeRecoveryResultSchema,
@@ -41,6 +50,7 @@ const operationJsonResponseHeaders = {
 } as const
 const MAX_OPERATION_INVOKE_BODY_BYTES = 256 * 1024
 const operationInvokeSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityOperationInvocations:invoke')
+const operationListSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityOperationInvocations:listInvocations')
 const operationStatusSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityOperationInvocations:readInvocationStatus')
 const operationCancelSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityOperationInvocations:cancelInvocation')
 const operationReconcileSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityOperationInvocations:reconcileInvocation')
@@ -51,6 +61,7 @@ type OperationInvokeReconcileRequest = Parameters<OperationInvokeService['reconc
 
 export type OperationInvokeHandlerOptions = Readonly<{
   authenticate?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['authenticate']
+  resolvePrincipal?: AgentAccessPrincipalResolver
   operationInvokeService?: OperationInvokeService
   timing?: ActionTimingSink
 }>
@@ -91,6 +102,46 @@ export function createOperationInvokeService(
       sourceWrite,
     })
     return operationInvokeAction.outputSchema.parse(result)
+  }
+  const listInvocations: NonNullable<OperationInvokeService['listInvocations']> = async (input) => {
+    const operationKey = operationKeyFor(input.input, input.principal.principalId, input.principal.credentialId, input.principal.applicationRef, input.principal.environment)
+    const command = {
+      operationRef: '',
+      input: {},
+      idempotencyKey: `list:${input.input.state ?? 'all'}:${input.input.cursor ?? 'start'}:${input.input.limit}`,
+      correlationId: input.correlationId,
+      operationKey,
+      principal: input.principal,
+    }
+    const sourceWrite = await sourceWriteAdmissionFromRequest({
+      request,
+      command,
+      body: bodyText,
+      scope: 'protected_action',
+      operationKey,
+      correlationId: input.correlationId,
+    })
+    const result = await callPublicSourceAction(operationListSourceAction, {
+      correlationId: input.correlationId,
+      operationKey,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      sourceWrite,
+      principal: input.principal,
+      ...(input.input.state === undefined ? {} : { state: input.input.state }),
+      paginationOpts: {
+        numItems: input.input.limit,
+        cursor: input.input.cursor ?? null,
+      },
+    })
+    if (!isRecord(result) || !Array.isArray(result.page) || typeof result.isDone !== 'boolean' || typeof result.continueCursor !== 'string') {
+      throw new Error('operation_invocation_list_invalid')
+    }
+    return operationListResultSchema.parse({
+      kind: 'available',
+      items: result.page,
+      hasMore: !result.isDone,
+      ...(!result.isDone && result.continueCursor.length > 0 ? { nextCursor: result.continueCursor } : {}),
+    })
   }
   const readInvocationStatus = async (input: OperationInvokeRecoveryRequest) => {
     const operationKey = operationKeyFor(input.invocationRef, input.principal.principalId, input.principal.credentialId, input.principal.applicationRef, input.principal.environment)
@@ -179,7 +230,7 @@ export function createOperationInvokeService(
     })
     return operationInvokeRecoveryResultSchema.parse(result)
   }
-  return { invokeOperation, readInvocationStatus, cancelInvocation, reconcileInvocation }
+  return { invokeOperation, listInvocations, readInvocationStatus, cancelInvocation, reconcileInvocation }
 }
 function gatewayTelemetryForResult(
   result: OperationInvokeResult,
@@ -331,11 +382,12 @@ export async function authenticateOperationGateway(
   options: OperationInvokeHandlerOptions,
   body: string | Uint8Array,
 ): Promise<Readonly<{ kind: 'authenticated'; principal: GatewayPrincipalRef }> | Response> {
+  const resolvePrincipal = options.resolvePrincipal
+    ?? (options.authenticate === undefined ? resolveAgentAccessPrincipal(request, body, correlationId) : undefined)
   const admitted = await authenticateAgentAccess({
-    ...(options.authenticate === undefined
-      ? { resolvePrincipal: resolveAgentAccessPrincipal(request, body, correlationId) }
-      : {}),
+    ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
     ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+    consequenceResource: 'surface:http:operations-call',
     requiredScope: OPERATION_INVOKE_SCOPE,
   })
   if (admitted.kind === 'authenticated') return { kind: admitted.kind, principal: admitted.principal }
@@ -561,6 +613,45 @@ export async function handleOperationInvokeStatusGet(
         refusalCode: mapped.code,
         unknown: true,
       })
+      return gatewayErrorResponse(error, 'invocation_runtime_unavailable', correlationId)
+    }
+  })
+}
+
+export async function handleOperationInvokeListGet(
+  request: Request,
+  options: OperationInvokeHandlerOptions = {},
+): Promise<Response> {
+  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    const admitted = await authenticateOperationGateway(request, correlationId, options, '')
+    if (admitted instanceof Response) return admitted
+    const url = new URL(request.url)
+    const rawLimit = url.searchParams.get('limit')
+    const rawCursor = url.searchParams.get('cursor')
+    const rawState = url.searchParams.get('state')
+    const parsed = operationListInputSchema.safeParse({
+      ...(rawLimit === null ? {} : { limit: Number(rawLimit) }),
+      ...(rawCursor === null ? {} : { cursor: rawCursor }),
+      ...(rawState === null ? {} : { state: rawState }),
+    })
+    if (!parsed.success) {
+      return withRequestCorrelationHeader(problem({
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_invocation_list_query',
+        detail: 'Use limit 1-100, an opaque cursor, and an optional canonical invocation state.',
+      }), correlationId)
+    }
+    try {
+      const service = options.operationInvokeService ?? createOperationInvokeService(request, '')
+      if (service.listInvocations === undefined) throw new Error('operation_history_service_unavailable')
+      const result = await service.listInvocations({
+        input: parsed.data,
+        principal: admitted.principal,
+        correlationId,
+      })
+      return withRequestCorrelationHeader(response(operationListResultSchema.parse(result), 200, operationJsonResponseHeaders), correlationId)
+    } catch (error) {
       return gatewayErrorResponse(error, 'invocation_runtime_unavailable', correlationId)
     }
   })

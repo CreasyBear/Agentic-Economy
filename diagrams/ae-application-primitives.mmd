@@ -1,0 +1,17 @@
+graph LR
+    A["Account"]
+    O["Operation"]
+    R["Order"]
+    X["Result"]
+    P["Payment"]
+
+    A -->|offers or acquires| O
+    O -->|selected as| R
+    R -->|fulfilled by| X
+    X -->|releases| P
+    P -->|returns value to| A
+
+    classDef existing fill:#E8F5EE,stroke:#247A52,color:#153E2D,stroke-width:2px
+    classDef next fill:#FFF1E8,stroke:#C85B25,color:#5A2A12,stroke-width:2px
+    class A,O,X existing
+    class R,P next

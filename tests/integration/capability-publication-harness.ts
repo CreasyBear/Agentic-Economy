@@ -154,6 +154,96 @@ export function operationContext(suffix: string): PublicationOperationContext {
   }
 }
 
+export async function installProviderConnectionFixture(
+  backend: ConvexFixtureBackend,
+  input: Readonly<{
+    businessId: Id<'businesses'>
+    connectionRef: string
+    providerRef: string
+    providerAccountRef: string
+    adapterId: string
+    secretRef: string | null
+    scopes: readonly string[]
+    resources: readonly string[]
+    evidenceRefs: readonly string[]
+    commandId: string
+  }>,
+) {
+  const owner = await backend.run(async (ctx) => {
+    const business = await ctx.db.get(input.businessId)
+    if (business === null) throw new Error('provider_connection_fixture_business_missing')
+    const account = await ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
+      .unique()
+    if (account === null) throw new Error('provider_connection_fixture_account_missing')
+    const ownership = await ctx.db.query('accountOwnerships')
+      .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+      .unique()
+    if (ownership === null) throw new Error('provider_connection_fixture_ownership_missing')
+    const principal = await ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', ownership.ownerPrincipalRef))
+      .unique()
+    if (principal === null) throw new Error('provider_connection_fixture_canonical_owner_missing')
+    return {
+      principalRef: principal.principalRef,
+      accountRef: account.accountRef,
+    }
+  })
+  const providerNamespace = `capability-provider/${input.adapterId}`
+  const installResources = [
+    `connection-provider:${providerNamespace}`,
+    `connection-provider:${providerNamespace}:${input.providerAccountRef}`,
+    ...(input.secretRef === null ? [] : [`secret:${input.secretRef}`]),
+  ].sort()
+  const suffix = canonicalDigest({
+    kind: 'canonical-provider-connection-fixture:v1',
+    commandId: input.commandId,
+    principalRef: owner.principalRef,
+    accountRef: owner.accountRef,
+    installResources,
+  }).slice('sha256:'.length, 'sha256:'.length + 32)
+  const grantRef = `grt_${suffix}`
+  const expiresAt = Date.now() + 300_000
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('authorityDelegationGrants', {
+      grantRef,
+      accountRef: owner.accountRef,
+      actorPrincipalRef: owner.principalRef,
+      subjectPrincipalRef: owner.principalRef,
+      scopes: ['connection:install'],
+      resourceRefs: installResources,
+      budgetLimit: 1,
+      budgetUsed: 0,
+      expiresAt,
+      generation: 1,
+      revision: 1,
+      lifecycle: 'active',
+      createdAt: 1,
+      createdBy: {
+        actorPrincipalRef: owner.principalRef,
+        activeAccountRef: owner.accountRef,
+        correlationRef: `fixture:${grantRef}`,
+        idempotencyRef: `fixture:${grantRef}`,
+      },
+    })
+  })
+  return await backend.mutation(internal.capabilityProviderConnections.create, {
+    connectionRef: input.connectionRef,
+    businessId: input.businessId,
+    providerRef: input.providerRef,
+    providerAccountRef: input.providerAccountRef,
+    adapterId: input.adapterId,
+    credentialRef: input.secretRef,
+    requestedScopes: [...input.scopes],
+    grantedScopes: [...input.scopes],
+    requestedResources: [...input.resources],
+    grantedResources: [...input.resources],
+    evidenceRefs: [...input.evidenceRefs],
+    commandId: input.commandId,
+    now: Date.now(),
+  })
+}
+
 export async function runEligibilityThroughCommand(
   backend: ConvexFixtureBackend,
   args: EligibilityInput & RegistrationContext,
@@ -334,24 +424,18 @@ export async function registerProviderConnection(
   adapterId = 'http-json:v1',
 ) {
   const { connectionRef, providerRef } = providerAuthority(suffix)
-  const result = await backend.mutation(
-    internal.capabilityProviderConnections.create,
-    {
-      commandId: `command:create:capability-publication:${suffix}`,
-      connectionRef,
-      businessId,
-      providerRef,
-      providerAccountRef: `account:capability-publication:${suffix}`,
-      adapterId,
-      credentialRef: null,
-      requestedScopes: [`capability:capability-publication:${suffix}`],
-      grantedScopes: [`capability:capability-publication:${suffix}`],
-      requestedResources: [`resource:capability-publication:${suffix}`],
-      grantedResources: [`resource:capability-publication:${suffix}`],
-      evidenceRefs: [`test:provider-connection:${suffix}`],
-      now: 1,
-    },
-  )
+  const result = await installProviderConnectionFixture(backend, {
+    commandId: `command:create:capability-publication:${suffix}`,
+    connectionRef,
+    businessId,
+    providerRef,
+    providerAccountRef: `account:capability-publication:${suffix}`,
+    adapterId,
+    secretRef: null,
+    scopes: [`capability:capability-publication:${suffix}`],
+    resources: [`resource:capability-publication:${suffix}`],
+    evidenceRefs: [`test:provider-connection:${suffix}`],
+  })
   if (result.kind !== 'applied') {
     throw new Error(`provider_connection_fixture_${result.kind}`)
   }

@@ -123,6 +123,7 @@ export type AgentAccessGrantReadback = Readonly<{
   expiresAt: number
 }>
 export type AgentAccessOwnerGrantReadback = Readonly<{
+  principalId: string
   credentialId: string
   applicationRef: string
   environment: AgentAccessEnvironment

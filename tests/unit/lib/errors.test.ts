@@ -6,7 +6,6 @@ import {
   gatewayFailureToProblem,
   kindForStatus,
   operationInvokeResultToProblem,
-  operationResultToProblem,
   DEFAULT_STATUS,
 } from '@/lib/errors'
 import type { ProblemKind } from '@/lib/errors'
@@ -99,58 +98,10 @@ describe('buildProblem', () => {
   })
 })
 
-describe('operationResultToProblem', () => {
-  it('returns null for ok', () => {
-    expect(operationResultToProblem({
-      kind: 'ok',
-      operationRef: 'operation:v1:abc',
-      capabilityId: 'c',
-      name: 'n',
-      output: {},
-      evidenceHash: 'h',
-    })).toBeNull()
-  })
-
-  it('maps refused operation_not_found to NOT_FOUND', () => {
-    expect(operationResultToProblem({ kind: 'refused', operationRef: 'r', reason: 'operation_not_found' }))
-      .toMatchObject({ kind: 'NOT_FOUND', code: 'operation_not_found' })
-  })
-  it('maps refused input_invalid to INVALID_ARGUMENT', () => {
-    expect(operationResultToProblem({ kind: 'refused', operationRef: 'r', reason: 'input_invalid' }))
-      .toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'input_invalid' })
-  })
-  it('maps other refusals to FAILED_PRECONDITION with the reason as code', () => {
-    expect(operationResultToProblem({ kind: 'refused', operationRef: 'r', reason: 'operation_not_keyless' }))
-      .toMatchObject({ kind: 'FAILED_PRECONDITION', code: 'operation_not_keyless' })
-    expect(operationResultToProblem({ kind: 'refused', operationRef: 'r', reason: 'endpoint_invalid' }))
-      .toMatchObject({ kind: 'FAILED_PRECONDITION', code: 'endpoint_invalid' })
-    expect(operationResultToProblem({ kind: 'refused', operationRef: 'r', reason: 'operation_not_executable' }))
-      .toMatchObject({ kind: 'FAILED_PRECONDITION', code: 'operation_not_executable' })
-  })
-
-  it('maps retryable provider/fetch errors to UNAVAILABLE retryable true', () => {
-    expect(operationResultToProblem({ kind: 'error', operationRef: 'r', code: 'provider_error', retryable: true, reason: 'upstream 503' }))
-      .toMatchObject({ kind: 'UNAVAILABLE', code: 'provider_error', retryable: true, detail: 'upstream 503' })
-    expect(operationResultToProblem({ kind: 'error', operationRef: 'r', code: 'fetch_failed', retryable: true, reason: 'dns' }))
-      .toMatchObject({ kind: 'UNAVAILABLE', code: 'fetch_failed', retryable: true })
-  })
-  it('maps non-retryable response_invalid to INTERNAL', () => {
-    expect(operationResultToProblem({ kind: 'error', operationRef: 'r', code: 'response_invalid', retryable: false, reason: 'schema mismatch' }))
-      .toMatchObject({ kind: 'INTERNAL', code: 'response_invalid', retryable: false })
-  })
-  it('respects result.retryable instead of the code heuristic', () => {
-    // provider_error with retryable:false must NOT map to UNAVAILABLE.
-    expect(operationResultToProblem({ kind: 'error', operationRef: 'r', code: 'provider_error', retryable: false, reason: 'declined' }))
-      .toMatchObject({ kind: 'INTERNAL', code: 'provider_error', retryable: false })
-  })
-})
-
 describe('gateway failure projection', () => {
   it('maps auth, budget, provider, and unknown failures through canonical kinds', () => {
     expect(gatewayFailureToProblem({ code: 'authentication_required', kind: 'refused' }))
       .toEqual({ kind: 'UNAUTHENTICATED', code: 'authentication_required' })
-    expect(gatewayFailureToProblem({ code: 'budget_exhausted', kind: 'refused' }))
-      .toEqual({ kind: 'RESOURCE_EXHAUSTED', code: 'budget_exhausted' })
     expect(gatewayFailureToProblem({ code: 'provider_unavailable', kind: 'error', retryable: true }))
       .toEqual({ kind: 'UNAVAILABLE', code: 'provider_unavailable', retryable: true })
     expect(gatewayFailureToProblem({ code: 'private provider response', kind: 'error' }))

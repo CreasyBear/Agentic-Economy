@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const serverMocks = vi.hoisted(() => ({
   auth: vi.fn(),
   clerkClient: vi.fn(),
+  callSourceQuery: vi.fn(),
   callSourceMutation: vi.fn(),
+  createConvexServerFunctionAssertion: vi.fn(),
+  sourceQuery: vi.fn((name: string) => ({ name })),
   sourceMutation: vi.fn((name: string) => ({ name })),
   registerAgentAccessGrant: vi.fn(),
   revokeAgentAccessGrant: vi.fn(),
@@ -20,7 +23,10 @@ vi.mock('@tanstack/react-start', () => ({
   }),
 }))
 vi.mock('@/lib/server/convex-source', () => ({
+  callSourceQuery: serverMocks.callSourceQuery,
   callSourceMutation: serverMocks.callSourceMutation,
+  createConvexServerFunctionAssertion: serverMocks.createConvexServerFunctionAssertion,
+  sourceQuery: serverMocks.sourceQuery,
   sourceMutation: serverMocks.sourceMutation,
 }))
 vi.mock('@/modules/agent-access/policy.functions', () => ({
@@ -51,7 +57,21 @@ beforeEach(() => {
   clerkApi.list.mockResolvedValue({ data: [] })
   clerkApi.create.mockResolvedValue({ id: 'key_server', secret: 'secret_server' })
   clerkApi.getSecret.mockResolvedValue({ secret: 'secret_server' })
-  serverMocks.callSourceMutation.mockResolvedValue({ kind: 'recorded' })
+  serverMocks.callSourceMutation.mockImplementation(async (_reference: unknown, input: { grantRef: string; expiresAt: number }) => ({
+    kind: 'recorded',
+    grantRef: input.grantRef,
+    generation: 1,
+    policyDigest: 'sha256:policy',
+    lifecycle: 'active',
+    expiresAt: input.expiresAt,
+  }))
+  serverMocks.createConvexServerFunctionAssertion.mockResolvedValue({
+    principalId: 'ae:server-function',
+    ownerId: 'ae:server-function',
+    credentialId: 'ae:server-function',
+    scopes: ['market_operations:invoke'],
+  })
+  serverMocks.callSourceQuery.mockResolvedValue([])
   serverMocks.registerAgentAccessGrant.mockResolvedValue({
     kind: 'recorded',
     grantRef: 'server-12345678',
@@ -98,7 +118,7 @@ describe('owner agent-access issuance policy', () => {
     expect(policy.budget.maximumSpendPerInvocation.units).not.toBe('0')
   })
 
-  it('registers Convex ownership by token identifier while Clerk keeps the raw user subject', async () => {
+  it('requires canonical Convex authority before Clerk effects and keeps provider IDs as locators', async () => {
     await expect(issueAgentAccessKeyServer({
       data: {
         name: 'Server assistant',
@@ -106,15 +126,34 @@ describe('owner agent-access issuance policy', () => {
       },
     })).resolves.toMatchObject({ kind: 'created', keyId: 'key_server' })
 
-    const tokenIdentifier = 'https://clerk.example.test|user_123'
+    expect(serverMocks.callSourceQuery).toHaveBeenCalledWith(
+      { name: 'agentAccessPolicy:listOwnerGrantReadbacks' },
+      { requireAuthority: true },
+    )
     expect(clerkApi.create).toHaveBeenCalledWith(expect.objectContaining({
       subject: 'user_123',
       createdBy: 'user_123',
     }))
-    expect(serverMocks.registerAgentAccessGrant).toHaveBeenCalledWith(
-      expect.objectContaining({ ownerId: tokenIdentifier }),
+    expect(serverMocks.callSourceMutation).toHaveBeenCalledWith(
+      { name: 'agentAccessPrincipals:registerIssuedAgentBindingForServer' },
+      expect.objectContaining({
+        credentialId: 'key_server',
+        grantRef: expect.stringMatching(/^grt_[0-9a-f]{32}$/u),
+        serviceAuth: expect.objectContaining({ principalId: 'ae:server-function' }),
+      }),
     )
-    expect(serverMocks.registerAgentAccessGrant.mock.calls[0]?.[0].ownerId).not.toBe('user_123')
+    expect(serverMocks.callSourceMutation.mock.calls[0]?.[1]).not.toHaveProperty('ownerId')
+  })
+
+  it('creates no Clerk key when canonical account authority is unavailable', async () => {
+    serverMocks.callSourceQuery.mockRejectedValue(new Error('canonical_authority_unavailable'))
+
+    await expect(issueAgentAccessKeyServer({
+      data: { name: 'Server assistant', idempotencyKey: 'authority-12345678' },
+    })).resolves.toEqual({ kind: 'error', code: 'missing_auth', retryable: false })
+
+    expect(clerkApi.create).not.toHaveBeenCalled()
+    expect(serverMocks.registerAgentAccessGrant).not.toHaveBeenCalled()
   })
 
   it('fails closed with missing auth when issuer or Clerk identity is unavailable', async () => {

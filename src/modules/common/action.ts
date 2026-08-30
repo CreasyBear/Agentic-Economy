@@ -24,6 +24,8 @@ import { z } from 'zod'
 
 export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'chat' | 'cli' | 'mcp'
 
+// Declaration merging is the extension seam for harness-owned action context.
+// oxlint-disable-next-line typescript/no-empty-object-type
 export interface ActionContextComposition {}
 
 export type ActionSourceWriteRequest = NonNullable<
@@ -42,7 +44,10 @@ export type ActionAgentAccessPrincipal = NonNullable<
   ActionContextComposition['agentAccessPrincipal']
 >
 export type ActionCredentialAdmission = Readonly<{
+  /** Primary scope used by single-scope actions and human-facing descriptions. */
   scope: string
+  /** When present, the credential must carry at least one listed scope. */
+  anyScopes?: readonly string[]
   authority: 'descriptor_classified'
 }>
 
