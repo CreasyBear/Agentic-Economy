@@ -134,7 +134,14 @@ function FoundBody({
         <dl className="grid grid-cols-[max-content_1fr] items-baseline gap-x-related gap-y-intra">
           <Fact label="Price" value={formatOperationPrice(operation.commercial.price)} />
           <Fact label="Access" value={formatOperationAuthentication(operation.authentication)} />
-          <Fact label="Readiness" value={formatOperationReadiness(operation.availability.posture)} />
+          <Fact
+            label="Readiness"
+            value={operationReadinessForBuyer({
+              availabilityPosture: operation.availability.posture,
+              requiresBuyerCredential,
+              hasBuyerCredential,
+            })}
+          />
           {operation.commercial.materialTerms.map((term) => (
             <Fact key={term.label} label={term.label} value={term.value} />
           ))}
@@ -165,6 +172,21 @@ function FoundBody({
       </section>
     </>
   )
+}
+
+function operationReadinessForBuyer({
+  availabilityPosture,
+  requiresBuyerCredential,
+  hasBuyerCredential,
+}: Readonly<{
+  availabilityPosture: PublicOperationDescriptor['availability']['posture']
+  requiresBuyerCredential: boolean
+  hasBuyerCredential: boolean
+}>): string {
+  if (availabilityPosture === 'routeable' && requiresBuyerCredential && !hasBuyerCredential) {
+    return 'Connection required'
+  }
+  return formatOperationReadiness(availabilityPosture)
 }
 
 function PrimaryContinuation({

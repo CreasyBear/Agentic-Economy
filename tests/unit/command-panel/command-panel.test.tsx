@@ -189,7 +189,8 @@ describe('operator command panel', () => {
     const fixture = detailFixture()
     expect(await screen.findByText(formatOperationPrice(fixture.commercial.price))).toBeTruthy()
     expect(screen.getByText(formatOperationAuthentication(fixture.authentication))).toBeTruthy()
-    expect(screen.getByText(formatOperationReadiness(fixture.availability.posture))).toBeTruthy()
+    expect(screen.getByText('Connection required')).toBeTruthy()
+    expect(screen.queryByText(formatOperationReadiness(fixture.availability.posture))).toBeNull()
     expect(screen.getByText('Charged per call.')).toBeTruthy()
     expect(screen.getByText(/Connect an agent before/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Connect agent' }).getAttribute('href')).toBe('/for-agents')
@@ -219,6 +220,8 @@ describe('operator command panel', () => {
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
     expect(await screen.findByText(/single safe next step/)).toBeTruthy()
+    expect(screen.getByText(formatOperationReadiness(detailFixture().availability.posture))).toBeTruthy()
+    expect(screen.queryByText('Connection required')).toBeNull()
     expect(screen.getByRole('button', { name: 'Copy Call Operation' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Connect agent' })).toBeNull()
 
