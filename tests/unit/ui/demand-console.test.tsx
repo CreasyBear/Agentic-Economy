@@ -10,7 +10,7 @@ import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorC
 import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeCreditTopUpPanel, type CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
-import { creditTopupTargetFromItems } from '@/components/ae/console/AeOwnerCredit'
+import { AeOwnerCredit, creditTopupTargetFromItems } from '@/components/ae/console/AeOwnerCredit'
 import type { CreditPaymentSession } from '@/modules/money/public'
 import type { CreditTopupBeginInput } from '@/modules/money/server'
 
@@ -96,6 +96,33 @@ describe('owner credit target', () => {
       currency: 'USD',
       exponent: 2,
     })
+  })
+
+  it('uses the shared funding continuation after an insufficient-credit call', () => {
+    render(<AeOwnerCredit
+      items={[{
+        ...keyReadback,
+        activity: [{
+          activityRef: 'activity:insufficient',
+          credentialId: 'key_ui_1',
+          serviceRef: 'service:weather',
+          offeringRef: 'offering:weather',
+          businessId: 'business:weather',
+          operationKey: 'weather.lookup',
+          invocationRef: 'invocation:insufficient',
+          attemptRef: 'attempt:insufficient',
+          grossAmount: { currency: 'USD', units: '500', exponent: 2 },
+          chargeState: 'insufficient_credit',
+          priceDigest: `sha256:${'a'.repeat(64)}`,
+          observedAt: 2,
+        }],
+      }]}
+      loading={false}
+    />)
+
+    fireEvent.click(screen.getByText('Call declined for insufficient credit'))
+    const continuation = screen.getByRole('link', { name: 'Add credit' })
+    expect(continuation.getAttribute('href')).toBe('/owner/credit#fund')
   })
 })
 

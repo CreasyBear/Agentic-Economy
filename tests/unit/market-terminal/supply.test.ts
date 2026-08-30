@@ -108,6 +108,47 @@ describe('AE CLI supplier Operation lifecycle', () => {
     expect(output).not.toContain('hidden-supplier-secret')
   })
 
+  it('renders the shared supplier continuation from current lifecycle facts', async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json({
+      kind: 'available',
+      businessId: 'business:one',
+      business: { name: 'Supplier', slug: 'supplier' },
+      operations: [{
+        offeringRef: 'offering:one',
+        revision: 1,
+        name: 'Lookup',
+        summary: 'Look something up.',
+        catalogStatus: 'published',
+        lifecycle: { state: 'active', reasons: [] },
+        readiness: { outcome: 'healthy' },
+        live: { available: true },
+        currentStep: 'test',
+        stepStates: { describe: 'completed', admission: 'completed', readiness: 'completed', test: 'completed' },
+        publication: { publicationRef: 'publication:one', publicationRevision: 1, operationRef: 'operation:one', state: 'current' },
+      }],
+      activityTruncated: false,
+    }))
+    vi.stubGlobal('fetch', fetch)
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSupplyCommand(['status', 'business:one'], { ...baseOptions, json: false })
+
+    expect(write.mock.calls.flat().join('')).toContain('next  ae inspect operation:one')
+  })
+
+  it('uses the shared missing-provider-connection guidance for an empty connection list', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'available',
+      businessId: 'business:one',
+      connections: [],
+    })))
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSupplyCommand(['connections', 'business:one'], { ...baseOptions, json: false })
+
+    expect(write.mock.calls.flat().join('')).toContain('next  /owner/settings/connections')
+  })
+
   it('adds one explicit idempotency key to maintenance material', async () => {
     const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       expect(JSON.parse(String(init?.body))).toMatchObject({

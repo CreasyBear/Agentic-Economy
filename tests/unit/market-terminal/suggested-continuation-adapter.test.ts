@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  creditContinuationForCli,
+  connectionContinuationForCli,
   invocationContinuationForCli,
   operationContinuationForCli,
+  supplierContinuationForCli,
 } from '../../../tools/ae/lib/suggested-continuation-adapter'
 import { suggestContinuation } from '@/modules/market/suggested-continuation'
 
@@ -62,5 +65,46 @@ describe('CLI suggested-continuation adapter', () => {
       command: `ae status ${invocationRef}`,
       warning: 'The external effect may have started. Reconcile before retrying.',
     })
+  })
+
+  it.each(['terminal', 'cancelled', 'invalidated'] as const)(
+    'does not send a %s invocation back to the same status command',
+    (state) => {
+      expect(invocationContinuationForCli({
+        kind: 'found',
+        invocationRef,
+        state,
+      })).toBeUndefined()
+    },
+  )
+
+  it('uses shared supplier, connection, and credit projections', () => {
+    expect(supplierContinuationForCli({
+      offeringRef: 'offering:one',
+      catalogStatus: 'published',
+      lifecycleState: 'active',
+      liveAvailable: true,
+      publicationState: 'current',
+      operationRef,
+    })).toEqual(suggestContinuation({
+      subject: 'supplier',
+      state: 'current',
+      offeringRef: 'offering:one',
+      operationRef,
+    }))
+    expect(connectionContinuationForCli('buyer')).toEqual(suggestContinuation({
+      subject: 'connection',
+      state: 'missing',
+      actor: 'buyer',
+    }))
+    expect(connectionContinuationForCli('supplier')).toEqual(suggestContinuation({
+      subject: 'connection',
+      state: 'missing',
+      actor: 'supplier',
+    }))
+    expect(creditContinuationForCli()).toEqual(suggestContinuation({
+      subject: 'credit',
+      state: 'insufficient',
+    }))
   })
 })

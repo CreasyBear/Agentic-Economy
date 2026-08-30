@@ -161,22 +161,23 @@ describe("current supply funnel", () => {
     );
 
     const expected = [
-      ["Continue description", "/owner/supply/offering%3Adescribe#description"],
+      ["Continue description", "/owner/offerings/offering%3Adescribe"],
       ["Connect provider", "/owner/supply/offering%3Aprovider#provider"],
       ["Recheck readiness", "/owner/supply/offering%3Areadiness#readiness"],
       ["Refresh and re-admit", "/owner/supply?rebind=offering%3Aauthority-stale#provider-connection-connection%3Astale"],
       ["Choose replacement connection", "/owner/supply/offering%3Acredential-rejected#credential-recovery"],
       ["Inspect incompatibility", "/owner/supply/offering%3Aincompatible#incompatibility"],
-      ["Republish", "/owner/supply/offering%3Awithdrawn#publication-maintenance"],
-      ["View live Operation", "/operations/operation%3Aone"],
+      ["Republish Operation", "/owner/supply/offering%3Awithdrawn#publication-maintenance"],
+      ["View live Operation", "/operations/operation:one"],
       ["Review earnings", "/owner/supply#earnings"],
     ] as const;
 
+    const operationsTable = within(screen.getByRole("table", { name: "Operations" }));
     for (const [label, href] of expected) {
-      const action = screen.getByRole("link", { name: label });
+      const action = operationsTable.getByRole("link", { name: label });
       expect(action.getAttribute("href")).toBe(href);
     }
-    expect(screen.getAllByRole("link", { name: /Continue description|Connect provider|Recheck readiness|Refresh and re-admit|Choose replacement connection|Inspect incompatibility|Republish|View live Operation|Review earnings/ })).toHaveLength(9);
+    expect(operationsTable.getAllByRole("link", { name: /Continue description|Connect provider|Recheck readiness|Refresh and re-admit|Choose replacement connection|Inspect incompatibility|Republish Operation|View live Operation|Review earnings/ })).toHaveLength(9);
   });
 
   it("labels non-production operational observations with their environment", () => {
@@ -224,11 +225,21 @@ describe("current supply funnel", () => {
     expect(screen.getByText("https://provider.example/quote")).toBeDefined();
     expect(screen.getByRole("button", { name: "Refresh authority" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Revoke" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Copy connection reference" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Connect supplier" })).toBeDefined();
     expect(document.activeElement?.getAttribute("id")).toBe(
       "provider-connection-provider-connection:test",
     );
     window.history.replaceState(null, "", "/");
+  });
+
+  it("uses the shared provider continuation in the empty state", () => {
+    renderWithRouter(
+      <AeOwnerProviderConnections businessId="business-1" connections={[]} />,
+    );
+
+    const continuation = screen.getByRole("link", { name: "Connect provider" });
+    expect(continuation.getAttribute("href")).toBe("/owner/settings/connections");
   });
 
   it("refreshes the exact bound connection when one provider host has two connections", async () => {

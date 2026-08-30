@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,7 @@ import {
   type OwnerProviderConnection,
 } from '@/modules/capability-supply/supply-funnel.functions'
 import { providerConnectionTargetId } from './provider-connection-target'
+import { suggestContinuation } from '@/modules/market/suggested-continuation'
 
 export function AeOwnerProviderConnections({
   businessId,
@@ -36,6 +38,11 @@ export function AeOwnerProviderConnections({
   const [refreshedForRebind, setRefreshedForRebind] = useState<string>()
   const rebindLinkRef = useRef<HTMLAnchorElement>(null)
   const canConnect = businessId !== undefined && businessId.length > 0
+  const missingConnectionContinuation = suggestContinuation({
+    subject: 'connection',
+    state: 'missing',
+    actor: 'supplier',
+  })
 
   useEffect(() => {
     const focusHashTarget = () => {
@@ -170,6 +177,11 @@ export function AeOwnerProviderConnections({
         <AeEmptyState
           title="No provider connection yet"
           description="Add the public HTTPS endpoint that returns the x402 payment challenge for your operation."
+          action={missingConnectionContinuation.href === undefined ? undefined : (
+            <Button asChild className="min-h-touch">
+              <a href={missingConnectionContinuation.href}>{missingConnectionContinuation.label}</a>
+            </Button>
+          )}
         />
       ) : (
         <ul className="m-0 grid list-none divide-y divide-border border-y border-border p-0">
@@ -184,6 +196,7 @@ export function AeOwnerProviderConnections({
                 <div className="grid min-w-0 gap-1">
                   <p className="font-medium text-foreground">{providerConnectionStatus(connection)}</p>
                   <p className="break-all text-sm text-muted-foreground">{connection.grantedResources[0] ?? connection.providerAccountRef}</p>
+                  <AeCopyReference label="connection reference" value={connection.connectionRef} />
                 </div>
                 {(connection.lifecycle === 'active' || connection.lifecycle === 'reauthorization_required') ? (
                   <div className="flex flex-wrap gap-2">

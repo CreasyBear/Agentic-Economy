@@ -465,10 +465,7 @@ describe('external-agent Market Operation cold loop', () => {
       [operationRef],
       { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
-    expect(replay).toEqual({
-      ...completedResult,
-      nextCommand: `ae status ${invocationRef}`,
-    })
+    expect(replay).toEqual(completedResult)
     expect(status.result).toEqual(completedResult)
 
     await expect(runInvokeCommand(

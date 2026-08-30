@@ -21,6 +21,7 @@ import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-oper
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 import type { PendingOperationApproval } from '@/modules/capability-execution/operation-approval.functions'
+import { suggestContinuation } from '@/modules/market/suggested-continuation'
 
 export type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 
@@ -127,6 +128,11 @@ export function AeAgentOperatorConsole({
     || selected.key.revoked
     || selected.key.expired
   const keysPhase = stagedListPhase({ firstLoadPending, rows: items })
+  const missingAgentContinuation = suggestContinuation({
+    subject: 'connection',
+    state: 'missing',
+    actor: 'buyer',
+  })
 
   return (
     <div className="grid gap-8">
@@ -159,7 +165,7 @@ export function AeAgentOperatorConsole({
             description="Start setup from the agent and approve the request to create access you can revoke."
             action={
               <Button asChild className="min-h-touch">
-                <a href="/for-agents">Connect agent</a>
+                <a href={missingAgentContinuation.href}>{missingAgentContinuation.label}</a>
               </Button>
             }
           />

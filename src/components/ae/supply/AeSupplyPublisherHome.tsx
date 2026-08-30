@@ -13,6 +13,7 @@ import {
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { AeOwnerProviderConnections } from './AeOwnerProviderConnections'
 import { providerConnectionTargetId } from './provider-connection-target'
+import { suggestContinuation, type SuggestedContinuation } from '@/modules/market/suggested-continuation'
 import { AeSupplyEarningsCard } from './AeSupplyEarningsCard'
 import { Badge } from '@/components/ui/badge'
 import type {
@@ -189,20 +190,7 @@ function SupplyOfferingsTable({ offerings }: { offerings: readonly OwnerSupplyOf
   )
 }
 
-type SupplierContinuation = Readonly<{
-  label:
-    | 'Continue description'
-    | 'Connect provider'
-    | 'Refresh and re-admit'
-    | 'Re-admit provider authority'
-    | 'Choose replacement connection'
-    | 'Recheck readiness'
-    | 'Inspect incompatibility'
-    | 'Republish'
-    | 'View live Operation'
-    | 'Review earnings'
-  href: string
-}>
+type SupplierContinuation = SuggestedContinuation & Readonly<{ href: string }>
 
 function supplierContinuationForOffering(
   offering: OwnerSupplyOfferingReadback,
@@ -220,49 +208,76 @@ function supplierContinuationForOffering(
     : undefined
 
   if (offering.status === 'retired' || publicationState === 'superseded') {
-    return { label: 'Review earnings', href: '/owner/supply#earnings' }
+    return { label: 'Review earnings', kind: 'navigate', href: '/owner/supply#earnings' }
   }
   if (publicationState === 'incompatible' || offering.lifecycle.state === 'incompatible') {
-    return { label: 'Inspect incompatibility', href: `${detailHref}#incompatibility` }
+    return withBrowserDestination(
+      suggestContinuation({ subject: 'supplier', state: 'incompatible', offeringRef: offering.offeringRef }),
+      `${detailHref}#incompatibility`,
+    )
   }
   if (publicationState === 'withdrawn' || offering.lifecycle.state === 'withdrawn') {
-    return { label: 'Republish', href: `${detailHref}#publication-maintenance` }
+    return withBrowserDestination(
+      suggestContinuation({ subject: 'supplier', state: 'withdrawn', offeringRef: offering.offeringRef }),
+      `${detailHref}#publication-maintenance`,
+    )
   }
   if (offering.currentStep === 'describe') {
-    return { label: 'Continue description', href: `${detailHref}#description` }
+    return withBrowserDestination(
+      suggestContinuation({ subject: 'supplier', state: 'draft', offeringRef: offering.offeringRef }),
+    )
   }
   if (authorityStale) {
     if (boundConnectionRef === undefined) {
       return {
         label: 'Re-admit provider authority',
+        kind: 'navigate',
         href: `${detailHref}#provider`,
       }
     }
     const rebindQuery = `?rebind=${encodeURIComponent(offering.offeringRef)}`
     return {
       label: 'Refresh and re-admit',
+      kind: 'navigate',
       href: `/owner/supply${rebindQuery}#${encodeURIComponent(providerConnectionTargetId(boundConnectionRef))}`,
     }
   }
   if (credentialNeedsAttention) {
     return {
       label: 'Choose replacement connection',
+      kind: 'navigate',
       href: `${detailHref}#credential-recovery`,
     }
   }
   if (offering.currentStep === 'admission') {
-    return { label: 'Connect provider', href: `${detailHref}#provider` }
+    return withBrowserDestination(
+      suggestContinuation({ subject: 'connection', state: 'missing', actor: 'supplier' }),
+      `${detailHref}#provider`,
+    )
   }
   if (offering.live.available && offering.publication?.operationRef !== undefined) {
-    return {
-      label: 'View live Operation',
-      href: `/operations/${encodeURIComponent(offering.publication.operationRef)}`,
-    }
+    return withBrowserDestination(suggestContinuation({
+      subject: 'supplier',
+      state: 'current',
+      offeringRef: offering.offeringRef,
+      operationRef: offering.publication.operationRef,
+    }))
   }
   if (offering.currentStep === 'readiness' || !offering.live.available) {
-    return { label: 'Recheck readiness', href: `${detailHref}#readiness` }
+    return withBrowserDestination(
+      suggestContinuation({ subject: 'supplier', state: 'unready', offeringRef: offering.offeringRef }),
+      `${detailHref}#readiness`,
+    )
   }
-  return { label: 'Review earnings', href: '/owner/supply#earnings' }
+  return { label: 'Review earnings', kind: 'navigate', href: '/owner/supply#earnings' }
+}
+
+function withBrowserDestination(
+  continuation: SuggestedContinuation,
+  href = continuation.href,
+): SupplierContinuation {
+  if (href === undefined) throw new Error('supplier_continuation_href_missing')
+  return { ...continuation, href }
 }
 
 export function AeOwnerOperationFacts({

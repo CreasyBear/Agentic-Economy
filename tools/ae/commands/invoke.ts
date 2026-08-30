@@ -13,11 +13,15 @@ import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
 import {
+  connectionContinuationForCli,
+  creditContinuationForCli,
+  invocationContinuationForCli,
+} from '../lib/suggested-continuation-adapter'
+import {
   MAX_STATUS_WAIT_MS,
   pendingDelay,
   readOperationStatus,
   requireAgentAccessKey,
-  statusCommandFor,
   terminalResult,
 } from './status'
 
@@ -81,7 +85,14 @@ function invokeOutput(
   result: OperationInvokeResult | OperationInvokeStatusResult,
 ): Record<string, unknown> {
   const invocationRef = 'invocationRef' in result ? result.invocationRef : undefined
-  const nextCommand = invocationRef === undefined ? undefined : statusCommandFor(invocationRef)
+  const continuation = result.kind === 'completed' && result.usage.chargeState === 'insufficient_credit'
+    ? creditContinuationForCli()
+    : result.kind === 'completed' || invocationRef === undefined
+      ? undefined
+      : result.kind === 'reconciliation_required'
+        ? invocationContinuationForCli({ kind: 'found', invocationRef, state: 'reconciliation_required' })
+        : invocationContinuationForCli({ kind: 'found', invocationRef, state: 'in_progress' })
+  const nextCommand = continuation?.command
   return {
     ...result,
     ...(nextCommand === undefined ? {} : { nextCommand }),
@@ -154,10 +165,13 @@ export async function runInvokeCommand(
     throw new CliFailure('Operation input must be a JSON object.', { kind: 'INVALID_ARGUMENT', code: 'invoke-input' })
   }
   if (credential === undefined) {
+    const continuation = connectionContinuationForCli('buyer')
     throw new CliFailure('No AE agent credential is configured. Run ae connect, then repeat the same call.', {
       kind: 'UNAUTHENTICATED',
       code: 'agent_access_key_required',
-      detail: { operationRef, nextAction: 'ae connect' },
+      detail: { operationRef, ...(continuation.command === undefined ? {} : { nextAction: continuation.command }) },
+      suggestion: continuation.label,
+      ...(continuation.command === undefined ? {} : { nextCommand: continuation.command }),
     })
   }
 

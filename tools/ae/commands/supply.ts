@@ -27,6 +27,10 @@ import {
   table,
 } from '../lib/output'
 import { usageFailure } from '../lib/help'
+import {
+  connectionContinuationForCli,
+  supplierContinuationForCli,
+} from '../lib/suggested-continuation-adapter'
 import { requireAgentAccessKey } from './status'
 
 export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
@@ -131,20 +135,45 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
     line(`${result.operations.length} Operation${result.operations.length === 1 ? '' : 's'}`)
     for (const operation of result.operations) {
       if (!isRecord(operation)) continue
+      const lifecycle = isRecord(operation.lifecycle) ? operation.lifecycle : undefined
+      const live = isRecord(operation.live) ? operation.live : undefined
+      const publication = isRecord(operation.publication) ? operation.publication : undefined
       table([
         ['offering', String(operation.offeringRef ?? '')],
         ['name', String(operation.name ?? '')],
         ['catalog', String(operation.catalogStatus ?? '')],
-        ['lifecycle', isRecord(operation.lifecycle) ? String(operation.lifecycle.state ?? '') : ''],
+        ['lifecycle', String(lifecycle?.state ?? '')],
         ['ready', isRecord(operation.readiness) ? String(operation.readiness.outcome ?? '') : ''],
-        ['live', isRecord(operation.live) && operation.live.available === true ? 'yes' : 'no'],
+        ['live', live?.available === true ? 'yes' : 'no'],
       ])
+      if (
+        typeof operation.offeringRef === 'string'
+        && (operation.catalogStatus === 'draft' || operation.catalogStatus === 'published' || operation.catalogStatus === 'paused' || operation.catalogStatus === 'retired')
+        && (lifecycle?.state === 'inactive' || lifecycle?.state === 'active' || lifecycle?.state === 'withdrawn' || lifecycle?.state === 'incompatible')
+      ) {
+        const continuation = supplierContinuationForCli({
+          offeringRef: operation.offeringRef,
+          catalogStatus: operation.catalogStatus,
+          lifecycleState: lifecycle.state,
+          liveAvailable: live?.available === true,
+          ...(publication?.state === 'current' || publication?.state === 'withdrawn' || publication?.state === 'superseded' || publication?.state === 'incompatible'
+            ? { publicationState: publication.state }
+            : {}),
+          ...(typeof publication?.operationRef === 'string' ? { operationRef: publication.operationRef } : {}),
+        })
+        table([['next', continuation.command ?? continuation.href ?? continuation.label]])
+      }
       line()
     }
     return
   }
   if (result.kind === 'available' && Array.isArray(result.connections)) {
     line(`${result.connections.length} provider connection${result.connections.length === 1 ? '' : 's'}`)
+    if (result.connections.length === 0) {
+      const continuation = connectionContinuationForCli('supplier')
+      table([['next', continuation.command ?? continuation.href ?? continuation.label]])
+      return
+    }
     for (const connection of result.connections) {
       if (!isRecord(connection)) continue
       table([

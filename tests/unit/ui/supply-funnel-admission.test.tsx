@@ -310,6 +310,29 @@ describe("current supply funnel", () => {
     window.history.replaceState(null, "", "/");
   });
 
+  it("ignores a continuation hash when that recovery target is not present", () => {
+    window.history.replaceState(null, "", "/#credential-recovery");
+
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={offeringAt("describe")}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        callbacks={{
+          saveOffering: async (value) => ({ kind: "saved", value, message: "Saved." }),
+          preflight: async () => ({ kind: "prepared", prepared: preparedPublication }),
+          admit: async () => ({ step: "admission", state: "completed" }),
+          runReadiness: async () => ({ step: "readiness", state: "completed" }),
+          runTest: async () => ({ step: "test", state: "completed" }),
+        }}
+      />,
+    );
+
+    expect(document.getElementById("credential-recovery")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Name" })).toBeDefined();
+    window.history.replaceState(null, "", "/");
+  });
+
   it("re-admits a credential-rejected Operation with a different compatible connection", async () => {
     const current = offeringAt("readiness");
     if (current.publication === undefined)

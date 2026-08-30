@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { addExactAmounts, formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 import type { AgentActivityView, AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 import { formatTimestamp } from '@/lib/ui/format-time'
+import { suggestContinuation } from '@/modules/market/suggested-continuation'
 import { AeCreditTopUpPanel, type CreditTopupPort, type CreditTopupTarget } from './AeCreditTopUpPanel'
 
 export type AeOwnerCreditProps = Readonly<{
@@ -76,6 +77,7 @@ export function AeOwnerCredit({
   const firstLoadPending = useFirstLoadPending(loading)
   const chargesPhase = stagedListPhase({ firstLoadPending, rows: activity })
   const [selected, setSelected] = useState<CreditChargeRow>()
+  const insufficientCreditContinuation = suggestContinuation({ subject: 'credit', state: 'insufficient' })
   const columns = useMemo<ColumnDef<CreditChargeRow, unknown>[]>(
     () => [
       {
@@ -196,7 +198,11 @@ export function AeOwnerCredit({
           : {
               action: (
                 <Button asChild className="min-h-touch">
-                  <a href={`/operations/invocations/${selected.entry.invocationRef}`}>View receipt</a>
+                  {selected.entry.chargeState === 'insufficient_credit' ? (
+                    <a href={insufficientCreditContinuation.href}>{insufficientCreditContinuation.label}</a>
+                  ) : (
+                    <a href={`/operations/invocations/${selected.entry.invocationRef}`}>View receipt</a>
+                  )}
                 </Button>
               ),
             })}

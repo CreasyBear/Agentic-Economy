@@ -206,4 +206,34 @@ describe('market-terminal authenticated operation invocation', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('uses the shared insufficient-credit continuation instead of status', async () => {
+    setApiKey('ae-test-caller-key')
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'completed',
+      invocationRef: 'invocation:credit',
+      operationRef: 'operation:v1:test',
+      output: {},
+      evidenceHash: 'sha256:credit',
+      usage: {
+        usageRef: 'usage:credit',
+        observedAt: 100,
+        chargeState: 'insufficient_credit',
+        amount: { currency: 'USD', units: '100', exponent: 2 },
+        priceDigest: 'sha256:price',
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    await runInvokeCommand(['operation:v1:test'], {
+      ...options,
+      input: '{}',
+      idempotencyKey: 'idem-credit',
+    })
+
+    expect(JSON.parse(write.mock.calls.flat().join(''))).toMatchObject({
+      kind: 'completed',
+      nextCommand: 'ae account balance',
+    })
+  })
+
 })

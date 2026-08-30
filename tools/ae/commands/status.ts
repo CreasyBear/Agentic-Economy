@@ -1,4 +1,5 @@
 import { isRecord } from '@/modules/common/is-record'
+import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   operationInvokeStatusResultSchema,
@@ -12,7 +13,11 @@ import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
-import { invocationContinuationForCli } from '../lib/suggested-continuation-adapter'
+import {
+  connectionContinuationForCli,
+  creditContinuationForCli,
+  invocationContinuationForCli,
+} from '../lib/suggested-continuation-adapter'
 
 export const MAX_STATUS_WAIT_MS = 60_000
 export const MIN_STATUS_DELAY_MS = 100
@@ -95,11 +100,14 @@ function configuredApiKeyOrigin(options: CliOptions, rawOrigin: string | undefin
 export function requireAgentAccessKey(command: string, options: CliOptions, requiredScope?: string): string {
   const credential = resolveAgentAccessCredential(options.baseUrl, requiredScope)
   if (credential === undefined) {
+    const buyerContinuation = requiredScope === MARKET_SUPPLY_MANAGE_SCOPE
+      ? undefined
+      : connectionContinuationForCli('buyer')
     throw new CliFailure(`Run ae connect before operation ${command}.`, {
       kind: 'UNAUTHENTICATED',
       code: 'agent_access_key_required',
-      suggestion: 'Authorize a buyer credential for this origin.',
-      nextCommand: requiredScope === undefined ? 'ae connect' : 'ae connect --supplier',
+      suggestion: buyerContinuation?.label ?? 'Authorize a supplier credential for this origin.',
+      nextCommand: buyerContinuation?.command ?? 'ae connect --supplier',
     })
   }
   configuredApiKeyOrigin(options, credential.origin)
@@ -206,14 +214,17 @@ export function renderStatusResult(
   ])
   if (record?.kind === 'found' || record?.kind === 'refused') {
     const parsedState = operationInvokeStatusStateSchema.safeParse(record.state)
-    const continuation = invocationContinuationForCli({
-      kind: record.kind,
-      invocationRef,
-      ...(parsedState.success ? { state: parsedState.data } : {}),
-      ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
-    })
-    if (continuation.command !== undefined) line(`  next: ${continuation.command}`)
-    if (continuation.warning !== undefined) line(`  warning: ${continuation.warning}`)
+    const usage = asRecord(record.usage)
+    const continuation = usage?.chargeState === 'insufficient_credit'
+      ? creditContinuationForCli()
+      : invocationContinuationForCli({
+          kind: record.kind,
+          invocationRef,
+          ...(parsedState.success ? { state: parsedState.data } : {}),
+          ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
+        })
+    if (continuation?.command !== undefined) line(`  next: ${continuation.command}`)
+    if (continuation?.warning !== undefined) line(`  warning: ${continuation.warning}`)
   }
   line(JSON.stringify(body, undefined, 2))
 }

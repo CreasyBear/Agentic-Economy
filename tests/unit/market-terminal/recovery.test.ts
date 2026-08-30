@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
+import {
+  AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST,
+  MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_SUPPLY_MANAGE_SCOPE,
+} from '@/modules/agent-access/contract'
 import { operationReconciliationEvidenceSchema } from '@/modules/capability-execution/operation-recovery.actions'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -8,6 +12,7 @@ import { runCancelCommand } from '../../../tools/ae/commands/cancel'
 import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
 import { runManifestCommand } from '../../../tools/ae/commands/manifest'
 import { runRecoverCommand } from '../../../tools/ae/commands/recover'
+import { requireAgentAccessKey } from '../../../tools/ae/commands/status'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
 
@@ -69,6 +74,21 @@ afterEach(() => {
 })
 
 describe('CLI operation recovery projections', () => {
+
+  it('keeps buyer and supplier credential setup commands distinct', () => {
+    for (const [scope, nextCommand] of [
+      [MARKET_OPERATIONS_INVOKE_SCOPE, 'ae connect'],
+      [MARKET_SUPPLY_MANAGE_SCOPE, 'ae connect --supplier'],
+    ] as const) {
+      try {
+        requireAgentAccessKey('account status', baseOptions, scope)
+        throw new Error('missing_credential_should_refuse')
+      } catch (error) {
+        expect(error).toBeInstanceOf(CliFailure)
+        expect((error as CliFailure).nextCommand).toBe(nextCommand)
+      }
+    }
+  })
 
   it('publishes a schema-valid recovery example with digest and identity rules', async () => {
     const output = capture(process.stdout)
@@ -195,10 +215,7 @@ describe('CLI operation recovery projections', () => {
       output.restore()
     }
 
-    expect(JSON.parse(output.read())).toEqual({
-      ...completed,
-      nextCommand: 'ae status invocation:one',
-    })
+    expect(JSON.parse(output.read())).toEqual(completed)
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
@@ -226,6 +243,80 @@ describe('CLI operation recovery projections', () => {
     expect(init?.redirect).toBe('manual')
     expect(JSON.parse(String(init?.body))).toEqual({ idempotencyKey: 'cancel:one' })
     expect(JSON.parse(output.read())).toMatchObject({ kind: 'found', state: 'cancelled' })
+  })
+
+  it.each(['terminal', 'cancelled', 'invalidated'] as const)(
+    'does not render a circular status continuation for a found %s status',
+    async (state) => {
+      setApiKey('ae-test-caller-key')
+      const output = capture(process.stdout)
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+        kind: 'found',
+        invocationRef: 'invocation:one',
+        operationRef: 'operation:v1:test',
+        state,
+        ...(state === 'terminal' ? { result: completed } : {}),
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      try {
+        const { runStatusCommand } = await import('../../../tools/ae/commands/status')
+        await runStatusCommand(['invocation:one'], { ...baseOptions, json: false })
+      } finally {
+        output.restore()
+      }
+
+      expect(output.read()).not.toContain('next: ae status invocation:one')
+    },
+  )
+
+  it('keeps terminal JSON canonical without adding a circular next command', async () => {
+    setApiKey('ae-test-caller-key')
+    const output = capture(process.stdout)
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'found',
+      invocationRef: 'invocation:one',
+      operationRef: 'operation:v1:test',
+      state: 'terminal',
+      result: completed,
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    try {
+      const { runStatusCommand } = await import('../../../tools/ae/commands/status')
+      await runStatusCommand(['invocation:one'], baseOptions)
+    } finally {
+      output.restore()
+    }
+
+    expect(JSON.parse(output.read())).not.toHaveProperty('nextCommand')
+  })
+
+  it('uses top-level status usage to point insufficient credit at account funding', async () => {
+    setApiKey('ae-test-caller-key')
+    const output = capture(process.stdout)
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'found',
+      invocationRef: 'invocation:one',
+      operationRef: 'operation:v1:test',
+      state: 'terminal',
+      usage: {
+        usageRef: 'usage:credit',
+        observedAt: 100,
+        chargeState: 'insufficient_credit',
+        amount: { currency: 'USD', units: '100', exponent: 2 },
+        priceDigest: 'sha256:price',
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    try {
+      const { runStatusCommand } = await import('../../../tools/ae/commands/status')
+      await runStatusCommand(['invocation:one'], { ...baseOptions, json: false })
+    } finally {
+      output.restore()
+    }
+
+    expect(output.read()).toContain('next: ae account balance')
+    expect(output.read()).not.toContain('next: ae status invocation:one')
   })
 
 
