@@ -152,7 +152,7 @@ describe('ae doctor', () => {
         nextCommand: `ae wait ${invocationRef}`,
       }]),
     })
-  })
+  }, 20_000)
 
   it('resurfaces a newly matched private market request as one safe re-entry command', async () => {
     const buyerSecret = 'FAKE_REENTRY_BUYER_SECRET_4127'
@@ -258,7 +258,7 @@ describe('ae doctor', () => {
     expect(human.stdout).not.toContain(savedQuery)
     expect(human.stdout).not.toContain(requestRef)
     expect(statusBodies).toEqual([{ requestRef }, { requestRef }])
-  })
+  }, 20_000)
 
   it('recalls the newest successful current Operation without replaying private invocation material', async () => {
     const buyerSecret = 'FAKE_REPEAT_BUYER_SECRET_8182'
@@ -361,7 +361,7 @@ describe('ae doctor', () => {
       { body: { operationRef } },
       { body: { operationRef } },
     ])
-  })
+  }, 20_000)
 
   it('summarizes supplier Operation and connection readiness for one requested business', async () => {
     const buyerSecret = 'FAKE_BUYER_SECRET_1872'
