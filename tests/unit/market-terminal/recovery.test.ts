@@ -75,10 +75,10 @@ afterEach(() => {
 
 describe('CLI operation recovery projections', () => {
 
-  it('keeps buyer and supplier credential setup commands distinct', () => {
+  it('inspects existing connections before authorizing a recovery identity', () => {
     for (const [scope, nextCommand] of [
-      [MARKET_OPERATIONS_INVOKE_SCOPE, 'ae connect'],
-      [MARKET_SUPPLY_MANAGE_SCOPE, 'ae connect --supplier'],
+      [MARKET_OPERATIONS_INVOKE_SCOPE, 'ae account connections'],
+      [MARKET_SUPPLY_MANAGE_SCOPE, 'ae account connections'],
     ] as const) {
       try {
         requireAgentAccessKey('account status', baseOptions, scope)

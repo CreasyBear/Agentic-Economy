@@ -99,6 +99,10 @@ describe('AE CLI account interface', () => {
       kind: 'connections',
       selectedOrigin: 'https://market.example',
       credentialSource: 'stored',
+      items: expect.arrayContaining([
+        expect.objectContaining({ origin: 'https://market.example', state: 'selected_active' }),
+        expect.objectContaining({ origin: 'https://other.example', state: 'stored_for_other_origin' }),
+      ]),
     })
     expect(listedOutput).not.toContain('hidden-secret')
     expect(listedOutput).not.toContain('other-secret')

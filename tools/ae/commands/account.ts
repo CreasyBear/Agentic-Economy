@@ -179,6 +179,13 @@ function listConnections(options: CliOptions): void {
       options.baseUrl,
       item.profile === 'supplier' ? MARKET_SUPPLY_MANAGE_SCOPE : MARKET_OPERATIONS_INVOKE_SCOPE,
     )?.source === 'stored',
+  })).map((item) => ({
+    ...item,
+    state: item.active
+      ? 'selected_active'
+      : item.selected
+        ? 'selected_overridden'
+        : 'stored_for_other_origin',
   }))
   const result = {
     kind: 'connections' as const,
@@ -192,14 +199,15 @@ function listConnections(options: CliOptions): void {
   }
   heading('AE connections')
   if (items.length === 0) {
-    line('No stored connections. Run ae connect for the selected origin.')
+    line('No stored connections for any origin.')
+    line('Anonymous search and inspection remain available. Connect only after selecting an Operation that requires access.')
     return
   }
   for (const item of items) {
     table([
       ['origin', item.origin],
       ['profile', item.profile],
-      ['status', item.active ? 'active stored credential' : item.selected ? 'selected but overridden' : 'stored'],
+      ['status', item.state.replaceAll('_', ' ')],
       ['connected', item.connectedAt],
       ['scope', item.scope ?? 'unknown'],
     ])

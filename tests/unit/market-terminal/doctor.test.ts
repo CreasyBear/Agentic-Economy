@@ -15,7 +15,7 @@ afterEach(async () => {
 })
 
 describe('ae doctor', () => {
-  it('returns one degraded diagnosis and the exact connect continuation without writing', async () => {
+  it('returns one degraded diagnosis and inspects connections before authorizing a new identity', async () => {
     const requests: Array<{ method: string; path: string }> = []
     const origin = await startServer((request, response) => {
       requests.push({ method: request.method ?? '', path: request.url ?? '' })
@@ -38,7 +38,7 @@ describe('ae doctor', () => {
       checks: [
         { id: 'origin', state: 'pass', summary: `Configured origin is ${origin}.` },
         { id: 'server', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
-        { id: 'buyer', state: 'warn', summary: 'No buyer credential is configured for this origin.', nextCommand: 'ae connect' },
+        { id: 'buyer', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and inspection remain available.', nextCommand: 'ae account connections' },
         { id: 'balance', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
         { id: 'invocation', state: 'warn', summary: 'Invocation recovery is unavailable until a buyer credential is connected.' },
       ],
@@ -256,7 +256,7 @@ describe('ae doctor', () => {
       expect.objectContaining({
           id: 'buyer', state: 'fail',
           summary: 'Buyer credential is not safely bound to the configured origin.',
-          nextCommand: 'ae connect',
+          nextCommand: 'ae account connections',
       }),
     ]))
     expect(requests).toEqual(['/.well-known/ucp'])

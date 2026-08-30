@@ -40,11 +40,11 @@ const LOOPBACK_HOSTNAMES: Record<string, true> = { localhost: true, '127.0.0.1':
 
 function configuredApiKeyOrigin(options: CliOptions, rawOrigin: string | undefined): string {
   if (rawOrigin === undefined || rawOrigin.trim().length === 0) {
-    throw new CliFailure('Connect this agent to the selected Agentic Economy origin first.', {
+    throw new CliFailure('Bind the existing credential to the selected Agentic Economy origin before using it.', {
       kind: 'INVALID_ARGUMENT',
       code: 'agent_access_key_origin_required',
-      suggestion: 'Bind the credential to the exact selected origin.',
-      nextCommand: 'ae connect',
+      suggestion: 'Preserve the current credential identity and bind it to the exact selected origin.',
+      nextCommand: `export AE_API_KEY_ORIGIN=${JSON.stringify(new URL(options.baseUrl).origin)}`,
     })
   }
 
@@ -100,14 +100,18 @@ function configuredApiKeyOrigin(options: CliOptions, rawOrigin: string | undefin
 export function requireAgentAccessKey(command: string, options: CliOptions, requiredScope?: string): string {
   const credential = resolveAgentAccessCredential(options.baseUrl, requiredScope)
   if (credential === undefined) {
-    const buyerContinuation = requiredScope === MARKET_SUPPLY_MANAGE_SCOPE
-      ? undefined
+    const shouldAuthorizeNow = command === 'invoke' || command === 'connect' || command.startsWith('supply ')
+    const connect = requiredScope === MARKET_SUPPLY_MANAGE_SCOPE
+      ? { label: 'Authorize supplier access for this exact origin.', command: 'ae connect --supplier' }
       : connectionContinuationForCli('buyer')
-    throw new CliFailure(`Run ae connect before operation ${command}.`, {
+    const continuation = shouldAuthorizeNow
+      ? connect
+      : { label: 'Inspect origin-bound connections before authorizing a new identity.', command: 'ae account connections' }
+    throw new CliFailure(`No matching credential is selected for ${command} on this origin.`, {
       kind: 'UNAUTHENTICATED',
       code: 'agent_access_key_required',
-      suggestion: buyerContinuation?.label ?? 'Authorize a supplier credential for this origin.',
-      nextCommand: buyerContinuation?.command ?? 'ae connect --supplier',
+      suggestion: continuation.label,
+      nextCommand: continuation.command,
     })
   }
   configuredApiKeyOrigin(options, credential.origin)

@@ -67,8 +67,8 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
     checks.push(
       {
         id: 'buyer', state: 'warn',
-        summary: 'No buyer credential is configured for this origin.',
-        nextCommand: 'ae connect',
+        summary: 'No buyer credential is selected for this origin; anonymous search and inspection remain available.',
+        nextCommand: 'ae account connections',
       },
       {
         id: 'balance', state: 'warn',
@@ -99,7 +99,7 @@ async function checkSupplier(baseUrl: string, businessId: string | undefined): P
       {
         id: 'supplier', state: 'warn',
         summary: 'No supplier credential is configured for this origin.',
-        nextCommand: 'ae connect --supplier',
+        nextCommand: 'ae account connections',
       },
       { id: 'supplier.readiness', state: 'warn', summary: 'Supplier readiness is unavailable until supplier access is connected.' },
     ]
@@ -288,7 +288,7 @@ function credentialOriginFailure(
   return {
     id: profile, state: 'fail',
     summary: `${profile === 'buyer' ? 'Buyer' : 'Supplier'} credential is not safely bound to the configured origin.`,
-    nextCommand: profile === 'buyer' ? 'ae connect' : 'ae connect --supplier',
+    nextCommand: 'ae account connections',
   }
 }
 
