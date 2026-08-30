@@ -1,6 +1,6 @@
 # Whop benchmark against Agentic Economy's current maturity
 
-**Date:** 2026-08-24  
+**Date:** 2026-08-24; operational rescan updated 2026-08-30
 **Question:** What does Whop's operating maturity reveal about the current Agentic Economy Operation market?  
 **Boundary:** Whop is used only as a benchmark for mature product foundations. This is not an integration proposal, supply strategy, product layer, or reason to widen Agentic Economy.
 
@@ -60,6 +60,19 @@ The biggest weaknesses sit one level above that kernel:
 6. no checked-in exact-revision production receipt proving the complete paid loop and its unit economics.
 
 This creates the central founder risk: the kernel may be technically ahead of proof that the market behaviour deserves it. The correct response is not to restore product breadth. It is to force the current narrow loop to earn its machinery.
+
+### 2026-08-30 operational correction: the admission path exists; its funded proof does not
+
+The hosted and source rescan found that “strong readiness” is true only after an Operation has been admitted correctly. An isolated implementation branch, `codex/onboarding-integration`, now closes the unsafe source and call-time transitions identified by this audit:
+
+1. CDP Bazaar rows are persisted as sanitized, immutable source observations only. Server-derived projections classify the automatic lane; unsafe methods, missing durable payment identity, unsupported payment terms, source drift, and enrichment drift cannot become canonical supply.
+2. Operator enrichment supplies the non-derivable effect, data-use, and input-independent-price assertions. Routeability is derived from exact revision-bound requirement evidence with independent expiry and lifecycle, rather than a stored approval boolean.
+3. Inspect remains provider-network-free. After buyer authority exists, the invocation sends the exact unsigned request, obtains a fresh 402, compares the full authorized tuple, and signs only if URL, amount, asset, payee, scheme, network, timeout, transfer method, payment flow, asset identity, and expiry still match. Ambiguous submission remains reconciliation-required.
+4. Canonical publication and qualification now join the exact source, current enrichment, and current allocation evidence. Missing, expired, failed, deprecated, withdrawn, or superseded evidence removes routeability; legacy observed x402 publications without the evidence pointer fail closed.
+
+The design and its source basis are documented in [x402 Operation onboarding](architecture/x402-operation-onboarding.md) and [Operation onboarding patterns](architecture/operation-onboarding-patterns.md). The branch passes 379/379 conformance tests, 92/92 focused onboarding/runtime transition tests, typecheck, lint, and module-boundary checks.
+
+One deliberate production blocker remains: no funded canonical onboarding-canary runner yet performs the real original request, identical replay, and different-fingerprint collision sequence and writes runner-owned collision evidence. The persistence state machine therefore refuses promotion without that proof. Convex code generation/deployment and a hosted paid pilot were not performed in this audit. The next engineering spend should be that narrowly scoped runner plus one real CDP `GET` pilot and an exact production receipt—not more registry breadth, UI polish, or a second protocol lane.
 
 ## What the Whop papercuts actually teach
 
