@@ -29,6 +29,7 @@ export function AeSupplyAgentProof({
             <ProofList
               items={services}
               remainingLabel="more listed"
+              getKey={(service) => service.id}
               render={(service) => <ServiceProofRow service={service} />}
             />
           )}
@@ -41,6 +42,7 @@ export function AeSupplyAgentProof({
             <ProofList
               items={tools}
               remainingLabel="more tools"
+              getKey={(tool) => tool.id}
               render={(tool) => <ToolProofRow tool={tool} />}
             />
           )}
@@ -53,10 +55,12 @@ export function AeSupplyAgentProof({
 function ProofList<T>({
   items,
   remainingLabel,
+  getKey,
   render,
 }: {
   items: readonly T[]
   remainingLabel: string
+  getKey: (item: T) => string
   render: (item: T) => ReactNode
 }) {
   const visible = items.slice(0, INITIAL_PROOF_COUNT)
@@ -65,8 +69,8 @@ function ProofList<T>({
   return (
     <>
       <ul className="m-0 grid list-none divide-y divide-border p-0">
-        {visible.map((item, index) => (
-          <li key={index} className="py-4 first:pt-0 last:pb-0">
+        {visible.map((item) => (
+          <li key={getKey(item)} className="py-4 first:pt-0 last:pb-0">
             {render(item)}
           </li>
         ))}
@@ -77,8 +81,8 @@ function ProofList<T>({
             Show {hidden.length} {remainingLabel}
           </summary>
           <ul className="m-0 mt-3 grid list-none divide-y divide-border border-t border-border p-0 pt-3">
-            {hidden.map((item, index) => (
-              <li key={index} className="py-4">
+            {hidden.map((item) => (
+              <li key={getKey(item)} className="py-4">
                 {render(item)}
               </li>
             ))}
