@@ -101,9 +101,10 @@ export function requireAgentAccessKey(command: string, options: CliOptions, requ
   const credential = resolveAgentAccessCredential(options.baseUrl, requiredScope)
   if (credential === undefined) {
     const shouldAuthorizeNow = command === 'invoke' || command === 'connect' || command.startsWith('supply ')
+    const buyerConnection = connectionContinuationForCli('buyer')
     const connect = requiredScope === MARKET_SUPPLY_MANAGE_SCOPE
       ? { label: 'Authorize supplier access for this exact origin.', command: 'ae connect --supplier' }
-      : connectionContinuationForCli('buyer')
+      : { label: buyerConnection?.label ?? 'Authorize buyer access for this exact origin.', command: buyerConnection?.command ?? 'ae connect' }
     const continuation = shouldAuthorizeNow
       ? connect
       : { label: 'Inspect origin-bound connections before authorizing a new identity.', command: 'ae account connections' }

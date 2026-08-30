@@ -15,10 +15,10 @@ describe('no-Operation navigation', () => {
   it('does not advertise detail navigation when there is no Operation reference', () => {
     const navigation: OperationProjectionNavigationContract = {
       market: {
-        search: relation('search'),
-        detail: relation('detail'),
-        compare: relation('compare'),
-        inspectPlan: relation('inspect_plan'),
+        search: relation('search') as OperationProjectionNavigationContract['market']['search'],
+        detail: relation('detail') as OperationProjectionNavigationContract['market']['detail'],
+        compare: relation('compare') as OperationProjectionNavigationContract['market']['compare'],
+        inspectPlan: relation('inspect_plan') as OperationProjectionNavigationContract['market']['inspectPlan'],
       },
       invoke: relation('invoke') as OperationProjectionNavigationContract['invoke'],
     }
