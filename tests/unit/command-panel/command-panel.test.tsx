@@ -22,6 +22,10 @@ import {
   type CommandPanelStack,
 } from '@/components/ae/command-panel/command-panel-state'
 import {
+  readRecentOperationRefs,
+  rememberRecentOperationRef,
+} from '@/components/ae/command-panel/recent-operations'
+import {
   formatOperationAuthentication,
   formatOperationPrice,
   formatOperationReadiness,
@@ -34,6 +38,7 @@ import type { PublicOperationDetailRouteResult } from '@/modules/registry/operat
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
   vi.unstubAllGlobals()
 })
 
@@ -62,6 +67,19 @@ describe('command panel page-stack machine', () => {
       pages = pushCommandPanelPage(pages, { kind: 'operations-search' })
     }
     expect(pages).toHaveLength(8)
+  })
+})
+
+describe('recent public Operations', () => {
+  it('keeps only the five newest distinct validated public references', () => {
+    const operationRefs = Array.from(
+      { length: 7 },
+      (_, index) => `operation:v1:${index.toString(16).repeat(64)}`,
+    )
+    for (const operationRef of operationRefs) rememberRecentOperationRef(operationRef)
+    rememberRecentOperationRef('not-a-public-operation-ref')
+
+    expect(readRecentOperationRefs()).toEqual(operationRefs.slice(-5).reverse())
   })
 })
 
@@ -130,6 +148,9 @@ describe('operator command panel', () => {
 
     const option = await screen.findByRole('option', { name: /Weather forecast/ })
     expect(option.getAttribute('aria-selected')).toBe('true')
+    expect(option.textContent).toContain('Price on request')
+    expect(option.textContent).toContain('Ready now')
+    expect(option.textContent).toContain('AE account invocation')
     const listbox = screen.getByRole('listbox', { name: 'Matching operations' })
     expect(input.getAttribute('aria-controls')).toBe(listbox.getAttribute('id'))
     expect(screen.getByText(/1 matched · showing 1/)).toBeTruthy()
@@ -143,9 +164,83 @@ describe('operator command panel', () => {
     expect(screen.getByText(formatOperationAuthentication(fixture.authentication))).toBeTruthy()
     expect(screen.getByText(formatOperationReadiness(fixture.availability.posture))).toBeTruthy()
     expect(screen.getByText('Charged per call.')).toBeTruthy()
+    expect(screen.getByText(/Authentication is required/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Connect an agent' }).getAttribute('href')).toBe('/for-agents')
     expect(
       screen.getByRole('link', { name: /Open operation page/ }).getAttribute('href'),
     ).toBe(`/operations/${encodeURIComponent(TEST_OPERATION_REF)}`)
+  })
+
+  it('copies the public reference and ready-to-run inspect and call commands', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(),
+    }))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = await screen.findByRole('combobox', { name: 'Search operations' })
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
+    fireEvent.change(input, { target: { value: 'weather' } })
+    fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy Operation reference' }))
+    expect(writeText).toHaveBeenLastCalledWith(TEST_OPERATION_REF)
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Inspect command' }))
+    expect(writeText).toHaveBeenLastCalledWith(`ae inspect '${TEST_OPERATION_REF}'`)
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Call command' }))
+    expect(writeText).toHaveBeenLastCalledWith(
+      `ae call '${TEST_OPERATION_REF}' --input '{"from":"USD","to":"EUR","note":"today'\\''s rate"}' --wait`,
+    )
+  })
+
+  it('shows up to five recently inspected public operation references before search', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
+    const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(),
+    }))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = await screen.findByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather forecast' } })
+    fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
+    await screen.findByRole('button', { name: 'Copy Operation reference' })
+
+    fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' })
+    const recent = await screen.findByRole('option', { name: new RegExp(TEST_OPERATION_REF) })
+    expect(recent.textContent).toContain(TEST_OPERATION_REF)
+    const persisted = JSON.stringify(window.localStorage)
+    expect(persisted).toContain(TEST_OPERATION_REF)
+    expect(persisted).not.toContain('weather forecast')
+  })
+
+  it('does not offer a call command without a published input example and guides setup when uncallable', async () => {
+    const fixture = detailFixture()
+    const { inputExamples: _inputExamples, ...contractWithoutExamples } = fixture.contract
+    const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: {
+        ...fixture,
+        contract: contractWithoutExamples,
+        availability: { posture: 'unavailable', reason: 'setup_required' },
+        navigation: [],
+      },
+    }))
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = await screen.findByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+    fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
+
+    expect(await screen.findByText(/supplier must finish setup/iu)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Continue supplier setup' }).getAttribute('href')).toBe('/owner/supply')
+    expect(screen.queryByRole('button', { name: 'Copy Call command' })).toBeNull()
   })
 
   it('pops one inspect layer per Escape before closing, then survives ⌘K flicker', async () => {
@@ -263,6 +358,10 @@ export function detailFixture(): PublicOperationDescriptor {
         inputJsonSchema: {},
         outputJsonSchema: {},
         customerAnnotations: [],
+        inputExamples: [{
+          label: 'Currency pair',
+          input: { from: 'USD', to: 'EUR', note: "today's rate" },
+        }],
       },
       business: { businessId: 'b_acme', slug: 'acme-tools', name: 'Acme Tools' },
       offering: {
@@ -286,7 +385,14 @@ export function detailFixture(): PublicOperationDescriptor {
       transport: { method: 'POST', requestTimeoutMs: 30000 },
       provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
       availability: { posture: 'routeable' },
-      navigation: [],
+      navigation: [{
+        relation: 'invoke',
+        pathTemplate: '/api/v1/operations/call',
+        method: 'POST',
+        actionId: 'agentic-economy.operation-invoke',
+        authentication: 'required',
+        surfaces: ['http', 'cli', 'mcp', 'chat'],
+      }],
     },
   })
   if (parsed.kind !== 'found') throw new Error('fixture_parse_wrong_branch')

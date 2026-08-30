@@ -6,7 +6,11 @@ import { SearchIcon } from 'lucide-react'
 
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { formatOperationPrice } from '@/modules/market/operation-view-model'
+import {
+  formatOperationAuthentication,
+  formatOperationPrice,
+  formatOperationReadiness,
+} from '@/modules/market/operation-view-model'
 
 import {
   OPERATION_SEARCH_RESULT_LIMIT,
@@ -14,6 +18,7 @@ import {
   type MarketOperationSearchInput,
   type OperationChoiceSearchResult,
 } from '../market-operations-client'
+import { useRecentOperationRefs } from '../recent-operations'
 
 type SearchState =
   | Readonly<{ kind: 'idle' }>
@@ -42,12 +47,16 @@ export function OperationsSearchPage({
 }: OperationsSearchPageProps) {
   const [query, setQuery] = useState('')
   const [state, setState] = useState<SearchState>({ kind: 'idle' })
+  const recentOperationRefs = useRecentOperationRefs()
   const [selectedId, setSelectedId] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const listboxRef = useRef<HTMLUListElement>(null)
   const generatedListboxId = useId()
   const listboxId = `ae-command-panel-results${generatedListboxId}`
   const items = state.kind === 'done' && state.result.kind === 'ok' ? state.result.items : []
+  const choices = query.trim() === ''
+    ? recentOperationRefs.map((operationRef) => ({ kind: 'recent' as const, operationRef }))
+    : items.map((item) => ({ kind: 'result' as const, item }))
 
   useEffect(() => {
     const trimmed = query.trim()
@@ -107,11 +116,11 @@ export function OperationsSearchPage({
   }, [selectedId])
 
   function moveSelection(delta: number): void {
-    if (items.length === 0) return
-    setSelectedId((current) => Math.min(items.length - 1, Math.max(0, current + delta)))
+    if (choices.length === 0) return
+    setSelectedId((current) => Math.min(choices.length - 1, Math.max(0, current + delta)))
   }
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
-    if (items.length === 0 && event.key !== 'Enter') return
+    if (choices.length === 0 && event.key !== 'Enter') return
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault()
@@ -127,12 +136,13 @@ export function OperationsSearchPage({
         break
       case 'End':
         event.preventDefault()
-        if (items.length > 0) setSelectedId(items.length - 1)
+        if (choices.length > 0) setSelectedId(choices.length - 1)
         break
       case 'Enter': {
         event.preventDefault()
-        const selected = items[selectedId]
-        if (selected !== undefined) onSelectOperation(selected.operationRef)
+        const selected = choices[selectedId]
+        if (selected?.kind === 'recent') onSelectOperation(selected.operationRef)
+        if (selected?.kind === 'result') onSelectOperation(selected.item.operationRef)
         break
       }
       default:
@@ -152,9 +162,9 @@ export function OperationsSearchPage({
             ref={inputRef}
             type="text"
             role="combobox"
-            aria-expanded={items.length > 0}
-            aria-controls={items.length > 0 ? listboxId : undefined}
-            aria-activedescendant={items.length > 0 ? optionId(listboxId, selectedId) : undefined}
+            aria-expanded={choices.length > 0}
+            aria-controls={choices.length > 0 ? listboxId : undefined}
+            aria-activedescendant={choices.length > 0 ? optionId(listboxId, selectedId) : undefined}
             aria-label="Search operations"
             autoComplete="off"
             autoCorrect="off"
@@ -167,42 +177,59 @@ export function OperationsSearchPage({
         </div>
       </div>
       <div aria-live="polite" className="min-h-0 flex-1 overflow-y-auto">
-        {renderBody(state, query)}
-        {items.length > 0 ? (
+        {renderBody(state, query, recentOperationRefs.length)}
+        {choices.length > 0 ? (
           <ul
             id={listboxId}
             ref={listboxRef}
             role="listbox"
-            aria-label="Matching operations"
+            aria-label={query.trim() === '' ? 'Recently inspected operations' : 'Matching operations'}
             className="py-intra"
           >
-            {items.map((item, index) => (
-              <li key={item.operationRef}>
-                <button
-                  type="button"
-                  role="option"
-                  id={optionId(listboxId, index)}
-                  aria-selected={index === selectedId}
-                  tabIndex={-1}
-                  onClick={() => onSelectOperation(item.operationRef)}
-                  onMouseMove={() => setSelectedId(index)}
-                  className={cn(
-                    'flex w-full items-center gap-intra px-gutter py-intra text-start transition-colors hover:bg-muted focus-visible:bg-muted',
-                    index === selectedId && 'bg-muted',
-                  )}
-                >
-                  <span className="grid min-w-0 flex-1 gap-0.5">
-                    <span className="truncate text-sm font-medium text-foreground">{item.title}</span>
-                    <span className="truncate font-mono text-xs text-muted-foreground">
-                      {item.supplier.name} · {item.capabilityId}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                    {formatOperationPrice(item.price)}
-                  </span>
-                </button>
-              </li>
-            ))}
+            {choices.map((choice, index) => {
+              const operationRef = choice.kind === 'recent' ? choice.operationRef : choice.item.operationRef
+              return (
+                <li key={operationRef}>
+                  <button
+                    type="button"
+                    role="option"
+                    id={optionId(listboxId, index)}
+                    aria-selected={index === selectedId}
+                    tabIndex={-1}
+                    onClick={() => onSelectOperation(operationRef)}
+                    onMouseMove={() => setSelectedId(index)}
+                    className={cn(
+                      'flex w-full items-center gap-intra px-gutter py-intra text-start transition-colors hover:bg-muted focus-visible:bg-muted',
+                      index === selectedId && 'bg-muted',
+                    )}
+                  >
+                    {choice.kind === 'recent' ? (
+                      <span className="grid min-w-0 flex-1 gap-0.5">
+                        <span className="text-sm font-medium text-foreground">Inspect recent Operation</span>
+                        <span dir="ltr" className="truncate font-mono text-xs text-muted-foreground">
+                          {choice.operationRef}
+                        </span>
+                      </span>
+                    ) : (
+                      <>
+                        <span className="grid min-w-0 flex-1 gap-0.5">
+                          <span className="truncate text-sm font-medium text-foreground">{choice.item.title}</span>
+                          <span className="truncate font-mono text-xs text-muted-foreground">
+                            {choice.item.supplier.name} · {choice.item.capabilityId}
+                          </span>
+                          <span className="truncate text-xs text-muted-foreground">
+                            {formatOperationReadiness(choice.item.availability.posture)} · {formatOperationAuthentication(choice.item.authentication)}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                          {formatOperationPrice(choice.item.price)}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         ) : null}
       </div>
@@ -214,11 +241,13 @@ function optionId(listboxId: string, index: number): string {
   return `${listboxId}-option-${index}`
 }
 
-function renderBody(state: SearchState, query: string): ReactNode {
+function renderBody(state: SearchState, query: string, recentCount: number): ReactNode {
   if (state.kind === 'idle') {
     return (
       <p role="status" className="px-gutter py-section text-sm text-muted-foreground">
-        Search the operation catalog by job, provider, or capability.
+        {recentCount > 0
+          ? `Recently inspected · ${recentCount}`
+          : 'Search the operation catalog by job, provider, or capability.'}
       </p>
     )
   }

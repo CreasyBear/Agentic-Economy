@@ -81,7 +81,7 @@ export function AeCommandPanel() {
         >
           <SheetTitle className="sr-only">Command console</SheetTitle>
           <SheetDescription className="sr-only">
-            Search the operation catalog and inspect one operation.
+            Search the Operation catalog, inspect one Operation, and take its next action.
           </SheetDescription>
           <div className="flex min-h-0 flex-1 flex-col" data-testid="command-panel-body">
             {panel.topPage.kind === 'operations-search' ? (

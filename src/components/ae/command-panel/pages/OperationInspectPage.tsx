@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowUpRightIcon } from 'lucide-react'
 
+import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { Button } from '@/components/ui/button'
 import {
   formatOperationAuthentication,
@@ -13,6 +14,7 @@ import {
 import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
 
 import { useOperationDetailReader } from '../CommandPanelProvider'
+import { rememberRecentOperationRef } from '../recent-operations'
 
 type InspectState =
   | Readonly<{ kind: 'loading' }>
@@ -36,8 +38,10 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
     void (async () => {
       const result = await readDetail(operationRef)
       if (!current) return
-      if (result.kind === 'found') setState({ kind: 'found', operation: result.operation })
-      else setState({ kind: 'unavailable', operationRef })
+      if (result.kind === 'found') {
+        rememberRecentOperationRef(result.operation.operationRef)
+        setState({ kind: 'found', operation: result.operation })
+      } else setState({ kind: 'unavailable', operationRef })
     })()
     return () => {
       current = false
@@ -73,6 +77,13 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
 }
 
 function FoundBody({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
+  const callable = operation.availability.posture === 'routeable'
+    && operation.navigation.some(({ relation }) => relation === 'invoke')
+  const inputExample = operation.contract.inputExamples?.[0]
+  const authenticated = operation.navigation.some(
+    ({ relation, authentication }) => relation === 'invoke' && authentication === 'required',
+  )
+
   return (
     <>
       <header className="grid gap-0.5 border-b border-border px-gutter pb-intra pt-intra">
@@ -97,6 +108,39 @@ function FoundBody({ operation }: Readonly<{ operation: PublicOperationDescripto
           ))}
         </dl>
 
+        {authenticated ? (
+          <div className="grid gap-intra rounded-lg border border-border bg-muted/35 p-intra">
+            <p className="text-sm text-foreground">
+              Authentication is required before the first call.
+            </p>
+            <Button asChild size="sm" variant="secondary" className="min-h-touch justify-self-start">
+              <Link to="/for-agents">Connect an agent</Link>
+            </Button>
+          </div>
+        ) : null}
+
+        {!callable ? (
+          <div className="grid gap-intra rounded-lg border border-warning-ring bg-warning-subtle p-intra">
+            <p className="text-sm text-warning-foreground">
+              This Operation cannot be called yet; its supplier must finish setup or restore readiness.
+            </p>
+            <Button asChild size="sm" variant="secondary" className="min-h-touch justify-self-start">
+              <Link to="/owner/supply">Continue supplier setup</Link>
+            </Button>
+          </div>
+        ) : null}
+
+        <div className="grid gap-intra" aria-labelledby="operation-actions-title">
+          <h3 id="operation-actions-title" className="text-sm font-semibold text-foreground">
+            Actions
+          </h3>
+          <AeCopyCommand compact label="Operation reference" code={operation.operationRef} />
+          <AeCopyCommand compact label="Inspect command" code={inspectCommand(operation.operationRef)} />
+          {callable && inputExample !== undefined ? (
+            <AeCopyCommand compact label="Call command" code={callCommand(operation.operationRef, inputExample.input)} />
+          ) : null}
+        </div>
+
         <Button asChild size="sm" className="min-h-touch self-start">
           <Link
             to="/operations/$operationRef"
@@ -110,6 +154,15 @@ function FoundBody({ operation }: Readonly<{ operation: PublicOperationDescripto
       </section>
     </>
   )
+}
+
+function inspectCommand(operationRef: string): string {
+  return `ae inspect '${operationRef}'`
+}
+
+function callCommand(operationRef: string, input: Readonly<Record<string, unknown>>): string {
+  const inputJson = JSON.stringify(input).replaceAll("'", "'\\''")
+  return `ae call '${operationRef}' --input '${inputJson}' --wait`
 }
 
 function Fact({ label, value }: Readonly<{ label: string; value: string }>) {
