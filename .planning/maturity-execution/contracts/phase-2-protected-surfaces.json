@@ -1458,7 +1458,7 @@
         {
           "ref": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts:readOwnerSupplyFunnel",
           "file": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts",
-          "line": 73,
+          "line": 74,
           "column": 1,
           "via": "call"
         },
@@ -1522,7 +1522,7 @@
         {
           "ref": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts:recheckOwnerCapability",
           "file": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts",
-          "line": 123,
+          "line": 124,
           "column": 1,
           "via": "call"
         },
@@ -1536,7 +1536,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerFunnel.ts:refreshOwnerCapability",
           "file": "convex/capabilitySupplyOwnerFunnel.ts",
-          "line": 53,
+          "line": 54,
           "column": 14,
           "via": "function_reference"
         },
@@ -1657,7 +1657,7 @@
         {
           "ref": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts:republishOwnerCapability",
           "file": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts",
-          "line": 149,
+          "line": 150,
           "column": 1,
           "via": "call"
         },
@@ -1671,7 +1671,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerFunnel.ts:republishOwnerCapability",
           "file": "convex/capabilitySupplyOwnerFunnel.ts",
-          "line": 47,
+          "line": 48,
           "column": 14,
           "via": "function_reference"
         },
@@ -1849,7 +1849,7 @@
         {
           "ref": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts:runOwnerSupplyReadiness",
           "file": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts",
-          "line": 89,
+          "line": 90,
           "column": 1,
           "via": "call"
         },
@@ -1913,7 +1913,7 @@
         {
           "ref": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts:runOwnerSupplyTest",
           "file": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts",
-          "line": 97,
+          "line": 98,
           "column": 1,
           "via": "call"
         },
@@ -1977,7 +1977,7 @@
         {
           "ref": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts:withdrawOwnerCapability",
           "file": "src/modules/capability-supply/internal/supply-funnel/funnel-owner.ts",
-          "line": 136,
+          "line": 137,
           "column": 1,
           "via": "call"
         },
@@ -1991,7 +1991,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerFunnel.ts:withdrawOwnerCapability",
           "file": "convex/capabilitySupplyOwnerFunnel.ts",
-          "line": 41,
+          "line": 42,
           "column": 14,
           "via": "function_reference"
         },
@@ -5291,11 +5291,11 @@
       "registrar": "mutationGeneric",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "56b27367bb39f9f93305f6eb9b8dd60e61becedb59eded9f7332b0c587db4867",
+      "sha256": "9947f4faac1f22d66e63eab322fbd01b1af488a7a341c46c069180a316c66e7b",
       "declaration": {
         "file": "convex/capabilitySupplyOwnerFunnel.ts",
         "symbol": "readAgentOwnerSupplyFunnel",
-        "line": 29,
+        "line": 30,
         "column": 14,
         "sha256": "19a08cd259d734543f427de72e764ef6ca56e12f8660490a98bd43545ee926fd"
       },
@@ -5306,7 +5306,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerFunnel.ts:readAgentOwnerSupplyFunnel",
           "file": "convex/capabilitySupplyOwnerFunnel.ts",
-          "line": 29,
+          "line": 30,
           "column": 14,
           "via": "declaration"
         },
@@ -5334,13 +5334,13 @@
       "registrar": "queryGeneric",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "56b27367bb39f9f93305f6eb9b8dd60e61becedb59eded9f7332b0c587db4867",
+      "sha256": "9947f4faac1f22d66e63eab322fbd01b1af488a7a341c46c069180a316c66e7b",
       "declaration": {
         "file": "convex/capabilitySupplyOwnerFunnel.ts",
         "symbol": "readOwnerSupplyFunnel",
         "line": 21,
         "column": 14,
-        "sha256": "af9b25e41ba164444865e65bd69b11147f976222687744146df8777ea214349c"
+        "sha256": "b699b0f7b1bc9c65be2f1b8990761ac1bef10e4d80a5d24852bb1f14c9a8d514"
       },
       "status": "bound",
       "marker": "transitive_authority_path:convex/capabilitySupplyOwnerFunnel.ts:readOwnerSupplyFunnel=>convex/authz.ts:resolveBusinessActor",
@@ -5377,11 +5377,11 @@
       "registrar": "mutationGeneric",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "56b27367bb39f9f93305f6eb9b8dd60e61becedb59eded9f7332b0c587db4867",
+      "sha256": "9947f4faac1f22d66e63eab322fbd01b1af488a7a341c46c069180a316c66e7b",
       "declaration": {
         "file": "convex/capabilitySupplyOwnerFunnel.ts",
         "symbol": "refreshOwnerCapability",
-        "line": 53,
+        "line": 54,
         "column": 14,
         "sha256": "269328925544639746d6922e937d7c938114f4aa2e7cd824b7bd2a39800bb4d9"
       },
@@ -5392,7 +5392,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerFunnel.ts:refreshOwnerCapability",
           "file": "convex/capabilitySupplyOwnerFunnel.ts",
-          "line": 53,
+          "line": 54,
           "column": 14,
           "via": "declaration"
         },
@@ -5427,11 +5427,11 @@
       "registrar": "mutationGeneric",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "56b27367bb39f9f93305f6eb9b8dd60e61becedb59eded9f7332b0c587db4867",
+      "sha256": "9947f4faac1f22d66e63eab322fbd01b1af488a7a341c46c069180a316c66e7b",
       "declaration": {
         "file": "convex/capabilitySupplyOwnerFunnel.ts",
         "symbol": "republishOwnerCapability",
-        "line": 47,
+        "line": 48,
         "column": 14,
         "sha256": "53d18e39779deca6bdbfe3608506a5b0f25ab720fb4c9e7172dc81cbf2da86fb"
       },
@@ -5442,7 +5442,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerFunnel.ts:republishOwnerCapability",
           "file": "convex/capabilitySupplyOwnerFunnel.ts",
-          "line": 47,
+          "line": 48,
           "column": 14,
           "via": "declaration"
         },
@@ -5470,11 +5470,11 @@
       "registrar": "mutationGeneric",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "56b27367bb39f9f93305f6eb9b8dd60e61becedb59eded9f7332b0c587db4867",
+      "sha256": "9947f4faac1f22d66e63eab322fbd01b1af488a7a341c46c069180a316c66e7b",
       "declaration": {
         "file": "convex/capabilitySupplyOwnerFunnel.ts",
         "symbol": "reserveOwnerCapabilityPublication",
-        "line": 35,
+        "line": 36,
         "column": 14,
         "sha256": "1deb4c4f961674120732c09e70bc6bc9ce33770e018c7ba04b54fc519ddd6d5f"
       },
@@ -5485,7 +5485,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication",
           "file": "convex/capabilitySupplyOwnerFunnel.ts",
-          "line": 35,
+          "line": 36,
           "column": 14,
           "via": "declaration"
         },
@@ -5513,11 +5513,11 @@
       "registrar": "mutationGeneric",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "56b27367bb39f9f93305f6eb9b8dd60e61becedb59eded9f7332b0c587db4867",
+      "sha256": "9947f4faac1f22d66e63eab322fbd01b1af488a7a341c46c069180a316c66e7b",
       "declaration": {
         "file": "convex/capabilitySupplyOwnerFunnel.ts",
         "symbol": "withdrawOwnerCapability",
-        "line": 41,
+        "line": 42,
         "column": 14,
         "sha256": "52b9a649e0479223110e632dc7cc5e04257d92eca6e66d3dd3a050e9f1cda237"
       },
@@ -5528,7 +5528,7 @@
         {
           "ref": "convex/capabilitySupplyOwnerFunnel.ts:withdrawOwnerCapability",
           "file": "convex/capabilitySupplyOwnerFunnel.ts",
-          "line": 41,
+          "line": 42,
           "column": 14,
           "via": "declaration"
         },
