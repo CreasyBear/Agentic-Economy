@@ -263,4 +263,50 @@ describe("current supply funnel", () => {
     expect(preflight).not.toHaveBeenCalled();
     expect(admit).not.toHaveBeenCalled();
   });
+
+  it("lands an incompatible Operation on a focused revision-guarded readmission action", async () => {
+    const current = offeringAt("readiness");
+    if (current.publication === undefined)
+      throw new Error("incompatible_publication_missing");
+    window.history.replaceState(null, "", "/#incompatibility");
+
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={{
+          ...current,
+          publication: {
+            ...current.publication,
+            state: "incompatible",
+            lifecycle: {
+              state: "incompatible",
+              reasons: ["incompatible_revision"],
+            },
+          },
+          lifecycle: {
+            state: "incompatible",
+            reasons: ["incompatible_revision"],
+          },
+          actionableReason: "incompatible_revision",
+          live: { available: false, reason: "incompatible_revision" },
+        }}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        callbacks={{
+          saveOffering: async (value) => ({ kind: "saved", value, message: "Saved." }),
+          preflight: async () => ({ kind: "prepared", prepared: preparedPublication }),
+          admit: async () => ({ step: "admission", state: "completed" }),
+          runReadiness: async () => ({ step: "readiness", state: "completed" }),
+          runTest: async () => ({ step: "test", state: "completed" }),
+        }}
+      />,
+    );
+
+    const repair = screen.getByRole("button", { name: "Check and continue" });
+    expect(repair.hasAttribute("disabled")).toBe(false);
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute("id")).toBe("incompatibility"),
+    );
+    expect(screen.queryByRole("button", { name: "Check readiness" })).toBeNull();
+    window.history.replaceState(null, "", "/");
+  });
 });

@@ -39,6 +39,31 @@ describe("current supply funnel", () => {
               ...offeringAt("readiness"),
               offeringRef: "offering:readiness",
             }),
+            operation("authority-stale", {
+              ...offeringAt("readiness"),
+              offeringRef: "offering:authority-stale",
+              actionableReason: "authority_stale",
+              authority: {
+                mode: "provider_owned",
+                kind: "provider_connection",
+                providerRef: "provider:stale",
+                authorityGeneration: 2,
+                authorityDigest: "sha256:stale",
+              },
+            }),
+            operation("credential-rejected", {
+              ...offeringAt("readiness"),
+              offeringRef: "offering:credential-rejected",
+              actionableReason: "credential_rejected",
+              readiness: { outcome: "credential_rejected", evidenceRefs: [] },
+              authority: {
+                mode: "provider_owned",
+                kind: "provider_connection",
+                providerRef: "provider:rejected",
+                authorityGeneration: 3,
+                authorityDigest: "sha256:rejected",
+              },
+            }),
             operation("incompatible", {
               publication: {
                 ...base.publication,
@@ -92,6 +117,8 @@ describe("current supply funnel", () => {
       ["Continue description", "/owner/supply/offering%3Adescribe#description"],
       ["Connect provider", "/owner/supply/offering%3Aprovider#provider"],
       ["Recheck readiness", "/owner/supply/offering%3Areadiness#readiness"],
+      ["Refresh provider authority", "/owner/supply#provider-connection-provider%3Astale"],
+      ["Repair provider connection", "/owner/supply#provider-connection-provider%3Arejected"],
       ["Inspect incompatibility", "/owner/supply/offering%3Aincompatible#incompatibility"],
       ["Republish", "/owner/supply/offering%3Awithdrawn#publication-maintenance"],
       ["View live Operation", "/operations/operation%3Aone"],
@@ -102,10 +129,15 @@ describe("current supply funnel", () => {
       const action = screen.getByRole("link", { name: label });
       expect(action.getAttribute("href")).toBe(href);
     }
-    expect(screen.getAllByRole("link", { name: /Continue description|Connect provider|Recheck readiness|Inspect incompatibility|Republish|View live Operation|Review earnings/ })).toHaveLength(7);
+    expect(screen.getAllByRole("link", { name: /Continue description|Connect provider|Recheck readiness|Refresh provider authority|Repair provider connection|Inspect incompatibility|Republish|View live Operation|Review earnings/ })).toHaveLength(9);
   });
 
   it("labels non-production operational observations with their environment", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/owner/supply#provider-connection-provider%3Atest",
+    );
     renderWithRouter(
       <AeSupplyPublisherHome
         readback={{
@@ -164,6 +196,10 @@ describe("current supply funnel", () => {
     expect(screen.getByRole("button", { name: "Refresh authority" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Revoke" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Connect supplier" })).toBeDefined();
+    expect(document.activeElement?.getAttribute("id")).toBe(
+      "provider-connection-provider:test",
+    );
+    window.history.replaceState(null, "", "/");
   });
 
   it("renders an incomplete owner readback as a repair state", () => {

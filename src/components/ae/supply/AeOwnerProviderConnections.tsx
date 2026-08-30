@@ -1,6 +1,6 @@
 import { Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -13,6 +13,7 @@ import {
   revokeOwnerProviderConnectionServer,
   type OwnerProviderConnection,
 } from '@/modules/capability-supply/supply-funnel.functions'
+import { providerConnectionTargetId } from './provider-connection-target'
 
 export function AeOwnerProviderConnections({
   businessId,
@@ -30,6 +31,25 @@ export function AeOwnerProviderConnections({
   const [busy, setBusy] = useState<string>()
   const [notice, setNotice] = useState<{ kind: 'error' | 'status'; text: string }>()
   const canConnect = businessId !== undefined && businessId.length > 0
+
+  useEffect(() => {
+    const focusHashTarget = () => {
+      let targetId: string
+      try {
+        targetId = decodeURIComponent(window.location.hash.replace(/^#/, ''))
+      } catch {
+        return
+      }
+      if (targetId !== 'supplier-connections' && !targetId.startsWith('provider-connection-')) return
+      const target = document.getElementById(targetId)
+      if (target === null) return
+      target.scrollIntoView({ block: 'start' })
+      target.focus({ preventScroll: true })
+    }
+    window.addEventListener('hashchange', focusHashTarget)
+    focusHashTarget()
+    return () => window.removeEventListener('hashchange', focusHashTarget)
+  }, [])
 
   async function refresh() {
     await router.invalidate()
@@ -115,11 +135,15 @@ export function AeOwnerProviderConnections({
   }
 
   return (
-    <AeSection
+    <div
       id="supplier-connections"
-      title="Supplier connections"
-      description="Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Then open an operation and select this connection as its access authority."
+      tabIndex={-1}
+      className="scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
+      <AeSection
+        title="Supplier connections"
+        description="Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Then open an operation and select this connection as its access authority."
+      >
       {connections.length === 0 ? (
         <AeEmptyState
           title="No provider connection yet"
@@ -128,7 +152,12 @@ export function AeOwnerProviderConnections({
       ) : (
         <ul className="m-0 grid list-none divide-y divide-border border-y border-border p-0">
           {connections.map((connection) => (
-            <li key={connection.connectionRef} className="grid min-w-0 gap-3 py-4">
+            <li
+              key={connection.connectionRef}
+              id={providerConnectionTargetId(connection.providerRef)}
+              tabIndex={-1}
+              className="grid min-w-0 scroll-mt-6 gap-3 py-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="grid min-w-0 gap-1">
                   <p className="font-medium text-foreground">{providerConnectionStatus(connection)}</p>
@@ -210,7 +239,8 @@ export function AeOwnerProviderConnections({
       >
         {notice?.text ?? ''}
       </p>
-    </AeSection>
+      </AeSection>
+    </div>
   )
 }
 

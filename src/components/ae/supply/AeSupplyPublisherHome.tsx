@@ -12,6 +12,7 @@ import {
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { AeOwnerProviderConnections } from './AeOwnerProviderConnections'
+import { providerConnectionTargetId } from './provider-connection-target'
 import { AeSupplyEarningsCard } from './AeSupplyEarningsCard'
 import { Badge } from '@/components/ui/badge'
 import type {
@@ -192,6 +193,8 @@ type SupplierContinuation = Readonly<{
   label:
     | 'Continue description'
     | 'Connect provider'
+    | 'Refresh provider authority'
+    | 'Repair provider connection'
     | 'Recheck readiness'
     | 'Inspect incompatibility'
     | 'Republish'
@@ -210,7 +213,11 @@ function supplierContinuationForOffering(
     || offering.readiness.outcome === 'credential_rejected'
     || offering.actionableReason === 'credential_unavailable'
     || offering.actionableReason === 'credential_rejected'
-    || offering.actionableReason === 'authority_stale'
+  const authorityStale = offering.actionableReason === 'authority_stale'
+  const providerConnectionHref = offering.authority?.kind === 'provider_connection'
+    && offering.authority.providerRef !== undefined
+    ? `/owner/supply#${encodeURIComponent(providerConnectionTargetId(offering.authority.providerRef))}`
+    : '/owner/supply#supplier-connections'
 
   if (offering.status === 'retired' || publicationState === 'superseded') {
     return { label: 'Review earnings', href: '/owner/supply#earnings' }
@@ -224,11 +231,14 @@ function supplierContinuationForOffering(
   if (offering.currentStep === 'describe') {
     return { label: 'Continue description', href: `${detailHref}#description` }
   }
-  if (offering.currentStep === 'admission') {
-    return { label: 'Connect provider', href: `${detailHref}#provider` }
+  if (authorityStale) {
+    return { label: 'Refresh provider authority', href: providerConnectionHref }
   }
   if (credentialNeedsAttention) {
-    return { label: 'Connect provider', href: '/owner/supply#supplier-connections' }
+    return { label: 'Repair provider connection', href: providerConnectionHref }
+  }
+  if (offering.currentStep === 'admission') {
+    return { label: 'Connect provider', href: `${detailHref}#provider` }
   }
   if (offering.live.available && offering.publication?.operationRef !== undefined) {
     return {

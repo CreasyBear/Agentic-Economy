@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { AeFactList } from '@/components/ae/data/AeFactList'
@@ -83,6 +83,16 @@ export function AeSupplyFunnel({
   const actionContext = contextForOffering(businessId, offering)
   const currentStep = offering.currentStep
   const isX402Test = offering.publication?.source.kind === 'x402'
+  const incompatible = offering.publication?.state === 'incompatible'
+    || offering.lifecycle.state === 'incompatible'
+
+  useEffect(() => {
+    if (window.location.hash !== '#incompatibility') return
+    const target = document.getElementById('incompatibility')
+    if (target === null) return
+    target.scrollIntoView({ block: 'start' })
+    target.focus({ preventScroll: true })
+  }, [])
 
   async function reload() {
     setConfirmTest(false)
@@ -146,7 +156,7 @@ export function AeSupplyFunnel({
           />
         </div>
       ) : null}
-      {currentStep === 'admission' ? (
+      {currentStep === 'admission' || incompatible ? (
         <div id="provider" className="scroll-mt-6">
           <AeSupplyEndpointConfigStep
             {...(initialSource === undefined ? {} : { initialValue: initialSource })}
@@ -161,7 +171,7 @@ export function AeSupplyFunnel({
           />
         </div>
       ) : null}
-      {currentStep === 'readiness' ? (
+      {currentStep === 'readiness' && !incompatible ? (
         <ActionStep
           title="3 · CHECK READINESS"
           heading="Check that the admitted operation works"
@@ -177,7 +187,7 @@ export function AeSupplyFunnel({
           }}
         />
       ) : null}
-      {currentStep === 'test' ? (
+      {currentStep === 'test' && !incompatible ? (
         <ActionStep
           title="4 · RUN A TEST"
           heading={isX402Test ? 'Check the payment challenge' : 'Run a real test'}
@@ -219,18 +229,34 @@ export function AeSupplyFunnel({
 
 function SupplyTruthCard({ offering }: Readonly<{ offering: OwnerSupplyOfferingReadback }>) {
   const publication = offering.publication
+  const incompatible = publication?.state === 'incompatible'
+    || offering.lifecycle.state === 'incompatible'
   return (
-    <AeSection id="incompatibility" title="Operation control" description="Canonical identifiers and states from the current owner readback. Credentials are never shown here.">
-      <AeFactList
-        facts={[
-          { label: 'Admission', value: offering.admission.state },
-          { label: 'Publication', value: publication?.state ?? 'not published' },
-          { label: 'Readiness', value: offering.readiness.outcome },
-          { label: 'Live', value: offering.live.available ? 'available' : 'unavailable' },
-        ]}
-      />
-      <AeOwnerOperationFacts offering={offering} detail />
-    </AeSection>
+    <div
+      id="incompatibility"
+      tabIndex={-1}
+      className="scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      <AeSection title="Operation control" description="Canonical identifiers and states from the current owner readback. Credentials are never shown here.">
+        {incompatible ? (
+          <Alert>
+            <AlertTitle>Readmission required</AlertTitle>
+            <AlertDescription>
+              This publication no longer matches the current Operation revision. Reconnect and re-admit the intended source below; the existing revision and source guards still apply.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <AeFactList
+          facts={[
+            { label: 'Admission', value: offering.admission.state },
+            { label: 'Publication', value: publication?.state ?? 'not published' },
+            { label: 'Readiness', value: offering.readiness.outcome },
+            { label: 'Live', value: offering.live.available ? 'available' : 'unavailable' },
+          ]}
+        />
+        <AeOwnerOperationFacts offering={offering} detail />
+      </AeSection>
+    </div>
   )
 }
 
