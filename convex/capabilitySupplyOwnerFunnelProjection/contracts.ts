@@ -20,9 +20,14 @@ const ownerSupplyLifecycleReasonValue = v.union(
 )
 const ownerSupplyAuthorityValue = v.union(
   v.object({ kind: v.literal('public_upstream') }),
-  v.object({ kind: v.literal('provider_connection'), providerRef: v.string() }),
+  v.object({
+    kind: v.literal('provider_connection'),
+    connectionRef: v.string(),
+    providerRef: v.string(),
+  }),
 )
 const ownerSupplyAuthoritySnapshotValue = v.object({
+  connectionRef: v.string(),
   providerRef: v.string(),
   authorityGeneration: v.number(),
   authorityDigest: v.string(),
@@ -148,6 +153,7 @@ export const ownerSupplyFunnelResultValue = v.union(
               v.literal('provider_connection'),
             ),
             providerRef: v.optional(v.string()),
+            connectionRef: v.optional(v.string()),
             authorityGeneration: v.optional(v.number()),
             authorityDigest: v.optional(v.string()),
           }),

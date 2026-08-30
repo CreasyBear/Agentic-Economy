@@ -358,6 +358,7 @@ export function x402OfferingAtTest(): OwnerSupplyOfferingReadback {
     authority: {
       mode: "provider_owned",
       kind: "provider_connection",
+      connectionRef: "connection:x402",
       providerRef: "provider:x402",
       authorityGeneration: 1,
       authorityDigest: sourceHash,
@@ -371,6 +372,7 @@ export function x402OfferingAtTest(): OwnerSupplyOfferingReadback {
         adapterId: "x402-fetch:v2",
         authority: {
           kind: "provider_connection",
+          connectionRef: "connection:x402",
           providerRef: "provider:x402",
         },
       },

@@ -32,7 +32,7 @@ export function AeOwnerProviderConnections({
   const [busy, setBusy] = useState<string>()
   const [notice, setNotice] = useState<{ kind: 'error' | 'status'; text: string }>()
   const [rebindOfferingRef, setRebindOfferingRef] = useState<string>()
-  const [rebindProviderRef, setRebindProviderRef] = useState<string>()
+  const [rebindConnectionRef, setRebindConnectionRef] = useState<string>()
   const [refreshedForRebind, setRefreshedForRebind] = useState<string>()
   const rebindLinkRef = useRef<HTMLAnchorElement>(null)
   const canConnect = businessId !== undefined && businessId.length > 0
@@ -56,7 +56,7 @@ export function AeOwnerProviderConnections({
     const requestedRebind = new URLSearchParams(window.location.search).get('rebind')?.trim()
     if (requestedRebind !== undefined && requestedRebind.length > 0 && requestedRebind.length <= 300) {
       setRebindOfferingRef(requestedRebind)
-      setRebindProviderRef(providerRefFromHash())
+      setRebindConnectionRef(connectionRefFromHash())
     }
     return () => window.removeEventListener('hashchange', focusHashTarget)
   }, [])
@@ -176,7 +176,7 @@ export function AeOwnerProviderConnections({
           {connections.map((connection) => (
             <li
               key={connection.connectionRef}
-              id={providerConnectionTargetId(connection.providerRef)}
+              id={providerConnectionTargetId(connection.connectionRef)}
               tabIndex={-1}
               className="grid min-w-0 scroll-mt-6 gap-3 py-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
@@ -217,7 +217,7 @@ export function AeOwnerProviderConnections({
                   </Button>
                 ) : null}
               </div>
-              {rebindOfferingRef !== undefined && connection.providerRef === rebindProviderRef ? (
+              {rebindOfferingRef !== undefined && connection.connectionRef === rebindConnectionRef ? (
                 refreshedForRebind === connection.connectionRef ? (
                   <Alert>
                     <AlertTitle>Authority refreshed</AlertTitle>
@@ -319,7 +319,7 @@ function connectionRefusalCopy(code: string): string {
   return 'The provider connection could not be updated. Reload and try again.'
 }
 
-function providerRefFromHash(): string | undefined {
+function connectionRefFromHash(): string | undefined {
   try {
     const targetId = decodeURIComponent(window.location.hash.replace(/^#/, ''))
     return targetId.startsWith('provider-connection-')

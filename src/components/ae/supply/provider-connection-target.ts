@@ -1,3 +1,3 @@
-export function providerConnectionTargetId(providerRef: string): string {
-  return `provider-connection-${providerRef}`
+export function providerConnectionTargetId(connectionRef: string): string {
+  return `provider-connection-${connectionRef}`
 }

@@ -138,12 +138,14 @@ export function ownerSupplyPublicationDetails(input: Readonly<{
           ? { kind: 'public_upstream' as const }
           : {
               kind: 'provider_connection' as const,
+              connectionRef: binding.authority.connectionRef,
               providerRef: binding.authority.providerRef,
             },
       ...(publication.connectionAuthority === undefined
         ? {}
         : {
             authoritySnapshot: {
+              connectionRef: publication.connectionAuthority.connectionRef,
               providerRef: publication.connectionAuthority.providerRef,
               authorityGeneration:
                 publication.connectionAuthority.authorityGeneration,
@@ -206,6 +208,7 @@ export function ownerSupplyAuthority(
   return {
     mode: publication.authorityMode,
     kind: 'provider_connection',
+    connectionRef: bindingAuthority.connectionRef,
     providerRef: bindingAuthority.providerRef,
     ...(publication.binding.authoritySnapshot === undefined
       ? {}

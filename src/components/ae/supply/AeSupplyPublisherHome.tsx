@@ -194,6 +194,7 @@ type SupplierContinuation = Readonly<{
     | 'Continue description'
     | 'Connect provider'
     | 'Refresh and re-admit'
+    | 'Re-admit provider authority'
     | 'Choose replacement connection'
     | 'Recheck readiness'
     | 'Inspect incompatibility'
@@ -214,10 +215,9 @@ function supplierContinuationForOffering(
     || offering.actionableReason === 'credential_unavailable'
     || offering.actionableReason === 'credential_rejected'
   const authorityStale = offering.actionableReason === 'authority_stale'
-  const providerConnectionTarget = offering.authority?.kind === 'provider_connection'
-    && offering.authority.providerRef !== undefined
-    ? providerConnectionTargetId(offering.authority.providerRef)
-    : 'supplier-connections'
+  const boundConnectionRef = offering.authority?.kind === 'provider_connection'
+    ? offering.authority.connectionRef
+    : undefined
 
   if (offering.status === 'retired' || publicationState === 'superseded') {
     return { label: 'Review earnings', href: '/owner/supply#earnings' }
@@ -232,10 +232,16 @@ function supplierContinuationForOffering(
     return { label: 'Continue description', href: `${detailHref}#description` }
   }
   if (authorityStale) {
+    if (boundConnectionRef === undefined) {
+      return {
+        label: 'Re-admit provider authority',
+        href: `${detailHref}#provider`,
+      }
+    }
     const rebindQuery = `?rebind=${encodeURIComponent(offering.offeringRef)}`
     return {
       label: 'Refresh and re-admit',
-      href: `/owner/supply${rebindQuery}#${encodeURIComponent(providerConnectionTarget)}`,
+      href: `/owner/supply${rebindQuery}#${encodeURIComponent(providerConnectionTargetId(boundConnectionRef))}`,
     }
   }
   if (credentialNeedsAttention) {

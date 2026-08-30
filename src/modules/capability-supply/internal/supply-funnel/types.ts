@@ -190,6 +190,7 @@ export type OwnerSupplyOfferingReadback = Readonly<{
       | "third_party_gateway"
       | "observed_external";
     kind: "public_upstream" | "provider_connection";
+    connectionRef?: string;
     providerRef?: string;
     authorityGeneration?: number;
     authorityDigest?: string;
@@ -224,9 +225,14 @@ export type OwnerSupplyOfferingReadback = Readonly<{
       conformance: "not_conformant" | "conformant";
       authority: Readonly<
         | { kind: "public_upstream" }
-        | { kind: "provider_connection"; providerRef: string }
+        | {
+            kind: "provider_connection";
+            connectionRef: string;
+            providerRef: string;
+          }
       >;
       authoritySnapshot?: Readonly<{
+        connectionRef: string;
         providerRef: string;
         authorityGeneration: number;
         authorityDigest: string;

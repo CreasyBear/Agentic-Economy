@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
 import { offeringAt, renderWithRouter } from "./supply-funnel-harness";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { AeSupplyPublisherHome } from "@/components/ae/supply/AeSupplyPublisherHome";
 import { AeOwnerProviderConnections } from "@/components/ae/supply/AeOwnerProviderConnections";
+import { providerConnectionTargetId } from "@/components/ae/supply/provider-connection-target";
 
 const connectionServerMocks = vi.hoisted(() => ({
   connect: vi.fn(),
@@ -90,6 +91,7 @@ describe("current supply funnel", () => {
               authority: {
                 mode: "provider_owned",
                 kind: "provider_connection",
+                connectionRef: "connection:stale",
                 providerRef: "provider:stale",
                 authorityGeneration: 2,
                 authorityDigest: "sha256:stale",
@@ -103,6 +105,7 @@ describe("current supply funnel", () => {
               authority: {
                 mode: "provider_owned",
                 kind: "provider_connection",
+                connectionRef: "connection:rejected",
                 providerRef: "provider:rejected",
                 authorityGeneration: 3,
                 authorityDigest: "sha256:rejected",
@@ -161,7 +164,7 @@ describe("current supply funnel", () => {
       ["Continue description", "/owner/supply/offering%3Adescribe#description"],
       ["Connect provider", "/owner/supply/offering%3Aprovider#provider"],
       ["Recheck readiness", "/owner/supply/offering%3Areadiness#readiness"],
-      ["Refresh and re-admit", "/owner/supply?rebind=offering%3Aauthority-stale#provider-connection-provider%3Astale"],
+      ["Refresh and re-admit", "/owner/supply?rebind=offering%3Aauthority-stale#provider-connection-connection%3Astale"],
       ["Choose replacement connection", "/owner/supply/offering%3Acredential-rejected#credential-recovery"],
       ["Inspect incompatibility", "/owner/supply/offering%3Aincompatible#incompatibility"],
       ["Republish", "/owner/supply/offering%3Awithdrawn#publication-maintenance"],
@@ -180,7 +183,7 @@ describe("current supply funnel", () => {
     window.history.replaceState(
       null,
       "",
-      "/owner/supply#provider-connection-provider%3Atest",
+      "/owner/supply#provider-connection-provider-connection%3Atest",
     );
     renderWithRouter(
       <AeSupplyPublisherHome
@@ -223,22 +226,28 @@ describe("current supply funnel", () => {
     expect(screen.getByRole("button", { name: "Revoke" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Connect supplier" })).toBeDefined();
     expect(document.activeElement?.getAttribute("id")).toBe(
-      "provider-connection-provider:test",
+      "provider-connection-provider-connection:test",
     );
     window.history.replaceState(null, "", "/");
   });
 
-  it("refreshes exact authority before exposing the exact Operation readmission", async () => {
+  it("refreshes the exact bound connection when one provider host has two connections", async () => {
+    const exactConnection = {
+      ...activeConnection,
+      connectionRef: "provider-connection:exact",
+      authorityGeneration: 7,
+      authorityDigest: "sha256:exact",
+    };
     window.history.replaceState(
       null,
       "",
-      "/owner/supply?rebind=offering%3Atest#provider-connection-provider%3Atest",
+      "/owner/supply?rebind=offering%3Atest#provider-connection-provider-connection%3Aexact",
     );
     connectionServerMocks.reconnect.mockResolvedValue({
       kind: "applied",
       connection: {
-        ...activeConnection,
-        authorityGeneration: 2,
+        ...exactConnection,
+        authorityGeneration: 8,
         authorityDigest: "sha256:refreshed",
       },
       commandDigest: "sha256:command",
@@ -246,24 +255,28 @@ describe("current supply funnel", () => {
     renderWithRouter(
       <AeOwnerProviderConnections
         businessId="business-1"
-        connections={[activeConnection]}
+        connections={[activeConnection, exactConnection]}
       />,
     );
 
-    await waitFor(() =>
-      expect(document.activeElement?.getAttribute("id")).toBe(
-        "provider-connection-provider:test",
-      ),
+    const exactTarget = document.getElementById(
+      providerConnectionTargetId(exactConnection.connectionRef),
     );
+    if (exactTarget === null) throw new Error("exact_connection_target_missing");
+    await waitFor(() =>
+      expect(document.activeElement).toBe(exactTarget),
+    );
+    expect(screen.getAllByText("Two-step authority recovery")).toHaveLength(1);
+    expect(within(exactTarget).getByText("Two-step authority recovery")).toBeDefined();
     expect(screen.queryByRole("link", { name: "Re-admit Operation" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Refresh authority" }));
+    fireEvent.click(within(exactTarget).getByRole("button", { name: "Refresh authority" }));
     await waitFor(() => expect(connectionServerMocks.reconnect).toHaveBeenCalledOnce());
     expect(connectionServerMocks.reconnect).toHaveBeenCalledWith({
       data: {
-        connectionRef: "provider-connection:test",
+        connectionRef: "provider-connection:exact",
         commandId: expect.any(String),
-        expectedAuthorityGeneration: 1,
-        expectedAuthorityDigest: "sha256:test",
+        expectedAuthorityGeneration: 7,
+        expectedAuthorityDigest: "sha256:exact",
       },
     });
     const continuation = await screen.findByRole("link", { name: "Re-admit Operation" });
