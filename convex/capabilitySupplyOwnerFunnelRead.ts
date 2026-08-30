@@ -8,7 +8,7 @@ import {
 
 export async function readOwnerSupplyFunnelHandler(
   ctx: QueryCtx,
-  args: { businessId: Id<'businesses'> },
+  args: { businessId: Id<'businesses'>; editorOfferingRef?: string },
 ): Promise<OwnerSupplyFunnelResult> {
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner')

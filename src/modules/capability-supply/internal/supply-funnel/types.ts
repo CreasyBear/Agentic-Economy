@@ -1,6 +1,7 @@
 import type { PricingConfig } from "@/modules/money/public";
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from "@/modules/security/source-write-admission";
 import type { CapabilityPublicationSourceSelector } from "../publication-importers";
+import type { PreparedPublicationMaterial } from "../publication";
 
 type BusinessOfferingStatus = "draft" | "published" | "paused" | "retired";
 type OfferingAccessPathDescriptor =
@@ -180,6 +181,7 @@ export type OwnerSupplyOfferingReadback = Readonly<{
   summary: string;
   status: BusinessOfferingStatus;
   sourceHash?: string;
+  sourceMaterial?: PreparedPublicationMaterial;
   endpointUrl?: string;
   source?: OwnerSupplyReadbackSource;
   pricing?: Readonly<{ config: PricingConfig; priceDigest: string }>;

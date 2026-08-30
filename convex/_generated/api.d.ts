@@ -49,6 +49,7 @@ import type * as capabilitySupplyOwnerFunnelProjection from "../capabilitySupply
 import type * as capabilitySupplyOwnerFunnelProjection_contracts from "../capabilitySupplyOwnerFunnelProjection/contracts.js";
 import type * as capabilitySupplyOwnerFunnelProjection_offering_projection from "../capabilitySupplyOwnerFunnelProjection/offering_projection.js";
 import type * as capabilitySupplyOwnerFunnelRead from "../capabilitySupplyOwnerFunnelRead.js";
+import type * as capabilitySupplyOwnerSourceMaterial from "../capabilitySupplyOwnerSourceMaterial.js";
 import type * as capabilitySupplyOwnerSupply from "../capabilitySupplyOwnerSupply.js";
 import type * as capabilitySupplyProbes from "../capabilitySupplyProbes.js";
 import type * as capabilitySupplyProjection from "../capabilitySupplyProjection.js";
@@ -232,6 +233,7 @@ declare const fullApi: ApiFromModules<{
   "capabilitySupplyOwnerFunnelProjection/contracts": typeof capabilitySupplyOwnerFunnelProjection_contracts;
   "capabilitySupplyOwnerFunnelProjection/offering_projection": typeof capabilitySupplyOwnerFunnelProjection_offering_projection;
   capabilitySupplyOwnerFunnelRead: typeof capabilitySupplyOwnerFunnelRead;
+  capabilitySupplyOwnerSourceMaterial: typeof capabilitySupplyOwnerSourceMaterial;
   capabilitySupplyOwnerSupply: typeof capabilitySupplyOwnerSupply;
   capabilitySupplyProbes: typeof capabilitySupplyProbes;
   capabilitySupplyProjection: typeof capabilitySupplyProjection;

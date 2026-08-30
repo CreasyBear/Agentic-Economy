@@ -7,7 +7,10 @@ import { Route as OwnerSupplyDetailRoute } from '@/routes/_operator/owner.supply
 const routeMocks = vi.hoisted(() => ({
   loaderData: undefined as unknown,
   funnelProps: undefined as
-    | { callbacks: Record<string, (...args: never[]) => Promise<unknown>> }
+    | {
+        initialSource?: Record<string, unknown>
+        callbacks: Record<string, (...args: never[]) => Promise<unknown>>
+      }
     | undefined,
   invalidate: vi.fn(),
   serverFnResults: new Map<unknown, (...args: never[]) => Promise<unknown>>(),
@@ -95,6 +98,96 @@ const SOURCE = {
   evidenceRefs: ['source:owner'],
 }
 
+const SOURCE_MATERIAL = {
+  sourceKind: 'openapi_http' as const,
+  sourceSelector: { path: '/lookup', method: 'post' as const },
+  sourceDescriptorJson: JSON.stringify(SOURCE.document),
+  sourceRevision: SOURCE.sourceRevision,
+  sourceDigest: `sha256:${'d'.repeat(64)}`,
+  documentJson: JSON.stringify({
+    contractFormat: 'ae.capability-contract:v2',
+    capabilityId: 'owner.lookup',
+    version: 1,
+    name: 'Owner lookup',
+    description: 'Returns one owner-provided result.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    outputSchema: {
+      type: 'object',
+      properties: { result: { type: 'string' } },
+      required: ['result'],
+      additionalProperties: false,
+    },
+    customerAnnotations: [
+      {
+        annotationId: 'result',
+        document: 'output',
+        pointer: '/result',
+        label: 'Result',
+        role: 'completion_evidence',
+      },
+    ],
+    dataUse: [],
+    effects: [],
+    evidence: [
+      { evidenceId: 'result', outputPointer: '/result', purpose: 'completion' },
+    ],
+    lifecycle: { idempotency: 'required', recovery: 'retry_safe' },
+  }),
+  offering: {
+    offeringId: 'offering:owner',
+    networkId: 'ae:public',
+    presentation: {
+      label: 'Owner lookup',
+      summary: 'Returns one owner-provided result.',
+      price: {
+        kind: 'fixed' as const,
+        amount: { currency: 'AUD', units: '100', exponent: 2 },
+      },
+      materialTerms: [],
+      commercialRelationship: {
+        kind: 'none' as const,
+        summary: 'No commercial influence.',
+        influencesEligibility: false,
+        influencesInclusion: false,
+        influencesOrder: false,
+        evidenceRefs: ['commercial:none'],
+      },
+    },
+    searchTerms: ['owner lookup'],
+    registrationEvidenceRefs: ['source:owner'],
+  },
+  binding: {
+    bindingId: 'binding:owner',
+    endpointUrl: 'https://provider.example/lookup',
+    authority: {
+      kind: 'provider_connection' as const,
+      connectionRef: 'connection:owner',
+      providerRef: 'provider:owner',
+    },
+    continuation: { kind: 'single_response' as const, evidenceRefs: [] },
+    cancellation: { kind: 'unsupported' as const, evidenceRefs: [] },
+    adapter: {
+      adapterId: 'http-json:v1' as const,
+      config: {
+        method: 'POST',
+        fixedQuery: [{ parameter: 'locale', value: 'en-AU' }],
+        responseContentType: 'application/json',
+        responseStatus: 200,
+        requestTimeoutMs: 5_000,
+        credential: { kind: 'bearer' },
+      },
+    },
+    registrationEvidenceRefs: ['source:owner'],
+  },
+  evidenceRefs: ['source:owner'],
+  pricingConfigJson: JSON.stringify({
+    version: 'pricing:v2',
+    unit: 'call',
+    paidAmount: { currency: 'AUD', units: '100', exponent: 2 },
+  }),
+  priceDigest: `sha256:${'e'.repeat(64)}`,
+}
+
 function loadedData() {
   const offering = {
     offeringRef: 'catalog-offering:owner',
@@ -136,6 +229,7 @@ function loadedData() {
       revision: offering.currentRevision,
       name: offering.revision.name,
       sourceHash: `sha256:${'c'.repeat(64)}`,
+      sourceMaterial: SOURCE_MATERIAL,
       accessPaths: [],
     },
     authorityOptions: [],
@@ -143,6 +237,54 @@ function loadedData() {
 }
 
 describe('owner supply route in-memory admission', () => {
+  it('prefills the exact admitted non-secret source for re-admission', () => {
+    routeMocks.loaderData = loadedData()
+
+    const Component = OwnerSupplyDetailRoute.options.component
+    if (Component === undefined) throw new Error('route_component_missing')
+    render(createElement(Component))
+
+    expect(routeMocks.funnelProps?.initialSource).toEqual({
+      sourceKind: 'openapi_http',
+      sourceRevision: SOURCE.sourceRevision,
+      contract: {
+        capabilityId: 'owner.lookup',
+        version: 1,
+        name: 'Owner lookup',
+        description: 'Returns one owner-provided result.',
+        customerAnnotations: [
+          {
+            annotationId: 'result',
+            document: 'output',
+            pointer: '/result',
+            label: 'Result',
+            role: 'completion_evidence',
+          },
+        ],
+        dataUse: [],
+        effects: [],
+        evidence: [
+          { evidenceId: 'result', outputPointer: '/result', purpose: 'completion' },
+        ],
+        lifecycle: { idempotency: 'required', recovery: 'retry_safe' },
+      },
+      commercial: {
+        offering: SOURCE_MATERIAL.offering,
+        bindingId: 'binding:owner',
+      },
+      evidenceRefs: ['source:owner'],
+      requestTimeoutMs: 5_000,
+      authority: {
+        kind: 'provider_connection',
+        connectionRef: 'connection:owner',
+        providerRef: 'provider:owner',
+      },
+      documentJson: JSON.stringify(SOURCE.document, null, 2),
+      operation: { path: '/lookup', method: 'post' },
+      fixedQuery: [{ parameter: 'locale', value: 'en-AU' }],
+    })
+  })
+
   it('admits with the current source instead of a stored draft digest', async () => {
     const preflight = vi.fn(async () => ({
       kind: 'prepared',

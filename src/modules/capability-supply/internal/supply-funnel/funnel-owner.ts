@@ -47,6 +47,7 @@ const republishMutation = sourceMutation<
 
 export const ownerSupplyReadInputSchema = z.strictObject({
   businessId: z.string().min(1),
+  editorOfferingRef: z.string().min(1).optional(),
 });
 export const ownerSupplyActionInputSchema = z.strictObject({
   businessId: z.string().min(1),

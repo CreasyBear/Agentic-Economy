@@ -8,6 +8,7 @@ import { ownerSupplyLiteral, ownerSupplyOptionalNumber, ownerSupplyStringArray }
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
+import { reconstructOwnerSourceMaterial } from './capabilitySupplyOwnerSourceMaterial'
 
 const MAX_READINESS_VALIDITY_MS = 24 * 60 * 60_000
 const OWNER_SUPPLY_OFFERINGS_READ_CAP = 50
@@ -40,6 +41,28 @@ type OwnerSupplyAvailable = Extract<
 >
 type OwnerSupplyOffering = OwnerSupplyAvailable['offerings'][number]
 type OwnerSupplyPublication = NonNullable<OwnerSupplyOffering['publication']>
+
+async function requestedOwnerSourceMaterial(
+  db: QueryCtx['db'] | MutationCtx['db'],
+  input: Readonly<{
+    editorOfferingRef: string | undefined
+    offeringRef: string
+    publication: Doc<'capabilityPublications'> | undefined
+  }>,
+): Promise<NonNullable<OwnerSupplyOffering['sourceMaterial']> | undefined> {
+  if (
+    input.editorOfferingRef !== input.offeringRef
+    || input.publication === undefined
+  ) return undefined
+  const result = await reconstructOwnerSourceMaterial(
+    db,
+    input.publication,
+    input.publication.registrationEvidenceRefs ?? [],
+  )
+  return result.kind === 'ready'
+    ? result.prepared as NonNullable<OwnerSupplyOffering['sourceMaterial']>
+    : undefined
+}
 
 async function qualifyOwnerSupplyOffering(
   db: QueryCtx['db'],
@@ -101,7 +124,7 @@ function ownerSupplyLifecycle(
 
 export async function readOwnerSupplyFunnelProjection(
   ctx: QueryCtx | MutationCtx,
-  args: { businessId: Id<'businesses'> },
+  args: { businessId: Id<'businesses'>; editorOfferingRef?: string },
   business: Doc<'businesses'>,
 ): Promise<OwnerSupplyFunnelResult> {
     const db = ctx.db
@@ -387,6 +410,11 @@ export async function readOwnerSupplyFunnelProjection(
           lifecycleReasons: lifecycleValue.reasons,
           readinessOutcome: readinessValue.outcome,
         })
+        const sourceMaterial = await requestedOwnerSourceMaterial(db, {
+          editorOfferingRef: args.editorOfferingRef,
+          offeringRef: offering.offeringRef,
+          publication,
+        })
         return ownerSupplyOfferingResult({
           offering,
           revision,
@@ -402,6 +430,7 @@ export async function readOwnerSupplyFunnelProjection(
           currentStep,
           stepStates,
           actionableReason,
+          sourceMaterial,
         })
       }),
     )

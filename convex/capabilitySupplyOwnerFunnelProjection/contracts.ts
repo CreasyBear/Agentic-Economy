@@ -5,6 +5,7 @@ import {
   readinessOutcomeValue,
 } from '@/modules/capability-supply/public'
 import { ownerSupplyAccessPathDescriptorValue } from '@/modules/capability-supply/owner-supply-validators'
+import { preparedPublicationMaterialValue } from '../capabilitySupplyPublish'
 
 const ownerSupplyLifecycleReasonValue = v.union(
   v.literal('admission_unproven'),
@@ -122,6 +123,7 @@ export const ownerSupplyFunnelResultValue = v.union(
           v.literal('retired'),
         ),
         sourceHash: v.optional(v.string()),
+        sourceMaterial: v.optional(preparedPublicationMaterialValue),
         source: v.optional(
           v.object({
             kind: v.union(

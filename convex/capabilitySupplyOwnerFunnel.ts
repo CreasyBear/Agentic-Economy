@@ -21,6 +21,7 @@ import {
 export const readOwnerSupplyFunnel = queryGeneric({
   args: {
     businessId: v.id('businesses'),
+    editorOfferingRef: v.optional(v.string()),
   },
   returns: ownerSupplyFunnelResultValue,
   handler: readOwnerSupplyFunnelHandler,

@@ -254,6 +254,7 @@ export function ownerSupplyOfferingResult(input: Readonly<{
   currentStep: OwnerSupplyOffering['currentStep']
   stepStates: OwnerSupplyStepStates
   actionableReason: OwnerSupplyOffering['actionableReason']
+  sourceMaterial: NonNullable<OwnerSupplyOffering['sourceMaterial']> | undefined
 }>): OwnerSupplyOffering {
   const {
     offering,
@@ -270,6 +271,7 @@ export function ownerSupplyOfferingResult(input: Readonly<{
     currentStep,
     stepStates,
     actionableReason,
+    sourceMaterial,
   } = input
   const sourceHash = revision?.sourceHash
   const source = publicationDetails?.source
@@ -284,6 +286,7 @@ export function ownerSupplyOfferingResult(input: Readonly<{
       'offering status',
     ),
     ...(sourceHash === undefined ? {} : { sourceHash }),
+    ...(sourceMaterial === undefined ? {} : { sourceMaterial }),
     ...(source === undefined ? {} : { source }),
     ...(binding === undefined ? {} : { endpointUrl: binding.endpointUrl }),
     ...(pricing === undefined ? {} : { pricing }),

@@ -213,6 +213,29 @@ describe('owner capability withdraw and republish', () => {
     })
     expect(firstReadback.activityTruncated).toBe(false)
     expect(firstReadback.callLog).toEqual([])
+    const editorReadback = await owner.query(
+      api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel,
+      { businessId, editorOfferingRef: offeringRef },
+    )
+    if (editorReadback.kind !== 'available')
+      throw new Error(`owner_test_editor_readback_kind:${editorReadback.kind}`)
+    expect(
+      editorReadback.offerings.find(
+        (offering) => offering.offeringRef === offeringRef,
+      )?.sourceMaterial,
+    ).toMatchObject({
+      sourceKind: prepared.command.prepared.sourceKind,
+      sourceSelector: prepared.command.prepared.sourceSelector,
+      sourceDescriptorJson: prepared.command.prepared.sourceDescriptorJson,
+      sourceRevision: prepared.command.prepared.sourceRevision,
+      sourceDigest: prepared.command.prepared.sourceDigest,
+      documentJson: prepared.command.prepared.documentJson,
+      binding: {
+        bindingId: prepared.command.prepared.binding.bindingId,
+        authority: prepared.command.prepared.binding.authority,
+      },
+    })
+    expect(firstReadback.offerings[0]).not.toHaveProperty('sourceMaterial')
     expect(
       firstReadback.offerings.find(
         (offering) => offering.offeringRef === offeringRef,
