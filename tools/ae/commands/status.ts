@@ -237,8 +237,9 @@ export function renderStatusResult(
 export async function readOperationStatus(
   options: CliOptions,
   invocationRef: string,
+  credentialCommand = 'status',
 ): Promise<OperationInvokeStatusResult> {
-  const apiKey = requireAgentAccessKey('status', options)
+  const apiKey = requireAgentAccessKey(credentialCommand, options)
   const path = operationStatusPath(invocationRef)
   const outcome = await callJson(options.baseUrl, path, {
     method: OPERATION_INVOKE_ROUTE_CONTRACT.status.method,

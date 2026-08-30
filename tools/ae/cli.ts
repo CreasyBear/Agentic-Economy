@@ -1,7 +1,7 @@
 /**
  * AE CLI. Exercises AE the way an external agent would through public machine
  * surfaces. Market Operation search/detail/compare are anonymous HTTP reads;
- * connect uses the existing OAuth device flow; call/status/cancel/reconcile
+ * connect uses the existing OAuth device flow; call/status/wait/cancel/reconcile
  * use the canonical authenticated gateway (the CLI's `recover` command is
  * the `operation.reconcile` action).
  * Run: ae <command> [args] [--json]
@@ -64,6 +64,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   call: ['input', 'idempotency-key', 'wait'],
   history: ['limit', 'cursor', 'state'],
   status: [],
+  wait: [],
   cancel: ['idempotency-key'],
   recover: ['idempotency-key'],
   revoke: [],
@@ -76,11 +77,12 @@ const AUTH_HELP = {
   deviceFlow: 'connect registers a public device client, displays the server-provided verification URI and user code, then polls for a one-time credential after approval.',
   existingKey: 'If AE_API_KEY is already set, connect validates it against the configured server before reporting connected; AE_API_KEY_ORIGIN must exactly match that server origin.',
   origin: 'Bind AE_API_KEY to the exact --base-url origin in AE_API_KEY_ORIGIN. Credentialed calls require HTTPS except loopback localhost, 127.0.0.1, or ::1 development.',
-  next: 'Connect stores one origin-bound key with user-only permissions; call, history, status, cancel, and recovery reuse it automatically.',
+  next: 'Connect stores one origin-bound key with user-only permissions; call, history, status, wait, cancel, and recovery reuse it automatically.',
   authenticatedOperations: {
     call: commandUsage('call'),
     history: commandUsage('history'),
     status: commandUsage('status'),
+    wait: commandUsage('wait'),
     cancel: commandUsage('cancel'),
     reconcile: commandUsage('recover'),
   },
@@ -170,6 +172,7 @@ function printAuthenticatedOperationHelp(): void {
     `  call: ${AUTH_HELP.authenticatedOperations.call}`,
     `  history: ${AUTH_HELP.authenticatedOperations.history}`,
     `  status: ${AUTH_HELP.authenticatedOperations.status}`,
+    `  wait: ${AUTH_HELP.authenticatedOperations.wait}`,
     `  cancel: ${AUTH_HELP.authenticatedOperations.cancel} (${AUTH_HELP.cancelRequirements})`,
     `  reconcile: ${AUTH_HELP.authenticatedOperations.reconcile}`,
   ].join('\n') + '\n')
@@ -330,6 +333,7 @@ async function main(): Promise<number> {
     revokeCommands,
     statusCommands,
     supplyCommands,
+    waitCommands,
   ] = await Promise.all([
     import('./commands/account'),
     import('./commands/cancel'),
@@ -344,6 +348,7 @@ async function main(): Promise<number> {
     import('./commands/revoke'),
     import('./commands/status'),
     import('./commands/supply'),
+    import('./commands/wait'),
   ])
   const marketOperationRunners: Record<string, CommandRunner> = Object.fromEntries(
     marketOperationCommands.MARKET_OPERATION_COMMAND_DESCRIPTORS.map(({ command, run }) => [command, run] as const),
@@ -359,6 +364,7 @@ async function main(): Promise<number> {
     [invokeCommands.invokeCommandDescriptor.command]: invokeCommands.invokeCommandDescriptor.run,
     [historyCommands.historyCommandDescriptor.command]: historyCommands.historyCommandDescriptor.run,
     status: statusCommands.runStatusCommand,
+    [waitCommands.waitCommandDescriptor.command]: waitCommands.waitCommandDescriptor.run,
     cancel: cancelCommands.runCancelCommand,
     recover: recoverCommands.runRecoverCommand,
     revoke: revokeCommands.runRevokeCommand,

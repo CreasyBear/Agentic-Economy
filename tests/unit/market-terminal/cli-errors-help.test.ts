@@ -30,6 +30,7 @@ describe('market-terminal CLI error contracts', () => {
       'call',
       'history',
       'status',
+      'wait',
       'cancel',
       'recover',
       'revoke',
@@ -38,6 +39,7 @@ describe('market-terminal CLI error contracts', () => {
       'call',
       'history',
       'status',
+      'wait',
       'cancel',
       'reconcile',
     ])
@@ -56,6 +58,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(textHelp.stdout).toContain('Authenticated Operation actions:')
     expect(textHelp.stdout).toContain('call:')
     expect(textHelp.stdout).toContain('status:')
+    expect(textHelp.stdout).toContain('wait:')
     expect(textHelp.stdout).toContain('cancel:')
     expect(textHelp.stdout).toContain('reconcile:')
     expect(textHelp.stdout).toContain('AE_API_KEY')

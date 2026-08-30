@@ -20,7 +20,7 @@ describe('public agent skill', () => {
       'ae inspect "$AE_OPERATION_REF" --json',
       'ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --json',
       'ae connect --json',
-      'ae status "$AE_INVOCATION_REF" --json',
+      'ae wait "$AE_INVOCATION_REF" --json',
       'ae recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json',
     ]
     let previous = -1
@@ -73,11 +73,13 @@ describe('public agent skill', () => {
     expect(body).toContain('job stays unproven')
   })
   it('distinguishes invoke outcomes from status diagnostics', () => {
+    expect(body).toContain('it cannot call, retry, or grant authority')
+    expect(body).toContain('ae status "$AE_INVOCATION_REF" --json` reads once')
     expect(body).toContain(
-      'Only `result.kind` is the operation outcome when present: `completed | pending | needs_authority | reconciliation_required | refused`.',
+      'Outcomes (`result.kind`): `completed | pending | needs_authority | reconciliation_required | refused`.',
     )
     expect(body).toContain(
-      "A status response's `found.state` is a recovery diagnostic, not an extra operation outcome: `gathering_information | awaiting_authority | authorized | leased | in_progress | retryable | reconciliation_required | terminal | cancelled | invalidated`.",
+      'Diagnostics (`found.state`): `gathering_information | awaiting_authority | authorized | leased | in_progress | retryable | reconciliation_required | terminal | cancelled | invalidated`.',
     )
   })
 

@@ -50,6 +50,7 @@ describe('ae doctor', () => {
   it('checks the buyer loop and points an uncertain invocation to status without exposing credentials', async () => {
     const buyerSecret = 'FAKE_BUYER_SECRET_51f8'
     const invocationRef = 'invocation:v1:needs-attention'
+    let invocationState: 'pending' | 'reconciliation_required' = 'reconciliation_required'
     const observed: Array<{ method: string; path: string; authorization?: string; body?: string }> = []
     const origin = await startServer((request, response) => {
       const chunks: Buffer[] = []
@@ -87,8 +88,8 @@ describe('ae doctor', () => {
           respondJson(response, {
             kind: 'available', hasMore: false,
             items: [{
-              invocationRef, operationRef: 'operation:v1:one', state: 'reconciliation_required',
-              resultKind: 'reconciliation_required', createdAt: 10, updatedAt: 20,
+              invocationRef, operationRef: 'operation:v1:one', state: invocationState,
+              resultKind: invocationState, createdAt: 10, updatedAt: 20,
             }],
           })
           return
@@ -132,6 +133,19 @@ describe('ae doctor', () => {
     expect(human.stdout.match(/^Next: /gmu)).toEqual([`Next: `])
     expect(human.stdout).toContain(`Next: ae status ${invocationRef}`)
     expect(human.stdout).not.toContain(buyerSecret)
+
+    invocationState = 'pending'
+    const pending = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+    expect(pending.status).toBe(0)
+    expect(JSON.parse(pending.stdout)).toMatchObject({
+      kind: 'degraded',
+      checks: expect.arrayContaining([{
+        id: 'invocation',
+        state: 'warn',
+        summary: 'A nonterminal invocation is still pending.',
+        nextCommand: `ae wait ${invocationRef}`,
+      }]),
+    })
   })
 
   it('summarizes supplier Operation and connection readiness for one requested business', async () => {

@@ -151,9 +151,18 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     summary: 'List this credential profile’s own invocation summaries, newest first.',
     args: '[--limit <1-100>] [--cursor <cursor>] [--state <state>]',
     json: true,
-    guidance: ['Use the returned invocationRef with status for exact result, receipt, and recovery detail.'],
+    guidance: ['Use the returned invocationRef with status for one snapshot or wait for a bounded recorded outcome.'],
   },
   status: { summary: 'Read one authenticated invocation status and evidence projection.', args: '<invocation-ref>', json: true },
+  wait: {
+    summary: 'Wait boundedly for one recorded invocation to reach a durable outcome.',
+    args: '<invocation-ref>',
+    json: true,
+    guidance: [
+      'Read-only: observes the existing invocation and never retries it, grants authority, or creates a replacement call.',
+      'A timeout preserves the invocation identity and returns the exact wait command to continue later.',
+    ],
+  },
   cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocation-ref> --idempotency-key <key>', json: true },
   recover: {
     summary: 'Reconcile a genuinely uncertain invocation with canonical evidence after a real uncertain outcome; this is not a replay.',
@@ -204,7 +213,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     protocol: 'agentic-economy.operation-terminal.v1',
     about: 'Discover exact current work, inspect terms, connect one agent key, call idempotently, preserve the receipt, and reuse successful work.',
     commands: COMMANDS,
-    coldLoop: ['search', 'inspect', 'connect', 'call', 'history', 'receipt', 'reuse'],
+    coldLoop: ['search', 'inspect', 'connect', 'call', 'history', 'wait', 'receipt', 'reuse'],
     payment: {
       providerQuotedAmount: {
         field: 'commercial.priceBreakdown.providerQuotedAmount',
@@ -242,10 +251,11 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
         increaseIntervalOn: ['slow_down'],
         stopOn: AGENT_ACCESS_OAUTH_ERROR_VALUES.filter((error) => error !== 'authorization_pending' && error !== 'slow_down'),
       },
-      invokeWait: 'invoke --wait polls status using the gateway retryAfterMs value until a terminal result or bounded timeout; a timeout preserves invocationRef for status.',
+      invokeWait: 'call --wait polls status using the gateway retryAfterMs value until a terminal result or bounded timeout; a timeout preserves invocationRef for status.',
+      recordedWait: 'wait observes one existing invocation through the status route until a durable result or bounded timeout; it never creates or retries an invocation.',
     },
     recovery: {
-      history: 'Use root history to recover invocation references owned by the current credential profile before reading exact status.',
+      history: 'Use root history to recover invocation references owned by the current credential profile before reading exact status or waiting for a recorded result.',
       statusFirst: true,
       cancel: 'Use root cancel with the same invocationRef and a stable idempotency key when cancellation is supported and the invocation should stop.',
       reconcile: 'Use root recover only after a genuinely uncertain outcome, with canonical evidence for the same invocationRef and the same idempotency identity; recover never replays a known result.',
@@ -328,7 +338,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
           originEnvironmentVariable: 'AE_API_KEY_ORIGIN',
           originBinding: 'AE_API_KEY_ORIGIN must equal new URL(--base-url).origin; credentialed calls require HTTPS except loopback HTTP development.',
           result: 'OAuth token.access_token',
-          usage: 'The CLI sends the stored origin-bound key for call, status, cancel, and recover. AE_API_KEY remains an explicit automation override.',
+          usage: 'The CLI sends the stored origin-bound key for call, status, wait, cancel, and recover. AE_API_KEY remains an explicit automation override.',
         },
         revocation: 'Root revoke emits the owner-browser continuation /agent-access#revoke; it does not revoke through an agent credential or an API route.',
         oneTimeSecretDelivery: false,
@@ -381,7 +391,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     protocol: manifest.protocol,
     about: manifest.about,
     commands: manifest.commands,
-    coldLoop: ['search', 'inspect', 'call', 'receipt', 'reuse'],
+    coldLoop: ['search', 'inspect', 'call', 'wait', 'receipt', 'reuse'],
     access: {
       anonymous: 'Search, inspect, and compare current Operations without connecting.',
       connected: 'Run ae connect once; authenticated invocation covers free and paid operations, and consequential operations require approval.',
@@ -418,6 +428,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     recovery: {
       history: 'ae history [--state <state>]',
       status: 'ae status <invocationRef>',
+      wait: 'ae wait <invocationRef>',
       rule: 'If the outcome is uncertain, read status before any retry and preserve the same identity.',
     },
     fullContract: 'ae manifest --technical --json',

@@ -341,7 +341,9 @@ async function checkInvocation(
       summary: attention.state === 'reconciliation_required'
         ? 'A reconciliation-required invocation needs attention.'
         : 'A nonterminal invocation is still pending.',
-      nextCommand: `ae status ${attention.invocationRef}`,
+      nextCommand: attention.state === 'reconciliation_required'
+        ? `ae status ${attention.invocationRef}`
+        : `ae wait ${attention.invocationRef}`,
     }
   } catch {
     return { id: 'invocation', state: 'fail', summary: 'Invocation recovery state could not be read.', nextCommand: 'ae history' }

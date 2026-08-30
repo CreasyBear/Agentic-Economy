@@ -48,11 +48,11 @@ export function AeAssistantInstallFunnel({
       code: `${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${baseUrl}" --wait`,
     },
     {
-      id: 'status',
-      title: 'Read the recorded status',
+      id: 'wait',
+      title: 'Wait for the recorded result',
       access: 'Authenticated',
-      description: 'Open the same execution record to see progress, money movement, validation, and the one safe next action.',
-      code: `${cli} status "$AE_INVOCATION_REF" --base-url "${baseUrl}" --json`,
+      description: 'Return to the same execution record after any process restart. This only observes progress and the safe next action; it never repeats the call.',
+      code: `${cli} wait "$AE_INVOCATION_REF" --base-url "${baseUrl}" --json`,
     },
   ] as const
   const [copyNotice, setCopyNotice] = useState<string>()

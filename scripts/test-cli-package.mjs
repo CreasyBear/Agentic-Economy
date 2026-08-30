@@ -29,6 +29,7 @@ const expectedCommands = [
   "search",
   "status",
   "supply",
+  "wait",
 ];
 
 async function runNode(version, args, options) {
