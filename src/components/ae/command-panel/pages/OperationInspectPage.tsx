@@ -84,6 +84,11 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
           <p className="text-sm text-muted-foreground">
             “{state.operationRef}” could not be inspected right now.
           </p>
+          <Button asChild size="sm" className="min-h-touch justify-self-start">
+            <Link to="/market" search={{ window: '30d' }} hash="operations">
+              Browse current Operations
+            </Link>
+          </Button>
         </div>
       ) : null}
       {state.kind === 'found' ? (

@@ -369,10 +369,11 @@ function OperationUnavailable({ result }: Readonly<{ result: Exclude<PublicOpera
       title={presentation.title}
       description={presentation.description}
       action={
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse current Operations</Link></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }}>Back to market</Link></Button>
-        </div>
+        <Button asChild className="min-h-touch">
+          <Link to="/market" search={{ window: '30d' }} hash="operations">
+            Browse current Operations
+          </Link>
+        </Button>
       }
     />
   )

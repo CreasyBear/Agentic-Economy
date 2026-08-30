@@ -323,6 +323,7 @@ describe('/operations/$operationRef', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: expectedTitle })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Browse current Operations' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Back to market' })).toBeNull()
     expect(screen.queryByText('USD 1.25')).toBeNull()
     expect(screen.queryByText('digest:current-price')).toBeNull()
     expect(screen.queryByRole('complementary', { name: 'Use this capability' })).toBeNull()

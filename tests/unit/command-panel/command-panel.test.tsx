@@ -286,6 +286,25 @@ describe('operator command panel', () => {
     expect(screen.queryByRole('button', { name: 'Copy Call command' })).toBeNull()
   })
 
+  it('gives an unavailable Operation one primary route back to current supply', async () => {
+    const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'unavailable',
+      schemaVersion: 'registry-operations:v1',
+      operationRef: TEST_OPERATION_REF,
+      reason: 'temporarily_unavailable',
+      navigation: [],
+    }))
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = await screen.findByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+    fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
+
+    const action = await screen.findByRole('link', { name: 'Browse current Operations' })
+    expect(action.getAttribute('href')).toBe('/market?window=30d#operations')
+  })
+
   it('pops one inspect layer per Escape before closing, then survives ⌘K flicker', async () => {
     vi.stubGlobal(
       'fetch',
