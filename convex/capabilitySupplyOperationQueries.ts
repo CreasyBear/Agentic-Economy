@@ -343,7 +343,11 @@ function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSource
     networkId: string | undefined,
     limit: number,
     now: number,
-  ): Promise<Readonly<{ operations: readonly CapabilityOperationSourceRecord[]; snapshotKey: string }>> => {
+  ): Promise<Readonly<{
+    operations: readonly CapabilityOperationSourceRecord[]
+    sourceCount: number
+    snapshotKey: string
+  }>> => {
     const publications = networkId === undefined
       ? await ctx.db.query('capabilityPublications')
         .withIndex('by_disposition_and_readinessValidUntil', (query) => query.eq('disposition', 'current'))
@@ -351,10 +355,21 @@ function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSource
       : await ctx.db.query('capabilityPublications')
         .withIndex('by_networkId_and_disposition', (query) => query.eq('networkId', networkId).eq('disposition', 'current'))
         .take(limit)
+    if (publications.length >= limit) {
+      return {
+        operations: [],
+        sourceCount: publications.length,
+        snapshotKey: `capability-supply:capacity:${canonicalDigest(publications.map((publication) => ({
+          publicationRef: publication.publicationRef,
+          revision: publication.revision,
+        })))}`,
+      }
+    }
     const records = await Promise.all(publications.map((publication) => operationRecord(ctx, publication, now)))
     const operations = records.flatMap((record) => record === undefined ? [] : [record])
     return {
       operations,
+      sourceCount: publications.length,
       snapshotKey: `capability-supply:current:${canonicalDigest({
         publications: publications.map((publication) => ({
           publicationRef: publication.publicationRef,

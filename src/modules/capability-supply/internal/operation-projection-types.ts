@@ -302,6 +302,7 @@ export type CapabilityOperationSourcePort = Readonly<{
   ) => Promise<
     Readonly<{
       operations: readonly CapabilityOperationSourceRecord[];
+      sourceCount: number;
       snapshotKey: string;
     }>
   >;

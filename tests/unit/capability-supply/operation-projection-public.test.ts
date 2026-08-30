@@ -112,7 +112,7 @@ describe('public operation read contract', () => {
     ]
     const plan = await inspectCapabilityOperationPlan({
       navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
-      listCurrent: async () => ({ operations: [operationRecord], snapshotKey: 'snapshot:projection' }),
+      listCurrent: async () => ({ operations: [operationRecord], sourceCount: 1, snapshotKey: 'snapshot:projection' }),
       loadCurrent: async () => operationRecord,
     }, { operationRefs: [projected[0]!.operationRef] }, 2_000)
     expect(plan.kind).toBe('ok')
@@ -327,7 +327,7 @@ describe('public operation read contract', () => {
     const operation = projectCapabilityOperation(populatedDataUseRecord, 2_000)
     const result = await compareCapabilityOperations({
       navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
-      listCurrent: async () => ({ operations: [populatedDataUseRecord], snapshotKey: 'snapshot:compare' }),
+      listCurrent: async () => ({ operations: [populatedDataUseRecord], sourceCount: 1, snapshotKey: 'snapshot:compare' }),
       loadCurrent: async (operationRef) => operationRef === operation.operationRef ? populatedDataUseRecord : null,
     }, { operationRefs: [operation.operationRef] }, 2_000)
 

@@ -321,6 +321,45 @@ describe('canonical Operation reads', () => {
       })
     })
 
+    await expect(backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' }))
+      .resolves.toMatchObject({ kind: 'no_candidates' })
+    await expect(backend.query(api.capabilitySupplyOperations.detail, {
+      operationRef: fixture.operationRef,
+    })).resolves.toMatchObject({ kind: 'not_found' })
+    await expect(backend.query(api.capabilitySupplyOperations.compare, {
+      operationRefs: [fixture.operationRef],
+    })).resolves.toMatchObject({ kind: 'unavailable', reason: 'operation_not_found' })
+    await expect(backend.query(api.capabilitySupplyOperations.inspectPlan, {
+      operationRefs: [fixture.operationRef],
+    })).resolves.toMatchObject({ kind: 'unavailable', reason: 'operation_not_found' })
+    await expect(backend.query(
+      internal.capabilitySupplyOperations.readCurrentPublishedOperationSnapshot,
+      { operationRef: fixture.operationRef },
+    )).resolves.toBeNull()
+  })
+
+  it('refuses a structurally malformed binding across every canonical reader', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishCurrentOperation(backend, 'malformed-binding')
+    await backend.run(async (ctx) => {
+      const binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', fixture.bindingId))
+        .unique()
+      if (binding === null) throw new Error('canonical_binding_missing')
+      await ctx.db.patch(binding._id, { endpointUrl: '' })
+    })
+
+    await expect(backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' }))
+      .resolves.toMatchObject({ kind: 'no_candidates' })
+    await expect(backend.query(api.capabilitySupplyOperations.detail, {
+      operationRef: fixture.operationRef,
+    })).resolves.toMatchObject({ kind: 'not_found' })
+    await expect(backend.query(api.capabilitySupplyOperations.compare, {
+      operationRefs: [fixture.operationRef],
+    })).resolves.toMatchObject({ kind: 'unavailable', reason: 'operation_not_found' })
+    await expect(backend.query(api.capabilitySupplyOperations.inspectPlan, {
+      operationRefs: [fixture.operationRef],
+    })).resolves.toMatchObject({ kind: 'unavailable', reason: 'operation_not_found' })
     await expect(backend.query(
       internal.capabilitySupplyOperations.readCurrentPublishedOperationSnapshot,
       { operationRef: fixture.operationRef },
@@ -399,6 +438,27 @@ describe('canonical Operation reads', () => {
     const exceededFixture = await publishCurrentOperation(exceeded, 'capacity-257')
     await cloneCurrentPublications(exceeded, exceededFixture, 257)
     await expect(exceeded.query(api.capabilitySupplyOperations.search, { query: 'lookup' }))
+      .resolves.toMatchObject({ kind: 'unavailable', reason: 'source_capacity_exceeded' })
+  }, 30_000)
+
+  it('refuses a raw overflow when one of the first 257 publications is malformed', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishCurrentOperation(backend, 'capacity-mixed-258')
+    await cloneCurrentPublications(backend, fixture, 258)
+    await backend.run(async (ctx) => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', fixture.publicationRef).eq('revision', fixture.publicationRevision)
+        ))
+        .unique()
+      if (publication === null) throw new Error('canonical_capacity_publication_missing')
+      await ctx.db.patch(publication._id, {
+        operationRef: `${publication.operationRef}:drift`,
+        readinessValidUntil: 0,
+      })
+    })
+
+    await expect(backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' }))
       .resolves.toMatchObject({ kind: 'unavailable', reason: 'source_capacity_exceeded' })
   }, 30_000)
 
