@@ -6,7 +6,6 @@ import { OPERATION_MARKET_SEARCH_PATH } from '@/modules/registry/operation-entry
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
-import { usageFailure } from '../lib/help'
 import { continuationCommand } from '../lib/continuation-command'
 import {
   formatOperationAuthentication,
@@ -20,9 +19,6 @@ import { throwOperationReadFailure } from '../lib/operation-read-failure'
 /** Search current public Market Operations without a caller credential. */
 export async function runSearchCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
-  if (query.length === 0) {
-    throw usageFailure('search', 'search-usage')
-  }
   if (!searchCommandDescriptor.inputSchema.safeParse({ query }).success) {
     throw new CliFailure('Search query must be 200 characters or fewer.', {
       kind: 'INVALID_ARGUMENT',
@@ -75,6 +71,13 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
         '--cursor', result.pagination.nextCursor,
       ])
     : undefined
+  const browseCommand = continuationCommand([
+    'ae', 'search',
+    ...(options.limit === undefined ? [] : ['--limit', options.limit]),
+  ])
+  const noCandidateContinuation = result.kind === 'no_candidates' && result.query.length > 0
+    ? browseCommand
+    : undefined
   const nextHref = result.kind === 'no_candidates'
     ? new URL('/market', options.baseUrl).toString()
     : undefined
@@ -82,16 +85,19 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     printJson({
       ...result,
       ...(nextCommand === undefined ? {} : { nextCommand }),
+      ...(noCandidateContinuation === undefined ? {} : { nextCommand: noCandidateContinuation }),
       ...(nextHref === undefined ? {} : { nextHref }),
     })
     return
   }
 
-  heading(`Market Operations for "${result.query}" (${outcome.durationMs}ms)`)
+  heading(result.query.length === 0
+    ? `Current Market Operations (${outcome.durationMs}ms)`
+    : `Market Operations for "${result.query}" (${outcome.durationMs}ms)`)
   if (result.kind === 'no_candidates') {
     line('  No current Operations match this job.')
-    line('  Browse the current market or try a broader job description:')
-    line(`  ${nextHref}`)
+    if (noCandidateContinuation !== undefined) line(`  Browse all: ${noCandidateContinuation}`)
+    line(`  Browser: ${nextHref}`)
     return
   }
 

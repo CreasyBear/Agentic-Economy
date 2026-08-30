@@ -158,6 +158,7 @@ describe('external-agent Market Operation cold loop', () => {
     }
     expect(JSON.parse(jsonOutput.read())).toMatchObject({
       kind: 'no_candidates',
+      nextCommand: 'ae search',
       nextHref: 'https://market.example/market',
     })
 
@@ -168,7 +169,24 @@ describe('external-agent Market Operation cold loop', () => {
       humanOutput.restore()
     }
     expect(humanOutput.read()).toContain('No current Operations match this job.')
+    expect(humanOutput.read()).toContain('Browse all: ae search')
     expect(humanOutput.read()).toContain('https://market.example/market')
+  })
+  it('browses all current Operations when no job is supplied', async () => {
+    const operationRef = `operation:v1:${'b'.repeat(64)}`
+    const result = operationSearchResult('', [operationDescriptor(operationRef)])
+    const output = captureStdout()
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(responseJson(result))
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      await runSearchCommand([], { ...options, json: false })
+    } finally {
+      output.restore()
+    }
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ query: '' })
+    expect(output.read()).toContain('Current Market Operations')
   })
   it('rejects a malformed successful search body with a safe CLI error', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({

@@ -19,7 +19,7 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('requires a Market Operation job query before network work', () => {
+  it('requires a reachable market when browsing without a job query', () => {
     const result = spawnCliSync([
       '--base-url',
       'http://127.0.0.1:1',
@@ -28,7 +28,7 @@ describe('market-terminal CLI error contracts', () => {
 
     expect(result.status).toBe(1)
     expect(result.stdout).toBe('')
-    expect(result.stderr).toContain('Usage: ae search "<job>"')
+    expect(result.stderr).toContain('Could not reach http://127.0.0.1:1.')
   }, 15_000)
 
   it('rejects an invalid base URL as a canonical JSON argument error', () => {

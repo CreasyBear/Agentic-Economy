@@ -74,7 +74,15 @@ export type CommandManifestEntry = Readonly<{
 
 export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
   manifest: { summary: 'Read this machine-readable Operation terminal contract.', args: '', json: true },
-  search: { summary: 'Search current public Market Operations for a job.', args: '"<job>" [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\']', json: true },
+  search: {
+    summary: 'Search current public Market Operations for a job, or omit the job to browse.',
+    args: '["<job>"] [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\']',
+    json: true,
+    guidance: [
+      'Filters: networkId, location, effects, dataUse, availability, currency, and maximumPrice.',
+      'Exact price example for at most USD 0.50: --filters \'{"currency":"USD","maximumPrice":{"currency":"USD","units":"50","exponent":2}}\'',
+    ],
+  },
   inspect: { summary: 'Read one exact current Market Operation before connecting or invoking.', args: '<operation-ref>', json: true },
   compare: { summary: 'Compare one to four exact current Operation references.', args: '<operation-ref> [<operation-ref> ...]', json: true },
   'inspect-plan': { summary: 'Inspect a bounded operation plan from one to four exact current Operation references.', args: '<operation-ref> [<operation-ref> ...]', json: true },
