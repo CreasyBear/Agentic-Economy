@@ -16,24 +16,43 @@ import type {
   PublicOperationPrice,
 } from '@/modules/capability-supply/public'
 import { formatCurrencyAmount } from '@/modules/money/public'
+import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
+import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import {
+  continuationForOperationFacts,
+  type SuggestedContinuation,
+} from '@/modules/market/suggested-continuation'
 import {
   readPublicOperationDetailRouteServer,
   type PublicOperationDetailRouteResult,
 } from '@/modules/registry/operation-detail-route.functions'
 
 export const Route = createFileRoute('/operations/$operationRef')({
-  loader: ({ params }) => readPublicOperationDetailRouteServer({ data: { operationRef: params.operationRef } })
-    .catch((): PublicOperationDetailRouteResult => ({ kind: 'source_unavailable', operationRef: params.operationRef })),
+  loader: async ({ params }) => {
+    const [result, keys] = await Promise.all([
+      readPublicOperationDetailRouteServer({ data: { operationRef: params.operationRef } })
+        .catch((): PublicOperationDetailRouteResult => ({ kind: 'source_unavailable', operationRef: params.operationRef })),
+      listAgentAccessKeysServer().catch(() => []),
+    ])
+    return {
+      result,
+      hasBuyerCredential: keys.some((key) => (
+        !key.revoked
+        && !key.expired
+        && key.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+      )),
+    }
+  },
   head: ({ loaderData }) => {
-    if (loaderData?.kind !== 'found') {
+    if (loaderData?.result.kind !== 'found') {
       return { meta: [
         { title: 'Operation unavailable | Agentic Economy' },
         { name: 'robots', content: 'noindex' },
       ] }
     }
     return { meta: [
-      { title: `${loaderData.operation.offering.label} | Agentic Economy` },
-      { name: 'description', content: loaderData.operation.summary },
+      { title: `${loaderData.result.operation.offering.label} | Agentic Economy` },
+      { name: 'description', content: loaderData.result.operation.summary },
     ] }
   },
   pendingComponent: OperationDetailPending,
@@ -42,29 +61,53 @@ export const Route = createFileRoute('/operations/$operationRef')({
 })
 
 function OperationDetailRoute() {
-  return <PublicOperationDetail result={Route.useLoaderData()} />
+  const data = Route.useLoaderData()
+  return (
+    <PublicOperationDetail
+      result={data.result}
+      hasBuyerCredential={data.hasBuyerCredential}
+    />
+  )
 }
 
-export function PublicOperationDetail({ result }: Readonly<{ result: PublicOperationDetailRouteResult }>) {
+export function PublicOperationDetail({
+  result,
+  hasBuyerCredential = false,
+}: Readonly<{
+  result: PublicOperationDetailRouteResult
+  hasBuyerCredential?: boolean
+}>) {
   if (result.kind !== 'found') return <OperationUnavailable result={result} />
-  return <CurrentOperationDetail operation={result.operation} />
+  return (
+    <CurrentOperationDetail
+      operation={result.operation}
+      hasBuyerCredential={hasBuyerCredential}
+    />
+  )
 }
 
-function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
+function CurrentOperationDetail({
+  operation,
+  hasBuyerCredential,
+}: Readonly<{
+  operation: PublicOperationDescriptor
+  hasBuyerCredential: boolean
+}>) {
   const requiredParameters = operation.parameters?.filter(({ required }) => required) ?? []
   const optionalParameters = operation.parameters?.filter(({ required }) => !required) ?? []
   const inputExample = operation.contract.inputExamples?.[0]
-  const mcpInput = inputExample === undefined
-    ? '<JSON matching the published schema>'
-    : JSON.stringify(inputExample.input)
   const invokeInput = inputExample === undefined
     ? '"$AE_INPUT_JSON"'
     : `'${JSON.stringify(inputExample.input).replaceAll("'", "'\\''")}'`
-  const accessMode = operation.availability.posture !== 'routeable'
-    ? 'inspect_only'
-    : operation.navigation.some(({ relation }) => relation === 'invoke')
-      ? 'authenticated_invoke'
-      : 'inspect_only'
+  const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
+  const continuation = continuationForOperationFacts({
+    operationRef: operation.operationRef,
+    availabilityPosture: operation.availability.posture === 'routeable' && invokeNavigation === undefined
+      ? 'integrated'
+      : operation.availability.posture,
+    requiresBuyerCredential: invokeNavigation?.authentication === 'required',
+    hasBuyerCredential,
+  })
   const lastVerifiedAt = operation.availability.observedAt
     ?? operation.commercial.priceEvidence?.observedAt
   return (
@@ -162,7 +205,7 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
             </AeSection>
           </div>
 
-          <OperationAccessSidecard operation={operation} accessMode={accessMode} invokeInput={invokeInput} mcpInput={mcpInput} />
+          <OperationAccessSidecard continuation={continuation} invokeInput={invokeInput} />
         </div>
 
         <details id="technical-contract" className="scroll-mt-6 rounded-card border border-border bg-card">
@@ -214,78 +257,53 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
 }
 
 function OperationAccessSidecard({
-  operation,
-  accessMode,
+  continuation,
   invokeInput,
-  mcpInput,
 }: Readonly<{
-  operation: PublicOperationDescriptor
-  accessMode: 'anonymous_execute' | 'authenticated_invoke' | 'inspect_only'
+  continuation: SuggestedContinuation
   invokeInput: string
-  mcpInput: string
 }>) {
-  if (accessMode === 'anonymous_execute') {
-    return (
-      <aside className="grid gap-related border-t border-border pt-6 lg:sticky lg:top-20 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0" aria-labelledby="execution-title">
-        <div className="grid gap-1">
-          <h2 id="execution-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
-          <p className="text-sm text-muted-foreground">Ready now with no provider key. Inspect the contract, then call it through MCP.</p>
-        </div>
-        <ol className="m-0 grid list-none gap-5 p-0">
-          <CommandStep number={1} title="Inspect capability" code={inspectCommand(operation.operationRef)} />
-          <CommandStep
-            number={2}
-            title="Call capability"
-            code={`ae_operation_execute\noperationRef=${operation.operationRef}\ninput=${mcpInput}`}
-          />
-        </ol>
-        <p className="text-sm text-muted-foreground">Pass only published input fields. Headline availability can change; the current descriptor remains authoritative.</p>
-      </aside>
-    )
-  }
-
-  if (accessMode === 'authenticated_invoke') {
-    return (
-      <aside className="grid gap-related border-t border-border pt-6 lg:sticky lg:top-20 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0" aria-labelledby="execution-title">
-        <div className="grid gap-1">
-          <h2 id="execution-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
-          <p className="text-sm text-muted-foreground">Connect once, call this capability, then follow the returned receipt. The CLI keeps the credential and retry identity for you.</p>
-        </div>
-        <Button asChild className="min-h-touch w-full">
-          <Link to="/for-agents">Connect an agent</Link>
-        </Button>
-        <ol className="m-0 grid list-none gap-5 p-0">
-          <CommandStep number={1} title="Inspect capability" code={inspectCommand(operation.operationRef)} />
-          <CommandStep number={2} title="Connect once" code="ae connect" />
-          <CommandStep number={3} title="Call capability" code={`ae call '${operation.operationRef}' --input ${invokeInput}`} />
-          <CommandStep number={4} title="Open the receipt" code="ae status <invocation-ref>" />
-        </ol>
-        <p className="text-sm text-muted-foreground"><code>ae connect</code> stores and validates one origin-bound agent key with user-only permissions. <code>ae call</code> generates a durable retry identity when one is not supplied.</p>
-      </aside>
-    )
-  }
-
   return (
-    <aside className="grid gap-related border-t border-border pt-6 lg:sticky lg:top-20 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0" aria-labelledby="availability-title">
+    <aside
+      className="grid gap-related border-t border-border pt-6 lg:sticky lg:top-20 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0"
+      aria-labelledby="operation-continuation-title"
+    >
       <div className="grid gap-1">
-        <h2 id="availability-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
+        <h2 id="operation-continuation-title" className="text-lg font-semibold text-foreground">
+          What you can do next
+        </h2>
         <p className="text-sm text-muted-foreground">
-          {operation.availability.posture === 'integrated' ? 'Setup is required before invocation.' : 'This capability is currently unavailable.'} You can still inspect its price and contract, but it cannot be called now.
+          {continuation.warning ?? continuationDescription(continuation)}
         </p>
       </div>
-      <div className="flex flex-col gap-3">
-        <Button asChild className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse current Operations</Link></Button>
-        <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }}>Back to market</Link></Button>
-      </div>
+      {continuation.label === 'Inspect Operation' && continuation.command !== undefined ? (
+        <AeCopyCommand label={continuation.label} code={continuation.command} />
+      ) : continuation.kind === 'navigate' && continuation.href !== undefined ? (
+        <Button asChild className="min-h-touch w-full">
+          <a href={continuation.href}>{continuation.label}</a>
+        </Button>
+      ) : continuation.command !== undefined ? (
+        <AeCopyCommand
+          label={continuation.label}
+          code={continuation.label === 'Call Operation'
+            ? continuation.command.replace("'<json>'", invokeInput)
+            : continuation.command}
+        />
+      ) : null}
     </aside>
   )
 }
 
+function continuationDescription(continuation: SuggestedContinuation): string {
+  if (continuation.label === 'Connect agent') return 'Connect an agent before making this protected call.'
+  if (continuation.label === 'Call Operation') return 'Your agent access is ready. Copy the exact call command.'
+  if (continuation.label === 'Inspect Operation') return 'This Operation is inspectable but not currently callable.'
+  return 'Inspect the current descriptor before choosing another Operation.'
+}
+
 /**
- * First-viewport buy decision. Routeable operations lead with a primary
- * "Use this capability" action and the total authorization figure; integrated
- * and unavailable operations lead with inspector actions instead. The
- * sidebar card (OperationAccessSidecard) keeps carrying the full step flow.
+ * First-viewport buy decision. The sidecard owns the one contextual action;
+ * this card stays factual so it cannot compete with that continuation.
  */
 function OperationDecision({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
   const routeable = operation.availability.posture === 'routeable'
@@ -307,22 +325,6 @@ function OperationDecision({ operation }: Readonly<{ operation: PublicOperationD
             ? 'The maximum charged for one call. Read the contract before invoking.'
             : 'Read the full contract before requesting access.'}
         </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {routeable ? (
-          <Button asChild className="min-h-touch">
-            <Link to="/for-agents">Use this capability</Link>
-          </Button>
-        ) : (
-          <>
-            <Button asChild variant="secondary" className="min-h-touch">
-              <a href="#price-and-terms">Inspect price and terms</a>
-            </Button>
-            <Button asChild variant="ghost" className="min-h-touch">
-              <a href="#parameters">View parameters</a>
-            </Button>
-          </>
-        )}
       </div>
     </section>
   )
@@ -450,14 +452,6 @@ function Example({ title, value, empty }: Readonly<{ title: string; value?: unkn
 
 function Schema({ title, value }: Readonly<{ title: string; value: Readonly<Record<string, unknown>> }>) {
   return <section className="grid min-w-0 gap-2"><h3 className="font-semibold text-foreground">{title}</h3><pre className="max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs text-foreground"><code>{JSON.stringify(value, null, 2)}</code></pre></section>
-}
-
-function CommandStep({ number, title, code }: Readonly<{ number: number; title: string; code: string }>) {
-  return <li className="grid min-w-0 gap-2"><h3 className="text-sm font-semibold text-foreground">{number}. {title}</h3><AeCopyCommand compact label={title} code={code} /></li>
-}
-
-function inspectCommand(operationRef: string): string {
-  return `ae inspect '${operationRef}'`
 }
 
 function formatPrice(price: PublicOperationPrice): string {

@@ -2,6 +2,7 @@
 
 import { createContext, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useServerFn } from '@tanstack/react-start'
 import { Separator } from '@/components/ui/separator'
 import {
   SidebarInset,
@@ -21,6 +22,8 @@ import {
   type OperatorNavBadges,
   type OperatorRole,
 } from '@/lib/operator/navigation'
+import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
+import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 
 type OperatorShellChrome = Omit<AeOperatorShellProps, 'children'>
 
@@ -149,6 +152,15 @@ function RootOperatorShell(props: AeOperatorShellProps) {
   const { children } = props
   const resolvedMainContentId = mainContentId ?? 'operator-main-content'
   const [commandOpen, setCommandOpen] = useState(false)
+  const readAgentKeys = useServerFn(listAgentAccessKeysServer)
+  const readBuyerCredentialPresence = useCallback(async () => {
+    const keys = await readAgentKeys()
+    return keys.some((key) => (
+      !key.revoked
+      && !key.expired
+      && key.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+    ))
+  }, [readAgentKeys])
   const openCommand = useCallback(() => setCommandOpen(true), [])
   const shellRef = useRef<HTMLDivElement>(null)
 
@@ -205,7 +217,11 @@ function RootOperatorShell(props: AeOperatorShellProps) {
                 )}
               </div>
               <div className="ms-auto px-gutter">
-                <CommandPanelProvider open={commandOpen} onOpenChange={setCommandOpen}>
+                <CommandPanelProvider
+                  open={commandOpen}
+                  onOpenChange={setCommandOpen}
+                  readBuyerCredentialPresence={readBuyerCredentialPresence}
+                >
                   <AeCommandPanel />
                 </CommandPanelProvider>
               </div>

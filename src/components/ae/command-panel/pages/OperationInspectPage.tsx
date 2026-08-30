@@ -17,12 +17,19 @@ import {
 } from '@/modules/market/suggested-continuation'
 import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
 
-import { useOperationDetailReader } from '../CommandPanelProvider'
+import {
+  useBuyerCredentialPresenceReader,
+  useOperationDetailReader,
+} from '../CommandPanelProvider'
 import { rememberRecentOperationRef } from '../recent-operations'
 
 type InspectState =
   | Readonly<{ kind: 'loading' }>
-  | Readonly<{ kind: 'found'; operation: PublicOperationDescriptor }>
+  | Readonly<{
+      kind: 'found'
+      operation: PublicOperationDescriptor
+      hasBuyerCredential: boolean
+    }>
   | Readonly<{ kind: 'unavailable'; operationRef: string }>
 
 
@@ -33,6 +40,7 @@ type InspectState =
  */
 export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: string }>) {
   const readDetail = useOperationDetailReader()
+  const readBuyerCredentialPresence = useBuyerCredentialPresenceReader()
   const [state, setState] = useState<InspectState>({ kind: 'loading' })
   const headingRef = useRef<HTMLDivElement>(null)
 
@@ -40,17 +48,20 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
     setState({ kind: 'loading' })
     let current = true
     void (async () => {
-      const result = await readDetail(operationRef)
+      const [result, hasBuyerCredential] = await Promise.all([
+        readDetail(operationRef),
+        readBuyerCredentialPresence().catch(() => false),
+      ])
       if (!current) return
       if (result.kind === 'found') {
         rememberRecentOperationRef(result.operation.operationRef)
-        setState({ kind: 'found', operation: result.operation })
+        setState({ kind: 'found', operation: result.operation, hasBuyerCredential })
       } else setState({ kind: 'unavailable', operationRef })
     })()
     return () => {
       current = false
     }
-  }, [operationRef, readDetail])
+  }, [operationRef, readBuyerCredentialPresence, readDetail])
 
   useEffect(() => {
     headingRef.current?.focus()
@@ -75,23 +86,34 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
           </p>
         </div>
       ) : null}
-      {state.kind === 'found' ? <FoundBody operation={state.operation} /> : null}
+      {state.kind === 'found' ? (
+        <FoundBody
+          operation={state.operation}
+          hasBuyerCredential={state.hasBuyerCredential}
+        />
+      ) : null}
     </div>
   )
 }
 
-function FoundBody({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
+function FoundBody({
+  operation,
+  hasBuyerCredential,
+}: Readonly<{
+  operation: PublicOperationDescriptor
+  hasBuyerCredential: boolean
+}>) {
   const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
   const callable = operation.availability.posture === 'routeable' && invokeNavigation !== undefined
   const inputExample = operation.contract.inputExamples?.[0]
   const requiresBuyerCredential = invokeNavigation?.authentication === 'required'
   const continuation = continuationForOperationFacts({
     operationRef: operation.operationRef,
-    availabilityPosture: callable ? operation.availability.posture : 'integrated',
+    availabilityPosture: operation.availability.posture === 'routeable' && !callable
+      ? 'integrated'
+      : operation.availability.posture,
     requiresBuyerCredential,
-    // This public panel has no account fact. It must not imply that a
-    // protected call is ready when it cannot prove a buyer credential exists.
-    hasBuyerCredential: !requiresBuyerCredential,
+    hasBuyerCredential,
   })
 
   return (
@@ -131,16 +153,15 @@ function FoundBody({ operation }: Readonly<{ operation: PublicOperationDescripto
           ) : null}
         </div>
 
-        <Button asChild size="sm" className="min-h-touch self-start">
-          <Link
-            to="/operations/$operationRef"
-            params={{ operationRef: operation.operationRef }}
-            data-testid="command-panel-open-operation"
-          >
-            Open operation page
-            <ArrowUpRightIcon aria-hidden="true" className="size-4" />
-          </Link>
-        </Button>
+        <Link
+          to="/operations/$operationRef"
+          params={{ operationRef: operation.operationRef }}
+          data-testid="command-panel-open-operation"
+          className="inline-flex min-h-touch items-center gap-1 justify-self-start text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Open full Operation details
+          <ArrowUpRightIcon aria-hidden="true" className="size-4" />
+        </Link>
       </section>
     </>
   )

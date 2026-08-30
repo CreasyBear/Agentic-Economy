@@ -194,7 +194,7 @@ describe('operator command panel', () => {
     expect(screen.getByText(/Connect an agent before/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Connect agent' }).getAttribute('href')).toBe('/for-agents')
     expect(
-      screen.getByRole('link', { name: /Open operation page/ }).getAttribute('href'),
+      screen.getByRole('link', { name: /Open full Operation details/ }).getAttribute('href'),
     ).toBe(`/operations/${encodeURIComponent(TEST_OPERATION_REF)}`)
   })
 
@@ -207,13 +207,21 @@ describe('operator command panel', () => {
       operation: detailFixture(),
     }))
 
-    renderPanel({ openImmediately: true, readDetail })
+    renderPanel({
+      openImmediately: true,
+      readDetail,
+      readBuyerCredentialPresence: async () => true,
+    })
     const input = await screen.findByRole('combobox', { name: 'Search operations' })
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
     fireEvent.change(input, { target: { value: 'weather' } })
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Copy Operation reference' }))
+    expect(await screen.findByText(/single safe next step/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy Call Operation' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Connect agent' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Operation reference' }))
     expect(writeText).toHaveBeenLastCalledWith(TEST_OPERATION_REF)
     fireEvent.click(screen.getByRole('button', { name: 'Copy Inspect command' }))
     expect(writeText).toHaveBeenLastCalledWith(`ae inspect '${TEST_OPERATION_REF}'`)
@@ -269,7 +277,7 @@ describe('operator command panel', () => {
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
     expect(await screen.findByText(/not currently callable/iu)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Inspect Operation' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy Inspect availability' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Continue supplier setup' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Copy Call command' })).toBeNull()
   })
@@ -293,12 +301,12 @@ describe('operator command panel', () => {
     await screen.findByRole('option', { name: /Weather forecast/ })
 
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(await screen.findByText(/Open operation page/)).toBeTruthy()
+    expect(await screen.findByText(/Open full Operation details/)).toBeTruthy()
     expect(detailReads).toBe(1)
 
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' })
     await waitFor(() => {
-      expect(screen.queryByText(/Open operation page/)).toBeNull()
+      expect(screen.queryByText(/Open full Operation details/)).toBeNull()
       expect(trigger.getAttribute('aria-expanded')).toBe('true')
     })
 
@@ -439,6 +447,7 @@ export function detailFixture(): PublicOperationDescriptor {
 function PanelHarness(props: {
   initialOpen: boolean
   readDetail?: (operationRef: string) => Promise<PublicOperationDetailRouteResult>
+  readBuyerCredentialPresence?: () => Promise<boolean>
 }): ReactElement {
   const [open, setOpen] = useState(props.initialOpen)
   return (
@@ -446,6 +455,9 @@ function PanelHarness(props: {
       open={open}
       onOpenChange={setOpen}
       {...(props.readDetail === undefined ? {} : { readDetail: props.readDetail })}
+      {...(props.readBuyerCredentialPresence === undefined
+        ? {}
+        : { readBuyerCredentialPresence: props.readBuyerCredentialPresence })}
     >
       <AeCommandPanel />
     </CommandPanelProvider>
@@ -454,6 +466,7 @@ function PanelHarness(props: {
 
 function renderPanel(options: {
   readDetail?: (operationRef: string) => Promise<PublicOperationDetailRouteResult>
+  readBuyerCredentialPresence?: () => Promise<boolean>
   openImmediately?: boolean
 } = {}): void {
   const rootRoute = createRootRoute()
@@ -471,6 +484,9 @@ function renderPanel(options: {
       <PanelHarness
         initialOpen={options.openImmediately === true}
         {...(options.readDetail === undefined ? {} : { readDetail: options.readDetail })}
+        {...(options.readBuyerCredentialPresence === undefined
+          ? {}
+          : { readBuyerCredentialPresence: options.readBuyerCredentialPresence })}
       />
     </RouterContextProvider>,
   )
