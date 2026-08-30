@@ -350,6 +350,59 @@ describe('external-agent Market Operation cold loop', () => {
     const accountRequest = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/v1/account'))
     expect(new Headers(accountRequest?.[1]?.headers).get('Authorization')).toBe('Bearer stored-buyer-secret')
   })
+
+  it('suggests an immediate call for a routeable keyless Operation without probing buyer access', async () => {
+    const operationRef = `operation:v1:${'a'.repeat(64)}`
+    const operation = {
+      ...operationDescriptor(operationRef, 'Public continuation'),
+      availability: { posture: 'routeable' },
+      navigation: [{
+        relation: 'invoke',
+        pathTemplate: '/api/v1/operations/call',
+        method: 'POST',
+        actionId: 'agentic-economy.operation-invoke',
+        authentication: 'none',
+        surfaces: ['http', 'cli', 'mcp', 'chat'],
+      }],
+    }
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      responseJson(operationDetailResult(operation)),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const output = captureStdout()
+
+    try {
+      await runInspectCommand([operationRef], { ...options, json: false })
+    } finally {
+      output.restore()
+    }
+
+    expect(output.read()).toContain('next: ae call')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a routeable descriptor without an invoke relation inspect-only', async () => {
+    const operationRef = `operation:v1:${'b'.repeat(64)}`
+    const operation = {
+      ...operationDescriptor(operationRef, 'Inspect-only continuation'),
+      availability: { posture: 'routeable' },
+    }
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      responseJson(operationDetailResult(operation)),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const output = captureStdout()
+
+    try {
+      await runInspectCommand([operationRef], { ...options, json: false })
+    } finally {
+      output.restore()
+    }
+
+    expect(output.read()).toContain('next: ae inspect')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects a malformed successful detail body with a safe CLI error', async () => {
     const operationRef = `operation:v1:${'e'.repeat(64)}`
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({

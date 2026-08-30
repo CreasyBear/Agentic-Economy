@@ -78,11 +78,18 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
       ? 'none'
       : operation.effects.map((effect) => effect.class.replace(/_/gu, ' ')).join(', ')}`,
   )
+  const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
+  const callable = operation.availability.posture === 'routeable' && invokeNavigation !== undefined
+  const requiresBuyerCredential = invokeNavigation?.authentication === 'required'
   const continuation = operationContinuationForCli({
     operationRef: operation.operationRef,
-    availabilityPosture: operation.availability.posture,
-    requiresBuyerCredential: true,
-    hasBuyerCredential: await hasCurrentBuyerInvokeCredential(options.baseUrl),
+    availabilityPosture: operation.availability.posture === 'routeable' && !callable
+      ? 'integrated'
+      : operation.availability.posture,
+    requiresBuyerCredential,
+    hasBuyerCredential: requiresBuyerCredential
+      ? await hasCurrentBuyerInvokeCredential(options.baseUrl)
+      : false,
   })
   line(`  next: ${continuation.command ?? continuation.label}`)
   if (continuation.warning !== undefined) line(`  warning: ${continuation.warning}`)
