@@ -17,12 +17,20 @@ import type { ServiceDto } from '@/modules/registry/public'
 
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 
-export const SUPPLY_OFFER_SENTENCE = 'Publish the job, the price, and the access terms. Agents compare before they call.'
+export const SUPPLY_OFFER_SENTENCE = 'Publish one bounded job, its price, and its access terms. Agents inspect the Operation before they call.'
 
 const SUPPLY_STEPS = [
-  { number: '01', title: 'Describe the tool', detail: 'Publish the job it does, its exact inputs and the outcome it returns.' },
-  { number: '02', title: 'Set access and price', detail: 'Make availability, price and payment terms clear before any call.' },
-  { number: '03', title: 'Test and publish', detail: 'Confirm the route works, then make it discoverable in the catalog.' },
+  { number: '01', title: 'Define one Operation', detail: 'Choose one bounded job with exact inputs and one usable outcome—not an entire app or account.' },
+  { number: '02', title: 'Connect one source', detail: 'Use one OpenAPI 3.1 GET or POST, remote MCP tool, Agent Plugin MCP tool, or public x402 HTTPS endpoint.' },
+  { number: '03', title: 'Set terms and test', detail: 'Declare price, access, effects, and evidence. AE checks the selected route before publication.' },
+  { number: '04', title: 'Publish and verify', detail: 'Publish only after readiness passes, then confirm agents can inspect the current Operation.' },
+] as const
+
+const SUPPLY_PREP = [
+  'The current source document or endpoint and the exact operation or tool selector.',
+  'The input and output schema, plus a safe example input for the readiness test.',
+  'Price, material terms, data use, side effects, and the evidence returned after delivery.',
+  'An existing owner-controlled provider connection if the upstream requires credentials. Never paste a raw key into the Operation form.',
 ] as const
 
 export function AeSupplyLanding({
@@ -44,7 +52,7 @@ export function AeSupplyLanding({
             <div className="mx-auto grid w-full max-w-xl justify-items-center gap-3">
               <AeSiteEyebrow>Suppliers</AeSiteEyebrow>
               <AeSiteHeading as="h1" size="md" id="supply-hero">
-                List your tool.
+                Publish an Operation.
               </AeSiteHeading>
             </div>
             <div className="mx-auto w-full max-w-lg">
@@ -54,7 +62,7 @@ export function AeSupplyLanding({
             </div>
           </AeSiteHeadingPair>
           <AeSiteButton asChild>
-            <Link to="/owner/supply">List a tool</Link>
+            <Link to="/owner/supply">Create or continue an Operation</Link>
           </AeSiteButton>
         </AeSiteHeroIntro>
       </AeSiteSection>
@@ -73,7 +81,24 @@ export function AeSupplyLanding({
           </Alert>
         </AeSiteSection>
       )}
-      <AeSiteSection ariaLabel="How to list a tool" scheme="surface">
+      <AeSiteSection ariaLabel="Check supplier fit" scheme="canvas">
+        <div className="grid max-w-3xl gap-page">
+          <div className="grid gap-intra">
+            <AeSiteEyebrow>Before you sign in</AeSiteEyebrow>
+            <AeSiteHeading as="h2" size="sm">Know what AE will ask for.</AeSiteHeading>
+            <AeSiteBody muted size="sm">
+              An Operation is one callable job an agent can search, compare, inspect, and buy. Public upstreams need no supplier secret. Keyed sources use an existing owner-controlled connection; AE does not collect a raw provider key in this flow.
+            </AeSiteBody>
+          </div>
+          <ul className="m-0 grid gap-intra pl-5 text-sm text-muted-foreground">
+            {SUPPLY_PREP.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+          <p className="text-sm text-muted-foreground">
+            Creating the supplier account and business is an owner step. After that, an owner can approve a separate agent credential for maintenance. <Link to="/SKILL.md" hash="supplier-path" className="font-medium text-foreground underline underline-offset-4">Read the supplier agent path</Link>.
+          </p>
+        </div>
+      </AeSiteSection>
+      <AeSiteSection ariaLabel="How to publish an Operation" scheme="surface">
         <AeSiteStack>
           <ol className="m-0 grid list-none gap-page p-0">
             {SUPPLY_STEPS.map((step) => (
@@ -95,7 +120,7 @@ export function AeSupplyLanding({
             to="/owner/supply"
             className="inline-flex min-h-touch items-center justify-self-start text-sm font-medium underline underline-offset-4"
           >
-            Manage listings
+            Manage Operations
           </Link>
         </div>
       </AeSiteSection>

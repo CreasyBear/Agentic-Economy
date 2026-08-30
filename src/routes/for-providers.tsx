@@ -8,8 +8,8 @@ export const Route = createFileRoute('/for-providers')({
   loader: () => loadSupplyLandingReadbackServer(),
   head: () => buildPublicPageHead({
     path: '/for-providers',
-    title: 'List your tool | Agentic Economy',
-    description: 'Publish the job, the price, and the access terms. Agents compare before they call.',
+    title: 'Publish an Operation | Agentic Economy',
+    description: 'Publish one bounded job, its price, access terms, readiness, and evidence.',
   }),
   component: SupplyLandingRoute,
 })

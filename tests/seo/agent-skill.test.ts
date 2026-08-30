@@ -51,6 +51,14 @@ describe('public agent skill', () => {
     expect(body).toContain('anonymously and free')
   })
 
+  it('gives supplier agents a bounded owner-approved onboarding path', () => {
+    expect(body).toContain('## Supplier path')
+    expect(body).toContain('Operation: one job')
+    expect(body).toContain('ae connect --supplier --json')
+    expect(body).toContain('ae doctor "$AE_BUSINESS_ID" --supplier --json')
+    expect(body).toContain('never submit provider keys or count setup tests as earnings')
+  })
+
   it('recovers from insufficient credit through the served operator page', () => {
     expect(body).toContain('## If credit runs short')
     expect(body).toContain('`insufficient_credit`')
