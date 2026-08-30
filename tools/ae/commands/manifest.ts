@@ -74,10 +74,10 @@ export type CommandManifestEntry = Readonly<{
 
 export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
   manifest: { summary: 'Read this machine-readable Operation terminal contract.', args: '', json: true },
-  search: { summary: 'Search current public Market Operations for a job.', args: '<job> [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\'>', json: true },
-  inspect: { summary: 'Read one exact current Market Operation before connecting or invoking.', args: '<operationRef>', json: true },
-  compare: { summary: 'Compare one to four exact current Operation references.', args: '<operationRef> [<operationRef> ...]', json: true },
-  'inspect-plan': { summary: 'Inspect a bounded operation plan from one to four exact current Operation references.', args: '<operationRef> [operationRef ...]', json: true },
+  search: { summary: 'Search current public Market Operations for a job.', args: '"<job>" [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\']', json: true },
+  inspect: { summary: 'Read one exact current Market Operation before connecting or invoking.', args: '<operation-ref>', json: true },
+  compare: { summary: 'Compare one to four exact current Operation references.', args: '<operation-ref> [<operation-ref> ...]', json: true },
+  'inspect-plan': { summary: 'Inspect a bounded operation plan from one to four exact current Operation references.', args: '<operation-ref> [<operation-ref> ...]', json: true },
   connect: {
     summary: 'Register a public device client or validate one separately stored AE credential profile.',
     args: '[--supplier]',
@@ -128,18 +128,18 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     json: true,
     guidance: ['Open the returned /owner/credit#fund continuation as the owner. No agent credential is used.'],
   },
-  call: { summary: 'Call one capability: anonymous MCP for eligible free keyless reads, otherwise the connected AE gateway.', args: "<operationRef> --input '<json>' [--wait]", json: true },
+  call: { summary: 'Call one capability: anonymous MCP for eligible free keyless reads, otherwise the connected AE gateway.', args: "<operation-ref> --input '<json>' [--wait]", json: true },
   history: {
     summary: 'List this credential profile’s own invocation summaries, newest first.',
     args: '[--limit <1-100>] [--cursor <cursor>] [--state <state>]',
     json: true,
     guidance: ['Use the returned invocationRef with status for exact result, receipt, and recovery detail.'],
   },
-  status: { summary: 'Read one authenticated invocation status and evidence projection.', args: '<invocationRef>', json: true },
-  cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocationRef> --idempotency-key <key>', json: true },
+  status: { summary: 'Read one authenticated invocation status and evidence projection.', args: '<invocation-ref>', json: true },
+  cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocation-ref> --idempotency-key <key>', json: true },
   recover: {
     summary: 'Reconcile a genuinely uncertain invocation with canonical evidence after a real uncertain outcome; this is not a replay.',
-    args: "<invocationRef> '<evidence-json>' --idempotency-key <key>",
+    args: "<invocation-ref> '<evidence-json>' --idempotency-key <key>",
     json: true,
     guidance: [
       'Inspect status first and use this only when the invocation outcome remains genuinely uncertain.',
@@ -167,7 +167,7 @@ function describedAction(actionId: string) {
 
 
 /**
- * `npm run -s ae -- manifest [--json]` — the external-agent handshake. The front door is the
+ * `ae manifest [--json]` — the external-agent handshake. The front door is the
  * canonical Operation search/inspection/invocation/recovery contract, not a
  * second legacy catalog or generic action inventory.
  */

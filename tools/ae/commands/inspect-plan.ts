@@ -7,15 +7,13 @@ import { OPERATION_MARKET_INSPECT_PLAN_PATH } from '@/modules/registry/operation
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
+import { usageFailure } from '../lib/help'
 import { throwOperationReadFailure } from '../lib/operation-read-failure'
 
 /** Inspect a bounded composition of exact current Operation references anonymously. */
 export async function runInspectPlanCommand(args: readonly string[], options: CliOptions): Promise<void> {
   if (args.length < 1 || args.length > 4) {
-    throw new CliFailure('Usage: npm run -s ae -- inspect-plan <operation-ref> [operation-ref ...]', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'inspect-plan-usage',
-    })
+    throw usageFailure('inspect-plan', 'inspect-plan-usage')
   }
 
   const parsedInput = inspectPlanCommandDescriptor.inputSchema.safeParse({

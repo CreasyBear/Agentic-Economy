@@ -26,6 +26,7 @@ import {
   requireOk,
   table,
 } from '../lib/output'
+import { usageFailure } from '../lib/help'
 import { requireAgentAccessKey } from './status'
 
 export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
@@ -85,14 +86,14 @@ function inputFor(subcommand: string, args: readonly string[], options: CliOptio
     const businessId = args[1]
     const offeringRef = args[2]
     if (businessId === undefined || args.length > 3) {
-      throw new CliFailure('Usage: ae supply status <businessId> [offeringRef]', { kind: 'INVALID_ARGUMENT', code: 'supply-status-usage' })
+      throw usageFailure('supply status', 'supply-status-usage')
     }
     return { businessId, ...(offeringRef === undefined ? {} : { offeringRef }) }
   }
   if (subcommand === 'earnings') {
     const currency = args[1]
     if (currency === undefined || args.length > 2) {
-      throw new CliFailure('Usage: ae supply earnings <currency>', { kind: 'INVALID_ARGUMENT', code: 'supply-earnings-usage' })
+      throw usageFailure('supply earnings', 'supply-earnings-usage')
     }
     return { currency }
   }
@@ -100,7 +101,7 @@ function inputFor(subcommand: string, args: readonly string[], options: CliOptio
     const businessId = args[1]
     const lifecycle = args[2]
     if (businessId === undefined || args.length > 3) {
-      throw new CliFailure('Usage: ae supply connections <businessId> [lifecycle] [--limit <1-100>]', { kind: 'INVALID_ARGUMENT', code: 'supply-connections-usage' })
+      throw usageFailure('supply connections', 'supply-connections-usage')
     }
     return {
       businessId,
@@ -111,12 +112,12 @@ function inputFor(subcommand: string, args: readonly string[], options: CliOptio
   if (subcommand === 'connection') {
     const connectionRef = args[1]
     if (connectionRef === undefined || args.length > 2) {
-      throw new CliFailure('Usage: ae supply connection <connectionRef>', { kind: 'INVALID_ARGUMENT', code: 'supply-connection-usage' })
+      throw usageFailure('supply connection', 'supply-connection-usage')
     }
     return { connectionRef }
   }
   if (args.length !== 1) {
-    throw new CliFailure(`Usage: ae supply ${subcommand} --input '<json>'`, { kind: 'INVALID_ARGUMENT', code: 'supply-command-usage' })
+    throw usageFailure(`supply ${subcommand}`, 'supply-command-usage')
   }
   return writeInput(options)
 }
@@ -178,10 +179,7 @@ export async function runSupplyCommand(args: readonly string[], options: CliOpti
   const subcommand = args[0] ?? 'status'
   const descriptor = descriptorFor(subcommand)
   if (descriptor === undefined) {
-    throw new CliFailure('Usage: ae supply <status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|retry-cleanup>', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'supply-usage',
-    })
+    throw usageFailure('supply', 'supply-usage')
   }
   const input = inputFor(subcommand, args, options)
   const parsedInput = descriptor.action.schema.safeParse(input)

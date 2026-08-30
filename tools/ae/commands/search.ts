@@ -6,6 +6,8 @@ import { OPERATION_MARKET_SEARCH_PATH } from '@/modules/registry/operation-entry
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
+import { usageFailure } from '../lib/help'
+import { continuationCommand } from '../lib/continuation-command'
 import {
   formatOperationAuthentication,
   formatOperationAvailability,
@@ -19,10 +21,7 @@ import { throwOperationReadFailure } from '../lib/operation-read-failure'
 export async function runSearchCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
   if (query.length === 0) {
-    throw new CliFailure('Usage: ae search "<job>"', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'search-usage',
-    })
+    throw usageFailure('search', 'search-usage')
   }
   if (!searchCommandDescriptor.inputSchema.safeParse({ query }).success) {
     throw new CliFailure('Search query must be 200 characters or fewer.', {
@@ -65,8 +64,19 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
       cursorProvided: parsedInput.data.cursor !== undefined,
     })
   }
+  const nextCommand = result.kind === 'ok' && result.pagination.hasMore && result.pagination.nextCursor !== undefined
+    ? continuationCommand([
+        'ae', 'search', result.query,
+        ...(options.limit === undefined ? [] : ['--limit', options.limit]),
+        ...(options.filters === undefined ? [] : [
+          '--filters',
+          typeof options.filters === 'string' ? JSON.stringify(parsedInput.data.filters) : JSON.stringify(options.filters),
+        ]),
+        '--cursor', result.pagination.nextCursor,
+      ])
+    : undefined
   if (options.json) {
-    printJson(result)
+    printJson(nextCommand === undefined ? result : { ...result, nextCommand })
     return
   }
 
@@ -91,7 +101,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   }
   line(
     result.pagination.hasMore
-      ? `  More results: rerun with --cursor ${result.pagination.nextCursor ?? '<cursor>'}`
+      ? `  Next: ${nextCommand ?? 'ae search --cursor <cursor>'}`
       : '  End of results.',
   )
 }

@@ -23,6 +23,8 @@ import {
   requireOk,
   table,
 } from '../lib/output'
+import { usageFailure } from '../lib/help'
+import { continuationCommand } from '../lib/continuation-command'
 import { requireAgentAccessKey } from './status'
 
 export const accountCommandDescriptor = Object.freeze({
@@ -96,9 +98,7 @@ async function readAccountMoney(
   if (descriptor === undefined) throw new Error('account_command_descriptor_missing')
   const currency = args[1] ?? 'USD'
   if (args.length > 2) {
-    throw new CliFailure(`Usage: ae account ${subcommand} [currency]${subcommand === 'activity' ? ' [--limit <1-100>] [--cursor <cursor>]' : ''}`, {
-      kind: 'INVALID_ARGUMENT', code: `account-${subcommand}-usage`,
-    })
+    throw usageFailure(`account ${subcommand}`, `account-${subcommand}-usage`)
   }
   const input = subcommand === 'balance'
     ? { currency }
@@ -125,8 +125,18 @@ async function readAccountMoney(
       kind: 'UNAVAILABLE', code: `account-${subcommand}-result-invalid`,
     })
   }
+  const nextCommand = subcommand === 'activity'
+    && parsed.data.kind === 'available'
+    && 'nextCursor' in parsed.data
+    && parsed.data.nextCursor !== undefined
+    ? continuationCommand([
+        'ae', 'account', 'activity', currency,
+        ...(options.limit === undefined ? [] : ['--limit', options.limit]),
+        '--cursor', parsed.data.nextCursor,
+      ])
+    : undefined
   if (options.json) {
-    printJson(parsed.data)
+    printJson(nextCommand === undefined ? parsed.data : { ...parsed.data, nextCommand })
     return
   }
   heading(`Account ${subcommand}`)
@@ -156,7 +166,7 @@ async function readAccountMoney(
       ])
       line()
     }
-    if (parsed.data.nextCursor !== undefined) line(`next cursor: ${parsed.data.nextCursor}`)
+    if (nextCommand !== undefined) line(`Next: ${nextCommand}`)
   }
 }
 
@@ -245,10 +255,7 @@ export async function runAccountCommand(args: readonly string[], options: CliOpt
     || (subcommand === 'status' && (args.length > 2 || (rawDisconnectProfile !== undefined && statusProfile === undefined)))
     || (subcommand === 'disconnect' && (args.length > 2 || (rawDisconnectProfile !== undefined && disconnectProfile === undefined)))
     || !['status', 'connections', 'disconnect'].includes(subcommand)) {
-    throw new CliFailure('Usage: ae account [status [market|supplier]|balance [currency]|activity [currency]|connections|disconnect [market|supplier]]', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'account-usage',
-    })
+    throw usageFailure('account', 'account-usage')
   }
   if (subcommand === 'status') {
     await inspectCurrentAccount(options, statusProfile)

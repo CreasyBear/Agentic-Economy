@@ -1,15 +1,13 @@
 import type { CliOptions } from '../lib/args'
-import { CliFailure, printJson } from '../lib/output'
+import { printJson } from '../lib/output'
+import { usageFailure } from '../lib/help'
 
 const OWNER_ACCESS_PATH = '/agent-access'
 
 /** Continue owner revocation in the authenticated browser surface; this command never revokes access. */
 export async function runRevokeCommand(args: readonly string[], options: CliOptions): Promise<void> {
   if (args.length > 0) {
-    throw new CliFailure('Usage: npm run -s ae -- revoke', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'revoke-usage',
-    })
+    throw usageFailure('revoke', 'revoke-usage')
   }
 
   printJson({

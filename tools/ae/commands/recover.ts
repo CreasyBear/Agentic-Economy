@@ -7,6 +7,7 @@ import {
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
+import { usageFailure } from '../lib/help'
 import { recoveryTransportFailure, requireAgentAccessKey } from './status'
 
 function recoverPath(invocationRef: string): string {
@@ -21,10 +22,7 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
   const invocationRef = args[0]?.trim()
   const rawEvidence = args[1]?.trim()
   if (invocationRef === undefined || invocationRef.length === 0 || rawEvidence === undefined || rawEvidence.length === 0 || args.length > 2) {
-    throw new CliFailure("Usage: npm run -s ae -- recover <invocation-ref> '<evidence-json>' --idempotency-key <key>", {
-      kind: 'INVALID_ARGUMENT',
-      code: 'recover-usage',
-    })
+    throw usageFailure('recover', 'recover-usage')
   }
 
   const idempotencyKey = options.idempotencyKey?.trim()

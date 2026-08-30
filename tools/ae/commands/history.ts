@@ -6,6 +6,8 @@ import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, printJson, requireOk, table } from '../lib/output'
+import { usageFailure } from '../lib/help'
+import { continuationCommand } from '../lib/continuation-command'
 import { requireAgentAccessKey } from './status'
 
 export const historyCommandDescriptor = Object.freeze({
@@ -20,10 +22,7 @@ export const historyCommandDescriptor = Object.freeze({
 
 export async function runHistoryCommand(args: readonly string[], options: CliOptions): Promise<void> {
   if (args.length > 0) {
-    throw new CliFailure('Usage: ae history [--limit <1-100>] [--cursor <cursor>] [--state <state>]', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'history-usage',
-    })
+    throw usageFailure('history', 'history-usage')
   }
   const parsed = operationListInputSchema.safeParse({
     ...(options.limit === undefined ? {} : { limit: Number(options.limit) }),
@@ -51,8 +50,16 @@ export async function runHistoryCommand(args: readonly string[], options: CliOpt
       code: 'history-result-invalid',
     })
   }
+  const nextCommand = result.data.nextCursor === undefined
+    ? undefined
+    : continuationCommand([
+        'ae', 'history',
+        ...(options.limit === undefined ? [] : ['--limit', options.limit]),
+        ...(options.state === undefined ? [] : ['--state', options.state]),
+        '--cursor', result.data.nextCursor,
+      ])
   if (options.json) {
-    printJson(result.data)
+    printJson(nextCommand === undefined ? result.data : { ...result.data, nextCommand })
     return
   }
   heading('Invocation history')
@@ -62,7 +69,5 @@ export async function runHistoryCommand(args: readonly string[], options: CliOpt
     ['state', item.state],
     ['created', new Date(item.createdAt).toISOString()],
   ]))
-  if (result.data.nextCursor !== undefined) {
-    process.stdout.write(`Next: ae history --cursor ${result.data.nextCursor}\n`)
-  }
+  if (nextCommand !== undefined) process.stdout.write(`Next: ${nextCommand}\n`)
 }

@@ -155,6 +155,20 @@ describe('AE CLI account interface', () => {
     })
   })
 
+  it('returns the exact account activity continuation command', async () => {
+    storeConnection({ baseUrl: options.baseUrl, accessToken: 'hidden-secret' })
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      kind: 'available', items: [], hasMore: true, nextCursor: 'cursor:two',
+    })))
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runAccountCommand(['activity', 'AUD'], { ...options, limit: '5', cursor: 'cursor:one' })
+
+    expect(JSON.parse(write.mock.calls.map(([value]) => String(value)).join(''))).toMatchObject({
+      nextCommand: 'ae account activity AUD --limit 5 --cursor cursor:two',
+    })
+  })
+
   it('does not pretend it can remove an environment-managed credential', async () => {
     process.env.AE_API_KEY = 'environment-secret'
     process.env.AE_API_KEY_ORIGIN = options.baseUrl

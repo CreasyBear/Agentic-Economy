@@ -10,15 +10,20 @@
  * whatever `--base-url` points at. It never proves hosted behavior.
  */
 
-import { COMMANDS, type CommandManifestEntry } from './commands/manifest'
+import { COMMANDS } from './commands/manifest'
 import { parseArgs, safeOriginForDiagnostics, type CliOptions, type ParsedArgs } from './lib/args'
 import { CliFailure, printJson, sourceErrorToCliFailure } from './lib/output'
+import {
+  CLI_ENTRYPOINT,
+  commandMetadata,
+  commandUsage,
+  rootCommandHelpLines,
+} from './lib/help'
 import { MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import type { ProblemKind } from '@/lib/errors'
 
 type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<void>
 
-const CLI_ENTRYPOINT = 'ae'
 const JSON_HELP_FLAGS = {
   '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, local Vite when Convex is loopback, or the hosted origin.' },
   '--limit': { type: 'string', description: 'Page size: search accepts 1-20; account activity, history, and supplier connections accept 1-100.' },
@@ -52,20 +57,6 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   cancel: ['idempotency-key'],
   recover: ['idempotency-key'],
   revoke: [],
-}
-
-function commandMetadata(path: string): CommandManifestEntry | undefined {
-  const [command, subcommand] = path.split(' ')
-  if (command === undefined) return undefined
-  const root = COMMANDS[command]
-  if (subcommand === undefined) return root
-  return root?.commands?.[subcommand]
-}
-
-function commandUsage(path: string): string {
-  const metadata = commandMetadata(path)
-  if (metadata === undefined) return `${CLI_ENTRYPOINT} ${path} [args] [flags]`
-  return `${CLI_ENTRYPOINT} ${path}${metadata.args.length === 0 ? '' : ` ${metadata.args}`}`
 }
 
 const AUTH_HELP = {
@@ -180,21 +171,7 @@ function printUsage(): void {
 Usage: ${CLI_ENTRYPOINT} <command> [args] [flags]
 
 Canonical Operation commands (need a running server; hosted default https://agentic-economy-phi.vercel.app, or http://127.0.0.1:3024 when CONVEX_URL is loopback):
-  ${CLI_ENTRYPOINT} manifest
-  ${CLI_ENTRYPOINT} search "<job>" [--limit <1-20>] [--cursor <cursor>] [--filters '<json>']
-  ${CLI_ENTRYPOINT} inspect <operation-ref>
-  ${CLI_ENTRYPOINT} compare <operation-ref> [operation-ref ...]
-  ${CLI_ENTRYPOINT} inspect-plan <operation-ref> [operation-ref ...]
-  ${CLI_ENTRYPOINT} connect [--supplier]
-  ${CLI_ENTRYPOINT} account [status [market|supplier]|balance [currency]|activity [currency]|connections|disconnect [market|supplier]]
-  ${CLI_ENTRYPOINT} supply <status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|retry-cleanup>
-  ${CLI_ENTRYPOINT} fund
-  ${CLI_ENTRYPOINT} call <operation-ref> --input '<json>' [--wait]
-  ${CLI_ENTRYPOINT} history [--limit <1-100>] [--cursor <cursor>] [--state <state>]
-  ${CLI_ENTRYPOINT} status <invocation-ref>
-  ${CLI_ENTRYPOINT} cancel <invocation-ref> --idempotency-key <key>
-  ${CLI_ENTRYPOINT} recover <invocation-ref> '<evidence-json>' --idempotency-key <key>
-  ${CLI_ENTRYPOINT} revoke
+${rootCommandHelpLines().join('\n')}
 
 Flags:
   --base-url <url>   server to call (env: AE_CLI_BASE_URL or AE_CANONICAL_BASE_URL)
@@ -376,9 +353,15 @@ async function main(): Promise<number> {
     const message = error instanceof Error ? error.message : String(error)
     const wantsJson = rawArgv.some((arg) => arg === '--json' || arg.startsWith('--json='))
     if (wantsJson) {
-      printJson({ kind: 'INVALID_ARGUMENT', code: 'invalid-arguments', message, exitCode: 1 })
+      printJson({
+        kind: 'INVALID_ARGUMENT', code: 'invalid-arguments', message, exitCode: 1,
+        suggestion: 'Review the command arguments and try again.',
+        nextCommand: 'ae help',
+      })
     } else {
       process.stderr.write(`${message}\n`)
+      process.stderr.write('Review the command arguments and try again.\n')
+      process.stderr.write('Next: ae help\n')
     }
     return 1
   }
@@ -392,9 +375,13 @@ async function main(): Promise<number> {
           code: helpPath.error.code,
           message: helpPath.error.message,
           exitCode: 1,
+          suggestion: 'Review the available commands and try again.',
+          nextCommand: 'ae help',
         })
       } else {
         process.stderr.write(`${helpPath.error.message}\n`)
+        process.stderr.write('Review the available commands and try again.\n')
+        process.stderr.write('Next: ae help\n')
       }
       return 1
     }
@@ -407,7 +394,11 @@ async function main(): Promise<number> {
   }
   if (parsed.command === undefined) {
     if (parsed.options.json) {
-      printJson({ kind: 'INVALID_ARGUMENT', code: 'no-command', message: 'No command provided. See --help for usage.', exitCode: 1 })
+      printJson({
+        kind: 'INVALID_ARGUMENT', code: 'no-command', message: 'No command provided.', exitCode: 1,
+        suggestion: 'Choose one command from the CLI help.',
+        nextCommand: 'ae help',
+      })
       return 1
     }
     printUsageWithAuthenticatedOperationHelp()
@@ -417,12 +408,16 @@ async function main(): Promise<number> {
   const run = commands[parsed.command]
   if (run === undefined) {
     if (parsed.options.json) {
-      printJson({ kind: 'INVALID_ARGUMENT', code: 'unknown-command', message: 'Unknown command', exitCode: 1 })
+      printJson({
+        kind: 'INVALID_ARGUMENT', code: 'unknown-command', message: 'Unknown command', exitCode: 1,
+        suggestion: 'Review the available commands and try again.',
+        nextCommand: 'ae help',
+      })
       return 1
     }
-    process.stderr.write('Unknown command\n\n')
-    process.stderr.write(`Known commands: ${Object.keys(commands).join(', ')}\n\n`)
-    printUsageWithAuthenticatedOperationHelp()
+    process.stderr.write('Unknown command\n')
+    process.stderr.write('Review the available commands and try again.\n')
+    process.stderr.write('Next: ae help\n')
     return 1
   }
 
@@ -438,6 +433,8 @@ async function main(): Promise<number> {
     let detail: unknown
     let retryable: boolean | undefined
     let retryAfter: string | undefined
+    let suggestion: string | undefined
+    let nextCommand: string | undefined
     const mappedFailure = error instanceof CliFailure ? error : sourceErrorToCliFailure(error)
     if (mappedFailure !== undefined) {
       exitCode = mappedFailure.exitCode
@@ -447,11 +444,19 @@ async function main(): Promise<number> {
       detail = mappedFailure.detail
       retryable = mappedFailure.retryable
       retryAfter = mappedFailure.retryAfter
+      suggestion = mappedFailure.suggestion
+      nextCommand = mappedFailure.nextCommand
+      if (kind === 'INVALID_ARGUMENT') {
+        suggestion ??= 'Review the command arguments and try again.'
+        nextCommand ??= `ae help ${parsed.command}`
+      }
     } else if (isConnectionRefused(error)) {
       exitCode = 1
       kind = 'UNAVAILABLE'
       code = 'connection_refused'
-      message = `Could not reach ${safeOriginForDiagnostics(parsed.options.baseUrl)}. Is the dev server running? Start it with: npm run dev`
+      message = `Could not reach ${safeOriginForDiagnostics(parsed.options.baseUrl)}.`
+      suggestion = 'Start the AE server, then retry the command.'
+      nextCommand = 'npm run dev'
     } else {
       exitCode = 1
       kind = 'INTERNAL'
@@ -468,9 +473,13 @@ async function main(): Promise<number> {
         exitCode,
         ...(retryable === undefined ? {} : { retryable }),
         ...(retryAfter === undefined ? {} : { retryAfter }),
+        ...(suggestion === undefined ? {} : { suggestion }),
+        ...(nextCommand === undefined ? {} : { nextCommand }),
       })
     } else {
       process.stderr.write(`${message}\n`)
+      if (suggestion !== undefined) process.stderr.write(`${suggestion}\n`)
+      if (nextCommand !== undefined) process.stderr.write(`Next: ${nextCommand}\n`)
     }
     return exitCode
   }

@@ -172,7 +172,10 @@ describe('external-agent Market Operation cold loop', () => {
       cursor: 'opaque-prior-cursor',
       filters: { availability: ['routeable'] },
     })
-    expect(JSON.parse(output.read())).toEqual(result)
+    expect(JSON.parse(output.read())).toEqual({
+      ...result,
+      nextCommand: `ae search 'reference lookup' --limit 3 --filters '{"availability":["routeable"]}' --cursor opaque-next-cursor`,
+    })
   })
   it('returns decision-sized JSON by default and keeps the full contract behind technical mode', async () => {
     const operationRef = `operation:v1:${'e'.repeat(64)}`

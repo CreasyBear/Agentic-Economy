@@ -5,6 +5,7 @@ import {
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
+import { usageFailure } from '../lib/help'
 import { OPERATION_MARKET_DETAIL_PATH } from '@/modules/registry/operation-entry'
 import {
   formatOperationAuthentication,
@@ -20,10 +21,7 @@ import { throwOperationReadFailure } from '../lib/operation-read-failure'
 export async function runInspectCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const operationRef = args[0]?.trim()
   if (operationRef === undefined || operationRef.length === 0 || args.length > 1) {
-    throw new CliFailure('Usage: ae inspect <operation-ref>', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'inspect-usage',
-    })
+    throw usageFailure('inspect', 'inspect-usage')
   }
   const parsedInput = inspectCommandDescriptor.inputSchema.safeParse({ operationRef })
   if (!parsedInput.success) {

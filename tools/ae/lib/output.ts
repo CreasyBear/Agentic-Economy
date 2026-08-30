@@ -4,7 +4,7 @@ import { remoteProblemToProblem, type ProblemKind } from '@/lib/errors'
 import { safeOriginForDiagnostics } from './args'
 
 const REDACTED_FAILURE_VALUE = '<redacted>'
-const SENSITIVE_FAILURE_FIELD = /^(?:authorization|access[_-]?token|api[_-]?key|bearer|base[_-]?url|body|credential|cookie|headers?|idempotency[_-]?key|invocation[_-]?ref|password|path|query|raw[_-]?url|request[_-]?url|retry[_-]?hint|secret|status[_-]?path|token|transport[_-]?url|url|userinfo)$/iu
+const SENSITIVE_FAILURE_FIELD = /^(?:authorization|access[_-]?token|api[_-]?key|bearer|base[_-]?url|body|credential|cookie|evidence(?:[_-]?ref)?|headers?|idempotency[_-]?key|input|invocation[_-]?ref|password|path|query|raw[_-]?url|request[_-]?url|retry[_-]?hint|secret|status[_-]?path|token|transport[_-]?url|url|userinfo)$/iu
 const URL_IN_FAILURE_TEXT = /https?:\/\/[^\s"'<>]+/giu
 const SENSITIVE_FAILURE_TEXT = /\b(?:authorization|access[_-]?token|api[_-]?key|bearer|idempotency[_-]?key|invocation[_-]?ref|password|secret|token)\s*[:=]\s*[^\s,;]+/giu
 
@@ -30,6 +30,8 @@ export type CliFailureOptions = {
   detail?: unknown
   retryable?: boolean
   retryAfter?: string
+  suggestion?: string
+  nextCommand?: string
 }
 
 export class CliFailure extends Error {
@@ -39,6 +41,8 @@ export class CliFailure extends Error {
   readonly detail: unknown | undefined
   readonly retryable: boolean | undefined
   readonly retryAfter: string | undefined
+  readonly suggestion: string | undefined
+  readonly nextCommand: string | undefined
 
   constructor(message: string, options: CliFailureOptions = {}) {
     super(sanitizeFailureText(message))
@@ -49,6 +53,8 @@ export class CliFailure extends Error {
     this.detail = options.detail === undefined ? undefined : sanitizeFailureValue(options.detail)
     this.retryable = options.retryable
     this.retryAfter = options.retryAfter
+    this.suggestion = options.suggestion === undefined ? undefined : sanitizeFailureText(options.suggestion)
+    this.nextCommand = options.nextCommand === undefined ? undefined : sanitizeFailureText(options.nextCommand)
   }
 }
 
@@ -149,5 +155,3 @@ export function table(rows: readonly (readonly [string, string])[]): void {
     process.stdout.write(`  ${label.padEnd(width)}  ${value}\n`)
   }
 }
-
-

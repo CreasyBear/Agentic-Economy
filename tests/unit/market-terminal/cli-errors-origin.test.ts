@@ -116,7 +116,9 @@ describe('market-terminal CLI error contracts', () => {
         expect(JSON.parse(result.stdout)).toMatchObject({
           kind: 'UNAVAILABLE',
           code: 'connection_refused',
-          message: 'Could not reach http://127.0.0.1:1. Is the dev server running? Start it with: npm run dev',
+          message: 'Could not reach http://127.0.0.1:1.',
+          suggestion: 'Start the AE server, then retry the command.',
+          nextCommand: 'npm run dev',
           exitCode: 1,
         })
       }

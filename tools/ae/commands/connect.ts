@@ -9,6 +9,7 @@ import { retry } from 'es-toolkit'
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential, storeConnection, storeMcpConnection } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
+import { usageFailure } from '../lib/help'
 import { requireAgentAccessKey } from './status'
 
 const OAUTH_REGISTER_PATH = '/oauth/register' as const
@@ -157,7 +158,7 @@ async function validateIssuedAccessToken(options: CliOptions, key: string, suppl
 /** Register a public device client, obtain owner consent, and deliver one AE key. */
 export async function runConnectCommand(args: readonly string[], options: CliOptions): Promise<void> {
   if (args.length > 0) {
-    throw new CliFailure('Usage: ae connect [--supplier]', { kind: 'INVALID_ARGUMENT', code: 'connect-usage' })
+    throw usageFailure('connect', 'connect-usage')
   }
 
   const supplier = options.supplier === true

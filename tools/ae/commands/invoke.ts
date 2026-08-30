@@ -11,6 +11,7 @@ import type { OperationInvokeStatusResult } from '@/modules/capability-execution
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
+import { usageFailure } from '../lib/help'
 import {
   MAX_STATUS_WAIT_MS,
   pendingDelay,
@@ -142,18 +143,12 @@ export async function runInvokeCommand(
     || operationRef === undefined
     || operationRef.length === 0
   ) {
-    throw new CliFailure("Usage: ae call <operation-ref> --input '<json>' [--wait]", {
-      kind: 'INVALID_ARGUMENT',
-      code: 'call-usage',
-    })
+    throw usageFailure('call', 'call-usage')
   }
 
   const rawInput = options.input?.trim()
   if (rawInput === undefined || rawInput.length === 0) {
-    throw new CliFailure("Usage: ae call <operation-ref> --input '<json>' [--wait]", {
-      kind: 'INVALID_ARGUMENT',
-      code: 'call-usage',
-    })
+    throw usageFailure('call', 'call-usage')
   }
   let input: unknown
   try {

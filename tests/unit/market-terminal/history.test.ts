@@ -59,6 +59,7 @@ describe('AE CLI invocation history', () => {
     expect(JSON.parse(write.mock.calls.map(([value]) => String(value)).join(''))).toMatchObject({
       items: [{ invocationRef: 'invocation:one' }],
       nextCursor: 'cursor:two',
+      nextCommand: 'ae history --limit 5 --state completed --cursor cursor:two',
     })
   })
 })

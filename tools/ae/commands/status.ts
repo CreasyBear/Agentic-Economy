@@ -8,6 +8,7 @@ import type { OperationInvokeStatusResult } from '@/modules/capability-execution
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
+import { usageFailure } from '../lib/help'
 
 export const MAX_STATUS_WAIT_MS = 60_000
 export const MIN_STATUS_DELAY_MS = 100
@@ -33,6 +34,8 @@ function configuredApiKeyOrigin(options: CliOptions, rawOrigin: string | undefin
     throw new CliFailure('Connect this agent to the selected Agentic Economy origin first.', {
       kind: 'INVALID_ARGUMENT',
       code: 'agent_access_key_origin_required',
+      suggestion: 'Bind the credential to the exact selected origin.',
+      nextCommand: 'ae connect',
     })
   }
 
@@ -91,6 +94,8 @@ export function requireAgentAccessKey(command: string, options: CliOptions, requ
     throw new CliFailure(`Run ae connect before operation ${command}.`, {
       kind: 'UNAUTHENTICATED',
       code: 'agent_access_key_required',
+      suggestion: 'Authorize a buyer credential for this origin.',
+      nextCommand: requiredScope === undefined ? 'ae connect' : 'ae connect --supplier',
     })
   }
   configuredApiKeyOrigin(options, credential.origin)
@@ -215,10 +220,7 @@ export async function runStatusCommand(args: readonly string[], options: CliOpti
   const invocationRef = args[0]?.trim()
   const parsedRef = operationStatusInputSchema.safeParse({ invocationRef })
   if (!parsedRef.success || args.length > 1) {
-    throw new CliFailure('Usage: npm run -s ae -- status <invocation-ref>', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'status-usage',
-    })
+    throw usageFailure('status', 'status-usage')
   }
 
   let body: OperationInvokeStatusResult
