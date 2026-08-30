@@ -11,6 +11,10 @@ import {
   formatOperationPrice,
   formatOperationReadiness,
 } from '@/modules/market/operation-view-model'
+import {
+  continuationForOperationFacts,
+  type SuggestedContinuation,
+} from '@/modules/market/suggested-continuation'
 import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
 
 import { useOperationDetailReader } from '../CommandPanelProvider'
@@ -77,12 +81,18 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
 }
 
 function FoundBody({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
-  const callable = operation.availability.posture === 'routeable'
-    && operation.navigation.some(({ relation }) => relation === 'invoke')
+  const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
+  const callable = operation.availability.posture === 'routeable' && invokeNavigation !== undefined
   const inputExample = operation.contract.inputExamples?.[0]
-  const authenticated = operation.navigation.some(
-    ({ relation, authentication }) => relation === 'invoke' && authentication === 'required',
-  )
+  const requiresBuyerCredential = invokeNavigation?.authentication === 'required'
+  const continuation = continuationForOperationFacts({
+    operationRef: operation.operationRef,
+    availabilityPosture: callable ? operation.availability.posture : 'integrated',
+    requiresBuyerCredential,
+    // This public panel has no account fact. It must not imply that a
+    // protected call is ready when it cannot prove a buyer credential exists.
+    hasBuyerCredential: !requiresBuyerCredential,
+  })
 
   return (
     <>
@@ -108,27 +118,7 @@ function FoundBody({ operation }: Readonly<{ operation: PublicOperationDescripto
           ))}
         </dl>
 
-        {authenticated ? (
-          <div className="grid gap-intra rounded-lg border border-border bg-muted/35 p-intra">
-            <p className="text-sm text-foreground">
-              Authentication is required before the first call.
-            </p>
-            <Button asChild size="sm" variant="secondary" className="min-h-touch justify-self-start">
-              <Link to="/for-agents">Connect an agent</Link>
-            </Button>
-          </div>
-        ) : null}
-
-        {!callable ? (
-          <div className="grid gap-intra rounded-lg border border-warning-ring bg-warning-subtle p-intra">
-            <p className="text-sm text-warning-foreground">
-              This Operation cannot be called yet; its supplier must finish setup or restore readiness.
-            </p>
-            <Button asChild size="sm" variant="secondary" className="min-h-touch justify-self-start">
-              <Link to="/owner/supply">Continue supplier setup</Link>
-            </Button>
-          </div>
-        ) : null}
+        <PrimaryContinuation continuation={continuation} />
 
         <div className="grid gap-intra" aria-labelledby="operation-actions-title">
           <h3 id="operation-actions-title" className="text-sm font-semibold text-foreground">
@@ -153,6 +143,38 @@ function FoundBody({ operation }: Readonly<{ operation: PublicOperationDescripto
         </Button>
       </section>
     </>
+  )
+}
+
+function PrimaryContinuation({
+  continuation,
+}: Readonly<{ continuation: SuggestedContinuation }>) {
+  const description = continuation.warning
+    ?? (continuation.label === 'Connect agent'
+      ? 'Connect an agent before making this protected call.'
+      : continuation.label === 'Inspect Operation'
+        ? 'This Operation can be inspected, but it is not currently callable.'
+        : 'This is the single safe next step from the current Operation state.')
+
+  return (
+    <section
+      className="grid gap-intra rounded-lg border border-border bg-muted/35 p-intra"
+      aria-labelledby="operation-next-action"
+    >
+      <div className="grid gap-0.5">
+        <h3 id="operation-next-action" className="text-sm font-semibold text-foreground">
+          What you can do next
+        </h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      {continuation.kind === 'navigate' && continuation.href !== undefined ? (
+        <Button asChild size="sm" className="min-h-touch justify-self-start">
+          <Link to={continuation.href}>{continuation.label}</Link>
+        </Button>
+      ) : continuation.command !== undefined ? (
+        <AeCopyCommand compact label={continuation.label} code={continuation.command} />
+      ) : null}
+    </section>
   )
 }
 

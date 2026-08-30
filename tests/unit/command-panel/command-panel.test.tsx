@@ -191,8 +191,8 @@ describe('operator command panel', () => {
     expect(screen.getByText(formatOperationAuthentication(fixture.authentication))).toBeTruthy()
     expect(screen.getByText(formatOperationReadiness(fixture.availability.posture))).toBeTruthy()
     expect(screen.getByText('Charged per call.')).toBeTruthy()
-    expect(screen.getByText(/Authentication is required/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Connect an agent' }).getAttribute('href')).toBe('/for-agents')
+    expect(screen.getByText(/Connect an agent before/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Connect agent' }).getAttribute('href')).toBe('/for-agents')
     expect(
       screen.getByRole('link', { name: /Open operation page/ }).getAttribute('href'),
     ).toBe(`/operations/${encodeURIComponent(TEST_OPERATION_REF)}`)
@@ -268,8 +268,9 @@ describe('operator command panel', () => {
     fireEvent.change(input, { target: { value: 'weather' } })
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
-    expect(await screen.findByText(/supplier must finish setup/iu)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Continue supplier setup' }).getAttribute('href')).toBe('/owner/supply')
+    expect(await screen.findByText(/not currently callable/iu)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Inspect Operation' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Continue supplier setup' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Copy Call command' })).toBeNull()
   })
 

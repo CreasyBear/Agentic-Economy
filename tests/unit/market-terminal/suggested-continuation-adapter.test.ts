@@ -23,7 +23,7 @@ describe('CLI suggested-continuation adapter', () => {
       label: 'Connect agent',
       kind: 'navigate',
       command: 'ae connect',
-      href: '/agent-access',
+      href: '/for-agents',
     })
 
     const routeable = operationContinuationForCli({

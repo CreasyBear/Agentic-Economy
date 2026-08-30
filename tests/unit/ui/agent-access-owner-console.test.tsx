@@ -27,6 +27,6 @@ describe('assistant access owner continuation anchors', () => {
     expect(credit.querySelector('a[href="/market?window=30d"]')?.textContent).toBe('Search Operations')
     expect(keys.querySelector('#revoke')).not.toBeNull()
     expect(keys.querySelector('#fund')).toBeNull()
-    expect(keys.querySelector('a[href="/agent-access"]')?.textContent).toBe('Connect agent')
+    expect(keys.querySelector('a[href="/for-agents"]')?.textContent).toBe('Connect agent')
   })
 })

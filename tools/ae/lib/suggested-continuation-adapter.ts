@@ -1,5 +1,6 @@
 import {
   continuationForInvocationStatus,
+  continuationForOperationFacts,
   suggestContinuation,
   type SuggestedContinuation,
 } from '@/modules/market/suggested-continuation'
@@ -40,18 +41,7 @@ type SupplierContinuationInput = Readonly<{
 export function operationContinuationForCli(
   input: OperationContinuationInput,
 ): SuggestedContinuation {
-  const state = input.requiresBuyerCredential && !input.hasBuyerCredential
-    ? 'connection_required'
-    : input.availabilityPosture === 'routeable'
-      ? 'ready'
-      : input.availabilityPosture === 'integrated'
-        ? 'inspect_only'
-        : 'unavailable'
-  return suggestContinuation({
-    subject: 'operation',
-    state,
-    operationRef: input.operationRef,
-  })
+  return continuationForOperationFacts(input)
 }
 
 export function invocationContinuationForCli(

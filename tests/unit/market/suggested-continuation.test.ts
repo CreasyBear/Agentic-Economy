@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   continuationForInvocationStatus,
+  continuationForOperationFacts,
   suggestContinuation,
   type ContinuationState,
   type SuggestedContinuation,
@@ -11,6 +12,24 @@ const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
 const INVOCATION_REF = 'invocation:current'
 
 describe('shared suggested continuation projection', () => {
+  it.each([
+    ['routeable', false, false, 'Call Operation'],
+    ['routeable', true, false, 'Connect agent'],
+    ['routeable', true, true, 'Call Operation'],
+    ['integrated', true, false, 'Inspect Operation'],
+    ['unavailable', true, false, 'Inspect availability'],
+  ] as const)(
+    'adapts %s Operation facts without mistaking authentication for availability',
+    (availabilityPosture, requiresBuyerCredential, hasBuyerCredential, label) => {
+      expect(continuationForOperationFacts({
+        operationRef: OPERATION_REF,
+        availabilityPosture,
+        requiresBuyerCredential,
+        hasBuyerCredential,
+      }).label).toBe(label)
+    },
+  )
+
   it.each<readonly [ContinuationState, SuggestedContinuation]>([
     [
       { subject: 'operation', state: 'ready', operationRef: OPERATION_REF },
@@ -18,7 +37,7 @@ describe('shared suggested continuation projection', () => {
     ],
     [
       { subject: 'operation', state: 'connection_required', operationRef: OPERATION_REF },
-      { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/agent-access' },
+      { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' },
     ],
     [
       { subject: 'operation', state: 'inspect_only', operationRef: OPERATION_REF },
@@ -70,7 +89,7 @@ describe('shared suggested continuation projection', () => {
     ],
     [
       { subject: 'connection', state: 'missing', actor: 'buyer' },
-      { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/agent-access' },
+      { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' },
     ],
     [
       { subject: 'connection', state: 'missing', actor: 'supplier' },

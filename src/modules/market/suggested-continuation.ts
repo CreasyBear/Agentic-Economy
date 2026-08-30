@@ -8,6 +8,13 @@ export type SuggestedContinuation = Readonly<{
 
 type CommandContinuation = SuggestedContinuation & Readonly<{ command: string }>
 
+export type OperationContinuationFacts = Readonly<{
+  operationRef: string
+  availabilityPosture: 'integrated' | 'routeable' | 'unavailable'
+  requiresBuyerCredential: boolean
+  hasBuyerCredential: boolean
+}>
+
 export type ContinuationState =
   | Readonly<{
       subject: 'operation'
@@ -67,10 +74,28 @@ export function suggestContinuation(state: ContinuationState): SuggestedContinua
   if (state.subject === 'supplier') return supplierContinuation(state)
   if (state.subject === 'connection') {
     return state.actor === 'buyer'
-      ? { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/agent-access' }
+      ? { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' }
       : { label: 'Connect provider', kind: 'navigate', href: '/owner/settings/connections' }
   }
   return { label: 'Add credit', kind: 'navigate', command: 'ae account balance', href: '/owner/credit#fund' }
+}
+
+/** Converts adapter-visible Operation facts into the one shared continuation. */
+export function continuationForOperationFacts(
+  input: OperationContinuationFacts,
+): SuggestedContinuation {
+  const state = input.availabilityPosture === 'integrated'
+    ? 'inspect_only'
+    : input.availabilityPosture === 'unavailable'
+      ? 'unavailable'
+      : input.requiresBuyerCredential && !input.hasBuyerCredential
+        ? 'connection_required'
+        : 'ready'
+  return suggestContinuation({
+    subject: 'operation',
+    state,
+    operationRef: input.operationRef,
+  })
 }
 
 function operationContinuation(
@@ -84,7 +109,7 @@ function operationContinuation(
     }
   }
   if (state.state === 'connection_required') {
-    return { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/agent-access' }
+    return { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' }
   }
   if (state.state === 'inspect_only') {
     return {
