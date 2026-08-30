@@ -117,6 +117,7 @@ export type AgentAccessAuthenticationOptions = Readonly<{
   resolvePrincipal?: AgentAccessPrincipalResolver
   requiredScope?: string | null
   requiredScopes?: readonly string[]
+  requiredAnyScopes?: readonly string[]
   requiredMode?: AgentAccessAuthorityMode
   consequenceResource?: string
 }>
@@ -132,6 +133,7 @@ export async function authenticateAgentAccess(
   const requiredScopes = Object.freeze([...new Set(
     options.requiredScopes ?? (requiredScope === null ? [] : [requiredScope]),
   )].sort())
+  const requiredAnyScopes = Object.freeze([...new Set(options.requiredAnyScopes ?? [])].sort())
   let candidate: AgentAccessApiKeyAuth
   try {
     candidate = await (options.authenticate ?? (async () =>
@@ -147,6 +149,9 @@ export async function authenticateAgentAccess(
   }
   const candidateScopes = candidate.scopes
   if (requiredScopes.some((scope) => !candidateScopes.includes(scope))) return { kind: 'refused', status: 403, reason: 'scope_required' }
+  if (requiredAnyScopes.length > 0 && !requiredAnyScopes.some((scope) => candidateScopes.includes(scope))) {
+    return { kind: 'refused', status: 403, reason: 'scope_required' }
+  }
   let admittedScopes = candidateScopes
   let claims = candidate.claims
   if (options.verifyKeyState !== undefined || options.authenticate === undefined) {
@@ -166,6 +171,9 @@ export async function authenticateAgentAccess(
         return { kind: 'refused', status: 401, reason: 'authentication_required' }
       }
       if (requiredScopes.some((scope) => !current.scopes.includes(scope))) return { kind: 'refused', status: 403, reason: 'scope_required' }
+      if (requiredAnyScopes.length > 0 && !requiredAnyScopes.some((scope) => current.scopes.includes(scope))) {
+        return { kind: 'refused', status: 403, reason: 'scope_required' }
+      }
       admittedScopes = current.scopes
       claims = current.claims
     } catch {
@@ -190,10 +198,14 @@ export async function authenticateAgentAccess(
       return { kind: 'refused', status: 403, reason: 'scope_required' }
     }
     try {
+      const matchedAnyScope = requiredAnyScopes.find((scope) => projection.scopes.includes(scope))
+      const bindingRequiredScopes = matchedAnyScope === undefined
+        ? requiredScopes
+        : Object.freeze([...new Set([...requiredScopes, matchedAnyScope])].sort())
       const stored = canonicalResolvedPrincipal(
-        await options.resolvePrincipal(projection, requiredScopes, consequenceResource),
+        await options.resolvePrincipal(projection, bindingRequiredScopes, consequenceResource),
         projection,
-        requiredScopes,
+        bindingRequiredScopes,
       )
       if (stored === undefined) {
         return { kind: 'refused', status: 403, reason: 'scope_required' }

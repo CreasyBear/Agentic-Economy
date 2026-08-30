@@ -102,7 +102,7 @@ function canonicalActor(principal: string, account: string): CanonicalActor | nu
 }
 
 function authorityValuesNarrowed(child: readonly string[], parent: readonly string[]): boolean {
-  return child.every((value) => parent.includes(value))
+  return parent.includes('*') || child.every((value) => parent.includes(value))
 }
 
 function parseGrantRow(
@@ -152,7 +152,7 @@ function rootAdmitsCleanup(
   return [
     leaf.subjectPrincipalRef === input.actorPrincipalRef,
     leaf.scopes.includes('connection:revoke'),
-    leaf.resourceRefs.includes(input.resourceRef),
+    leaf.resourceRefs.includes('*') || leaf.resourceRefs.includes(input.resourceRef),
   ].every(Boolean)
 }
 
@@ -198,14 +198,11 @@ async function readCurrentCleanupGrantChain(
   return null
 }
 
-export async function readCurrentCleanupResourceAuthority(
-  ctx: Pick<QueryCtx, 'db'>,
+function canonicalCleanupProjectionMatches(
+  canonical: Connection,
   legacy: ProviderConnection,
-  now = Date.now(),
-): Promise<CleanupResourceAuthority | null> {
-  const canonical = await readCanonicalConnectionForProjection(ctx, legacy)
-  if (canonical === null) return null
-  if (![
+): boolean {
+  return [
     canonical.lifecycle === 'revoked', canonical.action.operation === 'revoke',
     legacy.canonicalConnectionRef === canonical.connectionRef,
     legacy.canonicalConnectionGeneration === canonical.generation,
@@ -213,7 +210,38 @@ export async function readCurrentCleanupResourceAuthority(
     legacy.installedByPrincipalRef === canonical.installedByPrincipalRef,
     legacy.authorityGrantRef === canonical.action.grantRef,
     legacy.authorityGrantGeneration === canonical.action.grantGeneration,
-  ].every(Boolean)) return null
+  ].every(Boolean)
+}
+
+async function actorHasCurrentAccountAuthority(
+  ctx: Pick<QueryCtx, 'db'>,
+  input: Readonly<{
+    actorPrincipalRef: string
+    accountRef: string
+    ownership: Readonly<{
+      lifecycle: string
+      accountRef: string
+      ownerPrincipalRef: string
+    }>
+  }>,
+): Promise<boolean> {
+  if (input.ownership.lifecycle !== 'active' || input.ownership.accountRef !== input.accountRef) return false
+  if (input.ownership.ownerPrincipalRef === input.actorPrincipalRef) return true
+  const memberships = await ctx.db.query('memberships')
+    .withIndex('by_memberPrincipalRef_and_lifecycle', (query) => query
+      .eq('memberPrincipalRef', input.actorPrincipalRef as never)
+      .eq('lifecycle', 'active'))
+    .take(2)
+  return memberships.length === 1 && memberships[0]?.accountRef === input.accountRef
+}
+
+export async function readCurrentCleanupResourceAuthority(
+  ctx: Pick<QueryCtx, 'db'>,
+  legacy: ProviderConnection,
+  now = Date.now(),
+): Promise<CleanupResourceAuthority | null> {
+  const canonical = await readCanonicalConnectionForProjection(ctx, legacy)
+  if (canonical === null || !canonicalCleanupProjectionMatches(canonical, legacy)) return null
   const [principal, account] = await Promise.all([
     ctx.db.query('principals')
       .withIndex('by_principalRef', (query) => query.eq('principalRef', canonical.action.actorPrincipalRef as never))
@@ -233,11 +261,12 @@ export async function readCurrentCleanupResourceAuthority(
     .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', activeAccount.currentOwnershipRef))
     .unique()
   if (ownership === null) return null
-  if (![
-    ownership.lifecycle === 'active',
-    ownership.accountRef === canonical.owningAccountRef,
-    ownership.ownerPrincipalRef === canonical.action.actorPrincipalRef,
-  ].every(Boolean)) return null
+  const hasAccountAuthority = await actorHasCurrentAccountAuthority(ctx, {
+    actorPrincipalRef: canonical.action.actorPrincipalRef,
+    accountRef: canonical.owningAccountRef,
+    ownership,
+  })
+  if (!hasAccountAuthority) return null
   const resourceRef = `connection:${canonical.connectionRef}`
   const chain = await readCurrentCleanupGrantChain(ctx, {
     grantRef: canonical.action.grantRef,
@@ -298,7 +327,8 @@ export async function resolveUniqueCanonicalGrant(
     && Number.isSafeInteger(grant.generation)
     && grant.generation > 0
     && grant.scopes.includes(`connection:${operation}`)
-    && resourceRefs.every((resource) => grant.resourceRefs.includes(resource)))
+    && (grant.resourceRefs.includes('*')
+      || resourceRefs.every((resource) => grant.resourceRefs.includes(resource))))
   if (matching.length !== 1) return null
   const grant = matching[0] as (typeof matching)[number]
   return { grantRef: grant.grantRef as DelegationGrantRef, generation: grant.generation, expiresAt: grant.expiresAt }

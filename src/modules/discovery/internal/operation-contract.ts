@@ -65,6 +65,16 @@ export function operationRouteExample(route: PublicOperationRouteDescriptor): Pu
       },
     }
   }
+  if (route.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.list.actionId) {
+    const actionInput = { limit: 20 }
+    return {
+      actionInput,
+      http: {
+        path: `${route.path}?limit=20`,
+        headers: { Authorization: authorization, Accept: OPERATION_INVOKE_ROUTE_CONTRACT.media.response },
+      },
+    }
+  }
   if (route.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId) {
     const actionInput = { invocationRef: PUBLIC_INVOCATION_REF_EXAMPLE }
     return {
@@ -152,4 +162,3 @@ export function operationRoutesMarkdown(): readonly string[] {
     `  - request: \`${JSON.stringify(example.http.body ?? {})}\`; response: \`${OPERATION_INVOKE_ROUTE_CONTRACT.media.response}\`; required headers: ${route.requiredHeaders.map((header) => `\`${header}\``).join(', ')}.`,
   ])
 }
-

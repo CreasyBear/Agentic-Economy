@@ -1,31 +1,43 @@
 {
   "files": {
     "convex/actionInvocationControl.ts": {
-      "lines": 58,
-      "statements": 60,
-      "functions": 21,
-      "branches": 44
+      "lines": 30,
+      "statements": 31,
+      "functions": 8,
+      "branches": 31
     },
     "convex/agentAccessOAuth.ts": {
-      "lines": 1,
-      "statements": 1,
+      "lines": 0,
+      "statements": 0,
       "functions": 0,
-      "branches": 9
+      "branches": 7
     },
     "convex/agentAccessPolicy.ts": {
-      "lines": 17,
-      "statements": 23,
-      "functions": 7,
-      "branches": 30
+      "lines": 19,
+      "statements": 24,
+      "functions": 6,
+      "branches": 17
     },
     "convex/agentAccessPrincipals.ts": {
-      "lines": 22,
-      "statements": 27,
-      "functions": 6,
-      "branches": 58
+      "lines": 5,
+      "statements": 12,
+      "functions": 0,
+      "branches": 19
+    },
+    "convex/agentMoneyReads.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "convex/auth.config.ts": {
       "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 1
+    },
+    "convex/authorityBoundary.ts": {
+      "lines": 0,
       "statements": 1,
       "functions": 0,
       "branches": 1
@@ -34,31 +46,19 @@
       "lines": 0,
       "statements": 0,
       "functions": 0,
-      "branches": 3
+      "branches": 0
     },
     "convex/businessSupplyProjectionSnapshot.ts": {
-      "lines": 54,
-      "statements": 67,
+      "lines": 49,
+      "statements": 62,
       "functions": 6,
-      "branches": 126
+      "branches": 107
     },
     "convex/capabilityContractDocuments.ts": {
       "lines": 5,
-      "statements": 6,
+      "statements": 5,
       "functions": 0,
       "branches": 7
-    },
-    "convex/capabilityOperationAdmission.ts": {
-      "lines": 19,
-      "statements": 29,
-      "functions": 0,
-      "branches": 28
-    },
-    "convex/capabilityOperationDispatch.ts": {
-      "lines": 43,
-      "statements": 56,
-      "functions": 4,
-      "branches": 104
     },
     "convex/capabilityOperationInvocationIdentity.ts": {
       "lines": 7,
@@ -70,31 +70,19 @@
       "lines": 11,
       "statements": 16,
       "functions": 4,
-      "branches": 61
+      "branches": 54
     },
     "convex/capabilityOperationInvocations.ts": {
-      "lines": 5,
-      "statements": 10,
-      "functions": 1,
-      "branches": 11
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "convex/capabilityOperationInvocationWorker.ts": {
       "lines": 7,
       "statements": 13,
       "functions": 0,
       "branches": 14
-    },
-    "convex/capabilityOperationInvokeActions.ts": {
-      "lines": 29,
-      "statements": 40,
-      "functions": 8,
-      "branches": 86
-    },
-    "convex/capabilityOperationWorkComplete.ts": {
-      "lines": 3,
-      "statements": 3,
-      "functions": 0,
-      "branches": 7
     },
     "convex/capabilityOperationX402AuthorizationExpiry.ts": {
       "lines": 8,
@@ -108,31 +96,25 @@
       "functions": 15,
       "branches": 39
     },
+    "convex/capabilityProviderConnectionAgents.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
     "convex/capabilityProviderConnectionCleanup.ts": {
-      "lines": 7,
-      "statements": 11,
-      "functions": 2,
-      "branches": 16
-    },
-    "convex/capabilityProviderConnectionLeases.ts": {
-      "lines": 58,
-      "statements": 60,
-      "functions": 26,
-      "branches": 72
-    },
-    "convex/capabilityProviderConnectionLifecycle.ts": {
-      "lines": 60,
-      "statements": 63,
-      "functions": 28,
-      "branches": 90
-    },
-    "convex/capabilityProviderConnectionOwner.ts": {
-      "lines": 75,
-      "statements": 87,
-      "functions": 16,
-      "branches": 76
+      "lines": 4,
+      "statements": 7,
+      "functions": 0,
+      "branches": 12
     },
     "convex/capabilityProviderConnections.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/capabilityProviderConsequenceJournal.ts": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
@@ -151,28 +133,34 @@
       "branches": 28
     },
     "convex/capabilitySupplyEligiblePorts.ts": {
-      "lines": 9,
-      "statements": 11,
-      "functions": 4,
-      "branches": 19
+      "lines": 10,
+      "statements": 12,
+      "functions": 5,
+      "branches": 20
     },
     "convex/capabilitySupplyGraph.ts": {
-      "lines": 5,
-      "statements": 5,
+      "lines": 3,
+      "statements": 3,
       "functions": 0,
-      "branches": 5
+      "branches": 3
     },
     "convex/capabilitySupplyGraphPorts.ts": {
-      "lines": 8,
-      "statements": 9,
+      "lines": 7,
+      "statements": 8,
       "functions": 0,
-      "branches": 32
+      "branches": 28
     },
     "convex/capabilitySupplyLists.ts": {
-      "lines": 6,
-      "statements": 6,
-      "functions": 4,
-      "branches": 2
+      "lines": 8,
+      "statements": 9,
+      "functions": 6,
+      "branches": 3
+    },
+    "convex/capabilitySupplyOperationOriginMap.ts": {
+      "lines": 22,
+      "statements": 29,
+      "functions": 6,
+      "branches": 64
     },
     "convex/capabilitySupplyOperationPorts.ts": {
       "lines": 1,
@@ -180,23 +168,47 @@
       "functions": 1,
       "branches": 6
     },
-    "convex/capabilitySupplyOperationQueries.ts": {
-      "lines": 7,
-      "statements": 9,
-      "functions": 5,
-      "branches": 10
+    "convex/capabilitySupplyOperationProjection.ts": {
+      "lines": 16,
+      "statements": 27,
+      "functions": 0,
+      "branches": 38
     },
-    "convex/capabilitySupplyOperations.ts": {
+    "convex/capabilitySupplyOperationProjection/contracts.ts": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
       "branches": 0
     },
+    "convex/capabilitySupplyOperationProjection/read_control.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/capabilitySupplyOperationProjection/staging_snapshot.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/capabilitySupplyOperationQueries.ts": {
+      "lines": 6,
+      "statements": 8,
+      "functions": 3,
+      "branches": 13
+    },
+    "convex/capabilitySupplyOperations.ts": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
+      "branches": 0
+    },
     "convex/capabilitySupplyOperationShared.ts": {
-      "lines": 33,
-      "statements": 56,
-      "functions": 2,
-      "branches": 100
+      "lines": 9,
+      "statements": 21,
+      "functions": 0,
+      "branches": 48
     },
     "convex/capabilitySupplyOwnerFunnel.ts": {
       "lines": 0,
@@ -205,64 +217,76 @@
       "branches": 0
     },
     "convex/capabilitySupplyOwnerFunnelAgentRead.ts": {
-      "lines": 13,
-      "statements": 14,
-      "functions": 2,
-      "branches": 10
+      "lines": 10,
+      "statements": 10,
+      "functions": 1,
+      "branches": 8
     },
     "convex/capabilitySupplyOwnerFunnelCommands.ts": {
       "lines": 29,
       "statements": 34,
       "functions": 0,
-      "branches": 39
+      "branches": 44
     },
     "convex/capabilitySupplyOwnerFunnelProjection.ts": {
-      "lines": 18,
-      "statements": 18,
-      "functions": 11,
-      "branches": 68
+      "lines": 17,
+      "statements": 17,
+      "functions": 10,
+      "branches": 28
+    },
+    "convex/capabilitySupplyOwnerFunnelProjection/contracts.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/capabilitySupplyOwnerFunnelProjection/offering_projection.ts": {
+      "lines": 4,
+      "statements": 9,
+      "functions": 1,
+      "branches": 41
     },
     "convex/capabilitySupplyOwnerFunnelRead.ts": {
-      "lines": 1,
-      "statements": 2,
+      "lines": 0,
+      "statements": 1,
       "functions": 0,
-      "branches": 2
+      "branches": 1
     },
     "convex/capabilitySupplyOwnerSupply.ts": {
-      "lines": 29,
-      "statements": 33,
-      "functions": 2,
-      "branches": 34
+      "lines": 10,
+      "statements": 13,
+      "functions": 1,
+      "branches": 21
     },
     "convex/capabilitySupplyProbes.ts": {
-      "lines": 10,
-      "statements": 10,
-      "functions": 3,
+      "lines": 6,
+      "statements": 6,
+      "functions": 1,
       "branches": 8
     },
     "convex/capabilitySupplyProjection.ts": {
-      "lines": 14,
-      "statements": 33,
-      "functions": 3,
-      "branches": 80
+      "lines": 8,
+      "statements": 28,
+      "functions": 2,
+      "branches": 60
     },
     "convex/capabilitySupplyPublicationPorts.ts": {
       "lines": 3,
       "statements": 4,
       "functions": 1,
-      "branches": 15
+      "branches": 20
     },
     "convex/capabilitySupplyPublish.ts": {
       "lines": 68,
       "statements": 72,
       "functions": 11,
-      "branches": 116
+      "branches": 119
     },
     "convex/capabilitySupplyReadiness.ts": {
-      "lines": 9,
-      "statements": 10,
+      "lines": 10,
+      "statements": 11,
       "functions": 1,
-      "branches": 22
+      "branches": 20
     },
     "convex/capabilitySupplyRowMappers.ts": {
       "lines": 5,
@@ -272,15 +296,15 @@
     },
     "convex/capabilitySupplyShared.ts": {
       "lines": 0,
-      "statements": 2,
+      "statements": 3,
       "functions": 0,
-      "branches": 3
+      "branches": 4
     },
     "convex/capabilitySupplyWriterPorts.ts": {
       "lines": 0,
       "statements": 2,
       "functions": 0,
-      "branches": 6
+      "branches": 7
     },
     "convex/catalog.ts": {
       "lines": 0,
@@ -289,16 +313,16 @@
       "branches": 0
     },
     "convex/catalogOfferingMutations.ts": {
-      "lines": 71,
-      "statements": 88,
-      "functions": 18,
-      "branches": 105
+      "lines": 31,
+      "statements": 45,
+      "functions": 6,
+      "branches": 75
     },
     "convex/catalogPublicReads.ts": {
-      "lines": 55,
-      "statements": 64,
-      "functions": 18,
-      "branches": 37
+      "lines": 5,
+      "statements": 8,
+      "functions": 1,
+      "branches": 12
     },
     "convex/chatAdmission.ts": {
       "lines": 1,
@@ -307,40 +331,40 @@
       "branches": 2
     },
     "convex/chatAnonymous.ts": {
-      "lines": 14,
-      "statements": 17,
-      "functions": 3,
-      "branches": 18
+      "lines": 4,
+      "statements": 6,
+      "functions": 0,
+      "branches": 8
     },
     "convex/chatGenerate.ts": {
-      "lines": 3,
-      "statements": 3,
+      "lines": 0,
+      "statements": 0,
       "functions": 0,
-      "branches": 6
+      "branches": 0
     },
     "convex/chatMessages.ts": {
       "lines": 0,
-      "statements": 1,
+      "statements": 0,
       "functions": 0,
-      "branches": 1
+      "branches": 0
     },
     "convex/chatShares.ts": {
-      "lines": 21,
-      "statements": 38,
-      "functions": 1,
-      "branches": 52
+      "lines": 15,
+      "statements": 22,
+      "functions": 2,
+      "branches": 42
     },
     "convex/chatThreads.ts": {
-      "lines": 4,
-      "statements": 5,
-      "functions": 2,
-      "branches": 3
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "convex/chatTools.ts": {
-      "lines": 3,
-      "statements": 7,
-      "functions": 1,
-      "branches": 8
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "convex/convex.config.ts": {
       "lines": 10,
@@ -355,28 +379,28 @@
       "branches": 0
     },
     "convex/devSeed.ts": {
-      "lines": 50,
-      "statements": 59,
-      "functions": 8,
-      "branches": 54
+      "lines": 32,
+      "statements": 40,
+      "functions": 6,
+      "branches": 36
     },
     "convex/devSeedStore.ts": {
-      "lines": 43,
-      "statements": 46,
-      "functions": 11,
-      "branches": 38
+      "lines": 13,
+      "statements": 14,
+      "functions": 3,
+      "branches": 17
     },
     "convex/discovery.ts": {
-      "lines": 3,
-      "statements": 3,
-      "functions": 2,
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
       "branches": 3
     },
     "convex/facilitatorDiscovery.ts": {
-      "lines": 14,
-      "statements": 35,
+      "lines": 16,
+      "statements": 36,
       "functions": 0,
-      "branches": 45
+      "branches": 46
     },
     "convex/facilitatorDiscoveryAction.ts": {
       "lines": 7,
@@ -385,10 +409,208 @@
       "branches": 4
     },
     "convex/http.ts": {
-      "lines": 2,
-      "statements": 2,
+      "lines": 0,
+      "statements": 0,
       "functions": 0,
       "branches": 0
+    },
+    "convex/interactiveAuthority.ts": {
+      "lines": 11,
+      "statements": 18,
+      "functions": 0,
+      "branches": 18
+    },
+    "convex/interactiveCredentialLifecycle.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/lib/agentMoneyReads.ts": {
+      "lines": 2,
+      "statements": 4,
+      "functions": 0,
+      "branches": 6
+    },
+    "convex/lib/authorityRegistrars.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/lib/brokeredDisputeEvidence/validation.ts": {
+      "lines": 2,
+      "statements": 3,
+      "functions": 0,
+      "branches": 3
+    },
+    "convex/lib/canonicalAgentAuthority.ts": {
+      "lines": 0,
+      "statements": 7,
+      "functions": 0,
+      "branches": 7
+    },
+    "convex/lib/connectionLifecyclePersistence.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/lib/delegationPersistence.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/lib/marketExternalRegistry/contracts.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/lib/marketExternalRegistry/validation.ts": {
+      "lines": 8,
+      "statements": 12,
+      "functions": 2,
+      "branches": 23
+    },
+    "convex/lib/operationInvocations/admission.ts": {
+      "lines": 9,
+      "statements": 33,
+      "functions": 1,
+      "branches": 36
+    },
+    "convex/lib/operationInvocations/authorityHandlers.ts": {
+      "lines": 3,
+      "statements": 8,
+      "functions": 1,
+      "branches": 7
+    },
+    "convex/lib/operationInvocations/contracts.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/lib/operationInvocations/dispatch.ts": {
+      "lines": 50,
+      "statements": 74,
+      "functions": 10,
+      "branches": 87
+    },
+    "convex/lib/operationInvocations/invokeActions.ts": {
+      "lines": 26,
+      "statements": 39,
+      "functions": 7,
+      "branches": 89
+    },
+    "convex/lib/operationInvocations/reconciliation.ts": {
+      "lines": 5,
+      "statements": 13,
+      "functions": 1,
+      "branches": 15
+    },
+    "convex/lib/operationInvocations/workComplete.ts": {
+      "lines": 3,
+      "statements": 5,
+      "functions": 0,
+      "branches": 5
+    },
+    "convex/lib/providerConnections/agent.ts": {
+      "lines": 1,
+      "statements": 3,
+      "functions": 0,
+      "branches": 9
+    },
+    "convex/lib/providerConnections/authority.ts": {
+      "lines": 2,
+      "statements": 5,
+      "functions": 0,
+      "branches": 4
+    },
+    "convex/lib/providerConnections/cleanup.ts": {
+      "lines": 8,
+      "statements": 9,
+      "functions": 1,
+      "branches": 6
+    },
+    "convex/lib/providerConnections/codecs.ts": {
+      "lines": 0,
+      "statements": 1,
+      "functions": 0,
+      "branches": 2
+    },
+    "convex/lib/providerConnections/contracts.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/lib/providerConnections/leases.ts": {
+      "lines": 3,
+      "statements": 5,
+      "functions": 0,
+      "branches": 10
+    },
+    "convex/lib/providerConnections/lifecycle.ts": {
+      "lines": 0,
+      "statements": 1,
+      "functions": 0,
+      "branches": 4
+    },
+    "convex/lib/providerConnections/owner.ts": {
+      "lines": 20,
+      "statements": 21,
+      "functions": 1,
+      "branches": 22
+    },
+    "convex/lib/providerConnections/persistence.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/lib/qualifiedUsePayout/allocation.ts": {
+      "lines": 3,
+      "statements": 4,
+      "functions": 0,
+      "branches": 8
+    },
+    "convex/lib/qualifiedUsePayout/authority.ts": {
+      "lines": 0,
+      "statements": 2,
+      "functions": 0,
+      "branches": 3
+    },
+    "convex/lib/qualifiedUsePayout/composition.ts": {
+      "lines": 5,
+      "statements": 6,
+      "functions": 0,
+      "branches": 7
+    },
+    "convex/lib/qualifiedUsePayout/contracts.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/lib/qualifiedUsePayout/identity.ts": {
+      "lines": 2,
+      "statements": 4,
+      "functions": 0,
+      "branches": 4
+    },
+    "convex/lib/qualifiedUsePayout/journal.ts": {
+      "lines": 4,
+      "statements": 9,
+      "functions": 0,
+      "branches": 12
+    },
+    "convex/lib/qualifiedUsePayout/replay.ts": {
+      "lines": 4,
+      "statements": 7,
+      "functions": 0,
+      "branches": 7
     },
     "convex/lib/rateLimit.ts": {
       "lines": 2,
@@ -396,11 +618,29 @@
       "functions": 1,
       "branches": 4
     },
+    "convex/lib/secretLifecyclePersistence.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/lib/secretPointerPersistence.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "convex/lib/workloadCron/context.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 8
+    },
     "convex/marketAggregateBackfill.ts": {
-      "lines": 40,
-      "statements": 49,
-      "functions": 4,
-      "branches": 42
+      "lines": 20,
+      "statements": 28,
+      "functions": 1,
+      "branches": 31
     },
     "convex/marketDispatchWorkpool.ts": {
       "lines": 0,
@@ -409,34 +649,34 @@
       "branches": 0
     },
     "convex/marketEvidence.ts": {
-      "lines": 1,
-      "statements": 3,
-      "functions": 1,
-      "branches": 4
+      "lines": 0,
+      "statements": 2,
+      "functions": 0,
+      "branches": 3
     },
     "convex/marketExternalRefresh.ts": {
-      "lines": 7,
-      "statements": 7,
-      "functions": 3,
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
       "branches": 0
     },
     "convex/marketExternalRegistry.ts": {
-      "lines": 28,
-      "statements": 38,
-      "functions": 4,
-      "branches": 58
+      "lines": 19,
+      "statements": 26,
+      "functions": 2,
+      "branches": 34
     },
     "convex/marketExternalRegistryRefresh.ts": {
-      "lines": 33,
-      "statements": 34,
-      "functions": 7,
-      "branches": 54
+      "lines": 5,
+      "statements": 5,
+      "functions": 1,
+      "branches": 32
     },
     "convex/marketExternalSnapshots.ts": {
-      "lines": 10,
-      "statements": 12,
-      "functions": 3,
-      "branches": 11
+      "lines": 4,
+      "statements": 5,
+      "functions": 0,
+      "branches": 6
     },
     "convex/marketListingEvidence.ts": {
       "lines": 6,
@@ -445,28 +685,28 @@
       "branches": 11
     },
     "convex/marketPresence.ts": {
-      "lines": 9,
-      "statements": 11,
-      "functions": 2,
-      "branches": 14
-    },
-    "convex/marketRegistryGraduation.ts": {
-      "lines": 23,
-      "statements": 27,
-      "functions": 3,
-      "branches": 16
-    },
-    "convex/moneyBillingAuthorization.ts": {
-      "lines": 7,
-      "statements": 10,
-      "functions": 1,
+      "lines": 2,
+      "statements": 4,
+      "functions": 0,
       "branches": 11
     },
-    "convex/moneyBrokeredDisputeEvidence.ts": {
-      "lines": 1,
+    "convex/marketRegistryGraduation.ts": {
+      "lines": 4,
+      "statements": 6,
+      "functions": 0,
+      "branches": 7
+    },
+    "convex/moneyBillingAuthorization.ts": {
+      "lines": 0,
       "statements": 1,
       "functions": 0,
       "branches": 1
+    },
+    "convex/moneyBrokeredDisputeEvidence.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "convex/moneyBrokeredDisputeLoss.ts": {
       "lines": 8,
@@ -475,10 +715,10 @@
       "branches": 12
     },
     "convex/moneyBrokeredInvalidOutputLoss.ts": {
-      "lines": 8,
-      "statements": 15,
+      "lines": 6,
+      "statements": 18,
       "functions": 0,
-      "branches": 16
+      "branches": 19
     },
     "convex/moneyBudgetPersist.ts": {
       "lines": 24,
@@ -493,10 +733,10 @@
       "branches": 8
     },
     "convex/moneyChargeAdmission.ts": {
-      "lines": 28,
-      "statements": 29,
+      "lines": 18,
+      "statements": 19,
       "functions": 0,
-      "branches": 42
+      "branches": 32
     },
     "convex/moneyChargeAuthorize.ts": {
       "lines": 15,
@@ -505,16 +745,16 @@
       "branches": 43
     },
     "convex/moneyChargeBrokered.ts": {
-      "lines": 34,
-      "statements": 57,
+      "lines": 31,
+      "statements": 55,
       "functions": 1,
-      "branches": 68
+      "branches": 66
     },
     "convex/moneyChargeJournal.ts": {
-      "lines": 5,
-      "statements": 14,
+      "lines": 7,
+      "statements": 19,
       "functions": 0,
-      "branches": 25
+      "branches": 32
     },
     "convex/moneyChargeReconcile.ts": {
       "lines": 18,
@@ -523,22 +763,46 @@
       "branches": 22
     },
     "convex/moneyConnect.ts": {
-      "lines": 34,
-      "statements": 39,
-      "functions": 9,
-      "branches": 49
+      "lines": 29,
+      "statements": 33,
+      "functions": 6,
+      "branches": 47
+    },
+    "convex/moneyCreditPromotions.ts": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 8
     },
     "convex/moneyCreditReads.ts": {
-      "lines": 27,
-      "statements": 27,
-      "functions": 9,
-      "branches": 18
+      "lines": 9,
+      "statements": 9,
+      "functions": 0,
+      "branches": 11
     },
     "convex/moneyCreditTopup.ts": {
-      "lines": 65,
-      "statements": 72,
-      "functions": 11,
-      "branches": 103
+      "lines": 37,
+      "statements": 43,
+      "functions": 5,
+      "branches": 57
+    },
+    "convex/moneyCreditTopup/apply.ts": {
+      "lines": 27,
+      "statements": 31,
+      "functions": 1,
+      "branches": 35
+    },
+    "convex/moneyCreditTopup/command_view.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 9
+    },
+    "convex/moneyCreditTopup/contracts.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "convex/moneyExternalSpendFinalize.ts": {
       "lines": 5,
@@ -571,10 +835,10 @@
       "branches": 15
     },
     "convex/moneyLedger.ts": {
-      "lines": 0,
-      "statements": 0,
-      "functions": 0,
-      "branches": 0
+      "lines": 8,
+      "statements": 11,
+      "functions": 5,
+      "branches": 13
     },
     "convex/moneyLedgerValues.ts": {
       "lines": 0,
@@ -583,10 +847,10 @@
       "branches": 0
     },
     "convex/moneyPayoutTransferBegin.ts": {
-      "lines": 20,
-      "statements": 21,
+      "lines": 19,
+      "statements": 20,
       "functions": 2,
-      "branches": 25
+      "branches": 24
     },
     "convex/moneyPayoutTransferComplete.ts": {
       "lines": 0,
@@ -595,16 +859,16 @@
       "branches": 0
     },
     "convex/moneyPayoutTransferCompleteApply.ts": {
-      "lines": 48,
-      "statements": 53,
+      "lines": 46,
+      "statements": 51,
       "functions": 0,
-      "branches": 81
+      "branches": 77
     },
     "convex/moneyPayoutTransferRead.ts": {
       "lines": 7,
-      "statements": 8,
+      "statements": 7,
       "functions": 0,
-      "branches": 14
+      "branches": 13
     },
     "convex/moneyPayoutTransferReconcile.ts": {
       "lines": 3,
@@ -613,34 +877,40 @@
       "branches": 1
     },
     "convex/moneyPayoutTransferSettlement.ts": {
-      "lines": 24,
-      "statements": 27,
+      "lines": 25,
+      "statements": 28,
+      "functions": 1,
+      "branches": 30
+    },
+    "convex/moneyPayoutTransferShared.ts": {
+      "lines": 4,
+      "statements": 4,
+      "functions": 0,
+      "branches": 4
+    },
+    "convex/moneyPayoutTransferShared/reservation_journal.ts": {
+      "lines": 7,
+      "statements": 11,
+      "functions": 0,
+      "branches": 34
+    },
+    "convex/moneyPayoutTransferShared/row_projection.ts": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 1
+    },
+    "convex/moneyProviderEarnings.ts": {
+      "lines": 13,
+      "statements": 15,
       "functions": 1,
       "branches": 27
     },
-    "convex/moneyPayoutTransferShared.ts": {
-      "lines": 12,
-      "statements": 15,
-      "functions": 0,
-      "branches": 37
-    },
-    "convex/moneyProviderEarnings.ts": {
-      "lines": 24,
-      "statements": 28,
-      "functions": 4,
-      "branches": 33
-    },
-    "convex/moneyQualifiedUsePayout.ts": {
-      "lines": 20,
-      "statements": 27,
-      "functions": 0,
-      "branches": 38
-    },
     "convex/moneyRefund.ts": {
-      "lines": 20,
-      "statements": 21,
-      "functions": 2,
-      "branches": 26
+      "lines": 25,
+      "statements": 26,
+      "functions": 3,
+      "branches": 35
     },
     "convex/moneyStripeEvents.ts": {
       "lines": 4,
@@ -676,13 +946,19 @@
       "lines": 7,
       "statements": 11,
       "functions": 2,
-      "branches": 73
+      "branches": 72
+    },
+    "convex/providerConsequenceHttp.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "convex/qualifiedUse.ts": {
-      "lines": 23,
-      "statements": 25,
-      "functions": 7,
-      "branches": 17
+      "lines": 20,
+      "statements": 22,
+      "functions": 6,
+      "branches": 16
     },
     "convex/rateLimit.ts": {
       "lines": 3,
@@ -690,11 +966,29 @@
       "functions": 1,
       "branches": 5
     },
+    "convex/recoveryBreakGlass.ts": {
+      "lines": 0,
+      "statements": 1,
+      "functions": 0,
+      "branches": 1
+    },
     "convex/registry.ts": {
-      "lines": 33,
-      "statements": 75,
+      "lines": 34,
+      "statements": 77,
       "functions": 13,
-      "branches": 90
+      "branches": 92
+    },
+    "convex/secretLifecycleHttp.ts": {
+      "lines": 0,
+      "statements": 1,
+      "functions": 0,
+      "branches": 1
+    },
+    "convex/secretLifecycleOperations.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "convex/security.ts": {
       "lines": 0,
@@ -703,10 +997,10 @@
       "branches": 0
     },
     "convex/securityAdminMembership.ts": {
-      "lines": 15,
-      "statements": 15,
+      "lines": 16,
+      "statements": 16,
       "functions": 2,
-      "branches": 24
+      "branches": 25
     },
     "convex/securityAdminReadbacks.ts": {
       "lines": 0,
@@ -733,21 +1027,81 @@
       "branches": 0
     },
     "convex/sourceWriteAdmission.ts": {
-      "lines": 9,
-      "statements": 11,
+      "lines": 10,
+      "statements": 13,
       "functions": 1,
-      "branches": 9
+      "branches": 11
+    },
+    "convex/workloadCron.ts": {
+      "lines": 24,
+      "statements": 24,
+      "functions": 5,
+      "branches": 8
+    },
+    "src/components/ae/about/AeAboutPage.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/agents/AeAgentDoorPage.tsx": {
+      "lines": 0,
+      "statements": 1,
+      "functions": 0,
+      "branches": 1
+    },
+    "src/components/ae/command-panel/AeCommandPanel.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 1
+    },
+    "src/components/ae/command-panel/command-panel-state.ts": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 1
+    },
+    "src/components/ae/command-panel/CommandPanelProvider.tsx": {
+      "lines": 2,
+      "statements": 4,
+      "functions": 2,
+      "branches": 3
+    },
+    "src/components/ae/command-panel/market-operations-client.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 1
+    },
+    "src/components/ae/command-panel/pages/OperationInspectPage.tsx": {
+      "lines": 1,
+      "statements": 2,
+      "functions": 0,
+      "branches": 4
+    },
+    "src/components/ae/command-panel/pages/OperationsSearchPage.tsx": {
+      "lines": 23,
+      "statements": 29,
+      "functions": 4,
+      "branches": 22
+    },
+    "src/components/ae/command-panel/useCommandPanelHotKeys.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/components/ae/console/AeAgentOperatorConsole.tsx": {
-      "lines": 17,
-      "statements": 27,
-      "functions": 8,
-      "branches": 65
+      "lines": 29,
+      "statements": 33,
+      "functions": 10,
+      "branches": 48
     },
     "src/components/ae/console/AeAgentQuickstart.tsx": {
-      "lines": 3,
-      "statements": 3,
-      "functions": 3,
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
       "branches": 0
     },
     "src/components/ae/console/AeAssistantInstallFunnel.tsx": {
@@ -762,6 +1116,12 @@
       "functions": 1,
       "branches": 36
     },
+    "src/components/ae/console/AeOwnerCredit.tsx": {
+      "lines": 26,
+      "statements": 30,
+      "functions": 21,
+      "branches": 36
+    },
     "src/components/ae/data/AeCopyCommand.tsx": {
       "lines": 6,
       "statements": 7,
@@ -772,7 +1132,13 @@
       "lines": 0,
       "statements": 0,
       "functions": 0,
-      "branches": 5
+      "branches": 0
+    },
+    "src/components/ae/data/AeViewBar.tsx": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
+      "branches": 6
     },
     "src/components/ae/feedback/AeConfirmDialog.tsx": {
       "lines": 6,
@@ -780,11 +1146,17 @@
       "functions": 2,
       "branches": 11
     },
-    "src/components/ae/feedback/AeEmptyState.tsx": {
+    "src/components/ae/feedback/AeDegradedState.tsx": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
       "branches": 1
+    },
+    "src/components/ae/feedback/AeEmptyState.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/components/ae/feedback/AeObservabilityErrorBoundary.tsx": {
       "lines": 2,
@@ -798,6 +1170,12 @@
       "functions": 4,
       "branches": 11
     },
+    "src/components/ae/home/AeHomeLanding.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 4
+    },
     "src/components/ae/home/HomeRouteStates.tsx": {
       "lines": 2,
       "statements": 2,
@@ -809,6 +1187,12 @@
       "statements": 6,
       "functions": 1,
       "branches": 6
+    },
+    "src/components/ae/layout/AeChatPage.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 2
     },
     "src/components/ae/layout/AeNotFound.tsx": {
       "lines": 1,
@@ -822,59 +1206,89 @@
       "functions": 0,
       "branches": 1
     },
-    "src/components/ae/layout/AeOperatorCommandMenu.tsx": {
-      "lines": 0,
-      "statements": 0,
-      "functions": 0,
-      "branches": 0
-    },
     "src/components/ae/layout/AeOperatorRouteStates.tsx": {
-      "lines": 4,
-      "statements": 4,
-      "functions": 2,
-      "branches": 6
+      "lines": 2,
+      "statements": 2,
+      "functions": 0,
+      "branches": 8
     },
     "src/components/ae/layout/AeOperatorShell.tsx": {
       "lines": 4,
-      "statements": 5,
-      "functions": 2,
-      "branches": 10
+      "statements": 6,
+      "functions": 3,
+      "branches": 11
     },
     "src/components/ae/layout/AeOperatorSidebar.tsx": {
-      "lines": 0,
-      "statements": 0,
-      "functions": 0,
-      "branches": 9
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
+      "branches": 11
     },
     "src/components/ae/layout/AePageHeader.tsx": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
-      "branches": 2
+      "branches": 0
+    },
+    "src/components/ae/layout/AePageState.tsx": {
+      "lines": 9,
+      "statements": 9,
+      "functions": 7,
+      "branches": 9
+    },
+    "src/components/ae/layout/AePublicPage.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/components/ae/layout/AePublicShell.tsx": {
-      "lines": 7,
-      "statements": 8,
-      "functions": 3,
-      "branches": 6
+      "lines": 15,
+      "statements": 19,
+      "functions": 8,
+      "branches": 12
+    },
+    "src/components/ae/layout/AeRecordHeader.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 3
+    },
+    "src/components/ae/layout/AeRecordSheet.tsx": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
+      "branches": 0
     },
     "src/components/ae/layout/AeRouteCommandMenu.tsx": {
-      "lines": 32,
-      "statements": 33,
-      "functions": 13,
-      "branches": 40
+      "lines": 64,
+      "statements": 68,
+      "functions": 19,
+      "branches": 73
     },
     "src/components/ae/layout/AeRouteProgressBar.tsx": {
-      "lines": 9,
-      "statements": 12,
+      "lines": 10,
+      "statements": 13,
       "functions": 5,
       "branches": 6
+    },
+    "src/components/ae/layout/AeSection.tsx": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 5
+    },
+    "src/components/ae/layout/operator-command-context.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/components/ae/listing/AeProviderListingPage.tsx": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
-      "branches": 37
+      "branches": 35
     },
     "src/components/ae/listing/PublicBusinessNotFound.tsx": {
       "lines": 0,
@@ -882,17 +1296,35 @@
       "functions": 0,
       "branches": 0
     },
-    "src/components/ae/market/AeMarketPage.tsx": {
-      "lines": 20,
-      "statements": 21,
-      "functions": 7,
-      "branches": 51
-    },
-    "src/components/ae/market/AeOperationCard.tsx": {
+    "src/components/ae/market/AeCapabilityTile.tsx": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
-      "branches": 1
+      "branches": 2
+    },
+    "src/components/ae/market/AeMarketPage.tsx": {
+      "lines": 4,
+      "statements": 5,
+      "functions": 4,
+      "branches": 12
+    },
+    "src/components/ae/market/AeOperationCard.tsx": {
+      "lines": 3,
+      "statements": 3,
+      "functions": 1,
+      "branches": 4
+    },
+    "src/components/ae/market/AeOperationPrice.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 4
+    },
+    "src/components/ae/market/AeOperationTable.tsx": {
+      "lines": 5,
+      "statements": 6,
+      "functions": 5,
+      "branches": 7
     },
     "src/components/ae/offerings/AeOwnerOfferings.exports.ts": {
       "lines": 1,
@@ -901,9 +1333,9 @@
       "branches": 6
     },
     "src/components/ae/offerings/AeOwnerOfferings.tsx": {
-      "lines": 14,
-      "statements": 21,
-      "functions": 12,
+      "lines": 18,
+      "statements": 25,
+      "functions": 16,
       "branches": 48
     },
     "src/components/ae/offerings/offering-presentation.ts": {
@@ -913,64 +1345,64 @@
       "branches": 59
     },
     "src/components/ae/offerings/owner-offering.functions.ts": {
-      "lines": 34,
-      "statements": 43,
+      "lines": 35,
+      "statements": 44,
       "functions": 10,
       "branches": 44
     },
     "src/components/ae/operation-chat/ChatTranscript.tsx": {
-      "lines": 0,
-      "statements": 0,
-      "functions": 0,
-      "branches": 1
+      "lines": 5,
+      "statements": 5,
+      "functions": 4,
+      "branches": 16
     },
     "src/components/ae/operation-chat/OperationCard.tsx": {
-      "lines": 0,
-      "statements": 0,
-      "functions": 0,
-      "branches": 7
+      "lines": 26,
+      "statements": 30,
+      "functions": 9,
+      "branches": 46
     },
     "src/components/ae/operation-chat/OperationChat.tsx": {
-      "lines": 13,
-      "statements": 18,
-      "functions": 1,
-      "branches": 21
+      "lines": 158,
+      "statements": 176,
+      "functions": 43,
+      "branches": 124
     },
     "src/components/ae/operation-chat/OperationChatHeader.tsx": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
-      "branches": 0
+      "branches": 13
     },
     "src/components/ae/operation-chat/OperationComposer.tsx": {
-      "lines": 0,
-      "statements": 0,
-      "functions": 0,
-      "branches": 0
+      "lines": 7,
+      "statements": 7,
+      "functions": 3,
+      "branches": 21
     },
     "src/components/ae/operation-chat/OperationHistory.tsx": {
-      "lines": 3,
-      "statements": 3,
-      "functions": 3,
-      "branches": 3
+      "lines": 9,
+      "statements": 10,
+      "functions": 9,
+      "branches": 9
     },
     "src/components/ae/operation-chat/presentation.ts": {
-      "lines": 3,
-      "statements": 17,
-      "functions": 0,
-      "branches": 55
+      "lines": 13,
+      "statements": 21,
+      "functions": 4,
+      "branches": 22
     },
     "src/components/ae/operation-chat/SharedOperationChat.tsx": {
       "lines": 0,
-      "statements": 0,
-      "functions": 0,
-      "branches": 5
+      "statements": 1,
+      "functions": 1,
+      "branches": 2
     },
     "src/components/ae/operator/AeOperatorDataTable.tsx": {
-      "lines": 13,
-      "statements": 13,
-      "functions": 8,
-      "branches": 18
+      "lines": 22,
+      "statements": 27,
+      "functions": 6,
+      "branches": 33
     },
     "src/components/ae/primitives/AeOfferingCard.tsx": {
       "lines": 7,
@@ -991,9 +1423,9 @@
       "branches": 4
     },
     "src/components/ae/readback/AeAdminReadbackPanel.tsx": {
-      "lines": 25,
-      "statements": 25,
-      "functions": 18,
+      "lines": 22,
+      "statements": 22,
+      "functions": 17,
       "branches": 16
     },
     "src/components/ae/services/money.ts": {
@@ -1002,23 +1434,53 @@
       "functions": 0,
       "branches": 8
     },
+    "src/components/ae/settings/AeWorkspaceDevelopers.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/settings/AeWorkspaceGeneral.tsx": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 2
+    },
+    "src/components/ae/settings/AeWorkspaceMembers.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 7
+    },
+    "src/components/ae/settings/OwnerSettingsNav.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
     "src/components/ae/settings/OwnerSettingsSections.tsx": {
-      "lines": 4,
-      "statements": 4,
-      "functions": 3,
+      "lines": 2,
+      "statements": 2,
+      "functions": 1,
+      "branches": 2
+    },
+    "src/components/ae/settings/OwnerSettingsShell.tsx": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
       "branches": 2
     },
     "src/components/ae/status/AeCapabilityList.tsx": {
-      "lines": 4,
-      "statements": 4,
-      "functions": 2,
-      "branches": 2
+      "lines": 11,
+      "statements": 11,
+      "functions": 8,
+      "branches": 6
     },
     "src/components/ae/status/AeStatusBadge.tsx": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
-      "branches": 1
+      "branches": 3
     },
     "src/components/ae/status/AeStatusCard.tsx": {
       "lines": 1,
@@ -1032,11 +1494,17 @@
       "functions": 1,
       "branches": 4
     },
+    "src/components/ae/supply/AeOwnerProviderConnections.tsx": {
+      "lines": 54,
+      "statements": 60,
+      "functions": 9,
+      "branches": 41
+    },
     "src/components/ae/supply/AeSupplyAgentProof.tsx": {
-      "lines": 2,
-      "statements": 2,
-      "functions": 2,
-      "branches": 6
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
+      "branches": 5
     },
     "src/components/ae/supply/AeSupplyEarningsCard.tsx": {
       "lines": 36,
@@ -1054,7 +1522,7 @@
       "lines": 13,
       "statements": 17,
       "functions": 3,
-      "branches": 32
+      "branches": 31
     },
     "src/components/ae/supply/AeSupplyLanding.tsx": {
       "lines": 0,
@@ -1063,16 +1531,136 @@
       "branches": 3
     },
     "src/components/ae/supply/AeSupplyPublisherHome.tsx": {
-      "lines": 56,
-      "statements": 64,
+      "lines": 15,
+      "statements": 15,
       "functions": 12,
-      "branches": 54
+      "branches": 18
+    },
+    "src/components/ae/website/AeAgentInstructionCard.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/website/AeNotchedCard.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/website/AeSiteAuthPanel.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/website/AeSiteAuthStage.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 1
+    },
+    "src/components/ae/website/AeSiteBrowser.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/website/AeSiteButton.tsx": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 0,
+      "branches": 4
+    },
+    "src/components/ae/website/AeSiteButtonShape.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/website/AeSiteCallout.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 1
+    },
+    "src/components/ae/website/AeSiteCover.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/website/AeSiteEntrance.tsx": {
+      "lines": 7,
+      "statements": 8,
+      "functions": 2,
+      "branches": 5
+    },
+    "src/components/ae/website/AeSiteFaq.tsx": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 2,
+      "branches": 0
+    },
+    "src/components/ae/website/AeSiteFooter.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/website/AeSiteMarks.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 4
+    },
+    "src/components/ae/website/AeSiteNav.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/website/AeSiteResourceList.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 3
+    },
+    "src/components/ae/website/AeSiteSection.tsx": {
+      "lines": 5,
+      "statements": 5,
+      "functions": 0,
+      "branches": 5
+    },
+    "src/components/ae/website/AeSiteSignoff.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/website/AeSiteType.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 10
+    },
+    "src/components/ae/website/clerk-appearance.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/components/ae/website/heading-notation.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/components/ai-elements/code-block.tsx": {
       "lines": 3,
       "statements": 3,
       "functions": 1,
-      "branches": 20
+      "branches": 19
     },
     "src/components/ui/accordion.tsx": {
       "lines": 0,
@@ -1098,6 +1686,12 @@
       "functions": 1,
       "branches": 2
     },
+    "src/components/ui/bubble.tsx": {
+      "lines": 5,
+      "statements": 5,
+      "functions": 4,
+      "branches": 7
+    },
     "src/components/ui/button-variants.ts": {
       "lines": 0,
       "statements": 0,
@@ -1111,9 +1705,9 @@
       "branches": 0
     },
     "src/components/ui/card.tsx": {
-      "lines": 1,
-      "statements": 1,
-      "functions": 1,
+      "lines": 3,
+      "statements": 3,
+      "functions": 3,
       "branches": 0
     },
     "src/components/ui/collapsible.tsx": {
@@ -1128,6 +1722,12 @@
       "functions": 9,
       "branches": 3
     },
+    "src/components/ui/data-state.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
     "src/components/ui/dialog.tsx": {
       "lines": 1,
       "statements": 1,
@@ -1135,9 +1735,9 @@
       "branches": 1
     },
     "src/components/ui/empty.tsx": {
-      "lines": 0,
-      "statements": 0,
-      "functions": 0,
+      "lines": 3,
+      "statements": 3,
+      "functions": 3,
       "branches": 1
     },
     "src/components/ui/field.tsx": {
@@ -1146,11 +1746,17 @@
       "functions": 7,
       "branches": 11
     },
-    "src/components/ui/input-group.tsx": {
+    "src/components/ui/inline-edit-field.tsx": {
       "lines": 5,
-      "statements": 5,
-      "functions": 3,
+      "statements": 7,
+      "functions": 1,
       "branches": 6
+    },
+    "src/components/ui/input-group.tsx": {
+      "lines": 6,
+      "statements": 6,
+      "functions": 4,
+      "branches": 5
     },
     "src/components/ui/input.tsx": {
       "lines": 0,
@@ -1159,9 +1765,9 @@
       "branches": 0
     },
     "src/components/ui/item.tsx": {
-      "lines": 4,
-      "statements": 4,
-      "functions": 4,
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
       "branches": 2
     },
     "src/components/ui/label.tsx": {
@@ -1170,10 +1776,28 @@
       "functions": 0,
       "branches": 0
     },
+    "src/components/ui/marker.tsx": {
+      "lines": 4,
+      "statements": 4,
+      "functions": 3,
+      "branches": 4
+    },
+    "src/components/ui/message-scroller.tsx": {
+      "lines": 6,
+      "statements": 6,
+      "functions": 6,
+      "branches": 10
+    },
+    "src/components/ui/message.tsx": {
+      "lines": 6,
+      "statements": 6,
+      "functions": 6,
+      "branches": 1
+    },
     "src/components/ui/pagination.tsx": {
-      "lines": 7,
-      "statements": 7,
-      "functions": 7,
+      "lines": 4,
+      "statements": 4,
+      "functions": 4,
       "branches": 5
     },
     "src/components/ui/radio-group.tsx": {
@@ -1192,24 +1816,30 @@
       "lines": 0,
       "statements": 0,
       "functions": 0,
-      "branches": 0
-    },
-    "src/components/ui/sheet.tsx": {
-      "lines": 4,
-      "statements": 4,
-      "functions": 4,
       "branches": 1
     },
+    "src/components/ui/sheet.tsx": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 2,
+      "branches": 2
+    },
     "src/components/ui/sidebar.tsx": {
-      "lines": 28,
-      "statements": 30,
-      "functions": 15,
-      "branches": 48
+      "lines": 27,
+      "statements": 29,
+      "functions": 14,
+      "branches": 47
+    },
+    "src/components/ui/site-marker.tsx": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 3
     },
     "src/components/ui/skeleton.tsx": {
-      "lines": 1,
-      "statements": 1,
-      "functions": 1,
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
       "branches": 0
     },
     "src/components/ui/spinner.tsx": {
@@ -1219,9 +1849,9 @@
       "branches": 0
     },
     "src/components/ui/table.tsx": {
-      "lines": 8,
-      "statements": 8,
-      "functions": 8,
+      "lines": 2,
+      "statements": 2,
+      "functions": 2,
       "branches": 0
     },
     "src/components/ui/tabs.tsx": {
@@ -1236,15 +1866,21 @@
       "functions": 0,
       "branches": 0
     },
-    "src/components/ui/toggle-group.tsx": {
+    "src/components/ui/theme-meta.ts": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
-      "branches": 2
+      "branches": 0
+    },
+    "src/components/ui/toggle-group.tsx": {
+      "lines": 6,
+      "statements": 6,
+      "functions": 3,
+      "branches": 9
     },
     "src/components/ui/toggle-variants.ts": {
-      "lines": 0,
-      "statements": 0,
+      "lines": 1,
+      "statements": 1,
       "functions": 0,
       "branches": 0
     },
@@ -1253,6 +1889,12 @@
       "statements": 0,
       "functions": 0,
       "branches": 1
+    },
+    "src/content/brand-assets.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/content/brand-copy.ts": {
       "lines": 0,
@@ -1324,7 +1966,7 @@
       "lines": 0,
       "statements": 0,
       "functions": 0,
-      "branches": 1
+      "branches": 0
     },
     "src/lib/http/search-query.ts": {
       "lines": 1,
@@ -1338,6 +1980,18 @@
       "functions": 0,
       "branches": 4
     },
+    "src/lib/http/toast-error-funnel.ts": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
+      "branches": 0
+    },
+    "src/lib/http/toast-sanitizer.ts": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 0
+    },
     "src/lib/mcp-protocol.ts": {
       "lines": 0,
       "statements": 0,
@@ -1345,8 +1999,8 @@
       "branches": 0
     },
     "src/lib/observability/boot-client-observability.ts": {
-      "lines": 10,
-      "statements": 10,
+      "lines": 12,
+      "statements": 12,
       "functions": 2,
       "branches": 4
     },
@@ -1426,7 +2080,7 @@
       "lines": 6,
       "statements": 6,
       "functions": 0,
-      "branches": 7
+      "branches": 9
     },
     "src/lib/operator/route-options.ts": {
       "lines": 0,
@@ -1434,23 +2088,53 @@
       "functions": 0,
       "branches": 0
     },
-    "src/lib/query-length.ts": {
+    "src/lib/operator/settings-navigation.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 2
+    },
+    "src/lib/public/chat-ia.ts": {
+      "lines": 8,
+      "statements": 9,
+      "functions": 7,
+      "branches": 12
+    },
+    "src/lib/public/operation-icons.ts": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
       "branches": 0
     },
+    "src/lib/public/website-nav.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/lib/query-length.ts": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 0
+    },
     "src/lib/server/agent-access-auth.ts": {
-      "lines": 17,
-      "statements": 20,
-      "functions": 5,
-      "branches": 21
+      "lines": 1,
+      "statements": 2,
+      "functions": 1,
+      "branches": 2
+    },
+    "src/lib/server/agent-access-console.functions.ts": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
+      "branches": 0
     },
     "src/lib/server/agent-access-oauth-api.ts": {
-      "lines": 43,
-      "statements": 101,
-      "functions": 4,
-      "branches": 112
+      "lines": 53,
+      "statements": 100,
+      "functions": 3,
+      "branches": 106
     },
     "src/lib/server/agent-access-oauth-store.ts": {
       "lines": 20,
@@ -1458,17 +2142,41 @@
       "functions": 11,
       "branches": 78
     },
+    "src/lib/server/agent-access-oauth/protocol.ts": {
+      "lines": 5,
+      "statements": 21,
+      "functions": 0,
+      "branches": 24
+    },
+    "src/lib/server/agent-account-api.ts": {
+      "lines": 5,
+      "statements": 6,
+      "functions": 0,
+      "branches": 12
+    },
     "src/lib/server/agent-page-markdown.ts": {
-      "lines": 13,
-      "statements": 14,
+      "lines": 15,
+      "statements": 16,
       "functions": 3,
-      "branches": 18
+      "branches": 22
     },
     "src/lib/server/api-request-boundary.ts": {
       "lines": 0,
       "statements": 2,
       "functions": 0,
       "branches": 5
+    },
+    "src/lib/server/authority-boundary/protected-surface-manifest.ts": {
+      "lines": 6,
+      "statements": 7,
+      "functions": 1,
+      "branches": 14
+    },
+    "src/lib/server/authority-boundary/surface-adapters.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/lib/server/bounded-request-body.ts": {
       "lines": 8,
@@ -1477,9 +2185,9 @@
       "branches": 3
     },
     "src/lib/server/canonical-url.functions.ts": {
-      "lines": 1,
-      "statements": 1,
-      "functions": 1,
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
       "branches": 0
     },
     "src/lib/server/canonical-url.ts": {
@@ -1495,8 +2203,8 @@
       "branches": 1
     },
     "src/lib/server/convex-source.ts": {
-      "lines": 15,
-      "statements": 15,
+      "lines": 14,
+      "statements": 14,
       "functions": 2,
       "branches": 22
     },
@@ -1513,10 +2221,10 @@
       "branches": 0
     },
     "src/lib/server/mcp-api.ts": {
-      "lines": 27,
-      "statements": 34,
+      "lines": 29,
+      "statements": 36,
       "functions": 1,
-      "branches": 101
+      "branches": 105
     },
     "src/lib/server/method-guard.ts": {
       "lines": 0,
@@ -1543,16 +2251,28 @@
       "branches": 0
     },
     "src/lib/server/operation-invoke-api.ts": {
-      "lines": 67,
-      "statements": 72,
-      "functions": 7,
-      "branches": 69
+      "lines": 49,
+      "statements": 55,
+      "functions": 2,
+      "branches": 79
+    },
+    "src/lib/server/owner-status.functions.ts": {
+      "lines": 4,
+      "statements": 5,
+      "functions": 3,
+      "branches": 5
     },
     "src/lib/server/problem.ts": {
       "lines": 0,
       "statements": 1,
       "functions": 0,
       "branches": 1
+    },
+    "src/lib/server/public-business-route.functions.ts": {
+      "lines": 4,
+      "statements": 5,
+      "functions": 1,
+      "branches": 2
     },
     "src/lib/server/rate-limit.ts": {
       "lines": 3,
@@ -1585,16 +2305,16 @@
       "branches": 4
     },
     "src/lib/server/require-operator-session.ts": {
-      "lines": 3,
-      "statements": 3,
-      "functions": 3,
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
       "branches": 0
     },
     "src/lib/server/source-write-admission.ts": {
-      "lines": 8,
-      "statements": 11,
-      "functions": 2,
-      "branches": 13
+      "lines": 7,
+      "statements": 9,
+      "functions": 1,
+      "branches": 9
     },
     "src/lib/server/stripe-checkout-evidence.ts": {
       "lines": 18,
@@ -1615,10 +2335,10 @@
       "branches": 2
     },
     "src/lib/server/stripe-money-provider-config.ts": {
-      "lines": 6,
-      "statements": 10,
+      "lines": 5,
+      "statements": 9,
       "functions": 0,
-      "branches": 13
+      "branches": 11
     },
     "src/lib/server/stripe-money-provider.ts": {
       "lines": 9,
@@ -1627,8 +2347,8 @@
       "branches": 1
     },
     "src/lib/server/stripe-money-webhook.ts": {
-      "lines": 16,
-      "statements": 18,
+      "lines": 15,
+      "statements": 17,
       "functions": 0,
       "branches": 28
     },
@@ -1638,11 +2358,35 @@
       "functions": 2,
       "branches": 44
     },
+    "src/lib/server/supply-action-api.ts": {
+      "lines": 4,
+      "statements": 5,
+      "functions": 0,
+      "branches": 7
+    },
+    "src/lib/server/supply-landing.functions.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
     "src/lib/ui/contract-scans.ts": {
-      "lines": 54,
-      "statements": 56,
+      "lines": 51,
+      "statements": 53,
       "functions": 14,
-      "branches": 60
+      "branches": 56
+    },
+    "src/lib/ui/contract-scans/file-discovery.ts": {
+      "lines": 1,
+      "statements": 3,
+      "functions": 0,
+      "branches": 4
+    },
+    "src/lib/ui/contract-scans/module-boundaries.ts": {
+      "lines": 186,
+      "statements": 244,
+      "functions": 53,
+      "branches": 163
     },
     "src/lib/ui/copy-text-to-clipboard.ts": {
       "lines": 1,
@@ -1669,8 +2413,8 @@
       "branches": 1
     },
     "src/lib/ui/toast.ts": {
-      "lines": 7,
-      "statements": 7,
+      "lines": 6,
+      "statements": 6,
       "functions": 5,
       "branches": 2
     },
@@ -1685,12 +2429,6 @@
       "statements": 0,
       "functions": 0,
       "branches": 0
-    },
-    "src/modules/action-invocation/application-service.ts": {
-      "lines": 26,
-      "statements": 29,
-      "functions": 0,
-      "branches": 31
     },
     "src/modules/action-invocation/attempt-execution.ts": {
       "lines": 0,
@@ -1711,70 +2449,16 @@
       "branches": 75
     },
     "src/modules/action-invocation/contracts.ts": {
-      "lines": 0,
-      "statements": 2,
-      "functions": 0,
-      "branches": 2
-    },
-    "src/modules/action-invocation/development-host-read.ts": {
       "lines": 4,
-      "statements": 4,
+      "statements": 6,
       "functions": 0,
-      "branches": 12
-    },
-    "src/modules/action-invocation/durable.ts": {
-      "lines": 37,
-      "statements": 50,
-      "functions": 2,
-      "branches": 45
-    },
-    "src/modules/action-invocation/dynamic-published-adapter-commands.ts": {
-      "lines": 10,
-      "statements": 15,
-      "functions": 0,
-      "branches": 24
-    },
-    "src/modules/action-invocation/dynamic-published-adapter-snapshot.ts": {
-      "lines": 1,
-      "statements": 1,
-      "functions": 1,
       "branches": 4
     },
-    "src/modules/action-invocation/dynamic-published-adapter-transact.ts": {
-      "lines": 15,
-      "statements": 23,
-      "functions": 0,
-      "branches": 35
-    },
-    "src/modules/action-invocation/dynamic-published-adapter.ts": {
-      "lines": 5,
-      "statements": 11,
-      "functions": 0,
-      "branches": 12
-    },
-    "src/modules/action-invocation/dynamic-published-contract.ts": {
-      "lines": 1,
-      "statements": 1,
-      "functions": 0,
-      "branches": 16
-    },
-    "src/modules/action-invocation/dynamic-published-execution.ts": {
-      "lines": 39,
-      "statements": 43,
-      "functions": 3,
-      "branches": 74
-    },
-    "src/modules/action-invocation/dynamic-published-snapshot-verifier.ts": {
-      "lines": 5,
-      "statements": 19,
-      "functions": 2,
-      "branches": 25
-    },
-    "src/modules/action-invocation/dynamic-published-source.ts": {
-      "lines": 6,
-      "statements": 9,
-      "functions": 1,
-      "branches": 5
+    "src/modules/action-invocation/durable.ts": {
+      "lines": 42,
+      "statements": 55,
+      "functions": 4,
+      "branches": 47
     },
     "src/modules/action-invocation/exposure-offset-rules.ts": {
       "lines": 0,
@@ -1788,12 +2472,6 @@
       "functions": 1,
       "branches": 6
     },
-    "src/modules/action-invocation/host-projection.ts": {
-      "lines": 5,
-      "statements": 5,
-      "functions": 0,
-      "branches": 10
-    },
     "src/modules/action-invocation/in-memory-record-store.ts": {
       "lines": 2,
       "statements": 4,
@@ -1801,28 +2479,16 @@
       "branches": 3
     },
     "src/modules/action-invocation/in-memory.ts": {
-      "lines": 21,
-      "statements": 26,
-      "functions": 0,
-      "branches": 34
+      "lines": 30,
+      "statements": 35,
+      "functions": 2,
+      "branches": 47
     },
     "src/modules/action-invocation/index.ts": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
       "branches": 0
-    },
-    "src/modules/action-invocation/input-application.ts": {
-      "lines": 8,
-      "statements": 12,
-      "functions": 1,
-      "branches": 11
-    },
-    "src/modules/action-invocation/input-work.ts": {
-      "lines": 2,
-      "statements": 2,
-      "functions": 0,
-      "branches": 2
     },
     "src/modules/action-invocation/internal/convex-schema.ts": {
       "lines": 0,
@@ -1837,10 +2503,10 @@
       "branches": 7
     },
     "src/modules/action-invocation/internal/durable-contracts.ts": {
-      "lines": 8,
-      "statements": 10,
-      "functions": 0,
-      "branches": 46
+      "lines": 23,
+      "statements": 26,
+      "functions": 2,
+      "branches": 61
     },
     "src/modules/action-invocation/internal/x402-convex-values.ts": {
       "lines": 0,
@@ -1858,7 +2524,7 @@
       "lines": 11,
       "statements": 15,
       "functions": 2,
-      "branches": 23
+      "branches": 22
     },
     "src/modules/action-invocation/preparation.ts": {
       "lines": 0,
@@ -1915,10 +2581,16 @@
       "branches": 0
     },
     "src/modules/action-invocation/x402-payment-reconciliation-evidence.ts": {
+      "lines": 23,
+      "statements": 24,
+      "functions": 5,
+      "branches": 50
+    },
+    "src/modules/actions/contract.ts": {
       "lines": 0,
-      "statements": 1,
+      "statements": 0,
       "functions": 0,
-      "branches": 2
+      "branches": 0
     },
     "src/modules/actions/index.ts": {
       "lines": 1,
@@ -1938,21 +2610,27 @@
       "functions": 0,
       "branches": 10
     },
+    "src/modules/agent-access/account.actions.ts": {
+      "lines": 7,
+      "statements": 12,
+      "functions": 1,
+      "branches": 17
+    },
     "src/modules/agent-access/agent-access-console.ts": {
-      "lines": 9,
-      "statements": 11,
-      "functions": 4,
-      "branches": 12
+      "lines": 8,
+      "statements": 9,
+      "functions": 2,
+      "branches": 11
     },
     "src/modules/agent-access/agent-access.functions.ts": {
-      "lines": 33,
-      "statements": 37,
-      "functions": 11,
-      "branches": 58
+      "lines": 39,
+      "statements": 43,
+      "functions": 12,
+      "branches": 60
     },
     "src/modules/agent-access/agent-access.ts": {
       "lines": 8,
-      "statements": 16,
+      "statements": 18,
       "functions": 0,
       "branches": 26
     },
@@ -1980,11 +2658,17 @@
       "functions": 0,
       "branches": 0
     },
-    "src/modules/agent-access/oauth-state.ts": {
-      "lines": 9,
-      "statements": 45,
+    "src/modules/agent-access/issued-agent-binding.ts": {
+      "lines": 0,
+      "statements": 0,
       "functions": 0,
-      "branches": 48
+      "branches": 0
+    },
+    "src/modules/agent-access/oauth-state.ts": {
+      "lines": 4,
+      "statements": 39,
+      "functions": 0,
+      "branches": 43
     },
     "src/modules/agent-access/policy.functions.ts": {
       "lines": 16,
@@ -2012,9 +2696,75 @@
     },
     "src/modules/agent-access/service-auth-envelope.ts": {
       "lines": 0,
-      "statements": 2,
+      "statements": 1,
       "functions": 0,
-      "branches": 2
+      "branches": 1
+    },
+    "src/modules/authority/context/consequence-authority.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/authority/delegation/contracts.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/authority/delegation/delegation.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/authority/delegation/persistence.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/authority/internal/convex-schema.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/authority/recovery/convex-schema.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/authority/recovery/isolation.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/authority/recovery/production-evidence.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/authority/recovery/production-support.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/authority/recovery/recovery.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/authority/recovery/secret-canary.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/modules/business/internal/published-phone.ts": {
       "lines": 8,
@@ -2076,17 +2826,35 @@
       "functions": 8,
       "branches": 101
     },
+    "src/modules/capability-execution/current-operation-commitment.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
     "src/modules/capability-execution/internal/convex-schema.ts": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
       "branches": 0
     },
+    "src/modules/capability-execution/invocation-material.ts": {
+      "lines": 7,
+      "statements": 7,
+      "functions": 5,
+      "branches": 17
+    },
     "src/modules/capability-execution/invocation-receipt-view.ts": {
       "lines": 7,
-      "statements": 28,
+      "statements": 27,
       "functions": 2,
-      "branches": 47
+      "branches": 46
+    },
+    "src/modules/capability-execution/invocation-runtime.ts": {
+      "lines": 1,
+      "statements": 2,
+      "functions": 2,
+      "branches": 0
     },
     "src/modules/capability-execution/invocation-worker/brokeredX402.ts": {
       "lines": 0,
@@ -2095,22 +2863,76 @@
       "branches": 31
     },
     "src/modules/capability-execution/invocation-worker/charge.ts": {
-      "lines": 15,
-      "statements": 25,
+      "lines": 14,
+      "statements": 24,
       "functions": 1,
-      "branches": 28
+      "branches": 27
+    },
+    "src/modules/capability-execution/invocation-worker/jitProviderConsequence.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/modules/capability-execution/invocation-worker/lease.ts": {
-      "lines": 16,
-      "statements": 16,
-      "functions": 1,
-      "branches": 33
+      "lines": 21,
+      "statements": 21,
+      "functions": 2,
+      "branches": 50
     },
-    "src/modules/capability-execution/invocation-worker/recover.ts": {
-      "lines": 79,
-      "statements": 96,
-      "functions": 12,
-      "branches": 126
+    "src/modules/capability-execution/invocation-worker/providerConsequenceBridge.ts": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 1
+    },
+    "src/modules/capability-execution/invocation-worker/recovery/cancellation.ts": {
+      "lines": 12,
+      "statements": 19,
+      "functions": 1,
+      "branches": 12
+    },
+    "src/modules/capability-execution/invocation-worker/recovery/contracts.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/capability-execution/invocation-worker/recovery/expiry.ts": {
+      "lines": 6,
+      "statements": 8,
+      "functions": 0,
+      "branches": 9
+    },
+    "src/modules/capability-execution/invocation-worker/recovery/index.ts": {
+      "lines": 6,
+      "statements": 6,
+      "functions": 0,
+      "branches": 4
+    },
+    "src/modules/capability-execution/invocation-worker/recovery/loading.ts": {
+      "lines": 11,
+      "statements": 24,
+      "functions": 10,
+      "branches": 43
+    },
+    "src/modules/capability-execution/invocation-worker/recovery/reconciliation.ts": {
+      "lines": 29,
+      "statements": 33,
+      "functions": 4,
+      "branches": 35
+    },
+    "src/modules/capability-execution/invocation-worker/recovery/status.ts": {
+      "lines": 0,
+      "statements": 2,
+      "functions": 0,
+      "branches": 2
+    },
+    "src/modules/capability-execution/invocation-worker/recovery/x402.ts": {
+      "lines": 20,
+      "statements": 27,
+      "functions": 5,
+      "branches": 39
     },
     "src/modules/capability-execution/invocation-worker/runPreparation.ts": {
       "lines": 20,
@@ -2119,16 +2941,16 @@
       "branches": 37
     },
     "src/modules/capability-execution/invocation-worker/runRelease.ts": {
-      "lines": 52,
-      "statements": 63,
-      "functions": 4,
+      "lines": 51,
+      "statements": 62,
+      "functions": 5,
       "branches": 38
     },
     "src/modules/capability-execution/invocation-worker/x402Authorization.ts": {
-      "lines": 29,
-      "statements": 47,
+      "lines": 38,
+      "statements": 56,
       "functions": 3,
-      "branches": 62
+      "branches": 89
     },
     "src/modules/capability-execution/invocation-worker/x402Route.ts": {
       "lines": 2,
@@ -2148,11 +2970,17 @@
       "functions": 3,
       "branches": 0
     },
+    "src/modules/capability-execution/operation-history.actions.ts": {
+      "lines": 0,
+      "statements": 2,
+      "functions": 0,
+      "branches": 3
+    },
     "src/modules/capability-execution/operation-invoke-admit.ts": {
       "lines": 8,
       "statements": 8,
       "functions": 0,
-      "branches": 8
+      "branches": 9
     },
     "src/modules/capability-execution/operation-invoke-contracts.ts": {
       "lines": 0,
@@ -2179,10 +3007,10 @@
       "branches": 3
     },
     "src/modules/capability-execution/operation-invoke.ts": {
-      "lines": 71,
-      "statements": 76,
-      "functions": 5,
-      "branches": 104
+      "lines": 4,
+      "statements": 7,
+      "functions": 0,
+      "branches": 10
     },
     "src/modules/capability-execution/operation-recovery-contracts.ts": {
       "lines": 0,
@@ -2201,6 +3029,12 @@
       "statements": 23,
       "functions": 8,
       "branches": 10
+    },
+    "src/modules/capability-supply/current-operation.ts": {
+      "lines": 3,
+      "statements": 3,
+      "functions": 0,
+      "branches": 3
     },
     "src/modules/capability-supply/internal/admit-provider-schema.ts": {
       "lines": 13,
@@ -2266,7 +3100,7 @@
       "lines": 4,
       "statements": 7,
       "functions": 0,
-      "branches": 12
+      "branches": 13
     },
     "src/modules/capability-supply/internal/eligibility/projection.ts": {
       "lines": 0,
@@ -2299,10 +3133,10 @@
       "branches": 8
     },
     "src/modules/capability-supply/internal/facilitator-discovery-ingest.ts": {
-      "lines": 18,
-      "statements": 32,
-      "functions": 1,
-      "branches": 63
+      "lines": 24,
+      "statements": 39,
+      "functions": 2,
+      "branches": 70
     },
     "src/modules/capability-supply/internal/graph/probe-digest.ts": {
       "lines": 0,
@@ -2311,10 +3145,10 @@
       "branches": 2
     },
     "src/modules/capability-supply/internal/graph/qualify-candidate.ts": {
-      "lines": 4,
-      "statements": 5,
+      "lines": 2,
+      "statements": 3,
       "functions": 0,
-      "branches": 7
+      "branches": 5
     },
     "src/modules/capability-supply/internal/graph/quality-gate.ts": {
       "lines": 0,
@@ -2364,17 +3198,53 @@
       "functions": 0,
       "branches": 2
     },
-    "src/modules/capability-supply/internal/operation-detail-compare.ts": {
-      "lines": 5,
-      "statements": 5,
+    "src/modules/capability-supply/internal/openapi-import/credentials.ts": {
+      "lines": 0,
+      "statements": 9,
+      "functions": 1,
+      "branches": 12
+    },
+    "src/modules/capability-supply/internal/openapi-import/document.ts": {
+      "lines": 11,
+      "statements": 16,
+      "functions": 2,
+      "branches": 20
+    },
+    "src/modules/capability-supply/internal/openapi-import/import.ts": {
+      "lines": 1,
+      "statements": 7,
       "functions": 0,
-      "branches": 11
+      "branches": 10
+    },
+    "src/modules/capability-supply/internal/openapi-import/operation.ts": {
+      "lines": 1,
+      "statements": 7,
+      "functions": 0,
+      "branches": 10
+    },
+    "src/modules/capability-supply/internal/openapi-import/parameters.ts": {
+      "lines": 9,
+      "statements": 23,
+      "functions": 0,
+      "branches": 26
+    },
+    "src/modules/capability-supply/internal/openapi-import/preflight.ts": {
+      "lines": 4,
+      "statements": 12,
+      "functions": 0,
+      "branches": 19
+    },
+    "src/modules/capability-supply/internal/operation-detail-compare.ts": {
+      "lines": 3,
+      "statements": 3,
+      "functions": 0,
+      "branches": 8
     },
     "src/modules/capability-supply/internal/operation-inspect-plan.ts": {
-      "lines": 38,
-      "statements": 46,
-      "functions": 5,
-      "branches": 54
+      "lines": 30,
+      "statements": 36,
+      "functions": 3,
+      "branches": 48
     },
     "src/modules/capability-supply/internal/operation-ledger/commands.ts": {
       "lines": 8,
@@ -2395,10 +3265,10 @@
       "branches": 11
     },
     "src/modules/capability-supply/internal/operation-project.ts": {
-      "lines": 20,
-      "statements": 24,
-      "functions": 2,
-      "branches": 43
+      "lines": 13,
+      "statements": 17,
+      "functions": 4,
+      "branches": 26
     },
     "src/modules/capability-supply/internal/operation-projection-types.ts": {
       "lines": 0,
@@ -2407,10 +3277,10 @@
       "branches": 0
     },
     "src/modules/capability-supply/internal/operation-projection-wire-deserialize.ts": {
-      "lines": 4,
-      "statements": 4,
-      "functions": 1,
-      "branches": 7
+      "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 3
     },
     "src/modules/capability-supply/internal/operation-projection-wire-schema.ts": {
       "lines": 11,
@@ -2419,28 +3289,28 @@
       "branches": 13
     },
     "src/modules/capability-supply/internal/operation-projection-wire-serialize.ts": {
-      "lines": 26,
-      "statements": 28,
-      "functions": 4,
-      "branches": 89
+      "lines": 15,
+      "statements": 17,
+      "functions": 1,
+      "branches": 59
     },
     "src/modules/capability-supply/internal/operation-search.ts": {
-      "lines": 21,
-      "statements": 25,
-      "functions": 5,
-      "branches": 44
+      "lines": 22,
+      "statements": 37,
+      "functions": 7,
+      "branches": 66
     },
     "src/modules/capability-supply/internal/provider-connection/command-model.ts": {
-      "lines": 14,
-      "statements": 49,
+      "lines": 13,
+      "statements": 44,
       "functions": 0,
-      "branches": 73
+      "branches": 67
     },
     "src/modules/capability-supply/internal/provider-connection/lease.ts": {
-      "lines": 54,
-      "statements": 108,
-      "functions": 3,
-      "branches": 111
+      "lines": 25,
+      "statements": 77,
+      "functions": 0,
+      "branches": 87
     },
     "src/modules/capability-supply/internal/provider-connection/owner-projection.ts": {
       "lines": 0,
@@ -2449,10 +3319,10 @@
       "branches": 2
     },
     "src/modules/capability-supply/internal/provider-connection/shared.ts": {
-      "lines": 3,
-      "statements": 24,
+      "lines": 0,
+      "statements": 0,
       "functions": 0,
-      "branches": 26
+      "branches": 0
     },
     "src/modules/capability-supply/internal/provider-connection/types.ts": {
       "lines": 0,
@@ -2471,12 +3341,6 @@
       "statements": 5,
       "functions": 0,
       "branches": 5
-    },
-    "src/modules/capability-supply/internal/publication-importer-openapi.ts": {
-      "lines": 53,
-      "statements": 66,
-      "functions": 5,
-      "branches": 99
     },
     "src/modules/capability-supply/internal/publication-importer-types.ts": {
       "lines": 18,
@@ -2515,10 +3379,10 @@
       "branches": 17
     },
     "src/modules/capability-supply/internal/publication/lifecycle.ts": {
-      "lines": 1,
-      "statements": 1,
+      "lines": 0,
+      "statements": 0,
       "functions": 0,
-      "branches": 3
+      "branches": 0
     },
     "src/modules/capability-supply/internal/publication/provenance.ts": {
       "lines": 0,
@@ -2527,10 +3391,10 @@
       "branches": 0
     },
     "src/modules/capability-supply/internal/publication/publish.ts": {
-      "lines": 24,
-      "statements": 36,
-      "functions": 0,
-      "branches": 69
+      "lines": 33,
+      "statements": 40,
+      "functions": 2,
+      "branches": 45
     },
     "src/modules/capability-supply/internal/publication/refresh.ts": {
       "lines": 13,
@@ -2575,10 +3439,10 @@
       "branches": 0
     },
     "src/modules/capability-supply/internal/readiness-probe-http.ts": {
-      "lines": 22,
-      "statements": 22,
-      "functions": 5,
-      "branches": 32
+      "lines": 18,
+      "statements": 18,
+      "functions": 4,
+      "branches": 31
     },
     "src/modules/capability-supply/internal/readiness-probe-mcp.ts": {
       "lines": 26,
@@ -2600,9 +3464,9 @@
     },
     "src/modules/capability-supply/internal/readiness-probe.ts": {
       "lines": 5,
-      "statements": 6,
+      "statements": 5,
       "functions": 0,
-      "branches": 3
+      "branches": 2
     },
     "src/modules/capability-supply/internal/route-call-signing.ts": {
       "lines": 0,
@@ -2617,16 +3481,16 @@
       "branches": 9
     },
     "src/modules/capability-supply/internal/route-transport-http-json.ts": {
-      "lines": 44,
-      "statements": 46,
+      "lines": 43,
+      "statements": 45,
       "functions": 4,
-      "branches": 74
+      "branches": 73
     },
     "src/modules/capability-supply/internal/route-transport-invoke.ts": {
-      "lines": 10,
-      "statements": 10,
-      "functions": 0,
-      "branches": 15
+      "lines": 12,
+      "statements": 12,
+      "functions": 1,
+      "branches": 20
     },
     "src/modules/capability-supply/internal/route-transport-mcp.ts": {
       "lines": 31,
@@ -2635,22 +3499,22 @@
       "branches": 52
     },
     "src/modules/capability-supply/internal/route-transport-observation.ts": {
-      "lines": 10,
-      "statements": 12,
-      "functions": 3,
+      "lines": 4,
+      "statements": 6,
+      "functions": 0,
       "branches": 6
     },
     "src/modules/capability-supply/internal/route-transport-x402-payment.ts": {
-      "lines": 21,
-      "statements": 24,
+      "lines": 24,
+      "statements": 27,
       "functions": 2,
-      "branches": 24
+      "branches": 28
     },
     "src/modules/capability-supply/internal/route-transport-x402.ts": {
-      "lines": 23,
-      "statements": 23,
+      "lines": 19,
+      "statements": 19,
       "functions": 0,
-      "branches": 37
+      "branches": 35
     },
     "src/modules/capability-supply/internal/schema-deref-shared.ts": {
       "lines": 4,
@@ -2695,10 +3559,10 @@
       "branches": 0
     },
     "src/modules/capability-supply/internal/supply-funnel/landing.ts": {
-      "lines": 7,
-      "statements": 7,
-      "functions": 3,
-      "branches": 6
+      "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 2
     },
     "src/modules/capability-supply/internal/supply-funnel/pricing-port.ts": {
       "lines": 3,
@@ -2725,14 +3589,14 @@
       "branches": 6
     },
     "src/modules/capability-supply/internal/transport-adapters.ts": {
-      "lines": 31,
-      "statements": 38,
+      "lines": 36,
+      "statements": 43,
       "functions": 10,
       "branches": 60
     },
     "src/modules/capability-supply/internal/x402-evm-receipt-reader.ts": {
-      "lines": 23,
-      "statements": 27,
+      "lines": 24,
+      "statements": 28,
       "functions": 4,
       "branches": 31
     },
@@ -2751,7 +3615,7 @@
     "src/modules/capability-supply/internal/x402-payment-signer.ts": {
       "lines": 16,
       "statements": 19,
-      "functions": 1,
+      "functions": 2,
       "branches": 21
     },
     "src/modules/capability-supply/internal/x402-settlement-verifier.ts": {
@@ -2785,10 +3649,10 @@
       "branches": 35
     },
     "src/modules/capability-supply/public.ts": {
-      "lines": 12,
-      "statements": 15,
-      "functions": 4,
-      "branches": 37
+      "lines": 13,
+      "statements": 16,
+      "functions": 5,
+      "branches": 40
     },
     "src/modules/capability-supply/published-operation.ts": {
       "lines": 6,
@@ -2809,10 +3673,10 @@
       "branches": 1
     },
     "src/modules/capability-supply/supply-actions.ts": {
-      "lines": 1,
-      "statements": 23,
-      "functions": 1,
-      "branches": 35
+      "lines": 30,
+      "statements": 75,
+      "functions": 11,
+      "branches": 107
     },
     "src/modules/capability-supply/supply-funnel.functions.ts": {
       "lines": 13,
@@ -2840,21 +3704,21 @@
     },
     "src/modules/catalog/internal/offering-source.ts": {
       "lines": 7,
-      "statements": 37,
-      "functions": 8,
-      "branches": 46
+      "statements": 35,
+      "functions": 6,
+      "branches": 43
     },
     "src/modules/catalog/internal/offering-supply.ts": {
       "lines": 6,
       "statements": 10,
       "functions": 2,
-      "branches": 24
+      "branches": 23
     },
     "src/modules/catalog/internal/owner-status.ts": {
-      "lines": 1,
-      "statements": 2,
+      "lines": 0,
+      "statements": 1,
       "functions": 0,
-      "branches": 2
+      "branches": 1
     },
     "src/modules/catalog/internal/publish-reconcile.ts": {
       "lines": 13,
@@ -2868,23 +3732,29 @@
       "functions": 0,
       "branches": 0
     },
-    "src/modules/catalog/owner-status.functions.ts": {
-      "lines": 8,
-      "statements": 9,
-      "functions": 5,
-      "branches": 6
-    },
-    "src/modules/catalog/public-route.functions.ts": {
-      "lines": 12,
-      "statements": 13,
-      "functions": 2,
-      "branches": 4
-    },
     "src/modules/catalog/public.ts": {
       "lines": 0,
-      "statements": 1,
+      "statements": 0,
       "functions": 0,
-      "branches": 1
+      "branches": 0
+    },
+    "src/modules/chat-sharing/convex.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/chat-sharing/internal/convex-schema.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/chat-sharing/share-token.ts": {
+      "lines": 3,
+      "statements": 3,
+      "functions": 0,
+      "branches": 2
     },
     "src/modules/chat/internal/convex-schema.ts": {
       "lines": 0,
@@ -2892,11 +3762,11 @@
       "functions": 0,
       "branches": 0
     },
-    "src/modules/chat/share-token.ts": {
-      "lines": 3,
-      "statements": 3,
-      "functions": 0,
-      "branches": 3
+    "src/modules/chat/tool-card.ts": {
+      "lines": 54,
+      "statements": 99,
+      "functions": 4,
+      "branches": 153
     },
     "src/modules/common/action.ts": {
       "lines": 0,
@@ -2911,14 +3781,14 @@
       "branches": 2
     },
     "src/modules/common/base64-codec.ts": {
-      "lines": 1,
-      "statements": 2,
+      "lines": 0,
+      "statements": 1,
       "functions": 0,
       "branches": 1
     },
     "src/modules/common/bounded-json.ts": {
-      "lines": 1,
-      "statements": 1,
+      "lines": 0,
+      "statements": 0,
       "functions": 0,
       "branches": 1
     },
@@ -3030,6 +3900,18 @@
       "functions": 0,
       "branches": 0
     },
+    "src/modules/connections/internal/convex-schema.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/connections/lifecycle/lifecycle.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
     "src/modules/dev/internal/dev-seed-business-fixtures.ts": {
       "lines": 0,
       "statements": 0,
@@ -3037,10 +3919,10 @@
       "branches": 0
     },
     "src/modules/dev/internal/dev-seed-fixture.ts": {
-      "lines": 24,
-      "statements": 28,
-      "functions": 5,
-      "branches": 23
+      "lines": 6,
+      "statements": 9,
+      "functions": 1,
+      "branches": 13
     },
     "src/modules/discovery/developer-discovery-route.ts": {
       "lines": 0,
@@ -3049,22 +3931,28 @@
       "branches": 0
     },
     "src/modules/discovery/discovery.functions.ts": {
-      "lines": 14,
-      "statements": 14,
+      "lines": 8,
+      "statements": 8,
       "functions": 3,
-      "branches": 5
+      "branches": 4
     },
     "src/modules/discovery/internal/agent-skill.ts": {
       "lines": 0,
       "statements": 2,
       "functions": 0,
-      "branches": 6
+      "branches": 5
+    },
+    "src/modules/discovery/internal/api-catalog.ts": {
+      "lines": 0,
+      "statements": 3,
+      "functions": 0,
+      "branches": 3
     },
     "src/modules/discovery/internal/developer-discovery-route-projection.ts": {
       "lines": 34,
       "statements": 35,
       "functions": 7,
-      "branches": 61
+      "branches": 63
     },
     "src/modules/discovery/internal/developer-discovery-support-matrix.ts": {
       "lines": 6,
@@ -3122,15 +4010,21 @@
     },
     "src/modules/discovery/internal/site-manifest.ts": {
       "lines": 1,
-      "statements": 7,
+      "statements": 3,
       "functions": 0,
-      "branches": 13
+      "branches": 7
     },
     "src/modules/market/agentic-market-source.ts": {
       "lines": 2,
       "statements": 4,
       "functions": 0,
       "branches": 13
+    },
+    "src/modules/market/allocation-evidence.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/modules/market/contracts.ts": {
       "lines": 0,
@@ -3142,7 +4036,7 @@
       "lines": 6,
       "statements": 6,
       "functions": 1,
-      "branches": 7
+      "branches": 6
     },
     "src/modules/market/internal/convex-schema.ts": {
       "lines": 0,
@@ -3154,49 +4048,61 @@
       "lines": 4,
       "statements": 6,
       "functions": 0,
-      "branches": 11
+      "branches": 12
     },
     "src/modules/market/market.functions.ts": {
-      "lines": 2,
-      "statements": 2,
-      "functions": 2,
-      "branches": 6
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
+      "branches": 3
     },
     "src/modules/market/operation-view-model.ts": {
-      "lines": 29,
-      "statements": 35,
-      "functions": 10,
-      "branches": 45
+      "lines": 35,
+      "statements": 46,
+      "functions": 7,
+      "branches": 76
     },
     "src/modules/market/registry-graduation.ts": {
-      "lines": 7,
-      "statements": 10,
+      "lines": 6,
+      "statements": 9,
       "functions": 0,
-      "branches": 8
+      "branches": 6
+    },
+    "src/modules/market/registry-launch-cohort.ts": {
+      "lines": 4,
+      "statements": 8,
+      "functions": 0,
+      "branches": 19
     },
     "src/modules/market/registry-source-adapters.ts": {
-      "lines": 42,
-      "statements": 63,
+      "lines": 40,
+      "statements": 61,
       "functions": 8,
-      "branches": 113
+      "branches": 110
     },
     "src/modules/market/registry-source-contracts.ts": {
       "lines": 0,
       "statements": 0,
       "functions": 0,
-      "branches": 2
+      "branches": 1
     },
     "src/modules/market/server.ts": {
-      "lines": 51,
-      "statements": 53,
+      "lines": 53,
+      "statements": 55,
       "functions": 12,
-      "branches": 33
+      "branches": 35
     },
     "src/modules/model-gateway/public.ts": {
       "lines": 6,
       "statements": 6,
       "functions": 1,
       "branches": 18
+    },
+    "src/modules/module-boundaries.ts": {
+      "lines": 1,
+      "statements": 1,
+      "functions": 0,
+      "branches": 0
     },
     "src/modules/money/internal/account-ref.ts": {
       "lines": 0,
@@ -3208,7 +4114,7 @@
       "lines": 0,
       "statements": 2,
       "functions": 0,
-      "branches": 2
+      "branches": 7
     },
     "src/modules/money/internal/convex-schema.ts": {
       "lines": 0,
@@ -3223,10 +4129,10 @@
       "branches": 10
     },
     "src/modules/money/internal/credit-topup-http.ts": {
-      "lines": 26,
-      "statements": 34,
-      "functions": 6,
-      "branches": 82
+      "lines": 19,
+      "statements": 27,
+      "functions": 5,
+      "branches": 56
     },
     "src/modules/money/internal/delivery.ts": {
       "lines": 0,
@@ -3236,9 +4142,9 @@
     },
     "src/modules/money/internal/exact-amount.ts": {
       "lines": 4,
-      "statements": 13,
+      "statements": 14,
       "functions": 0,
-      "branches": 14
+      "branches": 15
     },
     "src/modules/money/internal/external-spend.ts": {
       "lines": 8,
@@ -3246,11 +4152,41 @@
       "functions": 0,
       "branches": 15
     },
-    "src/modules/money/internal/ledger.ts": {
-      "lines": 27,
-      "statements": 61,
+    "src/modules/money/internal/ledger/charge.ts": {
+      "lines": 7,
+      "statements": 18,
       "functions": 1,
-      "branches": 77
+      "branches": 23
+    },
+    "src/modules/money/internal/ledger/outcome.ts": {
+      "lines": 8,
+      "statements": 11,
+      "functions": 2,
+      "branches": 9
+    },
+    "src/modules/money/internal/ledger/payout.ts": {
+      "lines": 0,
+      "statements": 3,
+      "functions": 0,
+      "branches": 4
+    },
+    "src/modules/money/internal/ledger/refund.ts": {
+      "lines": 0,
+      "statements": 5,
+      "functions": 0,
+      "branches": 8
+    },
+    "src/modules/money/internal/ledger/shared.ts": {
+      "lines": 2,
+      "statements": 11,
+      "functions": 0,
+      "branches": 24
+    },
+    "src/modules/money/internal/ledger/topup.ts": {
+      "lines": 2,
+      "statements": 7,
+      "functions": 0,
+      "branches": 8
     },
     "src/modules/money/internal/payment-binding.ts": {
       "lines": 1,
@@ -3270,11 +4206,29 @@
       "functions": 1,
       "branches": 14
     },
-    "src/modules/money/internal/payout-policy.ts": {
-      "lines": 12,
-      "statements": 22,
+    "src/modules/money/internal/payout-policy/account-transition.ts": {
+      "lines": 0,
+      "statements": 3,
+      "functions": 1,
+      "branches": 4
+    },
+    "src/modules/money/internal/payout-policy/contracts.ts": {
+      "lines": 0,
+      "statements": 0,
       "functions": 0,
-      "branches": 37
+      "branches": 0
+    },
+    "src/modules/money/internal/payout-policy/payout-transition.ts": {
+      "lines": 1,
+      "statements": 18,
+      "functions": 0,
+      "branches": 28
+    },
+    "src/modules/money/internal/payout-policy/review-window.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/modules/money/internal/payout-transfer-command.ts": {
       "lines": 1,
@@ -3300,6 +4254,12 @@
       "functions": 0,
       "branches": 0
     },
+    "src/modules/money/internal/promotions.ts": {
+      "lines": 0,
+      "statements": 1,
+      "functions": 0,
+      "branches": 1
+    },
     "src/modules/money/internal/query-projections.ts": {
       "lines": 17,
       "statements": 26,
@@ -3308,9 +4268,9 @@
     },
     "src/modules/money/internal/stripe-webhook.ts": {
       "lines": 2,
-      "statements": 3,
+      "statements": 2,
       "functions": 0,
-      "branches": 8
+      "branches": 2
     },
     "src/modules/money/internal/topup.ts": {
       "lines": 26,
@@ -3325,14 +4285,14 @@
       "branches": 0
     },
     "src/modules/money/server.ts": {
-      "lines": 20,
-      "statements": 23,
-      "functions": 3,
-      "branches": 42
+      "lines": 1,
+      "statements": 4,
+      "functions": 0,
+      "branches": 22
     },
     "src/modules/network-guard/public.ts": {
-      "lines": 47,
-      "statements": 49,
+      "lines": 48,
+      "statements": 50,
       "functions": 8,
       "branches": 42
     },
@@ -3343,16 +4303,16 @@
       "branches": 8
     },
     "src/modules/observability/funnel.functions.ts": {
-      "lines": 6,
-      "statements": 6,
-      "functions": 2,
+      "lines": 1,
+      "statements": 1,
+      "functions": 1,
       "branches": 0
     },
     "src/modules/observability/internal/literals.ts": {
-      "lines": 0,
-      "statements": 0,
+      "lines": 1,
+      "statements": 1,
       "functions": 0,
-      "branches": 0
+      "branches": 1
     },
     "src/modules/observability/internal/operation-keys.ts": {
       "lines": 0,
@@ -3385,22 +4345,88 @@
       "branches": 0
     },
     "src/modules/observability/public.ts": {
-      "lines": 6,
-      "statements": 6,
+      "lines": 0,
+      "statements": 0,
       "functions": 0,
-      "branches": 6
+      "branches": 0
+    },
+    "src/modules/principal-account/account/convex-schema.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/principal-account/account/registry.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/principal-account/account/registry/contracts.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/principal-account/account/registry/validation.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/principal-account/external-identity/convex-schema.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/principal-account/external-identity/registry.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/principal-account/principal/convex-schema.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/principal-account/principal/registry.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/principal-account/public.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/principal-account/workload-context/workload-context.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/modules/registry/internal/offering-api-projection.ts": {
       "lines": 7,
-      "statements": 10,
+      "statements": 11,
       "functions": 1,
-      "branches": 27
+      "branches": 28
     },
     "src/modules/registry/internal/projection-attempts.ts": {
       "lines": 15,
       "statements": 15,
       "functions": 3,
       "branches": 41
+    },
+    "src/modules/registry/internal/registry-action-contracts.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
     },
     "src/modules/registry/internal/schema-values.ts": {
       "lines": 0,
@@ -3440,14 +4466,14 @@
     },
     "src/modules/registry/operation-choice-contracts.ts": {
       "lines": 0,
-      "statements": 1,
-      "functions": 1,
-      "branches": 3
+      "statements": 0,
+      "functions": 0,
+      "branches": 1
     },
     "src/modules/registry/operation-detail-route.functions.ts": {
-      "lines": 6,
-      "statements": 6,
-      "functions": 2,
+      "lines": 2,
+      "statements": 2,
+      "functions": 1,
       "branches": 0
     },
     "src/modules/registry/operation-entry.ts": {
@@ -3486,11 +4512,53 @@
       "functions": 3,
       "branches": 3
     },
+    "src/modules/secrets/infisical-cloud.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/secrets/internal/convex-schema.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/secrets/production-consumer.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/secrets/production-lifecycle.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/secrets/runtime.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/secrets/secret-plane.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
+    "src/modules/secrets/vercel-oidc.ts": {
+      "lines": 0,
+      "statements": 1,
+      "functions": 0,
+      "branches": 1
+    },
     "src/modules/security/admin-readback.functions.ts": {
-      "lines": 10,
-      "statements": 10,
-      "functions": 4,
-      "branches": 2
+      "lines": 9,
+      "statements": 9,
+      "functions": 3,
+      "branches": 0
     },
     "src/modules/security/internal/admin-authority.ts": {
       "lines": 8,
@@ -3546,6 +4614,12 @@
       "functions": 3,
       "branches": 28
     },
+    "src/modules/seo/internal/indexed-public-paths.ts": {
+      "lines": 0,
+      "statements": 0,
+      "functions": 0,
+      "branches": 0
+    },
     "src/modules/seo/internal/json-ld.ts": {
       "lines": 0,
       "statements": 0,
@@ -3557,6 +4631,12 @@
       "statements": 12,
       "functions": 6,
       "branches": 12
+    },
+    "src/modules/seo/internal/public-page-seo.ts": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 2,
+      "branches": 0
     },
     "src/modules/seo/public-route.ts": {
       "lines": 4,
@@ -3583,22 +4663,22 @@
       "branches": 0
     },
     "src/routes/__root.tsx": {
-      "lines": 17,
-      "statements": 19,
-      "functions": 11,
-      "branches": 12
+      "lines": 6,
+      "statements": 7,
+      "functions": 4,
+      "branches": 14
     },
     "src/routes/_operator.tsx": {
-      "lines": 3,
-      "statements": 3,
+      "lines": 4,
+      "statements": 4,
       "functions": 1,
-      "branches": 2
+      "branches": 4
     },
     "src/routes/_operator/activity.tsx": {
-      "lines": 21,
-      "statements": 26,
-      "functions": 11,
-      "branches": 22
+      "lines": 33,
+      "statements": 39,
+      "functions": 22,
+      "branches": 38
     },
     "src/routes/_operator/admin.audit-events.tsx": {
       "lines": 6,
@@ -3613,22 +4693,28 @@
       "branches": 0
     },
     "src/routes/_operator/agent-access.authorize.tsx": {
-      "lines": 10,
-      "statements": 12,
+      "lines": 11,
+      "statements": 13,
       "functions": 3,
       "branches": 15
     },
     "src/routes/_operator/agent-access.tsx": {
-      "lines": 81,
+      "lines": 82,
       "statements": 89,
-      "functions": 18,
-      "branches": 46
+      "functions": 16,
+      "branches": 48
     },
     "src/routes/_operator/developers.discovery.tsx": {
-      "lines": 16,
-      "statements": 19,
-      "functions": 11,
-      "branches": 18
+      "lines": 20,
+      "statements": 23,
+      "functions": 13,
+      "branches": 14
+    },
+    "src/routes/_operator/owner.credit.tsx": {
+      "lines": 28,
+      "statements": 29,
+      "functions": 8,
+      "branches": 8
     },
     "src/routes/_operator/owner.offerings.$offeringRef.tsx": {
       "lines": 23,
@@ -3648,10 +4734,40 @@
       "functions": 7,
       "branches": 22
     },
-    "src/routes/_operator/owner.settings.tsx": {
+    "src/routes/_operator/owner.settings.connections.tsx": {
+      "lines": 7,
+      "statements": 7,
+      "functions": 3,
+      "branches": 8
+    },
+    "src/routes/_operator/owner.settings.developers.tsx": {
       "lines": 3,
       "statements": 3,
       "functions": 2,
+      "branches": 0
+    },
+    "src/routes/_operator/owner.settings.members.tsx": {
+      "lines": 9,
+      "statements": 9,
+      "functions": 3,
+      "branches": 4
+    },
+    "src/routes/_operator/owner.settings.payouts.tsx": {
+      "lines": 8,
+      "statements": 8,
+      "functions": 4,
+      "branches": 0
+    },
+    "src/routes/_operator/owner.settings.tsx": {
+      "lines": 5,
+      "statements": 5,
+      "functions": 2,
+      "branches": 2
+    },
+    "src/routes/_operator/owner.settings.workspace.tsx": {
+      "lines": 5,
+      "statements": 5,
+      "functions": 3,
       "branches": 0
     },
     "src/routes/_operator/owner.status.tsx": {
@@ -3671,6 +4787,12 @@
       "statements": 11,
       "functions": 4,
       "branches": 4
+    },
+    "src/routes/[.]well-known/api-catalog.ts": {
+      "lines": 8,
+      "statements": 8,
+      "functions": 8,
+      "branches": 0
     },
     "src/routes/[.]well-known/http-message-signatures-directory.ts": {
       "lines": 10,
@@ -3707,6 +4829,12 @@
       "statements": 1,
       "functions": 0,
       "branches": 1
+    },
+    "src/routes/about.tsx": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 2,
+      "branches": 4
     },
     "src/routes/api.$.ts": {
       "lines": 12,
@@ -3745,16 +4873,28 @@
       "branches": 2
     },
     "src/routes/api.discovery.schema.ts": {
-      "lines": 29,
-      "statements": 31,
-      "functions": 15,
-      "branches": 54
+      "lines": 19,
+      "statements": 21,
+      "functions": 14,
+      "branches": 30
     },
     "src/routes/api.health.ts": {
       "lines": 9,
       "statements": 9,
       "functions": 9,
       "branches": 0
+    },
+    "src/routes/api.internal.provider-consequence.ts": {
+      "lines": 0,
+      "statements": 2,
+      "functions": 0,
+      "branches": 2
+    },
+    "src/routes/api.internal.secret-lifecycle.ts": {
+      "lines": 2,
+      "statements": 6,
+      "functions": 0,
+      "branches": 5
     },
     "src/routes/api.observability.client-error.ts": {
       "lines": 11,
@@ -3769,9 +4909,27 @@
       "branches": 4
     },
     "src/routes/api.stripe.webhook.ts": {
+      "lines": 8,
+      "statements": 8,
+      "functions": 8,
+      "branches": 0
+    },
+    "src/routes/api.v1.account.activity.ts": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 1,
+      "branches": 0
+    },
+    "src/routes/api.v1.account.balance.ts": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 1,
+      "branches": 0
+    },
+    "src/routes/api.v1.account.ts": {
       "lines": 11,
       "statements": 11,
-      "functions": 10,
+      "functions": 9,
       "branches": 0
     },
     "src/routes/api.v1.market-metrics.ts": {
@@ -3828,6 +4986,12 @@
       "functions": 7,
       "branches": 0
     },
+    "src/routes/api.v1.operations.ts": {
+      "lines": 11,
+      "statements": 11,
+      "functions": 9,
+      "branches": 0
+    },
     "src/routes/api.v1.registry.ts": {
       "lines": 12,
       "statements": 12,
@@ -3858,6 +5022,78 @@
       "functions": 10,
       "branches": 0
     },
+    "src/routes/api.v1.supply.connections.connect.ts": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 1,
+      "branches": 0
+    },
+    "src/routes/api.v1.supply.connections.detail.ts": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 1,
+      "branches": 0
+    },
+    "src/routes/api.v1.supply.connections.list.ts": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 1,
+      "branches": 0
+    },
+    "src/routes/api.v1.supply.connections.reconnect.ts": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 1,
+      "branches": 0
+    },
+    "src/routes/api.v1.supply.connections.retry-cleanup.ts": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 1,
+      "branches": 0
+    },
+    "src/routes/api.v1.supply.connections.revoke.ts": {
+      "lines": 2,
+      "statements": 2,
+      "functions": 1,
+      "branches": 0
+    },
+    "src/routes/api.v1.supply.earnings.ts": {
+      "lines": 6,
+      "statements": 6,
+      "functions": 5,
+      "branches": 0
+    },
+    "src/routes/api.v1.supply.publish.ts": {
+      "lines": 6,
+      "statements": 6,
+      "functions": 5,
+      "branches": 0
+    },
+    "src/routes/api.v1.supply.recheck.ts": {
+      "lines": 6,
+      "statements": 6,
+      "functions": 5,
+      "branches": 0
+    },
+    "src/routes/api.v1.supply.republish.ts": {
+      "lines": 6,
+      "statements": 6,
+      "functions": 5,
+      "branches": 0
+    },
+    "src/routes/api.v1.supply.status.ts": {
+      "lines": 6,
+      "statements": 6,
+      "functions": 5,
+      "branches": 0
+    },
+    "src/routes/api.v1.supply.withdraw.ts": {
+      "lines": 6,
+      "statements": 6,
+      "functions": 5,
+      "branches": 0
+    },
     "src/routes/engine.tsx": {
       "lines": 2,
       "statements": 2,
@@ -3865,9 +5101,9 @@
       "branches": 0
     },
     "src/routes/for-agents.tsx": {
-      "lines": 12,
-      "statements": 14,
-      "functions": 10,
+      "lines": 4,
+      "statements": 4,
+      "functions": 3,
       "branches": 2
     },
     "src/routes/for-providers.tsx": {
@@ -3880,7 +5116,7 @@
       "lines": 4,
       "statements": 4,
       "functions": 3,
-      "branches": 5
+      "branches": 7
     },
     "src/routes/llms[.]txt.ts": {
       "lines": 0,
@@ -3889,10 +5125,10 @@
       "branches": 0
     },
     "src/routes/market.tsx": {
-      "lines": 7,
-      "statements": 7,
-      "functions": 6,
-      "branches": 16
+      "lines": 9,
+      "statements": 9,
+      "functions": 8,
+      "branches": 27
     },
     "src/routes/mcp.ts": {
       "lines": 10,
@@ -3901,8 +5137,8 @@
       "branches": 0
     },
     "src/routes/oauth.authorize.ts": {
-      "lines": 8,
-      "statements": 8,
+      "lines": 9,
+      "statements": 9,
       "functions": 7,
       "branches": 0
     },
@@ -3925,10 +5161,10 @@
       "branches": 0
     },
     "src/routes/operations.$operationRef.tsx": {
-      "lines": 10,
-      "statements": 13,
+      "lines": 11,
+      "statements": 15,
       "functions": 5,
-      "branches": 32
+      "branches": 35
     },
     "src/routes/operations.invocations.$invocationRef.tsx": {
       "lines": 52,
@@ -3967,20 +5203,20 @@
       "branches": 2
     },
     "src/routes/sign-in.$.tsx": {
+      "lines": 3,
+      "statements": 3,
+      "functions": 2,
+      "branches": 17
+    },
+    "src/routes/sign-up.$.tsx": {
       "lines": 11,
       "statements": 11,
       "functions": 3,
-      "branches": 27
-    },
-    "src/routes/sign-up.$.tsx": {
-      "lines": 10,
-      "statements": 10,
-      "functions": 3,
-      "branches": 12
+      "branches": 18
     },
     "src/routes/sitemap[.]xml.ts": {
-      "lines": 2,
-      "statements": 2,
+      "lines": 1,
+      "statements": 1,
       "functions": 1,
       "branches": 0
     },
@@ -4020,17 +5256,35 @@
       "functions": 4,
       "branches": 16
     },
+    "tools/release/coverage-source-classification.ts": {
+      "lines": 3,
+      "statements": 4,
+      "functions": 3,
+      "branches": 3
+    },
     "tools/release/create-coverage-baseline.ts": {
       "lines": 12,
       "statements": 12,
       "functions": 1,
       "branches": 5
     },
+    "tools/release/current-operation-staging-observation.ts": {
+      "lines": 81,
+      "statements": 118,
+      "functions": 24,
+      "branches": 79
+    },
     "tools/release/maturity-release-integrity.ts": {
       "lines": 13,
       "statements": 18,
       "functions": 2,
       "branches": 17
+    },
+    "tools/release/operation-architecture-release-proof.ts": {
+      "lines": 0,
+      "statements": 1,
+      "functions": 0,
+      "branches": 2
     },
     "tools/release/operation-gateway-production-smoke-discovery.ts": {
       "lines": 28,
@@ -4092,6 +5346,12 @@
       "functions": 0,
       "branches": 2
     },
+    "tools/release/verify-convex-generated-anonymous.ts": {
+      "lines": 100,
+      "statements": 121,
+      "functions": 22,
+      "branches": 59
+    },
     "tools/release/verify-coverage-ratchet.ts": {
       "lines": 25,
       "statements": 27,
@@ -4109,12 +5369,6 @@
       "statements": 29,
       "functions": 6,
       "branches": 6
-    },
-    "convex/capabilitySupplyOperationOriginMap.ts": {
-      "lines": 41,
-      "statements": 57,
-      "functions": 10,
-      "branches": 103
     }
   },
   "schema": "ae.coverage-ratchet-baseline:v1"

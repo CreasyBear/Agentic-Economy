@@ -1,6 +1,10 @@
-import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
+import {
+  AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST,
+  MARKET_SUPPLY_MANAGE_SCOPE,
+} from '@/modules/agent-access/contract'
 import { isRecord } from '@/modules/common/is-record'
 import { spawn } from 'node:child_process'
+import { retry } from 'es-toolkit'
 
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential, storeConnection, storeMcpConnection } from '../lib/config'
@@ -16,6 +20,8 @@ const MAX_CONNECT_WAIT_MS = 60_000
 const MIN_POLL_DELAY_MS = 1_000
 const MAX_POLL_DELAY_MS = 10_000
 const DEFAULT_POLL_DELAY_MS = 5_000
+const ISSUED_KEY_VALIDATION_RETRIES = 20
+const ISSUED_KEY_VALIDATION_DELAY_MS = 250
 
 type JsonRecord = Record<string, unknown>
 
@@ -26,6 +32,7 @@ type ConnectDetails = Readonly<{
   verificationUri: string
   expiresIn: number
   intervalMs: number
+  supplier: boolean
 }>
 
 function oauthForm(values: Record<string, string>): { body: string; headers: HeadersInit } {
@@ -54,7 +61,7 @@ function positiveSeconds(value: unknown, field: string, fallback: number): numbe
   return value
 }
 function connectPending(details: ConnectDetails): JsonRecord {
-  const nextAction = `Approve ${details.verificationUri} with user code ${details.userCode}, then run ae connect again if this wait expires.`
+  const nextAction = `Approve ${details.verificationUri} with user code ${details.userCode}, then run ae connect${details.supplier ? ' --supplier' : ''} again if this wait expires.`
   return {
     kind: 'pending',
     clientId: details.clientId,
@@ -81,7 +88,9 @@ function printConnectResult(value: JsonRecord, options: CliOptions): void {
   ])
   if (value.kind === 'connected') {
     line('Your agent is connected. The origin-bound key is stored with user-only file permissions.')
-    line('Next: ae search "what you need", then ae inspect <operation> and ae call <operation> --input \'{...}\'.')
+    line(value.profile === 'supplier'
+      ? 'Next: ae supply status <businessId>.'
+      : 'Next: ae search "what you need", then ae inspect <operation> and ae call <operation> --input \'{...}\'.')
   } else if (typeof value.nextAction === 'string') {
     line(value.nextAction)
   }
@@ -96,18 +105,25 @@ function openVerificationUri(uri: string, options: CliOptions): void {
   child.unref()
 }
 
-async function validateAccessToken(options: CliOptions, key: string): Promise<void> {
-  const path = `/api/v1/operations/${encodeURIComponent(CONNECT_VALIDATION_INVOCATION_REF)}`
+async function validateAccessToken(options: CliOptions, key: string, supplier: boolean): Promise<void> {
+  const path = supplier
+    ? '/api/v1/supply/earnings'
+    : `/api/v1/operations/${encodeURIComponent(CONNECT_VALIDATION_INVOCATION_REF)}`
   const outcome = await callJson(options.baseUrl, path, {
-    method: 'GET',
+    method: supplier ? 'POST' : 'GET',
     headers: { Authorization: `Bearer ${key}` },
+    ...(supplier ? { body: JSON.stringify({ currency: 'USD' }) } : {}),
   })
   const body = outcome.body
   if (
     outcome.ok
     && isRecord(body)
-    && (body.kind === 'found' || body.kind === 'refused')
-    && body.invocationRef === CONNECT_VALIDATION_INVOCATION_REF
+    && (supplier
+      ? body.kind === 'available'
+        || body.kind === 'not_found'
+        || (body.kind === 'error' && body.code === 'source_unavailable')
+      : (body.kind === 'found' || body.kind === 'refused')
+        && body.invocationRef === CONNECT_VALIDATION_INVOCATION_REF)
   ) {
     return
   }
@@ -123,38 +139,68 @@ async function validateAccessToken(options: CliOptions, key: string): Promise<vo
   })
 }
 
-async function validateConfiguredKey(options: CliOptions): Promise<void> {
-  await validateAccessToken(options, requireAgentAccessKey('connect', options))
+async function validateConfiguredKey(options: CliOptions, supplier: boolean): Promise<void> {
+  await validateAccessToken(options, requireAgentAccessKey('connect', options, supplier ? MARKET_SUPPLY_MANAGE_SCOPE : undefined), supplier)
+}
+async function validateIssuedAccessToken(options: CliOptions, key: string, supplier: boolean): Promise<void> {
+  await retry(
+    async () => await validateAccessToken(options, key, supplier),
+    {
+      retries: ISSUED_KEY_VALIDATION_RETRIES,
+      delay: ISSUED_KEY_VALIDATION_DELAY_MS,
+      shouldRetry: (error) => error instanceof CliFailure
+        && error.kind === 'UNAUTHENTICATED'
+        && error.code === 'api_key_invalid',
+    },
+  )
 }
 /** Register a public device client, obtain owner consent, and deliver one AE key. */
 export async function runConnectCommand(args: readonly string[], options: CliOptions): Promise<void> {
   if (args.length > 0) {
-    throw new CliFailure('Usage: ae connect', { kind: 'INVALID_ARGUMENT', code: 'connect-usage' })
+    throw new CliFailure('Usage: ae connect [--supplier]', { kind: 'INVALID_ARGUMENT', code: 'connect-usage' })
   }
 
-  const configuredCredential = resolveAgentAccessCredential(options.baseUrl)
+  const supplier = options.supplier === true
+  const requestedScope = supplier
+    ? MARKET_SUPPLY_MANAGE_SCOPE
+    : AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope
+  const registrationRequest = supplier
+    ? {
+        ...AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST,
+        client_name: 'Agentic Economy Supplier CLI',
+        scope: requestedScope,
+      }
+    : AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST
+  const configuredCredential = resolveAgentAccessCredential(options.baseUrl, supplier ? MARKET_SUPPLY_MANAGE_SCOPE : undefined)
   if (configuredCredential !== undefined) {
-    await validateConfiguredKey(options)
-    printConnectResult({
-      kind: 'connected',
-      credential: 'origin_bound_agent_key',
-      source: `validated_${configuredCredential.source}`,
-      nextAction: 'Run ae search "what you need".',
-      ...(options.mcp === true
-        ? { mcpConfigured: true, mcpConfigPath: storeMcpConnection({ baseUrl: options.baseUrl, accessToken: configuredCredential.accessToken }) }
-        : {}),
-    }, options)
-    return
+    try {
+      await validateConfiguredKey(options, supplier)
+      printConnectResult({
+        kind: 'connected',
+        credential: 'origin_bound_agent_key',
+        profile: supplier ? 'supplier' : 'market',
+        source: `validated_${configuredCredential.source}`,
+        nextAction: supplier ? 'Run ae supply status <businessId>.' : 'Run ae search "what you need".',
+        ...(options.mcp === true
+          ? { mcpConfigured: true, mcpConfigPath: storeMcpConnection({ baseUrl: options.baseUrl, accessToken: configuredCredential.accessToken }) }
+          : {}),
+      }, options)
+      return
+    } catch (error) {
+      if (configuredCredential.source !== 'stored'
+        || !(error instanceof CliFailure)
+        || error.code !== 'api_key_invalid') throw error
+    }
   }
 
   const registrationOutcome = await callJson(options.baseUrl, OAUTH_REGISTER_PATH, {
     method: 'POST',
-    body: JSON.stringify(AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST),
+    body: JSON.stringify(registrationRequest),
   })
   const registration = requireOk(registrationOutcome, OAUTH_REGISTER_PATH)
   const clientId = textField(isRecord(registration) ? registration.client_id : undefined, 'registration.client_id')
 
-  const deviceRequest = oauthForm({ client_id: clientId, scope: AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope })
+  const deviceRequest = oauthForm({ client_id: clientId, scope: requestedScope })
   const deviceOutcome = await callJson(options.baseUrl, OAUTH_DEVICE_AUTHORIZATION_PATH, {
     method: 'POST',
     headers: deviceRequest.headers,
@@ -169,6 +215,7 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
     verificationUri: textField(deviceRecord?.verification_uri, 'verification_uri'),
     expiresIn: positiveSeconds(deviceRecord?.expires_in, 'expires_in', 600),
     intervalMs: Math.min(MAX_POLL_DELAY_MS, Math.max(MIN_POLL_DELAY_MS, positiveSeconds(deviceRecord?.interval, 'interval', DEFAULT_POLL_DELAY_MS / 1000) * 1_000)),
+    supplier,
   }
 
   if (!options.json) {
@@ -207,12 +254,13 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         throw new CliFailure('OAuth token response was not a JSON object.', { kind: 'UNAVAILABLE', code: 'connect-response-invalid' })
       }
       const accessToken = textField(token.access_token, 'access_token')
-      await validateAccessToken(options, accessToken)
+      await validateIssuedAccessToken(options, accessToken, supplier)
       const storedAt = storeConnection({
         baseUrl: options.baseUrl,
         accessToken,
         ...(typeof token.token_type === 'string' ? { tokenType: token.token_type } : {}),
         ...(typeof token.scope === 'string' ? { scope: token.scope } : {}),
+        profile: supplier ? 'supplier' : 'market',
       })
       const mcpStoredAt = options.mcp === true
         ? storeMcpConnection({ baseUrl: options.baseUrl, accessToken })
@@ -225,10 +273,11 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         ...(typeof token.token_type === 'string' ? { tokenType: token.token_type } : {}),
         ...(typeof token.scope === 'string' ? { scope: token.scope } : {}),
         credential: 'origin_bound_agent_key',
+        profile: supplier ? 'supplier' : 'market',
         credentialStored: true,
         configPath: storedAt,
         ...(mcpStoredAt === undefined ? {} : { mcpConfigured: true, mcpConfigPath: mcpStoredAt }),
-        nextAction: 'Run ae search "what you need".',
+        nextAction: supplier ? 'Run ae supply status <businessId>.' : 'Run ae search "what you need".',
       }, options)
       return
     }

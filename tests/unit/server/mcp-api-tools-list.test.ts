@@ -219,7 +219,8 @@ describe('MCP host adapter tools/list', () => {
     const names = ((body.result?.tools ?? []) as Array<Record<string, unknown>>).map((tool) => tool.name)
     const expectedNames = listMcpActions()
       .filter((action) => (action.readOnly && action.credentialAdmission === undefined)
-        || action.credentialAdmission?.scope === 'market_operations:invoke')
+        || action.credentialAdmission?.scope === 'market_operations:invoke'
+        || action.credentialAdmission?.anyScopes?.includes('market_operations:invoke') === true)
       .map(mcpToolName)
 
     expect(names).toEqual(expectedNames)
@@ -230,7 +231,7 @@ describe('MCP host adapter tools/list', () => {
     ]))
   })
 
-  it('lists exactly the three supplier tools plus anonymous reads for a supply-only principal', async () => {
+  it('lists every supplier lifecycle tool plus anonymous reads for a supply-only principal', async () => {
     const response = await postMcp({
       jsonrpc: '2.0',
       id: 'supply-only-list',
@@ -247,16 +248,27 @@ describe('MCP host adapter tools/list', () => {
       .filter((action) => action.credentialAdmission?.scope === 'market_supply:manage')
     const expectedNames = listMcpActions()
       .filter((action) => (action.readOnly && action.credentialAdmission === undefined)
-        || action.credentialAdmission?.scope === 'market_supply:manage')
+        || action.credentialAdmission?.scope === 'market_supply:manage'
+        || action.credentialAdmission?.anyScopes?.includes('market_supply:manage') === true)
       .map(mcpToolName)
     const operationProtectedNames = listMcpActions()
-      .filter((action) => action.credentialAdmission?.scope === 'market_operations:invoke')
+      .filter((action) => action.credentialAdmission?.scope === 'market_operations:invoke'
+        && action.credentialAdmission.anyScopes?.includes('market_supply:manage') !== true)
       .map(mcpToolName)
 
-    expect(supplyActions).toHaveLength(3)
+    expect(supplyActions).toHaveLength(12)
     expect(supplyActions.map((action) => action.id).sort()).toEqual([
+      'supply.connection.connect',
+      'supply.connection.detail',
+      'supply.connection.list',
+      'supply.connection.reconnect',
+      'supply.connection.retryCleanup',
+      'supply.connection.revoke',
       'supply.earnings',
       'supply.publish',
+      'supply.recheck',
+      'supply.republish',
+      'supply.status',
       'supply.withdraw',
     ])
     expect(names).toEqual(expectedNames)

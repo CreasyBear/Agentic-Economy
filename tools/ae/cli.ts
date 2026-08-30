@@ -13,7 +13,7 @@
 import { COMMANDS, type CommandManifestEntry } from './commands/manifest'
 import { parseArgs, safeOriginForDiagnostics, type CliOptions, type ParsedArgs } from './lib/args'
 import { CliFailure, printJson, sourceErrorToCliFailure } from './lib/output'
-import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import type { ProblemKind } from '@/lib/errors'
 
 type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<void>
@@ -21,28 +21,33 @@ type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<v
 const CLI_ENTRYPOINT = 'ae'
 const JSON_HELP_FLAGS = {
   '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, local Vite when Convex is loopback, or the hosted origin.' },
-  '--limit': { type: 'string', description: 'Search page size from 1 through 20; search only.' },
-  '--cursor': { type: 'string', description: 'Opaque search continuation cursor; search only.' },
+  '--limit': { type: 'string', description: 'Page size: search accepts 1-20; account activity, history, and supplier connections accept 1-100.' },
+  '--cursor': { type: 'string', description: 'Opaque search, account activity, or history continuation cursor.' },
+  '--state': { type: 'string', description: 'Canonical invocation state filter; history only.' },
   '--filters': { type: 'string', description: 'Canonical JSON search filters; search only.' },
-  '--input': { type: 'string', description: 'Schema-valid JSON object for call.' },
+  '--input': { type: 'string', description: 'Schema-valid JSON object for call or supplier lifecycle write.' },
   '--mcp': { type: 'boolean', description: 'Write a user-only Streamable HTTP MCP connection file after connect.' },
+  '--supplier': { type: 'boolean', description: 'Request a separate owner-approved supplier credential with market_supply:manage.' },
   '--json': { type: 'boolean', description: 'Emit exactly one machine-readable JSON value on stdout.' },
   '--help': { type: 'boolean', description: 'Show help without performing command work.' },
   '--technical': { type: 'boolean', description: 'Include operation identity and evidence metadata in human compare output.' },
-  '--idempotency-key': { type: 'string', description: 'Optional stable retry identity; call generates one when omitted.' },
+  '--idempotency-key': { type: 'string', description: 'Optional stable retry identity for call or supplier lifecycle write.' },
   '--wait': { type: 'boolean', description: 'Wait for a bounded call result; timeout preserves recovery detail.' },
 } as const
 
 const COMMON_COMMAND_OPTIONS = ['base-url', 'json'] as const
 const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
-  manifest: [],
+  manifest: ['technical'],
   search: ['limit', 'cursor', 'filters'],
   inspect: [],
   compare: ['technical'],
   'inspect-plan': [],
-  connect: ['mcp'],
+  connect: ['mcp', 'supplier'],
+  account: ['limit', 'cursor'],
+  supply: ['input', 'idempotency-key', 'limit'],
   fund: [],
   call: ['input', 'idempotency-key', 'wait'],
+  history: ['limit', 'cursor', 'state'],
   status: [],
   cancel: ['idempotency-key'],
   recover: ['idempotency-key'],
@@ -70,14 +75,23 @@ const AUTH_HELP = {
   deviceFlow: 'connect registers a public device client, displays the server-provided verification URI and user code, then polls for a one-time credential after approval.',
   existingKey: 'If AE_API_KEY is already set, connect validates it against the configured server before reporting connected; AE_API_KEY_ORIGIN must exactly match that server origin.',
   origin: 'Bind AE_API_KEY to the exact --base-url origin in AE_API_KEY_ORIGIN. Credentialed calls require HTTPS except loopback localhost, 127.0.0.1, or ::1 development.',
-  next: 'Connect stores one origin-bound key with user-only permissions; call, status, cancel, and recovery reuse it automatically.',
+  next: 'Connect stores one origin-bound key with user-only permissions; call, history, status, cancel, and recovery reuse it automatically.',
   authenticatedOperations: {
     call: commandUsage('call'),
+    history: commandUsage('history'),
     status: commandUsage('status'),
     cancel: commandUsage('cancel'),
     reconcile: commandUsage('recover'),
   },
   cancelRequirements: 'Cancel requires the AE access key AE_API_KEY plus --idempotency-key, sent as body.idempotencyKey.',
+} as const
+
+const SUPPLY_AUTH_HELP = {
+  ...AUTH_HELP,
+  scope: MARKET_SUPPLY_MANAGE_SCOPE,
+  deviceFlow: 'Run ae connect --supplier to request a separate owner-approved supplier credential; ordinary ae connect remains buyer-scoped.',
+  existingKey: 'Use an owner-issued AE key whose exact origin and market_supply:manage scope have already been established.',
+  next: 'Use supply status for Operations and supply connections for provider authority before lifecycle writes; preserve returned revisions, generations, and digests.',
 } as const
 
 function commandHelpName(command: string | undefined, positionals: readonly string[]): string | undefined {
@@ -87,7 +101,12 @@ function commandHelpName(command: string | undefined, positionals: readonly stri
       ? positionals
       : [command, ...positionals]
   if (tokens.length === 0) return undefined
-  return tokens[0]
+  const root = tokens[0]
+  const child = tokens[1]
+  if (root !== undefined && child !== undefined && COMMANDS[root]?.commands?.[child] !== undefined) {
+    return `${root} ${child}`
+  }
+  return root
 }
 
 function commandHelpProjection(path: string): Record<string, unknown> {
@@ -130,7 +149,7 @@ function jsonHelp(
       }
       : commandHelpProjection(requested)),
     flags: JSON_HELP_FLAGS,
-    auth: AUTH_HELP,
+    auth: requested?.startsWith('supply') === true ? SUPPLY_AUTH_HELP : AUTH_HELP,
     ...(requested === 'connect' ? {
       auth: {
         ...AUTH_HELP,
@@ -148,6 +167,7 @@ function printAuthenticatedOperationHelp(): void {
     '',
     'Authenticated Operation actions:',
     `  call: ${AUTH_HELP.authenticatedOperations.call}`,
+    `  history: ${AUTH_HELP.authenticatedOperations.history}`,
     `  status: ${AUTH_HELP.authenticatedOperations.status}`,
     `  cancel: ${AUTH_HELP.authenticatedOperations.cancel} (${AUTH_HELP.cancelRequirements})`,
     `  reconcile: ${AUTH_HELP.authenticatedOperations.reconcile}`,
@@ -165,9 +185,12 @@ Canonical Operation commands (need a running server; hosted default https://agen
   ${CLI_ENTRYPOINT} inspect <operation-ref>
   ${CLI_ENTRYPOINT} compare <operation-ref> [operation-ref ...]
   ${CLI_ENTRYPOINT} inspect-plan <operation-ref> [operation-ref ...]
-  ${CLI_ENTRYPOINT} connect
+  ${CLI_ENTRYPOINT} connect [--supplier]
+  ${CLI_ENTRYPOINT} account [status [market|supplier]|balance [currency]|activity [currency]|connections|disconnect [market|supplier]]
+  ${CLI_ENTRYPOINT} supply <status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|retry-cleanup>
   ${CLI_ENTRYPOINT} fund
   ${CLI_ENTRYPOINT} call <operation-ref> --input '<json>' [--wait]
+  ${CLI_ENTRYPOINT} history [--limit <1-100>] [--cursor <cursor>] [--state <state>]
   ${CLI_ENTRYPOINT} status <invocation-ref>
   ${CLI_ENTRYPOINT} cancel <invocation-ref> --idempotency-key <key>
   ${CLI_ENTRYPOINT} recover <invocation-ref> '<evidence-json>' --idempotency-key <key>
@@ -179,10 +202,12 @@ Flags:
   AE_API_KEY <token>          reusable caller credential for credentialed commands
   AE_API_KEY_ORIGIN <origin>  exact origin bound to AE_API_KEY; required with HTTPS except loopback HTTP development
   --json             machine-readable output
-  --limit <1-20>     search page size (search only)
-  --cursor <cursor>  opaque search continuation cursor (search only)
+  --limit <n>        bounded page size for search, account activity, history, or supplier connections
+  --cursor <cursor>  opaque continuation cursor for search, account activity, or history
+  --state <state>    canonical invocation state filter (history only)
   --filters '<json>' canonical search filters (search only)
   --technical        human compare output with operation identity and evidence metadata
+  --supplier         connect a separate owner-approved supplier credential
   --idempotency-key <key>  optional stable retry identity; call generates one when omitted
   --wait             bounded call wait; timeout returns durable recovery detail
   --help
@@ -229,6 +254,17 @@ function printCommandHelp(command: string | undefined, positionals: readonly str
       `  Existing key: ${AUTH_HELP.existingKey}`,
       `  Origin policy: ${AUTH_HELP.origin}`,
       `  Next: ${AUTH_HELP.next}`,
+      '  Supplier profile: ae connect --supplier requests market_supply:manage separately and does not replace the buyer credential.',
+    )
+  }
+  if (requested.startsWith('supply')) {
+    lines.push(
+      '',
+      'Supplier authentication:',
+      `  Credential: ${SUPPLY_AUTH_HELP.credential}`,
+      `  Scope: ${SUPPLY_AUTH_HELP.scope}`,
+      `  Issuance: ${SUPPLY_AUTH_HELP.deviceFlow}`,
+      `  Next: ${SUPPLY_AUTH_HELP.next}`,
     )
   }
   process.stdout.write(lines.join('\n') + '\n')
@@ -288,25 +324,31 @@ function validateCommandOptions(parsed: ParsedArgs): void {
 
 async function main(): Promise<number> {
   const [
+    accountCommands,
     cancelCommands,
     marketOperationCommands,
     connectCommands,
     fundCommands,
+    historyCommands,
     invokeCommands,
     manifestCommands,
     recoverCommands,
     revokeCommands,
     statusCommands,
+    supplyCommands,
   ] = await Promise.all([
+    import('./commands/account'),
     import('./commands/cancel'),
     import('./commands/market-operations'),
     import('./commands/connect'),
     import('./commands/fund'),
+    import('./commands/history'),
     import('./commands/invoke'),
     import('./commands/manifest'),
     import('./commands/recover'),
     import('./commands/revoke'),
     import('./commands/status'),
+    import('./commands/supply'),
   ])
   const marketOperationRunners: Record<string, CommandRunner> = Object.fromEntries(
     marketOperationCommands.MARKET_OPERATION_COMMAND_DESCRIPTORS.map(({ command, run }) => [command, run] as const),
@@ -315,8 +357,11 @@ async function main(): Promise<number> {
     manifest: manifestCommands.runManifestCommand,
     ...marketOperationRunners,
     connect: connectCommands.runConnectCommand,
+    account: accountCommands.runAccountCommand,
+    supply: supplyCommands.runSupplyCommand,
     fund: fundCommands.runFundCommand,
     [invokeCommands.invokeCommandDescriptor.command]: invokeCommands.invokeCommandDescriptor.run,
+    [historyCommands.historyCommandDescriptor.command]: historyCommands.historyCommandDescriptor.run,
     status: statusCommands.runStatusCommand,
     cancel: cancelCommands.runCancelCommand,
     recover: recoverCommands.runRecoverCommand,

@@ -37,16 +37,18 @@ function canSelectAuthority(value: PublicAuthorityMode, ceiling: string | undefi
   return ceiling === 'bounded_mandate'
 }
 
-function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientName?: string; mode?: string }> {
+function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientName?: string; mode?: string; accessProfile?: 'market' | 'supplier' }> {
   const document = new DOMParser().parseFromString(html, 'text/html')
   const consent = document.querySelector<HTMLElement>('[data-ae-consent]')
   const grantRef = consent?.dataset.grantRef
   const clientName = consent?.dataset.clientName
   const mode = consent?.dataset.authorityMode
+  const accessProfile = consent?.dataset.accessProfile
   return {
     ...(grantRef === undefined || grantRef.length === 0 ? {} : { grantRef }),
     ...(clientName === undefined || clientName.length === 0 ? {} : { clientName }),
     ...(mode === undefined || mode.length === 0 ? {} : { mode }),
+    ...(accessProfile === 'market' || accessProfile === 'supplier' ? { accessProfile } : {}),
   }
 }
 
@@ -68,6 +70,7 @@ function AgentAccessAuthorizeRoute() {
   const [consentLoading, setConsentLoading] = useState(userCode !== undefined)
   const [clientName, setClientName] = useState<string>()
   const [mode, setMode] = useState<string>()
+  const [accessProfile, setAccessProfile] = useState<'market' | 'supplier'>('market')
   const [selectedMode, setSelectedMode] = useState<PublicAuthorityMode>('approve_each')
   const [grantRef, setGrantRef] = useState<string>()
 
@@ -76,6 +79,7 @@ function AgentAccessAuthorizeRoute() {
       setConsentLoading(false)
       setClientName(undefined)
       setMode(undefined)
+      setAccessProfile('market')
       setGrantRef(undefined)
       return
     }
@@ -96,6 +100,7 @@ function AgentAccessAuthorizeRoute() {
         setGrantRef(details.grantRef)
         setClientName(details.clientName)
         setMode(details.mode)
+        setAccessProfile(details.accessProfile ?? 'market')
         setSelectedMode(
           details.mode === 'inspect_only'
             ? 'inspect_only'
@@ -145,9 +150,16 @@ function AgentAccessAuthorizeRoute() {
           <>
             <AeSection
               title={clientName === undefined ? 'Connect your agent' : `Connect ${clientName}`}
-              description="How much may this agent do without asking you?"
+              description={accessProfile === 'supplier'
+                ? 'This separate credential can inspect and manage your supplier Operations.'
+                : 'How much may this agent do without asking you?'}
             >
-              <fieldset className="grid gap-3" disabled={pending}>
+              {accessProfile === 'supplier' ? (
+                <Alert>
+                  <AlertTitle>Supplier management</AlertTitle>
+                  <AlertDescription>May inspect lifecycle and earnings, publish, recheck, withdraw, and republish your Operations. It cannot spend buyer credit or manage unrelated account settings.</AlertDescription>
+                </Alert>
+              ) : <fieldset className="grid gap-3" disabled={pending}>
                 <legend className="sr-only">Authority</legend>
                 <RadioGroup
                   aria-describedby="consent-expiry"
@@ -179,7 +191,7 @@ function AgentAccessAuthorizeRoute() {
                     )
                   })}
                 </RadioGroup>
-              </fieldset>
+              </fieldset>}
               <AeFactList
                 facts={[
                   { label: 'Application', value: `${clientName ?? 'Your agent'} · Development · Standard rate limits` },
@@ -194,7 +206,7 @@ function AgentAccessAuthorizeRoute() {
             </div>
           </>
         ) : status === 'approved' ? (
-          <Alert><AlertTitle>Access approved — return to your agent</AlertTitle><AlertDescription>AE delivers the caller key to that agent once. It can now finish setup; supplier credentials are never included.</AlertDescription></Alert>
+          <Alert><AlertTitle>Access approved — return to your agent</AlertTitle><AlertDescription>{accessProfile === 'supplier' ? 'AE delivers the separate supplier key to that agent once. It can now manage the approved supplier lifecycle.' : 'AE delivers the caller key to that agent once. It can now finish setup; supplier authority is not included.'}</AlertDescription></Alert>
         ) : status === 'denied' ? (
           <Alert><AlertTitle>Access not approved</AlertTitle><AlertDescription>Your agent can start a new request if you want to try again.</AlertDescription></Alert>
         ) : (

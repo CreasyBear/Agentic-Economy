@@ -44,6 +44,14 @@ function existingKey(overrides: Record<string, unknown> = {}) {
     ...overrides,
   }
 }
+const recordedBinding = (grantRef: string, policyDigest = `policy:${grantRef}`) => ({
+  kind: 'recorded' as const,
+  grantRef,
+  generation: 1,
+  policyDigest,
+  lifecycle: 'active' as const,
+  expiresAt: 2_000,
+})
 
 describe('agent access', () => {
   it('projects a supply-only key with the bounded supply authority', () => {
@@ -66,15 +74,7 @@ describe('agent access', () => {
         getSecret: vi.fn().mockResolvedValue({ secret: 'supply_secret' }),
         list: vi.fn().mockResolvedValue({ data: [] }),
       },
-      registerGrant: vi.fn().mockResolvedValue({
-        kind: 'recorded' as const,
-        grantRef: 'supply-12345678',
-        generation: 1,
-        policyDigest: 'policy:supply-12345678',
-        lifecycle: 'active' as const,
-        expiresAt: 2_000,
-      }),
-      registerPrincipal: vi.fn().mockResolvedValue({ kind: 'recorded' as const }),
+      registerBinding: vi.fn().mockResolvedValue(recordedBinding('supply-12345678')),
     })
     expect(result).toMatchObject({
       kind: 'created',
@@ -96,8 +96,7 @@ describe('agent access', () => {
         getSecret: vi.fn(),
         list: vi.fn().mockResolvedValue({ data: [] }),
       },
-      registerGrant: vi.fn(),
-      registerPrincipal: vi.fn(),
+      registerBinding: vi.fn(),
     })
     expect(result).toEqual({ kind: 'error', code: 'invalid_input', retryable: false })
   })
@@ -115,15 +114,7 @@ describe('agent access', () => {
         getSecret: vi.fn().mockResolvedValue({ secret: 'cli_secret' }),
         list: vi.fn().mockResolvedValue({ data: [] }),
       },
-      registerGrant: vi.fn().mockResolvedValue({
-        kind: 'recorded' as const,
-        grantRef: 'cli-12345678',
-        generation: 1,
-        policyDigest: 'policy:cli-12345678',
-        lifecycle: 'active' as const,
-        expiresAt: 2_000,
-      }),
-      registerPrincipal: vi.fn().mockResolvedValue({ kind: 'recorded' as const }),
+      registerBinding: vi.fn().mockResolvedValue(recordedBinding('cli-12345678')),
     })
     expect(result).toMatchObject({
       kind: 'created',
@@ -137,15 +128,7 @@ describe('agent access', () => {
     const list = vi.fn()
       .mockResolvedValueOnce({ data: [] })
       .mockResolvedValueOnce({ data: [existingKey()] })
-    const registerGrant = vi.fn().mockResolvedValue({
-      kind: 'recorded' as const,
-      grantRef: 'setup-12345678',
-      generation: 1,
-      policyDigest: 'policy:setup-12345678',
-      lifecycle: 'active' as const,
-      expiresAt: 2_000,
-    })
-    const registerPrincipal = vi.fn().mockResolvedValue({ kind: 'recorded' as const })
+    const registerBinding = vi.fn().mockResolvedValue(recordedBinding('setup-12345678'))
     const api = { create, getSecret, list }
 
     const first = await issueAgentAccessKey({
@@ -153,16 +136,14 @@ describe('agent access', () => {
       input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
       policy,
       api,
-      registerGrant,
-      registerPrincipal,
+      registerBinding,
     })
     const replay = await issueAgentAccessKey({
       principal: { userId: 'owner_123' },
       input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
       policy,
       api,
-      registerGrant,
-      registerPrincipal,
+      registerBinding,
     })
 
     expect(first).toEqual({
@@ -184,8 +165,7 @@ describe('agent access', () => {
       grantRef: 'setup-12345678',
     })
     expect(create).toHaveBeenCalledOnce()
-    expect(registerGrant).toHaveBeenCalledTimes(2)
-    expect(registerPrincipal).toHaveBeenCalledTimes(2)
+    expect(registerBinding).toHaveBeenCalledTimes(2)
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       name: 'AE Agent setup-12345678',
       subject: 'owner_123',
@@ -196,32 +176,54 @@ describe('agent access', () => {
       },
       description: 'Use Agentic Economy Market Operations with this assistant.',
     }))
-    expect(registerGrant).toHaveBeenCalledWith(expect.objectContaining({
+    expect(registerBinding).toHaveBeenCalledWith(expect.objectContaining({
+      issuanceKey: 'setup-12345678',
       grantRef: 'setup-12345678',
-      principalId: 'clerk_api_key:key_123',
-      ownerId: 'owner_123',
-      applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
       credentialId: 'key_123',
-      environment: 'sandbox',
-      operationAccess: 'all_admitted',
-      authorityMode: 'inspect_only',
-      policy,
-      lifecycle: 'active',
-      generation: 1,
-    }))
-    expect(registerPrincipal).toHaveBeenCalledWith(expect.objectContaining({
-      principalId: 'clerk_api_key:key_123',
-      ownerId: 'owner_123',
-      credentialId: 'key_123',
+      displayName: 'My assistant',
       applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
       environment: 'sandbox',
       scopes,
       authorityMode: 'inspect_only',
-      grantGeneration: 1,
-      policyDigest: 'policy:setup-12345678',
-      lifecycle: 'active',
+      policy,
     }))
     expect(getSecret).toHaveBeenCalledWith('key_123')
+  })
+
+  it('binds a fresh key through one atomic owner-authorized registration', async () => {
+    const create = vi.fn().mockResolvedValue({ id: 'key_atomic', secret: 'atomic_secret' })
+    const registerBinding = vi.fn().mockResolvedValue({
+      kind: 'recorded' as const,
+      grantRef: 'atomic-12345678',
+      generation: 1,
+      policyDigest: 'policy:atomic-12345678',
+      lifecycle: 'active' as const,
+      expiresAt: 2_000,
+    })
+
+    const result = await issueAgentAccessKey({
+      principal: { userId: 'owner_123' },
+      input: { name: 'Atomic assistant', idempotencyKey: 'atomic-12345678' },
+      policy,
+      api: {
+        create,
+        getSecret: vi.fn(),
+        list: vi.fn().mockResolvedValue({ data: [] }),
+      },
+      registerBinding,
+    })
+
+    expect(result).toMatchObject({
+      kind: 'created',
+      keyId: 'key_atomic',
+      grantRef: 'atomic-12345678',
+    })
+    expect(registerBinding).toHaveBeenCalledOnce()
+    expect(registerBinding).toHaveBeenCalledWith(expect.objectContaining({
+      credentialId: 'key_atomic',
+      displayName: 'Atomic assistant',
+      scopes,
+    }))
   })
 
   it('passes bounded production material and expiry to Clerk and conflicts on changed replay material', async () => {
@@ -233,15 +235,7 @@ describe('agent access', () => {
       maximumMonthlySpend: { currency: 'USD', units: '2000', exponent: 2 },
     })
     const create = vi.fn().mockResolvedValue({ id: 'production_key', secret: 'production_secret' })
-    const registerGrant = vi.fn().mockResolvedValue({
-      kind: 'recorded' as const,
-      grantRef: 'production-12345678',
-      generation: 1,
-      policyDigest: 'policy:production',
-      lifecycle: 'active' as const,
-      expiresAt: 12_345_000,
-    })
-    const registerPrincipal = vi.fn().mockResolvedValue({ kind: 'recorded' as const })
+    const registerBinding = vi.fn().mockResolvedValue(recordedBinding('production-12345678', 'policy:production'))
     const input = {
       name: 'Production assistant',
       idempotencyKey: 'production-12345678',
@@ -257,8 +251,7 @@ describe('agent access', () => {
       input,
       policy: productionPolicy,
       api: { create, getSecret: vi.fn().mockResolvedValue({ secret: 'production_secret' }), list: vi.fn().mockResolvedValue({ data: [] }) },
-      registerGrant,
-      registerPrincipal,
+      registerBinding,
     })
     expect(result).toMatchObject({ kind: 'created', expiresInSeconds: 3_600, authorityMode: 'bounded_mandate' })
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
@@ -294,8 +287,7 @@ describe('agent access', () => {
         getSecret: vi.fn(),
         list: vi.fn().mockResolvedValue({ data: [existingKey({ claims: existingClaims, scopes: input.scopes, expiresAt: 4_000_000 })] }),
       },
-      registerGrant: vi.fn(),
-      registerPrincipal: vi.fn(),
+      registerBinding: vi.fn(),
     })
     expect(conflict).toEqual({ kind: 'error', code: 'idempotency_conflict', retryable: false })
   })
@@ -312,22 +304,15 @@ describe('agent access', () => {
       },
       policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
       api: { create, getSecret: vi.fn(), list: vi.fn() },
+      registerBinding: vi.fn(),
     })
     expect(result).toEqual({ kind: 'error', code: 'invalid_input', retryable: false })
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('requires both durable grant and principal registration, then rolls back the Clerk key on failure', async () => {
+  it('rolls back the Clerk key when atomic durable binding fails', async () => {
     const revoke = vi.fn().mockResolvedValue(undefined)
-    const registerGrant = vi.fn().mockResolvedValue({
-      kind: 'recorded' as const,
-      grantRef: 'fresh-12345678',
-      generation: 1,
-      policyDigest: 'policy:fresh',
-      lifecycle: 'active' as const,
-      expiresAt: 2_000,
-    })
-    const registerPrincipal = vi.fn().mockResolvedValue({ kind: 'unavailable' as const })
+    const registerBinding = vi.fn().mockResolvedValue({ kind: 'unavailable' as const })
     const result = await issueAgentAccessKey({
       principal: { userId: 'owner_fresh' },
       input: { name: 'Fresh assistant', idempotencyKey: 'fresh-12345678' },
@@ -338,35 +323,22 @@ describe('agent access', () => {
         list: vi.fn().mockResolvedValue({ data: [] }),
         revoke,
       },
-      registerGrant,
-      registerPrincipal,
+      registerBinding,
     })
 
     expect(result).toEqual({ kind: 'error', code: 'issuance_unavailable', retryable: true })
-    expect(registerGrant).toHaveBeenCalledOnce()
-    expect(registerPrincipal).toHaveBeenCalledOnce()
+    expect(registerBinding).toHaveBeenCalledOnce()
     expect(revoke).toHaveBeenCalledWith({ apiKeyId: 'key_fresh', revocationReason: 'Source principal binding failed.' })
   })
 
-  it('fails closed without an authenticated owner or durable registration callbacks', async () => {
+  it('fails closed without an authenticated owner', async () => {
     await expect(issueAgentAccessKey({
       principal: undefined,
       input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
       policy,
       api: { create: vi.fn(), getSecret: vi.fn(), list: vi.fn() },
+      registerBinding: vi.fn(),
     })).resolves.toEqual({ kind: 'error', code: 'missing_auth', retryable: false })
-
-    const result = await issueAgentAccessKey({
-      principal: { userId: 'owner_123' },
-      input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
-      policy,
-      api: {
-        create: vi.fn().mockResolvedValue({ id: 'key_123', secret: 'secret' }),
-        getSecret: vi.fn(),
-        list: vi.fn().mockResolvedValue({ data: [] }),
-      },
-    })
-    expect(result).toEqual({ kind: 'error', code: 'issuance_unavailable', retryable: true })
   })
 
   it('rejects a changed material payload under the same idempotency key', async () => {
@@ -381,8 +353,7 @@ describe('agent access', () => {
         getSecret,
         list: vi.fn().mockResolvedValue({ data: [existingKey()] }),
       },
-      registerGrant: vi.fn(),
-      registerPrincipal: vi.fn(),
+      registerBinding: vi.fn(),
     })
 
     expect(result).toEqual({ kind: 'error', code: 'idempotency_conflict', retryable: false })

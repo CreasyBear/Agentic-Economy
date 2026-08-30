@@ -1,4 +1,5 @@
 import { customAlphabet } from 'nanoid'
+import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 
 import { base64Codec } from '@/modules/common/base64-codec'
 import type { ExactAmount } from '@/modules/money/public'
@@ -7,6 +8,7 @@ import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
   CUSTOMER_REQUEST_AGENT_SCOPE,
   MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_SUPPLY_MANAGE_SCOPE,
   agentAuthorityModeAllows,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
@@ -46,6 +48,7 @@ export const AGENT_ACCESS_OAUTH_ERROR_VALUES = Object.freeze([
   'access_denied',
   'expired_token',
   'invalid_grant',
+  'server_error',
   'rate_limited',
 ] as const)
 export type AgentAccessOAuthErrorCode = typeof AGENT_ACCESS_OAUTH_ERROR_VALUES[number]
@@ -58,6 +61,7 @@ export const AGENT_ACCESS_OAUTH_ERROR_DESCRIPTIONS: Readonly<Record<AgentAccessO
   access_denied: 'The resource owner denied the request.',
   expired_token: 'The device or authorization code expired.',
   invalid_grant: 'The authorization grant is invalid or expired.',
+  server_error: 'The authorization server is temporarily unavailable.',
   rate_limited: 'Too many OAuth requests; retry later.',
 })
 
@@ -147,6 +151,16 @@ export type AgentAccessOAuthTransition<T> =
   | AgentAccessOAuthRefusal
   | AgentAccessOAuthConflict
 
+export class AgentAccessOAuthIssueRefusal extends Error {
+  readonly reason: 'invalid_grant' | 'invalid_scope'
+
+  constructor(reason: 'invalid_grant' | 'invalid_scope') {
+    super(reason)
+    this.name = 'AgentAccessOAuthIssueRefusal'
+    this.reason = reason
+  }
+}
+
 export type AgentAccessOAuthIssueKey = (input: Readonly<{
   ownerId: string
   grant: AgentAccessOAuthGrant
@@ -173,10 +187,14 @@ export function requestedScopesForMode(mode: AgentAccessAuthorityMode): readonly
 export function normalizeRequestedScopes(scopeText: string | null | undefined): Readonly<{
   mode: AgentAccessAuthorityMode
   scopes: readonly string[]
+  profile: 'market' | 'supplier'
 }> | undefined {
   if (scopeText === null || scopeText === undefined) return undefined
   const rawScopes = scopeText.split(/\s+/u).filter((scope) => scope.length > 0)
   if (rawScopes.length === 0 || new Set(rawScopes).size !== rawScopes.length) return undefined
+  if (rawScopes.length === 1 && rawScopes[0] === MARKET_SUPPLY_MANAGE_SCOPE) {
+    return { mode: 'bounded_mandate', scopes: [MARKET_SUPPLY_MANAGE_SCOPE], profile: 'supplier' }
+  }
   const scopes = rawScopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
     ? rawScopes
     : [MARKET_OPERATIONS_INVOKE_SCOPE, ...rawScopes]
@@ -186,7 +204,7 @@ export function normalizeRequestedScopes(scopeText: string | null | undefined): 
   const modeScope = agentAuthorityScopeForMode(mode)
   const extras = scopes.filter((scope) => scope !== MARKET_OPERATIONS_INVOKE_SCOPE && scope !== modeScope)
   if (extras.length > 0) return undefined
-  return { mode, scopes: requestedScopesForMode(mode) }
+  return { mode, scopes: requestedScopesForMode(mode), profile: 'market' }
 }
 
 export async function hashOAuthValue(value: string): Promise<string> {
@@ -317,11 +335,18 @@ export async function approveGrant(
   const selectedMode = input.authorityMode ?? requested.mode
   if (!AGENT_ACCESS_AUTHORITY_MODE_VALUES.includes(selectedMode)
     || !agentAuthorityModeAllows(requested.mode, selectedMode)) return { kind: 'refused', reason: 'invalid_scope' }
-  const approvedScopes = requestedScopesForMode(selectedMode)
+  if (requested.profile === 'supplier' && selectedMode !== 'bounded_mandate') {
+    return { kind: 'refused', reason: 'invalid_scope' }
+  }
+  const approvedScopes = requested.profile === 'supplier'
+    ? requested.scopes
+    : requestedScopesForMode(selectedMode)
   let issued: Readonly<{ keyId: string }>
   try {
     issued = await input.issueKey({ ownerId: input.ownerId, grant: { ...valid.value, requestedScopes: approvedScopes } })
-  } catch {
+  } catch (error) {
+    if (error instanceof AgentAccessOAuthIssueRefusal) return { kind: 'refused', reason: error.reason }
+    console.error('[agent-access-oauth] issueKey failed', sanitizeTelemetryError(error))
     return { kind: 'refused', reason: 'issuance_unavailable' }
   }
   if (issued.keyId.trim().length === 0) return { kind: 'refused', reason: 'missing_key' }

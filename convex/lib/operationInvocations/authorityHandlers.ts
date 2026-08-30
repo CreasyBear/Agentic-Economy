@@ -22,12 +22,14 @@ import {
   cancelInvocationHandler,
   cancelOwnerInvocationHandler,
   invokeHandler,
+  listAgentInvocationsHandler,
   readInvocationStatusHandler,
   readOwnerInvocationStatusHandler,
   reconcileInvocationHandler,
   reconcileOwnerInvocationHandler,
 } from './invokeActions'
 import {
+  invocationSummaryPageValue,
   reconciledInvocationAuthorityResult,
   type CurrentAgentAuthority,
   type OperationPrincipal,
@@ -381,6 +383,15 @@ export async function canonicalAgentInvokeHandler(
   return await invokeHandler(ctx, { ...args, principal })
 }
 
+export async function canonicalAgentListHandler(
+  ctx: ActionCtx,
+  args: Parameters<typeof listAgentInvocationsHandler>[1],
+): Promise<Infer<typeof invocationSummaryPageValue>> {
+  const principal = await canonicalAgentPrincipal(ctx, args.principal, { operationRef: 'operation-list:v1' })
+  if (principal === null) throw new Error('agent_invocation_list_unauthorized')
+  return await listAgentInvocationsHandler(ctx, { ...args, principal })
+}
+
 export async function canonicalAgentStatusHandler(
   ctx: ActionCtx,
   args: Parameters<typeof readInvocationStatusHandler>[1],
@@ -486,4 +497,3 @@ export async function canonicalOwnerReconcileHandler(
     ? agentRecoveryNotFound(args.invocationRef)
     : await reconcileOwnerInvocationHandler(canonical.ctx, args)
 }
-

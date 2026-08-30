@@ -76,12 +76,12 @@ function PublicNavLink({
 
 export const AeSiteIconButton = forwardRef<
   HTMLButtonElement,
-  ButtonHTMLAttributes<HTMLButtonElement> & { ariaLabel: string }
->(function AeSiteIconButton({ ariaLabel, children, className, type = 'button', ...rest }, ref) {
+  Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> & { ariaLabel: string }
+>(function AeSiteIconButton({ ariaLabel, children, className, ...rest }, ref) {
   return (
     <button
       ref={ref}
-      type={type}
+      type="button"
       className={cn(
         'inline-flex size-touch items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         className,

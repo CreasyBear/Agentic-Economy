@@ -1,10 +1,10 @@
 {
   "format": "phase-2-surface-authority-map:v1",
-  "inventorySha256": "f1746db43d9f775cb650f35e7aa375b0873575d576b09ffbc0d682ff90a4e93e",
-  "total": 240,
-  "protected": 206,
+  "inventorySha256": "721d35369c15639964b83b8d7d894ea2cecbda917e34e7c99f46f8dbcef12288",
+  "total": 250,
+  "protected": 216,
   "exemptions": 34,
-  "proved": 206,
+  "proved": 216,
   "red": 0,
   "rows": [
     {
@@ -294,7 +294,7 @@
       "surfaceRef": "src/modules/agent-access/agent-access.functions.ts:issueAgentAccessKeyServer",
       "runtimeHandlerRef": "src/modules/agent-access/agent-access.functions.ts:issueAgentAccessKeyServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "5a875a60f79157e5f7cf96cca3895eb21b3136a11edddaec14df90fda121b4de",
+      "authorityPathSha256": "a4b44fbe0a217cab90dd80de46f76d841e801bb889c993fbd6de10ef89461681",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -303,32 +303,32 @@
             "from": "src/modules/agent-access/agent-access.functions.ts:issueAgentAccessKeyServer",
             "to": "src/modules/agent-access/agent-access.functions.ts:requireCanonicalOwnerAuthorityServer",
             "via": "call",
-            "callSiteSha256": "c7820007df1ba2fe797bf493976de476e6d6f8277c907bc36454c2587dbee90a",
+            "callSiteSha256": "72378de55a3780a88ca619ce8796f6663fc88622f81605bc8c50c89a33876571",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "src/modules/agent-access/agent-access.functions.ts:requireCanonicalOwnerAuthorityServer",
             "to": "src/modules/agent-access/agent-access.functions.ts:listOwnerGrantReadbacksQuery",
             "via": "function_reference",
-            "callSiteSha256": "e40446fc45c2e8dbc245776db8f82468612bd58a9e3d9f270952916bec14b4b3",
+            "callSiteSha256": "d9a9dcc52021191424719fac9f5459279d37a5f655d96d85777ea93f0b877d3d",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "src/modules/agent-access/agent-access.functions.ts:listOwnerGrantReadbacksQuery",
             "to": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
             "via": "function_reference",
-            "callSiteSha256": "eca76c2be2589005ba77f70df792ea7e94c598c3c1d94cf857d87eb2860b2353",
+            "callSiteSha256": "05b00926f61fe0efb7326f41ffca387c807b03857845bd22cba68e7d7d78eea9",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "1ca12aa9f63d555e52be93776a67b329d00668a39da3f0050076c5e6c487b826",
+            "callSiteSha256": "505a0de5d7a617752abf175f69f45b376d48f57d9a2496ec620bf64fde9d0c84",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "0a70b86a44bc3f26ed9ca2afd73bb36201cac0c5c8934b45d9dbd64081193f56"
+        "sha256": "ee92fe346a4ebcc160ecbedef244fe98ca2b7a1d3908635672a6ca86171f98f3"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -349,7 +349,7 @@
       "surfaceRef": "src/modules/agent-access/agent-access.functions.ts:listAgentAccessKeysServer",
       "runtimeHandlerRef": "src/modules/agent-access/agent-access.functions.ts:listAgentAccessKeysServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "bdc10b4700e694de8dc70a2b207b8333f211533686bbe04f0afb1c5d30c52902",
+      "authorityPathSha256": "198c5677dc8dfec8536a3cb52f3e2cce81c6463ab58eff687809a8332c9b1e56",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -358,32 +358,32 @@
             "from": "src/modules/agent-access/agent-access.functions.ts:listAgentAccessKeysServer",
             "to": "src/modules/agent-access/agent-access.functions.ts:requireCanonicalOwnerAuthorityServer",
             "via": "call",
-            "callSiteSha256": "c606cf0b4046591fd61ea1cfac80a736dc8c5a2addae8288fdb6c1280df89a35",
+            "callSiteSha256": "2b5d71c34dbd8668a6eefec1f0cfe147a0d8e7404edb4c9152ecfbc3af34af85",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "src/modules/agent-access/agent-access.functions.ts:requireCanonicalOwnerAuthorityServer",
             "to": "src/modules/agent-access/agent-access.functions.ts:listOwnerGrantReadbacksQuery",
             "via": "function_reference",
-            "callSiteSha256": "e40446fc45c2e8dbc245776db8f82468612bd58a9e3d9f270952916bec14b4b3",
+            "callSiteSha256": "d9a9dcc52021191424719fac9f5459279d37a5f655d96d85777ea93f0b877d3d",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "src/modules/agent-access/agent-access.functions.ts:listOwnerGrantReadbacksQuery",
             "to": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
             "via": "function_reference",
-            "callSiteSha256": "eca76c2be2589005ba77f70df792ea7e94c598c3c1d94cf857d87eb2860b2353",
+            "callSiteSha256": "05b00926f61fe0efb7326f41ffca387c807b03857845bd22cba68e7d7d78eea9",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "1ca12aa9f63d555e52be93776a67b329d00668a39da3f0050076c5e6c487b826",
+            "callSiteSha256": "505a0de5d7a617752abf175f69f45b376d48f57d9a2496ec620bf64fde9d0c84",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "fbfc6bd3579adc87749ac180901e0d525b749a0d4cbca56df83213e5dcdb4fb7"
+        "sha256": "92a2d9c6975311163b9527d29374b7480c7b2dbd0b4054a72cd1a64dd506c823"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -404,7 +404,7 @@
       "surfaceRef": "src/modules/agent-access/agent-access.functions.ts:revokeAgentAccessKeyServer",
       "runtimeHandlerRef": "src/modules/agent-access/agent-access.functions.ts:revokeAgentAccessKeyServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "2911da9ed5b488c15063d6d0c24edca6389016984c6dc8a7ec376092aa3f2deb",
+      "authorityPathSha256": "335a7797e593d51b578f02a5f3371cde2f90258fc731b10a7f7f61eda28f48db",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -413,32 +413,32 @@
             "from": "src/modules/agent-access/agent-access.functions.ts:revokeAgentAccessKeyServer",
             "to": "src/modules/agent-access/agent-access.functions.ts:requireCanonicalOwnerAuthorityServer",
             "via": "call",
-            "callSiteSha256": "98ee1a2e158c0f36348e7498316cffa9edc93e54b670f119bb10e376c82d6b82",
+            "callSiteSha256": "6077f444f95f47f7bd0b76e3307563e7178ff3c7b7643254504fcdaee9e06c77",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "src/modules/agent-access/agent-access.functions.ts:requireCanonicalOwnerAuthorityServer",
             "to": "src/modules/agent-access/agent-access.functions.ts:listOwnerGrantReadbacksQuery",
             "via": "function_reference",
-            "callSiteSha256": "e40446fc45c2e8dbc245776db8f82468612bd58a9e3d9f270952916bec14b4b3",
+            "callSiteSha256": "d9a9dcc52021191424719fac9f5459279d37a5f655d96d85777ea93f0b877d3d",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "src/modules/agent-access/agent-access.functions.ts:listOwnerGrantReadbacksQuery",
             "to": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
             "via": "function_reference",
-            "callSiteSha256": "eca76c2be2589005ba77f70df792ea7e94c598c3c1d94cf857d87eb2860b2353",
+            "callSiteSha256": "05b00926f61fe0efb7326f41ffca387c807b03857845bd22cba68e7d7d78eea9",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "1ca12aa9f63d555e52be93776a67b329d00668a39da3f0050076c5e6c487b826",
+            "callSiteSha256": "505a0de5d7a617752abf175f69f45b376d48f57d9a2496ec620bf64fde9d0c84",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "bcc3ee05486dedd4ebb63716004a578403ee5759dc0351a7ca0ffdcf957c6f53"
+        "sha256": "50576486beb81e9b730ea57869124ed82cfcbdc62797e33daff60aa355218bbd"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -459,7 +459,7 @@
       "surfaceRef": "src/modules/capability-execution/operation-approval.functions.ts:decideOperationApprovalServer",
       "runtimeHandlerRef": "src/modules/capability-execution/operation-approval.functions.ts:decideOperationApprovalServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "b78cbe1f7393df54f182747b8eb2161f85cecd9c1d18cf1029b7651565c7576d",
+      "authorityPathSha256": "3ea1211d4625605b5799e14932b3e32728539cef8b6e14fdd0de3a1dfa284e48",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -489,25 +489,25 @@
             "from": "convex/capabilityOperationInvocations.ts:decideOperationApproval",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalDecisionHandler",
             "via": "call",
-            "callSiteSha256": "1ccb4e114299d1fd6a0a1176ab2aea145e303e2e33b016e2edaaad11cfbbd161",
+            "callSiteSha256": "c7f3f4dc8477eb885ac4161eb1451816622b6b5cb8f5c73e3d82ccda6e2f328d",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalDecisionHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "via": "call",
-            "callSiteSha256": "cd7a9d48e1550ee45679ab002b93175f572704c287caed6769c5b519b92db18e",
+            "callSiteSha256": "ce28f1bc8ee089942d172b8a8778057810e8fd310ac82a6b93c7de8c8c0a9127",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "73d6b4922f11cb96739527d214c2f2f53c8c79bbe685b190ac9223c42a2a3dbc",
+            "callSiteSha256": "a1b84efe982a733561655fae0cd9c4eb7d76d91f9213368eb4189b848bb1b5ec",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "561a4e434253bc7daf0089aa9334ab1099a0b30c8a9756f3ecf1a161659a06c5"
+        "sha256": "fc6e79ac44ca4d7fdaae8c0034a7b2a8738a1689021c64b981509c399954ed97"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -528,7 +528,7 @@
       "surfaceRef": "src/modules/capability-execution/operation-approval.functions.ts:listPendingOperationApprovalsServer",
       "runtimeHandlerRef": "src/modules/capability-execution/operation-approval.functions.ts:listPendingOperationApprovalsServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "1ac83abf251bae1b3feb3ef6e4635920d2347022b6568d73f15a97ab2ff275ba",
+      "authorityPathSha256": "ae534eef9e8d472996985c4fe1ac1a510d8390b54a36cae437fd92b456b78c68",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -558,25 +558,25 @@
             "from": "convex/capabilityOperationInvocations.ts:listPendingOperationApprovals",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalListHandler",
             "via": "call",
-            "callSiteSha256": "a0fe0bf21c340e844c2c627cbd20a32de50e6a3a97ffb7ebe57b15e2b211043d",
+            "callSiteSha256": "96bce9d655c6785a8e6a81e36f3960995dde7c663548be703b9fedb82732bcc1",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalListHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "via": "call",
-            "callSiteSha256": "a74db1cfd8b11a08329526f880023206e176aa5b2ab286528d5bc35c3127a040",
+            "callSiteSha256": "9d4babaf75b916d5ba8f36e37d5aa3c497a3c07d9efd8ff04d8cbfda091dbc41",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "73d6b4922f11cb96739527d214c2f2f53c8c79bbe685b190ac9223c42a2a3dbc",
+            "callSiteSha256": "a1b84efe982a733561655fae0cd9c4eb7d76d91f9213368eb4189b848bb1b5ec",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "ecd8db0d9ee868da5e830f8f287bfaa3cd2c5ef100ab3ea24dfec610b60695bf"
+        "sha256": "6c19959afd9032e21856e212a006f2cbde51c1675c83a22d51888ff6a88abb93"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -597,7 +597,7 @@
       "surfaceRef": "src/modules/capability-execution/operation-recovery.functions.ts:cancelOwnerInvocationServer",
       "runtimeHandlerRef": "src/modules/capability-execution/operation-recovery.functions.ts:cancelOwnerInvocationServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "a001325e73ef2e7586032eefb912139127fac5f4a611a01d23d59345672e7f2d",
+      "authorityPathSha256": "ef50fd4bc2842b09c8f53d440ce03543b849c5724835e53b45d28f7687b8f37f",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -620,25 +620,25 @@
             "from": "convex/capabilityOperationInvocations.ts:cancelOwnerInvocation",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerCancelHandler",
             "via": "call",
-            "callSiteSha256": "5ebdd0dc764b72bb939059d0dc747f363b0236f45f6d8f874ca26dc378564709",
+            "callSiteSha256": "03b231e316db1a46178312db796e0ab1aea3e6df32d9d71819d5656423e5cdd6",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerCancelHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "via": "call",
-            "callSiteSha256": "6973caa23b2a1614e2a410ded1084084a174a73b808ed90b78dfb7415753add8",
+            "callSiteSha256": "3c550cf00e6106f3a52760593df017de42dc4c9e8a3b01d4d558c21d6f25f561",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "73d6b4922f11cb96739527d214c2f2f53c8c79bbe685b190ac9223c42a2a3dbc",
+            "callSiteSha256": "a1b84efe982a733561655fae0cd9c4eb7d76d91f9213368eb4189b848bb1b5ec",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "7cdf68c6fe531be9676ea4bfffadbcbe4423730c502ed7565e2bf9d23d183a5b"
+        "sha256": "0f2fb1d78c33bce5cfb1c763492c2873e4069e0593883eb3fa1dd0f5b6f59acf"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -659,7 +659,7 @@
       "surfaceRef": "src/modules/capability-execution/operation-recovery.functions.ts:readOwnerInvocationStatusServer",
       "runtimeHandlerRef": "src/modules/capability-execution/operation-recovery.functions.ts:readOwnerInvocationStatusServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "7fce54cb1c51a1cd5e670cd61fbbdae3bdf1aa42f3f9d48db827a4bfcb261ae2",
+      "authorityPathSha256": "9e208e243309a12ba3d3ccccaafdc8ed9f772ad10e88677fe8f93a6fee2b3573",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -682,25 +682,25 @@
             "from": "convex/capabilityOperationInvocations.ts:readOwnerInvocationStatus",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerStatusHandler",
             "via": "call",
-            "callSiteSha256": "7c9b2b4b256bb7e3e5fb68f0c72ecabaea97ad595bafe187dde788a55d965dd1",
+            "callSiteSha256": "991a5b53db5629dce6ed2640e2f116e6a17e24308ea9d4820d8a5810bb661360",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerStatusHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "via": "call",
-            "callSiteSha256": "ff8824cf3896e78ba7f29c1a63f4a464862df9ecac3a9cff80b49395e86aa83b",
+            "callSiteSha256": "46d4e6141912a9ff24a211d938f7a89044fc946e061bdc8652236c5274dfeae7",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "73d6b4922f11cb96739527d214c2f2f53c8c79bbe685b190ac9223c42a2a3dbc",
+            "callSiteSha256": "a1b84efe982a733561655fae0cd9c4eb7d76d91f9213368eb4189b848bb1b5ec",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "d9f54c0f51d0c6e1b9fd1498f9653c29639dc11357ca08306cab45db254377fc"
+        "sha256": "27e02072fecf920c1b3c0aa229d653e5dfc2d5487383569216e7c527e62f46b6"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -721,7 +721,7 @@
       "surfaceRef": "src/modules/capability-execution/operation-recovery.functions.ts:reconcileOwnerInvocationServer",
       "runtimeHandlerRef": "src/modules/capability-execution/operation-recovery.functions.ts:reconcileOwnerInvocationServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "0f23f44d9ab7f4b10c4bddd2c04cae1379bec905da59b8d793930b1488864b4e",
+      "authorityPathSha256": "bb420d30068217060654635c93e92bf740986aa6662f5749a67160b117e0240a",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -744,25 +744,25 @@
             "from": "convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerReconcileHandler",
             "via": "call",
-            "callSiteSha256": "0034b86986e6d5034c3fac20a49b0db8d3224121ab1fbdcec02d208fadd38d39",
+            "callSiteSha256": "82d73fd63570ea4b6c334cc42f15bbe622975a791aee4fe4ef3fc78eba0f33ca",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerReconcileHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "via": "call",
-            "callSiteSha256": "610b7bd805e23e499b2c41f1107e1e41dc85857f3f110582680d6f32deae0378",
+            "callSiteSha256": "06685a9c69788d2f30ec5fd24a0f4bfc87a927b37f6ebc952f86eb3570516fbf",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "73d6b4922f11cb96739527d214c2f2f53c8c79bbe685b190ac9223c42a2a3dbc",
+            "callSiteSha256": "a1b84efe982a733561655fae0cd9c4eb7d76d91f9213368eb4189b848bb1b5ec",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "e131fe4621a939f197349d81671c22f9c110d0580c7838379eed14f70e164a22"
+        "sha256": "ddf9ac0c8cf3631a80d37338e038d403e385d43d218bafb40b0c66f8dee01833"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -845,7 +845,7 @@
       "surfaceRef": "src/modules/capability-supply/supply-funnel.functions.ts:connectOwnerX402Server",
       "runtimeHandlerRef": "src/modules/capability-supply/supply-funnel.functions.ts:connectOwnerX402Server",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "e5d478a05ca1c571fc8f7ddb2ed75ec378591530dc295e8878aac12979fd3d3a",
+      "authorityPathSha256": "33361e8c8038302919b10bffd135863cdcafe321e1d0ffeccde32898c79bbcc0",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -880,20 +880,13 @@
           },
           {
             "from": "convex/lib/providerConnections/owner.ts:connectX402OwnerHandler",
-            "to": "convex/lib/providerConnections/owner.ts:readOwnedBusiness",
-            "via": "call",
-            "callSiteSha256": "f87a28008225c7b57cd3edbc98316fe94fad0594b1c7034dac8381c00464b30f",
-            "consequencePrimitiveCount": 1
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:readOwnedBusiness",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "658b47098c8b462dfce6ecc75a46f2d66f6988c563d13e78e17d524cc96fa6f4",
+            "callSiteSha256": "f04fed213dc2c1585596f59d5e495e1c4cb5171924d641ac060fa06d86625a81",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "8caf23c8bcba9314e64867da8b94d90c5352eb855140a7db8ffec3476f181c0e"
+        "sha256": "e13d623507852f7112f5d60b87fba91b6b5ce3fe21888015e05841a61a3d99b4"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -1045,7 +1038,7 @@
       "surfaceRef": "src/modules/capability-supply/supply-funnel.functions.ts:readOwnerProviderConnectionsServer",
       "runtimeHandlerRef": "src/modules/capability-supply/supply-funnel.functions.ts:readOwnerProviderConnectionsServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "1a989f53633e8adb371c132890e5893280d2e995da9a6314b48ad21f1fe2d599",
+      "authorityPathSha256": "48f91b8b0046e53b37bdc6efbc2268a0f7b4efe2e28f49e755e2592d0ebcd196",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -1082,11 +1075,11 @@
             "from": "convex/lib/providerConnections/owner.ts:listOwnerHandler",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "993afdbe0595acd0a79924b21c845d6c7ee18a3129547dad1d5a76885aa3c41c",
+            "callSiteSha256": "5bacaf11b1ca723b38a1ae92e5c4718cfe3de41380e9b3be72944fe8336c6403",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "278d9d0b5bd0151a372d825a09e34fbf7ce3d777509cdfc82d82ffa7a9e3a53b"
+        "sha256": "ea2929ebb12c4fbc755b85edbcaa467dfc3744cf2ed876f07c59d142e5931d24"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -1300,7 +1293,7 @@
       "surfaceRef": "src/modules/capability-supply/supply-funnel.functions.ts:reconnectOwnerProviderConnectionServer",
       "runtimeHandlerRef": "src/modules/capability-supply/supply-funnel.functions.ts:reconnectOwnerProviderConnectionServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "e794b43f17298b94bdf2a77142d5971977e9b6ef47e48cda72e26a45a2cb7785",
+      "authorityPathSha256": "6354c2a0877423cb94ede467e47e21f8b9910072d40d7a3abd401ee99ff4e455",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -1335,27 +1328,13 @@
           },
           {
             "from": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerHandler",
-            "to": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerConnection",
-            "via": "call",
-            "callSiteSha256": "af04aecd4a64aa58dae39a239eb592afbaae59477f9199def999ebeb49c2cf12",
-            "consequencePrimitiveCount": 0
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerConnection",
-            "to": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-            "via": "call",
-            "callSiteSha256": "11e68ce6f5716d9b81b0ec7ccf3f7f64a56c74a8b69693bbc70b52b71fb83e69",
-            "consequencePrimitiveCount": 1
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "0b3db4b02b30f843172f1fe14ae81bb48751bf583fafd58383551f53d3f547a5",
+            "callSiteSha256": "cbe9d502fec491e2fecaf4933333a4d86953a18ab9bfc96a2374c873f00703f7",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "76ccc1ed4d93485613027c1baba2e84edd24bf22af01159f7b275d8ec967b289"
+        "sha256": "1e76556dab7d32230da094625508e1aa7d99e413f000644087c21beade095caa"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -1438,7 +1417,7 @@
       "surfaceRef": "src/modules/capability-supply/supply-funnel.functions.ts:retryOwnerProviderConnectionCleanupServer",
       "runtimeHandlerRef": "src/modules/capability-supply/supply-funnel.functions.ts:retryOwnerProviderConnectionCleanupServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "bd21d41bbbaa073e996421ef4d3522f626b2c2b44be325221189f66d7ec2510e",
+      "authorityPathSha256": "fdf22d5bcfd75ee3f0c273d7bb232c510f7eed9ccc95af6e5be806a45b248208",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -1473,20 +1452,13 @@
           },
           {
             "from": "convex/lib/providerConnections/owner.ts:retryOwnerCleanupHandler",
-            "to": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-            "via": "call",
-            "callSiteSha256": "4794c1c38006c38336c9e429a938264f3fdf8b3273eed62af5d9dd6ba2b65120",
-            "consequencePrimitiveCount": 1
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "0b3db4b02b30f843172f1fe14ae81bb48751bf583fafd58383551f53d3f547a5",
+            "callSiteSha256": "aff2fed8d68b72f5b4915d94fd6dd5b8b13fc9c3a88af4930cd5408bad2430ef",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "62fe489ef8295eb11894e22d35e1682415bc5410b2f267a7e8159f72aa8b53aa"
+        "sha256": "b4bda5bc304c54ee2d790cfd95aa176152778c425fa58662cb51dc983e4f1574"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -1507,7 +1479,7 @@
       "surfaceRef": "src/modules/capability-supply/supply-funnel.functions.ts:revokeOwnerProviderConnectionServer",
       "runtimeHandlerRef": "src/modules/capability-supply/supply-funnel.functions.ts:revokeOwnerProviderConnectionServer",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "d372413b5f791b322f18d178e7fcb187b41470449d94bee2cc05722585358541",
+      "authorityPathSha256": "1cfc1a33b4aea6b7198e4ececa9681dab0086ed70984ad13d61570654bc29179",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -1542,20 +1514,13 @@
           },
           {
             "from": "convex/lib/providerConnections/owner.ts:revokeOwnerHandler",
-            "to": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-            "via": "call",
-            "callSiteSha256": "3529891a9c762c7e1f611fcdecdde19e98af3f94b435460b02edca1d9a09bcc7",
-            "consequencePrimitiveCount": 1
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "0b3db4b02b30f843172f1fe14ae81bb48751bf583fafd58383551f53d3f547a5",
+            "callSiteSha256": "38cf13ce7fe6cf68678eddbb74b4cc46d76becdb236544daba04bfd95e1b50ce",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "2e48e80e17276e9a3143b3561df7a4e5efe3f67568b9031c3fb7d2f84d5c531c"
+        "sha256": "1798226857ed386b28a87644035966c9631eb06e8928781253e3094f2cb4b1d1"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3020,7 +2985,7 @@
       "surfaceRef": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
       "runtimeHandlerRef": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "47828652d274408252e5cf75e6895fd64d1d36271b84366e8c5c26a2c6f09d91",
+      "authorityPathSha256": "4ee9cb9b12930c5dcc2ff22446fa5f5889873cbf4a56acf4155070f5a8c51374",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3029,11 +2994,11 @@
             "from": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "1ca12aa9f63d555e52be93776a67b329d00668a39da3f0050076c5e6c487b826",
+            "callSiteSha256": "505a0de5d7a617752abf175f69f45b376d48f57d9a2496ec620bf64fde9d0c84",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "1fe7e51459e954bae1bf8c4977dec08dd1d4af5a07a8668e59f1093f42b4113a"
+        "sha256": "574ad97cba2b7415634dc513b744e83462295261c8b7fb90f3fea58cf5c8e8a4"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3054,7 +3019,7 @@
       "surfaceRef": "convex/agentAccessPolicy.ts:registerGrantForServer",
       "runtimeHandlerRef": "convex/agentAccessPolicy.ts:registerGrantForServer",
       "authoritySink": "src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion",
-      "authorityPathSha256": "611178ed8b11617fa6f158addc3137959dc9b2dc376b2381f471b9990bd134a2",
+      "authorityPathSha256": "e51245acd5548b94af24e23e10bd20bf14e79b8be2efbe1d6fd7c31770d32bbf",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3063,18 +3028,18 @@
             "from": "convex/agentAccessPolicy.ts:registerGrantForServer",
             "to": "convex/agentAccessPolicy.ts:verifyServerAssertion",
             "via": "call",
-            "callSiteSha256": "157ec6a27a6c71aaa6991421c3a4ef667ef41bf0f6d37d7bb0d1b47ba96b2141",
+            "callSiteSha256": "0444446971a9362b4a0aabf4ddad1a497c9e3f425f633ce7121b3272439eb452",
             "consequencePrimitiveCount": 1
           },
           {
             "from": "convex/agentAccessPolicy.ts:verifyServerAssertion",
             "to": "src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion",
             "via": "call",
-            "callSiteSha256": "4a34b2141e8a92e10c96977108b126ee4b5aa20f4a8b70602f0ee62a590ef077",
+            "callSiteSha256": "62414453a8172639e9827a0ffa6350f6bda3a7abbaeb7fa477968ffec36c010f",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "84919aa1ab4023a05dc8c40904b6189266bb15867dd1399c45f61a01cfaaa925"
+        "sha256": "2848cc2f53fe8e6934898139c90f43bf998c370eecb1307aa6680dc8808e5eff"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
@@ -3095,7 +3060,7 @@
       "surfaceRef": "convex/agentAccessPolicy.ts:revokeGrantForServer",
       "runtimeHandlerRef": "convex/agentAccessPolicy.ts:revokeGrantForServer",
       "authoritySink": "src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion",
-      "authorityPathSha256": "7e9e2700422603af8a3aa2c7fd1f6e36a8e8ab8f5175b02ceb6fab7ca6101412",
+      "authorityPathSha256": "851ab0a08f943e42700d66d2a0a5c53607d85edc13072e6127961f696a32341a",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3104,18 +3069,18 @@
             "from": "convex/agentAccessPolicy.ts:revokeGrantForServer",
             "to": "convex/agentAccessPolicy.ts:verifyServerAssertion",
             "via": "call",
-            "callSiteSha256": "c564428a9379c645d52ab84be5b8a795d94f9422c7e918b9f094dfbfde991d98",
+            "callSiteSha256": "47f312ec6fa84c8fa982bfe8fcd0595bb7c3616cc2cae9c94ccef78e978987f0",
             "consequencePrimitiveCount": 1
           },
           {
             "from": "convex/agentAccessPolicy.ts:verifyServerAssertion",
             "to": "src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion",
             "via": "call",
-            "callSiteSha256": "4a34b2141e8a92e10c96977108b126ee4b5aa20f4a8b70602f0ee62a590ef077",
+            "callSiteSha256": "62414453a8172639e9827a0ffa6350f6bda3a7abbaeb7fa477968ffec36c010f",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "8b6eec8fd355a8e0d026cb85074debbd2fa8ed0de53814131ec5fdebf063add0"
+        "sha256": "9461d33274052768b4768253d6894c1f3a994d69c859915dbc6b6a12db3e9a9e"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
@@ -3136,7 +3101,7 @@
       "surfaceRef": "convex/agentAccessPrincipals.ts:registerAgentPrincipal",
       "runtimeHandlerRef": "convex/agentAccessPrincipals.ts:registerAgentPrincipal",
       "authoritySink": "convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext",
-      "authorityPathSha256": "1a647fdf7a87c10c609ecfa8ae3c4500ba2b74e9f6cc21c21e6a3d404ec9f90e",
+      "authorityPathSha256": "c4167e784fce56e4a78150686e6cf56c0b2f49d430a92a392d0e867cb65c5dc7",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3145,16 +3110,146 @@
             "from": "convex/agentAccessPrincipals.ts:registerAgentPrincipal",
             "to": "convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext",
             "via": "call",
-            "callSiteSha256": "d5f9eae9ee653e84e6ab5f5bc71738d09d5ec8ace5e688f2545fbee7acf14a69",
+            "callSiteSha256": "b4a1c701ccb5318939ec1f3698335206e83c28c4f87361d66ff684f968f9a2e1",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "d991fa70f2828d9dbf57ed9e03d4bd2f13bb30edc3197026ee4ad6e3f7728ed6"
+        "sha256": "5f066889c98c67334db0bcd1692b8e219da4cd224d63bb3170a16f2cf83a943b"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
         "testName": "drives the %s isolation case through the registered agent registration mutation and its real canonical-context sink",
         "testSha256": "0c95e74643f1beedd1de1dddcf648d6a3027b2784ba9bcc7f6985cb2922a277c",
+        "caseLabels": [
+          "owner",
+          "member",
+          "workload",
+          "missing_workload",
+          "stranger",
+          "wrong_account",
+          "stale_generation"
+        ]
+      }
+    },
+    {
+      "surfaceRef": "convex/agentAccessPrincipals.ts:registerIssuedAgentBindingForServer",
+      "runtimeHandlerRef": "convex/agentAccessPrincipals.ts:registerIssuedAgentBindingForServer",
+      "authoritySink": "convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext",
+      "authorityPathSha256": "542d4eff4a611e0495daaf3ad899403c7e8f11e0e0e7a739658931411abd6235",
+      "dominance": {
+        "status": "proved",
+        "method": "ordered_recursive_authority_dominance:v1",
+        "hops": [
+          {
+            "from": "convex/agentAccessPrincipals.ts:registerIssuedAgentBindingForServer",
+            "to": "convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext",
+            "via": "call",
+            "callSiteSha256": "8149294127badabdcde6adaf8824548b1a0cea86f43d8d97b8255d040ebed842",
+            "consequencePrimitiveCount": 5
+          }
+        ],
+        "sha256": "dbb67574db14fac24495fb986566efec9162fe47be1d7d76c3c17a9428220665"
+      },
+      "runtimeIsolation": {
+        "testFile": "tests/integration/chat-scheduled-authority.test.ts",
+        "testName": "evaluates resolveInteractiveAuthorityContext %s through the registered materialization mutation",
+        "testSha256": "806c19fbc82f89c16ae4937e462a579828fc47e388e25ddca4a28098a66ee43e",
+        "caseLabels": [
+          "owner",
+          "member",
+          "workload",
+          "missing_workload",
+          "stranger",
+          "wrong_account",
+          "stale_generation"
+        ]
+      }
+    },
+    {
+      "surfaceRef": "convex/agentMoneyReads.ts:activity",
+      "runtimeHandlerRef": "convex/agentMoneyReads.ts:activity",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal",
+      "authorityPathSha256": "bcd3ae301945498a66cabfd8b1f9cf942089cae49bf4c818834b0ae2c84fbd5a",
+      "dominance": {
+        "status": "proved",
+        "method": "ordered_recursive_authority_dominance:v1",
+        "hops": [
+          {
+            "from": "convex/agentMoneyReads.ts:activity",
+            "to": "convex/lib/agentMoneyReads.ts:listAgentActivityHandler",
+            "via": "call",
+            "callSiteSha256": "ca3716d367708873cc4e986579177183c7fe4fa87fda035f057c98ac92ce27ba",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/agentMoneyReads.ts:listAgentActivityHandler",
+            "to": "convex/lib/agentMoneyReads.ts:admitAgentMoneyRead",
+            "via": "call",
+            "callSiteSha256": "9981b9799908808d62e8105c5dbf8dce97ac8680eb5e29477992d4ea138abcce",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/agentMoneyReads.ts:admitAgentMoneyRead",
+            "to": "convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal",
+            "via": "call",
+            "callSiteSha256": "1f84b34fa56db8659cbf6aeb4b311d97de50bf93dd479834edefdb27474d9a51",
+            "consequencePrimitiveCount": 0
+          }
+        ],
+        "sha256": "5152a88961aa577fe27e628bb42dcd63296541d2f6be3520f59bf310d976930a"
+      },
+      "runtimeIsolation": {
+        "testFile": "tests/unit/convex/agent-money-reads.test.ts",
+        "testName": "drives the %s isolation case through the registered buyer balance mutation without cross-principal disclosure",
+        "testSha256": "863d22f7f33b74b9f507e214fd4e51fd1a6c477c7aae9b81a86f3e19ffa8fea3",
+        "caseLabels": [
+          "owner",
+          "member",
+          "workload",
+          "missing_workload",
+          "stranger",
+          "wrong_account",
+          "stale_generation"
+        ]
+      }
+    },
+    {
+      "surfaceRef": "convex/agentMoneyReads.ts:balance",
+      "runtimeHandlerRef": "convex/agentMoneyReads.ts:balance",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal",
+      "authorityPathSha256": "a9c6ca79cf2e09e9cc6cc5315d94f1f2eef1da9d383299eb325f2c70741db19c",
+      "dominance": {
+        "status": "proved",
+        "method": "ordered_recursive_authority_dominance:v1",
+        "hops": [
+          {
+            "from": "convex/agentMoneyReads.ts:balance",
+            "to": "convex/lib/agentMoneyReads.ts:readAgentBalanceHandler",
+            "via": "call",
+            "callSiteSha256": "2589a66a571ea21605ede4057d67b60fa6d29107cf4e06b48bfe9e3379c0fccc",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/agentMoneyReads.ts:readAgentBalanceHandler",
+            "to": "convex/lib/agentMoneyReads.ts:admitAgentMoneyRead",
+            "via": "call",
+            "callSiteSha256": "a70452ffb871eba3cf03a30e23ab00f253a2b94dab7c4357411ef87a5be26553",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/agentMoneyReads.ts:admitAgentMoneyRead",
+            "to": "convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal",
+            "via": "call",
+            "callSiteSha256": "1f84b34fa56db8659cbf6aeb4b311d97de50bf93dd479834edefdb27474d9a51",
+            "consequencePrimitiveCount": 0
+          }
+        ],
+        "sha256": "d9c4f83d70cb72ed03654a2e554d93fc5a83b31b62ff58c28989cfd02dc46fb9"
+      },
+      "runtimeIsolation": {
+        "testFile": "tests/unit/convex/agent-money-reads.test.ts",
+        "testName": "drives the %s isolation case through the registered buyer balance mutation without cross-principal disclosure",
+        "testSha256": "863d22f7f33b74b9f507e214fd4e51fd1a6c477c7aae9b81a86f3e19ffa8fea3",
         "caseLabels": [
           "owner",
           "member",
@@ -3179,11 +3274,11 @@
             "from": "convex/authorityBoundary.ts:resolveAgentBinding",
             "to": "convex/authorityBoundary.ts:resolveCanonicalAgentBinding",
             "via": "call",
-            "callSiteSha256": "4146254f3a3a6867c37bb513e1b1dccc2414f11c4b943913f5144741eb429e02",
+            "callSiteSha256": "fa9c8aef1f498fbfa214295286d6503659bb73859cf819fcbe9f7e03d5f7c399",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "95c464086ebcab8c0b0087a51ca307cf6d89bb5c95273c9fb395bd8e87c7351a"
+        "sha256": "41fac418b413f6b68f904561027b0066d0ce75c3563524d1e58f895a170c49f2"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authority-boundary.test.ts",
@@ -3238,7 +3333,7 @@
       "surfaceRef": "convex/capabilityOperationInvocations.ts:cancelInvocation",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:cancelInvocation",
       "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
-      "authorityPathSha256": "42c50bc1ac6b8bc8165f1982c74217c7a8f01d1bc641750ec57e80e7ad4e4c69",
+      "authorityPathSha256": "efd7f39d30674b3fc76c43933d0ffda97f287d3e2dba826a48c456a7f9d03341",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3247,46 +3342,46 @@
             "from": "convex/capabilityOperationInvocations.ts:cancelInvocation",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentCancelHandler",
             "via": "call",
-            "callSiteSha256": "51c66072dacabe2d3cd6736bd201665f8a14ce281f139d2844a777728df3dee8",
+            "callSiteSha256": "53e11533cbd6f1ba783a280a1b813486d0d27d1c11d16ec6da8ed930c96b2ef3",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentCancelHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "via": "call",
-            "callSiteSha256": "9e1d8b5500b81baa4f58df55c5b2410a4992f52f4d89205968b30747e4287e4c",
+            "callSiteSha256": "3d8b3921f41db1ec0d960e8f3eebed2fb8dd128e36d454b6203fee4d6d89ceb5",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "via": "function_reference",
-            "callSiteSha256": "f417b8fc5e4655a4b26b99f2bb8fd9968f76771ad6042da4758aec5445bccadb",
+            "callSiteSha256": "d5073e21d46ce9c968de8c299da2f5d8e439671d9347501281b2570e7e164248",
             "consequencePrimitiveCount": 1
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "to": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "via": "function_reference",
-            "callSiteSha256": "ec91aeb6bdf9b75cdafeeaddd4d9236133f8cf96bd798d3b06273833e2d54917",
+            "callSiteSha256": "664461977ec6fe3cc6d829b2cd0d8bc52a1682a918f20d3aa5954d42a3254832",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "via": "call",
-            "callSiteSha256": "f8ee4bb74fefc22380e9dbf3e1de5a5e5761ba827ce3c5183fe56f0ad08a8cab",
+            "callSiteSha256": "76ab025f0647963282e5e10723532facc4516383cb4a19ea2fb528ec042da99f",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
             "via": "call",
-            "callSiteSha256": "8137f1062082538bba03d8d9415d23b226d239a2b6c88efefcf82f5c243e2d3b",
+            "callSiteSha256": "1ceb648ead26a2eba61f52c86926904e34e254f4a6ef18e217326625ca4f36b6",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "37bfeb223b7dbc45f3f470cfeab3db620799147ac317f2d6b70a9c2df2761f85"
+        "sha256": "8dc2a51abd5921a15470896d2dae5a6f7b2ecc8c6c210c63e26468c7dee703ee"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
@@ -3307,7 +3402,7 @@
       "surfaceRef": "convex/capabilityOperationInvocations.ts:cancelOwnerInvocation",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:cancelOwnerInvocation",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "78556db651fc3caa887984c5178eaabd586178cd0fb35c990218db3fd59221f3",
+      "authorityPathSha256": "525218a0cc446a9fef67a5eb56a363488a94acba602b165d05f7a87c5d418f4d",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3316,25 +3411,25 @@
             "from": "convex/capabilityOperationInvocations.ts:cancelOwnerInvocation",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerCancelHandler",
             "via": "call",
-            "callSiteSha256": "5ebdd0dc764b72bb939059d0dc747f363b0236f45f6d8f874ca26dc378564709",
+            "callSiteSha256": "03b231e316db1a46178312db796e0ab1aea3e6df32d9d71819d5656423e5cdd6",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerCancelHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "via": "call",
-            "callSiteSha256": "6973caa23b2a1614e2a410ded1084084a174a73b808ed90b78dfb7415753add8",
+            "callSiteSha256": "3c550cf00e6106f3a52760593df017de42dc4c9e8a3b01d4d558c21d6f25f561",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "73d6b4922f11cb96739527d214c2f2f53c8c79bbe685b190ac9223c42a2a3dbc",
+            "callSiteSha256": "a1b84efe982a733561655fae0cd9c4eb7d76d91f9213368eb4189b848bb1b5ec",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "47848f03615287c99e1ab963cccdd8d3d15b98741e2d19f81b589e5da7a14355"
+        "sha256": "740925e8dba9ed45aac5395cc3ad12d13df62b9adcf2b19e3b8d838eac960efb"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3355,7 +3450,7 @@
       "surfaceRef": "convex/capabilityOperationInvocations.ts:decideOperationApproval",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:decideOperationApproval",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "d440540e710dc4d6bcd0b191df0a3819ff6aa55579094438cd3121b4bbb4b3b0",
+      "authorityPathSha256": "3054a490f14ce141e1e5bbf0d525078eea7210c6c100ed7537c3c710e894622f",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3364,25 +3459,25 @@
             "from": "convex/capabilityOperationInvocations.ts:decideOperationApproval",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalDecisionHandler",
             "via": "call",
-            "callSiteSha256": "1ccb4e114299d1fd6a0a1176ab2aea145e303e2e33b016e2edaaad11cfbbd161",
+            "callSiteSha256": "c7f3f4dc8477eb885ac4161eb1451816622b6b5cb8f5c73e3d82ccda6e2f328d",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalDecisionHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "via": "call",
-            "callSiteSha256": "cd7a9d48e1550ee45679ab002b93175f572704c287caed6769c5b519b92db18e",
+            "callSiteSha256": "ce28f1bc8ee089942d172b8a8778057810e8fd310ac82a6b93c7de8c8c0a9127",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "73d6b4922f11cb96739527d214c2f2f53c8c79bbe685b190ac9223c42a2a3dbc",
+            "callSiteSha256": "a1b84efe982a733561655fae0cd9c4eb7d76d91f9213368eb4189b848bb1b5ec",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "6ec90d4ebaf443dcdf50036ddd99b78e56c0f45e6532573b2da5d44d8b76cb1d"
+        "sha256": "9004f0c7f700903d3f3418ca6ba16c61cbd8f318d9f61606295d5f64886866c2"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3403,7 +3498,7 @@
       "surfaceRef": "convex/capabilityOperationInvocations.ts:invoke",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:invoke",
       "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
-      "authorityPathSha256": "a5df59cd2d25dcff4564340c01baaa0e881d79c13087e550998679f6192d244f",
+      "authorityPathSha256": "07e0238205a22706bbe8b9e6245ebf1ed159c88631d83568dc9f56e230db8e72",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3412,46 +3507,115 @@
             "from": "convex/capabilityOperationInvocations.ts:invoke",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentInvokeHandler",
             "via": "call",
-            "callSiteSha256": "e33c2c1f9701eadbd25bc44fb66b53279d9d2c1be436e6758312fdf0bfc95dfd",
+            "callSiteSha256": "eccb44601250495a5d56282991c2579df0b26717675a4700d38106dfd3f0fb93",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentInvokeHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "via": "call",
-            "callSiteSha256": "03bfd63f1ee2827786c029c9e4ddf0f2aed0636ad3395b3d480c7aa2db2e6328",
+            "callSiteSha256": "9b37a3419efd0f9faf674beecda60b61abe3060295fddd32741cfa45c7096951",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "via": "function_reference",
-            "callSiteSha256": "f417b8fc5e4655a4b26b99f2bb8fd9968f76771ad6042da4758aec5445bccadb",
+            "callSiteSha256": "d5073e21d46ce9c968de8c299da2f5d8e439671d9347501281b2570e7e164248",
             "consequencePrimitiveCount": 1
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "to": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "via": "function_reference",
-            "callSiteSha256": "ec91aeb6bdf9b75cdafeeaddd4d9236133f8cf96bd798d3b06273833e2d54917",
+            "callSiteSha256": "664461977ec6fe3cc6d829b2cd0d8bc52a1682a918f20d3aa5954d42a3254832",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "via": "call",
-            "callSiteSha256": "f8ee4bb74fefc22380e9dbf3e1de5a5e5761ba827ce3c5183fe56f0ad08a8cab",
+            "callSiteSha256": "76ab025f0647963282e5e10723532facc4516383cb4a19ea2fb528ec042da99f",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
             "via": "call",
-            "callSiteSha256": "8137f1062082538bba03d8d9415d23b226d239a2b6c88efefcf82f5c243e2d3b",
+            "callSiteSha256": "1ceb648ead26a2eba61f52c86926904e34e254f4a6ef18e217326625ca4f36b6",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "7a7fb11651dcb228057bd482cb32f4d02d8cf47d944c8075441cede318f04643"
+        "sha256": "6f682ab845861a7d03aee5869a6ac09840dd8d7441adc605ef9a685925d9e027"
+      },
+      "runtimeIsolation": {
+        "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
+        "testName": "drives the %s isolation case through the registered cancel action and its real current-agent sink",
+        "testSha256": "d9643abd26a55297cce78e37a05e335172845a96972952c86905625c0db8c384",
+        "caseLabels": [
+          "owner",
+          "member",
+          "workload",
+          "missing_workload",
+          "stranger",
+          "wrong_account",
+          "stale_generation"
+        ]
+      }
+    },
+    {
+      "surfaceRef": "convex/capabilityOperationInvocations.ts:listInvocations",
+      "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:listInvocations",
+      "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
+      "authorityPathSha256": "c7838073ada54b6f3192594627027752edd9c83323dbe9aac8683fb0d72c0c62",
+      "dominance": {
+        "status": "proved",
+        "method": "ordered_recursive_authority_dominance:v1",
+        "hops": [
+          {
+            "from": "convex/capabilityOperationInvocations.ts:listInvocations",
+            "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentListHandler",
+            "via": "call",
+            "callSiteSha256": "7581824ed221c68a664cbf570c212dec56d4c5ecaace075a49a09eb2c38e9922",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentListHandler",
+            "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
+            "via": "call",
+            "callSiteSha256": "c61f6b336ff8f13e15ea74bb421d7fbb31fdb3c9cf2d8a7c038a0fbe5371bd16",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
+            "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
+            "via": "function_reference",
+            "callSiteSha256": "d5073e21d46ce9c968de8c299da2f5d8e439671d9347501281b2570e7e164248",
+            "consequencePrimitiveCount": 1
+          },
+          {
+            "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
+            "to": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
+            "via": "function_reference",
+            "callSiteSha256": "664461977ec6fe3cc6d829b2cd0d8bc52a1682a918f20d3aa5954d42a3254832",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
+            "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
+            "via": "call",
+            "callSiteSha256": "76ab025f0647963282e5e10723532facc4516383cb4a19ea2fb528ec042da99f",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
+            "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
+            "via": "call",
+            "callSiteSha256": "1ceb648ead26a2eba61f52c86926904e34e254f4a6ef18e217326625ca4f36b6",
+            "consequencePrimitiveCount": 0
+          }
+        ],
+        "sha256": "bd7c6c39ad6fcfd4e2b3cc5fba53bcdabaa3bd8862e319df038fd2c017105e27"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
@@ -3472,7 +3636,7 @@
       "surfaceRef": "convex/capabilityOperationInvocations.ts:listPendingOperationApprovals",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:listPendingOperationApprovals",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "8c191b5e11f9c6ca7a3970dc9c73082c321df3322b1f57d0625b10915aaebf3d",
+      "authorityPathSha256": "39854748f8feb5ce6e6a1e03f25d9b8fd5da21180606162e953b0fa67d5e27f6",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3481,25 +3645,25 @@
             "from": "convex/capabilityOperationInvocations.ts:listPendingOperationApprovals",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalListHandler",
             "via": "call",
-            "callSiteSha256": "a0fe0bf21c340e844c2c627cbd20a32de50e6a3a97ffb7ebe57b15e2b211043d",
+            "callSiteSha256": "96bce9d655c6785a8e6a81e36f3960995dde7c663548be703b9fedb82732bcc1",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalListHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "via": "call",
-            "callSiteSha256": "a74db1cfd8b11a08329526f880023206e176aa5b2ab286528d5bc35c3127a040",
+            "callSiteSha256": "9d4babaf75b916d5ba8f36e37d5aa3c497a3c07d9efd8ff04d8cbfda091dbc41",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "73d6b4922f11cb96739527d214c2f2f53c8c79bbe685b190ac9223c42a2a3dbc",
+            "callSiteSha256": "a1b84efe982a733561655fae0cd9c4eb7d76d91f9213368eb4189b848bb1b5ec",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "627b0d28b9effede264fd016c50a5f85377fe97e0c55ef4fd9242011c8774632"
+        "sha256": "633b2e2a46f3e542ee4add99a4c44d2c44684d3b7617d30b3d05032f8018baff"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3520,7 +3684,7 @@
       "surfaceRef": "convex/capabilityOperationInvocations.ts:readInvocationStatus",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:readInvocationStatus",
       "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
-      "authorityPathSha256": "88fc7ee79faf043fbd5d77e1524572ed20fef3cc5ed8a3a0cc2050230180cc24",
+      "authorityPathSha256": "baef17e91983c71e0f3c48162db2888e7bd6520b9ee1a48ecbb0c129b53e2c45",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3529,46 +3693,46 @@
             "from": "convex/capabilityOperationInvocations.ts:readInvocationStatus",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentStatusHandler",
             "via": "call",
-            "callSiteSha256": "96b4e8117086e3709d81fade8a7c7c5c72e3d646df91e544abd6d6e8f96ddccb",
+            "callSiteSha256": "fdf1ca374e289454a56a49592ced2e2bb270af6366fad956134aed5f12335c29",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentStatusHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "via": "call",
-            "callSiteSha256": "15c848aa602d73d117cf562d4b15c3b6e728d7386cf9d6dc384737e81d2ea17c",
+            "callSiteSha256": "62f5a793cdeccd4d020b8f82f29ae9fa3a5382c5767b301f3aac49d664812799",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "via": "function_reference",
-            "callSiteSha256": "f417b8fc5e4655a4b26b99f2bb8fd9968f76771ad6042da4758aec5445bccadb",
+            "callSiteSha256": "d5073e21d46ce9c968de8c299da2f5d8e439671d9347501281b2570e7e164248",
             "consequencePrimitiveCount": 1
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "to": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "via": "function_reference",
-            "callSiteSha256": "ec91aeb6bdf9b75cdafeeaddd4d9236133f8cf96bd798d3b06273833e2d54917",
+            "callSiteSha256": "664461977ec6fe3cc6d829b2cd0d8bc52a1682a918f20d3aa5954d42a3254832",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "via": "call",
-            "callSiteSha256": "f8ee4bb74fefc22380e9dbf3e1de5a5e5761ba827ce3c5183fe56f0ad08a8cab",
+            "callSiteSha256": "76ab025f0647963282e5e10723532facc4516383cb4a19ea2fb528ec042da99f",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
             "via": "call",
-            "callSiteSha256": "8137f1062082538bba03d8d9415d23b226d239a2b6c88efefcf82f5c243e2d3b",
+            "callSiteSha256": "1ceb648ead26a2eba61f52c86926904e34e254f4a6ef18e217326625ca4f36b6",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "c49cd15e1d209e41f049d7a6343606d834d756bec50faf7e0957e63800d9d2f2"
+        "sha256": "684775afdf4e06bd971d55de2120969b32cd77f0ede05a304a60efba07fdd476"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
@@ -3589,7 +3753,7 @@
       "surfaceRef": "convex/capabilityOperationInvocations.ts:readOwnerInvocationStatus",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:readOwnerInvocationStatus",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "f0d8ea28959c4e1b47ac1fe3671f24eb169013da8ec4433dba9e9ef0a926b26b",
+      "authorityPathSha256": "21c0ddc849bbcc4696f39ecd53cd2c4fc848912e3b724e8ed06501b9d2b4d80c",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3598,25 +3762,25 @@
             "from": "convex/capabilityOperationInvocations.ts:readOwnerInvocationStatus",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerStatusHandler",
             "via": "call",
-            "callSiteSha256": "7c9b2b4b256bb7e3e5fb68f0c72ecabaea97ad595bafe187dde788a55d965dd1",
+            "callSiteSha256": "991a5b53db5629dce6ed2640e2f116e6a17e24308ea9d4820d8a5810bb661360",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerStatusHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "via": "call",
-            "callSiteSha256": "ff8824cf3896e78ba7f29c1a63f4a464862df9ecac3a9cff80b49395e86aa83b",
+            "callSiteSha256": "46d4e6141912a9ff24a211d938f7a89044fc946e061bdc8652236c5274dfeae7",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "73d6b4922f11cb96739527d214c2f2f53c8c79bbe685b190ac9223c42a2a3dbc",
+            "callSiteSha256": "a1b84efe982a733561655fae0cd9c4eb7d76d91f9213368eb4189b848bb1b5ec",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "1d4c0abf350f41a1eabee1045f23f48b8d08a019ef077012f2d93718b70d5b2e"
+        "sha256": "60db416152141d34001b9ba6afe6090bdddbef043442025a69575d295b82a8ad"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3637,7 +3801,7 @@
       "surfaceRef": "convex/capabilityOperationInvocations.ts:reconcileInvocation",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:reconcileInvocation",
       "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
-      "authorityPathSha256": "9463c478d5b087986afef2310b8482381e7842b732624eb3f8b13f34cdda3f25",
+      "authorityPathSha256": "d3603aa0e9634cf7ea6d2eb0dabd258054c2da4487a480c4363cc901e2df7791",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3646,46 +3810,46 @@
             "from": "convex/capabilityOperationInvocations.ts:reconcileInvocation",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentReconcileHandler",
             "via": "call",
-            "callSiteSha256": "049c5d39c822081f72e459bbd82d01dd16835c7c9c1a21d2fcb7e0c46c882388",
+            "callSiteSha256": "2a3ba916243ef0df9dda812ac95e60551a7f272be5a9771ef27975506d714fa8",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentReconcileHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "via": "call",
-            "callSiteSha256": "aa15c63c70aa7bca32bbc205ed36715ddb0ba40a4341fd37e7f2fa9f8f291717",
+            "callSiteSha256": "61312e24b6dc2ba34fe24c158e338b7819cc727ccd7b48b014ad00102f8cead7",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "via": "function_reference",
-            "callSiteSha256": "f417b8fc5e4655a4b26b99f2bb8fd9968f76771ad6042da4758aec5445bccadb",
+            "callSiteSha256": "d5073e21d46ce9c968de8c299da2f5d8e439671d9347501281b2570e7e164248",
             "consequencePrimitiveCount": 1
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "to": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "via": "function_reference",
-            "callSiteSha256": "ec91aeb6bdf9b75cdafeeaddd4d9236133f8cf96bd798d3b06273833e2d54917",
+            "callSiteSha256": "664461977ec6fe3cc6d829b2cd0d8bc52a1682a918f20d3aa5954d42a3254832",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "via": "call",
-            "callSiteSha256": "f8ee4bb74fefc22380e9dbf3e1de5a5e5761ba827ce3c5183fe56f0ad08a8cab",
+            "callSiteSha256": "76ab025f0647963282e5e10723532facc4516383cb4a19ea2fb528ec042da99f",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
             "via": "call",
-            "callSiteSha256": "8137f1062082538bba03d8d9415d23b226d239a2b6c88efefcf82f5c243e2d3b",
+            "callSiteSha256": "1ceb648ead26a2eba61f52c86926904e34e254f4a6ef18e217326625ca4f36b6",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "da9136d38844094702b7642629fb7cb7459a75aa32bc4379bda378b9873f4000"
+        "sha256": "0c367cded486c196e36e1c1c4112a8c1e80797519b750acbcb209d24804e0c9c"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
@@ -3706,7 +3870,7 @@
       "surfaceRef": "convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "47a240dcfb2b5a6c1e25f555be84e06900051ba399a006889ad87214d3945935",
+      "authorityPathSha256": "16d393e5388987d1a35c260adccbd2cd96f8a4105edece5b33fdfbdff9a85311",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3715,25 +3879,25 @@
             "from": "convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerReconcileHandler",
             "via": "call",
-            "callSiteSha256": "0034b86986e6d5034c3fac20a49b0db8d3224121ab1fbdcec02d208fadd38d39",
+            "callSiteSha256": "82d73fd63570ea4b6c334cc42f15bbe622975a791aee4fe4ef3fc78eba0f33ca",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerReconcileHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "via": "call",
-            "callSiteSha256": "610b7bd805e23e499b2c41f1107e1e41dc85857f3f110582680d6f32deae0378",
+            "callSiteSha256": "06685a9c69788d2f30ec5fd24a0f4bfc87a927b37f6ebc952f86eb3570516fbf",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "73d6b4922f11cb96739527d214c2f2f53c8c79bbe685b190ac9223c42a2a3dbc",
+            "callSiteSha256": "a1b84efe982a733561655fae0cd9c4eb7d76d91f9213368eb4189b848bb1b5ec",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "11ee9920dfda33a6f6f5cd641d1614a9706280b548c69ff95af05ba0f6cf0bca"
+        "sha256": "977a28a43b7947a0313d173c404734bfc4f47140fcbfae1d73d01175367ad3e9"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3751,10 +3915,298 @@
       }
     },
     {
+      "surfaceRef": "convex/capabilityProviderConnectionAgents.ts:connectX402",
+      "runtimeHandlerRef": "convex/capabilityProviderConnectionAgents.ts:connectX402",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPathSha256": "cf13a679283574ec20cb7b80038192fd9e5adbd47ec8f42e52781404d341222b",
+      "dominance": {
+        "status": "proved",
+        "method": "ordered_recursive_authority_dominance:v1",
+        "hops": [
+          {
+            "from": "convex/capabilityProviderConnectionAgents.ts:connectX402",
+            "to": "convex/lib/providerConnections/agent.ts:connectX402AgentHandler",
+            "via": "call",
+            "callSiteSha256": "31969214e5ef7b8a63962b54f44cfa64d1110c92635df4f13603be44083dfa8b",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:connectX402AgentHandler",
+            "to": "convex/lib/providerConnections/agent.ts:agentActor",
+            "via": "call",
+            "callSiteSha256": "2edf693b740af0d88da283d237439c767f44036c7757f06bc59a7de2d448ca04",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:agentActor",
+            "to": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+            "via": "call",
+            "callSiteSha256": "a72c143a15466cd5a410a70cfe846da1d15c0d100623a093252e4c7f81760b40",
+            "consequencePrimitiveCount": 0
+          }
+        ],
+        "sha256": "249ff429ea32e9883fa1c50839800b2eba5810a4a35c0e6e75e8776a5efb1937"
+      },
+      "runtimeIsolation": {
+        "testFile": "tests/integration/capability-supply-owner-funnel-reserve.test.ts",
+        "testName": "drives the %s isolation case through the registered reservation mutation without a denied publication effect",
+        "testSha256": "93baaa984fec93332a2fd16c702aafc874d23efe5797141e0f232f58ae260ca6",
+        "caseLabels": [
+          "owner",
+          "member",
+          "workload",
+          "missing_workload",
+          "stranger",
+          "wrong_account",
+          "stale_generation"
+        ]
+      }
+    },
+    {
+      "surfaceRef": "convex/capabilityProviderConnectionAgents.ts:list",
+      "runtimeHandlerRef": "convex/capabilityProviderConnectionAgents.ts:list",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPathSha256": "d5602605342aacceec12aa1ad79108d4220de5dfe082657796abf269d8dc36b4",
+      "dominance": {
+        "status": "proved",
+        "method": "ordered_recursive_authority_dominance:v1",
+        "hops": [
+          {
+            "from": "convex/capabilityProviderConnectionAgents.ts:list",
+            "to": "convex/lib/providerConnections/agent.ts:listAgentHandler",
+            "via": "call",
+            "callSiteSha256": "a64cf124772db18a0f817a0c1768dc53e75062da48cc2f809155c7a1fd7b77db",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:listAgentHandler",
+            "to": "convex/lib/providerConnections/agent.ts:agentActor",
+            "via": "call",
+            "callSiteSha256": "7bb2d1313c8c4ce7d30fa47e56630f48110dee3634ecebebcdc34545a0044bd9",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:agentActor",
+            "to": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+            "via": "call",
+            "callSiteSha256": "a72c143a15466cd5a410a70cfe846da1d15c0d100623a093252e4c7f81760b40",
+            "consequencePrimitiveCount": 0
+          }
+        ],
+        "sha256": "a62759da7909b8b9d3390f8e140276a8deef2f0c84cf8e024a7c00686a115547"
+      },
+      "runtimeIsolation": {
+        "testFile": "tests/integration/capability-supply-owner-funnel-reserve.test.ts",
+        "testName": "drives the %s isolation case through the registered reservation mutation without a denied publication effect",
+        "testSha256": "93baaa984fec93332a2fd16c702aafc874d23efe5797141e0f232f58ae260ca6",
+        "caseLabels": [
+          "owner",
+          "member",
+          "workload",
+          "missing_workload",
+          "stranger",
+          "wrong_account",
+          "stale_generation"
+        ]
+      }
+    },
+    {
+      "surfaceRef": "convex/capabilityProviderConnectionAgents.ts:read",
+      "runtimeHandlerRef": "convex/capabilityProviderConnectionAgents.ts:read",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPathSha256": "dc12a1322c005adadfa918453c95a4265af3840c8515b7c563bacfc81fc210b7",
+      "dominance": {
+        "status": "proved",
+        "method": "ordered_recursive_authority_dominance:v1",
+        "hops": [
+          {
+            "from": "convex/capabilityProviderConnectionAgents.ts:read",
+            "to": "convex/lib/providerConnections/agent.ts:readAgentHandler",
+            "via": "call",
+            "callSiteSha256": "ed7b74390f9c5748cad5703f57464bb9112d6eff30c48137817288322ce7ef96",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:readAgentHandler",
+            "to": "convex/lib/providerConnections/agent.ts:agentActor",
+            "via": "call",
+            "callSiteSha256": "f2d63d3a1e5e69c8a93583e1d99b6cfb183aa94a03c427bcd077c4aa266f5953",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:agentActor",
+            "to": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+            "via": "call",
+            "callSiteSha256": "a72c143a15466cd5a410a70cfe846da1d15c0d100623a093252e4c7f81760b40",
+            "consequencePrimitiveCount": 0
+          }
+        ],
+        "sha256": "47baa129563e9020c4faa46c8c46042c6f1c852eb29aeb3685846af38f1a1f90"
+      },
+      "runtimeIsolation": {
+        "testFile": "tests/integration/capability-supply-owner-funnel-reserve.test.ts",
+        "testName": "drives the %s isolation case through the registered reservation mutation without a denied publication effect",
+        "testSha256": "93baaa984fec93332a2fd16c702aafc874d23efe5797141e0f232f58ae260ca6",
+        "caseLabels": [
+          "owner",
+          "member",
+          "workload",
+          "missing_workload",
+          "stranger",
+          "wrong_account",
+          "stale_generation"
+        ]
+      }
+    },
+    {
+      "surfaceRef": "convex/capabilityProviderConnectionAgents.ts:reconnect",
+      "runtimeHandlerRef": "convex/capabilityProviderConnectionAgents.ts:reconnect",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPathSha256": "0808970dc0f13527f923a9fcc8a3576768dd48a01198bace0887440dd8aa371c",
+      "dominance": {
+        "status": "proved",
+        "method": "ordered_recursive_authority_dominance:v1",
+        "hops": [
+          {
+            "from": "convex/capabilityProviderConnectionAgents.ts:reconnect",
+            "to": "convex/lib/providerConnections/agent.ts:reconnectAgentHandler",
+            "via": "call",
+            "callSiteSha256": "7244659e427faf701c3fe43ef6e4278dfbe53d005287762ef67f7a4d67aa3822",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:reconnectAgentHandler",
+            "to": "convex/lib/providerConnections/agent.ts:agentActor",
+            "via": "call",
+            "callSiteSha256": "c4b30bec881f0351d83ef3acf65d10e8e428de4a82da9c55f838b42b21910e52",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:agentActor",
+            "to": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+            "via": "call",
+            "callSiteSha256": "a72c143a15466cd5a410a70cfe846da1d15c0d100623a093252e4c7f81760b40",
+            "consequencePrimitiveCount": 0
+          }
+        ],
+        "sha256": "657be11735ab98e53f814d54db6f9fbee3044a1ecd0e8dce6f7a4c51cefabc0f"
+      },
+      "runtimeIsolation": {
+        "testFile": "tests/integration/capability-supply-owner-funnel-reserve.test.ts",
+        "testName": "drives the %s isolation case through the registered reservation mutation without a denied publication effect",
+        "testSha256": "93baaa984fec93332a2fd16c702aafc874d23efe5797141e0f232f58ae260ca6",
+        "caseLabels": [
+          "owner",
+          "member",
+          "workload",
+          "missing_workload",
+          "stranger",
+          "wrong_account",
+          "stale_generation"
+        ]
+      }
+    },
+    {
+      "surfaceRef": "convex/capabilityProviderConnectionAgents.ts:retryCleanup",
+      "runtimeHandlerRef": "convex/capabilityProviderConnectionAgents.ts:retryCleanup",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPathSha256": "2026eb502fe9534e0b7aee393bf2485c5e65fb718369e7e1a90d66b1fb0318c4",
+      "dominance": {
+        "status": "proved",
+        "method": "ordered_recursive_authority_dominance:v1",
+        "hops": [
+          {
+            "from": "convex/capabilityProviderConnectionAgents.ts:retryCleanup",
+            "to": "convex/lib/providerConnections/agent.ts:retryCleanupAgentHandler",
+            "via": "call",
+            "callSiteSha256": "d97c48df9036bc89f8fb2e00a158432fc21100ed9a06690f7f0d0214c8aa8610",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:retryCleanupAgentHandler",
+            "to": "convex/lib/providerConnections/agent.ts:agentActor",
+            "via": "call",
+            "callSiteSha256": "03b2c2dc6881ab4d9dc61cee0713371fc6e544ac9425fea37b3006079b9e3ed3",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:agentActor",
+            "to": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+            "via": "call",
+            "callSiteSha256": "a72c143a15466cd5a410a70cfe846da1d15c0d100623a093252e4c7f81760b40",
+            "consequencePrimitiveCount": 0
+          }
+        ],
+        "sha256": "81cd28067f582c5ca1f5f40399f2fb798211decd60f2bb3272676cba0dfddc24"
+      },
+      "runtimeIsolation": {
+        "testFile": "tests/integration/capability-supply-owner-funnel-reserve.test.ts",
+        "testName": "drives the %s isolation case through the registered reservation mutation without a denied publication effect",
+        "testSha256": "93baaa984fec93332a2fd16c702aafc874d23efe5797141e0f232f58ae260ca6",
+        "caseLabels": [
+          "owner",
+          "member",
+          "workload",
+          "missing_workload",
+          "stranger",
+          "wrong_account",
+          "stale_generation"
+        ]
+      }
+    },
+    {
+      "surfaceRef": "convex/capabilityProviderConnectionAgents.ts:revoke",
+      "runtimeHandlerRef": "convex/capabilityProviderConnectionAgents.ts:revoke",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPathSha256": "32f92b3cc1348ff428f5cf1043184328ef4415f397b2101d727e7c3cbcfd15ef",
+      "dominance": {
+        "status": "proved",
+        "method": "ordered_recursive_authority_dominance:v1",
+        "hops": [
+          {
+            "from": "convex/capabilityProviderConnectionAgents.ts:revoke",
+            "to": "convex/lib/providerConnections/agent.ts:revokeAgentHandler",
+            "via": "call",
+            "callSiteSha256": "c2ed7c6fa8e11832d159c13b7fd9ab85d027012dbae2b47fc8ddd2cf7b1ccba6",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:revokeAgentHandler",
+            "to": "convex/lib/providerConnections/agent.ts:agentActor",
+            "via": "call",
+            "callSiteSha256": "6a8a986ea9319664cf143953dec943a5ec0dcd9e76dd1c1619fb071556903d33",
+            "consequencePrimitiveCount": 0
+          },
+          {
+            "from": "convex/lib/providerConnections/agent.ts:agentActor",
+            "to": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+            "via": "call",
+            "callSiteSha256": "a72c143a15466cd5a410a70cfe846da1d15c0d100623a093252e4c7f81760b40",
+            "consequencePrimitiveCount": 0
+          }
+        ],
+        "sha256": "5a6dd07930473e8c54fe61a56e768691dcc8cbeb19230c3dfb6204456322ce1b"
+      },
+      "runtimeIsolation": {
+        "testFile": "tests/integration/capability-supply-owner-funnel-reserve.test.ts",
+        "testName": "drives the %s isolation case through the registered reservation mutation without a denied publication effect",
+        "testSha256": "93baaa984fec93332a2fd16c702aafc874d23efe5797141e0f232f58ae260ca6",
+        "caseLabels": [
+          "owner",
+          "member",
+          "workload",
+          "missing_workload",
+          "stranger",
+          "wrong_account",
+          "stale_generation"
+        ]
+      }
+    },
+    {
       "surfaceRef": "convex/capabilityProviderConnections.ts:connectX402Owner",
       "runtimeHandlerRef": "convex/capabilityProviderConnections.ts:connectX402Owner",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "9fb03b2b1de47b4b6269c6fd51ab2471d659b5caec4ab55abdbf856d3e24f71d",
+      "authorityPathSha256": "2dfee6fcfb66fca5501a6ab89f33f0f5cf1d3fc189184b6d7c91308460d10702",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3768,20 +4220,13 @@
           },
           {
             "from": "convex/lib/providerConnections/owner.ts:connectX402OwnerHandler",
-            "to": "convex/lib/providerConnections/owner.ts:readOwnedBusiness",
-            "via": "call",
-            "callSiteSha256": "f87a28008225c7b57cd3edbc98316fe94fad0594b1c7034dac8381c00464b30f",
-            "consequencePrimitiveCount": 1
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:readOwnedBusiness",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "658b47098c8b462dfce6ecc75a46f2d66f6988c563d13e78e17d524cc96fa6f4",
+            "callSiteSha256": "f04fed213dc2c1585596f59d5e495e1c4cb5171924d641ac060fa06d86625a81",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "75c2013569a38d7828baf96cc7e570ce59fb980b7871d023bedd7ad84f14703e"
+        "sha256": "57c0171ff619db4c0d25863bdca2dc2353586d562216ba6f89bd12f67d313984"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3802,7 +4247,7 @@
       "surfaceRef": "convex/capabilityProviderConnections.ts:listOwner",
       "runtimeHandlerRef": "convex/capabilityProviderConnections.ts:listOwner",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "9dc81ef0392cd0c6d6e42759d4f1e696b7669027738ecbb37327a535fd444c73",
+      "authorityPathSha256": "6c6dfef4ced51f7acd9c1b0e4a343f766588d29b4ba8e117cd51c4588b7735dd",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3818,11 +4263,11 @@
             "from": "convex/lib/providerConnections/owner.ts:listOwnerHandler",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "993afdbe0595acd0a79924b21c845d6c7ee18a3129547dad1d5a76885aa3c41c",
+            "callSiteSha256": "5bacaf11b1ca723b38a1ae92e5c4718cfe3de41380e9b3be72944fe8336c6403",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "fc6bf2278a6ec93816b7eaaacfdc802a155bf581e3b6ec1251c1481687764c65"
+        "sha256": "0045481251c7cef1e85b4c5ccf67e8b70dbe9d7c998fa553427fe813376a0572"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3843,7 +4288,7 @@
       "surfaceRef": "convex/capabilityProviderConnections.ts:readOwner",
       "runtimeHandlerRef": "convex/capabilityProviderConnections.ts:readOwner",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "05eaad7669b1822db55f153be57d7e5ca0ecd4ad2b8bdb60ddcd6a3d120b8592",
+      "authorityPathSha256": "fd14853aff0eef2d0c36686c520381e02c10f8501b20ce010d888b8ef78bef3c",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3857,20 +4302,13 @@
           },
           {
             "from": "convex/lib/providerConnections/owner.ts:readOwnerHandler",
-            "to": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-            "via": "call",
-            "callSiteSha256": "c646a0919ee08d9209431db05119b0357079801d1d8ad360ac880290dbe1300e",
-            "consequencePrimitiveCount": 0
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "0b3db4b02b30f843172f1fe14ae81bb48751bf583fafd58383551f53d3f547a5",
+            "callSiteSha256": "4590e34420e42c1e186c1b46a72c7be670a7662d6f833e1ae08e3184ed0fc92c",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "a8cc93d318bedacde6a2b1483ee61ed076c56f32d530b5ed91e4ada0718fcac0"
+        "sha256": "84e8cd66b10763c2a012bee05988cae732e5f268d3a0190fc349445d68d5e71b"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3891,7 +4329,7 @@
       "surfaceRef": "convex/capabilityProviderConnections.ts:reconnectOwner",
       "runtimeHandlerRef": "convex/capabilityProviderConnections.ts:reconnectOwner",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "307772d0ae64435035c8b716e07315f9bc04e19d10f2a2af28034ac88b5937ca",
+      "authorityPathSha256": "0208d0c6a48f3663a9c0a4fbd59c068b7f899a4b607312bffd2842986a6dd141",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3905,27 +4343,13 @@
           },
           {
             "from": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerHandler",
-            "to": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerConnection",
-            "via": "call",
-            "callSiteSha256": "af04aecd4a64aa58dae39a239eb592afbaae59477f9199def999ebeb49c2cf12",
-            "consequencePrimitiveCount": 0
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerConnection",
-            "to": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-            "via": "call",
-            "callSiteSha256": "11e68ce6f5716d9b81b0ec7ccf3f7f64a56c74a8b69693bbc70b52b71fb83e69",
-            "consequencePrimitiveCount": 1
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "0b3db4b02b30f843172f1fe14ae81bb48751bf583fafd58383551f53d3f547a5",
+            "callSiteSha256": "cbe9d502fec491e2fecaf4933333a4d86953a18ab9bfc96a2374c873f00703f7",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "2e745b02dbf8418545ec206a694b82d83572d3f335470a7a42cccd7b016f7d3e"
+        "sha256": "a727885c20cfeb9e5ff20d201f2f32422bce47aa927e917530b6de2e5c52cb0d"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3946,7 +4370,7 @@
       "surfaceRef": "convex/capabilityProviderConnections.ts:retryOwnerCleanup",
       "runtimeHandlerRef": "convex/capabilityProviderConnections.ts:retryOwnerCleanup",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "b138961ac5db44ce7319c24c1670db471626c295710aeb70828b9d01a580144a",
+      "authorityPathSha256": "f39b9158923274165666828bfb78db3207497e6dbab5125b69038024d4964160",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -3960,20 +4384,13 @@
           },
           {
             "from": "convex/lib/providerConnections/owner.ts:retryOwnerCleanupHandler",
-            "to": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-            "via": "call",
-            "callSiteSha256": "4794c1c38006c38336c9e429a938264f3fdf8b3273eed62af5d9dd6ba2b65120",
-            "consequencePrimitiveCount": 1
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "0b3db4b02b30f843172f1fe14ae81bb48751bf583fafd58383551f53d3f547a5",
+            "callSiteSha256": "aff2fed8d68b72f5b4915d94fd6dd5b8b13fc9c3a88af4930cd5408bad2430ef",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "468fa4f22d7c4cc85ce932de278af989a0336199656e6d0925150530b9d61f38"
+        "sha256": "e77c87ed18c713edd72ad220ad44ed032497d9f20b36d6ca822ba96eaaf354d0"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -3994,7 +4411,7 @@
       "surfaceRef": "convex/capabilityProviderConnections.ts:revokeOwner",
       "runtimeHandlerRef": "convex/capabilityProviderConnections.ts:revokeOwner",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "9ea9a36cf580530575040c8b6f72ec3eee64a2c7141beaec7b3d503e94fe3845",
+      "authorityPathSha256": "97639598330a0dfddfd42f11c31efb069b397db3388b4206542e0025e71dbec2",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -4008,20 +4425,13 @@
           },
           {
             "from": "convex/lib/providerConnections/owner.ts:revokeOwnerHandler",
-            "to": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-            "via": "call",
-            "callSiteSha256": "3529891a9c762c7e1f611fcdecdde19e98af3f94b435460b02edca1d9a09bcc7",
-            "consequencePrimitiveCount": 1
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "0b3db4b02b30f843172f1fe14ae81bb48751bf583fafd58383551f53d3f547a5",
+            "callSiteSha256": "38cf13ce7fe6cf68678eddbb74b4cc46d76becdb236544daba04bfd95e1b50ce",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "819fa931fb092e3f005fd6db594dfefd9bd72c26e6f949953034b2d15c2eb1fa"
+        "sha256": "3970fb7aeb08e59ed06479395f7b0275f83d2c2e9aea519b0aed0bba1908684e"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -4042,7 +4452,7 @@
       "surfaceRef": "convex/capabilityProviderConnections.ts:rotateOwner",
       "runtimeHandlerRef": "convex/capabilityProviderConnections.ts:rotateOwner",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "0849a5cfaf88d15c74a94c465c6f446aae90e8748719d3f5ee7102b0ac5b6201",
+      "authorityPathSha256": "b36ec1ea5e402298a5fb6949b5d37f4306cf7093fe238051d39cebdf61a2dbf6",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -4056,27 +4466,13 @@
           },
           {
             "from": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerHandler",
-            "to": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerConnection",
-            "via": "call",
-            "callSiteSha256": "af04aecd4a64aa58dae39a239eb592afbaae59477f9199def999ebeb49c2cf12",
-            "consequencePrimitiveCount": 0
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerConnection",
-            "to": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-            "via": "call",
-            "callSiteSha256": "11e68ce6f5716d9b81b0ec7ccf3f7f64a56c74a8b69693bbc70b52b71fb83e69",
-            "consequencePrimitiveCount": 1
-          },
-          {
-            "from": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "0b3db4b02b30f843172f1fe14ae81bb48751bf583fafd58383551f53d3f547a5",
+            "callSiteSha256": "cbe9d502fec491e2fecaf4933333a4d86953a18ab9bfc96a2374c873f00703f7",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "e86c27c8014d9ea29920840bca98af3766d5f402b3052277ff5a6b0f0430e45f"
+        "sha256": "6dcd0db6cf889b8f19dd447ee2d93e520430b1692737cbb972343323a1b6f545"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -4303,7 +4699,7 @@
       "surfaceRef": "convex/capabilitySupplyOwnerFunnel.ts:readAgentOwnerSupplyFunnel",
       "runtimeHandlerRef": "convex/capabilitySupplyOwnerFunnel.ts:readAgentOwnerSupplyFunnel",
       "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
-      "authorityPathSha256": "569532e6848f9926399386501205c574b8852613372aad509b5cf9df5a0a376f",
+      "authorityPathSha256": "3c450b85e8c382fdfde8b33dc89381d843e632be6a83f55fcd09ca4c05fab48b",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -4474,7 +4870,7 @@
       "surfaceRef": "convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication",
       "runtimeHandlerRef": "convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication",
       "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
-      "authorityPathSha256": "f29e98cdd681080a58f8662007d96319fb8903662d8fc202ea682c31b07e0a5e",
+      "authorityPathSha256": "8ab8932e746a9cdef40144e6e40be32626e283dc7952806cf9f7eec72f163584",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -6114,7 +6510,7 @@
       "surfaceRef": "convex/moneyLedger.ts:readAgentProviderEarnings",
       "runtimeHandlerRef": "convex/moneyLedger.ts:readAgentProviderEarnings",
       "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
-      "authorityPathSha256": "f25cbe59f09218777b47a609ab0cc067d594f5a5dc345771765ff2b1bd09e83e",
+      "authorityPathSha256": "5adf9a54854ac45877b88be246ab65629cd51fb6f792af386df2d37515e93cff",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -7109,7 +7505,7 @@
             "from": "convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal",
             "to": "convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequence",
             "via": "function_reference",
-            "callSiteSha256": "0b06746a82d1dd06ce9078a02506a4f6835ea42630ac5ca1008f8befe5f33bc2",
+            "callSiteSha256": "0b9ffe06a7762b10b9cde03eede2f6521827d482757eb2514f5a23579e33a76f",
             "consequencePrimitiveCount": 1
           },
           {
@@ -7120,7 +7516,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "e686dd5e86453c4ecf1b06990a4c0c18c08c9324472f021f5e5e43386b9b40ed"
+        "sha256": "13410b5e410b0fea84cf384a2d82c369154264d1b844bc49d7837162e7df0b11"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -7150,7 +7546,7 @@
             "from": "convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket",
             "to": "convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicket",
             "via": "function_reference",
-            "callSiteSha256": "232b71ee56589c38490fc886e9c30e4774b9eefa96609e543ed2e36a15cbe57a",
+            "callSiteSha256": "d8c75a8ebb873bd3ff571eab6503ec77120df128825361f18faff7f4494fe0d2",
             "consequencePrimitiveCount": 0
           },
           {
@@ -7161,7 +7557,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "314a8f110149deb38e71c1df99e5f8d8e87b96ac06eadebabfd1c3d65db99b8f"
+        "sha256": "a6615f41acf0efabcad271abe2991ba57b5b06887e7c0f02170891dc06c57183"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -7191,7 +7587,7 @@
             "from": "convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal",
             "to": "convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequence",
             "via": "function_reference",
-            "callSiteSha256": "463ebc49c55637347269add91d4b705118a666627b7673bfb92d742b90370125",
+            "callSiteSha256": "6d260c98a10788f3633eb1178c1019ec62aa664aabcedca5f7cc85d1412f48a0",
             "consequencePrimitiveCount": 1
           },
           {
@@ -7202,7 +7598,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "861e691afc5b85985a23c46ddde1b72e92c78841e054657d542fef63f6f3d9ce"
+        "sha256": "f628ac92e3ff772a4b71192dca06f96ec2d1f2ed9b2f4d83280e232b71a18c23"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -7232,7 +7628,7 @@
             "from": "convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal",
             "to": "convex/capabilityProviderConsequenceJournal.ts:completeProviderConsequence",
             "via": "function_reference",
-            "callSiteSha256": "67e74a098db70067c7892f3484942acfc3cd6d83c2da2239e171cf9092432ef1",
+            "callSiteSha256": "6d7c33b36ff1a6c6d2d76ee637e34f66097df960da62e3d87c6f07ff048692a2",
             "consequencePrimitiveCount": 1
           },
           {
@@ -7243,7 +7639,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "8d8f321d36472bbe109b24aca8e8af3b1f547a42bedc5f26921db6d34391ca66"
+        "sha256": "517f4d04a459b22fa9d4fa10a3a8125a47770c224547e6cde172a722a2ae2b35"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -7273,7 +7669,7 @@
             "from": "convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc",
             "to": "convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402Rpc",
             "via": "function_reference",
-            "callSiteSha256": "acd8d2644aa968589ef6f82d1a8e3d9ed2c330696ee451708d1d840494035634",
+            "callSiteSha256": "1309f59b371bb69f25ef2992be42099b42616cb73bb7a5b935378811fb8843e5",
             "consequencePrimitiveCount": 1
           },
           {
@@ -7284,7 +7680,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "c6f5f53174ad7e2874f9291943049720cc7dfcf01db5a6f9716c62e345a71dcf"
+        "sha256": "0a4e419aad63cc54f59180cc70edb932586056c09e2f2b60defc6a8939e5530d"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -7314,7 +7710,7 @@
             "from": "convex/secretLifecycleHttp.ts:secretLifecycleRpc",
             "to": "convex/secretLifecycleOperations.ts:advanceSecretPointer",
             "via": "function_reference",
-            "callSiteSha256": "4deecb66511c341eb29fd333a1a403bcb3b12ff556b9e90458ed10617ee952ea",
+            "callSiteSha256": "d6b1c6be42dc986ab758c179ce0a06f6aa477bbc5d208c0f46e8baae36531767",
             "consequencePrimitiveCount": 6
           },
           {
@@ -7339,7 +7735,7 @@
             "consequencePrimitiveCount": 2
           }
         ],
-        "sha256": "6ce4c1875cedff5b00e99011761dcfe25740c9bc1bf4de77ccfff995192d9e04"
+        "sha256": "9bbdc9f6a0397e768964501880892016988f63bd40c05dfd3082f6c7103efda0"
       },
       "runtimeIsolation": {
         "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
@@ -7376,7 +7772,7 @@
             "from": "convex_http_route:POST /internal/provider-consequence/journal/abort",
             "to": "convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequence",
             "via": "function_reference",
-            "callSiteSha256": "0b06746a82d1dd06ce9078a02506a4f6835ea42630ac5ca1008f8befe5f33bc2",
+            "callSiteSha256": "0b9ffe06a7762b10b9cde03eede2f6521827d482757eb2514f5a23579e33a76f",
             "consequencePrimitiveCount": 1
           },
           {
@@ -7387,7 +7783,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "947837c1ffe524f73cec6041aa2be34ffd142e284262e61fe75df6248311486b"
+        "sha256": "49d217ba5b2910e2edfad185bde60e80ae548565929aed0dd2331135a915199e"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -7417,7 +7813,7 @@
             "from": "convex_http_route:POST /internal/provider-consequence/journal/attest",
             "to": "convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicket",
             "via": "function_reference",
-            "callSiteSha256": "232b71ee56589c38490fc886e9c30e4774b9eefa96609e543ed2e36a15cbe57a",
+            "callSiteSha256": "d8c75a8ebb873bd3ff571eab6503ec77120df128825361f18faff7f4494fe0d2",
             "consequencePrimitiveCount": 0
           },
           {
@@ -7428,7 +7824,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "17a02d43a00dad819877d7de94598a729855b0a27e33cfdec588dbdc58f521c4"
+        "sha256": "7d1dc9c0477e29137e1d15f960913e76f133ffbd474296ebcda3ace81e270e65"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -7458,7 +7854,7 @@
             "from": "convex_http_route:POST /internal/provider-consequence/journal/begin",
             "to": "convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequence",
             "via": "function_reference",
-            "callSiteSha256": "463ebc49c55637347269add91d4b705118a666627b7673bfb92d742b90370125",
+            "callSiteSha256": "6d260c98a10788f3633eb1178c1019ec62aa664aabcedca5f7cc85d1412f48a0",
             "consequencePrimitiveCount": 1
           },
           {
@@ -7469,7 +7865,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "bf6bb27e944c8a5114db8bb1eec951a223077a8c2c2966d39857272cb8809787"
+        "sha256": "9b59e5d2f11f29c890e4f2d19a9a567a917db90fda642dd7554dfa2cbda2b32f"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -7499,7 +7895,7 @@
             "from": "convex_http_route:POST /internal/provider-consequence/journal/complete",
             "to": "convex/capabilityProviderConsequenceJournal.ts:completeProviderConsequence",
             "via": "function_reference",
-            "callSiteSha256": "67e74a098db70067c7892f3484942acfc3cd6d83c2da2239e171cf9092432ef1",
+            "callSiteSha256": "6d7c33b36ff1a6c6d2d76ee637e34f66097df960da62e3d87c6f07ff048692a2",
             "consequencePrimitiveCount": 1
           },
           {
@@ -7510,7 +7906,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "2090b9b2ef82f3cc9cbbf4e8003a608dca0764565f5ef958250c498ca7572586"
+        "sha256": "36fb5f660ffd44db3f75c91f275428928aa88f6ef51fbcc4f09f4a2b8c376488"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -7540,7 +7936,7 @@
             "from": "convex_http_route:POST /internal/provider-consequence/x402",
             "to": "convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402Rpc",
             "via": "function_reference",
-            "callSiteSha256": "acd8d2644aa968589ef6f82d1a8e3d9ed2c330696ee451708d1d840494035634",
+            "callSiteSha256": "1309f59b371bb69f25ef2992be42099b42616cb73bb7a5b935378811fb8843e5",
             "consequencePrimitiveCount": 1
           },
           {
@@ -7551,7 +7947,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "4a61e00628594d66dd0909769b03ef49016c88682ba2651ee3998b0d42c6fb30"
+        "sha256": "9f7a13f2a09a22209d7ff7abc54caea2ca8c8767e5853275e20461c20cde0e05"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -7581,7 +7977,7 @@
             "from": "convex_http_route:POST /internal/secret-lifecycle",
             "to": "convex/secretLifecycleOperations.ts:advanceSecretPointer",
             "via": "function_reference",
-            "callSiteSha256": "4deecb66511c341eb29fd333a1a403bcb3b12ff556b9e90458ed10617ee952ea",
+            "callSiteSha256": "d6b1c6be42dc986ab758c179ce0a06f6aa477bbc5d208c0f46e8baae36531767",
             "consequencePrimitiveCount": 6
           },
           {
@@ -7606,7 +8002,7 @@
             "consequencePrimitiveCount": 2
           }
         ],
-        "sha256": "421e3c61798768a1228bca5e24a9c220a8bdaea149073f756d4c297fd1a583d3"
+        "sha256": "102ad455c50b21300efbd363580c5aab9c337654d442124efb6fe0ce310d16c5"
       },
       "runtimeIsolation": {
         "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
@@ -8123,7 +8519,7 @@
             "from": "callback:convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal",
             "to": "convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequence",
             "via": "function_reference",
-            "callSiteSha256": "0b06746a82d1dd06ce9078a02506a4f6835ea42630ac5ca1008f8befe5f33bc2",
+            "callSiteSha256": "0b9ffe06a7762b10b9cde03eede2f6521827d482757eb2514f5a23579e33a76f",
             "consequencePrimitiveCount": 1
           },
           {
@@ -8134,7 +8530,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "94bbabad0867747f4f36e1dff55d23df78a4d4505f32ad33bfd358d4370086cc"
+        "sha256": "1356154de16d5f6d270ee31ffa86382e0dfce7658d6d52a0939ff942e9addf80"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -8164,7 +8560,7 @@
             "from": "callback:convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket",
             "to": "convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicket",
             "via": "function_reference",
-            "callSiteSha256": "232b71ee56589c38490fc886e9c30e4774b9eefa96609e543ed2e36a15cbe57a",
+            "callSiteSha256": "d8c75a8ebb873bd3ff571eab6503ec77120df128825361f18faff7f4494fe0d2",
             "consequencePrimitiveCount": 0
           },
           {
@@ -8175,7 +8571,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "eeebd4cd2e28fd7da86acaca9216a5df14324c671759a77ecb98859dd3e7c2c7"
+        "sha256": "abab22795121a8f68a7036c325987aa1c546517eb1c733688ce6e3e63d6d85af"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -8205,7 +8601,7 @@
             "from": "callback:convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal",
             "to": "convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequence",
             "via": "function_reference",
-            "callSiteSha256": "463ebc49c55637347269add91d4b705118a666627b7673bfb92d742b90370125",
+            "callSiteSha256": "6d260c98a10788f3633eb1178c1019ec62aa664aabcedca5f7cc85d1412f48a0",
             "consequencePrimitiveCount": 1
           },
           {
@@ -8216,7 +8612,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "1dd1fb3a953900b4ffcb0e29182a3fef5f49670a1f36fb60654c22b3766c5b88"
+        "sha256": "addc96d558f56adf18595364e027224fe4146bc600eca23e5888f8c32a697fe6"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -8246,7 +8642,7 @@
             "from": "callback:convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal",
             "to": "convex/capabilityProviderConsequenceJournal.ts:completeProviderConsequence",
             "via": "function_reference",
-            "callSiteSha256": "67e74a098db70067c7892f3484942acfc3cd6d83c2da2239e171cf9092432ef1",
+            "callSiteSha256": "6d7c33b36ff1a6c6d2d76ee637e34f66097df960da62e3d87c6f07ff048692a2",
             "consequencePrimitiveCount": 1
           },
           {
@@ -8257,7 +8653,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "f5417ff2b6bcab81b21953c7ccbafd07a2186f09d8e728b76f66c70ece9c65b8"
+        "sha256": "fa5ce0b44397dd26650ba6f7875ba38764bba387ef1e42b4ae5c992ebf191886"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -8287,7 +8683,7 @@
             "from": "callback:convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc",
             "to": "convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402Rpc",
             "via": "function_reference",
-            "callSiteSha256": "acd8d2644aa968589ef6f82d1a8e3d9ed2c330696ee451708d1d840494035634",
+            "callSiteSha256": "1309f59b371bb69f25ef2992be42099b42616cb73bb7a5b935378811fb8843e5",
             "consequencePrimitiveCount": 1
           },
           {
@@ -8298,7 +8694,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "e7ce336d14c6a7b432b77eb1c82e56c46b65e5790fb7fc7399fa86feb6351f1a"
+        "sha256": "a3411fdd31e68fa0aa908973b0833c5ccd2bf8bd460b09b827a3f4fbff89c863"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
@@ -8328,7 +8724,7 @@
             "from": "callback:convex/secretLifecycleHttp.ts:secretLifecycleRpc",
             "to": "convex/secretLifecycleOperations.ts:advanceSecretPointer",
             "via": "function_reference",
-            "callSiteSha256": "4deecb66511c341eb29fd333a1a403bcb3b12ff556b9e90458ed10617ee952ea",
+            "callSiteSha256": "d6b1c6be42dc986ab758c179ce0a06f6aa477bbc5d208c0f46e8baae36531767",
             "consequencePrimitiveCount": 6
           },
           {
@@ -8353,7 +8749,7 @@
             "consequencePrimitiveCount": 2
           }
         ],
-        "sha256": "812dff44ba0055619d4451c17ade9ea74451017f2c15bf0dabb4206342972a34"
+        "sha256": "dc4afb47c43084f44637f0e1765ab4a9c93254f46052f9299f287dff419e4e40"
       },
       "runtimeIsolation": {
         "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
@@ -8422,7 +8818,7 @@
       "surfaceRef": "continuation:convex/capabilityOperationInvocations.ts:completeWork",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:completeWork",
       "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority",
-      "authorityPathSha256": "8050ab7ceed5cee2e86b7486ccdee4b113ea4a7bc87efb44bc1b46832aa4d18f",
+      "authorityPathSha256": "49deae368eafbb8da87c2721ec17f4d70811e123612f132dc90f74bb71b6f910",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -8431,7 +8827,7 @@
             "from": "continuation:convex/capabilityOperationInvocations.ts:completeWork",
             "to": "convex/lib/operationInvocations/reconciliation.ts:completeWorkWithReconciliationInitialization",
             "via": "call",
-            "callSiteSha256": "a1928c94658bdb1f990e76ac716706b2cfd877ff4b8f7998f4838876eeabcb1c",
+            "callSiteSha256": "d2423eb5c9d323807f2ec7d43d07e04e46525f9921e0c73da728b5b27686ba67",
             "consequencePrimitiveCount": 0
           },
           {
@@ -8442,7 +8838,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "a1ef7910b8c3150fbaa3f27d18a367fdfbf86f24b9d63a0182bc162eb4181995"
+        "sha256": "a5f9ae4a9ad9082ab842aa2e7553bcead36e304ff32ebdb027840b33fa7e13f7"
       },
       "runtimeIsolation": {
         "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
@@ -8463,7 +8859,7 @@
       "surfaceRef": "continuation:convex/capabilityProviderConnectionCleanup.ts:completeWork",
       "runtimeHandlerRef": "convex/capabilityProviderConnectionCleanup.ts:completeWork",
       "authoritySink": "convex/lib/providerConnections/authority.ts:readCurrentCleanupResourceAuthority",
-      "authorityPathSha256": "0ff437ff5859bc304df2a0e38c130eddf77114ac4357435446319080c4551712",
+      "authorityPathSha256": "3e100f5b513a21f1a470cc2b1c0964f0227707c7ef7411fb928c84a0d9944023",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -8838,7 +9234,7 @@
       "surfaceRef": "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocation",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:reconcileInvocation",
       "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
-      "authorityPathSha256": "fb054e5c7abcf3d15fc8c99aa2bd7b3dfa52c5d84ca45a55514f77cf3c1ffdb6",
+      "authorityPathSha256": "558c4688f99f366251aba75675fb3b0dfa454f7033890f1704632c2124befaba",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -8847,46 +9243,46 @@
             "from": "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocation",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentReconcileHandler",
             "via": "call",
-            "callSiteSha256": "049c5d39c822081f72e459bbd82d01dd16835c7c9c1a21d2fcb7e0c46c882388",
+            "callSiteSha256": "2a3ba916243ef0df9dda812ac95e60551a7f272be5a9771ef27975506d714fa8",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentReconcileHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "via": "call",
-            "callSiteSha256": "aa15c63c70aa7bca32bbc205ed36715ddb0ba40a4341fd37e7f2fa9f8f291717",
+            "callSiteSha256": "61312e24b6dc2ba34fe24c158e338b7819cc727ccd7b48b014ad00102f8cead7",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "via": "function_reference",
-            "callSiteSha256": "f417b8fc5e4655a4b26b99f2bb8fd9968f76771ad6042da4758aec5445bccadb",
+            "callSiteSha256": "d5073e21d46ce9c968de8c299da2f5d8e439671d9347501281b2570e7e164248",
             "consequencePrimitiveCount": 1
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "to": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "via": "function_reference",
-            "callSiteSha256": "ec91aeb6bdf9b75cdafeeaddd4d9236133f8cf96bd798d3b06273833e2d54917",
+            "callSiteSha256": "664461977ec6fe3cc6d829b2cd0d8bc52a1682a918f20d3aa5954d42a3254832",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "via": "call",
-            "callSiteSha256": "f8ee4bb74fefc22380e9dbf3e1de5a5e5761ba827ce3c5183fe56f0ad08a8cab",
+            "callSiteSha256": "76ab025f0647963282e5e10723532facc4516383cb4a19ea2fb528ec042da99f",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
             "via": "call",
-            "callSiteSha256": "8137f1062082538bba03d8d9415d23b226d239a2b6c88efefcf82f5c243e2d3b",
+            "callSiteSha256": "1ceb648ead26a2eba61f52c86926904e34e254f4a6ef18e217326625ca4f36b6",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "5275b07a1187f849e4a29ae5267c5817905f98b295fdeb019ebba03f6ba23d71"
+        "sha256": "febd65640bddfe2dee77c7566246a0da8b37e5299c9a4a668a29e47a7fac2382"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
@@ -8907,7 +9303,7 @@
       "surfaceRef": "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority",
       "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority",
-      "authorityPathSha256": "60abb88b0041693e4ed289fd0479cd098d2b4d9ffaa510f46511bc28a54c5336",
+      "authorityPathSha256": "493b5c8afd38fccc3183e882f86da6ed1331b4c67221bfcbd5dc75b35e76c9a2",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -8916,18 +9312,18 @@
             "from": "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:reconcileInvocationWorkloadAuthorityHandler",
             "via": "call",
-            "callSiteSha256": "330167e21186b79b1d192135cf139c8adfa88b19e1ada2f57db16fdb85c50e7d",
+            "callSiteSha256": "5c797c243cf94adb0722f9cac07f369d8fc6495cabbd55db3b2f2932e8791df0",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:reconcileInvocationWorkloadAuthorityHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority",
             "via": "call",
-            "callSiteSha256": "5ec57f62e6b8a9f437e0bde8dd77179157233732ab9c7e43a21cc7a84b400522",
+            "callSiteSha256": "9204208013176ee48bec45d81ac42b51027ebc3656b0f0647c176aadb035dc01",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "0ca94344321ca2c777c244c826d78a4059d8075fb5059ac49dbadbaca5d550a1"
+        "sha256": "94b76e746bd82bdf01d099e81d600e62356985e16452be6f0e5a36202dcbdf07"
       },
       "runtimeIsolation": {
         "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
@@ -8948,7 +9344,7 @@
       "surfaceRef": "reconciliation:convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPathSha256": "13e37795a8f5d8cde066c13ddc47ac49f9e5c925b1bd837c9abcae0fd19fef73",
+      "authorityPathSha256": "fde04ecc66f30396e3d7696d3e1132cc6f62e6b119a5716d4ef66f2fbc68f33c",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -8957,25 +9353,25 @@
             "from": "reconciliation:convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerReconcileHandler",
             "via": "call",
-            "callSiteSha256": "0034b86986e6d5034c3fac20a49b0db8d3224121ab1fbdcec02d208fadd38d39",
+            "callSiteSha256": "82d73fd63570ea4b6c334cc42f15bbe622975a791aee4fe4ef3fc78eba0f33ca",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerReconcileHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "via": "call",
-            "callSiteSha256": "610b7bd805e23e499b2c41f1107e1e41dc85857f3f110582680d6f32deae0378",
+            "callSiteSha256": "06685a9c69788d2f30ec5fd24a0f4bfc87a927b37f6ebc952f86eb3570516fbf",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
             "to": "convex/authz.ts:resolveBusinessActor",
             "via": "call",
-            "callSiteSha256": "73d6b4922f11cb96739527d214c2f2f53c8c79bbe685b190ac9223c42a2a3dbc",
+            "callSiteSha256": "a1b84efe982a733561655fae0cd9c4eb7d76d91f9213368eb4189b848bb1b5ec",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "05365464002dac4924d8507fae1e572649e303209364a84afccff3a55c0dfbe8"
+        "sha256": "1a422984e3416c48341a2e72739063efa286adeb1837982b1c6999de1016ea56"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authz-actor-isolation.test.ts",
@@ -9420,7 +9816,7 @@
       "surfaceRef": "reconciliation:src/routes/api.v1.operations.$invocationRef.reconcile.ts:Route",
       "runtimeHandlerRef": "src/routes/api.v1.operations.$invocationRef.reconcile.ts:Route",
       "authoritySink": "convex/authorityBoundary.ts:resolveCanonicalAgentBinding",
-      "authorityPathSha256": "b64c4811ca55a74c68c460338882e4ca663ef0476fe441459a8468cc4d48e09e",
+      "authorityPathSha256": "1a2d7178c91b75cdd54707ab1a2c0feca5d8a7e84e265b8bc851aaa05d98136a",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -9436,14 +9832,14 @@
             "from": "src/lib/server/operation-invoke-api.ts:handleOperationInvokeReconcilePost",
             "to": "src/lib/server/operation-invoke-api.ts:authenticateOperationGateway",
             "via": "call",
-            "callSiteSha256": "8e2bf8665c0e059f16f2505aaa7212cd337150c2d89c1656ac7c9b4ee39b833a",
+            "callSiteSha256": "c03ca283561e801dc8705ac3677f9cbe71a333223357af87af2a75744ba61f7d",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "src/lib/server/operation-invoke-api.ts:authenticateOperationGateway",
             "to": "src/lib/server/agent-access-auth.ts:resolveAgentAccessPrincipal",
             "via": "call",
-            "callSiteSha256": "919cb196d62697f26896720687c579eb108926e5d4880ba0ff4515a7a8dabe59",
+            "callSiteSha256": "5712208ba3a333932230c767f5fe6163871d0a8ffa7af041d133a84fe99e4d64",
             "consequencePrimitiveCount": 0
           },
           {
@@ -9464,11 +9860,11 @@
             "from": "convex/authorityBoundary.ts:resolveAgentBinding",
             "to": "convex/authorityBoundary.ts:resolveCanonicalAgentBinding",
             "via": "call",
-            "callSiteSha256": "4146254f3a3a6867c37bb513e1b1dccc2414f11c4b943913f5144741eb429e02",
+            "callSiteSha256": "fa9c8aef1f498fbfa214295286d6503659bb73859cf819fcbe9f7e03d5f7c399",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "a0fbd749c3984c697b26d307048fe7d498fd582b741037e344ee02e9aadc47b0"
+        "sha256": "e8ed93a2c82cf89f38533188d53c2606560c4bae96971a4b19a547ea6cf6b936"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/authority-boundary.test.ts",
@@ -9489,7 +9885,7 @@
       "surfaceRef": "run_action:convex/capabilityOperationInvocations.ts:invoke",
       "runtimeHandlerRef": "convex/capabilityOperationInvocations.ts:invoke",
       "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
-      "authorityPathSha256": "25892b0e70c62d44ef9d679da9a7801f159b0d52041fcf65426d39bbed9b6514",
+      "authorityPathSha256": "363c4b1347e0d82a19d6f4f3e82361b328de971de9681b7acf68534e29636ff8",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -9498,46 +9894,46 @@
             "from": "run_action:convex/capabilityOperationInvocations.ts:invoke",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentInvokeHandler",
             "via": "call",
-            "callSiteSha256": "e33c2c1f9701eadbd25bc44fb66b53279d9d2c1be436e6758312fdf0bfc95dfd",
+            "callSiteSha256": "eccb44601250495a5d56282991c2579df0b26717675a4700d38106dfd3f0fb93",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentInvokeHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "via": "call",
-            "callSiteSha256": "03bfd63f1ee2827786c029c9e4ddf0f2aed0636ad3395b3d480c7aa2db2e6328",
+            "callSiteSha256": "9b37a3419efd0f9faf674beecda60b61abe3060295fddd32741cfa45c7096951",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "via": "function_reference",
-            "callSiteSha256": "f417b8fc5e4655a4b26b99f2bb8fd9968f76771ad6042da4758aec5445bccadb",
+            "callSiteSha256": "d5073e21d46ce9c968de8c299da2f5d8e439671d9347501281b2570e7e164248",
             "consequencePrimitiveCount": 1
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
             "to": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "via": "function_reference",
-            "callSiteSha256": "ec91aeb6bdf9b75cdafeeaddd4d9236133f8cf96bd798d3b06273833e2d54917",
+            "callSiteSha256": "664461977ec6fe3cc6d829b2cd0d8bc52a1682a918f20d3aa5954d42a3254832",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "via": "call",
-            "callSiteSha256": "f8ee4bb74fefc22380e9dbf3e1de5a5e5761ba827ce3c5183fe56f0ad08a8cab",
+            "callSiteSha256": "76ab025f0647963282e5e10723532facc4516383cb4a19ea2fb528ec042da99f",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
             "via": "call",
-            "callSiteSha256": "8137f1062082538bba03d8d9415d23b226d239a2b6c88efefcf82f5c243e2d3b",
+            "callSiteSha256": "1ceb648ead26a2eba61f52c86926904e34e254f4a6ef18e217326625ca4f36b6",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "dbd9c28e23f88282d550fc9facb1f639b770d15e5ee1f39e60a55810df47178d"
+        "sha256": "3cdf9254570f190b41a4017e80ab106a2896e7fef415dfdb3de0ff753a5d4f04"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
@@ -9558,7 +9954,7 @@
       "surfaceRef": "run_action:convex/capabilityOperationInvocationWorker.ts:recover",
       "runtimeHandlerRef": "convex/capabilityOperationInvocationWorker.ts:recover",
       "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority",
-      "authorityPathSha256": "193c06de31c62b6151f341653cb94a75479177c8ae9ff66cb6c1312b26cbb445",
+      "authorityPathSha256": "b5e894a1380d009e1041f1c18531ed652d040a2ce181789a0912652ba1bdbea4",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -9588,18 +9984,18 @@
             "from": "convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:reconcileInvocationWorkloadAuthorityHandler",
             "via": "call",
-            "callSiteSha256": "330167e21186b79b1d192135cf139c8adfa88b19e1ada2f57db16fdb85c50e7d",
+            "callSiteSha256": "5c797c243cf94adb0722f9cac07f369d8fc6495cabbd55db3b2f2932e8791df0",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:reconcileInvocationWorkloadAuthorityHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority",
             "via": "call",
-            "callSiteSha256": "5ec57f62e6b8a9f437e0bde8dd77179157233732ab9c7e43a21cc7a84b400522",
+            "callSiteSha256": "9204208013176ee48bec45d81ac42b51027ebc3656b0f0647c176aadb035dc01",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "e3b02cd40c6454bc263a8e871bf77251bc3c27a8298537605a68c3260420e9a9"
+        "sha256": "f179a4893c46df6ad4f61f66b5e84ff572ef7ed84c68a5343cc55a11e2c4b7e5"
       },
       "runtimeIsolation": {
         "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
@@ -9620,7 +10016,7 @@
       "surfaceRef": "run_action:convex/capabilitySupplyReadiness.ts:probe",
       "runtimeHandlerRef": "convex/capabilitySupplyReadiness.ts:probe",
       "authoritySink": "convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority",
-      "authorityPathSha256": "a2f16afd1096e23371439605255618d41120c544b90149c3c2173eae27251fd8",
+      "authorityPathSha256": "6684b66609f3368f6cc03ba36f61dba3da06b58f30f9b726f93bb90b9930e1c8",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -9629,7 +10025,7 @@
             "from": "run_action:convex/capabilitySupplyReadiness.ts:probe",
             "to": "convex/capabilitySupplyReadiness.ts:probeHandler",
             "via": "call",
-            "callSiteSha256": "fffcdcba484d6f21a174e5529b74ec0181d09fd2e410800c4ca32beda3cac2ad",
+            "callSiteSha256": "997a7540e65ca52b807c34bd6db3d04e801d94d3bbbf1b186c5ca6c36b7b728d",
             "consequencePrimitiveCount": 0
           },
           {
@@ -9654,7 +10050,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "7e32ca3dcaa837f2d0c1e0bd927b86817fb0b78dbcedb0429cc48ab86cb0c8aa"
+        "sha256": "933f11fc8ffa3e91658e3251c654b5af31e2f76427b7b8eea21996a59e8fa939"
       },
       "runtimeIsolation": {
         "testFile": "tests/integration/capability-publication-probe.test.ts",
@@ -9791,7 +10187,7 @@
       "surfaceRef": "scheduler:convex/capabilitySupplyReadiness.ts:probe",
       "runtimeHandlerRef": "convex/capabilitySupplyReadiness.ts:probe",
       "authoritySink": "convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority",
-      "authorityPathSha256": "a6d61daa061a2898fafae3028a0bdce267dd51c700ff4b53e16a9f5f98a2b493",
+      "authorityPathSha256": "caeb3bbaacfca7b3c9d65de820d7271a568c2346db13218646866aad598cf0e6",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -9800,7 +10196,7 @@
             "from": "scheduler:convex/capabilitySupplyReadiness.ts:probe",
             "to": "convex/capabilitySupplyReadiness.ts:probeHandler",
             "via": "call",
-            "callSiteSha256": "fffcdcba484d6f21a174e5529b74ec0181d09fd2e410800c4ca32beda3cac2ad",
+            "callSiteSha256": "997a7540e65ca52b807c34bd6db3d04e801d94d3bbbf1b186c5ca6c36b7b728d",
             "consequencePrimitiveCount": 0
           },
           {
@@ -9825,7 +10221,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "17549c4b869779da91abec6a553ca626f6908801f994a8c01120afa03b2ba551"
+        "sha256": "98295658f675741892d562c033c94ad840ea8336432bc9be99cd6bf18dade6c7"
       },
       "runtimeIsolation": {
         "testFile": "tests/integration/capability-publication-probe.test.ts",
@@ -9846,7 +10242,7 @@
       "surfaceRef": "scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron",
       "runtimeHandlerRef": "convex/capabilitySupplyReadiness.ts:probeFromCron",
       "authoritySink": "convex/workloadCron.ts:bindWorkloadCronActionContext",
-      "authorityPathSha256": "d6915dc6e7787a9a52c0d947f911ea2d72156da6336c3b38c7dedc78d05bb296",
+      "authorityPathSha256": "877eb56fcc1a52187f9be62da815292b6725f586ebafdb441a582e94d6c6cc3e",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -9855,18 +10251,18 @@
             "from": "scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron",
             "to": "convex/capabilitySupplyReadiness.ts:probeFromCronHandler",
             "via": "call",
-            "callSiteSha256": "432e933dbe0fb83d54ff14319b62d50e110c38303d3049bf4a088678c640e6a2",
+            "callSiteSha256": "1aa3067bb48e6b8e12b11151a7428cd59c9ecc3f758b0827c31e963f471a683b",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/capabilitySupplyReadiness.ts:probeFromCronHandler",
             "to": "convex/workloadCron.ts:bindWorkloadCronActionContext",
             "via": "call",
-            "callSiteSha256": "de56089513f5930687fc48331c25add3f7684fade47b849cb5a1651a679ea8ba",
+            "callSiteSha256": "bd509ac8043c9d456be2276db4cde2cc23c4721d01159f77640197fe9aafe9dd",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "f86221122a0bdd7ce67eb3e13e8452e6150198cc9c47e59d6501033eb970b1bd"
+        "sha256": "d083d4a257cb4e5a5fa9e105c742ec91614eb30fb217b5a3913cd317497a94b7"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/workload-cron.test.ts",
@@ -10209,7 +10605,7 @@
       "surfaceRef": "workpool:convex/capabilityOperationInvocationWorker.ts:run",
       "runtimeHandlerRef": "convex/capabilityOperationInvocationWorker.ts:run",
       "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority",
-      "authorityPathSha256": "4440a502ad6a9144bcccd71f485ed556fec3f715570a6cb9f11ad848a5583117",
+      "authorityPathSha256": "7e172c7352ac92ea36c83b867749a8f62b9bc582561b4eb89e16e70cecddfe77",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -10239,18 +10635,18 @@
             "from": "convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:reconcileInvocationWorkloadAuthorityHandler",
             "via": "call",
-            "callSiteSha256": "330167e21186b79b1d192135cf139c8adfa88b19e1ada2f57db16fdb85c50e7d",
+            "callSiteSha256": "5c797c243cf94adb0722f9cac07f369d8fc6495cabbd55db3b2f2932e8791df0",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/lib/operationInvocations/authorityHandlers.ts:reconcileInvocationWorkloadAuthorityHandler",
             "to": "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority",
             "via": "call",
-            "callSiteSha256": "5ec57f62e6b8a9f437e0bde8dd77179157233732ab9c7e43a21cc7a84b400522",
+            "callSiteSha256": "9204208013176ee48bec45d81ac42b51027ebc3656b0f0647c176aadb035dc01",
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "12c8dd25b3ccafca6a7ec05c6b0de520bf3c414c594ec5a3009e28468670a2b2"
+        "sha256": "b3b8a594df3e9328de0030f37c52ef907b819aaa56db32f2afdf0f73da17ed71"
       },
       "runtimeIsolation": {
         "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
@@ -10271,7 +10667,7 @@
       "surfaceRef": "workpool:convex/capabilityProviderConnectionCleanup.ts:run",
       "runtimeHandlerRef": "convex/capabilityProviderConnectionCleanup.ts:run",
       "authoritySink": "convex/lib/providerConnections/authority.ts:readCurrentCleanupResourceAuthority",
-      "authorityPathSha256": "aa1d100fe080092dfa21b97006fdc9df600881172acd775552e4630c7fe1744f",
+      "authorityPathSha256": "d07eb3e4be292295598821bfffd42e26d5443df4469f9f36a9252f3bcd4e757e",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",

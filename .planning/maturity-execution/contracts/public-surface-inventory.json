@@ -462,6 +462,150 @@
       "routerPath": "/api/stripe/webhook",
       "owner": "money",
       "source": "src/routes/api.stripe.webhook.ts"
+    },
+    {
+      "id": "agent-account-self",
+      "host": "tanstack",
+      "methods": ["GET"],
+      "path": "/api/v1/account",
+      "routerPath": "/api/v1/account",
+      "owner": "agent-access",
+      "source": "src/routes/api.v1.account.ts"
+    },
+    {
+      "id": "agent-account-balance",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/account/balance",
+      "routerPath": "/api/v1/account/balance",
+      "owner": "money",
+      "source": "src/routes/api.v1.account.balance.ts"
+    },
+    {
+      "id": "agent-account-activity",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/account/activity",
+      "routerPath": "/api/v1/account/activity",
+      "owner": "money",
+      "source": "src/routes/api.v1.account.activity.ts"
+    },
+    {
+      "id": "operation-history",
+      "host": "tanstack",
+      "methods": ["GET"],
+      "path": "/api/v1/operations",
+      "routerPath": "/api/v1/operations",
+      "owner": "capability-execution",
+      "source": "src/routes/api.v1.operations.ts"
+    },
+    {
+      "id": "supply-status",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/status",
+      "routerPath": "/api/v1/supply/status",
+      "owner": "capability-supply",
+      "source": "src/routes/api.v1.supply.status.ts"
+    },
+    {
+      "id": "supply-publish",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/publish",
+      "routerPath": "/api/v1/supply/publish",
+      "owner": "capability-supply",
+      "source": "src/routes/api.v1.supply.publish.ts"
+    },
+    {
+      "id": "supply-withdraw",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/withdraw",
+      "routerPath": "/api/v1/supply/withdraw",
+      "owner": "capability-supply",
+      "source": "src/routes/api.v1.supply.withdraw.ts"
+    },
+    {
+      "id": "supply-recheck",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/recheck",
+      "routerPath": "/api/v1/supply/recheck",
+      "owner": "capability-supply",
+      "source": "src/routes/api.v1.supply.recheck.ts"
+    },
+    {
+      "id": "supply-republish",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/republish",
+      "routerPath": "/api/v1/supply/republish",
+      "owner": "capability-supply",
+      "source": "src/routes/api.v1.supply.republish.ts"
+    },
+    {
+      "id": "supply-earnings",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/earnings",
+      "routerPath": "/api/v1/supply/earnings",
+      "owner": "money",
+      "source": "src/routes/api.v1.supply.earnings.ts"
+    },
+    {
+      "id": "supply-connection-list",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/connections/list",
+      "routerPath": "/api/v1/supply/connections/list",
+      "owner": "capability-supply",
+      "source": "src/routes/api.v1.supply.connections.list.ts"
+    },
+    {
+      "id": "supply-connection-detail",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/connections/detail",
+      "routerPath": "/api/v1/supply/connections/detail",
+      "owner": "capability-supply",
+      "source": "src/routes/api.v1.supply.connections.detail.ts"
+    },
+    {
+      "id": "supply-connection-connect",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/connections/connect",
+      "routerPath": "/api/v1/supply/connections/connect",
+      "owner": "capability-supply",
+      "source": "src/routes/api.v1.supply.connections.connect.ts"
+    },
+    {
+      "id": "supply-connection-reconnect",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/connections/reconnect",
+      "routerPath": "/api/v1/supply/connections/reconnect",
+      "owner": "capability-supply",
+      "source": "src/routes/api.v1.supply.connections.reconnect.ts"
+    },
+    {
+      "id": "supply-connection-revoke",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/connections/revoke",
+      "routerPath": "/api/v1/supply/connections/revoke",
+      "owner": "capability-supply",
+      "source": "src/routes/api.v1.supply.connections.revoke.ts"
+    },
+    {
+      "id": "supply-connection-retry-cleanup",
+      "host": "tanstack",
+      "methods": ["POST"],
+      "path": "/api/v1/supply/connections/retry-cleanup",
+      "routerPath": "/api/v1/supply/connections/retry-cleanup",
+      "owner": "capability-supply",
+      "source": "src/routes/api.v1.supply.connections.retry-cleanup.ts"
     }
   ],
   "mcp": [
@@ -529,6 +673,71 @@
       "actionId": "supply.earnings",
       "toolName": "ae_supply_earnings",
       "owner": "capability-supply"
+    },
+    {
+      "actionId": "agentAccess.whoami",
+      "toolName": "ae_agentAccess_whoami",
+      "owner": "agent-access"
+    },
+    {
+      "actionId": "agentAccess.balance",
+      "toolName": "ae_agentAccess_balance",
+      "owner": "money"
+    },
+    {
+      "actionId": "agentAccess.activity",
+      "toolName": "ae_agentAccess_activity",
+      "owner": "money"
+    },
+    {
+      "actionId": "operation.list",
+      "toolName": "ae_operation_list",
+      "owner": "capability-execution"
+    },
+    {
+      "actionId": "supply.status",
+      "toolName": "ae_supply_status",
+      "owner": "capability-supply"
+    },
+    {
+      "actionId": "supply.recheck",
+      "toolName": "ae_supply_recheck",
+      "owner": "capability-supply"
+    },
+    {
+      "actionId": "supply.republish",
+      "toolName": "ae_supply_republish",
+      "owner": "capability-supply"
+    },
+    {
+      "actionId": "supply.connection.list",
+      "toolName": "ae_supply_connection_list",
+      "owner": "capability-supply"
+    },
+    {
+      "actionId": "supply.connection.detail",
+      "toolName": "ae_supply_connection_detail",
+      "owner": "capability-supply"
+    },
+    {
+      "actionId": "supply.connection.connect",
+      "toolName": "ae_supply_connection_connect",
+      "owner": "capability-supply"
+    },
+    {
+      "actionId": "supply.connection.reconnect",
+      "toolName": "ae_supply_connection_reconnect",
+      "owner": "capability-supply"
+    },
+    {
+      "actionId": "supply.connection.revoke",
+      "toolName": "ae_supply_connection_revoke",
+      "owner": "capability-supply"
+    },
+    {
+      "actionId": "supply.connection.retryCleanup",
+      "toolName": "ae_supply_connection_retryCleanup",
+      "owner": "capability-supply"
     }
   ],
   "cli": [
@@ -591,6 +800,21 @@
       "command": "revoke",
       "owner": "agent-access",
       "source": "tools/ae/commands/revoke.ts"
+    },
+    {
+      "command": "account",
+      "owner": "agent-access",
+      "source": "tools/ae/commands/account.ts"
+    },
+    {
+      "command": "history",
+      "owner": "capability-execution",
+      "source": "tools/ae/commands/history.ts"
+    },
+    {
+      "command": "supply",
+      "owner": "capability-supply",
+      "source": "tools/ae/commands/supply.ts"
     }
   ],
   "plannedNotImplemented": [

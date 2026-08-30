@@ -1,5 +1,9 @@
 import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
 import {
+  AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS,
+  AGENT_ACCOUNT_SELF_ROUTE_CONTRACT,
+} from '@/modules/agent-access/account.actions'
+import {
   findAction,
   listOperationRouteDescriptors,
   mcpToolName,
@@ -15,6 +19,7 @@ import {
   operationInvokeResultKindValues,
 } from '@/modules/capability-execution/operation-invoke-contracts'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { SUPPLY_ACTION_ROUTE_CONTRACTS } from '@/modules/capability-supply/supply-actions'
 import { describeActionForAgent } from '@/modules/common/action'
 import {
   OPERATION_MARKET_ACTION_ENTRIES,
@@ -73,7 +78,50 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
   inspect: { summary: 'Read one exact current Market Operation before connecting or invoking.', args: '<operationRef>', json: true },
   compare: { summary: 'Compare one to four exact current Operation references.', args: '<operationRef> [<operationRef> ...]', json: true },
   'inspect-plan': { summary: 'Inspect a bounded operation plan from one to four exact current Operation references.', args: '<operationRef> [operationRef ...]', json: true },
-  connect: { summary: 'Register a public device client or validate the configured AE key.', args: '', json: true },
+  connect: {
+    summary: 'Register a public device client or validate one separately stored AE credential profile.',
+    args: '[--supplier]',
+    json: true,
+    guidance: [
+      'Without --supplier, request buyer Operation access. With --supplier, request a separate owner-approved market_supply:manage credential.',
+      'Buyer and supplier credentials are stored independently for the exact server origin.',
+    ],
+  },
+  account: {
+    summary: 'Inspect current agent identity, exact buyer credit, credential activity, or local origin-bound connections.',
+    args: '[status [market|supplier]|balance [currency]|activity [currency]|connections|disconnect [market|supplier]]',
+    json: true,
+    commands: {
+      status: { summary: 'Read one buyer or supplier credential profile’s principal, owner account, scopes, and authority mode.', args: '[market|supplier]', json: true },
+      balance: { summary: 'Read exact buyer credit and the owner-browser funding continuation.', args: '[currency]', json: true },
+      activity: { summary: 'List this credential profile’s bounded charge activity, newest first.', args: '[currency] [--limit <1-100>] [--cursor <cursor>]', json: true },
+      connections: { summary: 'List locally stored origin-bound AE connections without revealing bearer material.', args: '', json: true },
+      disconnect: { summary: 'Remove one local credential profile, or all profiles for the selected origin; server-side revocation remains owner-controlled.', args: '[market|supplier]', json: true },
+    },
+  },
+  supply: {
+    summary: 'Inspect and manage owner-bound supplier Operations, provider connections, earnings, and recovery with an owner-issued supplier credential.',
+    args: '<status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|retry-cleanup>',
+    json: true,
+    guidance: [
+      'Requires a separately owner-approved credential with market_supply:manage; obtain it with ae connect --supplier.',
+      'Use status before lifecycle writes and preserve the exact offering and publication revisions it returns.',
+    ],
+    commands: {
+      status: { summary: 'List supplier Operations or inspect one exact offering lifecycle.', args: '<businessId> [offeringRef]', json: true },
+      publish: { summary: 'Publish one admitted supplier Operation artifact.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      withdraw: { summary: 'Withdraw one exact current supplier publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      recheck: { summary: 'Schedule readiness revalidation for one exact publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      republish: { summary: 'Republish one exact withdrawn publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      earnings: { summary: 'Read exact supplier earnings and payout status for one currency.', args: '<currency>', json: true },
+      connections: { summary: 'List provider connections for one supplier business, including non-active recovery states.', args: '<businessId> [lifecycle] [--limit <1-100>]', json: true },
+      connection: { summary: 'Inspect one exact provider connection and its current concurrency identity.', args: '<connectionRef>', json: true },
+      connect: { summary: 'Connect one public credentialless x402 endpoint.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      reconnect: { summary: 'Refresh one exact provider connection using its current generation and digest.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      revoke: { summary: 'Begin revocation and cleanup for one exact provider connection.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      'retry-cleanup': { summary: 'Resume eligible cleanup after persisted callback grace expires.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+    },
+  },
   fund: {
     summary: 'Continue to owner funding controls in the authenticated browser surface; this command never funds.',
     args: '',
@@ -81,6 +129,12 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     guidance: ['Open the returned /owner/credit#fund continuation as the owner. No agent credential is used.'],
   },
   call: { summary: 'Call one capability: anonymous MCP for eligible free keyless reads, otherwise the connected AE gateway.', args: "<operationRef> --input '<json>' [--wait]", json: true },
+  history: {
+    summary: 'List this credential profile’s own invocation summaries, newest first.',
+    args: '[--limit <1-100>] [--cursor <cursor>] [--state <state>]',
+    json: true,
+    guidance: ['Use the returned invocationRef with status for exact result, receipt, and recovery detail.'],
+  },
   status: { summary: 'Read one authenticated invocation status and evidence projection.', args: '<invocationRef>', json: true },
   cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocationRef> --idempotency-key <key>', json: true },
   recover: {
@@ -132,7 +186,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     protocol: 'agentic-economy.operation-terminal.v1',
     about: 'Discover exact current work, inspect terms, connect one agent key, call idempotently, preserve the receipt, and reuse successful work.',
     commands: COMMANDS,
-    coldLoop: ['search', 'inspect', 'connect', 'call', 'receipt', 'reuse'],
+    coldLoop: ['search', 'inspect', 'connect', 'call', 'history', 'receipt', 'reuse'],
     payment: {
       providerQuotedAmount: {
         field: 'commercial.priceBreakdown.providerQuotedAmount',
@@ -173,6 +227,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
       invokeWait: 'invoke --wait polls status using the gateway retryAfterMs value until a terminal result or bounded timeout; a timeout preserves invocationRef for status.',
     },
     recovery: {
+      history: 'Use root history to recover invocation references owned by the current credential profile before reading exact status.',
       statusFirst: true,
       cancel: 'Use root cancel with the same invocationRef and a stable idempotency key when cancellation is supported and the invocation should stop.',
       reconcile: 'Use root recover only after a genuinely uncertain outcome, with canonical evidence for the same invocationRef and the same idempotency identity; recover never replays a known result.',
@@ -262,6 +317,26 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
       },
       credentialBoundary: 'AE resolves provider, endpoint, connection, supplier credential, price, authority, and evidence server-side.',
     },
+    account: {
+      action: describedAction(AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.actionId),
+      route: AGENT_ACCOUNT_SELF_ROUTE_CONTRACT,
+      moneyRoutes: Object.values(AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS).map((route) => ({
+        ...route,
+        action: describedAction(route.actionId),
+      })),
+      commands: COMMANDS.account,
+      localConnectionLifecycle: ['connections', 'disconnect'],
+    },
+    supply: {
+      authentication: 'Bearer owner-issued credential with market_supply:manage',
+      connectCommand: 'ae connect --supplier',
+      issuanceBoundary: 'Supplier authority is a separate owner-approved credential profile; the ordinary ae connect buyer flow remains buyer-only.',
+      commands: COMMANDS.supply,
+      routes: Object.values(SUPPLY_ACTION_ROUTE_CONTRACTS).map((route) => ({
+        ...route,
+        action: describedAction(route.actionId),
+      })),
+    },
     jsonOutput: {
       stdout: 'exactly_one_json_value',
       stderr: 'progress_and_errors',
@@ -293,6 +368,20 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
       anonymous: 'Search, inspect, and compare current Operations without connecting.',
       connected: 'Run ae connect once; authenticated invocation covers free and paid operations, and consequential operations require approval.',
     },
+    account: {
+      command: 'ae account status [market|supplier]',
+      balance: 'ae account balance [currency]',
+      activity: 'ae account activity [currency] [--limit <1-100>] [--cursor <cursor>]',
+      connections: 'ae account connections',
+      disconnect: 'ae account disconnect',
+    },
+    supply: {
+      connect: 'ae connect --supplier',
+      status: 'ae supply status <businessId> [offeringRef]',
+      connections: 'ae supply connections <businessId>',
+      connection: 'ae supply connection <connectionRef>',
+      authority: 'Requires a separately owner-approved market_supply:manage credential; buyer and supplier profiles remain independent.',
+    },
     routes: operationReads.map(({ route, action }) => ({
       relation: route.relation,
       method: route.method,
@@ -309,6 +398,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
       },
     },
     recovery: {
+      history: 'ae history [--state <state>]',
       status: 'ae status <invocationRef>',
       rule: 'If the outcome is uncertain, read status before any retry and preserve the same identity.',
     },

@@ -58,6 +58,7 @@ const caller: AgentOperatorKeyReadback = {
     expired: false,
   },
   grant: {
+    principalId: `prn_${'1'.repeat(32)}`,
     credentialId: 'key_ui_1',
     applicationRef: 'agentic-economy',
     environment: 'sandbox',

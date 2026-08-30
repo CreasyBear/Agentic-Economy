@@ -247,7 +247,8 @@ export async function probeFromCronHandler(
   ctx: ActionCtx,
   args: ProbeArgs & Readonly<{ workload: unknown }>,
 ): Promise<ProbeResult> {
-  const parsed = parseWorkloadCronSnapshot(args.workload)
+  const { workload: workloadInput, ...probeArgs } = args
+  const parsed = parseWorkloadCronSnapshot(workloadInput)
   const workload: WorkloadCronSnapshot = await ctx.runQuery(internal.workloadCron.reconcile, {
     name: 'refresh capability supply readiness',
     snapshot: parsed,
@@ -255,7 +256,7 @@ export async function probeFromCronHandler(
   return await probeHandler(bindWorkloadCronActionContext(ctx, {
     name: 'refresh capability supply readiness',
     snapshot: workload,
-  }), args)
+  }), probeArgs)
 }
 
 export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = internalAction({

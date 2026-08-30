@@ -140,7 +140,7 @@ export function AeRouteCommandMenu({
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onOpenChange, openProp])
+  }, [onOpenChange, openProp, setOpen])
 
 
   return (

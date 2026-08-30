@@ -44,16 +44,6 @@ const readCurrentInteractiveAuthorityFactsRef = makeFunctionReference<
   unknown
 >('interactiveAuthority:readCurrentInteractiveAuthorityFacts')
 
-const AUTHORITY_CASE_LABELS = [
-  "owner",
-  "member",
-  "workload",
-  "missing_workload",
-  "stranger",
-  "wrong_account",
-  "stale_generation",
-] as const;
-
 describe('canonical interactive authority', () => {
   beforeEach(() => {
     vi.useFakeTimers()

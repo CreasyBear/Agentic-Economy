@@ -52,6 +52,13 @@ describe('P2-05 generated isolation matrix', () => {
   it('rejects incomplete/duplicate inventories and any cross-account, stranger, or stale-generation allowance', async () => {
     await expect(generateIsolationMatrix({ surfaces: [], actors, wrongAccountRef: OTHER, currentGeneration: 3, evaluate: async () => ({ kind: 'denied', reason: 'none' }) })).rejects.toMatchObject({ code: 'isolation_surface_inventory_invalid' })
     await expect(generateIsolationMatrix({ surfaces: [surfaces[0]!, surfaces[0]!], actors, wrongAccountRef: OTHER, currentGeneration: 3, evaluate: async () => ({ kind: 'denied', reason: 'none' }) })).rejects.toMatchObject({ code: 'isolation_surface_inventory_invalid' })
+    for (const invalid of [
+      { ...surfaces[0]!, surfaceRef: '' },
+      { ...surfaces[0]!, resourceRef: '' },
+      { ...surfaces[0]!, protection: 'future_protection' as never },
+    ]) {
+      await expect(generateIsolationMatrix({ surfaces: [invalid], actors, wrongAccountRef: OTHER, currentGeneration: 3, evaluate: async () => ({ kind: 'denied', reason: 'none' }) })).rejects.toMatchObject({ code: 'isolation_surface_inventory_invalid' })
+    }
     await expect(generateIsolationMatrix({ surfaces, actors, wrongAccountRef: ACCOUNT, currentGeneration: 3, evaluate: async () => ({ kind: 'denied', reason: 'none' }) })).rejects.toMatchObject({ code: 'isolation_account_context_invalid' })
     await expect(generateIsolationMatrix({ surfaces, actors: { ...actors, stranger: actors.owner }, wrongAccountRef: OTHER, currentGeneration: 3, evaluate: async () => ({ kind: 'denied', reason: 'none' }) })).rejects.toMatchObject({ code: 'isolation_account_context_invalid' })
     await expect(generateIsolationMatrix({ surfaces, actors, wrongAccountRef: OTHER, currentGeneration: 0, evaluate: async () => ({ kind: 'denied', reason: 'none' }) })).rejects.toMatchObject({ code: 'isolation_generation_invalid' })

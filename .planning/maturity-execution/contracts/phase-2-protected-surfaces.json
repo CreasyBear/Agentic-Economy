@@ -2,50 +2,53 @@
   "format": "phase-2-protected-surfaces:v2",
   "expectedCounts": {
     "serverFunctions": 47,
-    "publicConvex": 117,
+    "publicConvex": 127,
     "convexHttpActions": 7,
     "crons": 10,
     "backgroundFamilies": 25,
-    "frozenHttp": 40,
-    "frozenMcp": 13,
-    "frozenCli": 12
+    "frozenHttp": 56,
+    "frozenMcp": 26,
+    "frozenCli": 15
   },
   "baselineCounts": {
     "serverFunctions": 47,
-    "publicConvex": 117,
+    "publicConvex": 127,
     "convexHttpActions": 7,
     "crons": 10,
     "backgroundFamilies": 25,
-    "frozenHttp": 40,
-    "frozenMcp": 13,
-    "frozenCli": 12
+    "frozenHttp": 56,
+    "frozenMcp": 26,
+    "frozenCli": 15
   },
   "actualCounts": {
     "serverFunctions": 47,
-    "publicConvex": 117,
+    "publicConvex": 127,
     "convexHttpActions": 7,
     "convexHttpRoutes": 7,
     "crons": 10,
     "backgroundFamilies": 52,
-    "frozenHttp": 40,
-    "frozenMcp": 13,
-    "frozenCli": 12
+    "frozenHttp": 56,
+    "frozenMcp": 26,
+    "frozenCli": 15
   },
   "candidateCounts": {
     "serverFunctions": 47,
-    "publicConvex": 117,
+    "publicConvex": 127,
     "convexHttpActions": 7,
     "convexHttpRoutes": 7,
     "crons": 10,
     "backgroundFamilies": 52,
-    "frozenHttp": 40,
-    "frozenMcp": 13,
-    "frozenCli": 12
+    "frozenHttp": 56,
+    "frozenMcp": 26,
+    "frozenCli": 15
   },
   "frozenContract": {
     "sourceFile": ".planning/maturity-execution/contracts/public-surface-inventory.json",
-    "sha256": "5b6bc97afe960d6a9af91e151ad72ef624922d875ed44ec34f0a4d94271f9002",
+    "sha256": "cfc027d5b264ecc8e1ff8f846ef679bf42da045c8a1e862cd5ba94f8fdb522e3",
     "httpRefs": [
+      "agent-account-activity",
+      "agent-account-balance",
+      "agent-account-self",
       "agent-skill",
       "anonymous-chat-convex",
       "anonymous-chat-edge",
@@ -73,6 +76,7 @@
       "operation-cancel",
       "operation-compare",
       "operation-detail",
+      "operation-history",
       "operation-inspect-plan",
       "operation-reconcile",
       "operation-search",
@@ -85,11 +89,27 @@
       "service-search",
       "site-ucp",
       "sitemap",
-      "stripe-webhook"
+      "stripe-webhook",
+      "supply-connection-connect",
+      "supply-connection-detail",
+      "supply-connection-list",
+      "supply-connection-reconnect",
+      "supply-connection-retry-cleanup",
+      "supply-connection-revoke",
+      "supply-earnings",
+      "supply-publish",
+      "supply-recheck",
+      "supply-republish",
+      "supply-status",
+      "supply-withdraw"
     ],
     "mcpRefs": [
+      "agentAccess.activity",
+      "agentAccess.balance",
+      "agentAccess.whoami",
       "operation.cancel",
       "operation.invoke",
+      "operation.list",
       "operation.reconcile",
       "operation.status",
       "registry.detail",
@@ -98,23 +118,35 @@
       "registry.operations.inspectPlan",
       "registry.operations.search",
       "registry.search",
+      "supply.connection.connect",
+      "supply.connection.detail",
+      "supply.connection.list",
+      "supply.connection.reconnect",
+      "supply.connection.retryCleanup",
+      "supply.connection.revoke",
       "supply.earnings",
       "supply.publish",
+      "supply.recheck",
+      "supply.republish",
+      "supply.status",
       "supply.withdraw"
     ],
     "cliRefs": [
+      "account",
       "call",
       "cancel",
       "compare",
       "connect",
       "fund",
+      "history",
       "inspect",
       "inspect-plan",
       "manifest",
       "recover",
       "revoke",
       "search",
-      "status"
+      "status",
+      "supply"
     ]
   },
   "serverFunctions": [
@@ -507,13 +539,13 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "69010465cf54576a3b3e74599b737b332225ecd00dc511120aaf1437002708ce",
+      "sha256": "195b35d247c0660d81dc52abe1d8d05e9a69cb90acdec7e5aaa0e21b0a4151db",
       "declaration": {
         "file": "src/modules/agent-access/agent-access.functions.ts",
         "symbol": "issueAgentAccessKeyServer",
-        "line": 260,
+        "line": 289,
         "column": 14,
-        "sha256": "a89aadeed0e863ab4508518318cd206051bccfcce41272a7c1c43f592148165d"
+        "sha256": "338c64a6792cc159ef92bed9815a8b23331339ce5aeae248ee2ea99dc8668245"
       },
       "status": "bound",
       "marker": "transitive_authority_path:src/modules/agent-access/agent-access.functions.ts:issueAgentAccessKeyServer=>convex/authz.ts:resolveBusinessActor",
@@ -522,28 +554,28 @@
         {
           "ref": "src/modules/agent-access/agent-access.functions.ts:issueAgentAccessKeyServer",
           "file": "src/modules/agent-access/agent-access.functions.ts",
-          "line": 260,
+          "line": 289,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "src/modules/agent-access/agent-access.functions.ts:requireCanonicalOwnerAuthorityServer",
           "file": "src/modules/agent-access/agent-access.functions.ts",
-          "line": 198,
+          "line": 208,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "src/modules/agent-access/agent-access.functions.ts:listOwnerGrantReadbacksQuery",
           "file": "src/modules/agent-access/agent-access.functions.ts",
-          "line": 194,
+          "line": 204,
           "column": 7,
           "via": "function_reference"
         },
         {
           "ref": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
           "file": "convex/agentAccessPolicy.ts",
-          "line": 129,
+          "line": 130,
           "column": 14,
           "via": "function_reference"
         },
@@ -564,11 +596,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "69010465cf54576a3b3e74599b737b332225ecd00dc511120aaf1437002708ce",
+      "sha256": "195b35d247c0660d81dc52abe1d8d05e9a69cb90acdec7e5aaa0e21b0a4151db",
       "declaration": {
         "file": "src/modules/agent-access/agent-access.functions.ts",
         "symbol": "listAgentAccessKeysServer",
-        "line": 324,
+        "line": 348,
         "column": 14,
         "sha256": "83052a935e71bbff3844b7efd179923817883d573c142b9e5e937ed7ca4c180c"
       },
@@ -579,28 +611,28 @@
         {
           "ref": "src/modules/agent-access/agent-access.functions.ts:listAgentAccessKeysServer",
           "file": "src/modules/agent-access/agent-access.functions.ts",
-          "line": 324,
+          "line": 348,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "src/modules/agent-access/agent-access.functions.ts:requireCanonicalOwnerAuthorityServer",
           "file": "src/modules/agent-access/agent-access.functions.ts",
-          "line": 198,
+          "line": 208,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "src/modules/agent-access/agent-access.functions.ts:listOwnerGrantReadbacksQuery",
           "file": "src/modules/agent-access/agent-access.functions.ts",
-          "line": 194,
+          "line": 204,
           "column": 7,
           "via": "function_reference"
         },
         {
           "ref": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
           "file": "convex/agentAccessPolicy.ts",
-          "line": 129,
+          "line": 130,
           "column": 14,
           "via": "function_reference"
         },
@@ -621,11 +653,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "69010465cf54576a3b3e74599b737b332225ecd00dc511120aaf1437002708ce",
+      "sha256": "195b35d247c0660d81dc52abe1d8d05e9a69cb90acdec7e5aaa0e21b0a4151db",
       "declaration": {
         "file": "src/modules/agent-access/agent-access.functions.ts",
         "symbol": "revokeAgentAccessKeyServer",
-        "line": 333,
+        "line": 357,
         "column": 14,
         "sha256": "a1ab54002705b337cb67b2fb0f5dcec8c51882567effb4660c318627e2a92803"
       },
@@ -636,28 +668,28 @@
         {
           "ref": "src/modules/agent-access/agent-access.functions.ts:revokeAgentAccessKeyServer",
           "file": "src/modules/agent-access/agent-access.functions.ts",
-          "line": 333,
+          "line": 357,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "src/modules/agent-access/agent-access.functions.ts:requireCanonicalOwnerAuthorityServer",
           "file": "src/modules/agent-access/agent-access.functions.ts",
-          "line": 198,
+          "line": 208,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "src/modules/agent-access/agent-access.functions.ts:listOwnerGrantReadbacksQuery",
           "file": "src/modules/agent-access/agent-access.functions.ts",
-          "line": 194,
+          "line": 204,
           "column": 7,
           "via": "function_reference"
         },
         {
           "ref": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
           "file": "convex/agentAccessPolicy.ts",
-          "line": 129,
+          "line": 130,
           "column": 14,
           "via": "function_reference"
         },
@@ -714,21 +746,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:decideOperationApproval",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 144,
+          "line": 149,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalDecisionHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 450,
+          "line": 461,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 437,
+          "line": 448,
           "column": 1,
           "via": "call"
         },
@@ -785,21 +817,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:listPendingOperationApprovals",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 138,
+          "line": 143,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalListHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 445,
+          "line": 456,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 437,
+          "line": 448,
           "column": 1,
           "via": "call"
         },
@@ -849,21 +881,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:cancelOwnerInvocation",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 252,
+          "line": 280,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerCancelHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 470,
+          "line": 481,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 437,
+          "line": 448,
           "column": 1,
           "via": "call"
         },
@@ -913,21 +945,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:readOwnerInvocationStatus",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 246,
+          "line": 274,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerStatusHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 460,
+          "line": 471,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 437,
+          "line": 448,
           "column": 1,
           "via": "call"
         },
@@ -977,21 +1009,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 258,
+          "line": 286,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerReconcileHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 480,
+          "line": 491,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 437,
+          "line": 448,
           "column": 1,
           "via": "call"
         },
@@ -1119,14 +1151,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:connectX402OwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 411,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:readOwnedBusiness",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 181,
+          "line": 476,
           "column": 1,
           "via": "call"
         },
@@ -1325,7 +1350,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:listOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 237,
+          "line": 273,
           "column": 1,
           "via": "call"
         },
@@ -1588,21 +1613,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 407,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerConnection",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 193,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 163,
+          "line": 467,
           "column": 1,
           "via": "call"
         },
@@ -1730,14 +1741,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:retryOwnerCleanupHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 340,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 163,
+          "line": 388,
           "column": 1,
           "via": "call"
         },
@@ -1801,14 +1805,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:revokeOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 262,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 163,
+          "line": 298,
           "column": 1,
           "via": "call"
         },
@@ -3417,13 +3414,13 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "72afae3611ac8a638089b3c4764e50caf35f5607ac89af340e6d8e127203fb2d",
+      "sha256": "4145f063050974d5a66c49eec1d7b82135dd2a92adf01b294e7d36629cd55eba",
       "declaration": {
         "file": "convex/agentAccessPolicy.ts",
         "symbol": "listOwnerGrantReadbacks",
-        "line": 129,
+        "line": 130,
         "column": 14,
-        "sha256": "0cecf04e3b3607df615503d016c43b086af466af0b3918360a0c29ecf32f6411"
+        "sha256": "be7f0ef23fc36fac130e954e254da33417a1f966f0618da052fe6aefb69917da"
       },
       "status": "bound",
       "marker": "transitive_authority_path:convex/agentAccessPolicy.ts:listOwnerGrantReadbacks=>convex/authz.ts:resolveBusinessActor",
@@ -3432,7 +3429,7 @@
         {
           "ref": "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks",
           "file": "convex/agentAccessPolicy.ts",
-          "line": 129,
+          "line": 130,
           "column": 14,
           "via": "declaration"
         },
@@ -3453,11 +3450,11 @@
       "registrar": "mutation",
       "binding": "signed_callback",
       "consequential": true,
-      "sha256": "72afae3611ac8a638089b3c4764e50caf35f5607ac89af340e6d8e127203fb2d",
+      "sha256": "4145f063050974d5a66c49eec1d7b82135dd2a92adf01b294e7d36629cd55eba",
       "declaration": {
         "file": "convex/agentAccessPolicy.ts",
         "symbol": "registerGrantForServer",
-        "line": 164,
+        "line": 166,
         "column": 14,
         "sha256": "c07b5143c45147d0fce720d9d8c6fa304c433222be030c90adbb01d1f9c126ab"
       },
@@ -3468,14 +3465,14 @@
         {
           "ref": "convex/agentAccessPolicy.ts:registerGrantForServer",
           "file": "convex/agentAccessPolicy.ts",
-          "line": 164,
+          "line": 166,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/agentAccessPolicy.ts:verifyServerAssertion",
           "file": "convex/agentAccessPolicy.ts",
-          "line": 92,
+          "line": 93,
           "column": 1,
           "via": "call"
         },
@@ -3496,11 +3493,11 @@
       "registrar": "mutation",
       "binding": "signed_callback",
       "consequential": true,
-      "sha256": "72afae3611ac8a638089b3c4764e50caf35f5607ac89af340e6d8e127203fb2d",
+      "sha256": "4145f063050974d5a66c49eec1d7b82135dd2a92adf01b294e7d36629cd55eba",
       "declaration": {
         "file": "convex/agentAccessPolicy.ts",
         "symbol": "revokeGrantForServer",
-        "line": 307,
+        "line": 309,
         "column": 14,
         "sha256": "c7599861ab6cfb4f98abb508efa65fe6883207bf72713a9070c575b609e68077"
       },
@@ -3511,14 +3508,14 @@
         {
           "ref": "convex/agentAccessPolicy.ts:revokeGrantForServer",
           "file": "convex/agentAccessPolicy.ts",
-          "line": 307,
+          "line": 309,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/agentAccessPolicy.ts:verifyServerAssertion",
           "file": "convex/agentAccessPolicy.ts",
-          "line": 92,
+          "line": 93,
           "column": 1,
           "via": "call"
         },
@@ -3539,13 +3536,13 @@
       "registrar": "mutation",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "3b0724661545c7bfcf7b24303aa88088aebf8ff4be7ffe502d2f889752d3b36e",
+      "sha256": "e7abe2751babefbcc18cd6809f6be7aedbf9567fd76d96240509aacfe0c7c728",
       "declaration": {
         "file": "convex/agentAccessPrincipals.ts",
         "symbol": "registerAgentPrincipal",
-        "line": 166,
+        "line": 497,
         "column": 14,
-        "sha256": "5c646057e605f7da352a69890c6f3d8eb25654562b6207159043112ec9650edf"
+        "sha256": "2dec489a5ca07c5629a85cde4e8a4f15ce289203e771cc25ed8eed4f9ffac31a"
       },
       "status": "bound",
       "marker": "transitive_authority_path:convex/agentAccessPrincipals.ts:registerAgentPrincipal=>convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext",
@@ -3554,7 +3551,7 @@
         {
           "ref": "convex/agentAccessPrincipals.ts:registerAgentPrincipal",
           "file": "convex/agentAccessPrincipals.ts",
-          "line": 166,
+          "line": 497,
           "column": 14,
           "via": "declaration"
         },
@@ -3568,6 +3565,142 @@
       ]
     },
     {
+      "ref": "convex/agentAccessPrincipals.ts:registerIssuedAgentBindingForServer",
+      "kind": "convex_public",
+      "file": "convex/agentAccessPrincipals.ts",
+      "symbol": "registerIssuedAgentBindingForServer",
+      "registrar": "mutation",
+      "binding": "interactive_account",
+      "consequential": true,
+      "sha256": "e7abe2751babefbcc18cd6809f6be7aedbf9567fd76d96240509aacfe0c7c728",
+      "declaration": {
+        "file": "convex/agentAccessPrincipals.ts",
+        "symbol": "registerIssuedAgentBindingForServer",
+        "line": 211,
+        "column": 14,
+        "sha256": "a9325f91d6c2e323618ddcb57cffd065a52df4244dd79f26378cf5ae3cedb072"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:convex/agentAccessPrincipals.ts:registerIssuedAgentBindingForServer=>convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext",
+      "authoritySink": "convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext",
+      "authorityPath": [
+        {
+          "ref": "convex/agentAccessPrincipals.ts:registerIssuedAgentBindingForServer",
+          "file": "convex/agentAccessPrincipals.ts",
+          "line": 211,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext",
+          "file": "convex/interactiveAuthority.ts",
+          "line": 167,
+          "column": 1,
+          "via": "call"
+        }
+      ]
+    },
+    {
+      "ref": "convex/agentMoneyReads.ts:activity",
+      "kind": "convex_public",
+      "file": "convex/agentMoneyReads.ts",
+      "symbol": "activity",
+      "registrar": "mutationGeneric",
+      "binding": "canonical_agent",
+      "consequential": true,
+      "sha256": "06924987e0291777796948600ce86edd82a8a32fe2c849f77e44a92990acc815",
+      "declaration": {
+        "file": "convex/agentMoneyReads.ts",
+        "symbol": "activity",
+        "line": 18,
+        "column": 14,
+        "sha256": "6c82912c9ef6594f2edcbb1f1c9468a4de0985e9437c12183cbd528b71455229"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:convex/agentMoneyReads.ts:activity=>convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal",
+      "authorityPath": [
+        {
+          "ref": "convex/agentMoneyReads.ts:activity",
+          "file": "convex/agentMoneyReads.ts",
+          "line": 18,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "convex/lib/agentMoneyReads.ts:listAgentActivityHandler",
+          "file": "convex/lib/agentMoneyReads.ts",
+          "line": 129,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/agentMoneyReads.ts:admitAgentMoneyRead",
+          "file": "convex/lib/agentMoneyReads.ts",
+          "line": 91,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal",
+          "file": "convex/agentAccessPrincipals.ts",
+          "line": 480,
+          "column": 1,
+          "via": "call"
+        }
+      ]
+    },
+    {
+      "ref": "convex/agentMoneyReads.ts:balance",
+      "kind": "convex_public",
+      "file": "convex/agentMoneyReads.ts",
+      "symbol": "balance",
+      "registrar": "mutationGeneric",
+      "binding": "canonical_agent",
+      "consequential": true,
+      "sha256": "06924987e0291777796948600ce86edd82a8a32fe2c849f77e44a92990acc815",
+      "declaration": {
+        "file": "convex/agentMoneyReads.ts",
+        "symbol": "balance",
+        "line": 12,
+        "column": 14,
+        "sha256": "4e0fdb7f924325e632d04739889440b2d14f35dc12fd44a1fd122ef4d4e66603"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:convex/agentMoneyReads.ts:balance=>convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal",
+      "authorityPath": [
+        {
+          "ref": "convex/agentMoneyReads.ts:balance",
+          "file": "convex/agentMoneyReads.ts",
+          "line": 12,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "convex/lib/agentMoneyReads.ts:readAgentBalanceHandler",
+          "file": "convex/lib/agentMoneyReads.ts",
+          "line": 100,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/agentMoneyReads.ts:admitAgentMoneyRead",
+          "file": "convex/lib/agentMoneyReads.ts",
+          "line": 91,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal",
+          "file": "convex/agentAccessPrincipals.ts",
+          "line": 480,
+          "column": 1,
+          "via": "call"
+        }
+      ]
+    },
+    {
       "ref": "convex/authorityBoundary.ts:resolveAgentBinding",
       "kind": "convex_public",
       "file": "convex/authorityBoundary.ts",
@@ -3575,7 +3708,7 @@
       "registrar": "mutation",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "aa2576d68667de4b462f199ffa6291fb659b120eb5042cab8fd7b2f2528cbfd8",
+      "sha256": "25ea0c8adf67ba5608b9ec66dd83325a1406cd65251456fff897239eb990cf30",
       "declaration": {
         "file": "convex/authorityBoundary.ts",
         "symbol": "resolveAgentBinding",
@@ -3647,11 +3780,11 @@
       "registrar": "action",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "cancelInvocation",
-        "line": 234,
+        "line": 262,
         "column": 14,
         "sha256": "0a2101fa3571b4ec66734993c118cc767a37e730b8f801a47699bb8c650f6ca8"
       },
@@ -3662,49 +3795,49 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:cancelInvocation",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 234,
+          "line": 262,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentCancelHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 393,
+          "line": 404,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 108,
+          "line": 110,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 37,
+          "line": 39,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 80,
+          "line": 85,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 83,
+          "line": 85,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 222,
+          "line": 224,
           "column": 1,
           "via": "call"
         }
@@ -3718,11 +3851,11 @@
       "registrar": "action",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "cancelOwnerInvocation",
-        "line": 252,
+        "line": 280,
         "column": 14,
         "sha256": "01c02ae35bd136543bf4ae69eb2a37d451ba9f9ebd8db83886dcb01315b86621"
       },
@@ -3733,21 +3866,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:cancelOwnerInvocation",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 252,
+          "line": 280,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerCancelHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 470,
+          "line": 481,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 437,
+          "line": 448,
           "column": 1,
           "via": "call"
         },
@@ -3768,11 +3901,11 @@
       "registrar": "mutation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "decideOperationApproval",
-        "line": 144,
+        "line": 149,
         "column": 14,
         "sha256": "bcd9608b4dd520d7bbc07820d967f2df4fcac6afd7d2b898193245bd16e10403"
       },
@@ -3783,21 +3916,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:decideOperationApproval",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 144,
+          "line": 149,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalDecisionHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 450,
+          "line": 461,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 437,
+          "line": 448,
           "column": 1,
           "via": "call"
         },
@@ -3818,11 +3951,11 @@
       "registrar": "action",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "invoke",
-        "line": 222,
+        "line": 227,
         "column": 14,
         "sha256": "a2191067c2343edb22a95805de2e8c92b92be5f78b62ed58a879cf9b093a356f"
       },
@@ -3833,49 +3966,120 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:invoke",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 222,
+          "line": 227,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentInvokeHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 373,
+          "line": 375,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 108,
+          "line": 110,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 37,
+          "line": 39,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 80,
+          "line": 85,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 83,
+          "line": 85,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 222,
+          "line": 224,
+          "column": 1,
+          "via": "call"
+        }
+      ]
+    },
+    {
+      "ref": "convex/capabilityOperationInvocations.ts:listInvocations",
+      "kind": "convex_public",
+      "file": "convex/capabilityOperationInvocations.ts",
+      "symbol": "listInvocations",
+      "registrar": "action",
+      "binding": "canonical_agent",
+      "consequential": true,
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
+      "declaration": {
+        "file": "convex/capabilityOperationInvocations.ts",
+        "symbol": "listInvocations",
+        "line": 252,
+        "column": 14,
+        "sha256": "04efa8ffde684b72c2e06068351f7dce32e1fb14aa1c00e33d3ba6d31ee68bfa"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:convex/capabilityOperationInvocations.ts:listInvocations=>convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
+      "authoritySink": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
+      "authorityPath": [
+        {
+          "ref": "convex/capabilityOperationInvocations.ts:listInvocations",
+          "file": "convex/capabilityOperationInvocations.ts",
+          "line": 252,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentListHandler",
+          "file": "convex/lib/operationInvocations/authorityHandlers.ts",
+          "line": 386,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
+          "file": "convex/lib/operationInvocations/authorityHandlers.ts",
+          "line": 110,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
+          "file": "convex/lib/operationInvocations/authorityHandlers.ts",
+          "line": 39,
+          "column": 14,
+          "via": "function_reference"
+        },
+        {
+          "ref": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
+          "file": "convex/capabilityOperationInvocations.ts",
+          "line": 85,
+          "column": 14,
+          "via": "function_reference"
+        },
+        {
+          "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
+          "file": "convex/lib/operationInvocations/authorityHandlers.ts",
+          "line": 85,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
+          "file": "convex/lib/operationInvocations/authorityHandlers.ts",
+          "line": 224,
           "column": 1,
           "via": "call"
         }
@@ -3889,11 +4093,11 @@
       "registrar": "query",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "listPendingOperationApprovals",
-        "line": 138,
+        "line": 143,
         "column": 14,
         "sha256": "fc654a35bd0e04445408279b340a034add91ef6e63069572ad7d08aac2d1391f"
       },
@@ -3904,21 +4108,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:listPendingOperationApprovals",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 138,
+          "line": 143,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerApprovalListHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 445,
+          "line": 456,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 437,
+          "line": 448,
           "column": 1,
           "via": "call"
         },
@@ -3939,11 +4143,11 @@
       "registrar": "action",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "readInvocationStatus",
-        "line": 228,
+        "line": 233,
         "column": 14,
         "sha256": "b54f73877c76339d9517f502369c2235d47f26ebde55a9d6dee0d751ece0e6a5"
       },
@@ -3954,49 +4158,49 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:readInvocationStatus",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 228,
+          "line": 233,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentStatusHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 384,
+          "line": 395,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 108,
+          "line": 110,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 37,
+          "line": 39,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 80,
+          "line": 85,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 83,
+          "line": 85,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 222,
+          "line": 224,
           "column": 1,
           "via": "call"
         }
@@ -4010,11 +4214,11 @@
       "registrar": "action",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "readOwnerInvocationStatus",
-        "line": 246,
+        "line": 274,
         "column": 14,
         "sha256": "e1ca1362761e3669e122e6676f7bc658234b81cd3ebe58402bf6aa9f7b9986d1"
       },
@@ -4025,21 +4229,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:readOwnerInvocationStatus",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 246,
+          "line": 274,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerStatusHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 460,
+          "line": 471,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 437,
+          "line": 448,
           "column": 1,
           "via": "call"
         },
@@ -4060,11 +4264,11 @@
       "registrar": "action",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "reconcileInvocation",
-        "line": 240,
+        "line": 268,
         "column": 14,
         "sha256": "dd91b6b183c3ce45d1c27e2a8a29970de653935f71f8b1e030ebe4987e93e119"
       },
@@ -4075,49 +4279,49 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:reconcileInvocation",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 240,
+          "line": 268,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentReconcileHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 402,
+          "line": 413,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 108,
+          "line": 110,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 37,
+          "line": 39,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 80,
+          "line": 85,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 83,
+          "line": 85,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 222,
+          "line": 224,
           "column": 1,
           "via": "call"
         }
@@ -4131,11 +4335,11 @@
       "registrar": "action",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "reconcileOwnerInvocation",
-        "line": 258,
+        "line": 286,
         "column": 14,
         "sha256": "f16674eddfb0fca36796ca9cebfe91530a1a0f91d4485fd206cf5a3dfaa75805"
       },
@@ -4146,21 +4350,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 258,
+          "line": 286,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerReconcileHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 480,
+          "line": 491,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 437,
+          "line": 448,
           "column": 1,
           "via": "call"
         },
@@ -4168,6 +4372,306 @@
           "ref": "convex/authz.ts:resolveBusinessActor",
           "file": "convex/authz.ts",
           "line": 42,
+          "column": 1,
+          "via": "call"
+        }
+      ]
+    },
+    {
+      "ref": "convex/capabilityProviderConnectionAgents.ts:connectX402",
+      "kind": "convex_public",
+      "file": "convex/capabilityProviderConnectionAgents.ts",
+      "symbol": "connectX402",
+      "registrar": "mutationGeneric",
+      "binding": "canonical_agent",
+      "consequential": true,
+      "sha256": "83bec946dfa7d2a3f1ece93b3a473256b5e9d47d4989427c690d6515fb5d462c",
+      "declaration": {
+        "file": "convex/capabilityProviderConnectionAgents.ts",
+        "symbol": "connectX402",
+        "line": 33,
+        "column": 14,
+        "sha256": "0ceb5836c30b47048fceaf8bad34761e612d69083887057dca1aecc01d6752cb"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:convex/capabilityProviderConnectionAgents.ts:connectX402=>convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPath": [
+        {
+          "ref": "convex/capabilityProviderConnectionAgents.ts:connectX402",
+          "file": "convex/capabilityProviderConnectionAgents.ts",
+          "line": 33,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:connectX402AgentHandler",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 174,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:agentActor",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 97,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+          "file": "convex/agentAccessPrincipals.ts",
+          "line": 472,
+          "column": 1,
+          "via": "call"
+        }
+      ]
+    },
+    {
+      "ref": "convex/capabilityProviderConnectionAgents.ts:list",
+      "kind": "convex_public",
+      "file": "convex/capabilityProviderConnectionAgents.ts",
+      "symbol": "list",
+      "registrar": "mutationGeneric",
+      "binding": "canonical_agent",
+      "consequential": true,
+      "sha256": "83bec946dfa7d2a3f1ece93b3a473256b5e9d47d4989427c690d6515fb5d462c",
+      "declaration": {
+        "file": "convex/capabilityProviderConnectionAgents.ts",
+        "symbol": "list",
+        "line": 21,
+        "column": 14,
+        "sha256": "ee5a5f07e8c8c9ccb6bddbfcacc947a65887370b23b07392df179269f1fb3975"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:convex/capabilityProviderConnectionAgents.ts:list=>convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPath": [
+        {
+          "ref": "convex/capabilityProviderConnectionAgents.ts:list",
+          "file": "convex/capabilityProviderConnectionAgents.ts",
+          "line": 21,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:listAgentHandler",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 113,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:agentActor",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 97,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+          "file": "convex/agentAccessPrincipals.ts",
+          "line": 472,
+          "column": 1,
+          "via": "call"
+        }
+      ]
+    },
+    {
+      "ref": "convex/capabilityProviderConnectionAgents.ts:read",
+      "kind": "convex_public",
+      "file": "convex/capabilityProviderConnectionAgents.ts",
+      "symbol": "read",
+      "registrar": "mutationGeneric",
+      "binding": "canonical_agent",
+      "consequential": true,
+      "sha256": "83bec946dfa7d2a3f1ece93b3a473256b5e9d47d4989427c690d6515fb5d462c",
+      "declaration": {
+        "file": "convex/capabilityProviderConnectionAgents.ts",
+        "symbol": "read",
+        "line": 27,
+        "column": 14,
+        "sha256": "108debbdbfd811d47ee81d2f89c13354958f6cf365635451d49938ab4bd44cec"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:convex/capabilityProviderConnectionAgents.ts:read=>convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPath": [
+        {
+          "ref": "convex/capabilityProviderConnectionAgents.ts:read",
+          "file": "convex/capabilityProviderConnectionAgents.ts",
+          "line": 27,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:readAgentHandler",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 128,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:agentActor",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 97,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+          "file": "convex/agentAccessPrincipals.ts",
+          "line": 472,
+          "column": 1,
+          "via": "call"
+        }
+      ]
+    },
+    {
+      "ref": "convex/capabilityProviderConnectionAgents.ts:reconnect",
+      "kind": "convex_public",
+      "file": "convex/capabilityProviderConnectionAgents.ts",
+      "symbol": "reconnect",
+      "registrar": "mutationGeneric",
+      "binding": "canonical_agent",
+      "consequential": true,
+      "sha256": "83bec946dfa7d2a3f1ece93b3a473256b5e9d47d4989427c690d6515fb5d462c",
+      "declaration": {
+        "file": "convex/capabilityProviderConnectionAgents.ts",
+        "symbol": "reconnect",
+        "line": 39,
+        "column": 14,
+        "sha256": "c603384674bc20b6e9dde136e1107bb21a296bf96ea53e5a97f461935c0afffe"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:convex/capabilityProviderConnectionAgents.ts:reconnect=>convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPath": [
+        {
+          "ref": "convex/capabilityProviderConnectionAgents.ts:reconnect",
+          "file": "convex/capabilityProviderConnectionAgents.ts",
+          "line": 39,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:reconnectAgentHandler",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 140,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:agentActor",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 97,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+          "file": "convex/agentAccessPrincipals.ts",
+          "line": 472,
+          "column": 1,
+          "via": "call"
+        }
+      ]
+    },
+    {
+      "ref": "convex/capabilityProviderConnectionAgents.ts:retryCleanup",
+      "kind": "convex_public",
+      "file": "convex/capabilityProviderConnectionAgents.ts",
+      "symbol": "retryCleanup",
+      "registrar": "mutationGeneric",
+      "binding": "canonical_agent",
+      "consequential": true,
+      "sha256": "83bec946dfa7d2a3f1ece93b3a473256b5e9d47d4989427c690d6515fb5d462c",
+      "declaration": {
+        "file": "convex/capabilityProviderConnectionAgents.ts",
+        "symbol": "retryCleanup",
+        "line": 51,
+        "column": 14,
+        "sha256": "b971355cd1384fce25d449aec5b50328c57faa52c725bebbf61bd6a9b80d8f7e"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:convex/capabilityProviderConnectionAgents.ts:retryCleanup=>convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPath": [
+        {
+          "ref": "convex/capabilityProviderConnectionAgents.ts:retryCleanup",
+          "file": "convex/capabilityProviderConnectionAgents.ts",
+          "line": 51,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:retryCleanupAgentHandler",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 164,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:agentActor",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 97,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+          "file": "convex/agentAccessPrincipals.ts",
+          "line": 472,
+          "column": 1,
+          "via": "call"
+        }
+      ]
+    },
+    {
+      "ref": "convex/capabilityProviderConnectionAgents.ts:revoke",
+      "kind": "convex_public",
+      "file": "convex/capabilityProviderConnectionAgents.ts",
+      "symbol": "revoke",
+      "registrar": "mutationGeneric",
+      "binding": "canonical_agent",
+      "consequential": true,
+      "sha256": "83bec946dfa7d2a3f1ece93b3a473256b5e9d47d4989427c690d6515fb5d462c",
+      "declaration": {
+        "file": "convex/capabilityProviderConnectionAgents.ts",
+        "symbol": "revoke",
+        "line": 45,
+        "column": 14,
+        "sha256": "34915727e313de836a1832faded5b5c49fb4a79110e96a2fcd69218935406e90"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:convex/capabilityProviderConnectionAgents.ts:revoke=>convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authoritySink": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+      "authorityPath": [
+        {
+          "ref": "convex/capabilityProviderConnectionAgents.ts:revoke",
+          "file": "convex/capabilityProviderConnectionAgents.ts",
+          "line": 45,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:revokeAgentHandler",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 154,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/lib/providerConnections/agent.ts:agentActor",
+          "file": "convex/lib/providerConnections/agent.ts",
+          "line": 97,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
+          "file": "convex/agentAccessPrincipals.ts",
+          "line": 472,
           "column": 1,
           "via": "call"
         }
@@ -4203,14 +4707,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:connectX402OwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 411,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:readOwnedBusiness",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 181,
+          "line": 476,
           "column": 1,
           "via": "call"
         },
@@ -4253,7 +4750,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:listOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 237,
+          "line": 273,
           "column": 1,
           "via": "call"
         },
@@ -4296,14 +4793,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:readOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 232,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 163,
+          "line": 236,
           "column": 1,
           "via": "call"
         },
@@ -4346,21 +4836,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 407,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerConnection",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 193,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 163,
+          "line": 467,
           "column": 1,
           "via": "call"
         },
@@ -4403,14 +4879,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:retryOwnerCleanupHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 340,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 163,
+          "line": 388,
           "column": 1,
           "via": "call"
         },
@@ -4453,14 +4922,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:revokeOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 262,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 163,
+          "line": 298,
           "column": 1,
           "via": "call"
         },
@@ -4503,21 +4965,7 @@
         {
           "ref": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerHandler",
           "file": "convex/lib/providerConnections/owner.ts",
-          "line": 407,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:reauthorizeOwnerConnection",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 193,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/lib/providerConnections/owner.ts:readOwnedConnection",
-          "file": "convex/lib/providerConnections/owner.ts",
-          "line": 163,
+          "line": 467,
           "column": 1,
           "via": "call"
         },
@@ -4871,7 +5319,7 @@
         {
           "ref": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
           "file": "convex/agentAccessPrincipals.ts",
-          "line": 106,
+          "line": 472,
           "column": 1,
           "via": "call"
         }
@@ -5050,7 +5498,7 @@
         {
           "ref": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
           "file": "convex/agentAccessPrincipals.ts",
-          "line": 106,
+          "line": 472,
           "column": 1,
           "via": "call"
         }
@@ -6918,7 +7366,7 @@
         {
           "ref": "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal",
           "file": "convex/agentAccessPrincipals.ts",
-          "line": 106,
+          "line": 472,
           "column": 1,
           "via": "call"
         }
@@ -8029,7 +8477,7 @@
       "registrar": "httpActionGeneric",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "abortProviderConsequenceJournal",
@@ -8072,7 +8520,7 @@
       "registrar": "httpActionGeneric",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "attestProviderConsequenceTicket",
@@ -8115,7 +8563,7 @@
       "registrar": "httpActionGeneric",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "beginProviderConsequenceJournal",
@@ -8158,7 +8606,7 @@
       "registrar": "httpActionGeneric",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "completeProviderConsequenceJournal",
@@ -8201,7 +8649,7 @@
       "registrar": "httpActionGeneric",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "providerConsequenceX402Rpc",
@@ -8244,7 +8692,7 @@
       "registrar": "httpActionGeneric",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "d1bcdeb75de3259d4426f1b0ab932c44ec8ea33eac3e9ec19f13ee0231e31b9a",
+      "sha256": "1fb668c28d28cd33961d1cffecf3275422bc117066d851158b51706fd80bd729",
       "declaration": {
         "file": "convex/secretLifecycleHttp.ts",
         "symbol": "secretLifecycleRpc",
@@ -8339,7 +8787,7 @@
       "registrar": "http.route",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "abortProviderConsequenceJournal",
@@ -8393,7 +8841,7 @@
       "registrar": "http.route",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "attestProviderConsequenceTicket",
@@ -8447,7 +8895,7 @@
       "registrar": "http.route",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "beginProviderConsequenceJournal",
@@ -8501,7 +8949,7 @@
       "registrar": "http.route",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "completeProviderConsequenceJournal",
@@ -8555,7 +9003,7 @@
       "registrar": "http.route",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "providerConsequenceX402Rpc",
@@ -8609,7 +9057,7 @@
       "registrar": "http.route",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "d1bcdeb75de3259d4426f1b0ab932c44ec8ea33eac3e9ec19f13ee0231e31b9a",
+      "sha256": "1fb668c28d28cd33961d1cffecf3275422bc117066d851158b51706fd80bd729",
       "declaration": {
         "file": "convex/secretLifecycleHttp.ts",
         "symbol": "secretLifecycleRpc",
@@ -9268,7 +9716,7 @@
       "registrar": "callback",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "abortProviderConsequenceJournal",
@@ -9320,7 +9768,7 @@
       "registrar": "callback",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "attestProviderConsequenceTicket",
@@ -9372,7 +9820,7 @@
       "registrar": "callback",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "beginProviderConsequenceJournal",
@@ -9424,7 +9872,7 @@
       "registrar": "callback",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "completeProviderConsequenceJournal",
@@ -9476,7 +9924,7 @@
       "registrar": "callback",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "8b4c2de5786ea96cc3a3974c48afbffb3a4075915ab87a6231f0f5fbea0c1442",
+      "sha256": "169d20a257c4edb23662d03183f1c8e4b30935697b2662f85855ffb1e8a89549",
       "declaration": {
         "file": "convex/providerConsequenceHttp.ts",
         "symbol": "providerConsequenceX402Rpc",
@@ -9528,7 +9976,7 @@
       "registrar": "callback",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "d1bcdeb75de3259d4426f1b0ab932c44ec8ea33eac3e9ec19f13ee0231e31b9a",
+      "sha256": "1fb668c28d28cd33961d1cffecf3275422bc117066d851158b51706fd80bd729",
       "declaration": {
         "file": "convex/secretLifecycleHttp.ts",
         "symbol": "secretLifecycleRpc",
@@ -9653,11 +10101,11 @@
       "registrar": "continuation",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "completeWork",
-        "line": 216,
+        "line": 221,
         "column": 14,
         "sha256": "b42fe8a98371298b75f335c24195f9cf708eaac9576485291a853ad2b10a7233"
       },
@@ -9668,7 +10116,7 @@
         {
           "ref": "continuation:convex/capabilityOperationInvocations.ts:completeWork",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 216,
+          "line": 221,
           "column": 14,
           "via": "declaration"
         },
@@ -9682,7 +10130,7 @@
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 293,
+          "line": 295,
           "column": 1,
           "via": "call"
         }
@@ -9741,7 +10189,7 @@
         {
           "ref": "convex/lib/providerConnections/authority.ts:readCurrentCleanupResourceAuthority",
           "file": "convex/lib/providerConnections/authority.ts",
-          "line": 201,
+          "line": 238,
           "column": 1,
           "via": "call"
         }
@@ -10190,11 +10638,11 @@
       "registrar": "reconciliation",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "reconcileInvocation",
-        "line": 240,
+        "line": 268,
         "column": 14,
         "sha256": "dd91b6b183c3ce45d1c27e2a8a29970de653935f71f8b1e030ebe4987e93e119"
       },
@@ -10205,49 +10653,49 @@
         {
           "ref": "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocation",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 240,
+          "line": 268,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentReconcileHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 402,
+          "line": 413,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 108,
+          "line": 110,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 37,
+          "line": 39,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 80,
+          "line": 85,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 83,
+          "line": 85,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 222,
+          "line": 224,
           "column": 1,
           "via": "call"
         }
@@ -10256,7 +10704,7 @@
       "callSites": [
         {
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 240,
+          "line": 268,
           "column": 14,
           "expression": "reconcileInvocation"
         }
@@ -10270,11 +10718,11 @@
       "registrar": "reconciliation",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "reconcileInvocationWorkloadAuthority",
-        "line": 90,
+        "line": 95,
         "column": 14,
         "sha256": "569258252f7ab2120cc180c743cc08bb478d7907da5351541b23ec5edc2f98fb"
       },
@@ -10285,21 +10733,21 @@
         {
           "ref": "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 90,
+          "line": 95,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:reconcileInvocationWorkloadAuthorityHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 95,
+          "line": 97,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 293,
+          "line": 295,
           "column": 1,
           "via": "call"
         }
@@ -10308,7 +10756,7 @@
       "callSites": [
         {
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 90,
+          "line": 95,
           "column": 14,
           "expression": "reconcileInvocationWorkloadAuthority"
         }
@@ -10322,11 +10770,11 @@
       "registrar": "reconciliation",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "reconcileOwnerInvocation",
-        "line": 258,
+        "line": 286,
         "column": 14,
         "sha256": "f16674eddfb0fca36796ca9cebfe91530a1a0f91d4485fd206cf5a3dfaa75805"
       },
@@ -10337,21 +10785,21 @@
         {
           "ref": "reconciliation:convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 258,
+          "line": 286,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerReconcileHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 480,
+          "line": 491,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalOwnerActor",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 437,
+          "line": 448,
           "column": 1,
           "via": "call"
         },
@@ -10367,7 +10815,7 @@
       "callSites": [
         {
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 258,
+          "line": 286,
           "column": 14,
           "expression": "reconcileOwnerInvocation"
         }
@@ -10964,14 +11412,14 @@
         {
           "ref": "src/lib/server/operation-invoke-api.ts:handleOperationInvokeReconcilePost",
           "file": "src/lib/server/operation-invoke-api.ts",
-          "line": 628,
+          "line": 712,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "src/lib/server/operation-invoke-api.ts:authenticateOperationGateway",
           "file": "src/lib/server/operation-invoke-api.ts",
-          "line": 334,
+          "line": 379,
           "column": 1,
           "via": "call"
         },
@@ -11022,11 +11470,11 @@
       "registrar": "run_action",
       "binding": "canonical_agent",
       "consequential": true,
-      "sha256": "997758291e3de6597edde1dbd686179b1a0c3bc063c8312f70bdcd842ff490a1",
+      "sha256": "16abbd304bbceda19d3da10458762ef3464167f53262ad6c4180d1b7daeae930",
       "declaration": {
         "file": "convex/capabilityOperationInvocations.ts",
         "symbol": "invoke",
-        "line": 222,
+        "line": 227,
         "column": 14,
         "sha256": "a2191067c2343edb22a95805de2e8c92b92be5f78b62ed58a879cf9b093a356f"
       },
@@ -11037,49 +11485,49 @@
         {
           "ref": "run_action:convex/capabilityOperationInvocations.ts:invoke",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 222,
+          "line": 227,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentInvokeHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 373,
+          "line": 375,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:canonicalAgentPrincipal",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 108,
+          "line": 110,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityRef",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 37,
+          "line": 39,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthority",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 80,
+          "line": 85,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveInvocationAgentAuthorityHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 83,
+          "line": 85,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 222,
+          "line": 224,
           "column": 1,
           "via": "call"
         }
@@ -11138,21 +11586,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 90,
+          "line": 95,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:reconcileInvocationWorkloadAuthorityHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 95,
+          "line": 97,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 293,
+          "line": 295,
           "column": 1,
           "via": "call"
         }
@@ -11161,37 +11609,37 @@
       "callSites": [
         {
           "file": "convex/lib/operationInvocations/invokeActions.ts",
-          "line": 472,
+          "line": 546,
           "column": 24,
           "expression": "ctx.runAction"
         },
         {
           "file": "convex/lib/operationInvocations/invokeActions.ts",
-          "line": 497,
+          "line": 571,
           "column": 16,
           "expression": "ctx.runAction"
         },
         {
           "file": "convex/lib/operationInvocations/invokeActions.ts",
-          "line": 522,
+          "line": 596,
           "column": 16,
           "expression": "ctx.runAction"
         },
         {
           "file": "convex/lib/operationInvocations/invokeActions.ts",
-          "line": 537,
+          "line": 611,
           "column": 24,
           "expression": "ctx.runAction"
         },
         {
           "file": "convex/lib/operationInvocations/invokeActions.ts",
-          "line": 569,
+          "line": 643,
           "column": 16,
           "expression": "ctx.runAction"
         },
         {
           "file": "convex/lib/operationInvocations/invokeActions.ts",
-          "line": 584,
+          "line": 658,
           "column": 16,
           "expression": "ctx.runAction"
         }
@@ -11205,11 +11653,11 @@
       "registrar": "run_action",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "8378264e71ce3100dc644da8aaaf3992759bb6cab781e8a3cac099d3edaa49da",
+      "sha256": "2c61df10a7dbbd08b1d996acb9ea15a4f3f58db02238954aedee3948acf309e8",
       "declaration": {
         "file": "convex/capabilitySupplyReadiness.ts",
         "symbol": "probe",
-        "line": 261,
+        "line": 262,
         "column": 14,
         "sha256": "0c8687288d66f60667fac897416b747dceade3e961b7be3ba7def9a1a232c939"
       },
@@ -11220,7 +11668,7 @@
         {
           "ref": "run_action:convex/capabilitySupplyReadiness.ts:probe",
           "file": "convex/capabilitySupplyReadiness.ts",
-          "line": 261,
+          "line": 262,
           "column": 14,
           "via": "declaration"
         },
@@ -11426,11 +11874,11 @@
       "registrar": "scheduler",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "8378264e71ce3100dc644da8aaaf3992759bb6cab781e8a3cac099d3edaa49da",
+      "sha256": "2c61df10a7dbbd08b1d996acb9ea15a4f3f58db02238954aedee3948acf309e8",
       "declaration": {
         "file": "convex/capabilitySupplyReadiness.ts",
         "symbol": "probe",
-        "line": 261,
+        "line": 262,
         "column": 14,
         "sha256": "0c8687288d66f60667fac897416b747dceade3e961b7be3ba7def9a1a232c939"
       },
@@ -11441,7 +11889,7 @@
         {
           "ref": "scheduler:convex/capabilitySupplyReadiness.ts:probe",
           "file": "convex/capabilitySupplyReadiness.ts",
-          "line": 261,
+          "line": 262,
           "column": 14,
           "via": "declaration"
         },
@@ -11492,11 +11940,11 @@
       "registrar": "scheduler",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "8378264e71ce3100dc644da8aaaf3992759bb6cab781e8a3cac099d3edaa49da",
+      "sha256": "2c61df10a7dbbd08b1d996acb9ea15a4f3f58db02238954aedee3948acf309e8",
       "declaration": {
         "file": "convex/capabilitySupplyReadiness.ts",
         "symbol": "probeFromCron",
-        "line": 267,
+        "line": 268,
         "column": 14,
         "sha256": "d9c0b0bb9c31523f834ea1150920f1a73f5802358b782d7f7b885d2888e0f2da"
       },
@@ -11507,7 +11955,7 @@
         {
           "ref": "scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron",
           "file": "convex/capabilitySupplyReadiness.ts",
-          "line": 267,
+          "line": 268,
           "column": 14,
           "via": "declaration"
         },
@@ -12045,21 +12493,21 @@
         {
           "ref": "convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority",
           "file": "convex/capabilityOperationInvocations.ts",
-          "line": 90,
+          "line": 95,
           "column": 14,
           "via": "function_reference"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:reconcileInvocationWorkloadAuthorityHandler",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 95,
+          "line": 97,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority",
           "file": "convex/lib/operationInvocations/authorityHandlers.ts",
-          "line": 293,
+          "line": 295,
           "column": 1,
           "via": "call"
         }
@@ -12125,7 +12573,7 @@
         {
           "ref": "convex/lib/providerConnections/authority.ts:readCurrentCleanupResourceAuthority",
           "file": "convex/lib/providerConnections/authority.ts",
-          "line": 201,
+          "line": 238,
           "column": 1,
           "via": "call"
         }

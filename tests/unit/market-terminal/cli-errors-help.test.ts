@@ -23,8 +23,11 @@ describe('market-terminal CLI error contracts', () => {
       'compare',
       'inspect-plan',
       'connect',
+      'account',
+      'supply',
       'fund',
       'call',
+      'history',
       'status',
       'cancel',
       'recover',
@@ -32,6 +35,7 @@ describe('market-terminal CLI error contracts', () => {
     ])
     expect(Object.keys(helpBody.auth.authenticatedOperations)).toEqual([
       'call',
+      'history',
       'status',
       'cancel',
       'reconcile',
@@ -143,6 +147,45 @@ describe('market-terminal CLI error contracts', () => {
     expect(parsed.positionals).toEqual(['operation:v1:first', 'operation:v1:second'])
   })
 
+  it('exposes account subcommand help and accepts the advertised technical manifest', () => {
+    const accountHelp = spawnCliSync(['help', 'account', 'status', '--json'])
+    expect(accountHelp.status).toBe(0)
+    expect(JSON.parse(accountHelp.stdout)).toMatchObject({
+      kind: 'HELP',
+      command: 'account status',
+      usage: 'ae account status [market|supplier]',
+      summary: expect.stringContaining('principal'),
+    })
+    const balanceHelp = spawnCliSync(['help', 'account', 'balance', '--json'])
+    expect(balanceHelp.status).toBe(0)
+    expect(JSON.parse(balanceHelp.stdout)).toMatchObject({
+      kind: 'HELP',
+      command: 'account balance',
+      usage: 'ae account balance [currency]',
+      summary: expect.stringContaining('credit'),
+    })
+    const supplyHelp = spawnCliSync(['help', 'supply', 'status', '--json'])
+    expect(supplyHelp.status).toBe(0)
+    expect(JSON.parse(supplyHelp.stdout)).toMatchObject({
+      kind: 'HELP',
+      command: 'supply status',
+      usage: 'ae supply status <businessId> [offeringRef]',
+      auth: {
+        scope: 'market_supply:manage',
+        deviceFlow: expect.stringContaining('connect --supplier'),
+      },
+    })
+
+    const technicalManifest = spawnCliSync(['manifest', '--technical', '--json'])
+    expect(technicalManifest.status).toBe(0)
+    expect(JSON.parse(technicalManifest.stdout)).toMatchObject({
+      account: {
+        action: { id: 'agentAccess.whoami' },
+        route: { path: '/api/v1/account' },
+      },
+    })
+  }, 30_000)
+
   it('emits one machine-readable JSON help envelope and keeps root text help usable', () => {
     for (const [args, command] of [
       [['--json', '--help'], 'root'],
@@ -169,6 +212,8 @@ describe('market-terminal CLI error contracts', () => {
       expect(envelope.flags).toHaveProperty('--cursor')
       expect(envelope.flags).toHaveProperty('--filters')
       if (command === 'connect') {
+        expect(envelope.usage).toBe('ae connect [--supplier]')
+        expect(envelope.flags).toHaveProperty('--supplier')
         expect(envelope.auth.guidance).toEqual(expect.arrayContaining([
           expect.stringContaining('verification URI'),
           expect.stringContaining('user-only file permissions'),
@@ -191,6 +236,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(connectTextHelp.stdout).toContain('AE_API_KEY_ORIGIN')
     expect(connectTextHelp.stdout).toContain('market_operations:invoke')
     expect(connectTextHelp.stdout).toContain('verification URI')
+    expect(connectTextHelp.stdout).toContain('ae connect --supplier')
     expect(connectTextHelp.stderr).toBe('')
   }, 30_000)
 

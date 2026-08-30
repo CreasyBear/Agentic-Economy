@@ -20,9 +20,11 @@ export type CliOptions = {
   updateSnapshot?: boolean
   limit?: string | number
   cursor?: string
+  state?: string
   filters?: string | Record<string, unknown>
   input?: string
   mcp?: boolean
+  supplier?: boolean
 }
 
 export type ParsedArgs = {
@@ -111,9 +113,11 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       'update-snapshot': { type: 'boolean' },
       limit: { type: 'string' },
       cursor: { type: 'string' },
+      state: { type: 'string' },
       filters: { type: 'string' },
       input: { type: 'string' },
       mcp: { type: 'boolean' },
+      supplier: { type: 'boolean' },
     },
     allowPositionals: true,
     tokens: true,
@@ -152,9 +156,11 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     ...(parsed.values['update-snapshot'] === undefined ? {} : { updateSnapshot: parsed.values['update-snapshot'] }),
     ...(parsed.values.limit === undefined ? {} : { limit: parsed.values.limit }),
     ...(parsed.values.cursor === undefined ? {} : { cursor: parsed.values.cursor }),
+    ...(parsed.values.state === undefined ? {} : { state: parsed.values.state }),
     ...(parsed.values.filters === undefined ? {} : { filters: parsed.values.filters }),
     ...(parsed.values.input === undefined ? {} : { input: parsed.values.input }),
     mcp: parsed.values.mcp ?? false,
+    supplier: parsed.values.supplier ?? false,
   }
   const [command, ...positionals] = parsed.positionals
   return {
@@ -176,9 +182,13 @@ Canonical Operation commands (need a running server; hosted default ${HOSTED_DEF
   ${CLI_ENTRYPOINT} inspect <operation-ref>
   ${CLI_ENTRYPOINT} compare <operation-ref> [operation-ref ...]
   ${CLI_ENTRYPOINT} inspect-plan <operation-ref> [operation-ref ...]
-  ${CLI_ENTRYPOINT} connect
+  ${CLI_ENTRYPOINT} connect [--supplier]
+  ${CLI_ENTRYPOINT} account [status [market|supplier]|balance [currency]|activity [currency]|connections|disconnect [market|supplier]]
+  ${CLI_ENTRYPOINT} supply <status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|retry-cleanup>
   ${CLI_ENTRYPOINT} call <operation-ref> --input '<json>' [--wait]
+  ${CLI_ENTRYPOINT} history [--limit <1-100>] [--cursor <cursor>] [--state <state>]
   ${CLI_ENTRYPOINT} status <invocation-ref>
+  ${CLI_ENTRYPOINT} cancel <invocation-ref> --idempotency-key <key>
   ${CLI_ENTRYPOINT} recover <invocation-ref> '<evidence-json>' --idempotency-key <key>
 
 Flags:
@@ -187,10 +197,12 @@ Flags:
   AE_API_KEY <token>          reusable caller credential for credentialed commands
   AE_API_KEY_ORIGIN <origin>  exact origin bound to AE_API_KEY; required with HTTPS except loopback HTTP development
   --json             machine-readable output
-  --limit <1-20>     search page size (search only)
-  --cursor <cursor>  opaque search continuation cursor (search only)
+  --limit <n>        search, account activity, history, or supplier connection page size
+  --cursor <cursor>  opaque search, account activity, or history continuation cursor
+  --state <state>    canonical invocation state filter (history only)
   --filters '<json>' canonical search filters (search only)
   --technical        human compare output with operation identity and evidence metadata
+  --supplier         connect a separate owner-approved supplier credential
   --idempotency-key <key>  optional stable retry identity; call generates one when omitted
   --wait                   wait for a bounded call result; timeout preserves recovery detail
   --help

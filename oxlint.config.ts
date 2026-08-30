@@ -35,6 +35,7 @@ export default defineConfig({
     'perfectionist/sort-object-types': 'off',
     'perfectionist/sort-objects': 'off',
     'prefer-arrow-callback': 'off',
+    'prefer-const': 'off',
     // These compiler diagnostics are useful during component refactors, but
     // are not correctness gates for the current non-compiled React runtime.
     'react/incompatible-library': 'off',

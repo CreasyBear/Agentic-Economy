@@ -6,8 +6,10 @@ import { z } from 'zod'
 import {
   callSourceMutation,
   callSourceQuery,
+  createConvexServerFunctionAssertion,
   sourceMutation,
   sourceQuery,
+  type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
@@ -19,11 +21,12 @@ import {
   AGENT_ACCESS_MIN_TTL_SECONDS,
   listAgentAccessKeys,
   revokeAgentAccessKey,
-  type AgentAccessGrantRegistrationInput,
   type AgentAccessKeyCreateInput,
   type AgentAccessKeyRecord,
   type AgentAccessPrincipalRegistration,
   type AgentAccessPrincipalRegistrationResult,
+  type AgentAccessGrantRegistrationResult,
+  type IssuedAgentBindingRegistration,
 } from './agent-access'
 import {
   agentAccessPolicySchema,
@@ -35,13 +38,14 @@ import {
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
 } from './contract'
-import { registerAgentAccessGrant, revokeAgentAccessGrant } from './policy.functions'
+import { revokeAgentAccessGrant } from './policy.functions'
 import {
   buildProductionAgentAccessPolicy,
   defaultProductionAgentAccessPolicy,
 } from './production-policy'
 import { defaultSandboxAgentAccessPolicy } from './sandbox-policy'
 import { exactAmountSchema } from '@/modules/money/public'
+import { issuedAgentGrantRef } from './issued-agent-binding'
 
 const issueInputSchema = z.strictObject({
   name: z.string().trim().min(1).max(80),
@@ -191,6 +195,12 @@ type RegisterAgentPrincipalResult =
 const registerAgentPrincipalMutation = sourceMutation<RegisterAgentPrincipalArgs, RegisterAgentPrincipalResult>(
   'agentAccessPrincipals:registerAgentPrincipal',
 )
+type RegisterIssuedAgentBindingArgs = IssuedAgentBindingRegistration & Readonly<{
+  serviceAuth: ConvexServerFunctionAssertion
+}>
+const registerIssuedAgentBindingMutation = sourceMutation<RegisterIssuedAgentBindingArgs, AgentAccessGrantRegistrationResult>(
+  'agentAccessPrincipals:registerIssuedAgentBindingForServer',
+)
 const listOwnerGrantReadbacksQuery = sourceQuery<{ requireAuthority: true }, readonly unknown[]>(
   'agentAccessPolicy:listOwnerGrantReadbacks',
 )
@@ -257,6 +267,25 @@ export async function registerAgentAccessPrincipal(
   }
 }
 
+export async function registerIssuedAgentBinding(
+  input: IssuedAgentBindingRegistration,
+): Promise<AgentAccessGrantRegistrationResult> {
+  try {
+    const command = {
+      ...input,
+      scopes: [...input.scopes],
+    }
+    const serviceAuth = await createConvexServerFunctionAssertion({
+      operation: 'agentAccessPrincipals.registerIssuedAgentBindingForServer',
+      scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+      command,
+    })
+    return await callSourceMutation(registerIssuedAgentBindingMutation, { ...command, serviceAuth })
+  } catch {
+    return { kind: 'unavailable' }
+  }
+}
+
 export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
   .validator((data) => issueInputSchema.parse(data))
   .handler(async ({ data }) => {
@@ -279,9 +308,10 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
     } catch {
       return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
     }
-    const tokenIdentifier = principal === undefined
-      ? undefined
-      : convexTokenIdentifierFor(principal.userId)
+    if (principal === undefined) {
+      return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
+    }
+    const tokenIdentifier = convexTokenIdentifierFor(principal.userId)
     if (tokenIdentifier === undefined) {
       return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
     }
@@ -291,6 +321,7 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
       return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
     }
     const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
+    const grantRef = data.grantRef ?? issuedAgentGrantRef(principal.userId, data.idempotencyKey)
     return await issueAgentAccessKey({
       principal,
       input: {
@@ -304,20 +335,13 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
         ...(data.maximumCallsPerMinute === undefined ? {} : { maximumCallsPerMinute: data.maximumCallsPerMinute }),
         ...(data.maximumCallsPerHour === undefined ? {} : { maximumCallsPerHour: data.maximumCallsPerHour }),
         ...(data.expiresInSeconds === undefined ? {} : { expiresInSeconds: data.expiresInSeconds }),
-        ...(data.grantRef === undefined ? {} : { grantRef: data.grantRef }),
+        grantRef,
         ...(data.applicationRef === undefined ? {} : { applicationRef: data.applicationRef }),
         ...(data.environment === undefined ? {} : { environment: data.environment }),
       },
       policy,
       api,
-      registerPrincipal: async (registration: AgentAccessPrincipalRegistration) => await registerAgentAccessPrincipal({
-        ...registration,
-        ownerId: tokenIdentifier,
-      }),
-      registerGrant: async (grant: AgentAccessGrantRegistrationInput) => await registerAgentAccessGrant({
-        ...grant,
-        ownerId: tokenIdentifier,
-      }),
+      registerBinding: registerIssuedAgentBinding,
     })
   })
 

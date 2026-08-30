@@ -136,6 +136,22 @@ describe('canonical agent authority boundary', () => {
     expect(result?.ownerId).not.toBe(OTHER_ACCOUNT_REF)
   })
 
+  it('admits a concrete operation surface through a wildcard resource grant', async () => {
+    const backend = testBackend()
+    await seedCanonicalChain(backend, {
+      grant: { parentGrantRef: undefined, parentGeneration: undefined, resourceRefs: ['*'] },
+      parentGrant: null,
+    })
+
+    await expect(runResolver(backend, {
+      operationKey: 'surface:http:operations-call',
+    })).resolves.toMatchObject({
+      principalId: PRINCIPAL_REF,
+      ownerId: ACCOUNT_REF,
+      grantRef: GRANT_REF,
+    })
+  })
+
   it.each([
     ['credential locator', { credentialId: '' }],
     ['application ref', { applicationRef: '../application' }],

@@ -1,5 +1,6 @@
 import { readBoundedRequestJson, readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import {
+  MARKET_SUPPLY_MANAGE_SCOPE,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
@@ -116,7 +117,7 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
     'maximum_daily_spend',
     'maximum_monthly_spend',
   ]
-  const budgetCount = budgetKeys.filter((key) => Object.prototype.hasOwnProperty.call(detail, key)).length
+  const budgetCount = budgetKeys.filter((key) => Object.hasOwn(detail, key)).length
   if (![0, budgetKeys.length].includes(budgetCount)) return { kind: 'invalid' }
 
   const rateKeys = [
@@ -134,7 +135,7 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
   ])
   if (!suppliedRatesAreValid) return { kind: 'invalid' }
   const sandboxHasControls = budgetCount !== 0
-    || rateKeys.some((key) => Object.prototype.hasOwnProperty.call(detail, key))
+    || rateKeys.some((key) => Object.hasOwn(detail, key))
   if (environment === 'sandbox' && sandboxHasControls) {
     return { kind: 'invalid' }
   }
@@ -207,19 +208,27 @@ export function modeForGrant(grant: AgentAccessOAuthGrant): AgentAccessAuthority
   return agentAuthorityModeForScopes(grant.requestedScopes, { allowCustomerDefault: true })
 }
 
-export function consentHtml(input: Readonly<{ grantRef: string; clientName: string; mode: AgentAccessAuthorityMode; state: string; requestedAccess: AgentAccessOAuthRequestedAccess }>): string {
+export function accessProfileForGrant(grant: Pick<AgentAccessOAuthGrant, 'requestedScopes'>): 'market' | 'supplier' {
+  return grant.requestedScopes.length === 1 && grant.requestedScopes[0] === MARKET_SUPPLY_MANAGE_SCOPE
+    ? 'supplier'
+    : 'market'
+}
+
+export function consentHtml(input: Readonly<{ grantRef: string; clientName: string; mode: AgentAccessAuthorityMode; requestedScopes: readonly string[]; state: string; requestedAccess: AgentAccessOAuthRequestedAccess }>): string {
   const escapedName = escapeHtml(input.clientName)
   const escapedGrantRef = escapeHtml(input.grantRef)
   const escapedState = escapeHtml(input.state)
-  const scope = agentAuthorityScopeForMode(input.mode)
-  const permission = consentPermissionCopy(input.mode)
+  const profile = accessProfileForGrant({ requestedScopes: input.requestedScopes })
+  const scope = profile === 'supplier' ? MARKET_SUPPLY_MANAGE_SCOPE : agentAuthorityScopeForMode(input.mode)
+  const permission = consentPermissionCopy(input.mode, profile)
   const environment = escapeHtml(input.requestedAccess.environment)
   const authorityMode = escapeHtml(input.mode)
   const expiry = String(input.requestedAccess.expiresInSeconds)
-  return `<main data-ae-consent data-grant-ref="${escapedGrantRef}" data-client-name="${escapedName}" data-authority-mode="${authorityMode}" data-environment="${environment}" data-expires-in-seconds="${expiry}"><h1>Connect ${escapedName} to Agentic Economy</h1><p>This agent may ${permission.allowed}.</p><p>${permission.approval}</p><p data-ae-access>Environment: ${environment}. Access expires in ${expiry} seconds. Authority mode: ${authorityMode}. ${consentAccessSummary(input.requestedAccess)}</p><p>You can revoke it at any time from the Access &amp; usage workspace.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${authorityMode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
+  return `<main data-ae-consent data-grant-ref="${escapedGrantRef}" data-client-name="${escapedName}" data-authority-mode="${authorityMode}" data-access-profile="${profile}" data-environment="${environment}" data-expires-in-seconds="${expiry}"><h1>Connect ${escapedName} to Agentic Economy</h1><p>This agent may ${permission.allowed}.</p><p>${permission.approval}</p><p data-ae-access>Environment: ${environment}. Access expires in ${expiry} seconds. Authority mode: ${authorityMode}. ${consentAccessSummary(input.requestedAccess)}</p><p>You can revoke it at any time from the Access &amp; usage workspace.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${authorityMode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
 }
 
-export function consentPermissionCopy(mode: AgentAccessAuthorityMode): Readonly<{ allowed: string; approval: string }> {
+export function consentPermissionCopy(mode: AgentAccessAuthorityMode, profile: 'market' | 'supplier' = 'market'): Readonly<{ allowed: string; approval: string }> {
+  if (profile === 'supplier') return { allowed: 'inspect and manage your published supplier Operations', approval: 'It cannot fund buyers, spend buyer credit, or manage unrelated account settings.' }
   if (mode === 'inspect_only') return { allowed: 'browse and compare Operations', approval: 'Any invocation still waits for your approval.' }
   if (mode === 'approve_each') return { allowed: 'bring each request to you', approval: 'You approve each request before it moves forward.' }
   if (mode === 'bounded_mandate') return { allowed: 'work within the requested spend controls', approval: 'Paid calls proceed only within the requested controls.' }
@@ -271,7 +280,7 @@ const OAUTH_ERROR_DESCRIPTIONS = AGENT_ACCESS_OAUTH_ERROR_DESCRIPTIONS
 
 export function oauthError(
   error: AgentAccessOAuthErrorCode,
-  status: 400 | 401 | 403 | 413 | 429,
+  status: 400 | 401 | 403 | 413 | 429 | 503,
   headers: Readonly<Record<string, string>> = {},
 ): Response {
   const body: OAuthErrorBody = { error, error_description: OAUTH_ERROR_DESCRIPTIONS[error] }
@@ -299,5 +308,6 @@ export function oauthTransitionError(result: { kind: 'refused' | 'conflict'; rea
   if (result.reason === 'slow_down') return oauthError('slow_down', 400)
   if (result.reason === 'access_denied' || result.reason === 'owner_mismatch' || result.reason === 'owner_required') return oauthError('access_denied', 403)
   if (result.reason === 'expired_token') return oauthError('expired_token', 400)
+  if (result.reason === 'issuance_unavailable' || result.reason === 'missing_key') return oauthError('server_error', 503)
   return oauthError('invalid_grant', 400)
 }

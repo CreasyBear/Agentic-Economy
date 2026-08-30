@@ -171,7 +171,7 @@ export async function prepareX402PaymentMaterial(
     }
   }
   const signedOfferRequired = challenge.extensions !== undefined
-    && Object.prototype.hasOwnProperty.call(challenge.extensions, 'offer-receipt')
+    && Object.hasOwn(challenge.extensions, 'offer-receipt')
   let verifiedOffer: X402VerifiedOffer | undefined
   if (signedOfferRequired) {
     const offerVerification = await verifyX402SignedOffer({

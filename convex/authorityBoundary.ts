@@ -132,7 +132,7 @@ export async function resolveCanonicalAgentBinding(
   if (!currentServerTime(consequenceNow) || credential.expiresAt <= consequenceNow) return null
   const grants = candidates.filter((grant) => grant.expiresAt > consequenceNow
     && requiredScopes.every((scope) => grant.scopes.includes(scope))
-    && grant.resourceRefs.includes(input.operationKey))
+    && (grant.resourceRefs.includes('*') || grant.resourceRefs.includes(input.operationKey)))
   if (grants.length !== 1) return null
   const grant = grants[0]
   if (grant === undefined

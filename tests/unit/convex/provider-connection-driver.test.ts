@@ -4,7 +4,6 @@ import { api, internal } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { issueProviderApprovalDecision } from '@/modules/capability-supply/provider-approval'
 import { beginProviderConnectionRevocation } from '@/modules/capability-supply/provider-connection'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { accountRef, principalRef } from '@/modules/principal-account/public'
 import {
   advanceLeaseDrainHandler,

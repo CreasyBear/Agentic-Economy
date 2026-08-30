@@ -191,6 +191,7 @@ describe('Site discovery manifest', () => {
   it('projects every operation route and schema from the canonical contract', () => {
     const expected = [
       OPERATION_INVOKE_ROUTE_CONTRACT.invoke,
+      OPERATION_INVOKE_ROUTE_CONTRACT.list,
       OPERATION_INVOKE_ROUTE_CONTRACT.status,
       OPERATION_INVOKE_ROUTE_CONTRACT.cancel,
       OPERATION_INVOKE_ROUTE_CONTRACT.reconcile,
@@ -212,6 +213,7 @@ describe('Site discovery manifest', () => {
     })))
     expect(manifest.operationGateway.routes.every((route) => route.inputJsonSchema !== undefined)).toBe(true)
     expect(manifest.operationGateway.mcpTools.map((tool) => tool.name)).toContain('ae_operation_invoke')
+    expect(manifest.operationGateway.mcpTools.map((tool) => tool.name)).toContain('ae_operation_list')
   })
   it('keeps cancellation and reconciliation labelled as advanced recovery actions', () => {
     expect(manifest.operationGateway.recovery).toMatchObject({

@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { createHttpRateLimitAdmission } from '@/lib/server/rate-limit'
+import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 import { createConvexAgentAccessOAuthStore } from '@/lib/server/agent-access-oauth-store'
 import { handleOAuthAuthorizeGet, handleOAuthConsentPost, oauthAuthorizationUnavailableResponse } from '@/lib/server/agent-access-oauth-api'
 import { methodNotAllowed } from '@/lib/server/method-guard'
@@ -12,7 +13,8 @@ export const Route = createFileRoute('/oauth/authorize')({
       try {
         const store = createConvexAgentAccessOAuthStore(request, '')
         return handleOAuthAuthorizeGet(request, { store, rateLimit: admitOAuth })
-      } catch {
+      } catch (error) {
+        console.error('[oauth.authorize] GET failed', sanitizeTelemetryError(error))
         return oauthAuthorizationUnavailableResponse()
       }
     },
@@ -20,7 +22,8 @@ export const Route = createFileRoute('/oauth/authorize')({
       try {
         const body = await request.clone().text()
         return await handleOAuthConsentPost(request, { store: createConvexAgentAccessOAuthStore(request, body), rateLimit: admitOAuth })
-      } catch {
+      } catch (error) {
+        console.error('[oauth.authorize] POST failed', sanitizeTelemetryError(error))
         return oauthAuthorizationUnavailableResponse()
       }
     },

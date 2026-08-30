@@ -1,4 +1,5 @@
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
+import type { AccountManagementService } from '@/modules/agent-access/account.actions'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
 import type { OperationProjectionNavigationContract } from '@/modules/capability-supply/operation-projection'
@@ -33,5 +34,7 @@ declare module '@/modules/common/action' {
     operationInvokeService?: OperationInvokeService
     /** One injected supply-management service shared by authenticated MCP and CLI adapters. */
     supplyManagementService?: SupplyManagementService
+    /** One injected account read service shared by authenticated HTTP, MCP, and CLI adapters. */
+    accountManagementService?: AccountManagementService
   }
 }

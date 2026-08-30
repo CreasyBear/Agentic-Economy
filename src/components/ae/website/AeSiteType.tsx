@@ -36,6 +36,8 @@ export function AeSiteHeading({
   const segments = parseHeadingNotation(children).map((segment) => {
     const text = segment.kind === 'break' ? '' : segment.text
     const keyed = { key: `${segment.kind}-${offset}`, kind: segment.kind, text }
+    // Render-scoped cursor used only to construct stable segment keys.
+    // oxlint-disable-next-line react/immutability
     offset += text.length + (segment.kind === 'break' ? 1 : 0)
     return keyed
   })

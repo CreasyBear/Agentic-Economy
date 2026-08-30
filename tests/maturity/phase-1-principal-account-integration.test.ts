@@ -10,15 +10,6 @@ import {
   principalValue,
 } from '../../src/modules/principal-account/public'
 
-const canonicalIdentityTableNames = [
-  'principals',
-  'accounts',
-  'accountOwnerships',
-  'memberships',
-  'externalIdentityBindings',
-  'credentials',
-] as const
-
 const principalAccountTableNames = [
   'principals',
   'accounts',

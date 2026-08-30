@@ -468,7 +468,7 @@ function hasExactKeys(
 ): boolean {
   const keys = Object.keys(value)
   return keys.length === expected.length
-    && expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+    && expected.every((key) => Object.hasOwn(value, key))
 }
 
 function canonicalTicket(

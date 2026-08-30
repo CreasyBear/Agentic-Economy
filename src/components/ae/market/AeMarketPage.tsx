@@ -47,7 +47,10 @@ export function AeMarketPage({
 }) {
   const { window, catalog } = projection;
   const [categoryId, setCategoryId] = useState<MarketCategoryId | "all">("all");
-  const operations = catalog.kind === "ok" ? catalog.items : [];
+  const operations = useMemo(
+    () => catalog.kind === "ok" ? catalog.items : [],
+    [catalog],
+  );
   const capabilityGroups = useMemo(
     () => groupOperationCards(operations),
     [operations],

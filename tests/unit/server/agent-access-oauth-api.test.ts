@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
+import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { AGENT_ACCESS_KEY_TTL_SECONDS } from '@/modules/agent-access/agent-access'
 
 import {
@@ -267,6 +267,63 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(store.clients.size).toBe(1)
   })
 
+  it('issues one exact owner-approved supplier credential through device OAuth', async () => {
+    const store = storeFixture()
+    const options: OAuthApiOptions = {
+      store,
+      now: () => 1_000,
+      canonicalBaseUrl: 'http://localhost',
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_supplier' }),
+      issueKey: async (input) => {
+        expect(input.scopes).toEqual([MARKET_SUPPLY_MANAGE_SCOPE])
+        expect(input.authorityMode).toBe('bounded_mandate')
+        return { keyId: 'ak_supplier' }
+      },
+      getSecret: async () => ({ secret: 'supplier-secret-once' }),
+    }
+    const registration = await handleOAuthRegisterPost(new Request('http://localhost/oauth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST,
+        client_name: 'Agentic Economy Supplier CLI',
+        scope: MARKET_SUPPLY_MANAGE_SCOPE,
+      }),
+    }), options)
+    const registered = await registration.json() as { client_id: string; scope: string }
+    expect(registered.scope).toBe(MARKET_SUPPLY_MANAGE_SCOPE)
+
+    const device = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
+      client_id: registered.client_id,
+      scope: MARKET_SUPPLY_MANAGE_SCOPE,
+    }), options)
+    const deviceGrant = await device.json() as { device_code: string; user_code: string }
+    const consent = await handleOAuthAuthorizeGet(new Request(`http://localhost/oauth/authorize?user_code=${encodeURIComponent(deviceGrant.user_code)}`), options)
+    const html = await consent.text()
+    expect(html).toContain('data-access-profile="supplier"')
+    expect(html).toContain(`Technical permission: ${MARKET_SUPPLY_MANAGE_SCOPE}`)
+    expect(html).toContain('manage your published supplier Operations')
+
+    const grant = [...store.grants.values()][0]
+    if (grant === undefined) throw new Error('supplier grant missing')
+    const approved = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', {
+      grant_ref: grant.grantRef,
+      decision: 'approve',
+      authority_mode: 'bounded_mandate',
+    }), options)
+    expect(approved.status).toBe(200)
+
+    const token = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: registered.client_id,
+      device_code: deviceGrant.device_code,
+    }), options)
+    await expect(token.json()).resolves.toMatchObject({
+      access_token: 'supplier-secret-once',
+      scope: MARKET_SUPPLY_MANAGE_SCOPE,
+    })
+  })
+
   it('rejects registration without required client metadata', async () => {
     for (const field of ['client_name', 'redirect_uris'] as const) {
       const store = storeFixture()
@@ -506,6 +563,24 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(issuedInput?.authorityMode).toBe('inspect_only')
     expect(issuedInput?.requestedAccess).toEqual({ environment: 'sandbox', expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
     expect(issuedInput?.policy).toEqual(defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }))
+  })
+  it('reports key issuance outages as retryable server failures without consuming the grant', async () => {
+    const store = storeFixture()
+    await store.insertGrant({ grantRef: 'device:issuance-outage', flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-outage', userCodeHash: 'u-outage', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Unavailable assistant' })
+    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:issuance-outage', decision: 'approve' }), {
+      store,
+      now: () => 1_000,
+      canonicalBaseUrl: 'http://localhost',
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+      issueKey: async () => { throw new Error('upstream unavailable') },
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({
+      error: 'server_error',
+      error_description: 'The authorization server is temporarily unavailable.',
+    })
+    expect(store.grants.get('device:issuance-outage')?.status).toBe('pending')
   })
   it('rejects consent from a foreign Origin before changing the grant', async () => {
     const store = storeFixture()

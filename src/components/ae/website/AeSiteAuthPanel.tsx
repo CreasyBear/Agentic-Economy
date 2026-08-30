@@ -48,13 +48,12 @@ export function AeSiteAuthPanel({
 export function AeSiteAuthSubmit({
   className,
   children,
-  type = 'button',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'>) {
   return (
     <button
       {...props}
-      type={type}
+      type="button"
       className={cn(
         'inline-flex min-h-touch w-full items-center justify-center bg-foreground px-4 text-sm font-medium text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60',
         className,

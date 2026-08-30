@@ -54,6 +54,7 @@ export function AeAgentOperatorConsole({
   accessUnavailable = false,
 }: AeAgentOperatorConsoleProps) {
   const [selected, setSelected] = useState<AgentOperatorKeyReadback>()
+  const firstLoadPending = useFirstLoadPending(loading)
   const columns = useMemo<ColumnDef<AgentOperatorKeyReadback, unknown>[]>(
     () => [
       {
@@ -125,7 +126,6 @@ export function AeAgentOperatorConsole({
     || revokingKeyId !== undefined
     || selected.key.revoked
     || selected.key.expired
-  const firstLoadPending = useFirstLoadPending(loading)
   const keysPhase = stagedListPhase({ firstLoadPending, rows: items })
 
   return (

@@ -136,6 +136,7 @@ describe('Phase 2 canonical workload cron boundary', () => {
     const db = canonicalDb()
     const snapshot = await admitWorkloadCron(queryContext(db), 'refresh capability supply readiness')
     const queryRefs: string[] = []
+    const targetArgs: Record<string, unknown>[] = []
     const runMutation = vi.fn()
     const ctx = {
       runQuery: vi.fn(async (reference: RuntimeReference, args: Record<string, unknown>) => {
@@ -143,6 +144,7 @@ describe('Phase 2 canonical workload cron boundary', () => {
         queryRefs.push(name)
         if (name === 'workloadCron:reconcile') return await reconcileRuntime(queryContext(db), args)
         if (name === 'capabilitySupply:readCapabilityProbeTarget') {
+          targetArgs.push(args)
           return { kind: 'unavailable', reason: 'publication_missing', evidenceRefs: [] }
         }
         throw new Error(`unexpected_runtime_query:${name}`)
@@ -163,6 +165,11 @@ describe('Phase 2 canonical workload cron boundary', () => {
       'workloadCron:reconcile',
       'capabilitySupply:readCapabilityProbeTarget',
     ])
+    expect(targetArgs).toEqual([{
+      publicationRef: 'publication:runtime-sink',
+      expectedRevision: 1,
+      now: expect.any(Number),
+    }])
     expect(runMutation).not.toHaveBeenCalled()
 
     await expect(probeFromCronRuntime(ctx, {

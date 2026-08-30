@@ -34,11 +34,11 @@ describe('operational probe observability bypass', () => {
       const request = new Request(`https://ae.example${path}`)
       let nextCalls = 0
       const nextError = new Error(`next:${path}`)
-      const next: RequestServerNextFn<{}, undefined> = () => {
+      const next: RequestServerNextFn<Record<string, never>, undefined> = () => {
         nextCalls += 1
         throw nextError
       }
-      const options: RequestServerOptions<{}, undefined> = {
+      const options: RequestServerOptions<Record<string, never>, undefined> = {
         request,
         pathname: new URL(request.url).pathname,
         context: undefined,

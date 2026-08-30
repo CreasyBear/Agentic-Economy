@@ -79,7 +79,7 @@ function noStore(body: unknown, status: number): Response {
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const keys = Object.keys(value)
   return keys.length === expected.length
-    && expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+    && expected.every((key) => Object.hasOwn(value, key))
 }
 
 function isJsonValue(value: unknown): value is SecretLifecycleJsonValue {

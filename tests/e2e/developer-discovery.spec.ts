@@ -18,7 +18,7 @@ test.describe('developer discovery', () => {
     await expect(page.getByRole('link', { name: /download fixture bundle/i })).toHaveCount(0)
     await expect(page.getByText('Source-owned readback', { exact: true })).toBeVisible()
     await expect(page.getByText(/current public catalog facts/i)).toBeVisible()
-    await expect(page.getByText(/gated exclusions/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: /not in this product/i })).toBeVisible()
     await expect(page.getByText(/API keys/i)).toBeVisible()
     await expect(page.getByText(/read path status/i)).toBeVisible()
     await expect(page.getByText(/HTTP/i).first()).toBeVisible()
@@ -58,8 +58,8 @@ test.describe('developer discovery', () => {
       schemaVersion: 'developer-discovery:v1',
       nonAuthority: true,
     })
-    if (list?.kind === 'ok' && list.items.length > 0) {
-      const first = list.items[0]
+    if (list?.kind === 'ok' && Array.isArray(list.page) && list.page.length > 0) {
+      const first = list.page[0]
       const searchResponse = await request.get(`/api/businesses/search?q=${encodeURIComponent(first.category)}`)
       const detailResponse = await request.get(`/api/businesses/${first.slug}`)
       const search = await searchResponse.json()

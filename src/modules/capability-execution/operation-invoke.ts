@@ -14,6 +14,7 @@ import type {
   OperationInvokeRecoveryResult,
   OperationInvokeStatusResult,
 } from './operation-recovery-contracts'
+import type { OperationListInput, OperationListResult } from './operation-history.actions'
 import {
   admitOperationInvoke,
   reserveOperationInvoke,
@@ -93,6 +94,7 @@ export type OperationInvokeRuntime = Readonly<{
 }>
 
 export type OperationInvokeService = OperationInvokeExecutor & Readonly<{
+  listInvocations?(input: Readonly<{ input: OperationListInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<OperationListResult>
   readInvocationStatus(input: OperationInvokeRecoveryRequest): Promise<OperationInvokeStatusResult>
   cancelInvocation(input: OperationInvokeRecoveryRequest & Readonly<{ idempotencyKey: string }>): Promise<OperationInvokeRecoveryResult>
   reconcileInvocation(input: OperationInvokeRecoveryRequest & Readonly<{ evidence: Record<string, unknown>; idempotencyKey: string }>): Promise<OperationInvokeRecoveryResult>

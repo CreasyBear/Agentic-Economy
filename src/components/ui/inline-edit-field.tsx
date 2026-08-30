@@ -1,5 +1,5 @@
 import { PencilIcon } from 'lucide-react'
-import { useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useId, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -55,58 +55,17 @@ export function InlineEditField({
   onEditEnd,
 }: InlineEditFieldProps) {
   const [selfEditing, setSelfEditing] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [session, setSession] = useState<InlineEditSession | null>(null)
-  const seededRef = useRef(false)
-  const inputId = useId()
-  const errorId = `${inputId}-error`
   const editing = editingProp ?? selfEditing
 
-  // Seed-on-open happens during render: a fresh session always starts from
-  // the committed value with zero effect ordering involved.
-  if (editing && !seededRef.current) {
-    seededRef.current = true
-    setSession({ seed: value, draft: value, error: null })
-  }
-
-  const current: InlineEditSession = session ?? { seed: value, draft: value, error: null }
-
   function startEdit(): void {
-    if (readOnly || busy) return
+    if (readOnly) return
     onEditStart?.()
     setSelfEditing(true)
   }
 
   function endEdit(): void {
-    seededRef.current = false
-    setSession(null)
-    setBusy(false)
     setSelfEditing(false)
     onEditEnd?.()
-  }
-
-  async function commit(): Promise<void> {
-    if (busy) return
-    const next = current.draft.trim()
-    if (next === '' || next === current.seed.trim()) {
-      // A no-op commit (empty, or unchanged) is a cancel, not a write.
-      endEdit()
-      return
-    }
-    setBusy(true)
-    let accepted: boolean
-    try {
-      accepted = await onSave(next)
-    } catch {
-      accepted = false
-    }
-    if (accepted) {
-      endEdit()
-      return
-    }
-    // Rollback: restore the committed value and surface the failure inline.
-    setBusy(false)
-    setSession({ seed: current.seed, draft: current.seed, error: errorMessage })
   }
 
   if (readOnly) {
@@ -137,10 +96,71 @@ export function InlineEditField({
     )
   }
 
+  return (
+    <InlineEditEditor
+      value={value}
+      onSave={onSave}
+      label={label}
+      errorMessage={errorMessage}
+      saveLabel={saveLabel}
+      cancelLabel={cancelLabel}
+      onEnd={endEdit}
+    />
+  )
+}
+
+function InlineEditEditor({
+  value,
+  onSave,
+  label,
+  errorMessage,
+  saveLabel,
+  cancelLabel,
+  onEnd,
+}: Readonly<{
+  value: string
+  onSave(nextValue: string): Promise<boolean>
+  label: string
+  errorMessage: string
+  saveLabel: string
+  cancelLabel: string
+  onEnd(): void
+}>) {
+  const [busy, setBusy] = useState(false)
+  const [session, setSession] = useState<InlineEditSession>(() => ({
+    seed: value,
+    draft: value,
+    error: null,
+  }))
+  const inputId = useId()
+  const errorId = `${inputId}-error`
+
+  async function commit(): Promise<void> {
+    if (busy) return
+    const next = session.draft.trim()
+    if (next === '' || next === session.seed.trim()) {
+      onEnd()
+      return
+    }
+    setBusy(true)
+    let accepted: boolean
+    try {
+      accepted = await onSave(next)
+    } catch {
+      accepted = false
+    }
+    if (accepted) {
+      onEnd()
+      return
+    }
+    setBusy(false)
+    setSession({ seed: session.seed, draft: session.seed, error: errorMessage })
+  }
+
   const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
     if (event.key === 'Escape' && !busy) {
       event.stopPropagation()
-      endEdit()
+      onEnd()
     }
   }
 
@@ -156,24 +176,24 @@ export function InlineEditField({
       <Input
         id={inputId}
         aria-label={label}
-        aria-invalid={current.error !== null}
-        aria-describedby={current.error === null ? undefined : errorId}
-        value={current.draft}
-        onChange={(event) => setSession({ ...current, draft: event.target.value })}
+        aria-invalid={session.error !== null}
+        aria-describedby={session.error === null ? undefined : errorId}
+        value={session.draft}
+        onChange={(event) => setSession({ ...session, draft: event.target.value })}
         onKeyDown={onKeyDown}
         disabled={busy}
         autoFocus
       />
-      {current.error === null ? null : (
+      {session.error === null ? null : (
         <p id={errorId} role="alert" className="text-xs text-destructive">
-          {current.error}
+          {session.error}
         </p>
       )}
       <div className="flex items-center gap-intra">
         <Button type="submit" size="sm" disabled={busy} onClick={(event) => { event.preventDefault(); void commit() }}>
           {saveLabel}
         </Button>
-        <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={endEdit}>
+        <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={onEnd}>
           {cancelLabel}
         </Button>
       </div>

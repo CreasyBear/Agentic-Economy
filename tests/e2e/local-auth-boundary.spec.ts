@@ -15,7 +15,7 @@ test.describe('local auth boundary', () => {
 
     await expect(page.getByRole('heading', { name: 'Keys', exact: true })).toBeVisible()
     await expect(page.getByText('Local preview — no agent is connected')).toBeVisible()
-    await expect(page.getByText('No agent is connected yet.')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'No agent is connected yet', exact: true })).toBeVisible()
     await expect(page.getByText('Agent access unavailable')).toHaveCount(0)
   })
 })

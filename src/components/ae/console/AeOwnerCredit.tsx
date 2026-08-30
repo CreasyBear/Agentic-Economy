@@ -34,13 +34,22 @@ type CreditChargeRow = Readonly<{
 export function creditTopupTargetFromItems(
   items: readonly AgentOperatorKeyReadback[],
 ): CreditTopupTarget | undefined {
-  const item = items.find(({ account }) => account?.evidence === 'source')
-  if (item?.account === undefined) return undefined
-  return {
-    principalId: item.principalId,
-    currency: item.account.balance.currency,
-    exponent: item.account.balance.exponent,
+  const funded = items.find(({ account }) => account?.evidence === 'source')
+  if (funded?.account !== undefined) {
+    return {
+      principalId: funded.principalId,
+      currency: funded.account.balance.currency,
+      exponent: funded.account.balance.exponent,
+    }
   }
+  const unfunded = items.find(({ dataState, grant, key }) => dataState === 'empty'
+    && grant?.lifecycle === 'active'
+    && !key.revoked
+    && !key.expired)
+  const amount = unfunded?.grant?.budget.maximumSpendPerInvocation
+  return unfunded === undefined || amount === undefined
+    ? undefined
+    : { principalId: unfunded.principalId, currency: amount.currency, exponent: amount.exponent }
 }
 
 export function creditBalanceFromItems(

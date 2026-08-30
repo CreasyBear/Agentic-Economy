@@ -57,23 +57,23 @@ export type MeasuredProtectedSurfaceInventory = Readonly<{
   format: 'phase-2-protected-surfaces:v2'
   expectedCounts: Readonly<{
     serverFunctions: 47
-    publicConvex: 117
+    publicConvex: 127
     convexHttpActions: 7
     crons: 10
     backgroundFamilies: 25
-    frozenHttp: 40
-    frozenMcp: 13
-    frozenCli: 12
+    frozenHttp: 56
+    frozenMcp: 26
+    frozenCli: 15
   }>
   baselineCounts: Readonly<{
     serverFunctions: 47
-    publicConvex: 117
+    publicConvex: 127
     convexHttpActions: 7
     crons: 10
     backgroundFamilies: 25
-    frozenHttp: 40
-    frozenMcp: 13
-    frozenCli: 12
+    frozenHttp: 56
+    frozenMcp: 26
+    frozenCli: 15
   }>
   candidateCounts: Readonly<{
     serverFunctions: number
@@ -148,6 +148,9 @@ const PUBLIC_HTTP = [
 const INTERACTIVE_HTTP = ['oauth-authorize'] as const
 const SIGNED_CALLBACK_HTTP = ['stripe-webhook'] as const
 const CANONICAL_AGENT_HTTP = [
+  'agent-account-self',
+  'agent-account-balance',
+  'agent-account-activity',
   'operation-compare',
   'operation-detail',
   'operation-inspect-plan',
@@ -156,6 +159,19 @@ const CANONICAL_AGENT_HTTP = [
   'operation-reconcile',
   'operation-status',
   'operation-call',
+  'operation-history',
+  'supply-status',
+  'supply-publish',
+  'supply-withdraw',
+  'supply-recheck',
+  'supply-republish',
+  'supply-earnings',
+  'supply-connection-list',
+  'supply-connection-detail',
+  'supply-connection-connect',
+  'supply-connection-reconnect',
+  'supply-connection-revoke',
+  'supply-connection-retry-cleanup',
   'mcp-streamable-http',
 ] as const
 
@@ -173,11 +189,24 @@ const MCP_TOOLS = [
   'supply.publish',
   'supply.withdraw',
   'supply.earnings',
+  'agentAccess.whoami',
+  'agentAccess.balance',
+  'agentAccess.activity',
+  'operation.list',
+  'supply.status',
+  'supply.recheck',
+  'supply.republish',
+  'supply.connection.list',
+  'supply.connection.detail',
+  'supply.connection.connect',
+  'supply.connection.reconnect',
+  'supply.connection.revoke',
+  'supply.connection.retryCleanup',
 ] as const
 
 const PUBLIC_CLI = ['manifest', 'search', 'inspect', 'compare', 'inspect-plan'] as const
 const INTERACTIVE_CLI = ['connect', 'fund', 'revoke'] as const
-const CANONICAL_AGENT_CLI = ['call', 'status', 'cancel', 'recover'] as const
+const CANONICAL_AGENT_CLI = ['account', 'supply', 'call', 'history', 'status', 'cancel', 'recover'] as const
 
 const BACKGROUND_SURFACES = [
   ['callback:stripe-money-webhook', 'callback', 'signed_callback'],
@@ -296,7 +325,7 @@ export function verifyProtectedSurfaceManifest(
     ['http', 'mcp', 'cli', 'server_function', 'convex_public', 'callback', 'worker', 'job', 'cron', 'continuation', 'reconciliation']
       .map((kind) => [kind, manifest.filter((row) => row.kind === kind).length]),
   ) as Record<ProtectedSurfaceManifestRow['kind'], number>
-  if (counts.http !== 40 || counts.mcp !== 13 || counts.cli !== 12
+  if (counts.http !== 56 || counts.mcp !== 26 || counts.cli !== 15
     || counts.callback !== 2 || counts.worker !== 3 || counts.job !== 9 || counts.cron !== 10
     || counts.continuation !== 2 || counts.reconciliation !== 9) {
     throw new Error('protected_surface_inventory_invalid')
@@ -308,31 +337,31 @@ export function verifyProtectedSurfaceManifest(
     const blockedRows = measuredRows.filter((row) => row.status === 'blocked')
     if (measured.format !== 'phase-2-protected-surfaces:v2'
       || measured.expectedCounts.serverFunctions !== 47
-      || measured.expectedCounts.publicConvex !== 117
+      || measured.expectedCounts.publicConvex !== 127
       || measured.expectedCounts.convexHttpActions !== 7
       || measured.expectedCounts.crons !== 10
       || measured.expectedCounts.backgroundFamilies !== 25
-      || measured.expectedCounts.frozenHttp !== 40
-      || measured.expectedCounts.frozenMcp !== 13
-      || measured.expectedCounts.frozenCli !== 12
+      || measured.expectedCounts.frozenHttp !== 56
+      || measured.expectedCounts.frozenMcp !== 26
+      || measured.expectedCounts.frozenCli !== 15
       || measured.baselineCounts.serverFunctions !== 47
-      || measured.baselineCounts.publicConvex !== 117
+      || measured.baselineCounts.publicConvex !== 127
       || measured.baselineCounts.convexHttpActions !== 7
       || measured.baselineCounts.crons !== 10
       || measured.baselineCounts.backgroundFamilies !== 25
-      || measured.baselineCounts.frozenHttp !== 40
-      || measured.baselineCounts.frozenMcp !== 13
-      || measured.baselineCounts.frozenCli !== 12
+      || measured.baselineCounts.frozenHttp !== 56
+      || measured.baselineCounts.frozenMcp !== 26
+      || measured.baselineCounts.frozenCli !== 15
       || !exactCountRecords(measured.actualCounts, measured.candidateCounts)
       || !candidateCountsMatchRows(measured)
       || measured.frozenContract.sourceFile !== '.planning/maturity-execution/contracts/public-surface-inventory.json'
       || !/^[a-f0-9]{64}$/.test(measured.frozenContract.sha256)
-      || measured.frozenContract.httpRefs.length !== 40
-      || measured.frozenContract.mcpRefs.length !== 13
-      || measured.frozenContract.cliRefs.length !== 12
-      || new Set(measured.frozenContract.httpRefs).size !== 40
-      || new Set(measured.frozenContract.mcpRefs).size !== 13
-      || new Set(measured.frozenContract.cliRefs).size !== 12
+      || measured.frozenContract.httpRefs.length !== 56
+      || measured.frozenContract.mcpRefs.length !== 26
+      || measured.frozenContract.cliRefs.length !== 15
+      || new Set(measured.frozenContract.httpRefs).size !== 56
+      || new Set(measured.frozenContract.mcpRefs).size !== 26
+      || new Set(measured.frozenContract.cliRefs).size !== 15
       || new Set(measured.serverFunctions.map((row) => row.ref)).size !== measured.serverFunctions.length
       || new Set(measured.publicConvex.map((row) => row.ref)).size !== measured.publicConvex.length
       || new Set(measuredRows.map((row) => row.ref)).size !== measuredRows.length

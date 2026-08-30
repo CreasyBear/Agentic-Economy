@@ -302,7 +302,7 @@ export async function writeStagingReceipt(
     await handle.close().catch(() => undefined)
     await unlink(temporary).catch(() => undefined)
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-      throw new Error('staging_observation_receipt_exists')
+      throw new Error('staging_observation_receipt_exists', { cause: error })
     }
     throw error
   }

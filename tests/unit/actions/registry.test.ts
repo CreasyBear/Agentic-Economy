@@ -69,14 +69,20 @@ describe('action registry', () => {
       'registry.search', 'registry.detail',
       'registry.operations.search', 'registry.operations.detail',
       'registry.operations.compare', 'registry.operations.inspectPlan',
-      'operation.invoke', 'operation.status',
+      'agentAccess.whoami',
+      'agentAccess.balance', 'agentAccess.activity',
+      'operation.invoke', 'operation.list', 'operation.status',
       'operation.cancel', 'operation.reconcile',
-      'supply.publish', 'supply.withdraw', 'supply.earnings',
+      'supply.status', 'supply.publish', 'supply.withdraw',
+      'supply.recheck', 'supply.republish', 'supply.earnings',
+      'supply.connection.list', 'supply.connection.detail',
+      'supply.connection.connect', 'supply.connection.reconnect',
+      'supply.connection.revoke', 'supply.connection.retryCleanup',
     ])
-    expect(exposed.slice(-3).every((action) =>
+    expect(exposed.slice(-12).every((action) =>
       action.credentialAdmission?.scope === 'market_supply:manage'
-      && action.surfaces.includes('cli')
       && action.surfaces.includes('mcp'))).toBe(true)
+    expect(exposed.slice(-12).every((action) => action.surfaces.includes('cli'))).toBe(true)
     const anonymous = exposed.filter((action) => action.readOnly && action.credentialAdmission === undefined)
     expect(anonymous.map((action) => action.id)).toEqual([
       'registry.search', 'registry.detail',
@@ -99,15 +105,69 @@ describe('action registry', () => {
       'ae_registry_search', 'ae_registry_detail',
       'ae_registry_operations_search', 'ae_registry_operations_detail',
       'ae_registry_operations_compare', 'ae_registry_operations_inspectPlan',
-      'ae_operation_invoke', 'ae_operation_status',
+      'ae_agentAccess_whoami',
+      'ae_agentAccess_balance', 'ae_agentAccess_activity',
+      'ae_operation_invoke', 'ae_operation_list', 'ae_operation_status',
       'ae_operation_cancel', 'ae_operation_reconcile',
-      'ae_supply_publish', 'ae_supply_withdraw', 'ae_supply_earnings',
+      'ae_supply_status', 'ae_supply_publish', 'ae_supply_withdraw',
+      'ae_supply_recheck', 'ae_supply_republish', 'ae_supply_earnings',
+      'ae_supply_connection_list', 'ae_supply_connection_detail',
+      'ae_supply_connection_connect', 'ae_supply_connection_reconnect',
+      'ae_supply_connection_revoke', 'ae_supply_connection_retryCleanup',
     ])
+  })
+  it('exposes current agent identity without exposing bearer material', async () => {
+    const action = findAction('agentAccess.whoami')
+    expect(action?.surfaces).toEqual(['http', 'mcp', 'cli'])
+    expect(action?.credentialAdmission?.scope).toBe('market_operations:invoke')
+    expect(action?.credentialAdmission?.anyScopes).toEqual([
+      'market_operations:invoke',
+      'market_supply:manage',
+    ])
+    expect(action?.readOnly).toBe(true)
+
+    const result = await action?.run({
+      data: {},
+      context: {
+        caller: 'cli',
+        agentAccessPrincipal: {
+          principalId: 'prn_current',
+          ownerId: 'acc_owner',
+          credentialId: 'key_current',
+          applicationRef: 'agentic-economy',
+          environment: 'sandbox',
+          scopes: ['market_operations:invoke'],
+          authorityMode: 'inspect_only',
+        },
+      },
+    })
+    expect(result).toEqual({
+      kind: 'authenticated',
+      principalRef: 'prn_current',
+      accountRef: 'acc_owner',
+      credentialId: 'key_current',
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      scopes: ['market_operations:invoke'],
+      authorityMode: 'inspect_only',
+    })
+    expect(JSON.stringify(result)).not.toContain('Bearer')
+    expect(action?.outputSchema.safeParse({ ...result, accessToken: 'secret' }).success).toBe(false)
   })
   it('registers supply actions with narrow inputs and output contracts', () => {
     const publish = findAction('supply.publish')
     const withdraw = findAction('supply.withdraw')
+    const status = findAction('supply.status')
+    const recheck = findAction('supply.recheck')
+    const republish = findAction('supply.republish')
     const earnings = findAction('supply.earnings')
+    const connectionList = findAction('supply.connection.list')
+    const connectionDetail = findAction('supply.connection.detail')
+    const connectionConnect = findAction('supply.connection.connect')
+    const connectionReconnect = findAction('supply.connection.reconnect')
+    const connectionRevoke = findAction('supply.connection.revoke')
+    const connectionRetryCleanup = findAction('supply.connection.retryCleanup')
+    expect(status?.parameters.map(({ name }) => name)).toEqual(['businessId', 'offeringRef'])
     expect(publish?.parameters.map(({ name }) => name)).toEqual([
       'version', 'businessId', 'offeringRef', 'offeringRevision', 'offeringSourceHash',
       'source', 'evidenceRefs', 'idempotencyKey',
@@ -117,6 +177,12 @@ describe('action registry', () => {
       'publicationRef', 'publicationRevision', 'idempotencyKey',
     ])
     expect(earnings?.parameters.map(({ name }) => name)).toEqual(['currency'])
+    expect(recheck?.parameters).toEqual(withdraw?.parameters)
+    expect(republish?.parameters).toEqual(withdraw?.parameters)
+    for (const action of [status, publish, withdraw, recheck, republish, earnings, connectionList, connectionDetail, connectionConnect, connectionReconnect, connectionRevoke, connectionRetryCleanup]) {
+      expect(action?.surfaces).toEqual(['http', 'mcp', 'cli'])
+      expect(action?.credentialAdmission?.scope).toBe('market_supply:manage')
+    }
     expect(publish?.schema.safeParse({
       version: 'supply-publication:v1',
       businessId: 'business_1',
@@ -131,6 +197,12 @@ describe('action registry', () => {
     expect(publish?.outputSchema).toBeDefined()
     expect(withdraw?.outputSchema).toBeDefined()
     expect(earnings?.outputSchema).toBeDefined()
+    expect(connectionList?.readOnly).toBe(true)
+    expect(connectionDetail?.readOnly).toBe(true)
+    expect(connectionConnect?.readOnly).toBe(false)
+    expect(connectionReconnect?.schema).toBe(connectionRevoke?.schema)
+    expect(connectionRevoke?.invocationContract.retryClass).toBe('reconcile_before_retry')
+    expect(connectionRetryCleanup?.invocationContract.safeContinuations).toEqual(['supply.connection.detail'])
   })
 
   it('describes operation composition arrays from their canonical schemas', () => {

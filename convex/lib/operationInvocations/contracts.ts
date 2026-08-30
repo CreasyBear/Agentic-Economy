@@ -1,3 +1,4 @@
+import { paginationResultValidator } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import { vOnCompleteArgs } from '@convex-dev/workpool'
 import { sourceWriteArgs } from '../../sourceWriteAdmission'
@@ -216,6 +217,31 @@ export const principalAndSourceArgs = {
   ...sourceWriteArgs,
   principal: principalValue,
 } as const
+export const invocationState = v.union(
+  v.literal('pending'),
+  v.literal('completed'),
+  v.literal('refused'),
+  v.literal('reconciliation_required'),
+  v.literal('cancelled'),
+)
+export const invocationSummaryValue = v.object({
+  invocationRef: v.string(),
+  operationRef: v.string(),
+  state: invocationState,
+  resultKind: v.optional(v.union(
+    v.literal('completed'),
+    v.literal('pending'),
+    v.literal('needs_authority'),
+    v.literal('reconciliation_required'),
+    v.literal('refused'),
+  )),
+  usage: v.optional(usageValue),
+  receiptRef: v.optional(v.string()),
+  evidenceHash: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+export const invocationSummaryPageValue = paginationResultValidator(invocationSummaryValue)
 export const invokeArgs = {
   ...principalAndSourceArgs,
   operationRef: v.string(),
@@ -293,5 +319,4 @@ export const reconciledInvocationAuthorityResult = v.union(
   v.object({ kind: v.literal('authorized'), authority: reconciledInvocationAuthorityValue }),
   v.object({ kind: v.literal('refused') }),
 )
-
 

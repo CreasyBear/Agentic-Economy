@@ -68,7 +68,6 @@ function rankOperationSearchCandidates<T>(
   const tokens = searchTokens(query);
   const exactMatches = candidates.filter(
     ({ searchText }) =>
-      tokens.length === 0 ||
       tokens.every((token) =>
         searchableText(searchText).some(
           (term) => term === token || term.startsWith(token),

@@ -85,8 +85,8 @@ function configuredApiKeyOrigin(options: CliOptions, rawOrigin: string | undefin
   return originUrl.origin
 }
 
-export function requireAgentAccessKey(command: string, options: CliOptions): string {
-  const credential = resolveAgentAccessCredential(options.baseUrl)
+export function requireAgentAccessKey(command: string, options: CliOptions, requiredScope?: string): string {
+  const credential = resolveAgentAccessCredential(options.baseUrl, requiredScope)
   if (credential === undefined) {
     throw new CliFailure(`Run ae connect before operation ${command}.`, {
       kind: 'UNAUTHENTICATED',

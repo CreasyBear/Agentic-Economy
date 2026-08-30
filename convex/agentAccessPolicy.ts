@@ -67,6 +67,7 @@ type RevokeGrantForServerResult = Infer<typeof grantRevocationForServerResult>
 
 const grantReadResult = v.union(agentAccessGrantValue, v.null())
 const publicGrantReadback = v.object({
+  principalId: v.string(),
   credentialId: v.string(),
   applicationRef: v.string(),
   environment,
@@ -142,6 +143,7 @@ export const listOwnerGrantReadbacks = query({
       .order('desc')
       .take(64)
     return rows.map((row) => ({
+      principalId: row.principalId,
       credentialId: row.credentialId,
       applicationRef: row.applicationRef,
       environment: row.environment,

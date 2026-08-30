@@ -28,6 +28,7 @@ import {
   claimGrantDelivery,
   completeGrantDelivery,
   createOpaqueOAuthValue,
+  AgentAccessOAuthIssueRefusal,
   denyGrant,
   normalizeRequestedScopes,
   pollDeviceGrant,
@@ -46,15 +47,15 @@ import {
   AGENT_ACCESS_MAX_TTL_SECONDS,
   AGENT_ACCESS_MIN_TTL_SECONDS,
   issueAgentAccessKey,
-  type AgentAccessGrantRegistrationInput,
 } from '@/modules/agent-access/agent-access'
+import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
 import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
 import { buildProductionAgentAccessPolicy, defaultProductionAgentAccessPolicy } from '@/modules/agent-access/production-policy'
 import { agentAccessPolicySchema, type AgentAccessPolicy } from '@/modules/agent-access/policy'
 import { registerAgentAccessGrant } from '@/modules/agent-access/policy.functions'
 import {
   createClerkAgentAccessKeyApi,
-  registerAgentAccessPrincipal,
+  registerIssuedAgentBinding,
 } from '@/modules/agent-access/agent-access.functions'
 import { assertCsrf } from '@/modules/security/public'
 
@@ -228,7 +229,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
     if (result.kind !== 'ok') return oauthTransitionError(result)
     const mode = modeForGrant(result.value)
     if (mode === undefined) return oauthError('invalid_scope', 400)
-    return new Response(consentHtml({ grantRef: result.value.grantRef, clientName: result.value.displayName, mode, state: '', requestedAccess: result.value.requestedAccess }), {
+    return new Response(consentHtml({ grantRef: result.value.grantRef, clientName: result.value.displayName, mode, requestedScopes: result.value.requestedScopes, state: '', requestedAccess: result.value.requestedAccess }), {
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
     })
   }
@@ -273,7 +274,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   if (result.kind !== 'ok') return oauthTransitionError(result)
   const mode = modeForGrant(result.value.grant)
   if (mode === undefined) return oauthError('invalid_scope', 400)
-  return new Response(consentHtml({ grantRef: result.value.grant.grantRef, clientName: result.value.grant.displayName, mode, state, requestedAccess: result.value.grant.requestedAccess }), {
+  return new Response(consentHtml({ grantRef: result.value.grant.grantRef, clientName: result.value.grant.displayName, mode, requestedScopes: result.value.grant.requestedScopes, state, requestedAccess: result.value.grant.requestedAccess }), {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
   })
 }
@@ -478,9 +479,14 @@ async function issueGrantKey(grant: AgentAccessOAuthGrant, ownerId: string, opti
     const idempotencyKey = inputGrant.grantRef.replaceAll(':', '-')
     const authorityMode = modeForGrant(inputGrant)
     if (authorityMode === undefined || (inputGrant.requestedAccess.environment === 'production' && authorityMode === 'full_yolo')) {
-      throw new Error('invalid_requested_access')
+      throw new AgentAccessOAuthIssueRefusal('invalid_scope')
     }
-    const policy = deriveOAuthGrantPolicy(inputGrant.requestedAccess)
+    let policy: AgentAccessPolicy
+    try {
+      policy = deriveOAuthGrantPolicy(inputGrant.requestedAccess)
+    } catch {
+      throw new AgentAccessOAuthIssueRefusal('invalid_grant')
+    }
     if (options.issueKey !== undefined) {
       return await options.issueKey({
         ownerId: inputOwnerId,
@@ -503,7 +509,7 @@ async function issueGrantKey(grant: AgentAccessOAuthGrant, ownerId: string, opti
         name: inputGrant.displayName,
         idempotencyKey,
         scopes: inputGrant.requestedScopes,
-        grantRef: inputGrant.grantRef,
+        grantRef: issuedAgentGrantRef(inputOwnerId, idempotencyKey),
         environment: inputGrant.requestedAccess.environment,
         expiresInSeconds: inputGrant.requestedAccess.expiresInSeconds,
         ...(inputGrant.requestedAccess.maximumSpendPerInvocation === undefined ? {} : { maximumSpendPerInvocation: inputGrant.requestedAccess.maximumSpendPerInvocation }),
@@ -516,10 +522,13 @@ async function issueGrantKey(grant: AgentAccessOAuthGrant, ownerId: string, opti
       policy,
       returnSecret: false,
       api: createClerkAgentAccessKeyApi(clerkClient().apiKeys),
-      registerPrincipal: registerAgentAccessPrincipal,
-      registerGrant: async (grantInput: AgentAccessGrantRegistrationInput) => await registerAgentAccessGrant(grantInput),
+      registerBinding: registerIssuedAgentBinding,
     })
-    if (issued.kind === 'error') throw new Error(issued.code)
+    if (issued.kind === 'error') {
+      if (issued.code === 'invalid_input') throw new AgentAccessOAuthIssueRefusal('invalid_scope')
+      if (issued.code === 'idempotency_conflict') throw new AgentAccessOAuthIssueRefusal('invalid_grant')
+      throw new Error(issued.code)
+    }
     return { keyId: issued.keyId }
   }
   return await issue({ ownerId, grant })

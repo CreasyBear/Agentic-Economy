@@ -10,6 +10,7 @@ import {
 } from './contract'
 import type { AgentAccessPolicy } from './policy'
 import { compareExactAmounts, type ExactAmount } from '@/modules/money/public'
+import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 
 export const AGENT_ACCESS_KEY_TTL_SECONDS = 7 * 24 * 60 * 60
 export const AGENT_ACCESS_MIN_TTL_SECONDS = 1
@@ -98,6 +99,20 @@ export type AgentAccessGrantRegistrationResult = Readonly<{
   expiresAt?: number
 }>
 
+export type IssuedAgentBindingRegistration = Readonly<{
+  issuanceKey: string
+  grantRef: string
+  credentialId: string
+  displayName: string
+  applicationRef: string
+  environment: AgentAccessEnvironment
+  scopes: readonly string[]
+  authorityMode: AgentAccessAuthorityMode
+  policy: AgentAccessPolicy
+  createdAt: number
+  expiresAt: number
+}>
+
 export type AgentAccessPrincipalRegistrationResult = Readonly<{ kind: 'recorded' | 'conflict' | 'unavailable' }>
 
 export type AgentAccessPrincipalRegistration = Readonly<{
@@ -168,8 +183,7 @@ type IssueInput = Readonly<{
   input: AgentAccessKeyIssueInput
   policy: AgentAccessPolicy
   api: AgentAccessKeyApi
-  registerPrincipal?: (input: AgentAccessPrincipalRegistration) => Promise<AgentAccessPrincipalRegistrationResult>
-  registerGrant?: (input: AgentAccessGrantRegistrationInput) => Promise<AgentAccessGrantRegistrationResult>
+  registerBinding: (input: IssuedAgentBindingRegistration) => Promise<AgentAccessGrantRegistrationResult>
   returnSecret?: boolean
 }>
 export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAccessKeyResult> {
@@ -210,7 +224,7 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
         || existing.scopes.some((scope) => !scopes.includes(scope))) {
         return { kind: 'error', code: 'idempotency_conflict', retryable: false }
       }
-      const binding = await bindAgentPrincipal(input, existing.id, ownerId, scopes, authorityMode, applicationRef, environment, existing.expiresAt ?? existing.expiration, grantRef, existing.createdAt)
+      const binding = await bindAgentPrincipal(input, existing.id, scopes, authorityMode, applicationRef, environment, existing.expiresAt ?? existing.expiration, grantRef, existing.createdAt)
       if (binding === null) {
         await rollbackAgentKey(input.api, existing.id)
         return { kind: 'error', code: 'issuance_unavailable', retryable: true }
@@ -239,7 +253,7 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
     })
     const createdAt = Date.now()
     const expiresAt = createdAt + expiresInSeconds * 1000
-    const binding = await bindAgentPrincipal(input, created.id, ownerId, scopes, authorityMode, applicationRef, environment, expiresAt, grantRef, createdAt)
+    const binding = await bindAgentPrincipal(input, created.id, scopes, authorityMode, applicationRef, environment, expiresAt, grantRef, createdAt)
     if (binding === null) {
       await rollbackAgentKey(input.api, created.id)
       return { kind: 'error', code: 'issuance_unavailable', retryable: true }
@@ -251,7 +265,8 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
       await rollbackAgentKey(input.api, created.id)
       throw error
     }
-  } catch {
+  } catch (error) {
+    console.error('[agent-access] issueAgentAccessKey failed', sanitizeTelemetryError(error))
     return { kind: 'error', code: 'issuance_unavailable', retryable: true }
   }
 }
@@ -259,7 +274,6 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
 async function bindAgentPrincipal(
   input: IssueInput,
   keyId: string,
-  ownerId: string,
   scopes: readonly string[],
   authorityMode: AgentAccessAuthorityMode,
   applicationRef: string,
@@ -268,56 +282,40 @@ async function bindAgentPrincipal(
   grantRef: string,
   createdAt: number | undefined,
 ): Promise<AgentAccessGrantBinding | null> {
-  if (input.registerGrant === undefined || input.registerPrincipal === undefined || expiresAt === undefined) return null
+  if (expiresAt === undefined) return null
   try {
-    const grant = await input.registerGrant({
+    return completeGrantBinding(await input.registerBinding({
+      issuanceKey: input.input.idempotencyKey,
       grantRef,
-      principalId: `clerk_api_key:${keyId}`,
-      ownerId,
-      applicationRef,
       credentialId: keyId,
-      environment,
-      operationAccess: 'all_admitted',
-      authorityMode,
-      policy: input.policy,
-      lifecycle: 'active',
-      generation: 1,
-      createdAt: createdAt ?? Date.now(),
-      updatedAt: Date.now(),
-      expiresAt,
-    })
-    if (grant.kind !== 'recorded' && grant.kind !== 'replayed'
-      || typeof grant.grantRef !== 'string'
-      || typeof grant.generation !== 'number'
-      || typeof grant.policyDigest !== 'string'
-      || grant.lifecycle === undefined
-      || typeof grant.expiresAt !== 'number') return null
-    const result = await input.registerPrincipal({
-      principalId: `clerk_api_key:${keyId}`,
-      ownerId,
-      credentialId: keyId,
+      displayName: input.input.name,
       applicationRef,
       environment,
       scopes: [...scopes],
       authorityMode,
-      grantGeneration: grant.generation,
-      policyDigest: grant.policyDigest,
-      lifecycle: grant.lifecycle,
-      expiresAt: grant.expiresAt,
-      seenAt: Date.now(),
-    })
-    return result.kind === 'recorded'
-      ? {
-        kind: grant.kind,
-        grantRef: grant.grantRef,
-        generation: grant.generation,
-        policyDigest: grant.policyDigest,
-        lifecycle: grant.lifecycle,
-        expiresAt: grant.expiresAt,
-      }
-      : null
+      policy: input.policy,
+      createdAt: createdAt ?? Date.now(),
+      expiresAt,
+    }))
   } catch {
     return null
+  }
+}
+
+function completeGrantBinding(result: AgentAccessGrantRegistrationResult): AgentAccessGrantBinding | null {
+  if (result.kind !== 'recorded' && result.kind !== 'replayed'
+    || typeof result.grantRef !== 'string'
+    || typeof result.generation !== 'number'
+    || typeof result.policyDigest !== 'string'
+    || result.lifecycle === undefined
+    || typeof result.expiresAt !== 'number') return null
+  return {
+    kind: result.kind,
+    grantRef: result.grantRef,
+    generation: result.generation,
+    policyDigest: result.policyDigest,
+    lifecycle: result.lifecycle,
+    expiresAt: result.expiresAt,
   }
 }
 

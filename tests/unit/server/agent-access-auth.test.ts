@@ -11,6 +11,7 @@ import {
   CUSTOMER_REQUEST_APPROVE_EACH_SCOPE,
   CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE,
   MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_SUPPLY_MANAGE_SCOPE,
 } from '@/modules/agent-access/contract'
 
 const liveScopes = [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE]
@@ -334,6 +335,54 @@ describe('agent access authentication', () => {
         principal: { applicationRef: 'agentic-economy', environment: 'sandbox' },
       })
     }
+  })
+
+  it('admits exactly one declared alternative scope and binds canonical resolution to the matched scope', async () => {
+    const resolvedScopes: Array<readonly string[]> = []
+    const authenticateWithScopes = (scopes: readonly string[]) => async () => ({
+      isAuthenticated: true as const,
+      tokenType: 'api_key' as const,
+      id: 'ak_profile_identity',
+      subject: 'user_profile_identity',
+      scopes,
+    })
+    const resolvePrincipal: AgentAccessPrincipalResolver = async (projection, requiredScopes) => {
+      resolvedScopes.push(requiredScopes)
+      return {
+        ...projection,
+        principalId: 'prn_00000000000040008000000000000047',
+        ownerId: 'acc_00000000000040008000000000000047',
+      }
+    }
+    const options = {
+      requiredScope: null,
+      requiredAnyScopes: [MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE],
+      resolvePrincipal,
+    } as const
+
+    await expect(authenticateAgentAccess({
+      ...options,
+      consequenceResource: TEST_CONSEQUENCE_RESOURCE,
+      authenticate: authenticateWithScopes([MARKET_SUPPLY_MANAGE_SCOPE]),
+    })).resolves.toMatchObject({
+      kind: 'authenticated',
+      principal: { scopes: [MARKET_SUPPLY_MANAGE_SCOPE], authorityMode: 'bounded_mandate' },
+    })
+    await expect(authenticateAgentAccess({
+      ...options,
+      consequenceResource: TEST_CONSEQUENCE_RESOURCE,
+      authenticate: authenticateWithScopes([MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE]),
+    })).resolves.toMatchObject({ kind: 'authenticated' })
+    await expect(authenticateAgentAccess({
+      ...options,
+      consequenceResource: TEST_CONSEQUENCE_RESOURCE,
+      authenticate: authenticateWithScopes([CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE]),
+    })).resolves.toEqual({ kind: 'refused', status: 403, reason: 'scope_required' })
+
+    expect(resolvedScopes).toEqual([
+      [MARKET_SUPPLY_MANAGE_SCOPE],
+      [MARKET_OPERATIONS_INVOKE_SCOPE],
+    ])
   })
 
   it('keeps a scoped Clerk API key as a locator for a canonical principal', async () => {

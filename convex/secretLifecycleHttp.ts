@@ -28,7 +28,7 @@ function isRecord(value: unknown): value is JsonRecord {
 function exactKeys(value: JsonRecord, expected: readonly string[]): boolean {
   const keys = Object.keys(value)
   return keys.length === expected.length
-    && expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+    && expected.every((key) => Object.hasOwn(value, key))
 }
 
 async function readBody(request: Request): Promise<JsonRecord | undefined> {

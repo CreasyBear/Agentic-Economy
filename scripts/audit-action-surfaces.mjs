@@ -107,10 +107,20 @@ function report(title, rows, format) {
 
 /** Actions are referenced by their exported const, not by their string id. */
 function findExportName(moduleFiles, sources, actionId) {
-  const pattern = new RegExp(`export const (\\w+) = defineAction\\(\\{[\\s\\S]{0,200}?id: '${actionId.replace('.', '\\.')}'`, 'u')
+  const escapedActionId = escapeRegExp(actionId)
+  const pattern = new RegExp(`export const (\\w+) = defineAction(?:<[^;]{0,500}?>)?\\(\\{[\\s\\S]{0,500}?id:\\s*['"]${escapedActionId}['"]`, 'u')
   for (const file of moduleFiles) {
     const match = pattern.exec(sources.get(file) ?? '')
     if (match?.[1] !== undefined) return match[1]
+  }
+  const idConstantPattern = new RegExp(`export const (\\w+)\\s*=\\s*['"]${escapedActionId}['"](?:\\s+as const)?`, 'u')
+  for (const file of moduleFiles) {
+    const source = sources.get(file) ?? ''
+    const idConstant = idConstantPattern.exec(source)?.[1]
+    if (idConstant === undefined) continue
+    const actionPattern = new RegExp(`export const (\\w+)\\s*=\\s*defineAction(?:<[^;]{0,500}?>)?\\(\\{[\\s\\S]{0,500}?id:\\s*${escapeRegExp(idConstant)}\\b`, 'u')
+    const action = actionPattern.exec(source)?.[1]
+    if (action !== undefined) return action
   }
   const candidate = actionId.split('.').reduce((name, segment, index) => (
     `${name}${index === 0 ? segment : `${segment[0]?.toUpperCase() ?? ''}${segment.slice(1)}`}`
@@ -120,6 +130,10 @@ function findExportName(moduleFiles, sources, actionId) {
     if (declaration.test(sources.get(file) ?? '')) return candidate
   }
   return undefined
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
 }
 
 function mentionsAction(source, actionId, exportName) {

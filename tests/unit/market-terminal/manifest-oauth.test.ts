@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
 import { listOperationRouteDescriptors } from '@/modules/actions'
+import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
 import {
   AGENT_ACCESS_OAUTH_ERROR_VALUES,
   AGENT_ACCESS_POLL_INTERVAL_SECONDS,
@@ -104,7 +105,7 @@ describe('market terminal manifest OAuth contract', () => {
       listOperationRouteDescriptors().map(({ mcpToolName: toolName }) => toolName),
     )
     const operationReads = ((manifest.anonymous as JsonRecord).operationReads as readonly JsonRecord[])
-    expect(operationReads).toHaveLength(listOperationRouteDescriptors().length)
+    expect(operationReads).toHaveLength(OPERATION_MARKET_ACTION_ENTRIES.length)
     for (const operationRead of operationReads) {
       const route = operationRead.route as JsonRecord
       const action = operationRead.action as JsonRecord

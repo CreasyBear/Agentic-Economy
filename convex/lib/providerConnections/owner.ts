@@ -138,7 +138,12 @@ type ConnectX402OwnerArgs = {
   evidenceRefs: string[]
 }
 
-function projectOwnerProjection(connection: ProviderConnection, now: number) {
+export type ProviderConnectionActor = Readonly<{
+  canonicalPrincipalRef: string
+  canonicalAccountRef: string
+}>
+
+export function projectOwnerProjection(connection: ProviderConnection, now: number) {
   const projection = projectProviderConnectionOwner(connection, now)
   return {
     ...projection,
@@ -148,7 +153,7 @@ function projectOwnerProjection(connection: ProviderConnection, now: number) {
   }
 }
 
-function projectOwnerResult(result: ProviderConnectionCommandResult, now: number) {
+export function projectOwnerResult(result: ProviderConnectionCommandResult, now: number) {
   if (result.kind === 'refused') return result
   const connection = projectOwnerProjection(result.connection, now)
   return result.kind === 'applied'
@@ -160,13 +165,12 @@ function cleanupOwnerCommandDigest(connectionRef: string, commandId: string): st
   return canonicalDigest({ kind: 'provider_cleanup_owner_retry:v1', connectionRef, commandId })
 }
 
-async function readOwnedConnection(
-  ctx: Pick<QueryCtx, 'auth' | 'db'>,
+export async function readProviderConnectionForActor(
+  ctx: Pick<QueryCtx, 'db'>,
   connectionRef: string,
+  actor: ProviderConnectionActor,
   requireUsable = true,
 ) {
-  const actor = await resolveBusinessActor(ctx)
-  if (actor.kind !== 'authenticated_owner') return null
   const row = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef', (index) => index.eq('connectionRef', connectionRef)).unique()
   if (row === null) return null
@@ -178,26 +182,26 @@ async function readOwnedConnection(
   return canonical === null ? null : { row, canonical, actor }
 }
 
-async function readOwnedBusiness(
-  ctx: Pick<QueryCtx, 'auth' | 'db'>,
+export async function readProviderBusinessForActor(
+  ctx: Pick<QueryCtx, 'db'>,
   businessId: Id<'businesses'>,
+  actor: ProviderConnectionActor,
 ) {
-  const actor = await resolveBusinessActor(ctx)
-  if (actor.kind !== 'authenticated_owner') return null
   const business = await ctx.db.get(businessId)
   return business !== null && business.owningAccountRef === actor.canonicalAccountRef
     ? { business, actor }
     : null
 }
 
-async function reauthorizeOwnerConnection(
+export async function reauthorizeProviderConnectionForActor(
   ctx: MutationCtx,
   args: ReauthorizeOwnerArgs,
+  actor: ProviderConnectionActor,
   now: number,
 ) {
-  const owned = await readOwnedConnection(ctx, args.connectionRef)
+  const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor)
   if (owned === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
-  const { row, canonical, actor } = owned
+  const { row, canonical } = owned
   const current = toDomain(row)
   const result = reauthorizeProviderConnection(current, {
     ...current,
@@ -230,8 +234,40 @@ async function reauthorizeOwnerConnection(
 }
 
 export async function readOwnerHandler(ctx: QueryCtx, args: { connectionRef: string }) {
-  const owned = await readOwnedConnection(ctx, args.connectionRef)
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') return null
+  const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor)
   return owned === null ? null : projectOwnerProjection(toDomain(owned.row), owned.row.updatedAt)
+}
+
+export async function listProviderConnectionsForActor(
+  ctx: Pick<QueryCtx, 'db'>,
+  args: Readonly<{
+    businessId: Id<'businesses'>
+    lifecycle?: ProviderConnection['lifecycle']
+    limit: number
+  }>,
+  actor: ProviderConnectionActor,
+) {
+  const ownedBusiness = await readProviderBusinessForActor(ctx, args.businessId, actor)
+  if (ownedBusiness === null) return null
+  const states: readonly ProviderConnection['lifecycle'][] = args.lifecycle === undefined
+    ? ['active', 'reauthorization_required', 'revocation_pending', 'cleanup_required', 'revoked']
+    : [args.lifecycle]
+  const rows = (await Promise.all(states.map(async (state) => (
+    await ctx.db.query('capabilityProviderConnections')
+      .withIndex('by_businessId_and_lifecycle', (index) => index.eq('businessId', args.businessId).eq('lifecycle', state))
+      .take(args.limit)
+  )))).flat()
+    .filter((row) => row.owningAccountRef === actor.canonicalAccountRef)
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .slice(0, args.limit)
+  const canonicalRows = await Promise.all(rows.map(async (row) => (
+    await readCanonicalConnectionForProjection(ctx, toDomain(row), false)
+  )))
+  return rows.flatMap((row, index) => canonicalRows[index] === null
+    ? []
+    : [projectOwnerProjection(toDomain(row), row.updatedAt)])
 }
 
 export async function listOwnerHandler(ctx: QueryCtx) {
@@ -260,7 +296,19 @@ export async function listOwnerHandler(ctx: QueryCtx) {
 }
 
 export async function revokeOwnerHandler(ctx: MutationCtx, args: RevokeOwnerArgs) {
-  const owned = await readOwnedConnection(ctx, args.connectionRef)
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') {
+    return { kind: 'refused' as const, code: 'invalid_transition' as const }
+  }
+  return await revokeProviderConnectionForActor(ctx, args, actor)
+}
+
+export async function revokeProviderConnectionForActor(
+  ctx: MutationCtx,
+  args: RevokeOwnerArgs,
+  actor: ProviderConnectionActor,
+) {
+  const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor)
   const now = Date.now()
   const result = beginProviderConnectionRevocation(owned === null ? undefined : toDomain(owned.row), args, now)
   if (result.kind === 'applied' && owned !== null) {
@@ -338,7 +386,19 @@ function retryCleanupIsInvalid(
 }
 
 export async function retryOwnerCleanupHandler(ctx: MutationCtx, args: RetryOwnerCleanupArgs) {
-  const owned = await readOwnedConnection(ctx, args.connectionRef, false)
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') {
+    return { kind: 'refused' as const, code: 'invalid_identity' as const }
+  }
+  return await retryProviderConnectionCleanupForActor(ctx, args, actor)
+}
+
+export async function retryProviderConnectionCleanupForActor(
+  ctx: MutationCtx,
+  args: RetryOwnerCleanupArgs,
+  actor: ProviderConnectionActor,
+) {
+  const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor, false)
   const now = Date.now()
   if (owned === null) {
     return { kind: 'refused' as const, code: 'invalid_identity' as const }
@@ -405,11 +465,28 @@ export async function retryOwnerCleanupHandler(ctx: MutationCtx, args: RetryOwne
 }
 
 export async function reauthorizeOwnerHandler(ctx: MutationCtx, args: ReauthorizeOwnerArgs) {
-  return projectOwnerResult(await reauthorizeOwnerConnection(ctx, args, Date.now()), Date.now())
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') {
+    return { kind: 'refused' as const, code: 'invalid_transition' as const }
+  }
+  const now = Date.now()
+  return projectOwnerResult(await reauthorizeProviderConnectionForActor(ctx, args, actor, now), now)
 }
 
 export async function connectX402OwnerHandler(ctx: MutationCtx, args: ConnectX402OwnerArgs) {
-  const ownedBusiness = await readOwnedBusiness(ctx, args.businessId)
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') {
+    return { kind: 'refused' as const, code: 'invalid_identity' as const }
+  }
+  return await connectX402ProviderConnectionForActor(ctx, args, actor)
+}
+
+export async function connectX402ProviderConnectionForActor(
+  ctx: MutationCtx,
+  args: ConnectX402OwnerArgs,
+  actor: ProviderConnectionActor,
+) {
+  const ownedBusiness = await readProviderBusinessForActor(ctx, args.businessId, actor)
   const resourceUrl = validPublicHttpsEndpoint(args.resourceUrl)
   const now = Date.now()
   if (ownedBusiness === null || resourceUrl === undefined) {
@@ -459,7 +536,11 @@ export async function shareOwnerHandler(
   ctx: MutationCtx,
   args: Readonly<{ connectionRef: string; granteeAccountRef: string; commandId: string }>,
 ) {
-  const owned = await readOwnedConnection(ctx, args.connectionRef)
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') {
+    return { kind: 'refused' as const, code: 'invalid_transition' as const }
+  }
+  const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor)
   if (owned === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   let grantee
   try {

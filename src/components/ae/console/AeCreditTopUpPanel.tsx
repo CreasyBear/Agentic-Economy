@@ -50,6 +50,7 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
   const [recovery, setRecovery] = useState<RecoveryLocator>()
   const idempotencyKey = useRef<string | undefined>(undefined)
   const recoveryAttempted = useRef(false)
+  const targetPrincipalId = target?.principalId
 
   const stripePromise = useMemo(() => {
     const key = (publishableKey ?? import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)?.trim()
@@ -72,7 +73,7 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
       if (result.evidence.status === 'failed') setErrorMessage('The provider did not complete this payment. No credit was added.')
       if (result.evidence.status === 'outcome_unknown') setErrorMessage('Payment status is still being verified. No credit was added by this browser return.')
       setRecovery(locator)
-      persistRecovery(target?.principalId, locator)
+      persistRecovery(targetPrincipalId, locator)
       try {
         await onRefresh?.()
       } catch {
@@ -84,7 +85,7 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
     } finally {
       setChecking(false)
     }
-  }, [onRefresh, port, target?.principalId])
+  }, [onRefresh, port, targetPrincipalId])
 
   useEffect(() => {
     if (target === undefined || port === undefined || recoveryAttempted.current) return

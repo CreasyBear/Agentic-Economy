@@ -10,6 +10,7 @@ import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorC
 import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeCreditTopUpPanel, type CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
+import { creditTopupTargetFromItems } from '@/components/ae/console/AeOwnerCredit'
 import type { CreditPaymentSession } from '@/modules/money/public'
 import type { CreditTopupBeginInput } from '@/modules/money/server'
 
@@ -37,6 +38,7 @@ const keyReadback: AgentOperatorKeyReadback = {
     expired: false,
   },
   grant: {
+    principalId: `prn_${'1'.repeat(32)}`,
     credentialId: 'key_ui_1',
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
@@ -80,6 +82,21 @@ afterEach(() => {
   cleanup()
   window.sessionStorage.clear()
   stripeTestState.confirm.mockReset()
+})
+
+describe('owner credit target', () => {
+  it('uses the active grant policy before the first credit account exists', () => {
+    const { account: _fundedAccount, ...unfundedKeyReadback } = keyReadback
+    expect(creditTopupTargetFromItems([{
+      ...unfundedKeyReadback,
+      principalId: `prn_${'1'.repeat(32)}`,
+      dataState: 'empty',
+    }])).toEqual({
+      principalId: `prn_${'1'.repeat(32)}`,
+      currency: 'USD',
+      exponent: 2,
+    })
+  })
 })
 
 describe('assistant access components', () => {

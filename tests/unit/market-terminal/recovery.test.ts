@@ -125,7 +125,7 @@ describe('CLI operation recovery projections', () => {
     expect(manifest.commands.recover.summary).toContain('not a replay')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('genuinely uncertain')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('canonical evidence')
-    expect(manifest.coldLoop).toEqual(['search', 'inspect', 'connect', 'call', 'receipt', 'reuse'])
+    expect(manifest.coldLoop).toEqual(['search', 'inspect', 'connect', 'call', 'history', 'receipt', 'reuse'])
     expect(manifest.payment).toMatchObject({
       providerQuotedAmount: { field: 'commercial.priceBreakdown.providerQuotedAmount', exact: true },
       agenticEconomyFee: { field: 'commercial.priceBreakdown.agenticEconomyFee', rate: '10%', feeBps: 1_000 },

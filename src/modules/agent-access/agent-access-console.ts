@@ -94,19 +94,22 @@ export async function readAgentAccessMoneyReadback(
   grants: readonly AgentAccessOwnerGrantReadback[] = [],
 ): Promise<AgentAccessConsoleReadback> {
   const grantsByCredential = new Map(grants.map((grant) => [grant.credentialId, grant]))
-  return await Promise.all(keys.map(async (key) => {
-    const principalId = `clerk_api_key:${key.keyId}`
+  const boundKeys = keys.flatMap((key) => {
     const grant = grantsByCredential.get(key.keyId)
+    return grant === undefined ? [] : [{ key, grant }]
+  })
+  return await Promise.all(boundKeys.map(async ({ key, grant }) => {
+    const { principalId } = grant
     try {
       const [account, activity, usage] = await Promise.all([
         readCreditAccount({ port, query: { principalId, currency: 'USD' } }),
         listCreditActivity({ port, query: { principalId, credentialId: key.keyId, currency: 'USD', paginationOpts: { numItems: 50, cursor: null } } }),
         readKeyUsage({ port, query: { principalId, credentialId: key.keyId, currency: 'USD' } }),
       ])
-      return { key, ...(grant === undefined ? {} : { grant }), principalId, account, activity: activity.page, usage, dataState: 'source' as const }
+      return { key, grant, principalId, account, activity: activity.page, usage, dataState: 'source' as const }
     } catch (error) {
       const dataState = error instanceof MoneyQueryError && error.code === 'billing_identity_missing' ? 'empty' as const : 'unavailable' as const
-      return { key, ...(grant === undefined ? {} : { grant }), principalId, activity: [], dataState }
+      return { key, grant, principalId, activity: [], dataState }
     }
   }))
 }

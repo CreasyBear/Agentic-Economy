@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { paginationOptsValidator } from 'convex/server'
 import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import {
   approvalDecision,
@@ -14,6 +15,8 @@ import {
   operationDispatchMutationArgs,
   operationDispatchMutationResult,
   pendingApprovalView,
+  invocationState,
+  invocationSummaryPageValue,
   principalAndSourceArgs,
   principalValue,
   projectRecoveryArgs,
@@ -45,6 +48,7 @@ import {
 import {
   canonicalAgentCancelHandler,
   canonicalAgentInvokeHandler,
+  canonicalAgentListHandler,
   canonicalAgentReconcileHandler,
   canonicalAgentStatusHandler,
   canonicalOwnerApprovalDecisionHandler,
@@ -66,6 +70,7 @@ import {
 } from './lib/operationInvocations/dispatch'
 import {
   readOwnerRecoveryHandler,
+  listAgentInvocationSummariesHandler,
   readProviderLeaseAuthorityHandler,
   readRecoveryHandler,
   readReplayHandler,
@@ -229,6 +234,29 @@ export const readInvocationStatus = action({
   args: { ...principalAndSourceArgs, invocationRef: v.string() },
   returns: statusResultValue,
   handler: canonicalAgentStatusHandler,
+})
+
+export const listAgentInvocationSummaries = internalQuery({
+  args: {
+    principalId: v.string(),
+    credentialId: v.string(),
+    applicationRef: v.string(),
+    environment: v.union(v.literal('sandbox'), v.literal('production')),
+    state: v.optional(invocationState),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: invocationSummaryPageValue,
+  handler: listAgentInvocationSummariesHandler,
+})
+
+export const listInvocations = action({
+  args: {
+    ...principalAndSourceArgs,
+    state: v.optional(invocationState),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: invocationSummaryPageValue,
+  handler: canonicalAgentListHandler,
 })
 
 export const cancelInvocation = action({

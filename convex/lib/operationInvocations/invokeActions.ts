@@ -1,4 +1,5 @@
 import type { Infer } from 'convex/values'
+import type { PaginationOptions } from 'convex/server'
 import type { ActionCtx, MutationCtx, QueryCtx } from '../../_generated/server'
 import type { Doc } from '../../_generated/dataModel'
 import { internal } from '../../_generated/api'
@@ -34,6 +35,55 @@ import { type AdmitArgs, type OperationInvokePrincipal } from './admission'
 type OperationInvocationRow = Doc<'capabilityOperationInvocations'>
 type OperationResult = Infer<typeof operationResultValue>
 type Usage = Infer<typeof usageValue>
+type InvocationListState = OperationInvocationRow['state']
+
+function receiptRefFromResult(result: OperationResult | undefined): string | undefined {
+  return result !== undefined && 'receipt' in result ? result.receipt?.receiptRef : undefined
+}
+
+export async function listAgentInvocationSummariesHandler(
+  ctx: QueryCtx,
+  args: Readonly<{
+    principalId: string
+    credentialId: string
+    applicationRef: string
+    environment: 'sandbox' | 'production'
+    state?: InvocationListState
+    paginationOpts: PaginationOptions
+  }>,
+) {
+  const state = args.state
+  const source = state === undefined
+    ? ctx.db.query('capabilityOperationInvocations')
+        .withIndex('by_credentialId_and_createdAt', (query) => query.eq('credentialId', args.credentialId))
+        .order('desc')
+    : ctx.db.query('capabilityOperationInvocations')
+        .withIndex('by_credentialId_and_state', (query) => query.eq('credentialId', args.credentialId).eq('state', state))
+        .order('desc')
+  const page = await source.paginate(args.paginationOpts)
+  return {
+    ...page,
+    page: page.page
+      .filter((row) => row.principalId === args.principalId
+        && row.credentialId === args.credentialId
+        && row.applicationRef === args.applicationRef
+        && row.environment === args.environment)
+      .map((row) => {
+        const receiptRef = receiptRefFromResult(row.result)
+        return {
+          invocationRef: row.invocationRef,
+          operationRef: row.operationRef,
+          state: row.state,
+          ...(row.result === undefined ? {} : { resultKind: row.result.kind }),
+          ...(row.usage === undefined ? {} : { usage: row.usage }),
+          ...(receiptRef === undefined ? {} : { receiptRef }),
+          ...(row.evidenceHash === undefined ? {} : { evidenceHash: row.evidenceHash }),
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        }
+      }),
+  }
+}
 
 export type RecoveryRow = Readonly<{
   invocationRef: string
@@ -445,6 +495,30 @@ type RecoveryActionArgs = {
   principal: OperationInvokePrincipal
   invocationRef: string
   idempotencyKey?: string
+}
+
+export async function listAgentInvocationsHandler(
+  ctx: ActionCtx,
+  args: RecoveryActionArgs & Readonly<{ state?: InvocationListState; paginationOpts: PaginationOptions }>,
+) {
+  await ctx.runMutation(internal.capabilityOperationInvocations.admit, {
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
+    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
+    principal: args.principal,
+    operationRef: '',
+    input: {},
+    idempotencyKey: `list:${args.state ?? 'all'}:${args.paginationOpts.cursor ?? 'start'}:${args.paginationOpts.numItems}`,
+  })
+  return await ctx.runQuery(internal.capabilityOperationInvocations.listAgentInvocationSummaries, {
+    principalId: args.principal.principalId,
+    credentialId: args.principal.credentialId,
+    applicationRef: args.principal.applicationRef,
+    environment: args.principal.environment,
+    ...(args.state === undefined ? {} : { state: args.state }),
+    paginationOpts: args.paginationOpts,
+  })
 }
 
 type RecoveryEvidence =

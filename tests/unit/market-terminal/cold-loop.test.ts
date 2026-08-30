@@ -12,6 +12,7 @@ import { runStatusCommand } from '../../../tools/ae/commands/status'
 import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
+import { storeConnection } from '../../../tools/ae/lib/config'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { projectOperationSearchChoices } from '@/modules/registry/operation-choice-contracts'
 import { operationSearchOutputSchema } from '@/modules/capability-supply/public'
@@ -686,6 +687,81 @@ describe('external-agent Market Operation cold loop', () => {
       apiKeyOrigin: 'https://market.example',
     })
     expect(output.read()).not.toContain('ae-issued-secret')
+  })
+
+  it('waits for a newly issued Clerk key to reach the authentication edge', async () => {
+    const output = captureStdout()
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ client_id: 'ae_client' }, { status: 201 }))
+      .mockResolvedValueOnce(Response.json({
+        device_code: 'device-code',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'https://market.example/agent-access/authorize?user_code=ABCD-EFGH',
+        expires_in: 600,
+        interval: 1,
+      }))
+      .mockResolvedValueOnce(Response.json({ access_token: 'ae-issued-secret' }))
+      .mockResolvedValueOnce(Response.json({
+        type: 'about:blank',
+        title: 'Unauthenticated',
+        status: 401,
+        kind: 'UNAUTHENTICATED',
+        code: 'authentication_required',
+      }, { status: 401 }))
+      .mockResolvedValueOnce(Response.json({
+        kind: 'refused',
+        invocationRef: 'invocation:v1:connect-validation',
+        code: 'invocation_not_found',
+        retryable: false,
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      await runConnectCommand([], options)
+    } finally {
+      output.restore()
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(5)
+    expect(JSON.parse(output.read())).toMatchObject({ kind: 'connected', credentialStored: true })
+  })
+
+  it('replaces a rejected stored key through the device flow', async () => {
+    storeConnection({ baseUrl: options.baseUrl, accessToken: 'stale-stored-key' })
+    const output = captureStdout()
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({
+        type: 'about:blank',
+        title: 'Unauthenticated',
+        status: 401,
+        kind: 'UNAUTHENTICATED',
+        code: 'authentication_required',
+      }, { status: 401 }))
+      .mockResolvedValueOnce(Response.json({ client_id: 'ae_client' }, { status: 201 }))
+      .mockResolvedValueOnce(Response.json({
+        device_code: 'device-code',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'https://market.example/agent-access/authorize?user_code=ABCD-EFGH',
+        expires_in: 600,
+        interval: 1,
+      }))
+      .mockResolvedValueOnce(Response.json({ access_token: 'replacement-key' }))
+      .mockResolvedValueOnce(Response.json({
+        kind: 'refused',
+        invocationRef: 'invocation:v1:connect-validation',
+        code: 'invocation_not_found',
+        retryable: false,
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      await runConnectCommand([], options)
+    } finally {
+      output.restore()
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(5)
+    expect(JSON.parse(output.read())).toMatchObject({ kind: 'connected', credentialStored: true })
   })
 
   it('refuses an existing key origin mismatch before connect validation fetch', async () => {

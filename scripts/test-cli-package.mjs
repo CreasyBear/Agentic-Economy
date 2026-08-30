@@ -13,11 +13,13 @@ const run = promisify(execFile);
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const expectedFiles = ["README.md", "dist/ae.js", "package.json"];
 const expectedCommands = [
+  "account",
   "call",
   "cancel",
   "compare",
   "connect",
   "fund",
+  "history",
   "inspect",
   "inspect-plan",
   "manifest",
@@ -25,6 +27,7 @@ const expectedCommands = [
   "revoke",
   "search",
   "status",
+  "supply",
 ];
 
 async function runNode(version, args, options) {

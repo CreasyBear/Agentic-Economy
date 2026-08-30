@@ -5,6 +5,17 @@ import {
 } from './mcp-api-harness'
 import { describe, expect, it, vi } from 'vitest'
 
+function connectionServiceStubs() {
+  return {
+    connectionList: vi.fn(),
+    connectionDetail: vi.fn(),
+    connectionConnect: vi.fn(),
+    connectionReconnect: vi.fn(),
+    connectionRevoke: vi.fn(),
+    connectionRetryCleanup: vi.fn(),
+  }
+}
+
 describe('MCP host adapter supply', () => {
   it('dispatches a publication artifact above 64 KiB below the MCP body cap', async () => {
     const publicationSourceBytes = 262_144
@@ -38,9 +49,13 @@ describe('MCP host adapter supply', () => {
     expect(requestBytes).toBeLessThan(320 * 1024)
 
     const supplyService = {
+      status: vi.fn(),
       publish: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'boundary_probe' }),
       withdraw: vi.fn(),
+      recheck: vi.fn(),
+      republish: vi.fn(),
       earnings: vi.fn(),
+      ...connectionServiceStubs(),
     }
     const response = await postMcp(body, {
       authenticate: authenticateWithScopes(['market_supply:manage']),
@@ -59,9 +74,13 @@ describe('MCP host adapter supply', () => {
 
   it('rejects an operation-only principal from calling a supplier action without invoking its service', async () => {
     const supplyService = {
+      status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
+      recheck: vi.fn(),
+      republish: vi.fn(),
       earnings: vi.fn().mockResolvedValue({ kind: 'not_found' }),
+      ...connectionServiceStubs(),
     }
     const response = await postMcp({
       jsonrpc: '2.0',
@@ -87,9 +106,13 @@ describe('MCP host adapter supply', () => {
 
   it('rejects an anonymous principal from calling a supplier action without invoking its service', async () => {
     const supplyService = {
+      status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
+      recheck: vi.fn(),
+      republish: vi.fn(),
       earnings: vi.fn().mockResolvedValue({ kind: 'not_found' }),
+      ...connectionServiceStubs(),
     }
     const response = await postMcp({
       jsonrpc: '2.0',
@@ -121,9 +144,13 @@ describe('MCP host adapter supply', () => {
 
   it('dispatches a supplier action for a supply-only principal', async () => {
     const supplyService = {
+      status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
+      recheck: vi.fn(),
+      republish: vi.fn(),
       earnings: vi.fn().mockResolvedValue({ kind: 'not_found' }),
+      ...connectionServiceStubs(),
     }
     const response = await postMcp({
       jsonrpc: '2.0',
@@ -148,6 +175,40 @@ describe('MCP host adapter supply', () => {
         credentialId: 'key:test',
         scopes: ['market_supply:manage'],
       }),
+    }))
+  })
+
+  it('dispatches provider connection inspection for a supply-only principal', async () => {
+    const supplyService = {
+      status: vi.fn(),
+      publish: vi.fn(),
+      withdraw: vi.fn(),
+      recheck: vi.fn(),
+      republish: vi.fn(),
+      earnings: vi.fn(),
+      ...connectionServiceStubs(),
+    }
+    supplyService.connectionDetail.mockResolvedValue({ kind: 'not_found' })
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 'supplier-connection-detail',
+      method: 'tools/call',
+      params: {
+        name: 'ae_supply_connection_detail',
+        arguments: { connectionRef: 'connection:x402:one' },
+      },
+    }, {
+      authenticate: authenticateWithScopes(['market_supply:manage']),
+      supplyManagementService: supplyService,
+    }, {
+      authorization: 'Bearer supply-only',
+    })
+
+    expect(response.status).toBe(200)
+    const body = await readMcpBody(response)
+    expect((body.result?.structuredContent as { result?: unknown } | undefined)?.result).toEqual({ kind: 'not_found' })
+    expect(supplyService.connectionDetail).toHaveBeenCalledWith(expect.objectContaining({
+      input: { connectionRef: 'connection:x402:one' },
     }))
   })
 })

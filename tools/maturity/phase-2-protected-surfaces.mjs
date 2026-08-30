@@ -13,13 +13,13 @@ const CLASSIFICATIONS = resolve(ROOT, '.planning/maturity-execution/contracts/ph
 const INVENTORY_TEST = 'tests/maturity/phase-2-protected-surfaces.test.ts'
 const BASELINE_COUNTS = Object.freeze({
   serverFunctions: 47,
-  publicConvex: 117,
+  publicConvex: 127,
   convexHttpActions: 7,
   crons: 10,
   backgroundFamilies: 25,
-  frozenHttp: 40,
-  frozenMcp: 13,
-  frozenCli: 12,
+  frozenHttp: 56,
+  frozenMcp: 26,
+  frozenCli: 15,
 })
 const PUBLIC_CONVEX_REGISTRARS = new Set([
   'action',
@@ -54,6 +54,7 @@ const AUTHORITY_SINKS = Object.freeze({
     'convex/authorityBoundary.ts:resolveCanonicalAgentBinding',
     'convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext',
     'convex/lib/canonicalAgentAuthority.ts:validateCanonicalAgentDelegation',
+    'convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal',
     'convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal',
     'convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority',
     'convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicketHandler',
@@ -173,6 +174,7 @@ const SINK_TEST_ASSIGNMENTS = Object.freeze({
   'convex/authorityBoundary.ts:resolveCanonicalAgentBinding': ['convex/authorityBoundary.ts:resolveAgentBinding', 'tests/unit/convex/authority-boundary.test.ts', 'drives the %s isolation case through the registered mutation and commits no denied authority snapshot'],
   'convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority': ['convex/capabilityOperationInvocations.ts:cancelInvocation', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'drives the %s isolation case through the registered cancel action and its real current-agent sink'],
   'convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal': ['convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication', 'tests/integration/capability-supply-owner-funnel-reserve.test.ts', 'drives the %s isolation case through the registered reservation mutation without a denied publication effect'],
+  'convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal': ['convex/agentMoneyReads.ts:balance', 'tests/unit/convex/agent-money-reads.test.ts', 'drives the %s isolation case through the registered buyer balance mutation without cross-principal disclosure'],
   'convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext': ['convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority', 'tests/integration/chat-scheduled-authority.test.ts', 'evaluates resolveInteractiveAuthorityContext %s through the registered materialization mutation'],
   'convex/recoveryBreakGlass.ts:resolveRecoveryAccountFacts': ['convex/recoveryBreakGlass.ts:authorizeRecoveryOperation', 'tests/unit/convex/recovery-break-glass-driver.test.ts', 'evaluates %s through the registered recovery operation with atomic denial'],
   'convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal', 'tests/unit/capability-execution/provider-consequence-journal.test.ts', 'drives the %s isolation case through the registered provider abort route and abortProviderConsequence sink'],
@@ -1621,7 +1623,7 @@ function buildSurfaceAuthorityMap(inventory, registry) {
 
 function writeSurfaceAuthorityMap(inventory, registry) {
   const map = buildSurfaceAuthorityMap(inventory, registry)
-  if (map.red !== 0 || map.total !== 240 || map.protected + map.exemptions !== map.total) {
+  if (map.red !== 0 || map.total !== 250 || map.protected + map.exemptions !== map.total) {
     throw new Error('protected_surface_authority_map_red')
   }
   writeFileSync(SURFACE_AUTHORITY_MAP, `${JSON.stringify(map, null, 2)}\n`)

@@ -39,6 +39,7 @@ import type { ActionAgentAccessPrincipal, ActionTimingSink } from '@/modules/com
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
 import { createOperationInvokeService } from '@/lib/server/operation-invoke-api'
 import { createSupplyManagementService, type SupplyManagementService } from '@/modules/capability-supply/supply-actions'
+import { createAccountManagementService, type AccountManagementService } from '@/modules/agent-access/account.actions'
 const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
@@ -49,6 +50,7 @@ export type McpAccessTier = Readonly<{
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
   supplyManagementService?: SupplyManagementService
+  accountManagementService?: AccountManagementService
 }>
 
 type AeServerHandler<T extends AnyObjectSchema> = (
@@ -251,7 +253,7 @@ export function createAeMcpServer(
     : actions.filter((action) => action.surfaces.includes('mcp') && (
       (action.credentialAdmission === undefined && action.readOnly)
       || (action.credentialAdmission !== undefined
-        && access.principal?.scopes.includes(action.credentialAdmission.scope) === true)
+        && actionCredentialAdmitted(access.principal?.scopes ?? [], action.credentialAdmission))
       || (action.credentialAdmission === undefined
         && access.authorityMode !== undefined
         && agentAuthorityModeAllows(access.authorityMode, requiredModeForAction(action)))
@@ -287,6 +289,7 @@ export function createAeMcpServer(
               ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }),
               ...(access.timing === undefined ? {} : { timing: access.timing }),
               ...(access.supplyManagementService === undefined ? {} : { supplyManagementService: access.supplyManagementService }),
+              ...(access.accountManagementService === undefined ? {} : { accountManagementService: access.accountManagementService }),
               ...(access.operationInvokeService === undefined ? {} : { operationInvokeService: access.operationInvokeService }),
             },
           })
@@ -316,14 +319,29 @@ export function createAeMcpServer(
   return server
 }
 
+function actionCredentialAdmitted(
+  scopes: readonly string[],
+  admission: NonNullable<AnyAction['credentialAdmission']>,
+): boolean {
+  return admission.anyScopes === undefined
+    ? scopes.includes(admission.scope)
+    : admission.anyScopes.some((scope) => scopes.includes(scope))
+}
+
 type McpRequestOptions = Readonly<{
   actions?: readonly AnyAction[]
   authenticate?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['authenticate']
   resolvePrincipal?: AgentAccessPrincipalResolver
   supplyManagementService?: SupplyManagementService
+  accountManagementService?: AccountManagementService
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
 }>
+
+function mcpActionConsequenceResource(action: AnyAction): string {
+  const canonicalActionId = action.id.replace(/[A-Z]/g, (character) => `-${character.toLowerCase()}`)
+  return `surface:mcp:${canonicalActionId}`
+}
 
 export async function handleMcpRequest(request: Request, options: McpRequestOptions = {}): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
@@ -345,10 +363,12 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
     if (protectedTarget !== undefined) {
       const protectedAction = protectedTarget.action
       const requiredMode = requiredModeForAction(protectedAction)
-      const requiredScope = protectedTarget.generic ? null : protectedAction.credentialAdmission?.scope
-      const resolverRequiredScopes = protectedTarget.generic
+      const credentialAdmission = protectedTarget.generic ? undefined : protectedAction.credentialAdmission
+      const requiredAnyScopes = credentialAdmission?.anyScopes ?? []
+      const requiredScope = requiredAnyScopes.length > 0 ? null : credentialAdmission?.scope
+      const resolverRequiredScopes = protectedTarget.generic || requiredAnyScopes.length > 0
         ? []
-        : [protectedAction.credentialAdmission?.scope ?? agentAuthorityScopeForMode(requiredMode)]
+        : [credentialAdmission?.scope ?? agentAuthorityScopeForMode(requiredMode)]
       const resolvePrincipal = options.resolvePrincipal
         ?? (options.authenticate === undefined
           ? resolveAgentAccessPrincipal(boundedRequest, bounded.bodyText, correlationId)
@@ -358,9 +378,10 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
         ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
         consequenceResource: protectedTarget.generic
           ? 'surface:mcp:tools-list'
-          : `surface:mcp:${protectedAction.id}`,
+          : mcpActionConsequenceResource(protectedAction),
         ...(requiredScope === undefined ? {} : { requiredScope }),
         requiredScopes: resolverRequiredScopes,
+        requiredAnyScopes,
         requiredMode,
       })
       if (admitted.kind === 'refused') {
@@ -392,6 +413,8 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           ?? createOperationInvokeService(boundedRequest, bounded.bodyText),
         supplyManagementService: options.supplyManagementService
           ?? createSupplyManagementService(boundedRequest, bounded.bodyText),
+        accountManagementService: options.accountManagementService
+          ?? createAccountManagementService(boundedRequest, bounded.bodyText),
       })
       return withRequestCorrelationHeader(await serveMcp(server, boundedRequest), correlationId)
     }

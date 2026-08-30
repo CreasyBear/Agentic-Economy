@@ -298,6 +298,18 @@
       "binding": "canonical_agent",
       "consequential": true
     },
+    "convex/agentAccessPrincipals.ts:registerIssuedAgentBindingForServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/agentMoneyReads.ts:activity": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/agentMoneyReads.ts:balance": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
     "convex/authorityBoundary.ts:resolveAgentBinding": {
       "binding": "canonical_agent",
       "consequential": true
@@ -324,6 +336,10 @@
     },
     "convex/capabilityOperationInvocations.ts:listPendingOperationApprovals": {
       "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityOperationInvocations.ts:listInvocations": {
+      "binding": "canonical_agent",
       "consequential": true
     },
     "convex/capabilityOperationInvocations.ts:readInvocationStatus": {
@@ -368,6 +384,30 @@
     },
     "convex/capabilityProviderConnections.ts:rotateOwner": {
       "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnectionAgents.ts:connectX402": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnectionAgents.ts:list": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnectionAgents.ts:read": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnectionAgents.ts:reconnect": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnectionAgents.ts:retryCleanup": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnectionAgents.ts:revoke": {
+      "binding": "canonical_agent",
       "consequential": true
     },
     "convex/capabilitySupply.ts:inspectBindingControlState": {

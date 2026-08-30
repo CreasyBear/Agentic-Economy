@@ -12,6 +12,7 @@ import type * as actionInvocationControl from "../actionInvocationControl.js";
 import type * as agentAccessOAuth from "../agentAccessOAuth.js";
 import type * as agentAccessPolicy from "../agentAccessPolicy.js";
 import type * as agentAccessPrincipals from "../agentAccessPrincipals.js";
+import type * as agentMoneyReads from "../agentMoneyReads.js";
 import type * as authorityBoundary from "../authorityBoundary.js";
 import type * as authz from "../authz.js";
 import type * as businessSupplyProjectionSnapshot from "../businessSupplyProjectionSnapshot.js";
@@ -22,6 +23,7 @@ import type * as capabilityOperationInvocationWorker from "../capabilityOperatio
 import type * as capabilityOperationInvocations from "../capabilityOperationInvocations.js";
 import type * as capabilityOperationX402AuthorizationExpiry from "../capabilityOperationX402AuthorizationExpiry.js";
 import type * as capabilityProviderApprovals from "../capabilityProviderApprovals.js";
+import type * as capabilityProviderConnectionAgents from "../capabilityProviderConnectionAgents.js";
 import type * as capabilityProviderConnectionCleanup from "../capabilityProviderConnectionCleanup.js";
 import type * as capabilityProviderConnections from "../capabilityProviderConnections.js";
 import type * as capabilityProviderConsequenceJournal from "../capabilityProviderConsequenceJournal.js";
@@ -76,6 +78,7 @@ import type * as facilitatorDiscoveryAction from "../facilitatorDiscoveryAction.
 import type * as http from "../http.js";
 import type * as interactiveAuthority from "../interactiveAuthority.js";
 import type * as interactiveCredentialLifecycle from "../interactiveCredentialLifecycle.js";
+import type * as lib_agentMoneyReads from "../lib/agentMoneyReads.js";
 import type * as lib_authorityRegistrars from "../lib/authorityRegistrars.js";
 import type * as lib_brokeredDisputeEvidence_contracts from "../lib/brokeredDisputeEvidence/contracts.js";
 import type * as lib_brokeredDisputeEvidence_validation from "../lib/brokeredDisputeEvidence/validation.js";
@@ -91,6 +94,7 @@ import type * as lib_operationInvocations_dispatch from "../lib/operationInvocat
 import type * as lib_operationInvocations_invokeActions from "../lib/operationInvocations/invokeActions.js";
 import type * as lib_operationInvocations_reconciliation from "../lib/operationInvocations/reconciliation.js";
 import type * as lib_operationInvocations_workComplete from "../lib/operationInvocations/workComplete.js";
+import type * as lib_providerConnections_agent from "../lib/providerConnections/agent.js";
 import type * as lib_providerConnections_authority from "../lib/providerConnections/authority.js";
 import type * as lib_providerConnections_cleanup from "../lib/providerConnections/cleanup.js";
 import type * as lib_providerConnections_codecs from "../lib/providerConnections/codecs.js";
@@ -191,6 +195,7 @@ declare const fullApi: ApiFromModules<{
   agentAccessOAuth: typeof agentAccessOAuth;
   agentAccessPolicy: typeof agentAccessPolicy;
   agentAccessPrincipals: typeof agentAccessPrincipals;
+  agentMoneyReads: typeof agentMoneyReads;
   authorityBoundary: typeof authorityBoundary;
   authz: typeof authz;
   businessSupplyProjectionSnapshot: typeof businessSupplyProjectionSnapshot;
@@ -201,6 +206,7 @@ declare const fullApi: ApiFromModules<{
   capabilityOperationInvocations: typeof capabilityOperationInvocations;
   capabilityOperationX402AuthorizationExpiry: typeof capabilityOperationX402AuthorizationExpiry;
   capabilityProviderApprovals: typeof capabilityProviderApprovals;
+  capabilityProviderConnectionAgents: typeof capabilityProviderConnectionAgents;
   capabilityProviderConnectionCleanup: typeof capabilityProviderConnectionCleanup;
   capabilityProviderConnections: typeof capabilityProviderConnections;
   capabilityProviderConsequenceJournal: typeof capabilityProviderConsequenceJournal;
@@ -255,6 +261,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   interactiveAuthority: typeof interactiveAuthority;
   interactiveCredentialLifecycle: typeof interactiveCredentialLifecycle;
+  "lib/agentMoneyReads": typeof lib_agentMoneyReads;
   "lib/authorityRegistrars": typeof lib_authorityRegistrars;
   "lib/brokeredDisputeEvidence/contracts": typeof lib_brokeredDisputeEvidence_contracts;
   "lib/brokeredDisputeEvidence/validation": typeof lib_brokeredDisputeEvidence_validation;
@@ -270,6 +277,7 @@ declare const fullApi: ApiFromModules<{
   "lib/operationInvocations/invokeActions": typeof lib_operationInvocations_invokeActions;
   "lib/operationInvocations/reconciliation": typeof lib_operationInvocations_reconciliation;
   "lib/operationInvocations/workComplete": typeof lib_operationInvocations_workComplete;
+  "lib/providerConnections/agent": typeof lib_providerConnections_agent;
   "lib/providerConnections/authority": typeof lib_providerConnections_authority;
   "lib/providerConnections/cleanup": typeof lib_providerConnections_cleanup;
   "lib/providerConnections/codecs": typeof lib_providerConnections_codecs;

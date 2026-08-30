@@ -1,7 +1,30 @@
 {
   "format": "phase-2-authority-sink-runtime-tests:v2",
-  "inventorySha256": "f1746db43d9f775cb650f35e7aa375b0873575d576b09ffbc0d682ff90a4e93e",
+  "inventorySha256": "721d35369c15639964b83b8d7d894ea2cecbda917e34e7c99f46f8dbcef12288",
   "rows": {
+    "convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal": {
+      "status": "covered",
+      "surfaceRef": "convex/agentMoneyReads.ts:balance",
+      "testFile": "tests/unit/convex/agent-money-reads.test.ts",
+      "testName": "drives the %s isolation case through the registered buyer balance mutation without cross-principal disclosure",
+      "checksumScope": "named_test_case_ast",
+      "sha256": "863d22f7f33b74b9f507e214fd4e51fd1a6c477c7aae9b81a86f3e19ffa8fea3",
+      "invocation": {
+        "kind": "convex_runtime_invocation",
+        "target": "convex/agentMoneyReads.ts:balance",
+        "expression": "makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(\n  'agentMoneyReads:balance',\n)"
+      },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
+      "authorityPathSha256": "a9c6ca79cf2e09e9cc6cc5315d94f1f2eef1da9d383299eb325f2c70741db19c"
+    },
     "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal": {
       "status": "covered",
       "surfaceRef": "convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication",
@@ -23,7 +46,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "f29e98cdd681080a58f8662007d96319fb8903662d8fc202ea682c31b07e0a5e"
+      "authorityPathSha256": "8ab8932e746a9cdef40144e6e40be32626e283dc7952806cf9f7eec72f163584"
     },
     "convex/authorityBoundary.ts:resolveCanonicalAgentBinding": {
       "status": "covered",
@@ -253,7 +276,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "a6d61daa061a2898fafae3028a0bdce267dd51c700ff4b53e16a9f5f98a2b493"
+      "authorityPathSha256": "caeb3bbaacfca7b3c9d65de820d7271a568c2346db13218646866aad598cf0e6"
     },
     "convex/catalogOfferingMutations.ts:admitDevSeedCatalogAuthority": {
       "status": "covered",
@@ -368,7 +391,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "1a647fdf7a87c10c609ecfa8ae3c4500ba2b74e9f6cc21c21e6a3d404ec9f90e"
+      "authorityPathSha256": "c4167e784fce56e4a78150686e6cf56c0b2f49d430a92a392d0e867cb65c5dc7"
     },
     "convex/lib/operationInvocations/authorityHandlers.ts:reconcilePersistedInvocationAuthority": {
       "status": "covered",
@@ -391,7 +414,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "4440a502ad6a9144bcccd71f485ed556fec3f715570a6cb9f11ad848a5583117"
+      "authorityPathSha256": "7e172c7352ac92ea36c83b867749a8f62b9bc582561b4eb89e16e70cecddfe77"
     },
     "convex/lib/operationInvocations/authorityHandlers.ts:resolveCurrentAgentAuthority": {
       "status": "covered",
@@ -414,7 +437,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "42c50bc1ac6b8bc8165f1982c74217c7a8f01d1bc641750ec57e80e7ad4e4c69"
+      "authorityPathSha256": "efd7f39d30674b3fc76c43933d0ffda97f287d3e2dba826a48c456a7f9d03341"
     },
     "convex/lib/providerConnections/authority.ts:readCurrentCleanupResourceAuthority": {
       "status": "covered",
@@ -437,7 +460,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "aa1d100fe080092dfa21b97006fdc9df600881172acd775552e4630c7fe1744f"
+      "authorityPathSha256": "d07eb3e4be292295598821bfffd42e26d5443df4469f9f36a9252f3bcd4e757e"
     },
     "convex/lib/secretLifecyclePersistence.ts:requireSnapshot": {
       "status": "covered",
@@ -598,7 +621,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "d6915dc6e7787a9a52c0d947f911ea2d72156da6336c3b38c7dedc78d05bb296"
+      "authorityPathSha256": "877eb56fcc1a52187f9be62da815292b6725f586ebafdb441a582e94d6c6cc3e"
     },
     "convex/workloadCron.ts:reconcileWorkloadCronSnapshot": {
       "status": "covered",
@@ -667,7 +690,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "611178ed8b11617fa6f158addc3137959dc9b2dc376b2381f471b9990bd134a2"
+      "authorityPathSha256": "e51245acd5548b94af24e23e10bd20bf14e79b8be2efbe1d6fd7c31770d32bbf"
     }
   }
 }
