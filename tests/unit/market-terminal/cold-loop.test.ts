@@ -449,7 +449,8 @@ describe('external-agent Market Operation cold loop', () => {
       [operationRef],
       { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
-    expect(pending).toMatchObject({ kind: 'pending', invocationRef, operationRef, idempotencyKey })
+    expect(pending).toMatchObject({ kind: 'pending', invocationRef, operationRef })
+    expect(pending).not.toHaveProperty('idempotencyKey')
 
     const status = await readJsonOutput(() => runStatusCommand([invocationRef], invokeOptions))
     expect(status).toMatchObject({
@@ -466,7 +467,6 @@ describe('external-agent Market Operation cold loop', () => {
     ))
     expect(replay).toEqual({
       ...completedResult,
-      idempotencyKey,
       nextCommand: `ae status ${invocationRef}`,
     })
     expect(status.result).toEqual(completedResult)
@@ -525,8 +525,11 @@ describe('external-agent Market Operation cold loop', () => {
     } finally {
       output.restore()
     }
-    const result = JSON.parse(output.read()) as { idempotencyKey: string }
-    expect(result.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u)
+    const result = JSON.parse(output.read()) as Record<string, unknown>
+    expect(result).not.toHaveProperty('idempotencyKey')
+    const [, init] = fetchMock.mock.calls[0]!
+    const request = JSON.parse(String(init?.body)) as { idempotencyKey: string }
+    expect(request.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u)
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
@@ -552,7 +555,6 @@ describe('external-agent Market Operation cold loop', () => {
       invocationRef: string
       operationRef: string
       retryAfterMs: number
-      idempotencyKey: string
       nextCommand: string
     }
     expect(printed).toEqual({
@@ -560,9 +562,9 @@ describe('external-agent Market Operation cold loop', () => {
       invocationRef: 'invocation:current',
       operationRef: 'operation:v1:current',
       retryAfterMs: 100,
-      idempotencyKey: 'idem-stable',
       nextCommand: 'ae status invocation:current',
     })
+    expect(output.read()).not.toContain('idem-stable')
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 

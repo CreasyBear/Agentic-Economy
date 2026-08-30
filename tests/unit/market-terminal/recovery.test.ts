@@ -197,7 +197,6 @@ describe('CLI operation recovery projections', () => {
 
     expect(JSON.parse(output.read())).toEqual({
       ...completed,
-      idempotencyKey: 'idem:one',
       nextCommand: 'ae status invocation:one',
     })
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -331,8 +330,11 @@ describe('CLI operation recovery projections', () => {
     } finally {
       output.restore()
     }
-    const result = JSON.parse(output.read()) as { idempotencyKey: string }
-    expect(result.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u)
+    const result = JSON.parse(output.read()) as Record<string, unknown>
+    expect(result).not.toHaveProperty('idempotencyKey')
+    const [, init] = fetchMock.mock.calls[0]!
+    const request = JSON.parse(String(init?.body)) as { idempotencyKey: string }
+    expect(request.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u)
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
@@ -363,10 +365,39 @@ describe('CLI operation recovery projections', () => {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
     expect(init?.redirect).toBe('manual')
     expect(JSON.parse(String(init?.body))).toEqual({ idempotencyKey: 'recover:one', evidence })
-    expect(JSON.parse(output.read())).toMatchObject({
+    const rendered = output.read()
+    expect(JSON.parse(rendered)).toMatchObject({
       kind: 'found',
       invocationRef: 'invocation:one',
       result: completed,
     })
+    expect(rendered).not.toContain('recover:one')
+  })
+
+  it('never prints recovery idempotency material in human output', async () => {
+    setApiKey('ae-test-caller-key')
+    const stdout = capture(process.stdout)
+    const stderr = capture(process.stderr)
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'found',
+      invocationRef: 'invocation:one',
+      operationRef: 'operation:v1:test',
+      state: 'terminal',
+      result: completed,
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    try {
+      await runRecoverCommand(['invocation:one', JSON.stringify(evidence)], {
+        ...baseOptions,
+        json: false,
+        idempotencyKey: 'FAKE_RECOVERY_IDEMPOTENCY_SENTINEL',
+      })
+    } finally {
+      stdout.restore()
+      stderr.restore()
+    }
+
+    expect(stdout.read()).not.toContain('FAKE_RECOVERY_IDEMPOTENCY_SENTINEL')
+    expect(stderr.read()).not.toContain('FAKE_RECOVERY_IDEMPOTENCY_SENTINEL')
   })
 })

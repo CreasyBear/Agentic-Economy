@@ -79,17 +79,11 @@ function resolveIdempotencyKey(options: CliOptions): string {
 
 function invokeOutput(
   result: OperationInvokeResult | OperationInvokeStatusResult,
-  idempotencyKey: string,
 ): Record<string, unknown> {
   const invocationRef = 'invocationRef' in result ? result.invocationRef : undefined
-  const nextCommand = invocationRef === undefined
-    ? undefined
-    : result.kind === 'reconciliation_required'
-      ? `ae recover ${invocationRef} '<evidence-json>' --idempotency-key ${idempotencyKey}`
-      : statusCommandFor(invocationRef)
+  const nextCommand = invocationRef === undefined ? undefined : statusCommandFor(invocationRef)
   return {
     ...result,
-    idempotencyKey,
     ...(nextCommand === undefined ? {} : { nextCommand }),
   }
 }
@@ -208,7 +202,7 @@ export async function runInvokeCommand(
   const result = accepted.kind === 'pending' && options.wait === true
     ? await waitForOperationResult(options, operationRef, idempotencyKey, accepted)
     : accepted
-  const rendered = invokeOutput(result, idempotencyKey)
+  const rendered = invokeOutput(result)
 
   if (options.json) {
     printJson(rendered)
@@ -218,7 +212,6 @@ export async function runInvokeCommand(
   table([
     ['status', result.kind],
     ['duration', `${outcome.durationMs}ms`],
-    ['idempotency key', idempotencyKey],
     ...(rendered.nextCommand === undefined ? [] : [['next command', String(rendered.nextCommand)] as const]),
   ])
   line(JSON.stringify(rendered, undefined, 2))

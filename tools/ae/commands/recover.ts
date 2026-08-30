@@ -80,7 +80,6 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
 
   const rendered = {
     ...parsedResult.data,
-    idempotencyKey: parsedInput.data.idempotencyKey,
     nextCommand: `ae status ${parsedInput.data.invocationRef}`,
   }
   if (options.json) {
@@ -90,7 +89,6 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
   heading(`Operation recovery ${parsedInput.data.invocationRef}`)
   table([
     ['status', parsedResult.data.kind],
-    ['idempotency key', parsedInput.data.idempotencyKey],
     ['next command', rendered.nextCommand],
   ])
   line(JSON.stringify(rendered, undefined, 2))

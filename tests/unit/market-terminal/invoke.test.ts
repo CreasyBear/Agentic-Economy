@@ -99,7 +99,31 @@ describe('market-terminal authenticated operation invocation', () => {
       idempotencyKey: 'idem-cli-one',
     })
     expect(String(init?.body)).not.toMatch(/endpoint|provider|credential|payment/iu)
-    expect(write.mock.calls.flat().join('')).not.toContain('ae-test-caller-key')
+    const stdout = write.mock.calls.flat().join('')
+    expect(stdout).not.toContain('ae-test-caller-key')
+    expect(stdout).not.toContain('idem-cli-one')
+  })
+
+  it('never prints raw idempotency material in human output', async () => {
+    setApiKey('ae-test-caller-key')
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'pending',
+      invocationRef: 'invocation:one',
+      operationRef: 'operation:v1:test',
+      retryAfterMs: 100,
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    await runInvokeCommand(['operation:v1:test'], {
+      ...options,
+      json: false,
+      input: '{}',
+      idempotencyKey: 'FAKE_IDEMPOTENCY_SENTINEL',
+    })
+
+    expect(stdout.mock.calls.flat().join('')).not.toContain('FAKE_IDEMPOTENCY_SENTINEL')
+    expect(stderr.mock.calls.flat().join('')).not.toContain('FAKE_IDEMPOTENCY_SENTINEL')
   })
   it('polls a pending invocation through the authenticated status route and prints the durable terminal result', async () => {
     setApiKey('ae-test-caller-key')
