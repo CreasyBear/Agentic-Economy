@@ -23,7 +23,7 @@ export function AeAssistantInstallFunnel({
       id: 'connect',
       title: 'Connect',
       access: 'Once per device',
-      description: 'Opens browser approval, stores one origin-bound key with user-only permissions, verifies it, and configures MCP. No wallet or environment editing.',
+      description: 'Opens browser approval, stores one origin-bound key with user-only permissions, verifies it, and writes an MCP file to import into your harness. No wallet or environment editing.',
       code: `npx @agentic-economy/cli connect --base-url "${baseUrl}" --mcp`,
     },
     {

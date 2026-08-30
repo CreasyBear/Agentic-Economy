@@ -93,6 +93,7 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     guidance: [
       'Without --supplier, request buyer Operation access. With --supplier, request a separate owner-approved market_supply:manage credential.',
       'Pass --mcp to write the matching Streamable HTTP MCP connection after the credential is validated.',
+      'The MCP file must still be imported into the buyer harness and verified in a new session; --mcp cannot be combined with --supplier.',
       'Buyer and supplier credentials are stored independently for the exact server origin.',
     ],
   },

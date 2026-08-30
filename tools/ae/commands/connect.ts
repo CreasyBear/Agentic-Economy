@@ -71,6 +71,24 @@ function connectPending(details: ConnectDetails): JsonRecord {
     nextAction,
   }
 }
+
+function mcpImportHandoff(configPath: string): JsonRecord {
+  return {
+    kind: 'import_required',
+    configPath,
+    nextAction: 'Import this file into the harness, start a new agent session, then verify the AE search tool is visible.',
+    verificationTool: 'ae_registry_operations_search',
+  }
+}
+
+function connectedNextAction(supplier: boolean, mcpConfigPath?: string): string {
+  if (supplier) return 'Run ae supply status <businessId>.'
+  if (mcpConfigPath !== undefined) {
+    return 'Import the returned MCP config path into the harness, start a new agent session, and verify ae_registry_operations_search is visible.'
+  }
+  return 'Run ae search "what you need".'
+}
+
 function printConnectResult(value: JsonRecord, options: CliOptions): void {
   const apiKeyOrigin = new URL(options.baseUrl).origin
   const output = typeof value.access_token === 'string' || value.kind === 'connected'
@@ -89,9 +107,14 @@ function printConnectResult(value: JsonRecord, options: CliOptions): void {
   ])
   if (value.kind === 'connected') {
     line('Your agent is connected. The origin-bound key is stored with user-only file permissions.')
-    line(value.profile === 'supplier'
-      ? 'Next: ae supply status <businessId>.'
-      : 'Next: ae search "what you need", then ae inspect <operation> and ae call <operation> --input \'{...}\'.')
+    const mcp = isRecord(value.mcp) ? value.mcp : undefined
+    if (mcp?.kind === 'import_required' && typeof mcp.configPath === 'string') {
+      line(`MCP import file: ${mcp.configPath}`)
+      line('Import it into the harness, start a new agent session, then verify ae_registry_operations_search is visible.')
+    }
+    line(`Next: ${value.profile === 'supplier'
+      ? 'ae supply status <businessId>.'
+      : 'ae search "what you need", then ae inspect <operation> and ae call <operation> --input \'{...}\'.'}`)
   } else if (typeof value.nextAction === 'string') {
     line(value.nextAction)
   }
@@ -162,6 +185,14 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
   }
 
   const supplier = options.supplier === true
+  if (supplier && options.mcp === true) {
+    throw new CliFailure('Supplier access cannot be installed as the buyer Operation MCP connection.', {
+      kind: 'INVALID_ARGUMENT',
+      code: 'connect-profile-mcp-conflict',
+      suggestion: 'Connect the supplier CLI profile separately; use ordinary ae connect --mcp for buyer Operation tools.',
+      nextCommand: 'ae connect --supplier',
+    })
+  }
   const requestedScope = supplier
     ? MARKET_SUPPLY_MANAGE_SCOPE
     : AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope
@@ -176,15 +207,16 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
   if (configuredCredential !== undefined) {
     try {
       await validateConfiguredKey(options, supplier)
+      const mcpStoredAt = options.mcp === true
+        ? storeMcpConnection({ baseUrl: options.baseUrl, accessToken: configuredCredential.accessToken })
+        : undefined
       printConnectResult({
         kind: 'connected',
         credential: 'origin_bound_agent_key',
         profile: supplier ? 'supplier' : 'market',
         source: `validated_${configuredCredential.source}`,
-        nextAction: supplier ? 'Run ae supply status <businessId>.' : 'Run ae search "what you need".',
-        ...(options.mcp === true
-          ? { mcpConfigured: true, mcpConfigPath: storeMcpConnection({ baseUrl: options.baseUrl, accessToken: configuredCredential.accessToken }) }
-          : {}),
+        nextAction: connectedNextAction(supplier, mcpStoredAt),
+        ...(mcpStoredAt === undefined ? {} : { mcp: mcpImportHandoff(mcpStoredAt) }),
       }, options)
       return
     } catch (error) {
@@ -277,8 +309,8 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         profile: supplier ? 'supplier' : 'market',
         credentialStored: true,
         configPath: storedAt,
-        ...(mcpStoredAt === undefined ? {} : { mcpConfigured: true, mcpConfigPath: mcpStoredAt }),
-        nextAction: supplier ? 'Run ae supply status <businessId>.' : 'Run ae search "what you need".',
+        ...(mcpStoredAt === undefined ? {} : { mcp: mcpImportHandoff(mcpStoredAt) }),
+        nextAction: connectedNextAction(supplier, mcpStoredAt),
       }, options)
       return
     }

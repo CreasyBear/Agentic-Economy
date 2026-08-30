@@ -994,6 +994,42 @@ describe('external-agent Market Operation cold loop', () => {
     })
   })
 
+  it('returns an explicit MCP import and new-session verification handoff', async () => {
+    setApiKey('ae-existing-secret')
+    const output = captureStdout()
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValueOnce(responseJson({
+      kind: 'refused',
+      invocationRef: 'invocation:v1:connect-validation',
+      code: 'invocation_not_found',
+      retryable: false,
+    })))
+
+    try {
+      await runConnectCommand([], { ...options, mcp: true })
+    } finally {
+      output.restore()
+    }
+
+    expect(JSON.parse(output.read())).toMatchObject({
+      kind: 'connected',
+      nextAction: expect.stringContaining('Import the returned MCP config path'),
+      mcp: {
+        kind: 'import_required',
+        configPath: expect.stringContaining('mcp.json'),
+        nextAction: expect.stringContaining('start a new agent session'),
+        verificationTool: 'ae_registry_operations_search',
+      },
+    })
+  })
+
+  it('does not install a supplier credential as the buyer Operation MCP connection', async () => {
+    await expect(runConnectCommand([], { ...options, supplier: true, mcp: true })).rejects.toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'connect-profile-mcp-conflict',
+      nextCommand: 'ae connect --supplier',
+    } satisfies Partial<CliFailure>)
+  })
+
   it('refuses a fake configured key instead of claiming connected', async () => {
     setApiKey('fake-key')
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
