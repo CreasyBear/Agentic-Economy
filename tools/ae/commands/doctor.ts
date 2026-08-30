@@ -12,6 +12,11 @@ import {
 } from '@/modules/capability-execution/operation-history.actions'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
+  MARKET_REQUEST_ROUTE_CONTRACTS,
+  marketRequestListAction,
+  marketRequestStatusAction,
+} from '@/modules/market-demand/market-demand.actions'
+import {
   SUPPLY_ACTION_ROUTE_CONTRACTS,
   supplyConnectionListAction,
   supplyStatusAction,
@@ -19,6 +24,7 @@ import {
 
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
+import { continuationCommand } from '../lib/continuation-command'
 import { callJson, line, printJson } from '../lib/output'
 import { usageFailure } from '../lib/help'
 
@@ -33,6 +39,8 @@ type DoctorCheck = Readonly<{
   summary: string
   nextCommand?: string
 }>
+
+const MARKET_REQUEST_REENTRY_LIMIT = 5
 
 export async function runDoctorCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const businessId = args[0]?.trim()
@@ -241,9 +249,74 @@ async function checkBuyer(
       },
       await checkBalance(baseUrl, headers),
       await checkInvocation(baseUrl, headers),
+      await checkMarketRequests(baseUrl, headers),
     ]
   } catch {
     return credentialRefusedChecks('buyer')
+  }
+}
+
+async function checkMarketRequests(
+  baseUrl: string,
+  headers: Readonly<Record<string, string>>,
+): Promise<DoctorCheck> {
+  try {
+    const listOutcome = await callJson(baseUrl, MARKET_REQUEST_ROUTE_CONTRACTS.list.path, {
+      method: MARKET_REQUEST_ROUTE_CONTRACTS.list.method,
+      headers,
+      body: JSON.stringify({ limit: MARKET_REQUEST_REENTRY_LIMIT }),
+    })
+    const list = marketRequestListAction.outputSchema.safeParse(listOutcome.body)
+    if (!listOutcome.ok || !list.success || list.data.kind !== 'available') {
+      return marketRequestUnavailable('Private market request matches are unavailable.')
+    }
+    if (list.data.items.length === 0) {
+      return {
+        id: 'market_requests', state: 'pass',
+        summary: 'No private market requests need rechecking.',
+      }
+    }
+
+    const statuses = await Promise.all(list.data.items.map(async (item) => {
+      try {
+        const outcome = await callJson(baseUrl, MARKET_REQUEST_ROUTE_CONTRACTS.status.path, {
+          method: MARKET_REQUEST_ROUTE_CONTRACTS.status.method,
+          headers,
+          body: JSON.stringify({ requestRef: item.requestRef }),
+        })
+        const parsed = marketRequestStatusAction.outputSchema.safeParse(outcome.body)
+        return outcome.ok && parsed.success ? parsed.data : undefined
+      } catch {
+        return undefined
+      }
+    }))
+    const matched = statuses.filter((status) => status?.kind === 'matched')
+    const firstOperation = matched[0]?.operations[0]
+    if (firstOperation !== undefined) {
+      const checked = list.data.items.length
+      return {
+        id: 'market_requests', state: 'pass',
+        summary: `${matched.length} of ${checked} recent private market ${checked === 1 ? 'request now has' : 'requests now have'} matching Operations.`,
+        nextCommand: continuationCommand(['ae', 'inspect', firstOperation.operationRef]),
+      }
+    }
+    if (statuses.some((status) => status === undefined || status.kind === 'error' || status.kind === 'not_found')) {
+      return marketRequestUnavailable('Some recent private market requests could not be rechecked.')
+    }
+    const checked = list.data.items.length
+    return {
+      id: 'market_requests', state: 'pass',
+      summary: `No current Operation matches the ${checked} most recent private market ${checked === 1 ? 'request' : 'requests'} yet.`,
+    }
+  } catch {
+    return marketRequestUnavailable('Private market request matches could not be rechecked.')
+  }
+}
+
+function marketRequestUnavailable(summary: string): DoctorCheck {
+  return {
+    id: 'market_requests', state: 'warn', summary,
+    nextCommand: 'ae request list',
   }
 }
 
@@ -392,5 +465,6 @@ function renderDoctor(result: DoctorResult, options: CliOptions): void {
   }
   const nextCommand = result.checks.find((check) => check.state === 'fail' && check.nextCommand !== undefined)?.nextCommand
     ?? result.checks.find((check) => check.state === 'warn' && check.nextCommand !== undefined)?.nextCommand
+    ?? result.checks.find((check) => check.state === 'pass' && check.nextCommand !== undefined)?.nextCommand
   if (nextCommand !== undefined) line(`Next: ${nextCommand}`)
 }

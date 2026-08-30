@@ -94,6 +94,10 @@ describe('ae doctor', () => {
           })
           return
         }
+        if (request.url === '/api/v1/market-requests/list') {
+          respondJson(response, { kind: 'available', items: [], hasMore: false })
+          return
+        }
         respondJson(response, { error: 'unexpected' }, 404)
       })
     })
@@ -116,6 +120,7 @@ describe('ae doctor', () => {
           summary: 'A reconciliation-required invocation needs attention.',
           nextCommand: `ae status ${invocationRef}`,
         },
+        { id: 'market_requests', state: 'pass', summary: 'No private market requests need rechecking.' },
       ],
     })
     expect(observed).toEqual([
@@ -123,6 +128,7 @@ describe('ae doctor', () => {
       { method: 'GET', path: '/api/v1/account', authorization: `Bearer ${buyerSecret}` },
       { method: 'POST', path: '/api/v1/account/balance', authorization: `Bearer ${buyerSecret}`, body: '{"currency":"USD"}' },
       { method: 'GET', path: '/api/v1/operations?limit=100', authorization: `Bearer ${buyerSecret}` },
+      { method: 'POST', path: '/api/v1/market-requests/list', authorization: `Bearer ${buyerSecret}`, body: '{"limit":5}' },
     ])
 
     const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
@@ -146,6 +152,96 @@ describe('ae doctor', () => {
         nextCommand: `ae wait ${invocationRef}`,
       }]),
     })
+  })
+
+  it('resurfaces a newly matched private market request as one safe re-entry command', async () => {
+    const buyerSecret = 'FAKE_REENTRY_BUYER_SECRET_4127'
+    const savedQuery = 'translate a deeply private acquisition memo'
+    const requestRef = `market-request:v1:${'a'.repeat(64)}`
+    const operationRef = `operation:v1:${'b'.repeat(64)}`
+    const statusBodies: unknown[] = []
+    const origin = await startServer((request, response) => {
+      const chunks: Buffer[] = []
+      request.on('data', (chunk: Buffer) => chunks.push(chunk))
+      request.on('end', () => {
+        if (request.url === '/.well-known/ucp') {
+          respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
+          return
+        }
+        if (request.url === '/api/v1/account') {
+          respondJson(response, {
+            kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
+            credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
+            scopes: ['market_operations:invoke'], authorityMode: 'bounded_mandate',
+          })
+          return
+        }
+        if (request.url === '/api/v1/account/balance') {
+          respondJson(response, {
+            kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
+            balance: { currency: 'USD', units: '2500', exponent: 2 },
+            recoveryDue: { currency: 'USD', units: '0', exponent: 2 }, accountState: 'active',
+            version: 1, updatedAt: 10,
+            funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+          })
+          return
+        }
+        if (request.url === '/api/v1/operations?limit=100') {
+          respondJson(response, { kind: 'available', items: [], hasMore: false })
+          return
+        }
+        if (request.url === '/api/v1/market-requests/list') {
+          respondJson(response, {
+            kind: 'available', hasMore: false,
+            items: [{ requestRef, query: savedQuery, createdAt: 10, updatedAt: 10 }],
+          })
+          return
+        }
+        if (request.url === '/api/v1/market-requests/status') {
+          statusBodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+          respondJson(response, {
+            kind: 'matched', requestRef, query: savedQuery, createdAt: 10, matchedCount: 1,
+            operations: [{
+              operationRef, capabilityId: 'document.translate', title: 'Document translation',
+              summary: 'Translate one document.', supplier: { name: 'Reference Services', slug: 'reference' },
+              price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
+              authentication: { kind: 'ae_api_key' }, availability: { posture: 'integrated' }, navigation: [],
+            }],
+          })
+          return
+        }
+        respondJson(response, { error: 'unexpected' }, 404)
+      })
+    })
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+
+    expect(json.status).toBe(0)
+    expect(json.stderr).toBe('')
+    expect(json.stdout).not.toContain(buyerSecret)
+    expect(json.stdout).not.toContain(savedQuery)
+    expect(json.stdout).not.toContain(requestRef)
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      kind: 'ready',
+      checks: expect.arrayContaining([{
+        id: 'market_requests', state: 'pass',
+        summary: '1 of 1 recent private market request now has matching Operations.',
+        nextCommand: `ae inspect ${operationRef}`,
+      }]),
+    })
+
+    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    expect(human.status).toBe(0)
+    expect(human.stderr).toBe('')
+    expect(human.stdout).toContain('AE doctor: ready')
+    expect(human.stdout).toContain('✓ 1 of 1 recent private market request now has matching Operations.')
+    expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
+    expect(human.stdout).toContain(`Next: ae inspect ${operationRef}`)
+    expect(human.stdout).not.toContain(savedQuery)
+    expect(human.stdout).not.toContain(requestRef)
+    expect(statusBodies).toEqual([{ requestRef }, { requestRef }])
   })
 
   it('summarizes supplier Operation and connection readiness for one requested business', async () => {
@@ -183,6 +279,10 @@ describe('ae doctor', () => {
           return
         }
         if (request.url === '/api/v1/operations?limit=100') {
+          respondJson(response, { kind: 'available', items: [], hasMore: false })
+          return
+        }
+        if (request.url === '/api/v1/market-requests/list') {
           respondJson(response, { kind: 'available', items: [], hasMore: false })
           return
         }
@@ -230,6 +330,7 @@ describe('ae doctor', () => {
         { id: 'buyer', state: 'pass' },
         { id: 'balance', state: 'pass' },
         { id: 'invocation', state: 'pass' },
+        { id: 'market_requests', state: 'pass', summary: 'No private market requests need rechecking.' },
         { id: 'supplier', state: 'pass', summary: 'Supplier credential is origin-bound, authenticated, and has market_supply:manage.' },
         {
           id: 'supplier.readiness', state: 'warn',
@@ -300,6 +401,8 @@ describe('ae doctor', () => {
           })
         } else if (request.url === '/api/v1/operations?limit=100') {
           respondJson(response, { kind: 'available', items: [], hasMore: false })
+        } else if (request.url === '/api/v1/market-requests/list') {
+          respondJson(response, { kind: 'available', items: [], hasMore: false })
         } else {
           respondJson(response, { error: 'unexpected' }, 404)
         }
@@ -320,6 +423,7 @@ describe('ae doctor', () => {
         { id: 'buyer', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_operations:invoke.' },
         { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
         { id: 'invocation', state: 'pass', summary: 'No pending or reconciliation-required invocation needs attention.' },
+        { id: 'market_requests', state: 'pass', summary: 'No private market requests need rechecking.' },
       ],
     })
   })
