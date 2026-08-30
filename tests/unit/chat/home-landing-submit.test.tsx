@@ -5,7 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AGENT_DOOR, AGENT_INSTRUCTION, AGENT_SETUP_INSTRUCTION, HOME } from '@/content/brand-copy'
+import { AGENT_INSTRUCTION, AGENT_SETUP_INSTRUCTION, HOME } from '@/content/brand-copy'
 
 const routeState = vi.hoisted(() => {
   const state = {
@@ -67,8 +67,7 @@ describe('catalogue-first home', () => {
     expect(screen.queryByText(AGENT_SETUP_INSTRUCTION.code)).toBeNull()
     expect(screen.queryByText(/Claude Code/)).toBeNull()
     expect(document.querySelector('[data-slot="ae-site-browser"]')?.textContent).toContain('/llms.txt')
-    expect(screen.getAllByRole('link', { name: 'Browse tools' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('link', { name: AGENT_DOOR.cta }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: 'Browse Operations' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'List a tool' }).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: HOME.catalogHeading })).toBeTruthy()
     expect(screen.getByText(HOME.catalogEmpty)).toBeTruthy()
@@ -87,10 +86,10 @@ describe('catalogue-first home', () => {
 
     const catalog = document.querySelector('#home-catalog')
     expect(catalog).not.toBeNull()
-    const browse = screen.getAllByRole('link', { name: 'Browse tools' })
+    const browse = screen.getAllByRole('link', { name: 'Browse Operations' })
     expect(browse.some((link) => catalog?.contains(link) && link.getAttribute('href')?.startsWith('/market'))).toBe(true)
     const hero = document.querySelector('#home-hero')?.closest('section')
-    expect(browse.some((link) => hero?.contains(link))).toBe(false)
+    expect(browse.some((link) => hero?.contains(link))).toBe(true)
   })
 
   it('orders landing sections as hero, paste, catalog, close', () => {

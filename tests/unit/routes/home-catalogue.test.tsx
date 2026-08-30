@@ -61,7 +61,7 @@ describe('catalogue-first home', () => {
   it('peeks capabilities as catalog tiles instead of Operation rows', () => {
     renderResults()
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Tools in the catalog' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: 'Current Operations' })).toBeTruthy()
     const row = screen.getByRole('listitem')
     expect(
       within(row).getByRole('link', {
@@ -93,7 +93,7 @@ describe('catalogue-first home', () => {
       </RouterContextProvider>,
     )
 
-    expect(screen.getByText(/The tool catalog is temporarily unavailable/)).toBeTruthy()
+    expect(screen.getByText(/The Operation catalog is temporarily unavailable/)).toBeTruthy()
     const retry = screen.getByRole('link', { name: 'Try again' })
     expect(retry.getAttribute('href')).toBe('/')
     view.rerender(
@@ -101,9 +101,9 @@ describe('catalogue-first home', () => {
         <HomeCapabilityResults read={{ kind: 'ok', operations: [], matchedCount: 0 }} />
       </RouterContextProvider>,
     )
-    expect(screen.getByText(/No tools are ready right now/)).toBeTruthy()
+    expect(screen.getByText(/No Operations are available right now/)).toBeTruthy()
     expect(screen.queryByText('Invoice extract')).toBeNull()
-    const browse = screen.getAllByRole('link', { name: 'Browse tools' })
+    const browse = screen.getAllByRole('link', { name: 'Browse Operations' })
     expect(browse.some((link) => link.getAttribute('href')?.includes('/market'))).toBe(true)
   })
 })

@@ -22,7 +22,6 @@ import {
 } from "@/components/ae/website";
 import { ItemGroup } from "@/components/ui/item";
 import {
-  AGENT_DOOR,
   AGENT_INSTRUCTION,
   BUSINESS_DOOR,
   HOME,
@@ -35,16 +34,16 @@ type AeHomeLandingProps = Readonly<{
 }>;
 
 export function AeHomeLanding({ read }: AeHomeLandingProps) {
-  const toolCount = read.kind === "unavailable" ? 0 : read.matchedCount;
-  const toolLabel = toolCount === 1 ? "tool" : "tools";
+  const operationCount = read.kind === "unavailable" ? 0 : read.matchedCount;
+  const operationLabel = operationCount === 1 ? "Operation" : "Operations";
   const meta =
     read.kind === "unavailable"
       ? "Catalogue unavailable"
-      : `${toolCount.toLocaleString()} ${toolLabel} in the live catalog`;
+      : `${operationCount.toLocaleString()} current ${operationLabel}`;
 
   return (
     <div className="flex flex-col">
-      <HomeHero meta={meta} showMeta={read.kind === "ok" && toolCount > 0} />
+      <HomeHero meta={meta} showMeta={read.kind === "ok" && operationCount > 0} />
       <HomeCapabilityResults read={read} />
       <HomeClose />
     </div>
@@ -73,7 +72,7 @@ function HomeHero({
         </AeSiteHeadingPair>
         <div className="flex flex-wrap items-center justify-center gap-related">
           <AeSiteButton asChild>
-            <Link to="/for-agents">{AGENT_DOOR.cta}</Link>
+            <Link to="/market" search={{ window: "30d" }}>Browse Operations</Link>
           </AeSiteButton>
         </div>
       </AeSiteHeroIntro>
@@ -113,7 +112,7 @@ export function HomeCapabilityResults({
               </AeSiteHeading>
               <AeSiteButton asChild variant="outlined" className="self-start sm:self-auto">
                 <Link to="/market" search={{ window: "30d" }}>
-                  Browse tools
+                  Browse Operations
                 </Link>
               </AeSiteButton>
             </div>
@@ -137,7 +136,7 @@ export function HomeCapabilityResults({
               action={
                 <AeSiteButton asChild variant="outlined">
                   <Link to="/market" search={{ window: "30d" }}>
-                    Browse tools
+                    Browse Operations
                   </Link>
                 </AeSiteButton>
               }
@@ -170,7 +169,7 @@ function HomeClose() {
       body={HOME.closeBody}
     >
       <AeSiteButton asChild>
-        <Link to="/for-agents">{AGENT_DOOR.cta}</Link>
+        <Link to="/market" search={{ window: "30d" }}>Browse Operations</Link>
       </AeSiteButton>
       <AeSiteButton asChild variant="outlined">
         <Link to={BUSINESS_DOOR.href}>{BUSINESS_DOOR.cta}</Link>
