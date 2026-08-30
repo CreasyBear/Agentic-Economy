@@ -1,8 +1,7 @@
 import { CheckIcon, CopyIcon } from 'lucide-react'
-import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
+import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
 import { cn } from '@/lib/utils'
 
 export function AeCopyReference({
@@ -10,18 +9,9 @@ export function AeCopyReference({
   value,
   className,
 }: Readonly<{ label: string; value: string; className?: string }>) {
-  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
-  const copied = status === 'copied'
-
-  async function copyReference() {
-    try {
-      await copyTextToClipboard(value)
-      setStatus('copied')
-      window.setTimeout(() => setStatus('idle'), 1_600)
-    } catch {
-      setStatus('failed')
-    }
-  }
+  const { status, isCopied: copied, copy } = useClipboardCopy(value, {
+    timeout: 1_600,
+  })
 
   const feedback = copied ? 'Copied' : status === 'failed' ? 'Copy failed' : ''
   return (
@@ -33,7 +23,7 @@ export function AeCopyReference({
         size="icon-sm"
         className="shrink-0"
         aria-label={copied ? `${label} copied` : `Copy ${label}`}
-        onClick={() => { void copyReference() }}
+        onClick={() => { void copy() }}
       >
         {copied
           ? <CheckIcon aria-hidden="true" className="size-4" />

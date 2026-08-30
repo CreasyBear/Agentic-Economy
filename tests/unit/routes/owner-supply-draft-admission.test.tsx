@@ -285,6 +285,18 @@ describe('owner supply route in-memory admission', () => {
     })
   })
 
+  it('leaves the source blank when no admitted source can be reconstructed', () => {
+    const data = loadedData()
+    const { sourceMaterial: _sourceMaterial, ...durableOffering } = data.durableOffering
+    routeMocks.loaderData = { ...data, durableOffering }
+
+    const Component = OwnerSupplyDetailRoute.options.component
+    if (Component === undefined) throw new Error('route_component_missing')
+    render(createElement(Component))
+
+    expect(routeMocks.funnelProps).not.toHaveProperty('initialSource')
+  })
+
   it('admits with the current source instead of a stored draft digest', async () => {
     const preflight = vi.fn(async () => ({
       kind: 'prepared',

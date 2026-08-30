@@ -9,8 +9,31 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../setup/jsdom-platform'
+
+const shellMocks = vi.hoisted(() => ({
+  readAgentKeys: vi.fn(async (): Promise<unknown[]> => []),
+  readBuyerCredentialPresence: undefined as undefined | (() => Promise<boolean>),
+}))
+
+vi.mock('@tanstack/react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-start')>()),
+  useServerFn: () => shellMocks.readAgentKeys,
+}))
+vi.mock('@/components/ae/command-panel', () => ({
+  CommandPanelProvider: ({
+    children,
+    readBuyerCredentialPresence,
+  }: {
+    children: ReactElement
+    readBuyerCredentialPresence: () => Promise<boolean>
+  }) => {
+    shellMocks.readBuyerCredentialPresence = readBuyerCredentialPresence
+    return children
+  },
+  AeCommandPanel: () => null,
+}))
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeOperatorRouteStates'
@@ -20,7 +43,12 @@ import { Route as OperatorLayoutRoute } from '@/routes/_operator'
 import { Route as AgentAccessRoute } from '@/routes/_operator/agent-access'
 
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  shellMocks.readAgentKeys.mockReset()
+  shellMocks.readAgentKeys.mockResolvedValue([])
+  shellMocks.readBuyerCredentialPresence = undefined
+})
 
 describe('operator shell nested chrome', () => {
   it('replaces actions, breadcrumbs, and badges when nested route chrome changes', async () => {
@@ -144,6 +172,34 @@ describe('operator shell nested chrome', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Couldn’t load this page' })).toBeNull()
     expect(screen.getByText('Workspace unavailable')).toBeTruthy()
+  })
+
+  it('only reports active invoke-scoped buyer access to the shared command panel', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="owner"
+        title="Workspace"
+        description="Loading your latest marketplace activity."
+        currentPath="/owner/settings"
+      >
+        <div>Workspace body</div>
+      </AeOperatorShell>,
+      '/owner/settings',
+    )
+    const readPresence = shellMocks.readBuyerCredentialPresence
+    if (readPresence === undefined) throw new Error('buyer_presence_reader_missing')
+
+    shellMocks.readAgentKeys.mockResolvedValueOnce([
+      { revoked: true, expired: false, scopes: ['market_operations:invoke'] },
+      { revoked: false, expired: true, scopes: ['market_operations:invoke'] },
+      { revoked: false, expired: false, scopes: ['market_operations:read'] },
+    ])
+    await expect(readPresence()).resolves.toBe(false)
+
+    shellMocks.readAgentKeys.mockResolvedValueOnce([
+      { revoked: false, expired: false, scopes: ['market_operations:invoke'] },
+    ])
+    await expect(readPresence()).resolves.toBe(true)
   })
 })
 

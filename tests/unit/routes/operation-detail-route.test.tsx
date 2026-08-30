@@ -363,4 +363,29 @@ describe('/operations/$operationRef', () => {
       result: { kind: 'found' },
     })
   })
+
+  it('fails buyer-access lookup closed and ignores unusable keys', async () => {
+    readDetailMock.mockResolvedValue({
+      kind: 'found',
+      schemaVersion: PublicOperationRegistrySchemaVersion,
+      operation,
+    })
+    const loader = Route.options.loader as (input: { params: { operationRef: string } }) => Promise<unknown>
+
+    listAgentKeysMock.mockRejectedValueOnce(new Error('buyer access unavailable'))
+    await expect(loader({ params: { operationRef: operation.operationRef } })).resolves.toMatchObject({
+      hasBuyerCredential: false,
+      result: { kind: 'found' },
+    })
+
+    listAgentKeysMock.mockResolvedValueOnce([
+      { revoked: true, expired: false, scopes: ['market_operations:invoke'] },
+      { revoked: false, expired: true, scopes: ['market_operations:invoke'] },
+      { revoked: false, expired: false, scopes: ['market_operations:read'] },
+    ])
+    await expect(loader({ params: { operationRef: operation.operationRef } })).resolves.toMatchObject({
+      hasBuyerCredential: false,
+      result: { kind: 'found' },
+    })
+  })
 })

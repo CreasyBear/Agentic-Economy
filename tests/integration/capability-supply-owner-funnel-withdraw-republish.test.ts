@@ -235,6 +235,35 @@ describe('owner capability withdraw and republish', () => {
         authority: prepared.command.prepared.binding.authority,
       },
     })
+    const publicationBeforeIntegrityFailure = await backend.run(async (ctx) =>
+      ctx.db
+        .query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) =>
+          query
+            .eq('publicationRef', first.publicationRef)
+            .eq('revision', first.publicationRevision),
+        )
+        .unique(),
+    )
+    if (publicationBeforeIntegrityFailure === null)
+      throw new Error('owner_test_publication_missing')
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(publicationBeforeIntegrityFailure._id, {
+        sourceSelector: undefined,
+      })
+    })
+    const refusedEditorReadback = await owner.query(
+      api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel,
+      { businessId, editorOfferingRef: offeringRef },
+    )
+    if (refusedEditorReadback.kind !== 'available')
+      throw new Error(`owner_test_refused_editor_readback_kind:${refusedEditorReadback.kind}`)
+    expect(refusedEditorReadback.offerings[0]).not.toHaveProperty('sourceMaterial')
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(publicationBeforeIntegrityFailure._id, {
+        sourceSelector: publicationBeforeIntegrityFailure.sourceSelector,
+      })
+    })
     expect(firstReadback.offerings[0]).not.toHaveProperty('sourceMaterial')
     expect(
       firstReadback.offerings.find(

@@ -275,7 +275,7 @@ function OperationAccessSidecard({
           What you can do next
         </h2>
         <p className="text-sm text-muted-foreground">
-          {continuation.warning ?? continuationDescription(continuation)}
+          {continuationDescription(continuation)}
         </p>
       </div>
       {continuation.label === 'Inspect Operation' && continuation.command !== undefined ? (
@@ -297,10 +297,10 @@ function OperationAccessSidecard({
 }
 
 function continuationDescription(continuation: SuggestedContinuation): string {
+  if (continuation.warning !== undefined) return continuation.warning
   if (continuation.label === 'Connect agent') return 'Connect an agent before making this protected call.'
   if (continuation.label === 'Call Operation') return 'Your agent access is ready. Copy the exact call command.'
-  if (continuation.label === 'Inspect Operation') return 'This Operation is inspectable but not currently callable.'
-  return 'Inspect the current descriptor before choosing another Operation.'
+  return 'This Operation is inspectable but not currently callable.'
 }
 
 /**

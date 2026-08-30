@@ -57,7 +57,7 @@ async function requestedOwnerSourceMaterial(
   const result = await reconstructOwnerSourceMaterial(
     db,
     input.publication,
-    input.publication.registrationEvidenceRefs ?? [],
+    input.publication.registrationEvidenceRefs,
   )
   return result.kind === 'ready'
     ? result.prepared as NonNullable<OwnerSupplyOffering['sourceMaterial']>

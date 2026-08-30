@@ -12,6 +12,32 @@ import {
 } from './capability-supply-owner-funnel-harness'
 
 describe('owner supply funnel read', () => {
+  it('does not invent editor source material before an Operation is admitted', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await createPublishedBusinessOwner(
+      backend,
+      'owner-funnel-unadmitted-editor',
+    )
+    const offeringRef = 'catalog-offering:owner-funnel-unadmitted-editor'
+    await seedCatalogOffering(
+      backend,
+      businessId,
+      offeringRef,
+      1,
+      1,
+      'catalog-source:owner-funnel-unadmitted-editor:v1',
+    )
+
+    const readback = await owner.query(
+      api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel,
+      { businessId, editorOfferingRef: offeringRef },
+    )
+    if (readback.kind !== 'available')
+      throw new Error(`owner_funnel_unadmitted_readback:${readback.kind}`)
+    expect(readback.offerings).toHaveLength(1)
+    expect(readback.offerings[0]).not.toHaveProperty('sourceMaterial')
+  })
+
   it('does not disclose another canonical Account through a legacy owner locator', async () => {
     const backend = convexTest(schema, modules)
     const { businessId } = await createPublishedBusinessOwner(

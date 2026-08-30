@@ -1,8 +1,8 @@
 import { CheckIcon, CopyIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useCallback } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
+import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
 import { cn } from '@/lib/utils'
 
 type AeCopyCommandProps = Readonly<{
@@ -23,19 +23,13 @@ export function AeCopyCommand({
   compact = false,
   comfortable = false,
 }: AeCopyCommandProps) {
-  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
-  const copied = status === 'copied'
-
-  async function handleCopy() {
-    const resolved = copyText.replaceAll('$ORIGIN', window.location.origin)
-    try {
-      await copyTextToClipboard(resolved)
-      setStatus('copied')
-      window.setTimeout(() => setStatus('idle'), 1_600)
-    } catch {
-      setStatus('failed')
-    }
-  }
+  const resolveCopyText = useCallback(
+    () => copyText.replaceAll('$ORIGIN', window.location.origin),
+    [copyText],
+  )
+  const { status, isCopied: copied, copy } = useClipboardCopy(resolveCopyText, {
+    timeout: 1_600,
+  })
 
   return (
     <div className={cn('grid min-w-0 gap-1.5', className)}>
@@ -54,7 +48,7 @@ export function AeCopyCommand({
           size={comfortable ? 'icon' : 'icon-sm'}
           className={cn('relative shrink-0', comfortable && 'min-h-touch min-w-touch')}
           aria-label={copied ? `${label} copied` : `Copy ${label}`}
-          onClick={handleCopy}
+          onClick={() => { void copy() }}
         >
           <span className="relative size-4">
             <CopyIcon

@@ -235,6 +235,29 @@ describe('operator command panel', () => {
     )
   })
 
+  it('fails buyer-access lookup closed instead of exposing a call command', async () => {
+    const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(),
+    }))
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
+
+    renderPanel({
+      openImmediately: true,
+      readDetail,
+      readBuyerCredentialPresence: async () => {
+        throw new Error('buyer access unavailable')
+      },
+    })
+    const input = await screen.findByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+    fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
+
+    expect(await screen.findByRole('link', { name: 'Connect agent' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Copy Call command' })).toBeNull()
+  })
+
   it('shows up to five recently inspected public operation references before search', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
     const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
