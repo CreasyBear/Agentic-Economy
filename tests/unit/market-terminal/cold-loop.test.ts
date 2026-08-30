@@ -138,7 +138,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
     expect(JSON.parse(String(init?.body))).toEqual({ query: 'extract invoices' })
   })
-  it('gives empty search results a safe browse continuation in human and JSON output', async () => {
+  it('gives empty search results private demand memory plus a safe browse fallback', async () => {
     const result = projectOperationSearchChoices(operationSearchOutputSchema.parse({
       kind: 'no_candidates',
       schemaVersion: 'registry-operations:v1',
@@ -158,7 +158,8 @@ describe('external-agent Market Operation cold loop', () => {
     }
     expect(JSON.parse(jsonOutput.read())).toMatchObject({
       kind: 'no_candidates',
-      nextCommand: 'ae search',
+      nextCommand: "ae request create 'invoice extraction'",
+      browseCommand: 'ae search',
       nextHref: 'https://market.example/market',
     })
 
@@ -169,6 +170,7 @@ describe('external-agent Market Operation cold loop', () => {
       humanOutput.restore()
     }
     expect(humanOutput.read()).toContain('No current Operations match this job.')
+    expect(humanOutput.read()).toContain("Remember this missing job: ae request create 'invoice extraction'")
     expect(humanOutput.read()).toContain('Browse all: ae search')
     expect(humanOutput.read()).toContain('https://market.example/market')
   })

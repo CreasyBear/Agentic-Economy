@@ -40,6 +40,7 @@ import type { OperationInvokeService } from '@/modules/capability-execution/oper
 import { createOperationInvokeService } from '@/lib/server/operation-invoke-api'
 import { createSupplyManagementService, type SupplyManagementService } from '@/modules/capability-supply/supply-actions'
 import { createAccountManagementService, type AccountManagementService } from '@/modules/agent-access/account.actions'
+import { createMarketDemandService, type MarketDemandService } from '@/modules/market-demand/market-demand.actions'
 const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
@@ -51,6 +52,7 @@ export type McpAccessTier = Readonly<{
   operationInvokeService?: OperationInvokeService
   supplyManagementService?: SupplyManagementService
   accountManagementService?: AccountManagementService
+  marketDemandService?: MarketDemandService
 }>
 
 type AeServerHandler<T extends AnyObjectSchema> = (
@@ -290,6 +292,7 @@ export function createAeMcpServer(
               ...(access.timing === undefined ? {} : { timing: access.timing }),
               ...(access.supplyManagementService === undefined ? {} : { supplyManagementService: access.supplyManagementService }),
               ...(access.accountManagementService === undefined ? {} : { accountManagementService: access.accountManagementService }),
+              ...(access.marketDemandService === undefined ? {} : { marketDemandService: access.marketDemandService }),
               ...(access.operationInvokeService === undefined ? {} : { operationInvokeService: access.operationInvokeService }),
             },
           })
@@ -334,6 +337,7 @@ type McpRequestOptions = Readonly<{
   resolvePrincipal?: AgentAccessPrincipalResolver
   supplyManagementService?: SupplyManagementService
   accountManagementService?: AccountManagementService
+  marketDemandService?: MarketDemandService
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
 }>
@@ -415,6 +419,8 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           ?? createSupplyManagementService(boundedRequest, bounded.bodyText),
         accountManagementService: options.accountManagementService
           ?? createAccountManagementService(boundedRequest, bounded.bodyText),
+        marketDemandService: options.marketDemandService
+          ?? createMarketDemandService(boundedRequest, bounded.bodyText),
       })
       return withRequestCorrelationHeader(await serveMcp(server, boundedRequest), correlationId)
     }

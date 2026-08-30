@@ -83,6 +83,20 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
       'Exact price example for at most USD 0.50: --filters \'{"currency":"USD","maximumPrice":{"currency":"USD","units":"50","exponent":2}}\'',
     ],
   },
+  request: {
+    summary: 'Remember and revisit a private missing job after current Market Operations return no match.',
+    args: '<create|list|status>',
+    json: true,
+    guidance: [
+      'A request is private market memory for this exact credential profile, not a project, tender, supplier message, or callable Operation.',
+      'Create refuses when a current canonical Operation already matches; search and inspect that Operation instead.',
+    ],
+    commands: {
+      create: { summary: 'Record one no-result job with replay-safe identity.', args: '"<job>" [--idempotency-key <key>]', json: true },
+      list: { summary: 'List this connection’s private missing-job requests, newest first.', args: '[--limit <1-100>] [--cursor <cursor>]', json: true },
+      status: { summary: 'Check whether current canonical Operations now match one private request.', args: '<request-ref>', json: true },
+    },
+  },
   inspect: { summary: 'Read one exact current Market Operation before connecting or invoking.', args: '<operation-ref>', json: true },
   compare: { summary: 'Compare one to four exact current Operation references.', args: '<operation-ref> [<operation-ref> ...]', json: true },
   'inspect-plan': { summary: 'Inspect a bounded operation plan from one to four exact current Operation references.', args: '<operation-ref> [<operation-ref> ...]', json: true },

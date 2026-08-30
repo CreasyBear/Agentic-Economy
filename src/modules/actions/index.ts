@@ -51,6 +51,11 @@ import {
 } from '@/modules/capability-execution/operation-recovery.actions'
 import { operationInvokeAction } from '@/modules/capability-execution/operation-invoke.actions'
 import { operationListAction } from '@/modules/capability-execution/operation-history.actions'
+import {
+  marketRequestCreateAction,
+  marketRequestListAction,
+  marketRequestStatusAction,
+} from '@/modules/market-demand/market-demand.actions'
 
 const registeredActions: readonly AnyAction[] = [
   registrySearchAction,
@@ -62,6 +67,9 @@ const registeredActions: readonly AnyAction[] = [
   agentAccountSelfAction,
   agentAccountBalanceAction,
   agentAccountActivityAction,
+  marketRequestCreateAction,
+  marketRequestListAction,
+  marketRequestStatusAction,
   operationInvokeAction,
   operationListAction,
   operationStatusAction,

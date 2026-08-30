@@ -25,6 +25,7 @@ const expectedCommands = [
   "inspect-plan",
   "manifest",
   "recover",
+  "request",
   "revoke",
   "search",
   "status",

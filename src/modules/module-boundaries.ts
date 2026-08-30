@@ -27,6 +27,7 @@ export type ModuleName =
   | 'dev'
   | 'discovery'
   | 'market'
+  | 'market-demand'
   | 'model-gateway'
   | 'money'
   | 'network-guard'
@@ -93,7 +94,8 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { name: 'capability-execution', entrySurfaces: ['index.ts', 'schema.ts', 'convex.ts', 'current-operation-commitment.ts', 'invocation-receipt-view.ts', 'invocation-runtime.ts', 'provider-consequence-runtime.ts', 'operation-approval.functions.ts', 'operation-history.actions.ts', 'operation-invoke-entry.ts', 'operation-invoke-contracts.ts', 'operation-invoke.actions.ts', 'operation-invoke.ts', 'operation-recovery-contracts.ts', 'operation-recovery.actions.ts', 'operation-recovery.functions.ts'], allowedDependencies: ['common', 'network-guard', 'capability-contract', 'business', 'security', 'agent-access', 'money', 'observability', 'action-invocation', 'capability-supply', 'principal-account', 'secrets'] },
     { name: 'registry', entrySurfaces: ['public.ts', 'schema.ts', 'operation-entry.ts', 'operation-paths.ts', 'operation-action-contracts.ts', 'operation-choice-contracts.ts', 'registry.actions.ts', 'operations.actions.ts', 'registry.functions.ts', 'operation-detail-route.functions.ts'], allowedDependencies: ['common', 'capability-contract', 'business', 'catalog', 'capability-supply', 'money', 'observability'] },
     { name: 'market', entrySurfaces: ['server.ts', 'schema.ts', 'contracts.ts', 'agentic-market-source.ts', 'allocation-evidence.ts', 'home-catalogue.ts', 'listing-evidence.ts', 'market.functions.ts', 'operation-view-model.ts', 'registry-graduation.ts', 'registry-launch-cohort.ts', 'registry-source-adapters.ts', 'registry-source-contracts.ts', 'suggested-continuation.ts'], allowedDependencies: ['common', 'capability-contract', 'business', 'capability-supply', 'money', 'observability'] },
-    { name: 'actions', entrySurfaces: ['index.ts', 'contract.ts', 'strict-schema.ts', 'tool-contract.ts'], allowedDependencies: ['common', 'registry', 'capability-execution', 'capability-supply', 'agent-access', 'security'] },
+    { name: 'market-demand', entrySurfaces: ['schema.ts', 'market-demand.actions.ts'], allowedDependencies: ['common', 'agent-access', 'registry'] },
+    { name: 'actions', entrySurfaces: ['index.ts', 'contract.ts', 'strict-schema.ts', 'tool-contract.ts'], allowedDependencies: ['common', 'registry', 'capability-execution', 'capability-supply', 'agent-access', 'market-demand', 'security'] },
     { name: 'discovery', entrySurfaces: ['public.ts', 'convex.ts', 'discovery.functions.ts', 'developer-discovery.ts', 'developer-discovery-route.ts'], allowedDependencies: ['common', 'business', 'capability-contract', 'catalog', 'registry', 'capability-supply', 'capability-execution', 'agent-access', 'money', 'actions', 'market', 'observability', 'seo'] },
     { name: 'seo', entrySurfaces: ['public.ts', 'public-route.ts'], allowedDependencies: ['common', 'business', 'catalog', 'registry'] },
     { name: 'storefront', entrySurfaces: ['public.ts'], allowedDependencies: ['common', 'network-guard', 'business', 'catalog', 'registry', 'model-gateway'] },

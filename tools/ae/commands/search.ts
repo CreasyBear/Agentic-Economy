@@ -75,8 +75,8 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     'ae', 'search',
     ...(options.limit === undefined ? [] : ['--limit', options.limit]),
   ])
-  const noCandidateContinuation = result.kind === 'no_candidates' && result.query.length > 0
-    ? browseCommand
+  const requestCommand = result.kind === 'no_candidates' && result.query.length > 0
+    ? continuationCommand(['ae', 'request', 'create', result.query])
     : undefined
   const nextHref = result.kind === 'no_candidates'
     ? new URL('/market', options.baseUrl).toString()
@@ -85,7 +85,8 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     printJson({
       ...result,
       ...(nextCommand === undefined ? {} : { nextCommand }),
-      ...(noCandidateContinuation === undefined ? {} : { nextCommand: noCandidateContinuation }),
+      ...(requestCommand === undefined ? {} : { nextCommand: requestCommand }),
+      ...(result.kind === 'no_candidates' ? { browseCommand } : {}),
       ...(nextHref === undefined ? {} : { nextHref }),
     })
     return
@@ -96,7 +97,8 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     : `Market Operations for "${result.query}" (${outcome.durationMs}ms)`)
   if (result.kind === 'no_candidates') {
     line('  No current Operations match this job.')
-    if (noCandidateContinuation !== undefined) line(`  Browse all: ${noCandidateContinuation}`)
+    if (requestCommand !== undefined) line(`  Remember this missing job: ${requestCommand}`)
+    line(`  Browse all: ${browseCommand}`)
     line(`  Browser: ${nextHref}`)
     return
   }

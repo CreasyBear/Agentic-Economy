@@ -19,6 +19,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(Object.keys(commands)).toEqual([
       'manifest',
       'search',
+      'request',
       'inspect',
       'compare',
       'inspect-plan',
@@ -38,6 +39,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(Object.keys(helpBody.auth.authenticatedOperations)).toEqual([
       'call',
       'history',
+      'request',
       'status',
       'wait',
       'cancel',

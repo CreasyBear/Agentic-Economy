@@ -6,6 +6,7 @@ import { invokeCommandDescriptor } from './invoke'
 import { historyCommandDescriptor } from './history'
 import { MARKET_OPERATION_COMMAND_DESCRIPTORS } from './market-operations'
 import { SUPPLY_COMMAND_DESCRIPTORS } from './supply'
+import { MARKET_REQUEST_COMMAND_DESCRIPTORS } from './request'
 
 export type CliActionAdapterDescriptor = Readonly<{
   actionId: string
@@ -34,6 +35,13 @@ export const CLI_ACTION_ADAPTERS: readonly CliActionAdapterDescriptor[] = Object
     path: accountCommandDescriptor.path,
   },
   ...ACCOUNT_COMMAND_DESCRIPTORS.map(({ actionId, command, subcommand, method, path }) => ({
+    actionId,
+    command,
+    subcommand,
+    method,
+    path,
+  })),
+  ...MARKET_REQUEST_COMMAND_DESCRIPTORS.map(({ actionId, command, subcommand, method, path }) => ({
     actionId,
     command,
     subcommand,

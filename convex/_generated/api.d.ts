@@ -117,6 +117,7 @@ import type * as lib_secretLifecyclePersistence from "../lib/secretLifecyclePers
 import type * as lib_secretPointerPersistence from "../lib/secretPointerPersistence.js";
 import type * as lib_workloadCron_context from "../lib/workloadCron/context.js";
 import type * as marketAggregateBackfill from "../marketAggregateBackfill.js";
+import type * as marketDemandSignals from "../marketDemandSignals.js";
 import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
 import type * as marketEvidence from "../marketEvidence.js";
 import type * as marketExternalRefresh from "../marketExternalRefresh.js";
@@ -301,6 +302,7 @@ declare const fullApi: ApiFromModules<{
   "lib/secretPointerPersistence": typeof lib_secretPointerPersistence;
   "lib/workloadCron/context": typeof lib_workloadCron_context;
   marketAggregateBackfill: typeof marketAggregateBackfill;
+  marketDemandSignals: typeof marketDemandSignals;
   marketDispatchWorkpool: typeof marketDispatchWorkpool;
   marketEvidence: typeof marketEvidence;
   marketExternalRefresh: typeof marketExternalRefresh;

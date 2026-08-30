@@ -100,7 +100,10 @@ function configuredApiKeyOrigin(options: CliOptions, rawOrigin: string | undefin
 export function requireAgentAccessKey(command: string, options: CliOptions, requiredScope?: string): string {
   const credential = resolveAgentAccessCredential(options.baseUrl, requiredScope)
   if (credential === undefined) {
-    const shouldAuthorizeNow = command === 'invoke' || command === 'connect' || command.startsWith('supply ')
+    const shouldAuthorizeNow = command === 'invoke'
+      || command === 'connect'
+      || command === 'request create'
+      || command.startsWith('supply ')
     const buyerConnection = connectionContinuationForCli('buyer')
     const connect = requiredScope === MARKET_SUPPLY_MANAGE_SCOPE
       ? { label: 'Authorize supplier access for this exact origin.', command: 'ae connect --supplier' }

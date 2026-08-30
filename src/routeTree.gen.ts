@@ -53,6 +53,7 @@ import { Route as ApiV1ServicesRouteImport } from './routes/api.v1.services'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
 import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
 import { Route as ApiV1OperationsRouteImport } from './routes/api.v1.operations'
+import { Route as ApiV1MarketRequestsRouteImport } from './routes/api.v1.market-requests'
 import { Route as ApiV1MarketMetricsRouteImport } from './routes/api.v1.market-metrics'
 import { Route as ApiV1AccountRouteImport } from './routes/api.v1.account'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
@@ -83,6 +84,8 @@ import { Route as ApiV1ServicesSearchRouteImport } from './routes/api.v1.service
 import { Route as ApiV1ServicesServiceIdRouteImport } from './routes/api.v1.services.$serviceId'
 import { Route as ApiV1OperationsCallRouteImport } from './routes/api.v1.operations.call'
 import { Route as ApiV1OperationsInvocationRefRouteImport } from './routes/api.v1.operations.$invocationRef'
+import { Route as ApiV1MarketRequestsStatusRouteImport } from './routes/api.v1.market-requests.status'
+import { Route as ApiV1MarketRequestsListRouteImport } from './routes/api.v1.market-requests.list'
 import { Route as ApiV1MarketOperationsSearchRouteImport } from './routes/api.v1.market-operations.search'
 import { Route as ApiV1MarketOperationsInspectPlanRouteImport } from './routes/api.v1.market-operations.inspect-plan'
 import { Route as ApiV1MarketOperationsDetailRouteImport } from './routes/api.v1.market-operations.detail'
@@ -330,6 +333,11 @@ const ApiV1OperationsRoute = ApiV1OperationsRouteImport.update({
   path: '/api/v1/operations',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1MarketRequestsRoute = ApiV1MarketRequestsRouteImport.update({
+  id: '/api/v1/market-requests',
+  path: '/api/v1/market-requests',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1MarketMetricsRoute = ApiV1MarketMetricsRouteImport.update({
   id: '/api/v1/market-metrics',
   path: '/api/v1/market-metrics',
@@ -488,6 +496,17 @@ const ApiV1OperationsInvocationRefRoute =
     path: '/$invocationRef',
     getParentRoute: () => ApiV1OperationsRoute,
   } as any)
+const ApiV1MarketRequestsStatusRoute =
+  ApiV1MarketRequestsStatusRouteImport.update({
+    id: '/status',
+    path: '/status',
+    getParentRoute: () => ApiV1MarketRequestsRoute,
+  } as any)
+const ApiV1MarketRequestsListRoute = ApiV1MarketRequestsListRouteImport.update({
+  id: '/list',
+  path: '/list',
+  getParentRoute: () => ApiV1MarketRequestsRoute,
+} as any)
 const ApiV1MarketOperationsSearchRoute =
   ApiV1MarketOperationsSearchRouteImport.update({
     id: '/api/v1/market-operations/search',
@@ -678,6 +697,7 @@ export interface FileRoutesByFullPath {
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
+  '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/operations': typeof ApiV1OperationsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
@@ -697,6 +717,8 @@ export interface FileRoutesByFullPath {
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
+  '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
+  '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
@@ -775,6 +797,7 @@ export interface FileRoutesByTo {
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
+  '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/operations': typeof ApiV1OperationsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
@@ -794,6 +817,8 @@ export interface FileRoutesByTo {
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
+  '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
+  '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
@@ -874,6 +899,7 @@ export interface FileRoutesById {
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
+  '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/operations': typeof ApiV1OperationsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
@@ -893,6 +919,8 @@ export interface FileRoutesById {
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
+  '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
+  '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
@@ -973,6 +1001,7 @@ export interface FileRouteTypes {
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/market-metrics'
+    | '/api/v1/market-requests'
     | '/api/v1/operations'
     | '/api/v1/registry'
     | '/api/v1/release'
@@ -992,6 +1021,8 @@ export interface FileRouteTypes {
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
     | '/api/v1/market-operations/search'
+    | '/api/v1/market-requests/list'
+    | '/api/v1/market-requests/status'
     | '/api/v1/operations/$invocationRef'
     | '/api/v1/operations/call'
     | '/api/v1/services/$serviceId'
@@ -1070,6 +1101,7 @@ export interface FileRouteTypes {
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/market-metrics'
+    | '/api/v1/market-requests'
     | '/api/v1/operations'
     | '/api/v1/registry'
     | '/api/v1/release'
@@ -1089,6 +1121,8 @@ export interface FileRouteTypes {
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
     | '/api/v1/market-operations/search'
+    | '/api/v1/market-requests/list'
+    | '/api/v1/market-requests/status'
     | '/api/v1/operations/$invocationRef'
     | '/api/v1/operations/call'
     | '/api/v1/services/$serviceId'
@@ -1168,6 +1202,7 @@ export interface FileRouteTypes {
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/market-metrics'
+    | '/api/v1/market-requests'
     | '/api/v1/operations'
     | '/api/v1/registry'
     | '/api/v1/release'
@@ -1187,6 +1222,8 @@ export interface FileRouteTypes {
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
     | '/api/v1/market-operations/search'
+    | '/api/v1/market-requests/list'
+    | '/api/v1/market-requests/status'
     | '/api/v1/operations/$invocationRef'
     | '/api/v1/operations/call'
     | '/api/v1/services/$serviceId'
@@ -1251,6 +1288,7 @@ export interface RootRouteChildren {
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiV1AccountRoute: typeof ApiV1AccountRouteWithChildren
   ApiV1MarketMetricsRoute: typeof ApiV1MarketMetricsRoute
+  ApiV1MarketRequestsRoute: typeof ApiV1MarketRequestsRouteWithChildren
   ApiV1OperationsRoute: typeof ApiV1OperationsRouteWithChildren
   ApiV1RegistryRoute: typeof ApiV1RegistryRoute
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
@@ -1583,6 +1621,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1OperationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/market-requests': {
+      id: '/api/v1/market-requests'
+      path: '/api/v1/market-requests'
+      fullPath: '/api/v1/market-requests'
+      preLoaderRoute: typeof ApiV1MarketRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/market-metrics': {
       id: '/api/v1/market-metrics'
       path: '/api/v1/market-metrics'
@@ -1792,6 +1837,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/operations/$invocationRef'
       preLoaderRoute: typeof ApiV1OperationsInvocationRefRouteImport
       parentRoute: typeof ApiV1OperationsRoute
+    }
+    '/api/v1/market-requests/status': {
+      id: '/api/v1/market-requests/status'
+      path: '/status'
+      fullPath: '/api/v1/market-requests/status'
+      preLoaderRoute: typeof ApiV1MarketRequestsStatusRouteImport
+      parentRoute: typeof ApiV1MarketRequestsRoute
+    }
+    '/api/v1/market-requests/list': {
+      id: '/api/v1/market-requests/list'
+      path: '/list'
+      fullPath: '/api/v1/market-requests/list'
+      preLoaderRoute: typeof ApiV1MarketRequestsListRouteImport
+      parentRoute: typeof ApiV1MarketRequestsRoute
     }
     '/api/v1/market-operations/search': {
       id: '/api/v1/market-operations/search'
@@ -2104,6 +2163,19 @@ const ApiV1AccountRouteWithChildren = ApiV1AccountRoute._addFileChildren(
   ApiV1AccountRouteChildren,
 )
 
+interface ApiV1MarketRequestsRouteChildren {
+  ApiV1MarketRequestsListRoute: typeof ApiV1MarketRequestsListRoute
+  ApiV1MarketRequestsStatusRoute: typeof ApiV1MarketRequestsStatusRoute
+}
+
+const ApiV1MarketRequestsRouteChildren: ApiV1MarketRequestsRouteChildren = {
+  ApiV1MarketRequestsListRoute: ApiV1MarketRequestsListRoute,
+  ApiV1MarketRequestsStatusRoute: ApiV1MarketRequestsStatusRoute,
+}
+
+const ApiV1MarketRequestsRouteWithChildren =
+  ApiV1MarketRequestsRoute._addFileChildren(ApiV1MarketRequestsRouteChildren)
+
 interface ApiV1OperationsInvocationRefRouteChildren {
   ApiV1OperationsInvocationRefCancelRoute: typeof ApiV1OperationsInvocationRefCancelRoute
   ApiV1OperationsInvocationRefReconcileRoute: typeof ApiV1OperationsInvocationRefReconcileRoute
@@ -2198,6 +2270,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiV1AccountRoute: ApiV1AccountRouteWithChildren,
   ApiV1MarketMetricsRoute: ApiV1MarketMetricsRoute,
+  ApiV1MarketRequestsRoute: ApiV1MarketRequestsRouteWithChildren,
   ApiV1OperationsRoute: ApiV1OperationsRouteWithChildren,
   ApiV1RegistryRoute: ApiV1RegistryRoute,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,

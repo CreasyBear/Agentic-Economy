@@ -22,6 +22,7 @@ import { authorityDelegationTables } from '../src/modules/authority/internal/con
 import { connectionTables } from '../src/modules/connections/internal/convex-schema'
 import { secretReferenceTables } from '../src/modules/secrets/internal/convex-schema'
 import { recoveryProductionTables } from '../src/modules/authority/recovery/public'
+import { marketDemandTables } from '../src/modules/market-demand/schema'
 
 export default defineSchema({
   ...chatTables,
@@ -45,4 +46,5 @@ export default defineSchema({
   ...connectionTables,
   ...secretReferenceTables,
   ...recoveryProductionTables,
+  ...marketDemandTables,
 })

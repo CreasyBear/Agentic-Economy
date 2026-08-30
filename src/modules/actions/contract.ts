@@ -6,6 +6,7 @@ import type { OperationProjectionNavigationContract } from '@/modules/capability
 import type { SupplyManagementService } from '@/modules/capability-supply/supply-actions'
 import { operationMarketNavigation } from '@/modules/registry/operation-entry'
 import type { SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
+import type { MarketDemandService } from '@/modules/market-demand/market-demand.actions'
 
 export const CURRENT_OPERATION_PROJECTION_NAVIGATION = Object.freeze({
   market: Object.freeze({
@@ -36,5 +37,7 @@ declare module '@/modules/common/action' {
     supplyManagementService?: SupplyManagementService
     /** One injected account read service shared by authenticated HTTP, MCP, and CLI adapters. */
     accountManagementService?: AccountManagementService
+    /** Private market-demand memory shared by authenticated HTTP, MCP, and CLI adapters. */
+    marketDemandService?: MarketDemandService
   }
 }
