@@ -189,6 +189,8 @@ describe('/operations/invocations/$invocationRef', () => {
     expect(screen.getByText('Pending')).toBeTruthy()
     expect(screen.getByText('2000 ms')).toBeTruthy()
     expect(screen.queryByText('Completed')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'What can I do next?' })).toBeTruthy()
+    expect(screen.getByText(`ae status ${invocationRef}`)).toBeTruthy()
   })
 
   it('keeps reconciliation required distinct without inventing a result', () => {
@@ -202,6 +204,7 @@ describe('/operations/invocations/$invocationRef', () => {
     expect(screen.getByText('What happens automatically')).toBeTruthy()
     expect(screen.getByText('What you can do')).toBeTruthy()
     expect(screen.getByText('Reference kept')).toBeTruthy()
+    expect(screen.getByText('The external effect may have started. Reconcile before retrying.')).toBeTruthy()
   })
 
   it('submits explicit owner reconciliation evidence only when canonical binding facts exist', () => {

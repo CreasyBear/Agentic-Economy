@@ -43,6 +43,7 @@ import type {
   OperationInvokeStatusResult,
 } from '@/modules/capability-execution/operation-recovery-contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { continuationForInvocationStatus } from '@/modules/market/suggested-continuation'
 import { formatCurrencyAmount } from '@/modules/money/public'
 
 export type InvocationStatusPageResult = OperationInvokeStatusResult | Readonly<{
@@ -249,6 +250,7 @@ function StatusFound({
         <ReceiptTimeline stages={receiptView.stages} />
         {receiptView.issue === undefined ? null : <InvocationIssue issue={receiptView.issue} />}
         <InvocationRecoveryActions result={result} {...(actions === undefined ? {} : { actions })} />
+        <InvocationSuggestedContinuation result={result} />
 
         <ReceiptMoneyFacts view={receiptView} />
         {result.result === undefined ? (
@@ -266,6 +268,23 @@ function StatusFound({
         <MachineReadableReceipt view={receiptView} />
       </article>
     </AePublicPage>
+  )
+}
+
+function InvocationSuggestedContinuation({ result }: Readonly<{ result: FoundInvocationStatus }>) {
+  if (result.state === 'terminal' || result.state === 'cancelled' || result.state === 'invalidated') return null
+  const continuation = continuationForInvocationStatus({
+    invocationRef: result.invocationRef,
+    state: result.state,
+  })
+  if (continuation.command === undefined) return null
+  return (
+    <AeSection
+      title="What can I do next?"
+      description={continuation.warning ?? 'Check this exact invocation before taking another consequential action.'}
+    >
+      <AeCopyCommand compact label={continuation.label} code={continuation.command} />
+    </AeSection>
   )
 }
 
