@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
@@ -870,7 +871,7 @@ function Fact({ label, value, children }: Readonly<{ label: string; value?: stri
 }
 
 function Ref({ value }: Readonly<{ value: string }>) {
-  return <code dir="ltr" className="break-all font-mono text-xs text-foreground">{value}</code>
+  return <AeCopyReference label="reference" value={value} />
 }
 
 function canRefreshStatus(result: InvocationStatusPageResult): boolean {

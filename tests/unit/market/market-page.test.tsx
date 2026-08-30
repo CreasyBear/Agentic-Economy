@@ -175,6 +175,7 @@ describe("market page", () => {
 
     expect(screen.getByRole("status").textContent).toBe("0 shown");
     expect(screen.getByText("No tools match these filters")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Clear filters" })).toBeTruthy();
   });
 
   it("distinguishes catalogue unavailability from an empty search", () => {
@@ -191,6 +192,7 @@ describe("market page", () => {
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe("Catalogue unavailable");
     expect(screen.queryByText("No tools match these filters")).toBeNull();
+    expect(screen.getByRole("link", { name: "Try again" })).toBeTruthy();
   });
 
   it("states the page size against the catalog total and paginates browse", () => {

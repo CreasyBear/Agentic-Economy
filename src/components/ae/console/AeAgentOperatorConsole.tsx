@@ -157,6 +157,11 @@ export function AeAgentOperatorConsole({
           <AeEmptyState
             title="No agent is connected yet"
             description="Start setup from the agent and approve the request to create access you can revoke."
+            action={
+              <Button asChild className="min-h-touch">
+                <a href="/for-agents">Connect agent</a>
+              </Button>
+            }
           />
         ) : (
           <AeRecordTable

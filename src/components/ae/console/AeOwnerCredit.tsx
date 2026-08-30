@@ -173,6 +173,11 @@ export function AeOwnerCredit({
           <AeEmptyState
             title="No charges yet"
             description="Browsing does not create paid-call charges."
+            action={
+              <Button asChild className="min-h-touch">
+                <a href="/market?window=30d">Search Operations</a>
+              </Button>
+            }
           />
         ) : (
           <p className="text-sm text-muted-foreground">Some charge details are temporarily unavailable.</p>

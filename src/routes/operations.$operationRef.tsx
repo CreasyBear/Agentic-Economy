@@ -5,6 +5,7 @@ import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperationPrice } from '@/components/ae/market/AeOperationPrice'
 import { Button } from '@/components/ui/button'
@@ -379,7 +380,7 @@ function TimeFact({ label: factLabel, value }: Readonly<{ label: string; value: 
 }
 
 function Ref({ value }: Readonly<{ value: string }>) {
-  return <code dir="ltr" className="break-all font-mono text-xs text-foreground">{value}</code>
+  return <AeCopyReference label="reference" value={value} />
 }
 
 function BusinessLink({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {

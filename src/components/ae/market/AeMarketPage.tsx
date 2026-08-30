@@ -168,12 +168,22 @@ function CatalogEmpty({ unavailable }: { unavailable: boolean }) {
       icon={<SearchIcon />}
       title="The tool catalog is temporarily unavailable"
       description="Try again shortly. Existing tool links continue to work."
+      action={
+        <Button asChild className="min-h-touch">
+          <Link to="/market" search={{ window: "30d" }}>Try again</Link>
+        </Button>
+      }
     />
   ) : (
     <AeEmptyState
       icon={<SearchIcon />}
       title="No tools match these filters"
       description="Try a broader search, another category, or a different availability."
+      action={
+        <Button asChild className="min-h-touch">
+          <Link to="/market" search={{ window: "30d" }}>Clear filters</Link>
+        </Button>
+      }
     />
   );
 }
