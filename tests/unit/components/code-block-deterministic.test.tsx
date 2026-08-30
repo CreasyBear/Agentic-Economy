@@ -8,7 +8,10 @@ vi.mock('shiki', () => ({
     codeToTokens: (code: string) => ({
       bg: '#ffffff',
       fg: '#111111',
-      tokens: [[{ color: '#123456', content: code, fontStyle: 0 }]],
+      tokens: [[
+        { color: '#123456', content: code, fontStyle: 7 },
+        { color: '#654321', content: ' plain', fontStyle: 0 },
+      ]],
     }),
     getLoadedLanguages: () => ['typescript'],
   })),
@@ -24,7 +27,14 @@ describe('CodeBlock deterministic highlighting', () => {
     await waitFor(() => {
       const token = view.getByText(code)
       expect(token.style.color).toBe('rgb(18, 52, 86)')
+      expect(token.style.fontStyle).toBe('italic')
+      expect(token.style.fontWeight).toBe('bold')
+      expect(token.style.textDecoration).toBe('underline')
       expect(token.closest('pre')?.style.backgroundColor).toBe('rgb(255, 255, 255)')
+      const plainToken = view.getByText('plain', { exact: false })
+      expect(plainToken.style.fontStyle).toBe('')
+      expect(plainToken.style.fontWeight).toBe('')
+      expect(plainToken.style.textDecoration).toBe('')
     })
   })
 })
