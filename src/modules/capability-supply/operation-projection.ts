@@ -98,6 +98,7 @@ export type {
 } from "./internal/operation-inspect-plan";
 
 export {
+  noOperationNavigation,
   projectCapabilityOperation,
   projectCapabilityOperationCatalogPrice,
   projectCapabilityOperationParameters,

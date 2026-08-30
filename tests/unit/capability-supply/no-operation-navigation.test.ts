@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { noOperationNavigation } from '@/modules/capability-supply/internal/operation-project'
-import type { OperationProjectionNavigationContract } from '@/modules/capability-supply/internal/operation-projection-types'
+import {
+  noOperationNavigation,
+  type OperationProjectionNavigationContract,
+} from '@/modules/capability-supply/operation-projection'
 
 const relation = (name: 'search' | 'detail' | 'compare' | 'inspect_plan' | 'invoke') => ({
   relation: name,
