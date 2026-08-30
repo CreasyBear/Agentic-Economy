@@ -179,7 +179,7 @@ export function AeOwnerProviderConnections({
           description="Add the public HTTPS endpoint that returns the x402 payment challenge for your operation."
           action={(
             <Button asChild className="min-h-touch">
-              <a href={missingConnectionContinuation.href!}>{missingConnectionContinuation.label}</a>
+              <a href={missingConnectionContinuation.href}>{missingConnectionContinuation.label}</a>
             </Button>
           )}
         />
