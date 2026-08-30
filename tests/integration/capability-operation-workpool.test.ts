@@ -990,8 +990,8 @@ describe('capability operation Workpool lifecycle', () => {
         kind: 'completed',
         operationRef,
         output: providerOutput,
-        idempotencyKey,
       })
+      expect(completed).not.toHaveProperty('idempotencyKey')
       const status = operationInvokeStatusResultSchema.parse(await runCli(['status', completed.invocationRef]))
       expect(status).toMatchObject({
         kind: 'found',
