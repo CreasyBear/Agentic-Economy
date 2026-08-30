@@ -118,6 +118,7 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     guidance: [
       'Uses existing read-only surfaces only; it never connects, funds, retries, reconciles, or changes supplier state.',
       'Rechecks the five newest private market requests and points directly to the first current matching Operation without revealing the saved job phrase.',
+      'When recovery is clear, confirms the newest previously successful Operation is still current and offers inspection without replaying prior inputs or effects.',
       'Pass --supplier to validate separately stored supplier access; add a business ID to include Operation and provider readiness.',
     ],
   },

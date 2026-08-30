@@ -11,11 +11,13 @@ import {
   operationListResultSchema,
 } from '@/modules/capability-execution/operation-history.actions'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { operationDetailOutputSchema } from '@/modules/capability-supply/public'
 import {
   MARKET_REQUEST_ROUTE_CONTRACTS,
   marketRequestListAction,
   marketRequestStatusAction,
 } from '@/modules/market-demand/market-demand.actions'
+import { OPERATION_MARKET_DETAIL_PATH } from '@/modules/registry/operation-entry'
 import {
   SUPPLY_ACTION_ROUTE_CONTRACTS,
   supplyConnectionListAction,
@@ -38,6 +40,11 @@ type DoctorCheck = Readonly<{
   state: 'pass' | 'warn' | 'fail'
   summary: string
   nextCommand?: string
+}>
+
+type InvocationDoctorResult = Readonly<{
+  check: DoctorCheck
+  recentCompletedOperationRef?: string
 }>
 
 const MARKET_REQUEST_REENTRY_LIMIT = 5
@@ -242,14 +249,21 @@ async function checkBuyer(
         { id: 'invocation', state: 'warn', summary: 'Invocation recovery was not checked because buyer scope is missing.' },
       ]
     }
+    const balance = await checkBalance(baseUrl, headers)
+    const invocation = await checkInvocation(baseUrl, headers)
+    const marketRequests = await checkMarketRequests(baseUrl, headers)
+    const repeatUse = invocation.recentCompletedOperationRef === undefined
+      ? undefined
+      : await checkRepeatUse(baseUrl, invocation.recentCompletedOperationRef)
     return [
       {
         id: 'buyer', state: 'pass',
         summary: `Buyer credential is origin-bound, authenticated, and has ${MARKET_OPERATIONS_INVOKE_SCOPE}.`,
       },
-      await checkBalance(baseUrl, headers),
-      await checkInvocation(baseUrl, headers),
-      await checkMarketRequests(baseUrl, headers),
+      balance,
+      invocation.check,
+      marketRequests,
+      ...(repeatUse === undefined ? [] : [repeatUse]),
     ]
   } catch {
     return credentialRefusedChecks('buyer')
@@ -394,7 +408,7 @@ async function checkBalance(
 async function checkInvocation(
   baseUrl: string,
   headers: Readonly<Record<string, string>>,
-): Promise<DoctorCheck> {
+): Promise<InvocationDoctorResult> {
   try {
     const path = `${OPERATION_INVOKE_ROUTE_CONTRACT.list.path}?limit=100`
     const outcome = await callJson(baseUrl, path, {
@@ -403,23 +417,51 @@ async function checkInvocation(
     })
     const parsed = operationListResultSchema.safeParse(outcome.body)
     if (!outcome.ok || !parsed.success) {
-      return { id: 'invocation', state: 'fail', summary: 'Invocation recovery state is unavailable.', nextCommand: 'ae history' }
+      return {
+        check: { id: 'invocation', state: 'fail', summary: 'Invocation recovery state is unavailable.', nextCommand: 'ae history' },
+      }
     }
     const attention = parsed.data.items.find((item) => item.state === 'reconciliation_required' || item.state === 'pending')
     if (attention === undefined) {
-      return { id: 'invocation', state: 'pass', summary: 'No pending or reconciliation-required invocation needs attention.' }
+      const recentCompletedOperationRef = parsed.data.items.find((item) => item.state === 'completed')?.operationRef
+      return {
+        check: { id: 'invocation', state: 'pass', summary: 'No pending or reconciliation-required invocation needs attention.' },
+        ...(recentCompletedOperationRef === undefined ? {} : { recentCompletedOperationRef }),
+      }
     }
     return {
-      id: 'invocation', state: 'warn',
-      summary: attention.state === 'reconciliation_required'
-        ? 'A reconciliation-required invocation needs attention.'
-        : 'A nonterminal invocation is still pending.',
-      nextCommand: attention.state === 'reconciliation_required'
-        ? `ae status ${attention.invocationRef}`
-        : `ae wait ${attention.invocationRef}`,
+      check: {
+        id: 'invocation', state: 'warn',
+        summary: attention.state === 'reconciliation_required'
+          ? 'A reconciliation-required invocation needs attention.'
+          : 'A nonterminal invocation is still pending.',
+        nextCommand: attention.state === 'reconciliation_required'
+          ? `ae status ${attention.invocationRef}`
+          : `ae wait ${attention.invocationRef}`,
+      },
     }
   } catch {
-    return { id: 'invocation', state: 'fail', summary: 'Invocation recovery state could not be read.', nextCommand: 'ae history' }
+    return {
+      check: { id: 'invocation', state: 'fail', summary: 'Invocation recovery state could not be read.', nextCommand: 'ae history' },
+    }
+  }
+}
+
+async function checkRepeatUse(baseUrl: string, operationRef: string): Promise<DoctorCheck | undefined> {
+  try {
+    const outcome = await callJson(baseUrl, OPERATION_MARKET_DETAIL_PATH, {
+      method: 'POST',
+      body: JSON.stringify({ operationRef }),
+    })
+    const parsed = operationDetailOutputSchema.safeParse(outcome.body)
+    if (!outcome.ok || !parsed.success || parsed.data.kind !== 'found') return undefined
+    return {
+      id: 'repeat_use', state: 'pass',
+      summary: 'A previously successful Operation is still current and ready to inspect.',
+      nextCommand: continuationCommand(['ae', 'inspect', parsed.data.operation.operationRef]),
+    }
+  } catch {
+    return undefined
   }
 }
 

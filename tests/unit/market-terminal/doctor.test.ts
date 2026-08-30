@@ -159,6 +159,7 @@ describe('ae doctor', () => {
     const savedQuery = 'translate a deeply private acquisition memo'
     const requestRef = `market-request:v1:${'a'.repeat(64)}`
     const operationRef = `operation:v1:${'b'.repeat(64)}`
+    const priorOperationRef = `operation:v1:${'d'.repeat(64)}`
     const statusBodies: unknown[] = []
     const origin = await startServer((request, response) => {
       const chunks: Buffer[] = []
@@ -187,7 +188,13 @@ describe('ae doctor', () => {
           return
         }
         if (request.url === '/api/v1/operations?limit=100') {
-          respondJson(response, { kind: 'available', items: [], hasMore: false })
+          respondJson(response, {
+            kind: 'available', hasMore: false,
+            items: [{
+              invocationRef: 'invocation:v1:prior-success', operationRef: priorOperationRef,
+              state: 'completed', resultKind: 'completed', createdAt: 1, updatedAt: 2,
+            }],
+          })
           return
         }
         if (request.url === '/api/v1/market-requests/list') {
@@ -210,6 +217,12 @@ describe('ae doctor', () => {
           })
           return
         }
+        if (request.url === '/api/v1/market-operations/detail') {
+          respondJson(response, {
+            kind: 'found', schemaVersion: 'registry-operations:v1', operation: currentOperation(priorOperationRef),
+          })
+          return
+        }
         respondJson(response, { error: 'unexpected' }, 404)
       })
     })
@@ -225,11 +238,14 @@ describe('ae doctor', () => {
     expect(json.stdout).not.toContain(requestRef)
     expect(JSON.parse(json.stdout)).toMatchObject({
       kind: 'ready',
-      checks: expect.arrayContaining([{
+      checks: expect.arrayContaining([expect.objectContaining({
         id: 'market_requests', state: 'pass',
         summary: '1 of 1 recent private market request now has matching Operations.',
         nextCommand: `ae inspect ${operationRef}`,
-      }]),
+      }), expect.objectContaining({
+        id: 'repeat_use', state: 'pass',
+        nextCommand: `ae inspect ${priorOperationRef}`,
+      })]),
     })
 
     const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
@@ -242,6 +258,109 @@ describe('ae doctor', () => {
     expect(human.stdout).not.toContain(savedQuery)
     expect(human.stdout).not.toContain(requestRef)
     expect(statusBodies).toEqual([{ requestRef }, { requestRef }])
+  })
+
+  it('recalls the newest successful current Operation without replaying private invocation material', async () => {
+    const buyerSecret = 'FAKE_REPEAT_BUYER_SECRET_8182'
+    const invocationRef = 'invocation:v1:private-repeat-receipt'
+    const evidenceHash = 'sha256:private-repeat-evidence'
+    const operationRef = `operation:v1:${'c'.repeat(64)}`
+    const detailRequests: Array<{ authorization?: string; body: unknown }> = []
+    let current = true
+    const origin = await startServer((request, response) => {
+      const chunks: Buffer[] = []
+      request.on('data', (chunk: Buffer) => chunks.push(chunk))
+      request.on('end', () => {
+        if (request.url === '/.well-known/ucp') {
+          respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
+          return
+        }
+        if (request.url === '/api/v1/account') {
+          respondJson(response, {
+            kind: 'authenticated', principalRef: 'prn_buyer', accountRef: 'acc_owner',
+            credentialId: 'credential_buyer', applicationRef: 'agentic-economy', environment: 'sandbox',
+            scopes: ['market_operations:invoke'], authorityMode: 'bounded_mandate',
+          })
+          return
+        }
+        if (request.url === '/api/v1/account/balance') {
+          respondJson(response, {
+            kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
+            balance: { currency: 'USD', units: '2500', exponent: 2 },
+            recoveryDue: { currency: 'USD', units: '0', exponent: 2 }, accountState: 'active',
+            version: 1, updatedAt: 10,
+            funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+          })
+          return
+        }
+        if (request.url === '/api/v1/operations?limit=100') {
+          respondJson(response, {
+            kind: 'available', hasMore: false,
+            items: [{
+              invocationRef, operationRef, state: 'completed', resultKind: 'completed',
+              receiptRef: 'receipt:v1:private-repeat', evidenceHash, createdAt: 10, updatedAt: 20,
+            }],
+          })
+          return
+        }
+        if (request.url === '/api/v1/market-requests/list') {
+          respondJson(response, { kind: 'available', items: [], hasMore: false })
+          return
+        }
+        if (request.url === '/api/v1/market-operations/detail') {
+          detailRequests.push({
+            ...(request.headers.authorization === undefined ? {} : { authorization: request.headers.authorization }),
+            body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
+          })
+          respondJson(response, current
+            ? { kind: 'found', schemaVersion: 'registry-operations:v1', operation: currentOperation(operationRef) }
+            : { kind: 'not_found', schemaVersion: 'registry-operations:v1', operationRef, navigation: [] })
+          return
+        }
+        respondJson(response, { error: 'unexpected' }, 404)
+      })
+    })
+    const directory = makeConfigDirectory()
+    writeStoredConfig(directory, origin, buyerSecret)
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+
+    expect(json.status).toBe(0)
+    expect(json.stderr).toBe('')
+    expect(json.stdout).not.toContain(buyerSecret)
+    expect(json.stdout).not.toContain(invocationRef)
+    expect(json.stdout).not.toContain(evidenceHash)
+    expect(detailRequests).toEqual([{ body: { operationRef } }])
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      kind: 'ready',
+      checks: expect.arrayContaining([{
+        id: 'repeat_use', state: 'pass',
+        summary: 'A previously successful Operation is still current and ready to inspect.',
+        nextCommand: `ae inspect ${operationRef}`,
+      }]),
+    })
+
+    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    expect(human.status).toBe(0)
+    expect(human.stderr).toBe('')
+    expect(human.stdout).toContain('✓ A previously successful Operation is still current and ready to inspect.')
+    expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
+    expect(human.stdout).toContain(`Next: ae inspect ${operationRef}`)
+    expect(human.stdout).not.toContain(invocationRef)
+    expect(human.stdout).not.toContain(evidenceHash)
+
+    current = false
+    const retired = await spawnCli(['doctor', '--base-url', origin, '--json'], { env: cleanEnvironment(directory) })
+    expect(retired.status).toBe(0)
+    expect(JSON.parse(retired.stdout)).toMatchObject({ kind: 'ready' })
+    expect(JSON.parse(retired.stdout).checks).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'repeat_use' }),
+    ]))
+    expect(detailRequests).toEqual([
+      { body: { operationRef } },
+      { body: { operationRef } },
+      { body: { operationRef } },
+    ])
   })
 
   it('summarizes supplier Operation and connection readiness for one requested business', async () => {
@@ -524,6 +643,35 @@ function supplyConnection(connectionRef: string, available: boolean, lifecycle: 
     adapterId: 'x402:v1', grantedScopes: [], grantedResources: [], authorityGeneration: 1,
     authorityDigest: 'sha256:authority', lifecycle, available, credentialConfigured: available,
     observedAt: 10, reasonCode: available ? null : 'cleanup_failed', evidenceRefs: [], createdAt: 1, updatedAt: 10,
+  }
+}
+
+function currentOperation(operationRef: string) {
+  return {
+    operationRef,
+    callVia: '/api/v1/operations/call',
+    paymentLane: 'brokered',
+    operationId: 'reference.lookup',
+    contract: {
+      capabilityId: 'reference.lookup', version: 1,
+      inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, customerAnnotations: [],
+    },
+    business: { businessId: 'business:reference', slug: 'reference', name: 'Reference Services' },
+    offering: { offeringRef: 'offering:reference', revision: 1, label: 'Reference lookup', summary: 'Current reference lookup' },
+    summary: 'Current reference lookup',
+    commercial: {
+      price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
+      materialTerms: [], relationship: { kind: 'none', summary: 'No commercial relationship.' },
+    },
+    dataUse: [], effects: [], evidence: [], cancellation: { kind: 'unsupported' },
+    recovery: { idempotency: 'required', recovery: 'retry_safe' },
+    authentication: { kind: 'ae_api_key' },
+    transport: {
+      method: 'GET', pathTemplate: '/lookup', responseStatus: 200,
+      responseContentType: 'application/json', requestTimeoutMs: 5_000,
+    },
+    provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
+    availability: { posture: 'integrated' }, navigation: [],
   }
 }
 
