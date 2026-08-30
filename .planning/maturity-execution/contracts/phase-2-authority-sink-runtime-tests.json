@@ -1,6 +1,6 @@
 {
   "format": "phase-2-authority-sink-runtime-tests:v2",
-  "inventorySha256": "96a9bd2ec54aa3a7fe52a05c794018cb2be734666f7ef7887513203130b34050",
+  "inventorySha256": "54f08799ff75ab4a2c6f03b3a267a19b8f0b1f64694ebccbea5945ae49c89a11",
   "rows": {
     "convex/agentAccessPrincipals.ts:verifyMarketAgentPrincipal": {
       "status": "covered",
@@ -46,7 +46,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "8ab8932e746a9cdef40144e6e40be32626e283dc7952806cf9f7eec72f163584"
+      "authorityPathSha256": "99e9f1796be79eeb65a56531d50f430703e8a122791203bbafe0626573e47723"
     },
     "convex/authorityBoundary.ts:resolveCanonicalAgentBinding": {
       "status": "covered",
