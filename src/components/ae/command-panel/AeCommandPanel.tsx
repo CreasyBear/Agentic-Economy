@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { ArrowLeftIcon, SearchIcon, XIcon } from 'lucide-react'
 
@@ -25,6 +25,7 @@ export function AeCommandPanel() {
 
   const triggerRef = useRef<HTMLButtonElement>(null)
   const wasOpenRef = useRef(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     if (wasOpenRef.current && !panel.isOpen) {
@@ -66,6 +67,9 @@ export function AeCommandPanel() {
             if (panel.pageCount > 1) {
               event.preventDefault()
               panel.popPage()
+            } else if (searchQuery.trim() !== '') {
+              event.preventDefault()
+              setSearchQuery('')
             }
           }}
           onKeyDown={(event) => {
@@ -104,6 +108,8 @@ export function AeCommandPanel() {
             >
               <OperationsSearchPage
                 isActive={panel.topPage.kind === 'operations-search'}
+                query={searchQuery}
+                onQueryChange={setSearchQuery}
                 onSelectOperation={panel.pushInspect}
               />
             </div>

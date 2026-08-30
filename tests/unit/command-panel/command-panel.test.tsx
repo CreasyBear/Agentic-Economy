@@ -302,6 +302,12 @@ describe('operator command panel', () => {
     })
 
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' })
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeTruthy()
+      expect((screen.getByRole('combobox', { name: 'Search operations' }) as HTMLInputElement).value).toBe('')
+    })
+
+    fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 
     fireEvent.keyDown(window, { key: 'k', metaKey: true })

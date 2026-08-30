@@ -31,6 +31,8 @@ export const OPERATIONS_SEARCH_DEBOUNCE_MS = 200
 
 type OperationsSearchPageProps = Readonly<{
   isActive?: boolean
+  query: string
+  onQueryChange: (query: string) => void
   onSelectOperation: (operationRef: string) => void
   searchOperations?: (
     input: MarketOperationSearchInput,
@@ -44,10 +46,11 @@ type OperationsSearchPageProps = Readonly<{
  */
 export function OperationsSearchPage({
   isActive = true,
+  query,
+  onQueryChange,
   onSelectOperation,
   searchOperations = searchMarketOperations,
 }: OperationsSearchPageProps) {
-  const [query, setQuery] = useState('')
   const [state, setState] = useState<SearchState>({ kind: 'idle' })
   const recentOperationRefs = useRecentOperationRefs()
   const [selectedId, setSelectedId] = useState(0)
@@ -174,7 +177,7 @@ export function OperationsSearchPage({
             placeholder="Search operations…"
             className="ps-10"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => onQueryChange(event.target.value)}
           />
         </div>
       </div>
