@@ -1,7 +1,7 @@
 # Operation onboarding patterns: what mature systems actually prove
 
-**Evidence date:** 2026-08-30  
-**Product authority:** [`PRODUCT.md`](../../PRODUCT.md)  
+**Evidence date:** 2026-08-30
+**Product authority:** [`PRODUCT.md`](../../PRODUCT.md)
 **Scope:** Primary-source study of supplier and callable-unit onboarding, admission, permissions, readiness, canaries, idempotency, revision promotion, and revocation. This report recommends mechanisms for Agentic Economy's canonical Operation market; it does not propose a general app store, agent runtime, deployment platform, or procurement workflow.
 
 ## Decision
