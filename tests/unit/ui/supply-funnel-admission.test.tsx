@@ -100,6 +100,7 @@ describe("current supply funnel", () => {
         }),
       ).toBeDefined(),
     );
+    expect(document.getElementById("provider")).not.toBeNull();
     expect(saveOffering).toHaveBeenCalledOnce();
 
     nextStep = "readiness";
@@ -111,6 +112,7 @@ describe("current supply funnel", () => {
         }),
       ).toBeDefined(),
     );
+    expect(document.getElementById("readiness")).not.toBeNull();
     expect(preflight).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "openapi_http",

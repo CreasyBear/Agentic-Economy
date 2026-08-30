@@ -116,6 +116,7 @@ export function AeOwnerProviderConnections({
 
   return (
     <AeSection
+      id="supplier-connections"
       title="Supplier connections"
       description="Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Then open an operation and select this connection as its access authority."
     >

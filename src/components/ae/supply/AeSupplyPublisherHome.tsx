@@ -111,7 +111,7 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
         />
         {readback.activityTruncated ? <p className="text-sm text-muted-foreground">Showing the 50 most recent activity records.</p> : null}
       </AeSection>
-      <AeSection title="Earnings and payouts" description="Source-recorded supplier earnings. Setup or test calls do not create earnings.">
+      <AeSection id="earnings" title="Earnings and payouts" description="Source-recorded supplier earnings. Setup or test calls do not create earnings.">
         <OwnerEarningsCard
           earnings={earnings}
           {...(connect === undefined ? {} : { connect })}
@@ -160,6 +160,18 @@ function SupplyOfferingsTable({ offerings }: { offerings: readonly OwnerSupplyOf
         header: 'Live',
         cell: ({ row }) => (row.original.live.available ? 'Available' : 'Unavailable'),
       },
+      {
+        id: 'continuation',
+        header: 'Next action',
+        cell: ({ row }) => {
+          const continuation = supplierContinuationForOffering(row.original)
+          return (
+            <Button asChild size="sm" variant="secondary" className="min-h-touch whitespace-nowrap">
+              <a href={continuation.href}>{continuation.label}</a>
+            </Button>
+          )
+        },
+      },
     ],
     [],
   )
@@ -174,6 +186,60 @@ function SupplyOfferingsTable({ offerings }: { offerings: readonly OwnerSupplyOf
       getRowHref={(item) => `/owner/supply/${encodeURIComponent(item.offeringRef)}`}
     />
   )
+}
+
+type SupplierContinuation = Readonly<{
+  label:
+    | 'Continue description'
+    | 'Connect provider'
+    | 'Recheck readiness'
+    | 'Inspect incompatibility'
+    | 'Republish'
+    | 'View live Operation'
+    | 'Review earnings'
+  href: string
+}>
+
+function supplierContinuationForOffering(
+  offering: OwnerSupplyOfferingReadback,
+): SupplierContinuation {
+  const detailHref = `/owner/supply/${encodeURIComponent(offering.offeringRef)}`
+  const publicationState = offering.publication?.state
+  const credentialNeedsAttention =
+    offering.readiness.outcome === 'credential_unavailable'
+    || offering.readiness.outcome === 'credential_rejected'
+    || offering.actionableReason === 'credential_unavailable'
+    || offering.actionableReason === 'credential_rejected'
+    || offering.actionableReason === 'authority_stale'
+
+  if (offering.status === 'retired' || publicationState === 'superseded') {
+    return { label: 'Review earnings', href: '/owner/supply#earnings' }
+  }
+  if (publicationState === 'incompatible' || offering.lifecycle.state === 'incompatible') {
+    return { label: 'Inspect incompatibility', href: `${detailHref}#incompatibility` }
+  }
+  if (publicationState === 'withdrawn' || offering.lifecycle.state === 'withdrawn') {
+    return { label: 'Republish', href: `${detailHref}#publication-maintenance` }
+  }
+  if (offering.currentStep === 'describe') {
+    return { label: 'Continue description', href: `${detailHref}#description` }
+  }
+  if (offering.currentStep === 'admission') {
+    return { label: 'Connect provider', href: `${detailHref}#provider` }
+  }
+  if (credentialNeedsAttention) {
+    return { label: 'Connect provider', href: '/owner/supply#supplier-connections' }
+  }
+  if (offering.live.available && offering.publication?.operationRef !== undefined) {
+    return {
+      label: 'View live Operation',
+      href: `/operations/${encodeURIComponent(offering.publication.operationRef)}`,
+    }
+  }
+  if (offering.currentStep === 'readiness' || !offering.live.available) {
+    return { label: 'Recheck readiness', href: `${detailHref}#readiness` }
+  }
+  return { label: 'Review earnings', href: '/owner/supply#earnings' }
 }
 
 export function AeOwnerOperationFacts({

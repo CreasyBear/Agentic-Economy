@@ -131,31 +131,35 @@ export function AeSupplyFunnel({
         })}
       </ol>
       {currentStep === 'describe' ? (
-        <AeOwnerOfferingEditor
-          initialValue={initialOffering}
-          onSave={async (value) => {
-            const result = await callbacks.saveOffering(value)
-            if (result.kind === 'saved') {
-              setFeedback({ message: 'Operation details saved. Next, connect its API.', variant: 'default' })
-              await reload()
-            }
-            return result
-          }}
-          draftKey={businessId}
-        />
+        <div id="description" className="scroll-mt-6">
+          <AeOwnerOfferingEditor
+            initialValue={initialOffering}
+            onSave={async (value) => {
+              const result = await callbacks.saveOffering(value)
+              if (result.kind === 'saved') {
+                setFeedback({ message: 'Operation details saved. Next, connect its API.', variant: 'default' })
+                await reload()
+              }
+              return result
+            }}
+            draftKey={businessId}
+          />
+        </div>
       ) : null}
       {currentStep === 'admission' ? (
-        <AeSupplyEndpointConfigStep
-          {...(initialSource === undefined ? {} : { initialValue: initialSource })}
-          {...(initialDocumentPreflight === undefined ? {} : { initialDocumentPreflight })}
-          {...(callbacks.preflightDocument === undefined ? {} : { onPreflightDocument: callbacks.preflightDocument })}
-          {...(callbacks.saveSourceDraft === undefined ? {} : { onSaveDraft: callbacks.saveSourceDraft })}
-          onPreflight={callbacks.preflight}
-          authorityOptions={authorityOptions}
-          onSubmit={async (value) => {
-            await showCompletion(await callbacks.admit(value))
-          }}
-        />
+        <div id="provider" className="scroll-mt-6">
+          <AeSupplyEndpointConfigStep
+            {...(initialSource === undefined ? {} : { initialValue: initialSource })}
+            {...(initialDocumentPreflight === undefined ? {} : { initialDocumentPreflight })}
+            {...(callbacks.preflightDocument === undefined ? {} : { onPreflightDocument: callbacks.preflightDocument })}
+            {...(callbacks.saveSourceDraft === undefined ? {} : { onSaveDraft: callbacks.saveSourceDraft })}
+            onPreflight={callbacks.preflight}
+            authorityOptions={authorityOptions}
+            onSubmit={async (value) => {
+              await showCompletion(await callbacks.admit(value))
+            }}
+          />
+        </div>
       ) : null}
       {currentStep === 'readiness' ? (
         <ActionStep
@@ -216,7 +220,7 @@ export function AeSupplyFunnel({
 function SupplyTruthCard({ offering }: Readonly<{ offering: OwnerSupplyOfferingReadback }>) {
   const publication = offering.publication
   return (
-    <AeSection title="Operation control" description="Canonical identifiers and states from the current owner readback. Credentials are never shown here.">
+    <AeSection id="incompatibility" title="Operation control" description="Canonical identifiers and states from the current owner readback. Credentials are never shown here.">
       <AeFactList
         facts={[
           { label: 'Admission', value: offering.admission.state },
@@ -262,7 +266,7 @@ function MaintenanceActions({
     }
   }
   return (
-    <AeSection title="Publication maintenance" description="Each action rechecks the current Operation and publication revision before it changes anything.">
+    <AeSection id={publicationState === 'withdrawn' ? 'publication-maintenance' : 'readiness'} title="Publication maintenance" description="Each action rechecks the current Operation and publication revision before it changes anything.">
       <div className="flex flex-wrap gap-3">
         {publicationState === 'current' && recheck !== undefined ? <MaintenanceButton label="Recheck readiness" callback={recheck} context={context} onResult={onResult} /> : null}
         {publicationState === 'current' && withdraw !== undefined ? (

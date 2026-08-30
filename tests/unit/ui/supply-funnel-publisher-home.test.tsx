@@ -1,12 +1,110 @@
 // @vitest-environment jsdom
 
-import { renderWithRouter } from "./supply-funnel-harness";
+import { offeringAt, renderWithRouter } from "./supply-funnel-harness";
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { AeSupplyPublisherHome } from "@/components/ae/supply/AeSupplyPublisherHome";
 
 describe("current supply funnel", () => {
+  it("gives every Operation exactly one status-aware primary continuation", () => {
+    const base = offeringAt("test");
+    if (base.publication === undefined) throw new Error("test_publication_missing");
+    const operation = (
+      suffix: string,
+      patch: Partial<typeof base>,
+    ) => ({
+      ...base,
+      offeringRef: `offering:${suffix}`,
+      name: `Operation ${suffix}`,
+      ...patch,
+    });
+
+    renderWithRouter(
+      <AeSupplyPublisherHome
+        readback={{
+          kind: "available",
+          businessId: "business-1",
+          business: { name: "Provider", slug: "provider" },
+          offerings: [
+            operation("describe", {
+              ...offeringAt("describe"),
+              offeringRef: "offering:describe",
+            }),
+            operation("provider", {
+              ...offeringAt("admission"),
+              offeringRef: "offering:provider",
+            }),
+            operation("readiness", {
+              ...offeringAt("readiness"),
+              offeringRef: "offering:readiness",
+            }),
+            operation("incompatible", {
+              publication: {
+                ...base.publication,
+                state: "incompatible",
+                lifecycle: {
+                  state: "incompatible",
+                  reasons: ["incompatible_revision"],
+                },
+              },
+              lifecycle: {
+                state: "incompatible",
+                reasons: ["incompatible_revision"],
+              },
+              live: { available: false, reason: "incompatible_revision" },
+            }),
+            operation("withdrawn", {
+              status: "paused",
+              publication: {
+                ...base.publication,
+                state: "withdrawn",
+                lifecycle: {
+                  state: "withdrawn",
+                  reasons: ["withdrawn"],
+                },
+              },
+              lifecycle: { state: "withdrawn", reasons: ["withdrawn"] },
+              live: { available: false, reason: "withdrawn" },
+            }),
+            operation("live", {}),
+            operation("retired", {
+              status: "retired",
+              publication: { ...base.publication, state: "superseded" },
+              lifecycle: { state: "inactive", reasons: [] },
+              live: { available: false },
+            }),
+          ],
+          callLog: [],
+          activityTruncated: false,
+          liquidity: {
+            fillCount: 0,
+            zeroCount: 0,
+            depthSamples: 0,
+            environment: "production",
+          },
+        }}
+        earnings={{ kind: "not_found" }}
+      />,
+    );
+
+    const expected = [
+      ["Continue description", "/owner/supply/offering%3Adescribe#description"],
+      ["Connect provider", "/owner/supply/offering%3Aprovider#provider"],
+      ["Recheck readiness", "/owner/supply/offering%3Areadiness#readiness"],
+      ["Inspect incompatibility", "/owner/supply/offering%3Aincompatible#incompatibility"],
+      ["Republish", "/owner/supply/offering%3Awithdrawn#publication-maintenance"],
+      ["View live Operation", "/operations/operation%3Aone"],
+      ["Review earnings", "/owner/supply#earnings"],
+    ] as const;
+
+    for (const [label, href] of expected) {
+      const action = screen.getByRole("link", { name: label });
+      expect(action.getAttribute("href")).toBe(href);
+    }
+    expect(screen.getAllByRole("link", { name: /Continue description|Connect provider|Recheck readiness|Inspect incompatibility|Republish|View live Operation|Review earnings/ })).toHaveLength(7);
+  });
+
   it("labels non-production operational observations with their environment", () => {
     renderWithRouter(
       <AeSupplyPublisherHome

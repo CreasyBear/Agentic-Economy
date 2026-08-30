@@ -36,6 +36,7 @@ describe("current supply funnel", () => {
       />,
     );
     expect(screen.getByText("Public details")).toBeDefined();
+    expect(document.getElementById("description")).not.toBeNull();
     expect(
       screen.queryByRole("heading", { name: "Check that it works" }),
     ).toBeNull();
