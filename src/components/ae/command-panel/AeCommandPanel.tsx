@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 
-import { SearchIcon } from 'lucide-react'
+import { ArrowLeftIcon, SearchIcon, XIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
@@ -83,6 +83,19 @@ export function AeCommandPanel() {
           <SheetDescription className="sr-only">
             Search the Operation catalog, inspect one Operation, and take its next action.
           </SheetDescription>
+          <div className="flex min-h-touch items-center justify-end border-b border-border px-gutter sm:hidden">
+            {panel.pageCount > 1 ? (
+              <Button type="button" variant="ghost" size="sm" className="min-h-touch" onClick={panel.popPage}>
+                <ArrowLeftIcon aria-hidden="true" />
+                Back
+              </Button>
+            ) : (
+              <Button type="button" variant="ghost" size="sm" className="min-h-touch" onClick={panel.close}>
+                <XIcon aria-hidden="true" />
+                Close
+              </Button>
+            )}
+          </div>
           <div className="flex min-h-0 flex-1 flex-col" data-testid="command-panel-body">
             {panel.topPage.kind === 'operations-search' ? (
               <OperationsSearchPage onSelectOperation={panel.pushInspect} />

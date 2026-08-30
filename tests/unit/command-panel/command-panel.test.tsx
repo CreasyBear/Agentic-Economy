@@ -115,6 +115,30 @@ describe('operator command panel', () => {
     })
   })
 
+  it('provides touch-visible Close at the root and Back on inspection', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
+    const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(),
+    }))
+
+    renderPanel({ openImmediately: true, readDetail })
+    expect(screen.getByRole('button', { name: 'Close' }).className).toContain('min-h-touch')
+
+    const input = screen.getByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+    fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
+
+    const back = await screen.findByRole('button', { name: 'Back' })
+    expect(back.className).toContain('min-h-touch')
+    fireEvent.click(back)
+    expect(await screen.findByRole('combobox', { name: 'Search operations' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
   it('renders mocked catalog results, roles them, and pushes inspect on Enter', async () => {
     const searchCalls: Array<{ url: string; body: unknown }> = []
     vi.stubGlobal(
