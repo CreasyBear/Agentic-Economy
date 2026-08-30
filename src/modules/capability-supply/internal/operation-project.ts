@@ -57,10 +57,7 @@ export function operationNavigation(
 export function noOperationNavigation(
   navigation: OperationProjectionNavigationContract,
 ): readonly PublicOperationNavigationRelation[] {
-  return Object.freeze([
-    navigation.market.search,
-    navigation.market.detail,
-  ]);
+  return Object.freeze([navigation.market.search]);
 }
 
 export function normalizeRefs(

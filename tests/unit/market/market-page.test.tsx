@@ -123,7 +123,7 @@ describe("market page", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "2 tools for agents",
+        name: "2 current Operations",
       }),
     ).toBeTruthy();
     expect(screen.queryByRole("textbox", { name: "Search tools" })).toBeNull();
@@ -142,7 +142,7 @@ describe("market page", () => {
     );
     expect(screen.queryByText("Market activity")).toBeNull();
     expect(screen.getByRole("link", { name: "Connect your agent" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "List a tool" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Publish an Operation" })).toBeTruthy();
   });
 
   it("keeps admitted Operations separate once a capability is opened", () => {
@@ -174,7 +174,7 @@ describe("market page", () => {
     );
 
     expect(screen.getByRole("status").textContent).toBe("0 shown");
-    expect(screen.getByText("No tools match these filters")).toBeTruthy();
+    expect(screen.getByText("No Operations match these filters")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Clear filters" })).toBeTruthy();
   });
 
@@ -188,10 +188,10 @@ describe("market page", () => {
     );
 
     expect(
-      screen.getByText("The tool catalog is temporarily unavailable"),
+      screen.getByText("The Operation catalog is temporarily unavailable"),
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe("Catalogue unavailable");
-    expect(screen.queryByText("No tools match these filters")).toBeNull();
+    expect(screen.queryByText("No Operations match these filters")).toBeNull();
     expect(screen.getByRole("link", { name: "Try again" })).toBeTruthy();
   });
 
@@ -215,7 +215,7 @@ describe("market page", () => {
     );
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "136 tools for agents" }),
+      screen.getByRole("heading", { level: 1, name: "136 current Operations" }),
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("1 of 136");
     expect(screen.getByRole("link", { name: "Next 12" }).getAttribute("href")).toContain(

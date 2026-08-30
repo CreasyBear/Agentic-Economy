@@ -75,14 +75,23 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
         '--cursor', result.pagination.nextCursor,
       ])
     : undefined
+  const nextHref = result.kind === 'no_candidates'
+    ? new URL('/market', options.baseUrl).toString()
+    : undefined
   if (options.json) {
-    printJson(nextCommand === undefined ? result : { ...result, nextCommand })
+    printJson({
+      ...result,
+      ...(nextCommand === undefined ? {} : { nextCommand }),
+      ...(nextHref === undefined ? {} : { nextHref }),
+    })
     return
   }
 
   heading(`Market Operations for "${result.query}" (${outcome.durationMs}ms)`)
   if (result.kind === 'no_candidates') {
-    line('  No matching Operations.')
+    line('  No current Operations match this job.')
+    line('  Browse the current market or try a broader job description:')
+    line(`  ${nextHref}`)
     return
   }
 

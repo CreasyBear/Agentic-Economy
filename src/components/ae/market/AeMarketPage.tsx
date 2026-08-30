@@ -36,7 +36,7 @@ type MarketPageSearch = Readonly<{
 }>;
 
 const CATALOG_DESCRIPTION =
-  "Compare price and readiness, then call. Browse without a provider account.";
+  "Inspect price, access, and readiness without an account. Only available Operations can be called.";
 
 export function AeMarketPage({
   projection,
@@ -72,7 +72,7 @@ export function AeMarketPage({
   const isQuery = query !== undefined;
   const unavailable = catalog.kind === "unavailable";
   const empty = !unavailable && matchedCount === 0;
-  const toolLabel = matchedCount === 1 ? "tool" : "tools";
+  const operationLabel = matchedCount === 1 ? "Operation" : "Operations";
   const shownCount = drilledGroup?.operations.length ?? operations.length;
   const status = unavailable
     ? "Catalogue unavailable"
@@ -104,7 +104,7 @@ export function AeMarketPage({
   } else if (isQuery) {
     title = `Results for “${query}”`;
     description =
-      "Tools that match this search. Compare price and readiness, then call.";
+      "Current Operations that match this job. Inspect access and readiness before calling.";
     actions = catalogLink;
     body =
       unavailable || empty || catalog.kind !== "ok" ? (
@@ -119,13 +119,13 @@ export function AeMarketPage({
       );
   } else {
     title = unavailable
-      ? "The tool catalog"
-      : `${matchedCount.toLocaleString()} ${toolLabel} for agents`;
+      ? "The Operation catalog"
+      : `${matchedCount.toLocaleString()} current ${operationLabel}`;
     description = CATALOG_DESCRIPTION;
     actions = (
       <>
         <AeSiteButton asChild variant="outlined">
-          <Link to="/for-providers">List a tool</Link>
+          <Link to="/for-providers">Publish an Operation</Link>
         </AeSiteButton>
         <AeSiteButton asChild>
           <Link to="/for-agents">{AGENT_DOOR.cta}</Link>
@@ -166,8 +166,8 @@ function CatalogEmpty({ unavailable }: { unavailable: boolean }) {
   return unavailable ? (
     <AeEmptyState
       icon={<SearchIcon />}
-      title="The tool catalog is temporarily unavailable"
-      description="Try again shortly. Existing tool links continue to work."
+      title="The Operation catalog is temporarily unavailable"
+      description="Try again shortly. Existing Operation links continue to work."
       action={
         <Button asChild className="min-h-touch">
           <Link to="/market" search={{ window: "30d" }}>Try again</Link>
@@ -177,7 +177,7 @@ function CatalogEmpty({ unavailable }: { unavailable: boolean }) {
   ) : (
     <AeEmptyState
       icon={<SearchIcon />}
-      title="No tools match these filters"
+      title="No Operations match these filters"
       description="Try a broader search, another category, or a different availability."
       action={
         <Button asChild className="min-h-touch">

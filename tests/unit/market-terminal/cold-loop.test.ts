@@ -138,6 +138,38 @@ describe('external-agent Market Operation cold loop', () => {
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
     expect(JSON.parse(String(init?.body))).toEqual({ query: 'extract invoices' })
   })
+  it('gives empty search results a safe browse continuation in human and JSON output', async () => {
+    const result = projectOperationSearchChoices(operationSearchOutputSchema.parse({
+      kind: 'no_candidates',
+      schemaVersion: 'registry-operations:v1',
+      query: 'invoice extraction',
+      appliedFilters: {},
+      matchedCount: 0,
+      ranking: [],
+      navigation: [],
+    }))
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => responseJson(result))
+    vi.stubGlobal('fetch', fetchMock)
+    const jsonOutput = captureStdout()
+    try {
+      await runSearchCommand(['invoice extraction'], options)
+    } finally {
+      jsonOutput.restore()
+    }
+    expect(JSON.parse(jsonOutput.read())).toMatchObject({
+      kind: 'no_candidates',
+      nextHref: 'https://market.example/market',
+    })
+
+    const humanOutput = captureStdout()
+    try {
+      await runSearchCommand(['invoice extraction'], { ...options, json: false })
+    } finally {
+      humanOutput.restore()
+    }
+    expect(humanOutput.read()).toContain('No current Operations match this job.')
+    expect(humanOutput.read()).toContain('https://market.example/market')
+  })
   it('rejects a malformed successful search body with a safe CLI error', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'ok',
