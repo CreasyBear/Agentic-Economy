@@ -195,6 +195,7 @@ Flags:
   --filters '<json>' canonical search filters (search only)
   --technical        human compare output with operation identity and evidence metadata
   --supplier         connect a separate owner-approved supplier credential
+  --mcp              write the matching MCP connection after connect validates the credential
   --idempotency-key <key>  optional stable retry identity; call generates one when omitted
   --wait             bounded call wait; timeout returns durable recovery detail
   --help

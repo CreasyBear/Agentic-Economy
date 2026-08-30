@@ -80,10 +80,11 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
   'inspect-plan': { summary: 'Inspect a bounded operation plan from one to four exact current Operation references.', args: '<operation-ref> [<operation-ref> ...]', json: true },
   connect: {
     summary: 'Register a public device client or validate one separately stored AE credential profile.',
-    args: '[--supplier]',
+    args: '[--mcp] [--supplier]',
     json: true,
     guidance: [
       'Without --supplier, request buyer Operation access. With --supplier, request a separate owner-approved market_supply:manage credential.',
+      'Pass --mcp to write the matching Streamable HTTP MCP connection after the credential is validated.',
       'Buyer and supplier credentials are stored independently for the exact server origin.',
     ],
   },

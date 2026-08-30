@@ -247,7 +247,7 @@ describe('market-terminal CLI error contracts', () => {
       expect(envelope.flags).toHaveProperty('--cursor')
       expect(envelope.flags).toHaveProperty('--filters')
       if (command === 'connect') {
-        expect(envelope.usage).toBe('ae connect [--supplier]')
+        expect(envelope.usage).toBe('ae connect [--mcp] [--supplier]')
         expect(envelope.flags).toHaveProperty('--supplier')
         expect(envelope.auth.guidance).toEqual(expect.arrayContaining([
           expect.stringContaining('verification URI'),
