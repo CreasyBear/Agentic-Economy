@@ -48,15 +48,19 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
     setState({ kind: 'loading' })
     let current = true
     void (async () => {
-      const [result, hasBuyerCredential] = await Promise.all([
-        readDetail(operationRef),
-        readBuyerCredentialPresence().catch(() => false),
-      ])
-      if (!current) return
-      if (result.kind === 'found') {
-        rememberRecentOperationRef(result.operation.operationRef)
-        setState({ kind: 'found', operation: result.operation, hasBuyerCredential })
-      } else setState({ kind: 'unavailable', operationRef })
+      try {
+        const [result, hasBuyerCredential] = await Promise.all([
+          readDetail(operationRef),
+          readBuyerCredentialPresence().catch(() => false),
+        ])
+        if (!current) return
+        if (result.kind === 'found') {
+          rememberRecentOperationRef(result.operation.operationRef)
+          setState({ kind: 'found', operation: result.operation, hasBuyerCredential })
+        } else setState({ kind: 'unavailable', operationRef })
+      } catch {
+        if (current) setState({ kind: 'unavailable', operationRef })
+      }
     })()
     return () => {
       current = false
@@ -110,14 +114,15 @@ function FoundBody({
 }>) {
   const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
   const callable = operation.availability.posture === 'routeable' && invokeNavigation !== undefined
+  const availabilityPosture = operation.availability.posture === 'routeable' && !callable
+    ? 'integrated'
+    : operation.availability.posture
   const inputExample = operation.contract.inputExamples?.[0]
   // Every command copied here targets the authenticated brokered CLI rail.
   const requiresBuyerCredential = invokeNavigation !== undefined
   const continuation = continuationForOperationFacts({
     operationRef: operation.operationRef,
-    availabilityPosture: operation.availability.posture === 'routeable' && !callable
-      ? 'integrated'
-      : operation.availability.posture,
+    availabilityPosture,
     requiresBuyerCredential,
     hasBuyerCredential,
   })
@@ -143,7 +148,7 @@ function FoundBody({
           <Fact
             label="Readiness"
             value={operationReadinessForBuyer({
-              availabilityPosture: operation.availability.posture,
+              availabilityPosture,
               requiresBuyerCredential,
               hasBuyerCredential,
             })}

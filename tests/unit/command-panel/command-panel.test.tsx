@@ -305,6 +305,44 @@ describe('operator command panel', () => {
     expect(action.getAttribute('href')).toBe('/market?window=30d#operations')
   })
 
+  it('turns a rejected detail read into the same actionable unavailable state', async () => {
+    const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => {
+      throw new Error('network unavailable')
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = await screen.findByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+    fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
+
+    expect(await screen.findByText('Operation unavailable')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Browse current Operations' })).toBeTruthy()
+    expect(screen.queryByText('Loading operation…')).toBeNull()
+  })
+
+  it('does not label an invoke-less routeable descriptor ready', async () => {
+    const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: {
+        ...detailFixture(),
+        availability: { posture: 'routeable' },
+        navigation: [],
+      },
+    }))
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = await screen.findByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+    fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
+
+    expect(await screen.findByText('Integration available')).toBeTruthy()
+    expect(screen.queryByText('Ready now')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Inspect Operation' })).toBeTruthy()
+  })
+
   it('pops one inspect layer per Escape before closing, then survives ⌘K flicker', async () => {
     vi.stubGlobal(
       'fetch',
