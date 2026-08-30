@@ -22,6 +22,10 @@ describe("supply landing", () => {
     expect(screen.getByText(/one callable job an agent can search/i)).toBeDefined();
     expect(screen.getByText(/OpenAPI 3\.1 GET or POST/i)).toBeDefined();
     expect(screen.getByText(/Never paste a raw key/i)).toBeDefined();
+    expect(screen.getByText(/method plus path for OpenAPI/i)).toBeDefined();
+    expect(screen.getByText(/USD 0\.50 is units 50, exponent 2/i)).toBeDefined();
+    expect(screen.getByText(/Readiness tests may reach the configured upstream/i)).toBeDefined();
+    expect(screen.getByText(/only creates credentialless x402 connections/i)).toBeDefined();
     expect(screen.getByRole("link", { name: "Read the supplier agent path" }).getAttribute("href")).toBe("/SKILL.md#supplier-path");
     expect(screen.getByRole("heading", { name: "What agents can inspect" })).toBeDefined();
     expect(screen.getByText("Quote API")).toBeDefined();
@@ -35,6 +39,6 @@ describe("supply landing", () => {
 
   it("renders the honest empty state", () => {
     renderWithRouter(<AeSupplyLanding tools={[]} services={[]} />);
-    expect(screen.getByText("No tools are listed yet.")).toBeDefined();
+    expect(screen.getByText("No supplier profiles are published yet.")).toBeDefined();
   });
 });

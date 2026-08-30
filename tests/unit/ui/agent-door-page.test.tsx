@@ -30,7 +30,7 @@ describe('agent door page', () => {
     expect(screen.queryByRole('heading', { name: AGENT_INSTRUCTION.heading })).toBeNull()
     expect(screen.queryByText(AGENT_INSTRUCTION.code)).toBeNull()
     expect(screen.getByRole('button', { name: `Copy ${AGENT_SETUP_INSTRUCTION.label}` })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'List a tool' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Publish an Operation' })).toBeTruthy()
     expect(document.querySelector('[data-slot="ae-site-browser"]')).toBeNull()
   })
 })

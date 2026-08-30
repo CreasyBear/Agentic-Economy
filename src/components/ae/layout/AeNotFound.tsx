@@ -14,7 +14,7 @@ export function AeNotFound() {
             <a href="/market?window=30d">Browse tools</a>
           </AeSiteButton>
           <AeSiteButton asChild variant="outlined">
-            <a href="/for-providers">List a tool</a>
+            <a href="/for-providers">Publish an Operation</a>
           </AeSiteButton>
         </>
       }

@@ -58,7 +58,7 @@ export const publicFooterColumns: readonly PublicFooterColumn[] = [
   {
     title: 'Suppliers',
     links: [
-      { label: 'List a tool', to: '/for-providers' },
+      { label: 'Publish an Operation', to: '/for-providers' },
       { label: 'Browse listed tools', to: '/market', search: { window: '30d' } },
     ],
   },

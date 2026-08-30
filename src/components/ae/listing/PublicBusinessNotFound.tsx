@@ -17,7 +17,7 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
         description="This supplier is not published in the catalogue right now."
         action={
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button asChild variant="default" className="min-h-touch"><Link to="/for-providers">List a tool</Link></Button>
+            <Button asChild variant="default" className="min-h-touch"><Link to="/for-providers">Publish an Operation</Link></Button>
             <Button asChild variant="secondary" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
           </div>
         }
@@ -32,7 +32,7 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
       action={
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button asChild variant="default" className="min-h-touch"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse catalog</Link></Button>
-          <Button asChild variant="secondary" className="min-h-touch"><Link to="/for-providers">List a tool</Link></Button>
+          <Button asChild variant="secondary" className="min-h-touch"><Link to="/for-providers">Publish an Operation</Link></Button>
         </div>
       }
     />

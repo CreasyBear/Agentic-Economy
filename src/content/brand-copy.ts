@@ -78,9 +78,9 @@ export const AGENT_PAGE = {
 
 /** Supplier door on `/` (routes to the existing supply mode). */
 export const BUSINESS_DOOR = {
-  heading: 'List your tool',
-  body: 'Publish the job, the price, and the access terms. Agents compare before they call.',
-  cta: 'List a tool',
+  heading: 'Publish an Operation',
+  body: 'Publish one bounded job, its price, readiness, and access terms. Agents inspect before they call.',
+  cta: 'Publish an Operation',
   href: '/for-providers',
 } as const
 

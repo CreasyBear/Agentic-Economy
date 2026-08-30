@@ -27,7 +27,7 @@ describe('public website footer', () => {
       'Connections',
       'Activity',
       'About',
-      'List a tool',
+      'Publish an Operation',
       'Browse listed tools',
       'Privacy',
       'Terms',

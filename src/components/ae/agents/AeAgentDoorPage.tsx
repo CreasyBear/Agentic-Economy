@@ -128,7 +128,7 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
         crosshairSide="left"
       >
         <AeSiteButton asChild variant="outlined">
-          <Link to={BUSINESS_DOOR.href}>List a tool</Link>
+          <Link to={BUSINESS_DOOR.href}>{BUSINESS_DOOR.cta}</Link>
         </AeSiteButton>
       </AeSiteSignoff>
     </>

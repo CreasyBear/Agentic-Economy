@@ -27,9 +27,9 @@ const SUPPLY_STEPS = [
 ] as const
 
 const SUPPLY_PREP = [
-  'The current source document or endpoint and the exact operation or tool selector.',
+  'The exact selector: method plus path for OpenAPI, tool name for MCP, server plus tool name for Agent Plugin MCP, or resourceUrl for x402.',
   'The input and output schema, plus a safe example input for the readiness test.',
-  'Price, material terms, data use, side effects, and the evidence returned after delivery.',
+  'Price as ISO currency plus integer units and decimal exponent (USD 0.50 is units 50, exponent 2), material terms, data use, side effects, and completion evidence.',
   'An existing owner-controlled provider connection if the upstream requires credentials. Never paste a raw key into the Operation form.',
 ] as const
 
@@ -93,6 +93,9 @@ export function AeSupplyLanding({
           <ul className="m-0 grid gap-intra pl-5 text-sm text-muted-foreground">
             {SUPPLY_PREP.map((item) => <li key={item}>{item}</li>)}
           </ul>
+          <p className="text-sm text-muted-foreground">
+            Readiness tests may reach the configured upstream. Use an example that is safe to execute there and assume it may consume provider quota or cost. The public supplier flow only creates credentialless x402 connections; do not assume a keyed source fits unless authenticated setup offers a compatible existing connection.
+          </p>
           <p className="text-sm text-muted-foreground">
             Creating the supplier account and business is an owner step. After that, an owner can approve a separate agent credential for maintenance. <Link to="/SKILL.md" hash="supplier-path" className="font-medium text-foreground underline underline-offset-4">Read the supplier agent path</Link>.
           </p>

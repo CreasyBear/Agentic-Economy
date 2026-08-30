@@ -18,13 +18,13 @@ export function AeSupplyAgentProof({
   return (
     <AeSection
       title="What agents can inspect"
-      description="This is the public evidence agents use to compare."
+      description="Supplier profiles are business metadata. AE interface actions help agents inspect them; neither becomes callable supply until an Operation is admitted and published."
     >
       <div className="grid gap-8">
         <div className="grid gap-3">
-          <h3 className="text-sm font-medium text-foreground">Listed in the catalog</h3>
+          <h3 className="text-sm font-medium text-foreground">Published supplier profiles</h3>
           {services.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No tools are listed yet.</p>
+            <p className="text-sm text-muted-foreground">No supplier profiles are published yet.</p>
           ) : (
             <ProofList
               items={services}
@@ -34,9 +34,9 @@ export function AeSupplyAgentProof({
           )}
         </div>
         <div className="grid gap-3">
-          <h3 className="text-sm font-medium text-foreground">Callable tools</h3>
+          <h3 className="text-sm font-medium text-foreground">AE public inspection actions</h3>
           {tools.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No public actions are available yet. List a tool to make one available.</p>
+            <p className="text-sm text-muted-foreground">AE public inspection actions are temporarily unavailable.</p>
           ) : (
             <ProofList
               items={tools}

@@ -76,7 +76,7 @@ describe('public semantic comfort', () => {
   it('gives homepage actions a comfortable standalone target', () => {
     renderRoute('/')
 
-    for (const name of ['Browse Operations', 'List a tool'] as const) {
+    for (const name of ['Browse Operations', 'Publish an Operation'] as const) {
       const links = screen.getAllByRole('link', { name })
       expect(links.length).toBeGreaterThan(0)
       for (const link of links) expect(link.classList.contains('min-h-touch')).toBe(true)

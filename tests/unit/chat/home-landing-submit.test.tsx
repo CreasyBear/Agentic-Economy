@@ -68,7 +68,7 @@ describe('catalogue-first home', () => {
     expect(screen.queryByText(/Claude Code/)).toBeNull()
     expect(document.querySelector('[data-slot="ae-site-browser"]')?.textContent).toContain('/llms.txt')
     expect(screen.getAllByRole('link', { name: 'Browse Operations' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('link', { name: 'List a tool' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: 'Publish an Operation' }).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: HOME.catalogHeading })).toBeTruthy()
     expect(screen.getByText(HOME.catalogEmpty)).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'One connection.' })).toBeNull()
