@@ -51,7 +51,7 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
             </AeSiteHeadingPair>
             <div className="flex flex-wrap items-center justify-center gap-related">
               <AeSiteButton asChild>
-                <Link to="/market" search={{ window: '30d' }}>Browse tools</Link>
+                <Link to="/market" search={{ window: '30d' }}>Browse Operations</Link>
               </AeSiteButton>
               <AeSiteButton asChild variant="outlined">
                 <Link to="/SKILL.md">Read the skill</Link>

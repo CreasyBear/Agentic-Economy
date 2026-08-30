@@ -11,7 +11,7 @@ export function AeNotFound() {
       actions={
         <>
           <AeSiteButton asChild>
-            <a href="/market?window=30d">Browse tools</a>
+            <a href="/market?window=30d">Browse Operations</a>
           </AeSiteButton>
           <AeSiteButton asChild variant="outlined">
             <a href="/for-providers">Publish an Operation</a>

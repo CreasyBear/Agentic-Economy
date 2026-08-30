@@ -32,9 +32,9 @@ test.describe('market product accessibility', () => {
     await expect(primary.getByRole('link', { name: 'Activity' })).toBeVisible()
   })
 
-  test('browse tools continues into the market catalog', async ({ page }) => {
+  test('browse Operations continues into the market catalog', async ({ page }) => {
     await gotoSettled(page, '/')
-    await page.getByRole('link', { name: 'Browse tools' }).first().click()
+    await page.getByRole('link', { name: 'Browse Operations' }).first().click()
     await page.waitForURL((url) => (
       url.pathname === '/market'
       && url.searchParams.get('window') === '30d'

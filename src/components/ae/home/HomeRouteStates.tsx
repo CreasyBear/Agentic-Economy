@@ -26,7 +26,7 @@ export function ServicesError() {
             <p className="block font-semibold text-foreground">The catalog didn’t load</p>
             <p className="block text-muted-foreground">Reload and try again. No tool was called.</p>
           </div>
-          <Button asChild variant="default" className="min-h-touch justify-self-start"><Link to="/market" search={{ window: '30d' }}>Browse tools</Link></Button>
+          <Button asChild variant="default" className="min-h-touch justify-self-start"><Link to="/market" search={{ window: '30d' }}>Browse Operations</Link></Button>
         </Card>
       </div>
     </AePublicPage>
