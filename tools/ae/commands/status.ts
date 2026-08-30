@@ -4,11 +4,15 @@ import {
   operationInvokeStatusResultSchema,
   operationStatusInputSchema,
 } from '@/modules/capability-execution/operation-recovery.actions'
-import type { OperationInvokeStatusResult } from '@/modules/capability-execution/operation-recovery-contracts'
+import {
+  operationInvokeStatusStateSchema,
+  type OperationInvokeStatusResult,
+} from '@/modules/capability-execution/operation-recovery-contracts'
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
+import { invocationContinuationForCli } from '../lib/suggested-continuation-adapter'
 
 export const MAX_STATUS_WAIT_MS = 60_000
 export const MIN_STATUS_DELAY_MS = 100
@@ -200,6 +204,17 @@ export function renderStatusResult(
     ['status', typeof record?.state === 'string' ? record.state : typeof record?.kind === 'string' ? record.kind : 'unknown'],
     ['operation', typeof record?.operationRef === 'string' ? record.operationRef : 'unknown'],
   ])
+  if (record?.kind === 'found' || record?.kind === 'refused') {
+    const parsedState = operationInvokeStatusStateSchema.safeParse(record.state)
+    const continuation = invocationContinuationForCli({
+      kind: record.kind,
+      invocationRef,
+      ...(parsedState.success ? { state: parsedState.data } : {}),
+      ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
+    })
+    if (continuation.command !== undefined) line(`  next: ${continuation.command}`)
+    if (continuation.warning !== undefined) line(`  warning: ${continuation.warning}`)
+  }
   line(JSON.stringify(body, undefined, 2))
 }
 

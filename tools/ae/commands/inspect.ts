@@ -10,13 +10,14 @@ import { OPERATION_MARKET_DETAIL_PATH } from '@/modules/registry/operation-entry
 import {
   formatOperationAuthentication,
   formatOperationAvailability,
-  formatOperationContinuations,
   formatOperationInputs,
   formatOperationTotalPrice,
   formatOperationVerification,
   operationLabel,
 } from '../lib/operation-format'
 import { throwOperationReadFailure } from '../lib/operation-read-failure'
+import { resolveAgentAccessCredential } from '../lib/config'
+import { operationContinuationForCli } from '../lib/suggested-continuation-adapter'
 /** Read one exact current Market Operation without a caller credential. */
 export async function runInspectCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const operationRef = args[0]?.trim()
@@ -72,7 +73,14 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
       ? 'none'
       : operation.effects.map((effect) => effect.class.replace(/_/gu, ' ')).join(', ')}`,
   )
-  line(`  next: ${formatOperationContinuations(operation)}`)
+  const continuation = operationContinuationForCli({
+    operationRef: operation.operationRef,
+    availabilityPosture: operation.availability.posture,
+    requiresBuyerCredential: true,
+    hasBuyerCredential: resolveAgentAccessCredential(options.baseUrl) !== undefined,
+  })
+  line(`  next: ${continuation.command ?? continuation.label}`)
+  if (continuation.warning !== undefined) line(`  warning: ${continuation.warning}`)
   if (operation.contract.inputExamples?.[0] !== undefined) {
     line(`  example input: ${JSON.stringify(operation.contract.inputExamples[0].input)}`)
   }
