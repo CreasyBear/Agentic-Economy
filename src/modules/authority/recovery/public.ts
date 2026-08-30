@@ -70,15 +70,3 @@ export type {
   SecretCanaryProof,
   SecretCanarySink,
 } from './secret-canary'
-
-export {
-  ProductionEvidenceError,
-  collectProductionEvidence,
-} from './production-evidence'
-export type {
-  ProductionEvidenceErrorCode,
-  ProductionEvidenceProof,
-  ProductionEvidenceRequest,
-  ProductionEvidenceSinkCollectors,
-  ProductionSinkEvidence,
-} from './production-evidence'

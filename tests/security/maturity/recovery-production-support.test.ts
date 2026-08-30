@@ -269,14 +269,6 @@ describe('P2-05 durable recovery production support', () => {
     })
   })
 
-  it('fails closed at the retired caller-verified intake without persisting any claimed proof', async () => {
-    const fixture = service()
-    await expect(fixture.subject.recordVerifiedApproval(approval('approval:forged', OWNER, 'caller:proof')))
-      .rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
-    expect(fixture.repository.approvals).toHaveLength(0)
-    expect(fixture.verificationRequests).toHaveLength(0)
-  })
-
   it('rejects malformed intent and untrusted verifier output before persistence', async () => {
     const fixture = service()
     for (const malformed of [

@@ -104,8 +104,6 @@ export default defineConfig({
     },
     {
       files: [
-        'convex/capabilitySupplyOperationProjection.ts',
-        'convex/capabilitySupplyOperationProjection/**/*.ts',
         'convex/capabilitySupplyOwnerFunnelProjection.ts',
         'convex/capabilitySupplyOwnerFunnelProjection/**/*.ts',
         'convex/lib/marketExternalRegistry/**/*.ts',

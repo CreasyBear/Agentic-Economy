@@ -8,7 +8,7 @@ import {
   assertGeneratedSnapshotUnchanged,
   assertPinnedNitroNightly,
   protectedGeneratedPaths,
-} from './maturity-release-integrity'
+} from './release-integrity'
 
 const run = promisify(execFile)
 const root = resolve(process.cwd())
@@ -63,4 +63,4 @@ process.stdout.write(generated.stdout)
 process.stderr.write(generated.stderr)
 const after = await snapshotGeneratedPaths()
 assertGeneratedSnapshotUnchanged(before, after)
-process.stdout.write(`MATURITY_RELEASE_INTEGRITY_PASS nitro=${nitroVersion}\n`)
+process.stdout.write(`RELEASE_INTEGRITY_PASS nitro=${nitroVersion}\n`)

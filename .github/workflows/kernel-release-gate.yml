@@ -13,37 +13,6 @@ on:
         required: true
         default: false
         type: boolean
-      confirm_current_operation_staging_observation:
-        description: 'Confirm the exact-revision staging projection observation may change only the current Operation read-mode flag on the dedicated development deployment.'
-        required: true
-        default: false
-        type: boolean
-      current_operation_staging_stage:
-        description: 'Start begins the shadow soak; complete verifies its exact artifact after 24 hours and cuts over; rollback immediately restores old.'
-        required: true
-        default: start
-        type: choice
-        options:
-          - start
-          - complete
-          - rollback
-      current_operation_staging_owner:
-        description: 'Required bounded release-owner identity recorded in the sanitized receipt.'
-        required: true
-        type: string
-      current_operation_staging_start_workflow_run_id:
-        description: 'Complete only: workflow run ID that produced the exact start artifact for this repository and source revision.'
-        required: false
-        type: string
-      confirm_current_operation_staging_cutover:
-        description: 'Complete only: explicitly confirm cutover to the new read path bound to the downloaded start receipt digest.'
-        required: true
-        default: false
-        type: boolean
-      current_operation_staging_rollback_reason:
-        description: 'Rollback only: required bounded operator reason.'
-        required: false
-        type: string
       confirm_live_gateway_spend:
         description: 'Type the run ID below and confirm the production-approved paid gateway smoke may move at most USD 6.00 total externally (top-up charge plus provider payout).'
         required: true
@@ -121,7 +90,7 @@ jobs:
         run: git diff --exit-code -- convex/_generated
 
       - name: Verify generated source and pinned release inputs
-        run: npm run verify:maturity-release-integrity
+        run: npm run verify:release-integrity
 
       - name: Run source release contract without deployment credentials
         run: npm run test:release:source:after-codegen
@@ -186,94 +155,6 @@ jobs:
         with:
           name: release-${{ github.sha }}-${{ github.run_id }}-chat-staging-smoke
           path: output/release/playwright-chat-staging-smoke.json
-          if-no-files-found: error
-          retention-days: 14
-
-  current-operation-staging-observation:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_current_operation_staging_observation == true && (inputs.current_operation_staging_stage != 'complete' || inputs.confirm_current_operation_staging_cutover == true)
-    name: Opt-in current Operation staging observation and cutover
-    needs: source-proof
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: staging
-    env:
-      AE_T8_STAGING_CONVEX_DEPLOYMENT: ${{ vars.AE_T8_STAGING_CONVEX_DEPLOYMENT }}
-      CONVEX_DEPLOY_KEY: ${{ secrets.AE_T8_STAGING_CONVEX_DEPLOY_KEY }}
-      AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
-      AE_T8_RELEASE_OWNER: ${{ inputs.current_operation_staging_owner }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-          cache: npm
-
-      - name: Pin the repository package manager
-        run: npm install --global npm@11.5.1
-
-      - name: Frozen dependency install without lifecycle scripts
-        run: npm ci --ignore-scripts
-
-      - name: Require the exact prior start workflow run for completion
-        if: inputs.current_operation_staging_stage == 'complete'
-        env:
-          START_WORKFLOW_RUN_ID: ${{ inputs.current_operation_staging_start_workflow_run_id }}
-        run: test -n "${START_WORKFLOW_RUN_ID}" && test "${START_WORKFLOW_RUN_ID}" -eq "${START_WORKFLOW_RUN_ID}" 2>/dev/null
-
-      - name: Download the exact revision-bound staging start receipt
-        if: inputs.current_operation_staging_stage == 'complete'
-        uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          run-id: ${{ inputs.current_operation_staging_start_workflow_run_id }}
-          name: release-${{ github.sha }}-${{ inputs.current_operation_staging_start_workflow_run_id }}-current-operation-staging-start
-          path: output/release/current-operation-staging-start-artifact
-
-      - name: Start the exact-revision shadow observation
-        if: inputs.current_operation_staging_stage == 'start'
-        run: |
-          npm run observe:current-operation:staging -- \
-            start \
-            --deployment "${AE_T8_STAGING_CONVEX_DEPLOYMENT}" \
-            --revision "${AE_RELEASE_SOURCE_REVISION}" \
-            --owner "${AE_T8_RELEASE_OWNER}" \
-            --receipt output/release/current-operation-staging-start.json
-
-      - name: Complete the exact baseline-bound staging cutover
-        if: inputs.current_operation_staging_stage == 'complete'
-        run: |
-          baseline='output/release/current-operation-staging-start-artifact/current-operation-staging-start.json'
-          baseline_digest="$(jq -er '.receiptDigest' "${baseline}")"
-          confirmation="cutover:${AE_T8_STAGING_CONVEX_DEPLOYMENT}:${AE_RELEASE_SOURCE_REVISION}:${AE_T8_RELEASE_OWNER}:${baseline_digest}"
-          npm run observe:current-operation:staging -- \
-            complete \
-            --deployment "${AE_T8_STAGING_CONVEX_DEPLOYMENT}" \
-            --revision "${AE_RELEASE_SOURCE_REVISION}" \
-            --owner "${AE_T8_RELEASE_OWNER}" \
-            --start-artifact "${baseline}" \
-            --confirm-cutover "${confirmation}" \
-            --receipt output/release/current-operation-staging-complete.json
-
-      - name: Restore the old read path without deleting projection rows
-        if: inputs.current_operation_staging_stage == 'rollback'
-        env:
-          ROLLBACK_REASON: ${{ inputs.current_operation_staging_rollback_reason }}
-        run: |
-          npm run observe:current-operation:staging -- \
-            rollback \
-            --deployment "${AE_T8_STAGING_CONVEX_DEPLOYMENT}" \
-            --revision "${AE_RELEASE_SOURCE_REVISION}" \
-            --owner "${AE_T8_RELEASE_OWNER}" \
-            --reason "${ROLLBACK_REASON}" \
-            --receipt output/release/current-operation-staging-rollback.json
-
-      - name: Upload only the sanitized staging observation receipt
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ github.sha }}-${{ github.run_id }}-current-operation-staging-${{ inputs.current_operation_staging_stage }}
-          path: output/release/current-operation-staging-${{ inputs.current_operation_staging_stage }}.json
           if-no-files-found: error
           retention-days: 14
 

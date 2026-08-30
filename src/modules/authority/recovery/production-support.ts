@@ -174,11 +174,6 @@ export class ProductionRecoveryService {
     }
   }
 
-  /** Legacy verified-object intake is fail-closed until its driver migrates to recordApproval. */
-  async recordVerifiedApproval(_input: unknown): Promise<never> {
-    throw new RecoveryError('recovery_approval_unavailable')
-  }
-
   async authorize(input: AuthorizeRecoveryRequest): Promise<RecoveryAdmission> {
     if (this.#coordinator === undefined) throw new RecoveryError('recovery_authority_invalid')
     return await this.#coordinator.authorize(input)

@@ -7,7 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { assertCliPackIntegrity } from "../tools/release/maturity-release-integrity.ts";
+import { assertCliPackIntegrity } from "../tools/release/release-integrity.ts";
 
 const run = promisify(execFile);
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
