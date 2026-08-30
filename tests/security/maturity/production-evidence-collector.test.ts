@@ -54,7 +54,7 @@ function rows(kind: MeasuredProtectedSurfaceRow['kind'], count: number, firstExe
 function inventory(): MeasuredProtectedSurfaceInventory {
   const baselineCounts = Object.freeze({
     serverFunctions: 47, publicConvex: 127, convexHttpActions: 7, crons: 10,
-    backgroundFamilies: 25, frozenHttp: 56, frozenMcp: 26, frozenCli: 15,
+    backgroundFamilies: 25, frozenHttp: 56, frozenMcp: 26, frozenCli: 16,
   })
   const candidateCounts = Object.freeze({ ...baselineCounts, convexHttpRoutes: 0 })
   return Object.freeze({
@@ -68,7 +68,7 @@ function inventory(): MeasuredProtectedSurfaceInventory {
       sha256: HASH,
       httpRefs: Object.freeze(Array.from({ length: 56 }, (_, index) => `http:${index}`)),
       mcpRefs: Object.freeze(Array.from({ length: 26 }, (_, index) => `mcp:${index}`)),
-      cliRefs: Object.freeze(Array.from({ length: 15 }, (_, index) => `cli:${index}`)),
+      cliRefs: Object.freeze(Array.from({ length: 16 }, (_, index) => `cli:${index}`)),
     }),
     serverFunctions: rows('server_function', 47),
     publicConvex: rows('convex_public', 127, true),

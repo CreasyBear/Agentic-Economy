@@ -18,6 +18,7 @@ const expectedCommands = [
   "cancel",
   "compare",
   "connect",
+  "doctor",
   "fund",
   "history",
   "inspect",

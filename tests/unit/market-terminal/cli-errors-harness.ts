@@ -2,7 +2,10 @@ import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process'
 
 const CLI_ARGV = ['--import', 'tsx', 'tools/ae/cli.ts'] as const
 
-export async function spawnCli(args: readonly string[]): Promise<{
+export async function spawnCli(
+  args: readonly string[],
+  options?: { env?: NodeJS.ProcessEnv },
+): Promise<{
   status: number | null
   signal: NodeJS.Signals | null
   stdout: string
@@ -17,6 +20,7 @@ export async function spawnCli(args: readonly string[]): Promise<{
   const child = spawn(process.execPath, [...CLI_ARGV, ...args], {
     cwd: process.cwd(),
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: options?.env,
   })
   const stdout: Buffer[] = []
   const stderr: Buffer[] = []

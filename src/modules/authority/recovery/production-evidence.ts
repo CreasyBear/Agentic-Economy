@@ -18,7 +18,7 @@ const PHASE_2_BASELINE_COUNTS = Object.freeze({
   backgroundFamilies: 25,
   frozenHttp: 56,
   frozenMcp: 26,
-  frozenCli: 15,
+  frozenCli: 16,
 })
 
 export type ProductionEvidenceErrorCode =

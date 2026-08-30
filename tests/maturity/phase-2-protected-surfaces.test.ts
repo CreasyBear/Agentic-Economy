@@ -164,14 +164,14 @@ describe('Phase 2 generated protected-surface manifest', () => {
       backgroundFamilies: 25,
       frozenHttp: 56,
       frozenMcp: 26,
-      frozenCli: 15,
+      frozenCli: 16,
     })
     expect(inventory.candidateCounts?.serverFunctions).toBe(inventory.serverFunctions.length)
     expect(inventory.candidateCounts?.publicConvex).toBe(inventory.publicConvex.length)
     expect(inventory.candidateCounts?.publicConvex).toBeGreaterThanOrEqual(116)
     expect(inventory.candidateCounts?.frozenHttp).toBe(56)
     expect(inventory.candidateCounts?.frozenMcp).toBe(26)
-    expect(inventory.candidateCounts?.frozenCli).toBe(15)
+    expect(inventory.candidateCounts?.frozenCli).toBe(16)
   })
 
   it('discovers generic Convex HTTP handlers and every registered HTTP route', () => {
@@ -309,7 +309,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
     expect(verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, measuredInventory)).toMatchObject({
       http: 56,
       mcp: 26,
-      cli: 15,
+      cli: 16,
       callback: 2,
       worker: 3,
       job: 9,
@@ -328,7 +328,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
     expect(measuredInventory.actualCounts.backgroundFamilies).toBe(52)
     expect(measuredInventory.actualCounts.frozenHttp).toBe(56)
     expect(measuredInventory.actualCounts.frozenMcp).toBe(26)
-    expect(measuredInventory.actualCounts.frozenCli).toBe(15)
+    expect(measuredInventory.actualCounts.frozenCli).toBe(16)
     expect(measuredRows().filter((row) => row.status === 'blocked')).toEqual([])
     expect(Object.values(measuredInventory.blockedByKind).every((count) => count === 0)).toBe(true)
 

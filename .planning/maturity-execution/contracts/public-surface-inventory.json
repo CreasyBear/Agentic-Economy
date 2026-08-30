@@ -772,6 +772,11 @@
       "source": "tools/ae/commands/connect.ts"
     },
     {
+      "command": "doctor",
+      "owner": "agent-access",
+      "source": "tools/ae/commands/doctor.ts"
+    },
+    {
       "command": "fund",
       "owner": "agent-access",
       "source": "tools/ae/commands/fund.ts"

@@ -19,7 +19,7 @@ const BASELINE_COUNTS = Object.freeze({
   backgroundFamilies: 25,
   frozenHttp: 56,
   frozenMcp: 26,
-  frozenCli: 15,
+  frozenCli: 16,
 })
 const PUBLIC_CONVEX_REGISTRARS = new Set([
   'action',

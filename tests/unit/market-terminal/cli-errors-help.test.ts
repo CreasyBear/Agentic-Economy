@@ -23,6 +23,7 @@ describe('market-terminal CLI error contracts', () => {
       'compare',
       'inspect-plan',
       'connect',
+      'doctor',
       'account',
       'supply',
       'fund',
@@ -45,7 +46,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(helpBody.auth.cancelRequirements).toContain('AE_API_KEY')
     expect(helpBody.auth.cancelRequirements).toContain('--idempotency-key')
     expect(helpBody.auth.cancelRequirements).toContain('body.idempotencyKey')
-    for (const legacy of ['feeds', 'run', 'study', 'reconcile', 'action', 'doctor', 'business', 'demand', 'advanced']) {
+    for (const legacy of ['feeds', 'run', 'study', 'reconcile', 'action', 'business', 'demand', 'advanced']) {
       expect(commands).not.toHaveProperty(legacy)
     }
 
@@ -174,6 +175,14 @@ describe('market-terminal CLI error contracts', () => {
         scope: 'market_supply:manage',
         deviceFlow: expect.stringContaining('connect --supplier'),
       },
+    })
+    const doctorHelp = spawnCliSync(['help', 'doctor', '--json'])
+    expect(doctorHelp.status).toBe(0)
+    expect(JSON.parse(doctorHelp.stdout)).toMatchObject({
+      kind: 'HELP',
+      command: 'doctor',
+      usage: 'ae doctor [businessId] [--supplier]',
+      summary: expect.stringContaining('without changing'),
     })
 
     const technicalManifest = spawnCliSync(['manifest', '--technical', '--json'])

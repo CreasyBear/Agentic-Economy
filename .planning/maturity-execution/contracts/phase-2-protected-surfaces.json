@@ -8,7 +8,7 @@
     "backgroundFamilies": 25,
     "frozenHttp": 56,
     "frozenMcp": 26,
-    "frozenCli": 15
+    "frozenCli": 16
   },
   "baselineCounts": {
     "serverFunctions": 47,
@@ -18,7 +18,7 @@
     "backgroundFamilies": 25,
     "frozenHttp": 56,
     "frozenMcp": 26,
-    "frozenCli": 15
+    "frozenCli": 16
   },
   "actualCounts": {
     "serverFunctions": 47,
@@ -29,7 +29,7 @@
     "backgroundFamilies": 52,
     "frozenHttp": 56,
     "frozenMcp": 26,
-    "frozenCli": 15
+    "frozenCli": 16
   },
   "candidateCounts": {
     "serverFunctions": 47,
@@ -40,11 +40,11 @@
     "backgroundFamilies": 52,
     "frozenHttp": 56,
     "frozenMcp": 26,
-    "frozenCli": 15
+    "frozenCli": 16
   },
   "frozenContract": {
     "sourceFile": ".planning/maturity-execution/contracts/public-surface-inventory.json",
-    "sha256": "cfc027d5b264ecc8e1ff8f846ef679bf42da045c8a1e862cd5ba94f8fdb522e3",
+    "sha256": "b8287f79d6d013364578bcd71f5d444df908caa6952ae8c98dd04f2521e45a60",
     "httpRefs": [
       "agent-account-activity",
       "agent-account-balance",
@@ -137,6 +137,7 @@
       "cancel",
       "compare",
       "connect",
+      "doctor",
       "fund",
       "history",
       "inspect",

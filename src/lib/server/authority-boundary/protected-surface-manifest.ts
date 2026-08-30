@@ -63,7 +63,7 @@ export type MeasuredProtectedSurfaceInventory = Readonly<{
     backgroundFamilies: 25
     frozenHttp: 56
     frozenMcp: 26
-    frozenCli: 15
+    frozenCli: 16
   }>
   baselineCounts: Readonly<{
     serverFunctions: 47
@@ -73,7 +73,7 @@ export type MeasuredProtectedSurfaceInventory = Readonly<{
     backgroundFamilies: 25
     frozenHttp: 56
     frozenMcp: 26
-    frozenCli: 15
+    frozenCli: 16
   }>
   candidateCounts: Readonly<{
     serverFunctions: number
@@ -206,6 +206,7 @@ const MCP_TOOLS = [
 
 const PUBLIC_CLI = ['manifest', 'search', 'inspect', 'compare', 'inspect-plan'] as const
 const INTERACTIVE_CLI = ['connect', 'fund', 'revoke'] as const
+const CANONICAL_AGENT_READ_CLI = ['doctor'] as const
 const CANONICAL_AGENT_CLI = ['account', 'supply', 'call', 'history', 'status', 'cancel', 'recover'] as const
 
 const BACKGROUND_SURFACES = [
@@ -271,6 +272,7 @@ export const PROTECTED_SURFACE_MANIFEST = Object.freeze([
   ...rows(MCP_TOOLS, 'mcp', 'canonical_agent', true),
   ...rows(PUBLIC_CLI, 'cli', 'public_non_consequential', false),
   ...rows(INTERACTIVE_CLI, 'cli', 'interactive_account', true),
+  ...rows(CANONICAL_AGENT_READ_CLI, 'cli', 'canonical_agent', false),
   ...rows(CANONICAL_AGENT_CLI, 'cli', 'canonical_agent', true),
   ...rows(CRON_SURFACES, 'cron', 'workload_account', true),
   ...BACKGROUND_SURFACES.map(([surfaceRef, kind, binding]) => Object.freeze({
@@ -325,7 +327,7 @@ export function verifyProtectedSurfaceManifest(
     ['http', 'mcp', 'cli', 'server_function', 'convex_public', 'callback', 'worker', 'job', 'cron', 'continuation', 'reconciliation']
       .map((kind) => [kind, manifest.filter((row) => row.kind === kind).length]),
   ) as Record<ProtectedSurfaceManifestRow['kind'], number>
-  if (counts.http !== 56 || counts.mcp !== 26 || counts.cli !== 15
+  if (counts.http !== 56 || counts.mcp !== 26 || counts.cli !== 16
     || counts.callback !== 2 || counts.worker !== 3 || counts.job !== 9 || counts.cron !== 10
     || counts.continuation !== 2 || counts.reconciliation !== 9) {
     throw new Error('protected_surface_inventory_invalid')
@@ -343,7 +345,7 @@ export function verifyProtectedSurfaceManifest(
       || measured.expectedCounts.backgroundFamilies !== 25
       || measured.expectedCounts.frozenHttp !== 56
       || measured.expectedCounts.frozenMcp !== 26
-      || measured.expectedCounts.frozenCli !== 15
+      || measured.expectedCounts.frozenCli !== 16
       || measured.baselineCounts.serverFunctions !== 47
       || measured.baselineCounts.publicConvex !== 127
       || measured.baselineCounts.convexHttpActions !== 7
@@ -351,17 +353,17 @@ export function verifyProtectedSurfaceManifest(
       || measured.baselineCounts.backgroundFamilies !== 25
       || measured.baselineCounts.frozenHttp !== 56
       || measured.baselineCounts.frozenMcp !== 26
-      || measured.baselineCounts.frozenCli !== 15
+      || measured.baselineCounts.frozenCli !== 16
       || !exactCountRecords(measured.actualCounts, measured.candidateCounts)
       || !candidateCountsMatchRows(measured)
       || measured.frozenContract.sourceFile !== '.planning/maturity-execution/contracts/public-surface-inventory.json'
       || !/^[a-f0-9]{64}$/.test(measured.frozenContract.sha256)
       || measured.frozenContract.httpRefs.length !== 56
       || measured.frozenContract.mcpRefs.length !== 26
-      || measured.frozenContract.cliRefs.length !== 15
+      || measured.frozenContract.cliRefs.length !== 16
       || new Set(measured.frozenContract.httpRefs).size !== 56
       || new Set(measured.frozenContract.mcpRefs).size !== 26
-      || new Set(measured.frozenContract.cliRefs).size !== 15
+      || new Set(measured.frozenContract.cliRefs).size !== 16
       || new Set(measured.serverFunctions.map((row) => row.ref)).size !== measured.serverFunctions.length
       || new Set(measured.publicConvex.map((row) => row.ref)).size !== measured.publicConvex.length
       || new Set(measuredRows.map((row) => row.ref)).size !== measuredRows.length

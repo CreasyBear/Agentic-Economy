@@ -87,6 +87,15 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
       'Buyer and supplier credentials are stored independently for the exact server origin.',
     ],
   },
+  doctor: {
+    summary: 'Check this CLI connection across the Operation market loop without changing server or local state.',
+    args: '[businessId] [--supplier]',
+    json: true,
+    guidance: [
+      'Uses existing read-only surfaces only; it never connects, funds, retries, reconciles, or changes supplier state.',
+      'Pass --supplier to validate separately stored supplier access; add a business ID to include Operation and provider readiness.',
+    ],
+  },
   account: {
     summary: 'Inspect current agent identity, exact buyer credit, credential activity, or local origin-bound connections.',
     args: '[status [market|supplier]|balance [currency]|activity [currency]|connections|disconnect [market|supplier]]',
