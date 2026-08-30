@@ -381,11 +381,10 @@ describe('P2-05 production evidence collector', () => {
     ]
     for (const replacement of malformedProtectedRows) {
       const map = structuredClone(canonicalMap) as unknown as { rows: Array<Record<string, unknown>> }
-        & ProductionEvidenceRequest['surfaceAuthorityMap']
       map.rows[protectedRowIndex] = { ...map.rows[protectedRowIndex]!, ...replacement }
       await expect(collectProductionEvidence({
         ...evidenceRequest(),
-        surfaceAuthorityMap: map,
+        surfaceAuthorityMap: map as unknown as ProductionEvidenceRequest['surfaceAuthorityMap'],
       })).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
     }
 
@@ -397,11 +396,10 @@ describe('P2-05 production evidence collector', () => {
     ]
     for (const replacement of malformedExemptRows) {
       const map = structuredClone(canonicalMap) as unknown as { rows: Array<Record<string, unknown>> }
-        & ProductionEvidenceRequest['surfaceAuthorityMap']
       map.rows[exemptRowIndex] = { ...map.rows[exemptRowIndex]!, ...replacement }
       await expect(collectProductionEvidence({
         ...evidenceRequest(),
-        surfaceAuthorityMap: map,
+        surfaceAuthorityMap: map as unknown as ProductionEvidenceRequest['surfaceAuthorityMap'],
       })).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
     }
 
