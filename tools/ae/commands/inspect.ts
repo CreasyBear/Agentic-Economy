@@ -2,6 +2,11 @@ import {
   operationDetailInputSchema,
   operationDetailOutputSchema,
 } from '@/modules/capability-supply/public'
+import {
+  AGENT_ACCOUNT_SELF_ROUTE_CONTRACT,
+  agentAccountSelfResultSchema,
+} from '@/modules/agent-access/account.actions'
+import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
@@ -77,12 +82,30 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
     operationRef: operation.operationRef,
     availabilityPosture: operation.availability.posture,
     requiresBuyerCredential: true,
-    hasBuyerCredential: resolveAgentAccessCredential(options.baseUrl) !== undefined,
+    hasBuyerCredential: await hasCurrentBuyerInvokeCredential(options.baseUrl),
   })
   line(`  next: ${continuation.command ?? continuation.label}`)
   if (continuation.warning !== undefined) line(`  warning: ${continuation.warning}`)
   if (operation.contract.inputExamples?.[0] !== undefined) {
     line(`  example input: ${JSON.stringify(operation.contract.inputExamples[0].input)}`)
+  }
+}
+
+async function hasCurrentBuyerInvokeCredential(baseUrl: string): Promise<boolean> {
+  const credential = resolveAgentAccessCredential(baseUrl, MARKET_OPERATIONS_INVOKE_SCOPE)
+  if (credential === undefined) return false
+  const configuredOrigin = credential.origin.trim()
+  if (configuredOrigin !== '' && configuredOrigin !== new URL(baseUrl).origin) return false
+  try {
+    const outcome = await callJson(baseUrl, AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.path, {
+      method: AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.method,
+      headers: { Authorization: `Bearer ${credential.accessToken}` },
+    })
+    if (!outcome.ok) return false
+    const account = agentAccountSelfResultSchema.safeParse(outcome.body)
+    return account.success && account.data.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+  } catch {
+    return false
   }
 }
 

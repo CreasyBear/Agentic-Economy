@@ -77,6 +77,13 @@ function operationDetailResult(operation: OperationDescriptorFixture) {
     operation,
   }
 }
+
+function responseJson(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
 const options: CliOptions = {
   baseUrl: 'https://market.example',
   json: true,
@@ -266,6 +273,82 @@ describe('external-agent Market Operation cold loop', () => {
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
     expect(JSON.parse(String(init?.body))).toEqual({ operationRef })
+  })
+
+  it.each([
+    {
+      name: 'wrong scope',
+      accountStatus: 200,
+      scopes: ['market_supply:manage'],
+      expected: 'ae connect',
+    },
+    {
+      name: 'rejected or expired credential',
+      accountStatus: 401,
+      scopes: ['market_operations:invoke'],
+      expected: 'ae connect',
+    },
+    {
+      name: 'current invoke-scoped credential',
+      accountStatus: 200,
+      scopes: ['market_operations:invoke'],
+      expected: 'ae call',
+    },
+  ])('uses server-verified buyer access for the human continuation: $name', async ({
+    accountStatus,
+    scopes,
+    expected,
+  }) => {
+    const operationRef = `operation:v1:${'f'.repeat(64)}`
+    const operation = {
+      ...operationDescriptor(operationRef, 'Verified continuation'),
+      availability: { posture: 'routeable' },
+      navigation: [{
+        relation: 'invoke',
+        pathTemplate: '/api/v1/operations/call',
+        method: 'POST',
+        actionId: 'agentic-economy.operation-invoke',
+        authentication: 'required',
+        surfaces: ['http', 'cli', 'mcp', 'chat'],
+      }],
+    }
+    storeConnection({
+      baseUrl: options.baseUrl,
+      accessToken: 'stored-buyer-secret',
+      scope: 'market_operations:invoke',
+    })
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/api/v1/market-operations/detail')) {
+        return responseJson(operationDetailResult(operation))
+      }
+      if (url.endsWith('/api/v1/account')) {
+        return responseJson({
+          kind: 'authenticated',
+          principalRef: 'principal:buyer',
+          accountRef: 'account:buyer',
+          credentialId: 'credential:buyer',
+          applicationRef: 'application:buyer',
+          environment: 'production',
+          scopes,
+          authorityMode: 'inspect_only',
+        }, accountStatus)
+      }
+      throw new Error(`unexpected route ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const output = captureStdout()
+
+    try {
+      await runInspectCommand([operationRef], { ...options, json: false })
+    } finally {
+      output.restore()
+    }
+
+    expect(output.read()).toContain(`next: ${expected}`)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const accountRequest = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/v1/account'))
+    expect(new Headers(accountRequest?.[1]?.headers).get('Authorization')).toBe('Bearer stored-buyer-secret')
   })
   it('rejects a malformed successful detail body with a safe CLI error', async () => {
     const operationRef = `operation:v1:${'e'.repeat(64)}`
