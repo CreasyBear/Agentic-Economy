@@ -148,7 +148,7 @@ function FoundBody({
           </h3>
           <AeCopyCommand compact label="Operation reference" code={operation.operationRef} />
           <AeCopyCommand compact label="Inspect command" code={inspectCommand(operation.operationRef)} />
-          {callable && inputExample !== undefined ? (
+          {continuation.label === 'Call Operation' && inputExample !== undefined ? (
             <AeCopyCommand compact label="Call command" code={callCommand(operation.operationRef, inputExample.input)} />
           ) : null}
         </div>

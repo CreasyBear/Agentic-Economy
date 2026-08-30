@@ -126,7 +126,7 @@ function CurrentOperationDetail({
       <article className="ae-rail grid gap-8 pb-page">
         <header className="grid gap-4">
           <p className="text-sm text-muted-foreground">{operation.business.name}</p>
-          <OperationDecision operation={operation} />
+          <OperationDecision operation={operation} continuation={continuation} />
           <AeFactList
             className="sm:grid-cols-3"
             facts={[
@@ -305,8 +305,19 @@ function continuationDescription(continuation: SuggestedContinuation): string {
  * First-viewport buy decision. The sidecard owns the one contextual action;
  * this card stays factual so it cannot compete with that continuation.
  */
-function OperationDecision({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
-  const routeable = operation.availability.posture === 'routeable'
+function OperationDecision({
+  operation,
+  continuation,
+}: Readonly<{
+  operation: PublicOperationDescriptor
+  continuation: SuggestedContinuation
+}>) {
+  const ready = continuation.label === 'Call Operation'
+  const decisionLabel = ready
+    ? 'Ready to call'
+    : continuation.label === 'Connect agent'
+      ? 'Connection required'
+      : 'Setup required'
   return (
     <section
       aria-labelledby="operation-decision-title"
@@ -317,13 +328,15 @@ function OperationDecision({ operation }: Readonly<{ operation: PublicOperationD
           id="operation-decision-title"
           className="text-sm font-medium text-muted-foreground"
         >
-          {routeable ? 'Ready to call' : 'Setup required'}
+          {decisionLabel}
         </p>
         <AeOperationPrice price={totalPrice(operation)} size="lg" label="Total authorization" />
         <p className="max-w-md text-xs leading-5 text-muted-foreground">
-          {routeable
+          {ready
             ? 'The maximum charged for one call. Read the contract before invoking.'
-            : 'Read the full contract before requesting access.'}
+            : continuation.label === 'Connect agent'
+              ? 'Connect an agent before attempting this protected call.'
+              : 'Read the full contract before requesting access.'}
         </p>
       </div>
     </section>

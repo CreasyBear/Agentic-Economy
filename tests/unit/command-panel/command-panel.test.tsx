@@ -193,6 +193,7 @@ describe('operator command panel', () => {
     expect(screen.getByText('Charged per call.')).toBeTruthy()
     expect(screen.getByText(/Connect an agent before/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Connect agent' }).getAttribute('href')).toBe('/for-agents')
+    expect(screen.queryByRole('button', { name: 'Copy Call command' })).toBeNull()
     expect(
       screen.getByRole('link', { name: /Open full Operation details/ }).getAttribute('href'),
     ).toBe(`/operations/${encodeURIComponent(TEST_OPERATION_REF)}`)

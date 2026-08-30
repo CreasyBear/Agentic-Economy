@@ -248,6 +248,8 @@ describe('/operations/$operationRef', () => {
     expect(within(continuation).getByRole('link', { name: 'Connect agent' }).getAttribute('href'))
       .toBe('/for-agents')
     expect(within(continuation).queryByRole('button')).toBeNull()
+    expect(screen.getByRole('region', { name: 'Connection required' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Copy Call Operation' })).toBeNull()
   })
 
   it('keeps an integrated setup-required descriptor inspectable without implying it can be invoked', () => {
