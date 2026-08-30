@@ -136,6 +136,7 @@ describe('operator command panel', () => {
     const restoredInput = await screen.findByRole('combobox', { name: 'Search operations' })
     expect((restoredInput as HTMLInputElement).value).toBe('weather')
     expect(screen.getByRole('option', { name: /Weather forecast/ })).toBeTruthy()
+    await waitFor(() => expect(document.activeElement).toBe(restoredInput))
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())

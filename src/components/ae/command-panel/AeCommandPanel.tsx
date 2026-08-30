@@ -102,7 +102,10 @@ export function AeCommandPanel() {
               className="contents"
               aria-hidden={panel.topPage.kind !== 'operations-search'}
             >
-              <OperationsSearchPage onSelectOperation={panel.pushInspect} />
+              <OperationsSearchPage
+                isActive={panel.topPage.kind === 'operations-search'}
+                onSelectOperation={panel.pushInspect}
+              />
             </div>
             {panel.topPage.kind === 'operation-inspect' ? (
               <OperationInspectPage operationRef={panel.topPage.operationRef} />

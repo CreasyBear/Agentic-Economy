@@ -30,6 +30,7 @@ type SearchState =
 export const OPERATIONS_SEARCH_DEBOUNCE_MS = 200
 
 type OperationsSearchPageProps = Readonly<{
+  isActive?: boolean
   onSelectOperation: (operationRef: string) => void
   searchOperations?: (
     input: MarketOperationSearchInput,
@@ -42,6 +43,7 @@ type OperationsSearchPageProps = Readonly<{
  * live endpoint — no local filtering, no invented results.
  */
 export function OperationsSearchPage({
+  isActive = true,
   onSelectOperation,
   searchOperations = searchMarketOperations,
 }: OperationsSearchPageProps) {
@@ -100,8 +102,8 @@ export function OperationsSearchPage({
   }, [state])
 
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
+    if (isActive) inputRef.current?.focus()
+  }, [isActive])
 
   useEffect(() => {
     const listbox = listboxRef.current
