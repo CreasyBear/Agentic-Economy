@@ -26,7 +26,7 @@ type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<v
 
 const JSON_HELP_FLAGS = {
   '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, local Vite when Convex is loopback, or the hosted origin.' },
-  '--limit': { type: 'string', description: 'Page size: search accepts 1-20; account activity, history, and supplier connections accept 1-100.' },
+  '--limit': { type: 'string', description: 'Page size: search accepts 1-20; account activity and history accept 1-100.' },
   '--cursor': { type: 'string', description: 'Opaque search, account activity, or history continuation cursor.' },
   '--state': { type: 'string', description: 'Canonical invocation state filter; history only.' },
   '--filters': { type: 'string', description: 'Canonical JSON search filters; search only.' },
@@ -49,8 +49,17 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   'inspect-plan': [],
   connect: ['mcp', 'supplier'],
   doctor: ['supplier'],
-  account: ['limit', 'cursor'],
-  supply: ['input', 'idempotency-key', 'limit'],
+  account: [],
+  'account activity': ['limit', 'cursor'],
+  supply: [],
+  'supply publish': ['input', 'idempotency-key'],
+  'supply withdraw': ['input', 'idempotency-key'],
+  'supply recheck': ['input', 'idempotency-key'],
+  'supply republish': ['input', 'idempotency-key'],
+  'supply connect': ['input', 'idempotency-key'],
+  'supply reconnect': ['input', 'idempotency-key'],
+  'supply revoke': ['input', 'idempotency-key'],
+  'supply retry-cleanup': ['input', 'idempotency-key'],
   fund: [],
   call: ['input', 'idempotency-key', 'wait'],
   history: ['limit', 'cursor', 'state'],
@@ -180,7 +189,7 @@ Flags:
   AE_API_KEY <token>          reusable caller credential for credentialed commands
   AE_API_KEY_ORIGIN <origin>  exact origin bound to AE_API_KEY; required with HTTPS except loopback HTTP development
   --json             machine-readable output
-  --limit <n>        bounded page size for search, account activity, history, or supplier connections
+  --limit <n>        bounded page size for search, account activity, or history
   --cursor <cursor>  opaque continuation cursor for search, account activity, or history
   --state <state>    canonical invocation state filter (history only)
   --filters '<json>' canonical search filters (search only)
@@ -275,7 +284,10 @@ function resolveHelpPath(
 function validateCommandOptions(parsed: ParsedArgs): void {
   const command = parsed.command
   if (command === undefined) return
-  const commandPath = command
+  const subcommand = parsed.positionals[0]
+  const commandPath = subcommand !== undefined && COMMANDS[command]?.commands?.[subcommand] !== undefined
+    ? `${command} ${subcommand}`
+    : command
   const allowed = new Set([
     ...COMMON_COMMAND_OPTIONS,
     ...(COMMAND_OPTIONS[commandPath] ?? []),
@@ -289,6 +301,8 @@ function validateCommandOptions(parsed: ParsedArgs): void {
     {
       kind: 'INVALID_ARGUMENT',
       code: 'option-not-supported',
+      suggestion: 'Review the flags supported by this exact command and try again.',
+      nextCommand: `ae help ${commandPath}`,
       detail: {
         command: commandPath,
         unsupportedOptions: unsupported.map((option) => `--${option}`),

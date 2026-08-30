@@ -123,7 +123,7 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
       recheck: { summary: 'Schedule readiness revalidation for one exact publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       republish: { summary: 'Republish one exact withdrawn publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       earnings: { summary: 'Read exact supplier earnings and payout status for one currency.', args: '<currency>', json: true },
-      connections: { summary: 'List provider connections for one supplier business, including non-active recovery states.', args: '<businessId> [lifecycle] [--limit <1-100>]', json: true },
+      connections: { summary: 'List the bounded provider-connection projection for one supplier business, including non-active recovery states.', args: '<businessId> [lifecycle]', json: true },
       connection: { summary: 'Inspect one exact provider connection and its current concurrency identity.', args: '<connectionRef>', json: true },
       connect: { summary: 'Connect one public credentialless x402 endpoint.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       reconnect: { summary: 'Refresh one exact provider connection using its current generation and digest.', args: "--input '<json>' [--idempotency-key <key>]", json: true },

@@ -134,6 +134,32 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
+  it('does not advertise or accept client-side truncation for supplier connections', () => {
+    const help = spawnCliSync(['help', 'supply', 'connections', '--json'])
+    expect(help.status).toBe(0)
+    expect(JSON.parse(help.stdout)).toMatchObject({
+      usage: 'ae supply connections <businessId> [lifecycle]',
+    })
+
+    const result = spawnCliSync([
+      'supply',
+      'connections',
+      'business:one',
+      '--limit',
+      '1',
+      '--json',
+    ])
+    expect(result.status).toBe(1)
+    expect(result.stderr).toBe('')
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'option-not-supported',
+      message: 'Option --limit is not valid for supply connections.',
+      suggestion: 'Review the flags supported by this exact command and try again.',
+      nextCommand: 'ae help supply connections',
+    })
+  }, 15_000)
+
   it('parses technical comparison output flags', () => {
     const parsed = parseArgs([
       '--technical',

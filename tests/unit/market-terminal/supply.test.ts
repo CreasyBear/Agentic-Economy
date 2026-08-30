@@ -159,7 +159,7 @@ describe('AE CLI supplier Operation lifecycle', () => {
       expect(JSON.parse(String(init?.body))).toEqual({
         businessId: 'business:one',
         lifecycle: 'cleanup_required',
-        limit: 25,
+        limit: 100,
       })
       return Response.json({
         kind: 'available',
@@ -188,7 +188,7 @@ describe('AE CLI supplier Operation lifecycle', () => {
     vi.stubGlobal('fetch', fetch)
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    await runSupplyCommand(['connections', 'business:one', 'cleanup_required'], { ...baseOptions, limit: 25 })
+    await runSupplyCommand(['connections', 'business:one', 'cleanup_required'], baseOptions)
 
     expect(JSON.parse(write.mock.calls.map(([value]) => String(value)).join(''))).toMatchObject({
       connections: [{ connectionRef: 'connection:x402:one', lifecycle: 'cleanup_required', authorityGeneration: 3 }],

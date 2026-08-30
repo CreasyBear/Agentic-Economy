@@ -106,7 +106,6 @@ function inputFor(subcommand: string, args: readonly string[], options: CliOptio
     return {
       businessId,
       ...(lifecycle === undefined ? {} : { lifecycle }),
-      ...(options.limit === undefined ? {} : { limit: Number(options.limit) }),
     }
   }
   if (subcommand === 'connection') {
