@@ -3,7 +3,7 @@ import { expect, it } from 'vitest'
 import { createCurrentOperationCommitment } from '@/modules/capability-supply/current-operation'
 
 import { api, internal } from '../../convex/_generated/api'
-import { readCurrentPublishedOperation } from '../../convex/capabilitySupplyOperationProjection'
+import { readCurrentPublishedOperation } from '../../convex/capabilitySupplyCurrentOperation'
 import {
   convexTestWithMarketComponents,
   publishedBusinessOwner,

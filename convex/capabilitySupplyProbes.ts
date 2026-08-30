@@ -24,7 +24,6 @@ import {
   publicationLifecycleValue,
 } from './capabilitySupplyShared'
 import { syncMarketOperationPresence } from './marketPresence'
-import { rebuildCurrentOperationProjection } from './capabilitySupplyOperationProjection'
 import {
   type AgentAccessPrincipalValue,
   verifySupplyAgentPrincipal,
@@ -369,11 +368,6 @@ export async function observeCapabilityReadinessHandler(
     readinessValidUntil: args.validUntil,
     updatedAt: now,
   })
-  await rebuildCurrentOperationProjection(ctx, {
-    publicationRef: publication.publicationRef,
-    publicationRevision: publication.revision,
-    now,
-  })
   await syncMarketOperationPresence(ctx, {
     operationRef: publication.operationRef,
     businessId: publication.businessId,
@@ -538,31 +532,13 @@ export async function recordCapabilityProbeResultHandler(
     return { kind: 'refused' as const, reason: 'target_changed' as const }
   }
   const { resourceAuthority: _resourceAuthority, ...observation } = args
-  const [publication, result] = await Promise.all([
-    ctx.db
-      .query('capabilityPublications')
-      .withIndex('by_publicationRef_and_revision', (index) =>
-        index
-          .eq('publicationRef', args.publicationRef)
-          .eq('revision', args.expectedRevision),
-      )
-      .unique(),
-    recordCapabilityProbeResultFromModule(
-      capabilitySupplyGraphPorts(ctx.db),
-      {
-        ...observation,
-        now: Date.now(),
-      },
-    ),
-  ])
-  if (result.kind === 'observed' && publication !== null) {
-    const now = Date.now()
-    await rebuildCurrentOperationProjection(ctx, {
-      publicationRef: publication.publicationRef,
-      publicationRevision: publication.revision,
-      now,
-    })
-  }
+  const result = await recordCapabilityProbeResultFromModule(
+    capabilitySupplyGraphPorts(ctx.db),
+    {
+      ...observation,
+      now: Date.now(),
+    },
+  )
   return result.kind === 'observed'
     ? { ...result, lifecycle: convexPublicationLifecycle(result.lifecycle) }
     : result

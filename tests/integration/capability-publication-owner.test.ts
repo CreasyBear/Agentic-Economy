@@ -11,7 +11,7 @@ import { withSourceWrite } from '../helpers/source-write-admission'
 import {
   admitPublication,
   capabilityPublicationInput,
-  installCanonicalProviderConnectionFixture,
+  installProviderConnectionFixture,
   operationContext,
   ownerMaintenanceArgs,
   preparedPublicationArgs,
@@ -21,11 +21,11 @@ import {
 
 async function installCurrentProviderConnection(
   backend: ReturnType<typeof convexTestWithMarketComponents>,
-  businessId: Parameters<typeof installCanonicalProviderConnectionFixture>[1]['businessId'],
+  businessId: Parameters<typeof installProviderConnectionFixture>[1]['businessId'],
   suffix: string,
 ) {
   const authority = providerAuthority(suffix)
-  const result = await installCanonicalProviderConnectionFixture(backend, {
+  const result = await installProviderConnectionFixture(backend, {
     businessId,
     ...authority,
     providerAccountRef: `account:capability-publication:${suffix}`,

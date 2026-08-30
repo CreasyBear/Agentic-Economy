@@ -23,7 +23,6 @@ export type ModuleName =
   | 'chat'
   | 'chat-sharing'
   | 'common'
-  | 'connections'
   | 'dev'
   | 'discovery'
   | 'market'
@@ -79,7 +78,6 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { name: 'principal-account', entrySurfaces: ['public.ts', 'principal/public.ts', 'account/public.ts', 'external-identity/public.ts', 'workload-context/public.ts'], allowedDependencies: [] },
     { name: 'authority', entrySurfaces: ['delegation/public.ts', 'context/public.ts', 'recovery/public.ts', 'internal/convex-schema.ts'], allowedDependencies: ['principal-account'] },
     { name: 'secrets', entrySurfaces: ['public.ts', 'secret-plane.ts', 'convex.ts', 'runtime.ts', 'internal/convex-schema.ts'], allowedDependencies: [] },
-    { name: 'connections', entrySurfaces: ['lifecycle/public.ts', 'internal/convex-schema.ts'], allowedDependencies: ['principal-account', 'authority', 'secrets'] },
     { name: 'network-guard', entrySurfaces: ['public.ts', 'server.ts'], allowedDependencies: ['common'] },
     { name: 'capability-contract', entrySurfaces: ['public.ts'], allowedDependencies: ['common'] },
     { name: 'business', entrySurfaces: ['public.ts', 'schema.ts'], allowedDependencies: ['common', 'principal-account'] },
@@ -159,15 +157,11 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { id: 'test-whitebox-53', importers: ['tests/unit/money/stripe-webhook.test.ts'], to: 'money', entry: 'internal/stripe-webhook.ts', owner: 'source-tests' },
     { id: 'test-whitebox-54', importers: ['tests/unit/observability/audit-redaction.test.ts'], to: 'observability', entry: 'internal/audit.ts', owner: 'source-tests' },
     { id: 'test-whitebox-55', importers: ['tests/unit/observability/audit-redaction.test.ts'], to: 'observability', entry: 'internal/redaction.ts', owner: 'source-tests' },
-    { id: 'test-whitebox-56', importers: ['tests/unit/observability/business-action-events.test.ts'], to: 'observability', entry: 'internal/schema.ts', owner: 'source-tests' },
     { id: 'test-whitebox-57', importers: ['tests/unit/observability/operation-keys.test.ts'], to: 'observability', entry: 'internal/operation-keys.ts', owner: 'source-tests' },
     { id: 'test-whitebox-59', importers: ['tests/unit/registry/search-documents.test.ts', 'tests/unit/registry/trade-vocabulary.test.ts'], to: 'registry', entry: 'internal/search-documents.ts', owner: 'source-tests' },
     { id: 'test-whitebox-60', importers: ['tests/unit/security/admin-authority.test.ts'], to: 'security', entry: 'internal/admin-authority.ts', owner: 'source-tests' },
     { id: 'test-whitebox-61', importers: ['tests/unit/server/mcp-api-operation-recovery.test.ts'], to: 'action-invocation', entry: 'reconciliation-evidence.ts', owner: 'source-tests' },
     { id: 'test-whitebox-62', importers: ['tests/unit/capability-execution/provider-consequence-bridge.test.ts'], to: 'capability-execution', entry: 'invocation-worker/providerConsequenceBridge.ts', owner: 'source-tests' },
-    { id: 'test-whitebox-63', importers: ['tests/unit/convex/provider-connection-projection.test.ts'], to: 'capability-supply', entry: 'internal/provider-connection/shared.ts', owner: 'source-tests' },
-    { id: 'test-whitebox-64', importers: ['tests/unit/convex/provider-connection-projection.test.ts'], to: 'capability-supply', entry: 'internal/provider-connection/types.ts', owner: 'source-tests' },
-    { id: 'test-whitebox-65', importers: ['tests/unit/convex/provider-connection-projection.test.ts'], to: 'capability-supply', entry: 'internal/provider-connection/lease.ts', owner: 'source-tests' },
     { id: 'test-whitebox-66', importers: ['tests/unit/capability-supply/readiness-probe-quote.test.ts', 'tests/unit/capability-supply/readiness-probe-http-json.test.ts'], to: 'capability-supply', entry: 'internal/readiness-probe-shared.ts', owner: 'source-tests' },
   ],
 }

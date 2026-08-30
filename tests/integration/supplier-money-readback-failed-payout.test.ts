@@ -560,6 +560,11 @@ describe('supplier money readback failed payout', () => {
       await ctx.db.insert('moneyPayouts', {
         payoutRef: fabricatedPayoutRef,
         businessId: businessRef,
+        owningAccountRef: accountRef,
+        authorityPrincipalRef: principalId,
+        authorityGrantRef,
+        authorityGrantGeneration,
+        authorityResourceRefs: [authorityResourceRef],
         currency: 'USD',
         exponent: 2,
         grossAccrualUnits: '550',

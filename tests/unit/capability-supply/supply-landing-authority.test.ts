@@ -29,7 +29,7 @@ vi.mock('@/modules/registry/registry.actions', () => ({
 
 import { loadSupplyLandingReadbackServer } from '@/lib/server/supply-landing.functions'
 
-describe('Phase 2 supply landing public exemption', () => {
+describe('Supply landing public exemption', () => {
   it('loadSupplyLandingReadbackServer returns only credential-free public tools and registry projections', async () => {
     registry.run.mockResolvedValue({ items: [], cursor: null, hasMore: false })
 

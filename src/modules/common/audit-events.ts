@@ -21,17 +21,6 @@ export const AuditTargetTypeValues = [
   'billing',
   'billing_provider_event',
   'billing_reconciliation',
-  'business_action_card',
-  'business_action_mandate',
-  'business_action_request',
-  'business_action_checkpoint',
-  'business_action_guardrail_evidence',
-  'business_action_external_evidence',
-  'business_action_result_artifact',
-  'business_action_receipt',
-  'business_action_support',
-  'business_action_private_evidence',
-  'business_action_no_repair',
 ] as const
 
 export const AuditEventTypeValues = [
@@ -109,18 +98,6 @@ export const AuditEventTypeValues = [
   'billing.reconciliation_failed',
   'billing.reconciliation_repaired',
   'billing.no_repair_marked',
-  'business_action.card_versioned',
-  'business_action.mandate_recorded',
-  'business_action.request_proposed',
-  'business_action.checkpoint_recorded',
-  'business_action.guardrail_allowed',
-  'business_action.guardrail_blocked',
-  'business_action.evidence_ingested',
-  'business_action.evidence_held',
-  'business_action.result_artifact_recorded',
-  'business_action.receipt_recorded',
-  'business_action.proof_gap_recorded',
-  'business_action.no_repair_marked',
 ] as const
 
 export type ActorKind = (typeof ActorKindValues)[number]
@@ -161,7 +138,7 @@ export type AuditEventInput = Omit<AuditEventContract, 'evidenceRefs'> & {
 
 export type AuditValidationResult =
   | { valid: true; event: AuditEventContract }
-  | { valid: false; reason: 'missing_identity' | 'missing_payload_hash' | 'missing_state_transition' }
+  | { valid: false; reason: 'invalid_event_type' | 'invalid_target_type' | 'missing_identity' | 'missing_payload_hash' | 'missing_state_transition' }
 
 export type AuditEventSink = {
   auditEvents: AuditEventContract[]
@@ -230,7 +207,12 @@ const stateChangingEvents: Partial<Record<AuditEventType, true>> = {
   'billing.no_repair_marked': true,
 }
 
+const auditEventTypes = new Set<string>(AuditEventTypeValues)
+const auditTargetTypes = new Set<string>(AuditTargetTypeValues)
+
 export function validateAuditEvent(input: AuditEventInput): AuditValidationResult {
+  if (!auditEventTypes.has(input.eventType)) return { valid: false, reason: 'invalid_event_type' }
+  if (!auditTargetTypes.has(input.targetType)) return { valid: false, reason: 'invalid_target_type' }
   if (
     input.eventId.length === 0 ||
     input.actorRef.length === 0 ||

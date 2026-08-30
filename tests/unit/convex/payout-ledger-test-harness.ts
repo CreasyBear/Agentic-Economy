@@ -16,8 +16,8 @@ import {
 import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
 import { STRIPE_TRANSFER_RECOVERY_WINDOW_MS } from '../../../src/modules/money/public'
 import {
-  PHASE_2_CRON_ACCOUNT_REF,
-  PHASE_2_CRON_PRINCIPAL_REF,
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
   type WorkloadCronSnapshot,
 } from '../../../convex/workloadCron'
 
@@ -231,8 +231,8 @@ export const payoutAuthorityGrantGeneration = 1
 export const dailySettlementWorkload: WorkloadCronSnapshot = {
   name: 'run daily supplier settlement',
   workloadKind: 'cron',
-  actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
-  activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+  actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+  activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
   correlationRef: 'cron:test:daily-settlement',
   idempotencyRef: 'cron:test:daily-settlement',
   purpose: 'run daily supplier settlement',
@@ -263,8 +263,8 @@ export function seedPayout(
     idempotencyRef: 'payout:test:authority',
   }
   const workloadActionContext = {
-    actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
-    activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+    actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
     correlationRef: 'payout:test:workload-account',
     idempotencyRef: 'payout:test:workload-account',
   }
@@ -282,9 +282,9 @@ export function seedPayout(
   })
   db.seed('principals', {
     _id: 'principals:cron-workload',
-    principalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    principalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
     kind: 'workload',
-    displayName: 'Phase 2 scheduled workload',
+    displayName: 'System scheduled workload',
     lifecycle: 'active',
     revision: 1,
     createdAt: 1,
@@ -307,11 +307,11 @@ export function seedPayout(
   })
   db.seed('accounts', {
     _id: 'accounts:cron-workload',
-    accountRef: PHASE_2_CRON_ACCOUNT_REF,
-    displayName: 'Phase 2 scheduled workload account',
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    displayName: 'System scheduled workload account',
     lifecycle: 'active',
     recoveryPolicy: { kind: 'no_transfer', revision: 1 },
-    creationActorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    creationActorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
     creationIdempotencyRef: workloadActionContext.idempotencyRef,
     initialOwnershipRef: workloadOwnershipRef,
     revision: 1,
@@ -334,8 +334,8 @@ export function seedPayout(
   db.seed('accountOwnerships', {
     _id: 'accountOwnerships:cron-workload',
     ownershipRef: workloadOwnershipRef,
-    accountRef: PHASE_2_CRON_ACCOUNT_REF,
-    ownerPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    ownerPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
     lifecycle: 'active',
     changeKind: 'creation',
     revision: 1,
@@ -345,8 +345,8 @@ export function seedPayout(
   db.seed('memberships', {
     _id: 'memberships:cron-workload',
     membershipRef: 'mem_99999999999999999999999999999999',
-    accountRef: PHASE_2_CRON_ACCOUNT_REF,
-    memberPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    memberPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
     lifecycle: 'active',
     revision: 1,
     createdAt: 1,

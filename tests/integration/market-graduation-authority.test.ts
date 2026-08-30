@@ -27,8 +27,8 @@ import {
   sweep as marketGraduationSweep,
 } from '../../convex/marketRegistryGraduation'
 import {
-  PHASE_2_CRON_ACCOUNT_REF,
-  PHASE_2_CRON_PRINCIPAL_REF,
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
   type WorkloadCronSnapshot,
 } from '../../convex/workloadCron'
 import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
@@ -41,8 +41,8 @@ import timezonePin from '@/modules/capability-supply/internal/x402-bazaar-fixtur
 const WORKLOAD: WorkloadCronSnapshot = Object.freeze({
   name: 'refresh Agentic Economy API registry',
   workloadKind: 'cron',
-  actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
-  activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+  actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+  activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
   correlationRef: 'cron:market-registry-graduation:test',
   idempotencyRef: 'cron:market-registry-graduation:test',
   purpose: 'refresh Agentic Economy API registry',

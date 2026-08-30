@@ -25,14 +25,12 @@ export type {
 } from './internal/provider-connection/types'
 
 export {
-  canonicalProviderConnectionProjection,
-  canonicalProviderConnectionProjectionIsCurrent,
-  canonicalProviderConnectionProjectionMatches,
-  canonicalProviderLeaseProjection,
-  canonicalProviderLeaseProjectionIsCurrent,
   isProviderConnectionAuthorityCurrent,
+  providerConnectionAuthorityProvenanceIsValid,
   providerConnectionAuthorityDigest,
+  withProviderConnectionAuthority,
 } from './internal/provider-connection/shared'
+export type { ProviderConnectionAuthorityProvenance } from './internal/provider-connection/shared'
 
 export {
   beginProviderConnectionRevocation,

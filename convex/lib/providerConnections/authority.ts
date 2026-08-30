@@ -1,74 +1,31 @@
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
 import type { Id } from '../../_generated/dataModel'
 import {
-  canonicalProviderConnectionProjectionIsCurrent,
-  canonicalProviderConnectionProjectionMatches,
+  providerConnectionAuthorityProvenanceIsValid,
   type ProviderConnection,
+  type ProviderConnectionAuthorityProvenance,
 } from '../../../src/modules/capability-supply/provider-connection'
 import {
   DELEGATION_MAX_ANCESTRY_GRANTS,
-  DelegationError,
-  DelegationService,
   parsePersistedDelegationGrant,
   type DelegationGrant,
   type DelegationGrantRef,
 } from '../../../src/modules/authority/delegation/public'
-import {
-  ConnectionLifecycleError,
-  ConnectionLifecycleService,
-  parsePersistedConnection,
-  type Connection,
-  type ConnectionOperation,
-} from '../../../src/modules/connections/lifecycle/public'
 import {
   accountRef,
   principalRef,
   type AccountRef,
   type PrincipalRef,
 } from '../../../src/modules/principal-account/public'
-import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
-import {
-  createDelegationBackedConnectionAuthority,
-  createConvexConnectionLifecycleStore,
-} from '../connectionLifecyclePersistence'
-import {
-  createConvexDelegationContextPort,
-  createConvexDelegationStore,
-} from '../delegationPersistence'
 import type { CleanupResourceAuthority } from './contracts'
+import { validateCanonicalAgentDelegation } from '../canonicalAgentAuthority'
+
+type ProviderConnectionOperation = 'install' | 'refresh' | 'revoke' | 'delete'
 
 export type CanonicalActor = Readonly<{
   principalRef: PrincipalRef
   accountRef: AccountRef
 }>
-
-function withoutSystemFields<Value extends { _id: unknown; _creationTime: number }>(value: Value) {
-  const { _id, _creationTime, ...domain } = value
-  void _id
-  void _creationTime
-  return domain
-}
-
-export async function readCanonicalConnectionForProjection(
-  ctx: Pick<QueryCtx, 'db'>,
-  legacy: ProviderConnection,
-  requireUsable = false,
-): Promise<Connection | null> {
-  if (legacy.canonicalConnectionRef === undefined) return null
-  const row = await ctx.db.query('connections')
-    .withIndex('by_connectionRef', (query) => query.eq('connectionRef', legacy.canonicalConnectionRef as never))
-    .unique()
-  if (row === null) return null
-  try {
-    const canonical = parsePersistedConnection(withoutSystemFields(row))
-    const valid = requireUsable
-      ? canonicalProviderConnectionProjectionIsCurrent(legacy, canonical)
-      : canonicalProviderConnectionProjectionMatches(legacy, canonical)
-    return valid ? canonical : null
-  } catch {
-    return null
-  }
-}
 
 export async function resolveCanonicalBusinessOwner(
   ctx: Pick<MutationCtx, 'db'>,
@@ -198,21 +155,6 @@ async function readCurrentCleanupGrantChain(
   return null
 }
 
-function canonicalCleanupProjectionMatches(
-  canonical: Connection,
-  legacy: ProviderConnection,
-): boolean {
-  return [
-    canonical.lifecycle === 'revoked', canonical.action.operation === 'revoke',
-    legacy.canonicalConnectionRef === canonical.connectionRef,
-    legacy.canonicalConnectionGeneration === canonical.generation,
-    legacy.owningAccountRef === canonical.owningAccountRef,
-    legacy.installedByPrincipalRef === canonical.installedByPrincipalRef,
-    legacy.authorityGrantRef === canonical.action.grantRef,
-    legacy.authorityGrantGeneration === canonical.action.grantGeneration,
-  ].every(Boolean)
-}
-
 async function actorHasCurrentAccountAuthority(
   ctx: Pick<QueryCtx, 'db'>,
   input: Readonly<{
@@ -237,17 +179,17 @@ async function actorHasCurrentAccountAuthority(
 
 export async function readCurrentCleanupResourceAuthority(
   ctx: Pick<QueryCtx, 'db'>,
-  legacy: ProviderConnection,
+  connection: ProviderConnection,
   now = Date.now(),
 ): Promise<CleanupResourceAuthority | null> {
-  const canonical = await readCanonicalConnectionForProjection(ctx, legacy)
-  if (canonical === null || !canonicalCleanupProjectionMatches(canonical, legacy)) return null
+  if (!providerConnectionAuthorityProvenanceIsValid(connection)
+    || !['revocation_pending', 'cleanup_required', 'revoked'].includes(connection.lifecycle)) return null
   const [principal, account] = await Promise.all([
     ctx.db.query('principals')
-      .withIndex('by_principalRef', (query) => query.eq('principalRef', canonical.action.actorPrincipalRef as never))
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', connection.installedByPrincipalRef as never))
       .unique(),
     ctx.db.query('accounts')
-      .withIndex('by_accountRef', (query) => query.eq('accountRef', canonical.owningAccountRef as never))
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', connection.owningAccountRef as never))
       .unique(),
   ])
   if ([principal, account].some((row) => row === null)) return null
@@ -262,30 +204,26 @@ export async function readCurrentCleanupResourceAuthority(
     .unique()
   if (ownership === null) return null
   const hasAccountAuthority = await actorHasCurrentAccountAuthority(ctx, {
-    actorPrincipalRef: canonical.action.actorPrincipalRef,
-    accountRef: canonical.owningAccountRef,
+    actorPrincipalRef: connection.installedByPrincipalRef,
+    accountRef: connection.owningAccountRef,
     ownership,
   })
   if (!hasAccountAuthority) return null
-  const resourceRef = `connection:${canonical.connectionRef}`
+  const resourceRef = `connection:${connection.connectionRef}`
   const chain = await readCurrentCleanupGrantChain(ctx, {
-    grantRef: canonical.action.grantRef,
-    grantGeneration: canonical.action.grantGeneration,
-    accountRef: canonical.owningAccountRef,
-    actorPrincipalRef: canonical.action.actorPrincipalRef,
+    grantRef: connection.authorityGrantRef,
+    grantGeneration: connection.authorityGrantGeneration,
+    accountRef: connection.owningAccountRef,
+    actorPrincipalRef: connection.installedByPrincipalRef,
     resourceRef,
     now,
   })
   if (chain === null) return null
-  if (![
-    canonical.action.activeAccountRef === canonical.owningAccountRef,
-    canonical.action.resourceRefs.includes(resourceRef),
-  ].every(Boolean)) return null
   return Object.freeze({
-    canonicalConnectionRef: canonical.connectionRef,
-    connectionGeneration: canonical.generation,
-    owningAccountRef: canonical.owningAccountRef,
-    actorPrincipalRef: canonical.action.actorPrincipalRef,
+    connectionRef: connection.connectionRef,
+    authorityGeneration: connection.authorityGeneration,
+    owningAccountRef: connection.owningAccountRef,
+    actorPrincipalRef: connection.installedByPrincipalRef,
     accountRevision: activeAccount.revision,
     ownershipRef: ownership.ownershipRef,
     grantRef: chain.leaf.grantRef,
@@ -298,8 +236,8 @@ export function cleanupResourceAuthorityMatches(
   left: CleanupResourceAuthority,
   right: CleanupResourceAuthority,
 ): boolean {
-  return left.canonicalConnectionRef === right.canonicalConnectionRef
-    && left.connectionGeneration === right.connectionGeneration
+  return left.connectionRef === right.connectionRef
+    && left.authorityGeneration === right.authorityGeneration
     && left.owningAccountRef === right.owningAccountRef
     && left.actorPrincipalRef === right.actorPrincipalRef
     && left.accountRevision === right.accountRevision
@@ -309,10 +247,66 @@ export function cleanupResourceAuthorityMatches(
     && left.authorityExpiresAt === right.authorityExpiresAt
 }
 
-export async function resolveUniqueCanonicalGrant(
-  ctx: Pick<MutationCtx, 'db'>,
+type ProviderConnectionGrantCandidate = Readonly<{
+  grantRef: string
+  generation: number
+  accountRef: string
+  subjectPrincipalRef: string
+  scopes: readonly string[]
+  resourceRefs: readonly string[]
+}>
+
+function grantCandidateCouldAdmit(
+  candidate: ProviderConnectionGrantCandidate,
   actor: CanonicalActor,
-  operation: ConnectionOperation,
+  operation: ProviderConnectionOperation,
+  resourceRefs: readonly string[],
+): boolean {
+  return candidate.accountRef === actor.accountRef
+    && candidate.subjectPrincipalRef === actor.principalRef
+    && Number.isSafeInteger(candidate.generation)
+    && candidate.generation >= 1
+    && candidate.scopes.includes(`connection:${operation}`)
+    && (candidate.resourceRefs.includes('*')
+      || resourceRefs.every((resource) => candidate.resourceRefs.includes(resource)))
+}
+
+async function admitProviderConnectionGrantCandidate(
+  ctx: MutationCtx,
+  candidate: ProviderConnectionGrantCandidate,
+  actor: CanonicalActor,
+  operation: ProviderConnectionOperation,
+  resourceRefs: readonly string[],
+  now: number,
+): Promise<{ grantRef: DelegationGrantRef; generation: number; expiresAt: number } | null> {
+  if (!grantCandidateCouldAdmit(candidate, actor, operation, resourceRefs)) return null
+  const snapshot = await validateCanonicalAgentDelegation(ctx, {
+    evidenceKind: 'provider-connection-provenance',
+    evidenceRef: `connection:${operation}`,
+    principalRef: actor.principalRef,
+    accountRef: actor.accountRef,
+    grantRef: candidate.grantRef,
+    grantGeneration: candidate.generation,
+    requiredScopes: [`connection:${operation}`],
+    resourceRefs,
+    now,
+  })
+  if (snapshot === null
+    || snapshot.grantRef !== candidate.grantRef
+    || snapshot.generation !== candidate.generation
+    || snapshot.accountRef !== actor.accountRef
+    || snapshot.actorPrincipalRef !== actor.principalRef) return null
+  return {
+    grantRef: candidate.grantRef as DelegationGrantRef,
+    generation: candidate.generation,
+    expiresAt: snapshot.expiresAt,
+  }
+}
+
+export async function resolveUniqueProviderConnectionGrant(
+  ctx: MutationCtx,
+  actor: CanonicalActor,
+  operation: ProviderConnectionOperation,
   resourceRefs: readonly string[],
 ): Promise<{ grantRef: DelegationGrantRef; generation: number; expiresAt: number } | null> {
   const now = Date.now()
@@ -322,51 +316,31 @@ export async function resolveUniqueCanonicalGrant(
       .eq('lifecycle', 'active'))
     .take(DELEGATION_MAX_ANCESTRY_GRANTS + 1)
   if (candidates.length > DELEGATION_MAX_ANCESTRY_GRANTS) return null
-  const matching = candidates.filter((grant) => grant.accountRef === actor.accountRef
-    && grant.expiresAt > now
-    && Number.isSafeInteger(grant.generation)
-    && grant.generation > 0
-    && grant.scopes.includes(`connection:${operation}`)
-    && (grant.resourceRefs.includes('*')
-      || resourceRefs.every((resource) => grant.resourceRefs.includes(resource))))
-  if (matching.length !== 1) return null
-  const grant = matching[0] as (typeof matching)[number]
-  return { grantRef: grant.grantRef as DelegationGrantRef, generation: grant.generation, expiresAt: grant.expiresAt }
-}
-
-export function createCanonicalConnectionLifecycleService(ctx: MutationCtx, actor: CanonicalActor): ConnectionLifecycleService {
-  const delegation = new DelegationService(
-    createConvexDelegationStore(ctx),
-    createConvexDelegationContextPort(ctx, actor.principalRef),
-  )
-  const authority = createDelegationBackedConnectionAuthority(delegation)
-  return new ConnectionLifecycleService(
-    createConvexConnectionLifecycleStore(ctx),
-    {
-      withCurrentAuthority: async (request, consequence) => await authority.withCurrentAuthority(
-        request,
-        async (snapshot) => await consequence(Object.freeze({
-          ...snapshot,
-          // Delegation persists canonical set order; Connection actions retain
-          // their operation-defined order after the same set was admitted.
-          resourceRefs: Object.freeze([...request.resourceRefs]),
-        })),
-      ),
-    },
-  )
-}
-
-export function canonicalConnectionActionContext(actor: CanonicalActor, operation: ConnectionOperation, commandId: string) {
-  const requestRef = canonicalDigest({ operation, commandId, accountRef: actor.accountRef, principalRef: actor.principalRef })
-  return {
-    actorPrincipalRef: actor.principalRef,
-    activeAccountRef: actor.accountRef,
-    correlationRef: `provider-connection:${requestRef}`,
-    idempotencyRef: `provider-connection:${operation}:${requestRef}`,
+  const matching: Array<{ grantRef: DelegationGrantRef; generation: number; expiresAt: number }> = []
+  for (const candidate of candidates) {
+    const admitted = await admitProviderConnectionGrantCandidate(
+      ctx, candidate, actor, operation, resourceRefs, now,
+    )
+    if (admitted !== null) matching.push(admitted)
   }
+  if (matching.length !== 1) return null
+  return matching[0] ?? null
 }
 
-export function failClosedCanonicalLifecycleError(error: unknown): null {
-  if (error instanceof ConnectionLifecycleError || error instanceof DelegationError) return null
-  throw error
+export async function resolveProviderConnectionProvenance(
+  ctx: MutationCtx,
+  actor: CanonicalActor,
+  operation: ProviderConnectionOperation,
+  resourceRefs: readonly string[],
+  credentialRef: string | null,
+): Promise<ProviderConnectionAuthorityProvenance | null> {
+  const grant = await resolveUniqueProviderConnectionGrant(ctx, actor, operation, resourceRefs)
+  if (grant === null) return null
+  return Object.freeze({
+    owningAccountRef: actor.accountRef,
+    installedByPrincipalRef: actor.principalRef,
+    authorityGrantRef: grant.grantRef,
+    authorityGrantGeneration: grant.generation,
+    ...(credentialRef === null ? {} : { secretRef: credentialRef }),
+  })
 }

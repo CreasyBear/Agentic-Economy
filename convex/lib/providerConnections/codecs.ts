@@ -15,12 +15,6 @@ export function toDomain(row: ProviderConnectionRow): ProviderConnection {
 
 function optionalConnectionFields(connection: ProviderConnection) {
   return Object.fromEntries(Object.entries({
-    canonicalConnectionRef: connection.canonicalConnectionRef,
-    owningAccountRef: connection.owningAccountRef,
-    installedByPrincipalRef: connection.installedByPrincipalRef,
-    authorityGrantRef: connection.authorityGrantRef,
-    authorityGrantGeneration: connection.authorityGrantGeneration,
-    canonicalConnectionGeneration: connection.canonicalConnectionGeneration,
     secretRef: connection.secretRef,
     expiresAt: connection.expiresAt,
     revocationRef: connection.revocationRef,
@@ -45,6 +39,10 @@ export function toRow(
   }
   return {
     connectionRef: connection.connectionRef,
+    owningAccountRef: connection.owningAccountRef,
+    installedByPrincipalRef: connection.installedByPrincipalRef,
+    authorityGrantRef: connection.authorityGrantRef,
+    authorityGrantGeneration: connection.authorityGrantGeneration,
     ...optionalConnectionFields(connection),
     businessId: connection.businessId as Id<'businesses'>,
     providerRef: connection.providerRef,
@@ -79,14 +77,6 @@ export function toLeaseDomain(row: ProviderConnectionLeaseRow): ProviderConnecti
 
 function optionalLeaseFields(lease: ProviderConnectionInvocationLease) {
   return Object.fromEntries(Object.entries({
-    canonicalLeaseRef: lease.canonicalLeaseRef,
-    canonicalConnectionRef: lease.canonicalConnectionRef,
-    canonicalConnectionGeneration: lease.canonicalConnectionGeneration,
-    owningAccountRef: lease.owningAccountRef,
-    activeAccountRef: lease.activeAccountRef,
-    actorPrincipalRef: lease.actorPrincipalRef,
-    grantRef: lease.grantRef,
-    grantGeneration: lease.grantGeneration,
     readinessDigest: lease.readinessDigest,
     consumedAt: lease.consumedAt,
     invalidatedAt: lease.invalidatedAt,
@@ -103,6 +93,11 @@ export function toLeaseRow(
   }
   return {
     leaseRef: lease.leaseRef,
+    owningAccountRef: lease.owningAccountRef,
+    activeAccountRef: lease.activeAccountRef,
+    actorPrincipalRef: lease.actorPrincipalRef,
+    grantRef: lease.grantRef,
+    grantGeneration: lease.grantGeneration,
     ...optionalLeaseFields(lease),
     invocationRef: lease.invocationRef,
     operationRef: lease.operationRef,
@@ -127,4 +122,3 @@ export function toLeaseRow(
     lastCommandDigest: lease.lastCommandDigest,
   }
 }
-

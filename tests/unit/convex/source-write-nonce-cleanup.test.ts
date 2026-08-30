@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { cleanupExpiredSourceWriteNonces } from '../../../convex/sourceWriteAdmission'
 import {
-  PHASE_2_CRON_ACCOUNT_REF,
-  PHASE_2_CRON_PRINCIPAL_REF,
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
   type WorkloadCronSnapshot,
 } from '../../../convex/workloadCron'
 
@@ -315,8 +315,8 @@ function workloadSnapshot(
   return {
     name,
     workloadKind: 'cron',
-    actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
-    activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+    actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
     correlationRef: `cron:${handler}:test`,
     idempotencyRef: `cron:${handler}:test`,
     purpose: name,
@@ -333,12 +333,12 @@ function seedWorkloadAuthority(db: FakeDb): void {
   const ownershipRef = 'own_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
   const action = {
     actorPrincipalRef: ownerPrincipalRef,
-    activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+    activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
     correlationRef: 'source-write-cleanup-test:account',
     idempotencyRef: 'source-write-cleanup-test:account',
   }
   db.seed('principals', row('principals:workload', {
-    principalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    principalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
     kind: 'workload',
     displayName: 'Source-write cleanup workload',
     lifecycle: 'active',
@@ -349,15 +349,15 @@ function seedWorkloadAuthority(db: FakeDb): void {
   db.seed('principals', row('principals:owner', {
     principalRef: ownerPrincipalRef,
     kind: 'human',
-    displayName: 'Phase 2 operations owner',
+    displayName: 'System operations owner',
     lifecycle: 'active',
     revision: 1,
     createdAt: 1,
     updatedAt: 1,
   }))
   db.seed('accounts', row('accounts:workload', {
-    accountRef: PHASE_2_CRON_ACCOUNT_REF,
-    displayName: 'Phase 2 operations',
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    displayName: 'System operations',
     lifecycle: 'active',
     recoveryPolicy: { kind: 'no_transfer', revision: 1 },
     creationActorPrincipalRef: ownerPrincipalRef,
@@ -371,7 +371,7 @@ function seedWorkloadAuthority(db: FakeDb): void {
   }))
   db.seed('accountOwnerships', row('accountOwnerships:workload', {
     ownershipRef,
-    accountRef: PHASE_2_CRON_ACCOUNT_REF,
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
     ownerPrincipalRef,
     lifecycle: 'active',
     changeKind: 'creation',
@@ -381,8 +381,8 @@ function seedWorkloadAuthority(db: FakeDb): void {
   }))
   db.seed('memberships', row('memberships:workload', {
     membershipRef: 'mem_cccccccccccccccccccccccccccccccc',
-    accountRef: PHASE_2_CRON_ACCOUNT_REF,
-    memberPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    memberPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
     lifecycle: 'active',
     revision: 1,
     createdAt: 1,

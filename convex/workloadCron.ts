@@ -33,11 +33,11 @@ import {
 import {
   CONSEQUENCE_OPERATIONS,
   ConvexWorkloadContextStore,
-  PHASE_2_CRON_ACCOUNT_REF,
-  PHASE_2_CRON_MEMBERSHIP_REF,
-  PHASE_2_CRON_OWNER_PRINCIPAL_REF,
-  PHASE_2_CRON_OWNERSHIP_REF,
-  PHASE_2_CRON_PRINCIPAL_REF,
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_MEMBERSHIP_REF,
+  SYSTEM_WORKLOAD_OWNER_PRINCIPAL_REF,
+  SYSTEM_WORKLOAD_OWNERSHIP_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
   WorkloadCronBoundaryError,
   consequenceJsonValue,
   consequenceOperationValue,
@@ -94,7 +94,7 @@ type EnsurePlatformWorkloadIdentitiesResult = Readonly<{
 }>
 
 // Self-healing bootstrap for the cron fleet's machine identity. Every scheduled
-// workload admits through WorkloadContextAdmission with the fixed Phase 2 refs,
+// workload admits through WorkloadContextAdmission with fixed system refs,
 // which throws workload_principal_missing on any fresh deployment. This
 // internalMutation inserts the canonical rows (see convex/agentAccessOAuth.test.ts
 // and tests/integration/facilitator-discovery.test.ts fixtures) when absent and
@@ -105,19 +105,19 @@ export async function ensurePlatformWorkloadIdentitiesHandler(
   const now = Date.now()
   const created: string[] = []
   const action = Object.freeze({
-    actorPrincipalRef: PHASE_2_CRON_OWNER_PRINCIPAL_REF,
-    activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+    actorPrincipalRef: SYSTEM_WORKLOAD_OWNER_PRINCIPAL_REF,
+    activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
     correlationRef: 'platform-identity:cron',
     idempotencyRef: 'platform-identity:cron',
   })
   const principal = await ctx.db.query('principals')
-    .withIndex('by_principalRef', (query) => query.eq('principalRef', PHASE_2_CRON_PRINCIPAL_REF))
+    .withIndex('by_principalRef', (query) => query.eq('principalRef', SYSTEM_WORKLOAD_PRINCIPAL_REF))
     .unique()
   if (principal === null) {
     await ctx.db.insert('principals', {
-      principalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      principalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
       kind: 'workload',
-      displayName: 'Phase 2 scheduled workload',
+      displayName: 'System scheduled workload',
       lifecycle: 'active',
       revision: 1,
       createdAt: now,
@@ -126,18 +126,18 @@ export async function ensurePlatformWorkloadIdentitiesHandler(
     created.push('principal')
   }
   const account = await ctx.db.query('accounts')
-    .withIndex('by_accountRef', (query) => query.eq('accountRef', PHASE_2_CRON_ACCOUNT_REF))
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', SYSTEM_WORKLOAD_ACCOUNT_REF))
     .unique()
   if (account === null) {
     await ctx.db.insert('accounts', {
-      accountRef: PHASE_2_CRON_ACCOUNT_REF,
-      displayName: 'Phase 2 operations',
+      accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+      displayName: 'System operations',
       lifecycle: 'active',
       recoveryPolicy: { kind: 'no_transfer', revision: 1 },
-      creationActorPrincipalRef: PHASE_2_CRON_OWNER_PRINCIPAL_REF,
+      creationActorPrincipalRef: SYSTEM_WORKLOAD_OWNER_PRINCIPAL_REF,
       creationIdempotencyRef: 'platform-identity:cron:account',
-      initialOwnershipRef: PHASE_2_CRON_OWNERSHIP_REF,
-      currentOwnershipRef: PHASE_2_CRON_OWNERSHIP_REF,
+      initialOwnershipRef: SYSTEM_WORKLOAD_OWNERSHIP_REF,
+      currentOwnershipRef: SYSTEM_WORKLOAD_OWNERSHIP_REF,
       revision: 1,
       createdAt: now,
       updatedAt: now,
@@ -146,13 +146,13 @@ export async function ensurePlatformWorkloadIdentitiesHandler(
     created.push('account')
   }
   const ownership = await ctx.db.query('accountOwnerships')
-    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', PHASE_2_CRON_OWNERSHIP_REF))
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', SYSTEM_WORKLOAD_OWNERSHIP_REF))
     .unique()
   if (ownership === null) {
     await ctx.db.insert('accountOwnerships', {
-      ownershipRef: PHASE_2_CRON_OWNERSHIP_REF,
-      accountRef: PHASE_2_CRON_ACCOUNT_REF,
-      ownerPrincipalRef: PHASE_2_CRON_OWNER_PRINCIPAL_REF,
+      ownershipRef: SYSTEM_WORKLOAD_OWNERSHIP_REF,
+      accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+      ownerPrincipalRef: SYSTEM_WORKLOAD_OWNER_PRINCIPAL_REF,
       lifecycle: 'active',
       changeKind: 'creation',
       revision: 1,
@@ -162,13 +162,13 @@ export async function ensurePlatformWorkloadIdentitiesHandler(
     created.push('ownership')
   }
   const membership = await ctx.db.query('memberships')
-    .withIndex('by_membershipRef', (query) => query.eq('membershipRef', PHASE_2_CRON_MEMBERSHIP_REF))
+    .withIndex('by_membershipRef', (query) => query.eq('membershipRef', SYSTEM_WORKLOAD_MEMBERSHIP_REF))
     .unique()
   if (membership === null) {
     await ctx.db.insert('memberships', {
-      membershipRef: PHASE_2_CRON_MEMBERSHIP_REF,
-      accountRef: PHASE_2_CRON_ACCOUNT_REF,
-      memberPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      membershipRef: SYSTEM_WORKLOAD_MEMBERSHIP_REF,
+      accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+      memberPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
       lifecycle: 'active',
       revision: 1,
       createdAt: now,
@@ -474,15 +474,6 @@ export async function refreshAgenticEconomyApiRegistryHandler(ctx: WorkloadCronA
   )
 }
 
-export async function continueMarketAggregateBackfillHandler(ctx: WorkloadCronMutationContext): Promise<null> {
-  return await runAdmittedMutation(
-    ctx,
-    'continue market aggregate backfill',
-    internal.marketAggregateBackfill.run,
-    {},
-  )
-}
-
 export async function refreshCurrentMarketPresenceHandler(
   ctx: WorkloadCronMutationContext,
   args: Readonly<{ cursor?: string | null }> = {},
@@ -556,12 +547,6 @@ export const refreshAgenticEconomyApiRegistry = internalAction({
   args: {},
   returns: v.null(),
   handler: refreshAgenticEconomyApiRegistryHandler,
-})
-
-export const continueMarketAggregateBackfill = internalMutation({
-  args: {},
-  returns: v.null(),
-  handler: continueMarketAggregateBackfillHandler,
 })
 
 export const refreshCurrentMarketPresence = internalMutation({

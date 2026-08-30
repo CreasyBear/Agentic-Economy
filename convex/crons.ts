@@ -35,13 +35,6 @@ crons.interval(
 )
 
 crons.interval(
-  'continue market aggregate backfill',
-  { hours: 6 },
-  internal.workloadCron.continueMarketAggregateBackfill,
-  {},
-)
-
-crons.interval(
   'refresh current market presence',
   { hours: 1 },
   internal.workloadCron.refreshCurrentMarketPresence,

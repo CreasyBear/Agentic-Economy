@@ -5,8 +5,8 @@ import { DelegationService } from '@/modules/authority/delegation/public'
 import convexCrons from '../../../convex/crons'
 import { probeFromCron } from '../../../convex/capabilitySupplyReadiness'
 import {
-  PHASE_2_CRON_ACCOUNT_REF,
-  PHASE_2_CRON_PRINCIPAL_REF,
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
   WORKLOAD_CRON_DECLARATIONS,
   admitWorkloadCron,
   admitWorkloadCronHandler,
@@ -15,7 +15,6 @@ import {
   reconcileWorkloadCronResourceAccount,
   cleanupExpiredAgentAccessOAuthGrantsHandler,
   cleanupExpiredSourceWriteNoncesHandler,
-  continueMarketAggregateBackfillHandler,
   reconcileDueFacilitatorInvocationsHandler,
   reconcileWorkloadCronSnapshot,
   reconcileWorkloadCronSnapshotHandler,
@@ -43,7 +42,6 @@ const probeFromCronRuntime = (probeFromCron as unknown as { _handler: Registered
 const EXPECTED_BINDINGS = {
   'cleanup expired agent access oauth grants': 'workloadCron:cleanupExpiredAgentAccessOAuthGrants',
   'cleanup expired source write nonces': 'workloadCron:cleanupExpiredSourceWriteNonces',
-  'continue market aggregate backfill': 'workloadCron:continueMarketAggregateBackfill',
   'reconcile due facilitator invocations': 'workloadCron:reconcileDueFacilitatorInvocations',
   'refresh Agentic Economy API registry': 'workloadCron:refreshAgenticEconomyApiRegistry',
   'refresh Agentic Market snapshots': 'workloadCron:refreshAgenticMarketSnapshots',
@@ -61,7 +59,6 @@ const ACTION_HANDLERS = [
 ] as const
 
 const MUTATION_HANDLERS = [
-  continueMarketAggregateBackfillHandler,
   refreshCurrentMarketPresenceHandler,
   refreshCapabilitySupplyReadinessHandler,
   cleanupExpiredSourceWriteNoncesHandler,
@@ -69,13 +66,13 @@ const MUTATION_HANDLERS = [
   runDailySupplierSettlementHandler,
 ] as const
 
-describe('Phase 2 canonical workload cron boundary', () => {
+describe('System workload cron boundary', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-26T00:00:00.000Z'))
   })
 
-  it('binds the exact ten cron registrations only to workload admission wrappers', () => {
+  it('binds the exact nine cron registrations only to workload admission wrappers', () => {
     expect(Object.keys(convexCrons.crons).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
     expect(Object.fromEntries(
       Object.entries(convexCrons.crons).map(([name, job]) => [name, job.name]),
@@ -84,12 +81,12 @@ describe('Phase 2 canonical workload cron boundary', () => {
   })
 
   it('declares every cron as one canonical workload Principal and Account with no exemption', () => {
-    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(10)
+    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(9)
     expect(WORKLOAD_CRON_DECLARATIONS.map(({ name }) => name).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
     expect(WORKLOAD_CRON_DECLARATIONS.every((declaration) => (
       declaration.authority === 'canonical_workload'
-      && declaration.actorPrincipalRef === PHASE_2_CRON_PRINCIPAL_REF
-      && declaration.activeAccountRef === PHASE_2_CRON_ACCOUNT_REF
+      && declaration.actorPrincipalRef === SYSTEM_WORKLOAD_PRINCIPAL_REF
+      && declaration.activeAccountRef === SYSTEM_WORKLOAD_ACCOUNT_REF
     ))).toBe(true)
     expect(JSON.stringify(WORKLOAD_CRON_DECLARATIONS)).not.toMatch(/credential|provider|ownerId|principalId|superuser/iu)
   })
@@ -119,8 +116,8 @@ describe('Phase 2 canonical workload cron boundary', () => {
       name: 'refresh capability supply readiness',
       snapshot,
     })).resolves.toMatchObject({
-      actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
-      activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+      actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+      activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
       principalRevision: 7,
       activeAccountRevision: 11,
     })
@@ -229,8 +226,8 @@ describe('Phase 2 canonical workload cron boundary', () => {
           name: snapshot.name,
           snapshot,
         })).resolves.toMatchObject({
-          actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
-          activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+          actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+          activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
         })
         await expect(probeFromCronRuntime(action, {
           publicationRef: 'publication:isolation-matrix',
@@ -265,8 +262,8 @@ describe('Phase 2 canonical workload cron boundary', () => {
         : admitWorkloadCron(queryContext(db), declaration.name)
       await expect(admission).resolves.toMatchObject({
         workloadKind: declaration.workloadKind,
-        actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
-        activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+        actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+        activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
         principalRevision: 7,
         activeAccountRevision: 11,
         accessVia: 'membership',
@@ -279,18 +276,18 @@ describe('Phase 2 canonical workload cron boundary', () => {
     const db = canonicalDb({ workloadOwnsAccount: true, includeMembership: false })
     await expect(admitWorkloadCron(queryContext(db), 'refresh current market presence')).resolves.toMatchObject({
       accessVia: 'ownership',
-      actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
-      activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+      actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+      activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
     })
   })
 
   it('denies missing or ambiguous workload Principal facts', async () => {
-    await expect(admitWorkloadCron(queryContext(new FakeDb()), 'continue market aggregate backfill'))
+    await expect(admitWorkloadCron(queryContext(new FakeDb()), 'refresh current market presence'))
       .rejects.toMatchObject({ code: 'workload_principal_missing' })
 
     const ambiguous = canonicalDb()
     ambiguous.seed('principals', principal())
-    await expect(admitWorkloadCron(queryContext(ambiguous), 'continue market aggregate backfill'))
+    await expect(admitWorkloadCron(queryContext(ambiguous), 'refresh current market presence'))
       .rejects.toThrow('unique query returned more than one row')
   })
 
@@ -335,14 +332,14 @@ describe('Phase 2 canonical workload cron boundary', () => {
       .rejects.toThrow('unique query returned more than one row')
   })
 
-  it('checks current workload authority before dispatch across all ten wrappers', async () => {
+  it('checks current workload authority before dispatch across all nine wrappers', async () => {
     const context = new FakeRuntimeContext(canonicalDb())
     for (const handler of ACTION_HANDLERS) await expect(handler(context.action())).resolves.toBeNull()
     for (const handler of MUTATION_HANDLERS) await expect(handler(context.mutation())).resolves.toBeNull()
 
     expect(context.admissions).toEqual(WORKLOAD_CRON_DECLARATIONS.slice(0, 4).map(({ name }) => name))
-    expect(context.dispatches).toHaveLength(10)
-    expect(context.db.queries).toEqual(Array.from({ length: 10 }, () => [
+    expect(context.dispatches).toHaveLength(9)
+    expect(context.db.queries).toEqual(Array.from({ length: 9 }, () => [
       'principals',
       'accounts',
       'accountOwnerships',
@@ -418,8 +415,8 @@ describe('Phase 2 canonical workload cron boundary', () => {
       queryContext(db),
       snapshot.name,
       snapshot,
-      PHASE_2_CRON_ACCOUNT_REF,
-    )).resolves.toMatchObject({ activeAccountRef: PHASE_2_CRON_ACCOUNT_REF })
+      SYSTEM_WORKLOAD_ACCOUNT_REF,
+    )).resolves.toMatchObject({ activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF })
     const resourceAccountRef = 'acc_dddddddddddddddddddddddddddddddd'
     db.seed('accounts', { ...account(), accountRef: resourceAccountRef })
     await expect(reconcileWorkloadCronResourceAccount(
@@ -427,7 +424,7 @@ describe('Phase 2 canonical workload cron boundary', () => {
       snapshot.name,
       snapshot,
       resourceAccountRef,
-    )).resolves.toMatchObject({ activeAccountRef: PHASE_2_CRON_ACCOUNT_REF })
+    )).resolves.toMatchObject({ activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF })
   })
 
   it('binds reconciliation resources only through a current full-chain grant admission and dual Account attribution', async () => {
@@ -442,7 +439,7 @@ describe('Phase 2 canonical workload cron boundary', () => {
       payload: {},
     })).rejects.toMatchObject({ code: 'workload_resource_authority_invalid' })
 
-    seedInvocationAuthority(db, { grantAccountRef: PHASE_2_CRON_ACCOUNT_REF })
+    seedInvocationAuthority(db, { grantAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF })
     const sameAccount = new FakeRuntimeContext(db)
     await expect(dispatchWorkloadCronConsequenceHandler(sameAccount.mutation() as never, {
       name: snapshot.name,
@@ -704,9 +701,9 @@ function canonicalDb(options: CanonicalDbOptions = {}): FakeDb {
 
 function principal(input: Readonly<{ kind?: string; lifecycle?: string }> = {}): Row {
   return {
-    principalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    principalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
     kind: input.kind ?? 'workload',
-    displayName: 'Phase 2 scheduled workload',
+    displayName: 'System scheduled workload',
     lifecycle: input.lifecycle ?? 'active',
     revision: 7,
     createdAt: 1,
@@ -716,8 +713,8 @@ function principal(input: Readonly<{ kind?: string; lifecycle?: string }> = {}):
 
 function account(input: Readonly<{ lifecycle?: string }> = {}): Row {
   return {
-    accountRef: PHASE_2_CRON_ACCOUNT_REF,
-    displayName: 'Phase 2 operations',
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+    displayName: 'System operations',
     lifecycle: input.lifecycle ?? 'active',
     recoveryPolicy: { kind: 'no_transfer', revision: 1 },
     creationActorPrincipalRef: 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
@@ -729,7 +726,7 @@ function account(input: Readonly<{ lifecycle?: string }> = {}): Row {
     updatedAt: 2,
     lastAction: {
       actorPrincipalRef: 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+      activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
       correlationRef: 'account:create',
       idempotencyRef: 'account:create',
     },
@@ -739,9 +736,9 @@ function account(input: Readonly<{ lifecycle?: string }> = {}): Row {
 function ownership(input: Readonly<{ workloadOwnsAccount?: boolean }> = {}): Row {
   return {
     ownershipRef: 'own_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    accountRef: PHASE_2_CRON_ACCOUNT_REF,
+    accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
     ownerPrincipalRef: input.workloadOwnsAccount === true
-      ? PHASE_2_CRON_PRINCIPAL_REF
+      ? SYSTEM_WORKLOAD_PRINCIPAL_REF
       : 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     lifecycle: 'active',
     changeKind: 'creation',
@@ -749,7 +746,7 @@ function ownership(input: Readonly<{ workloadOwnsAccount?: boolean }> = {}): Row
     createdAt: 1,
     createdBy: {
       actorPrincipalRef: 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+      activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
       correlationRef: 'account:create',
       idempotencyRef: 'account:create',
     },
@@ -759,14 +756,14 @@ function ownership(input: Readonly<{ workloadOwnsAccount?: boolean }> = {}): Row
 function membership(input: Readonly<{ accountRef?: string }> = {}): Row {
   return {
     membershipRef: 'mem_cccccccccccccccccccccccccccccccc',
-    accountRef: input.accountRef ?? PHASE_2_CRON_ACCOUNT_REF,
-    memberPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    accountRef: input.accountRef ?? SYSTEM_WORKLOAD_ACCOUNT_REF,
+    memberPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
     lifecycle: 'active',
     revision: 1,
     createdAt: 1,
     createdBy: {
       actorPrincipalRef: 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      activeAccountRef: input.accountRef ?? PHASE_2_CRON_ACCOUNT_REF,
+      activeAccountRef: input.accountRef ?? SYSTEM_WORKLOAD_ACCOUNT_REF,
       correlationRef: 'membership:create',
       idempotencyRef: 'membership:create',
     },
@@ -859,7 +856,7 @@ function seedInvocationAuthority(
     createdAt: 1,
     updatedAt: 1,
   })
-  if (resourceAccountRef !== PHASE_2_CRON_ACCOUNT_REF) {
+  if (resourceAccountRef !== SYSTEM_WORKLOAD_ACCOUNT_REF) {
     db.seed('accounts', {
       ...account(),
       accountRef: resourceAccountRef,

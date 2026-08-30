@@ -30,6 +30,11 @@ const eligibility = {
 const providerConnectionCommand: CreateProviderConnectionCommand = {
   commandId: 'command:create:eligibility',
   connectionRef: 'connection:demo',
+  owningAccountRef: 'account:owner',
+  installedByPrincipalRef: 'principal:owner',
+  authorityGrantRef: 'grant:connection',
+  authorityGrantGeneration: 1,
+  secretRef: 'env:DEMO_PROVIDER_SECRET',
   businessId: 'business-1',
   providerRef: 'provider:demo',
   providerAccountRef: 'account:demo',

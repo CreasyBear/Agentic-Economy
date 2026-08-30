@@ -8,6 +8,7 @@ import {
   issueProviderConnectionLease,
   projectProviderConnectionOwner,
   projectProviderConnectionPublic,
+  providerConnectionAuthorityProvenanceIsValid,
   providerConnectionCleanupRequestDigest,
   providerConnectionLeaseAuthoritySnapshot,
   recordProviderConnectionCleanupResult,
@@ -15,6 +16,7 @@ import {
   resolveProviderConnectionCredentialRef,
   resolveProviderConnectionCredentialRefForLease,
   validateProviderConnectionLeaseAuthority,
+  withProviderConnectionAuthority,
   type CreateProviderConnectionCommand,
   type ProviderConnection,
   type ProviderConnectionCleanupOutcome,
@@ -24,6 +26,11 @@ import {
 const baseCommand: CreateProviderConnectionCommand = {
   commandId: 'command:create:one',
   connectionRef: 'connection:one',
+  owningAccountRef: 'account:owner',
+  installedByPrincipalRef: 'principal:owner',
+  authorityGrantRef: 'grant:connection',
+  authorityGrantGeneration: 1,
+  secretRef: 'env:PROVIDER_SECRET',
   businessId: 'business:one',
   providerRef: 'provider:one',
   providerAccountRef: 'account:one',
@@ -35,6 +42,13 @@ const baseCommand: CreateProviderConnectionCommand = {
   grantedResources: ['orders'],
   evidenceRefs: ['evidence:create'],
 }
+
+const x402Authority = {
+  owningAccountRef: 'account:owner',
+  installedByPrincipalRef: 'principal:owner',
+  authorityGrantRef: 'grant:connection',
+  authorityGrantGeneration: 1,
+} as const
 function approvalFor(current: ProviderConnection, decision: ProviderConnectionLeaseApproval['decision'] = 'granted'): ProviderConnectionLeaseApproval {
   return {
     decisionRef: 'decision:provider:one',
@@ -70,6 +84,10 @@ function leaseCommand(current: ProviderConnection, overrides: Partial<Parameters
     readinessValidUntil: 10_000,
     leaseMs: 1_000,
     evidenceRefs: ['evidence:lease'],
+    activeAccountRef: current.owningAccountRef,
+    actorPrincipalRef: 'principal:buyer',
+    grantRef: 'grant:lease',
+    grantGeneration: 1,
     ...overrides,
   } as Parameters<typeof issueProviderConnectionLease>[1]
 }
@@ -120,6 +138,34 @@ function cleanupCommand(
 }
 
 describe('provider connection domain', () => {
+  it('binds every authority-provenance field into the connection digest', () => {
+    const current = create()
+    const substitutions: Array<Partial<ProviderConnection>> = [
+      { owningAccountRef: 'account:attacker' },
+      { installedByPrincipalRef: 'principal:attacker' },
+      { authorityGrantRef: 'grant:substituted' },
+      { authorityGrantGeneration: 2 },
+      { secretRef: 'env:PROVIDER_SECRET_V2', credentialRef: 'env:PROVIDER_SECRET_V2' },
+    ]
+    expect(providerConnectionAuthorityProvenanceIsValid(current)).toBe(true)
+    for (const substitution of substitutions) {
+      expect(providerConnectionAuthorityProvenanceIsValid({ ...current, ...substitution })).toBe(false)
+    }
+  })
+
+  it('recomputes the authority digest whenever provenance is rebound', () => {
+    const current = create()
+    const rebound = withProviderConnectionAuthority(current, {
+      owningAccountRef: current.owningAccountRef,
+      installedByPrincipalRef: current.installedByPrincipalRef,
+      authorityGrantRef: 'grant:replacement',
+      authorityGrantGeneration: 2,
+      secretRef: 'env:PROVIDER_SECRET',
+    })
+    expect(rebound.authorityDigest).not.toBe(current.authorityDigest)
+    expect(providerConnectionAuthorityProvenanceIsValid(rebound)).toBe(true)
+  })
+
   it('narrows requested scopes/resources and stores sorted unique grants', () => {
     const result = createProviderConnection({
       ...baseCommand,
@@ -148,6 +194,7 @@ describe('provider connection domain', () => {
       ...baseCommand,
       commandId: 'command:reauthorize:one',
       credentialRef: 'env:PROVIDER_SECRET_V2',
+      secretRef: 'env:PROVIDER_SECRET_V2',
       expectedAuthorityGeneration: current.authorityGeneration,
       expectedAuthorityDigest: current.authorityDigest,
       evidenceRefs: ['evidence:reauthorize'],
@@ -235,6 +282,7 @@ describe('provider connection domain', () => {
 
   it('detaches credential-less x402 locally without remote revocation', () => {
     const created = createX402ProviderConnection({
+      ...x402Authority,
       commandId: 'command:x402:cleanup',
       connectionRef: 'connection:x402:cleanup',
       businessId: 'business:one',
@@ -329,6 +377,7 @@ describe('provider connection domain', () => {
 
   it('validates a credential-less x402 lease without reading provider credential custody', () => {
     const created = createX402ProviderConnection({
+      ...x402Authority,
       commandId: 'command:x402:lease',
       connectionRef: 'connection:x402:lease',
       businessId: 'business:one',
@@ -472,6 +521,7 @@ describe('provider connection domain', () => {
   })
   it('creates non-secret x402 authority and refuses replay drift against the existing lifecycle row', () => {
     const command = {
+      ...x402Authority,
       commandId: 'command:x402:one',
       connectionRef: 'connection:x402:one',
       businessId: 'business:one',

@@ -16,7 +16,7 @@ export type ConnectionAuthority = Readonly<{
 }>
 
 export type ProviderLeaseAuthority = Readonly<{
-  canonicalConnectionRef: string
+  connectionRef: string
   authorityGeneration: number
   authorityDigest: string
   grantedScopes: readonly string[]
@@ -75,14 +75,11 @@ export async function issueProviderLease(
   if (lease.kind !== 'applied' && lease.kind !== 'duplicate') {
     return { kind: 'refused', nextAction: 'Provider connection lease was refused.' }
   }
-  if (lease.lease.canonicalConnectionRef === undefined) {
-    return { kind: 'refused', nextAction: 'Provider connection canonical authority is unavailable.' }
-  }
   return {
     kind: 'issued',
     leaseRef: lease.lease.leaseRef,
     leaseAuthority: {
-      canonicalConnectionRef: lease.lease.canonicalConnectionRef,
+      connectionRef: lease.lease.connectionRef,
       authorityGeneration: lease.lease.authorityGeneration,
       authorityDigest: lease.lease.authorityDigest,
       grantedScopes: lease.lease.grantedScopes,

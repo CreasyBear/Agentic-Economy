@@ -51,7 +51,7 @@ async function publishCurrentOperation(
       },
     }),
   )
-  if ('reason' in published) throw new Error(`wave0_publication_refused:${published.reason}`)
+  if ('reason' in published) throw new Error(`canonical_publication_refused:${published.reason}`)
   await admitPublication(backend, published, suffix)
   const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
     publicationRef: published.publicationRef,
@@ -59,12 +59,12 @@ async function publishCurrentOperation(
     credentialState: 'ready',
     healthState: 'healthy',
     validUntil: Date.now() + 3_600_000,
-    operationKey: `test:wave0:ready:${suffix}`,
-    correlationId: `test:wave0:${suffix}`,
+    operationKey: `test:canonical-operation:ready:${suffix}`,
+    correlationId: `test:canonical-operation:${suffix}`,
     reasonCode: 'source_test_readiness',
-    evidenceRefs: ['test:wave0'],
+    evidenceRefs: ['test:canonical-operation'],
   })
-  if (observed.kind !== 'observed') throw new Error(`wave0_readiness_refused:${observed.reason}`)
+  if (observed.kind !== 'observed') throw new Error(`canonical_readiness_refused:${observed.reason}`)
   return { businessId, ...published }
 }
 
@@ -79,11 +79,11 @@ async function cloneCurrentPublications(
         query.eq('publicationRef', fixture.publicationRef).eq('revision', fixture.publicationRevision)
       ))
       .unique()
-    if (source === null) throw new Error('wave0_source_publication_missing')
+    if (source === null) throw new Error('canonical_source_publication_missing')
     const { _id: _sourceId, _creationTime: _sourceCreationTime, ...material } = source
     const operationRefs = [source.operationRef]
     for (let index = 1; index < total; index += 1) {
-      const publicationRef = `${source.publicationRef}:wave0:${String(index).padStart(3, '0')}`
+      const publicationRef = `${source.publicationRef}:canonical:${String(index).padStart(3, '0')}`
       const operationRef = createPublicOperationRef({
         operationId: capabilityOperationId(source.capabilityId),
         publicationRef,
@@ -105,18 +105,20 @@ async function cloneCurrentPublications(
   })
 }
 
-async function projectionDiagnostics(backend: ConvexFixtureBackend) {
-  return await backend.query(internal.capabilitySupplyOperations.currentProjectionDiagnostics, {
-    now: Date.now(),
-  })
-}
+type CorruptionReason =
+  | 'identity_drift'
+  | 'missing_offering'
+  | 'missing_binding'
+  | 'missing_business'
+  | 'missing_contract'
+  | 'business_unpublished'
+  | 'invalid_transport'
+  | 'malformed_price'
 
-type DropReason = Awaited<ReturnType<typeof projectionDiagnostics>>['drops'][number]['reason']
-
-async function corruptCurrentProjection(
+async function corruptCurrentOperationMaterial(
   backend: ConvexFixtureBackend,
   fixture: PublishedOperationFixture,
-  reason: DropReason,
+  reason: CorruptionReason,
 ): Promise<void> {
   await backend.run(async (ctx) => {
     const publication = await ctx.db.query('capabilityPublications')
@@ -124,7 +126,7 @@ async function corruptCurrentProjection(
         query.eq('publicationRef', fixture.publicationRef).eq('revision', fixture.publicationRevision)
       ))
       .unique()
-    if (publication === null) throw new Error('wave0_corrupt_publication_missing')
+    if (publication === null) throw new Error('canonical_corrupt_publication_missing')
     if (reason === 'identity_drift') {
       await ctx.db.patch(publication._id, { operationRef: `${publication.operationRef}:drift` })
       return
@@ -132,14 +134,14 @@ async function corruptCurrentProjection(
     if (reason === 'missing_offering') {
       const row = await ctx.db.query('capabilityOfferings')
         .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId)).unique()
-      if (row === null) throw new Error('wave0_corrupt_offering_missing')
+      if (row === null) throw new Error('canonical_corrupt_offering_missing')
       await ctx.db.delete(row._id)
       return
     }
     if (reason === 'missing_binding') {
       const row = await ctx.db.query('capabilityTransportBindings')
         .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId)).unique()
-      if (row === null) throw new Error('wave0_corrupt_binding_missing')
+      if (row === null) throw new Error('canonical_corrupt_binding_missing')
       await ctx.db.delete(row._id)
       return
     }
@@ -152,7 +154,7 @@ async function corruptCurrentProjection(
         .withIndex('by_capabilityId_and_version', (query) => (
           query.eq('capabilityId', publication.capabilityId).eq('version', publication.version)
         )).unique()
-      if (row === null) throw new Error('wave0_corrupt_contract_missing')
+      if (row === null) throw new Error('canonical_corrupt_contract_missing')
       await ctx.db.delete(row._id)
       return
     }
@@ -162,7 +164,7 @@ async function corruptCurrentProjection(
     }
     const binding = await ctx.db.query('capabilityTransportBindings')
       .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId)).unique()
-    if (binding === null) throw new Error('wave0_corrupt_binding_missing')
+    if (binding === null) throw new Error('canonical_corrupt_binding_missing')
     if (reason === 'invalid_transport') {
       await ctx.db.patch(binding._id, { configJson: '{"method":"INVALID"}' })
       return
@@ -171,13 +173,8 @@ async function corruptCurrentProjection(
   })
 }
 
-function percentile95(samples: readonly number[]): number {
-  const ordered = [...samples].sort((left, right) => left - right)
-  return ordered[Math.max(0, Math.ceil(ordered.length * 0.95) - 1)] ?? 0
-}
 
-
-describe('Wave 0 current Operation verification', () => {
+describe('canonical Operation reads', () => {
   it('keeps two suppliers coherent across search, detail, compare, inspect, and pinned call identity', async () => {
     const backend = convexTestWithMarketComponents()
     const first = await publishCurrentOperation(backend, 'parity-first')
@@ -247,7 +244,7 @@ describe('Wave 0 current Operation verification', () => {
           .withIndex('by_publicationRef_and_revision', (query) => (
             query.eq('publicationRef', fixture.publicationRef).eq('revision', fixture.publicationRevision)
           )).unique()
-        if (publication === null) throw new Error('wave0_stale_publication_missing')
+        if (publication === null) throw new Error('canonical_stale_publication_missing')
         if (material === 'readiness') {
           await ctx.db.patch(publication._id, { healthState: 'unhealthy' })
           return
@@ -255,7 +252,7 @@ describe('Wave 0 current Operation verification', () => {
         if (material === 'price') {
           const offering = await ctx.db.query('capabilityOfferings')
             .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId)).unique()
-          if (offering === null) throw new Error('wave0_stale_offering_missing')
+          if (offering === null) throw new Error('canonical_stale_offering_missing')
           await ctx.db.patch(offering._id, {
             presentation: {
               ...offering.presentation,
@@ -268,7 +265,7 @@ describe('Wave 0 current Operation verification', () => {
           .withIndex('by_capabilityId_and_version', (query) => (
             query.eq('capabilityId', publication.capabilityId).eq('version', publication.version)
           )).unique()
-        if (contract === null) throw new Error('wave0_stale_contract_missing')
+        if (contract === null) throw new Error('canonical_stale_contract_missing')
         const document = JSON.parse(contract.documentJson) as Record<string, unknown>
         await ctx.db.patch(contract._id, {
           documentJson: JSON.stringify({
@@ -298,48 +295,98 @@ describe('Wave 0 current Operation verification', () => {
     'business_unpublished',
     'invalid_transport',
     'malformed_price',
-  ] as const)('reports bounded %s evidence instead of a silent projection drop', async (reason) => {
+  ] as const)('fails closed when canonical %s material is corrupt', async (reason) => {
     const backend = convexTestWithMarketComponents()
-    const fixture = await publishCurrentOperation(backend, `drop-${reason.replaceAll('_', '-')}`)
-    await corruptCurrentProjection(backend, fixture, reason)
+    const fixture = await publishCurrentOperation(backend, `corrupt-${reason.replaceAll('_', '-')}`)
+    await corruptCurrentOperationMaterial(backend, fixture, reason)
 
-    const search = await backend.query(api.capabilitySupplyOperations.search, {
-      query: 'private-query-sentinel',
-    })
-    expect(search.kind).toBe('no_candidates')
-    const diagnostic = await projectionDiagnostics(backend)
-    expect(diagnostic).toMatchObject({
-      scannedCount: 1,
-      projectedCount: 0,
-      unavailableCount: 0,
-      dropCount: 1,
-      truncated: false,
-      drops: [{ reason, count: 1 }],
-    })
-    expect(JSON.stringify(diagnostic)).not.toContain('private-query-sentinel')
-    expect(JSON.stringify(diagnostic)).not.toContain('.example.test')
+    await expect(backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' }))
+      .resolves.toMatchObject({ kind: 'no_candidates' })
+    await expect(backend.query(
+      internal.capabilitySupplyOperations.readCurrentPublishedOperationSnapshot,
+      { operationRef: fixture.operationRef },
+    )).resolves.toBeNull()
   })
 
-  it('distinguishes a legitimate unavailable state from corrupt projection material', async () => {
+  it('returns null instead of throwing when an offering is structurally malformed', async () => {
     const backend = convexTestWithMarketComponents()
-    const fixture = await publishCurrentOperation(backend, 'unavailable-health')
+    const fixture = await publishCurrentOperation(backend, 'malformed-offering')
     await backend.run(async (ctx) => {
-      const publication = await ctx.db.query('capabilityPublications')
-        .withIndex('by_publicationRef_and_revision', (query) => (
-          query.eq('publicationRef', fixture.publicationRef).eq('revision', fixture.publicationRevision)
-        )).unique()
-      if (publication === null) throw new Error('wave0_unavailable_publication_missing')
-      await ctx.db.patch(publication._id, { healthState: 'unhealthy' })
+      const offering = await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', fixture.offeringId))
+        .unique()
+      if (offering === null) throw new Error('canonical_offering_missing')
+      await ctx.db.patch(offering._id, {
+        presentation: { ...offering.presentation, label: '' },
+      })
     })
-    await expect(projectionDiagnostics(backend)).resolves.toMatchObject({
-      scannedCount: 1,
-      projectedCount: 1,
-      unavailableCount: 1,
-      dropCount: 0,
-      drops: [],
-      unavailable: [{ reason: 'temporarily_unavailable', count: 1 }],
-    })
+
+    await expect(backend.query(
+      internal.capabilitySupplyOperations.readCurrentPublishedOperationSnapshot,
+      { operationRef: fixture.operationRef },
+    )).resolves.toBeNull()
   })
+
+  it.each(['offering', 'binding', 'business', 'contract'] as const)(
+    'invalidates a pagination cursor when joined %s facts change',
+    async (joinedFact) => {
+      const backend = convexTestWithMarketComponents()
+      const first = await publishCurrentOperation(backend, `cursor-${joinedFact}-first`)
+      await publishCurrentOperation(backend, `cursor-${joinedFact}-second`)
+      const page = await backend.query(api.capabilitySupplyOperations.search, {
+        query: 'lookup',
+        limit: 1,
+      })
+      expect(page).toMatchObject({ kind: 'ok', pagination: { hasMore: true } })
+      if (page.kind !== 'ok' || page.pagination.nextCursor === undefined) return
+
+      await backend.run(async (ctx) => {
+        const publication = await ctx.db.query('capabilityPublications')
+          .withIndex('by_publicationRef_and_revision', (query) => (
+            query.eq('publicationRef', first.publicationRef).eq('revision', first.publicationRevision)
+          ))
+          .unique()
+        if (publication === null) throw new Error('canonical_cursor_publication_missing')
+        if (joinedFact === 'business') {
+          const business = await ctx.db.get(publication.businessId)
+          if (business === null) throw new Error('canonical_cursor_business_missing')
+          await ctx.db.patch(business._id, { name: `${business.name} changed` })
+          return
+        }
+        if (joinedFact === 'offering') {
+          const offering = await ctx.db.query('capabilityOfferings')
+            .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId))
+            .unique()
+          if (offering === null) throw new Error('canonical_cursor_offering_missing')
+          await ctx.db.patch(offering._id, {
+            presentation: { ...offering.presentation, label: `${offering.presentation.label} changed` },
+          })
+          return
+        }
+        if (joinedFact === 'binding') {
+          const binding = await ctx.db.query('capabilityTransportBindings')
+            .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId))
+            .unique()
+          if (binding === null) throw new Error('canonical_cursor_binding_missing')
+          await ctx.db.patch(binding._id, { endpointUrl: `${binding.endpointUrl}/changed` })
+          return
+        }
+        const contract = await ctx.db.query('capabilityContractDocuments')
+          .withIndex('by_capabilityId_and_version', (query) => (
+            query.eq('capabilityId', publication.capabilityId).eq('version', publication.version)
+          ))
+          .unique()
+        if (contract === null) throw new Error('canonical_cursor_contract_missing')
+        await ctx.db.patch(contract._id, { documentJson: '{malformed' })
+      })
+
+      await expect(backend.query(api.capabilitySupplyOperations.search, {
+        query: 'lookup',
+        limit: 1,
+        cursor: page.pagination.nextCursor,
+      })).resolves.toMatchObject({ kind: 'unavailable', reason: 'query_invalid' })
+    },
+  )
 
   it('accepts 256 valid current Operations and refuses 257 with the typed capacity outcome', async () => {
     const accepted = convexTestWithMarketComponents()
@@ -355,54 +402,4 @@ describe('Wave 0 current Operation verification', () => {
       .resolves.toMatchObject({ kind: 'unavailable', reason: 'source_capacity_exceeded' })
   }, 30_000)
 
-  it.each([1, 20, 256] as const)('records the reproducible %i-Operation search baseline', async (size) => {
-    const backend = convexTestWithMarketComponents()
-    const fixture = await publishCurrentOperation(backend, `benchmark-${size}`)
-    const operationRefs = await cloneCurrentPublications(backend, fixture, size)
-    const wallMs: number[] = []
-    const heapBytes: number[] = []
-    let measurement: Awaited<ReturnType<typeof backend.query>> | undefined
-    for (let run = 0; run < 10; run += 1) {
-      const started = performance.now()
-      measurement = await backend.query(internal.capabilitySupplyOperations.currentSearchBenchmark, {
-        query: 'lookup',
-        limit: 20,
-      })
-      wallMs.push(performance.now() - started)
-      heapBytes.push(process.memoryUsage().heapUsed)
-    }
-    const detailStarted = performance.now()
-    const detail = await backend.query(api.capabilitySupplyOperations.detail, {
-      operationRef: operationRefs[0]!,
-    })
-    const detailMs = performance.now() - detailStarted
-    const compareStarted = performance.now()
-    const compare = await backend.query(api.capabilitySupplyOperations.compare, {
-      operationRefs: operationRefs.slice(0, Math.min(2, operationRefs.length)),
-    })
-    const compareMs = performance.now() - compareStarted
-    const inspectStarted = performance.now()
-    const inspect = await backend.query(api.capabilitySupplyOperations.inspectPlan, {
-      operationRefs: operationRefs.slice(0, Math.min(2, operationRefs.length)),
-    })
-    const inspectMs = performance.now() - inspectStarted
-    expect(measurement).toMatchObject({ outcome: 'ok', matchedCount: size })
-    expect(detail.kind).toBe('found')
-    expect(compare.kind).toBe('ok')
-    expect(inspect.kind).toBe('ok')
-    console.info('T1_WAVE0_BASELINE', JSON.stringify({
-      size,
-      sourceRows: size,
-      databaseQueries: measurement?.databaseQueries,
-      documentsRead: measurement?.documentsRead,
-      bytesRead: measurement?.bytesRead,
-      serializedResultBytes: measurement?.serializedResultBytes,
-      heapHighWaterBytes: Math.max(...heapBytes),
-      searchWallP95Ms: percentile95(wallMs),
-      detailMs,
-      compareMs,
-      inspectMs,
-      samples: wallMs.length,
-    }))
-  }, 30_000)
 })

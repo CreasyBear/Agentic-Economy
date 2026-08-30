@@ -122,8 +122,8 @@ function isCleanupTarget(value: unknown): value is CleanupTarget {
 
 function isCleanupResourceAuthority(value: unknown): value is CleanupResourceAuthority {
   if (!isRecord(value)) return false
-  return typeof value.canonicalConnectionRef === 'string'
-    && typeof value.connectionGeneration === 'number'
+  return typeof value.connectionRef === 'string'
+    && typeof value.authorityGeneration === 'number'
     && typeof value.owningAccountRef === 'string'
     && typeof value.actorPrincipalRef === 'string'
     && typeof value.accountRevision === 'number'

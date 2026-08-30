@@ -8,7 +8,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('supplier money readback connect auth', () => {
   it('shows the canonical daily payout as accountState missing before Connect', async () => {
-    const { backend, owner, businessRef, providerAccountRef } =
+    const { backend, owner, businessRef, providerAccountRef, accountRef, principalId } =
       await createSupplierMoneyOwner('supplier-earnings-missing-connect')
     const periodStart = '2026-07-01T00:00:00.000Z'
     const periodEnd = '2026-07-02T00:00:00.000Z'
@@ -37,6 +37,11 @@ describe('supplier money readback connect auth', () => {
       await ctx.db.insert('moneyPayouts', {
         payoutRef,
         businessId: businessRef,
+        owningAccountRef: accountRef,
+        authorityPrincipalRef: principalId,
+        authorityGrantRef: 'grant:supplier-earnings-missing-connect',
+        authorityGrantGeneration: 1,
+        authorityResourceRefs: [`business:${businessRef}`],
         currency: 'USD',
         exponent: 2,
         grossAccrualUnits: '5500',
@@ -51,22 +56,6 @@ describe('supplier money readback connect auth', () => {
         idempotencyKey: payoutRef,
         createdAt: 1,
         updatedAt: 2,
-      })
-      await ctx.db.insert('moneyPayouts', {
-        payoutRef: 'legacy-undefined-cadence',
-        businessId: businessRef,
-        currency: 'USD',
-        exponent: 2,
-        grossAccrualUnits: '1',
-        rakeUnits: '0',
-        providerNetUnits: '1',
-        minimumPayoutUnits: '0',
-        state: 'paid',
-        periodStart: 'legacy-period-start',
-        periodEnd: 'legacy-period-end',
-        idempotencyKey: 'legacy-idempotency',
-        createdAt: 3,
-        updatedAt: 99,
       })
     })
     await expect(owner.query(readOwnerProviderEarnings, {})).resolves.toMatchObject({

@@ -37,8 +37,6 @@ const GENERATION = secretGeneration('sgn_11111111111111111111111111111111')
 const PAYMENT_REF = secretRef('sec_22222222222222222222222222222222')
 const PAYMENT_GENERATION = secretGeneration('sgn_22222222222222222222222222222222')
 const CREDENTIAL = 'provider-secret-never-return'
-const CANONICAL_CONNECTION_REF = `con_${'3'.repeat(32)}`
-
 type ProviderRouteTransportInvocation = Extract<
   RouteTransportInvocation,
   Readonly<{ binding: Readonly<{ authority: Readonly<{ kind: 'provider_connection' }> }> }>
@@ -75,7 +73,6 @@ function invocation(): ProviderRouteTransportInvocation {
       callIdentity: { keyId: 'route-calls:2026-08', signature: 'hmac-sha256:signed-call' },
       authorityGeneration: 4,
       authorityDigest: canonicalDigest({ connection: 'test', generation: 4 }),
-      canonicalConnectionRef: CANONICAL_CONNECTION_REF,
       leaseRef: 'lease:test',
       invocationRef: 'invocation:test',
       operationRef: 'operation:test',
@@ -183,9 +180,8 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     invocationRef,
     operationRef,
     leaseRef,
-    canonicalLeaseRef: 'lease_canonical_test',
-    canonicalConnectionRef: routeInvocation.authority.canonicalConnectionRef!,
-    canonicalConnectionGeneration: authority.authorityGeneration,
+    connectionRef: routeInvocation.binding.authority.connectionRef,
+    authorityGeneration: authority.authorityGeneration,
     providerRef: routeInvocation.binding.authority.providerRef,
     adapterId: routeInvocation.binding.adapterId,
     authorityDigest: authority.authorityDigest,
@@ -426,8 +422,8 @@ describe('JIT provider consequence boundary', () => {
     ['request digest substitution', (value: CanonicalProviderConsequenceTicket) => ({ ...value, requestDigest: canonicalDigest({ request: 'other' }) })],
     ['invocation digest substitution', (value: CanonicalProviderConsequenceTicket) => ({ ...value, invocationDigest: canonicalDigest({ invocation: 'other' }) })],
     ['lease substitution', (value: CanonicalProviderConsequenceTicket) => ({ ...value, leaseRef: 'lease:other' })],
-    ['cross-account connection substitution', (value: CanonicalProviderConsequenceTicket) => ({ ...value, canonicalConnectionRef: 'connection:other' })],
-    ['authority generation substitution', (value: CanonicalProviderConsequenceTicket) => ({ ...value, canonicalConnectionGeneration: 5 })],
+    ['cross-account connection substitution', (value: CanonicalProviderConsequenceTicket) => ({ ...value, connectionRef: 'connection:other' })],
+    ['authority generation substitution', (value: CanonicalProviderConsequenceTicket) => ({ ...value, authorityGeneration: 5 })],
     ['authority digest substitution', (value: CanonicalProviderConsequenceTicket) => ({ ...value, authorityDigest: canonicalDigest({ authority: 'other' }) })],
     ['scope widening', (value: CanonicalProviderConsequenceTicket) => ({ ...value, grantedScopes: [...value.grantedScopes, 'admin:*'] })],
     ['resource widening', (value: CanonicalProviderConsequenceTicket) => ({ ...value, grantedResources: [...value.grantedResources, 'account:other'] })],

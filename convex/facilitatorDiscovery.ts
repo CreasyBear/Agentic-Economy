@@ -449,6 +449,8 @@ async function ensureProviderConnection(
       ? connection
       : undefined
   }
+  const business = await ctx.db.get(businessId)
+  if (business === null) return undefined
   const commandId = `facilitator-discovery:connection:${canonicalDigest(identity).slice(7)}`
   const result = createX402ProviderConnection({
     commandId,
@@ -458,6 +460,10 @@ async function ensureProviderConnection(
     providerAccountRef,
     resourceUrl,
     evidenceRefs: [SOURCE_EVIDENCE],
+    owningAccountRef: business.owningAccountRef,
+    installedByPrincipalRef: FACILITATOR_DISCOVERY_PUBLISHER_REF,
+    authorityGrantRef: `observed:${FACILITATOR_DISCOVERY_PUBLISHER_REF}`,
+    authorityGrantGeneration: 1,
   }, now)
   if (result.kind !== 'applied') return undefined
   await ctx.db.insert('capabilityProviderConnections', toRow(result.connection, commandId, result.commandDigest))

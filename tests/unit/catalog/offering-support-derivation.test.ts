@@ -123,6 +123,11 @@ describe('catalogue support derivation', () => {
       const connectionResult = createProviderConnection({
         commandId: 'command:create:connection:test',
         connectionRef: 'connection:test',
+        owningAccountRef: 'account:owner',
+        installedByPrincipalRef: 'principal:owner',
+        authorityGrantRef: 'grant:connection',
+        authorityGrantGeneration: 1,
+        secretRef: 'env:TEST_PROVIDER_SECRET',
         businessId: String(businessId),
         providerRef: 'provider:test',
         providerAccountRef: 'account:test',
@@ -223,6 +228,11 @@ describe('catalogue support derivation', () => {
       })
       await ctx.db.insert('capabilityProviderConnections', {
         connectionRef: connection.connectionRef,
+        owningAccountRef: connection.owningAccountRef,
+        installedByPrincipalRef: connection.installedByPrincipalRef,
+        authorityGrantRef: connection.authorityGrantRef,
+        authorityGrantGeneration: connection.authorityGrantGeneration,
+        ...(connection.secretRef === undefined ? {} : { secretRef: connection.secretRef }),
         businessId,
         providerRef: connection.providerRef,
         providerAccountRef: connection.providerAccountRef,

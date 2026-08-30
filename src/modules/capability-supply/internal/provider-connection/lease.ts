@@ -62,15 +62,11 @@ export type ProviderConnectionLeaseApproval = Readonly<{
 
 export type ProviderConnectionInvocationLease = Readonly<{
   leaseRef: string
-  /** Staged compatibility mapping. Absence is a denial, not a legacy fallback. */
-  canonicalLeaseRef?: string
-  canonicalConnectionRef?: string
-  canonicalConnectionGeneration?: number
-  owningAccountRef?: string
-  activeAccountRef?: string
-  actorPrincipalRef?: string
-  grantRef?: string
-  grantGeneration?: number
+  owningAccountRef: string
+  activeAccountRef: string
+  actorPrincipalRef: string
+  grantRef: string
+  grantGeneration: number
   invocationRef: string
   operationRef: string
   connectionRef: string
@@ -133,6 +129,10 @@ export type IssueProviderConnectionLeaseCommand = Readonly<{
   readinessDigest?: string
   leaseMs: number
   evidenceRefs: readonly string[]
+  activeAccountRef: string
+  actorPrincipalRef: string
+  grantRef: string
+  grantGeneration: number
 }>
 
 export type ConsumeProviderConnectionLeaseCommand = Readonly<{
@@ -258,10 +258,13 @@ function normalizeLeaseIssueCommand(
   if (!leaseIdentity(command.commandId) || !leaseIdentity(command.leaseRef)
     || !leaseIdentity(command.invocationRef) || !leaseIdentity(command.operationRef)
     || !leaseIdentity(command.connectionRef) || !leaseIdentity(command.providerRef)
-    || !leaseIdentity(command.providerAccountRef) || !leaseIdentity(command.adapterId)) {
+    || !leaseIdentity(command.providerAccountRef) || !leaseIdentity(command.adapterId)
+    || !leaseIdentity(command.activeAccountRef) || !leaseIdentity(command.actorPrincipalRef)
+    || !leaseIdentity(command.grantRef)) {
     return { kind: 'refused', code: 'invalid_identity' }
   }
   if (!validGeneration(command.expectedAuthorityGeneration)
+    || !validGeneration(command.grantGeneration)
     || !isCanonicalDigest(command.expectedAuthorityDigest)) {
     return { kind: 'refused', code: 'invalid_generation' }
   }
@@ -364,6 +367,8 @@ function leaseCurrentRefusal(
   if (current.lifecycle !== 'active') return 'connection_not_active'
   if (current.expiresAt !== undefined && current.expiresAt <= now) return 'connection_expired'
   if (!isProviderConnectionAuthorityCurrent(current)) return 'lease_digest_stale'
+  if (lease.owningAccountRef !== current.owningAccountRef
+    || lease.activeAccountRef !== current.owningAccountRef) return 'lease_identity_mismatch'
   if (current.authorityGeneration !== lease.authorityGeneration
     || current.authorityGeneration !== expected.authorityGeneration) return 'lease_generation_stale'
   if (current.authorityDigest !== lease.authorityDigest
@@ -438,6 +443,7 @@ export function issueProviderConnectionLease(
   if (integrity !== null) return leaseRefusal(integrity)
   if (current.lifecycle !== 'active') return leaseRefusal('connection_not_active')
   if (current.expiresAt !== undefined && current.expiresAt <= now) return leaseRefusal('connection_expired')
+  if (normalized.command.activeAccountRef !== current.owningAccountRef) return leaseRefusal('invalid_lease')
   if (current.authorityGeneration !== normalized.command.expectedAuthorityGeneration) return leaseRefusal('invalid_generation')
   if (current.authorityDigest !== normalized.command.expectedAuthorityDigest) return leaseRefusal('invalid_digest')
   const approvalError = leaseApprovalRefusal(normalized.command, normalized.command.approval, current)
@@ -446,6 +452,11 @@ export function issueProviderConnectionLease(
   if (current.expiresAt !== undefined && expiresAt > current.expiresAt) return leaseRefusal('invalid_time')
   const lease: ProviderConnectionInvocationLease = {
     leaseRef: normalized.command.leaseRef,
+    owningAccountRef: current.owningAccountRef,
+    activeAccountRef: normalized.command.activeAccountRef,
+    actorPrincipalRef: normalized.command.actorPrincipalRef,
+    grantRef: normalized.command.grantRef,
+    grantGeneration: normalized.command.grantGeneration,
     invocationRef: normalized.command.invocationRef,
     operationRef: normalized.command.operationRef,
     connectionRef: current.connectionRef,

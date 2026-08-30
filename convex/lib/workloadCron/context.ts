@@ -25,8 +25,8 @@ import {
 } from '../../_generated/server'
 import type { Doc } from '../../_generated/dataModel'
 
-export const PHASE_2_CRON_PRINCIPAL_REF = 'prn_f2000000000000000000000000000001' as PrincipalRef
-export const PHASE_2_CRON_ACCOUNT_REF = 'acc_f2000000000000000000000000000001' as AccountRef
+export const SYSTEM_WORKLOAD_PRINCIPAL_REF = 'prn_f2000000000000000000000000000001' as PrincipalRef
+export const SYSTEM_WORKLOAD_ACCOUNT_REF = 'acc_f2000000000000000000000000000001' as AccountRef
 
 // Fixed machine-identity refs for the cron workload's platform rows, provisioned
 // idempotently by ensurePlatformWorkloadIdentities (convex/workloadCron.ts) so a
@@ -35,16 +35,15 @@ export const PHASE_2_CRON_ACCOUNT_REF = 'acc_f2000000000000000000000000000001' a
 // principal reaches it through an active membership (accessVia 'membership'),
 // matching the canonical fixtures in convex/agentAccessOAuth.test.ts and
 // tests/integration/facilitator-discovery.test.ts.
-export const PHASE_2_CRON_OWNER_PRINCIPAL_REF = 'prn_f2000000000000000000000000000002' as PrincipalRef
-export const PHASE_2_CRON_OWNERSHIP_REF = 'own_f2000000000000000000000000000001'
-export const PHASE_2_CRON_MEMBERSHIP_REF = 'mem_f2000000000000000000000000000001'
+export const SYSTEM_WORKLOAD_OWNER_PRINCIPAL_REF = 'prn_f2000000000000000000000000000002' as PrincipalRef
+export const SYSTEM_WORKLOAD_OWNERSHIP_REF = 'own_f2000000000000000000000000000001'
+export const SYSTEM_WORKLOAD_MEMBERSHIP_REF = 'mem_f2000000000000000000000000000001'
 
 export const WORKLOAD_CRON_DECLARATIONS = [
   declaration('reconcile due facilitator invocations', 'reconciliation', 'reconcileDueFacilitatorInvocations'),
   declaration('refresh facilitator discovery', 'cron', 'refreshFacilitatorDiscovery'),
   declaration('refresh Agentic Market snapshots', 'cron', 'refreshAgenticMarketSnapshots'),
   declaration('refresh Agentic Economy API registry', 'cron', 'refreshAgenticEconomyApiRegistry'),
-  declaration('continue market aggregate backfill', 'cron', 'continueMarketAggregateBackfill'),
   declaration('refresh current market presence', 'cron', 'refreshCurrentMarketPresence'),
   declaration('refresh capability supply readiness', 'cron', 'refreshCapabilitySupplyReadiness'),
   declaration('cleanup expired source write nonces', 'cron', 'cleanupExpiredSourceWriteNonces'),
@@ -87,7 +86,6 @@ export const workloadCronNameValue = v.union(
   v.literal('refresh facilitator discovery'),
   v.literal('refresh Agentic Market snapshots'),
   v.literal('refresh Agentic Economy API registry'),
-  v.literal('continue market aggregate backfill'),
   v.literal('refresh current market presence'),
   v.literal('refresh capability supply readiness'),
   v.literal('cleanup expired source write nonces'),
@@ -248,8 +246,8 @@ export function declaration<Name extends string, Handler extends string>(
     workloadKind,
     handler,
     authority: 'canonical_workload' as const,
-    actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
-    activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+    actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
   })
 }
 
@@ -372,4 +370,3 @@ export function membershipFromRow(row: Doc<'memberships'>): Membership {
     ...(row.endedBy === undefined ? {} : { endedBy: actionContextFromRow(row.endedBy) }),
   })
 }
-

@@ -12,7 +12,7 @@ import {
   seedCatalogOffering,
   x402Source,
 } from './capability-supply-owner-funnel-harness'
-import { installCanonicalProviderConnectionFixture } from './capability-publication-harness'
+import { installProviderConnectionFixture } from './capability-publication-harness'
 
 describe('owner supply test', () => {
   it('completes x402 Test only from the exact fresh no-payment challenge', async () => {
@@ -34,7 +34,7 @@ describe('owner supply test', () => {
     )
     const now = Date.now()
     await expect(
-      installCanonicalProviderConnectionFixture(backend, {
+      installProviderConnectionFixture(backend, {
         connectionRef: 'connection:owner:x402',
         businessId,
         providerRef: 'provider:owner:x402',

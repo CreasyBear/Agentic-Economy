@@ -110,7 +110,6 @@ function providerInvocation(value: RouteTransportInvocation): value is AdmittedP
   if (value.binding.authority.kind !== 'provider_connection') return false
   const authority = value.authority as ProviderInvocation['authority']
   return authority.leaseRef !== undefined
-    && authority.canonicalConnectionRef !== undefined
     && authority.invocationRef !== undefined
     && authority.operationRef !== undefined
     && authority.attemptRef !== undefined

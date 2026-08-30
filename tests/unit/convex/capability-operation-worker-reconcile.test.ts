@@ -18,16 +18,16 @@ import {
 } from '../../../convex/capabilityOperationInvocations'
 import { reconcileScheduled } from '../../../convex/capabilityOperationInvocationWorker'
 import {
-  PHASE_2_CRON_ACCOUNT_REF,
-  PHASE_2_CRON_PRINCIPAL_REF,
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
   type WorkloadCronSnapshot,
 } from '../../../convex/workloadCron'
 
 const WORKLOAD: WorkloadCronSnapshot = {
   name: 'reconcile due facilitator invocations',
   workloadKind: 'reconciliation',
-  actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
-  activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+  actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+  activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
   correlationRef: 'cron:test:reconcile',
   idempotencyRef: 'cron:test:reconcile',
   purpose: 'reconcile due facilitator invocations',

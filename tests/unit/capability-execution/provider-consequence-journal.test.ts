@@ -203,6 +203,44 @@ async function grant(
   return { grantRef, expiresAt }
 }
 
+async function childGrant(
+  backend: ConvexFixtureBackend,
+  owner: CanonicalOwner,
+  suffix: string,
+  parent: Readonly<{ grantRef: string; expiresAt: number }>,
+  scopes: readonly string[],
+  resources: readonly string[],
+) {
+  const grantRef = `grt_${suffix.repeat(32)}`
+  const expiresAt = parent.expiresAt - 60_000
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('authorityDelegationGrants', {
+      grantRef,
+      accountRef: owner.accountRef,
+      actorPrincipalRef: owner.principalRef,
+      subjectPrincipalRef: owner.principalRef,
+      parentGrantRef: parent.grantRef,
+      parentGeneration: 1,
+      scopes: [...scopes].sort(),
+      resourceRefs: [...resources].sort(),
+      budgetLimit: 1,
+      budgetUsed: 0,
+      expiresAt,
+      generation: 1,
+      revision: 1,
+      lifecycle: 'active',
+      createdAt: NOW - 500,
+      createdBy: {
+        actorPrincipalRef: owner.principalRef,
+        activeAccountRef: owner.accountRef,
+        correlationRef: `create:${grantRef}`,
+        idempotencyRef: `create:${grantRef}`,
+      },
+    })
+  })
+  return { grantRef, expiresAt, parentGrantRef: parent.grantRef }
+}
+
 async function freshIssueAuthority(adapterId = 'http-json:v1') {
   const backend = convexTestWithMarketComponents()
   const fixture = await publishedBusinessOwner(backend, 'provider-consequence-journal')
@@ -229,16 +267,26 @@ async function freshIssueAuthority(adapterId = 'http-json:v1') {
     evidenceRefs: ['evidence:install'],
     now: NOW,
   })
-  if (installed.kind === 'refused' || installed.connection.canonicalConnectionRef === undefined) {
+  if (installed.kind === 'refused' || installed.connection.connectionRef === undefined) {
     throw new Error('canonical_install_failed')
   }
   const operationRef = 'operation:journal'
   const invocationRef = 'invocation:journal'
   const attemptRef = 'attempt:journal'
-  const leaseGrant = await grant(backend, owner, 'b', [
+  const leaseGrantScopes = [
     'connection:begin_effect',
     'connection:lease',
-  ], [operationRef, `connection:${installed.connection.canonicalConnectionRef}`])
+  ]
+  const leaseGrantResources = [operationRef, `connection:${installed.connection.connectionRef}`]
+  const leaseRootGrant = await grant(backend, owner, 'b', leaseGrantScopes, leaseGrantResources)
+  const leaseGrant = await childGrant(
+    backend,
+    owner,
+    'c',
+    leaseRootGrant,
+    leaseGrantScopes,
+    leaseGrantResources,
+  )
   const approval = issueProviderApprovalDecision({
     commandId: 'command:approval:journal',
     decisionRef: 'decision:approval:journal',
@@ -400,6 +448,7 @@ async function freshIssueAuthority(adapterId = 'http-json:v1') {
     signingSecretRef,
     connection: installed.connection,
     lease: leaseResult.lease,
+    leaseRootGrant,
   }
 }
 
@@ -441,9 +490,8 @@ function journalRow(overrides: Record<string, unknown> = {}) {
     attemptRef: 'attempt:test',
     effectGeneration: 1,
     leaseRef: 'lease:test',
-    canonicalLeaseRef: 'lease-canonical:test',
-    canonicalConnectionRef: 'connection:test',
-    canonicalConnectionGeneration: 6,
+    connectionRef: 'connection:test',
+    authorityGeneration: 6,
     providerRef: 'provider:test',
     adapterId: 'x402-fetch:v2',
     authorityDigest: DIGEST('6'),
@@ -659,6 +707,147 @@ describe('provider consequence durable journal', () => {
     getVercelOidcToken.mockResolvedValue(testOidcJwt())
   })
 
+  it('resolves a configured credential only through the atomic consequence-time lease gate', async () => {
+    const { backend, args, owner } = await freshIssueAuthority()
+    await expect(backend.run(async (ctx) => beginLeaseEffectHandler(ctx, {
+      leaseRef: args.leaseRef,
+      invocationRef: args.invocationRef,
+      operationRef: args.operationRef,
+      commandId: args.commandId,
+    }))).resolves.toMatchObject({
+      kind: 'admitted',
+      owningAccountRef: owner.accountRef,
+      activeAccountRef: owner.accountRef,
+      actorPrincipalRef: owner.principalRef,
+      secretRef: SECRET_REF,
+    })
+  })
+
+  it.each(['revoked_parent', 'stale_parent', 'inactive_context'] as const)(
+    'refuses consequence authority when the live delegation context is %s',
+    async (failure) => {
+      const fixture = await freshIssueAuthority()
+      await fixture.backend.run(async (ctx) => {
+        if (failure === 'inactive_context') {
+          const account = await ctx.db.query('accounts')
+            .withIndex('by_accountRef', (query) => query.eq('accountRef', fixture.owner.accountRef))
+            .unique()
+          if (account === null) throw new Error('account_fixture_missing')
+          await ctx.db.patch(account._id, { lifecycle: 'suspended' })
+          return
+        }
+        const parent = await ctx.db.query('authorityDelegationGrants')
+          .withIndex('by_grantRef', (query) => query.eq('grantRef', fixture.leaseRootGrant.grantRef))
+          .unique()
+        if (parent === null) throw new Error('parent_grant_fixture_missing')
+        await ctx.db.patch(parent._id, failure === 'revoked_parent'
+          ? { lifecycle: 'revoked', generation: parent.generation + 1, revision: parent.revision + 1, revokedAt: NOW }
+          : { generation: parent.generation + 1, revision: parent.revision + 1 })
+      })
+
+      await expect(fixture.backend.run(async (ctx) => beginLeaseEffectHandler(ctx, {
+        leaseRef: fixture.args.leaseRef,
+        invocationRef: fixture.args.invocationRef,
+        operationRef: fixture.args.operationRef,
+        commandId: fixture.args.commandId,
+      }))).resolves.toEqual({ kind: 'unavailable', reason: 'invocation_authority_mismatch' })
+    },
+  )
+
+  it('prevents an attacker account from leasing or using a victim connection credential', async () => {
+    const fixture = await freshIssueAuthority()
+    const attackerBusiness = await publishedBusinessOwner(fixture.backend, 'provider-consequence-attacker')
+    const attacker = await canonicalOwner(fixture.backend, attackerBusiness.businessId)
+    const attackerGrant = await grant(fixture.backend, attacker, 'd', [
+      'connection:begin_effect',
+      'connection:lease',
+    ], [fixture.args.operationRef, `connection:${fixture.connection.connectionRef}`])
+    await fixture.backend.run(async (ctx) => {
+      const invocation = await ctx.db.query('capabilityOperationInvocations')
+        .withIndex('by_invocationRef', (query) => query.eq('invocationRef', fixture.args.invocationRef))
+        .unique()
+      if (invocation === null) throw new Error('invocation_fixture_missing')
+      await ctx.db.patch(invocation._id, {
+        principalId: attacker.principalRef,
+        grantRef: attackerGrant.grantRef,
+        grantGeneration: 1,
+        grantExpiresAt: attackerGrant.expiresAt,
+      })
+    })
+
+    const leaseRef = 'lease:attacker'
+    await expect(fixture.backend.mutation(internal.capabilityProviderConnections.issueLease, {
+      commandId: 'command:lease:attacker',
+      leaseRef,
+      invocationRef: fixture.args.invocationRef,
+      operationRef: fixture.args.operationRef,
+      connectionRef: fixture.connection.connectionRef,
+      providerRef: fixture.connection.providerRef,
+      providerAccountRef: fixture.connection.providerAccountRef,
+      adapterId: fixture.connection.adapterId,
+      expectedAuthorityGeneration: fixture.connection.authorityGeneration,
+      expectedAuthorityDigest: fixture.connection.authorityDigest,
+      requestedScopes: [...fixture.connection.grantedScopes],
+      grantedScopes: [...fixture.connection.grantedScopes],
+      requestedResources: [...fixture.connection.grantedResources],
+      grantedResources: [...fixture.connection.grantedResources],
+      approvalDecisionRef: 'decision:approval:journal',
+      readinessValidUntil: fixture.args.readinessValidUntil,
+      readinessDigest: fixture.args.readinessDigest,
+      leaseMs: 60_000,
+      evidenceRefs: ['evidence:attacker-lease'],
+      now: NOW,
+    })).resolves.toEqual({ kind: 'refused', code: 'invalid_lease' })
+    await expect(fixture.backend.run(async (ctx) => beginLeaseEffectHandler(ctx, {
+      leaseRef,
+      invocationRef: fixture.args.invocationRef,
+      operationRef: fixture.args.operationRef,
+      commandId: 'command:effect:attacker',
+    }))).resolves.toEqual({ kind: 'unavailable', reason: 'lease_inactive' })
+  })
+
+  it.each(['revoked_parent', 'stale_parent'] as const)(
+    'refuses provider installation when its delegation has a %s',
+    async (failure) => {
+      const backend = convexTestWithMarketComponents()
+      const fixture = await publishedBusinessOwner(backend, `provider-install-${failure}`)
+      const owner = await canonicalOwner(backend, fixture.businessId)
+      const providerAccountRef = `account:install:${failure}`
+      const resources = [
+        'connection-provider:capability-provider/http-json:v1',
+        `connection-provider:capability-provider/http-json:v1:${providerAccountRef}`,
+        `secret:${SECRET_REF}`,
+      ]
+      const parent = await grant(backend, owner, 'e', ['*'], ['*'])
+      await childGrant(backend, owner, 'f', parent, ['connection:install'], resources)
+      await backend.run(async (ctx) => {
+        const parentRow = await ctx.db.query('authorityDelegationGrants')
+          .withIndex('by_grantRef', (query) => query.eq('grantRef', parent.grantRef))
+          .unique()
+        if (parentRow === null) throw new Error('parent_grant_fixture_missing')
+        await ctx.db.patch(parentRow._id, failure === 'revoked_parent'
+          ? { lifecycle: 'revoked', generation: 2, revision: 2, revokedAt: NOW }
+          : { generation: 2, revision: 2 })
+      })
+
+      await expect(backend.mutation(internal.capabilityProviderConnections.create, {
+        commandId: `command:install:${failure}`,
+        connectionRef: `connection:install:${failure}`,
+        businessId: fixture.businessId,
+        providerRef: 'provider:install-test',
+        providerAccountRef,
+        adapterId: 'http-json:v1',
+        credentialRef: SECRET_REF,
+        requestedScopes: ['profile:read'],
+        grantedScopes: ['profile:read'],
+        requestedResources: [providerAccountRef],
+        grantedResources: [providerAccountRef],
+        evidenceRefs: ['evidence:install-test'],
+        now: NOW,
+      })).resolves.toEqual({ kind: 'refused', code: 'invalid_transition' })
+    },
+  )
+
   it('issues a fresh ticket only from exact current lease, invocation, connection, grant, and secret authority', async () => {
     const { backend, args, owner, signingSecretRef } = await freshIssueAuthority()
 
@@ -702,13 +891,10 @@ describe('provider consequence durable journal', () => {
     expect(JSON.stringify(persisted)).not.toContain(JOURNAL_TOKEN)
   })
 
-  it('executes one real installed legacy-to-canonical consequence and replays without a second provider send', async () => {
+  it('executes one real installed provider consequence and replays without a second provider send', async () => {
     const fixture = await freshIssueAuthority()
     const { connection, lease } = fixture
-    if (connection.canonicalConnectionRef === undefined || lease.canonicalConnectionRef === undefined) {
-      throw new Error('canonical_connection_fixture_missing')
-    }
-    expect(connection.connectionRef).not.toBe(connection.canonicalConnectionRef)
+    expect(lease.connectionRef).toBe(connection.connectionRef)
     const config = { method: 'POST' as const, requestTimeoutMs: 5_000, credential: { kind: 'bearer' as const } }
     const routeInvocation: Extract<RouteTransportInvocation, { binding: { authority: { kind: 'provider_connection' } } }> = {
       binding: {
@@ -732,7 +918,6 @@ describe('provider consequence durable journal', () => {
         maximumSpend: { currency: 'USD', units: '0', exponent: 2 },
         expiresAt: fixture.args.requestedExpiresAt,
         callIdentity: { keyId: 'route-calls:test', signature: 'hmac-sha256:test' },
-        canonicalConnectionRef: connection.canonicalConnectionRef,
         authorityGeneration: lease.authorityGeneration,
         authorityDigest: lease.authorityDigest,
         leaseRef: fixture.args.leaseRef,
@@ -764,8 +949,8 @@ describe('provider consequence durable journal', () => {
       invocationDigest,
     }))
     if (issued.kind !== 'issued') throw new Error('ticket_issue_fixture_failed')
-    expect(issued.ticket.canonicalConnectionRef).toBe(connection.canonicalConnectionRef)
-    expect(issued.ticket.canonicalConnectionRef).not.toBe(routeInvocation.binding.authority.connectionRef)
+    expect(issued.ticket.connectionRef).toBe(connection.connectionRef)
+    expect(issued.ticket.connectionRef).toBe(routeInvocation.binding.authority.connectionRef)
 
     const durableJournal: ProviderConsequenceJournal = {
       begin: async (input) => await fixture.backend.run(async (ctx) => claimProviderConsequenceHandler(ctx, {
@@ -926,9 +1111,9 @@ describe('provider consequence durable journal', () => {
   it.each([
     ['not admitted', { kind: 'unavailable', reason: 'lease_inactive' }],
     ['owning account drift', { owningAccountRef: `acc_${'0'.repeat(32)}` }],
-    ['active account drift', { activeAccountRef: `acc_${'0'.repeat(32)}` }],
-    ['canonical connection drift', { canonicalConnectionRef: `con_${'0'.repeat(32)}` }],
-    ['canonical generation drift', { canonicalConnectionGeneration: 999 }],
+    ['active account drift', { activeAccountRef: `acc_${'f'.repeat(32)}` }],
+    ['connection drift', { connectionRef: `con_${'0'.repeat(32)}` }],
+    ['generation drift', { authorityGeneration: 999 }],
     ['secret drift', { secretRef: `sec_${'0'.repeat(32)}` }],
   ] as const)('rejects contradictory atomic effect admission: %s', async (_label, patch) => {
     const { backend, args } = await freshIssueAuthority()
@@ -989,8 +1174,6 @@ describe('provider consequence durable journal', () => {
 
     await expect(backend.run(async (ctx) => issueProviderConsequenceTicketHandler(ctx, args)))
       .resolves.toEqual({ kind: 'unavailable', reason: 'secret_pointer_unavailable' })
-    await expect(backend.run(async (ctx) => ctx.db.query('connectionEffectAdmissions').collect()))
-      .resolves.toHaveLength(0)
     await expect(backend.run(async (ctx) => ctx.db.query('providerConsequenceJournal').collect()))
       .resolves.toHaveLength(0)
   })
@@ -1015,8 +1198,6 @@ describe('provider consequence durable journal', () => {
 
     await expect(backend.run(async (ctx) => issueProviderConsequenceTicketHandler(ctx, args)))
       .resolves.toEqual({ kind: 'unavailable', reason: 'effect_journal_identity_mismatch' })
-    await expect(backend.run(async (ctx) => ctx.db.query('connectionEffectAdmissions').collect()))
-      .resolves.toHaveLength(1)
     const journals = await backend.run(async (ctx) => ctx.db.query('providerConsequenceJournal').collect())
     expect(journals).toHaveLength(1)
     expect(journals[0]).toMatchObject({ ticketRef: 'provider-ticket:conflict' })
@@ -1028,8 +1209,8 @@ describe('provider consequence durable journal', () => {
       { invocationDigest: DIGEST('a') }, { operationKeyDigest: DIGEST('a') },
       { invocationRef: 'invocation:other' }, { operationRef: 'operation:other' },
       { attemptRef: 'attempt:other' }, { effectGeneration: 99 }, { leaseRef: 'lease:other' },
-      { canonicalLeaseRef: 'lease-canonical:other' }, { canonicalConnectionRef: 'connection:other' },
-      { canonicalConnectionGeneration: 99 }, { providerRef: 'provider:other' },
+      { connectionRef: 'connection:other' },
+      { authorityGeneration: 99 }, { providerRef: 'provider:other' },
       { adapterId: 'mcp-jsonrpc:v1' }, { authorityDigest: DIGEST('a') },
       { grantedScopes: ['scope:other'] }, { grantedResources: ['resource:other'] },
       { readinessValidUntil: NOW + 1 }, { readinessDigest: DIGEST('a') },

@@ -1,4 +1,5 @@
 import { makeFunctionReference } from 'convex/server'
+import type { WorkId } from '@convex-dev/workpool'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
@@ -6,6 +7,7 @@ import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modu
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
 import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
 import type { Id } from '../../../convex/_generated/dataModel'
+import { internal } from '../../../convex/_generated/api'
 import {
   convexTestWithWorkers,
   publishedBusinessOwner,
@@ -237,5 +239,102 @@ describe('supplier-agent provider connection lifecycle', () => {
       operationKey: siblingOperationKey,
       correlationId: siblingOperationKey,
     })).resolves.toEqual({ kind: 'not_found' })
+  })
+
+  it('carries a real revoke through cleanup while refusing stale or substituted callback authority', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const fixture = await publishedBusinessOwner(backend, 'agent-provider-cleanup-callback')
+    const principal = await issueSupplierAgent(backend, fixture.owner, 'user_agent-provider-cleanup-callback')
+    const base = { agentPrincipal: principal }
+    const connectOperationKey = 'supplier-connection:connect:cleanup-callback'
+    const connected = await agentCommand(backend, connectX402, {
+      ...base,
+      businessId: fixture.businessId,
+      resourceUrl: 'https://provider.example/x402-cleanup',
+      evidenceRefs: ['evidence:supplier-connect'],
+      commandId: connectOperationKey,
+      operationKey: connectOperationKey,
+      correlationId: connectOperationKey,
+    })
+    if (connected.kind !== 'applied') throw new Error('provider_connection_fixture_failed')
+    const connection = connected.connection as Record<string, unknown>
+    const revokeOperationKey = 'supplier-connection:revoke:cleanup-callback'
+    const revoked = await agentCommand(backend, revokeConnection, {
+      ...base,
+      connectionRef: connection.connectionRef,
+      expectedAuthorityGeneration: connection.authorityGeneration,
+      expectedAuthorityDigest: connection.authorityDigest,
+      evidenceRefs: ['evidence:supplier-revoke'],
+      commandId: revokeOperationKey,
+      operationKey: revokeOperationKey,
+      correlationId: revokeOperationKey,
+    })
+    expect(revoked).toMatchObject({ kind: 'applied', connection: { lifecycle: 'revocation_pending' } })
+
+    const scheduled = await backend.run(async (ctx) => await ctx.db.query('capabilityProviderConnections')
+      .withIndex('by_connectionRef', (query) => query.eq('connectionRef', String(connection.connectionRef)))
+      .unique())
+    if (scheduled === null
+      || scheduled.cleanupWorkId === undefined
+      || scheduled.cleanupCommandId === undefined
+      || scheduled.cleanupRequestDigest === undefined
+      || scheduled.cleanupAttempt === undefined) throw new Error('cleanup_schedule_missing')
+    const targetArgs = {
+      connectionRef: scheduled.connectionRef,
+      commandId: scheduled.cleanupCommandId,
+      expectedAuthorityGeneration: scheduled.authorityGeneration,
+      expectedAuthorityDigest: scheduled.authorityDigest,
+      requestDigest: scheduled.cleanupRequestDigest,
+      cleanupAttempt: scheduled.cleanupAttempt,
+      now: Date.now(),
+    }
+    const target = await backend.query(internal.capabilityProviderConnections.readCleanupTarget, targetArgs)
+    if (target === null) throw new Error('cleanup_target_missing')
+    const callback = {
+      workId: scheduled.cleanupWorkId as WorkId,
+      context: {
+        connectionRef: targetArgs.connectionRef,
+        commandId: targetArgs.commandId,
+        expectedAuthorityGeneration: targetArgs.expectedAuthorityGeneration,
+        expectedAuthorityDigest: targetArgs.expectedAuthorityDigest,
+        requestDigest: targetArgs.requestDigest,
+        cleanupAttempt: targetArgs.cleanupAttempt,
+        workKind: 'cleanup' as const,
+        resourceAuthority: target.resourceAuthority,
+      },
+      result: {
+        kind: 'success' as const,
+        returnValue: {
+          kind: 'cleanup' as const,
+          result: {
+            outcome: 'detached' as const,
+            reasonCode: 'local_detached',
+            evidenceRefs: ['provider_cleanup:local_detached'],
+          },
+        },
+      },
+    }
+
+    await backend.mutation(internal.capabilityProviderConnectionCleanup.completeWork, {
+      ...callback,
+      context: {
+        ...callback.context,
+        resourceAuthority: {
+          ...target.resourceAuthority,
+          owningAccountRef: `acc_${'9'.repeat(32)}`,
+        },
+      },
+    })
+    await backend.mutation(internal.capabilityProviderConnectionCleanup.completeWork, {
+      ...callback,
+      context: { ...callback.context, expectedAuthorityDigest: `sha256:${'0'.repeat(64)}` },
+    })
+    const unchanged = await backend.run(async (ctx) => await ctx.db.get(scheduled._id))
+    expect(unchanged).toMatchObject({ lifecycle: 'revocation_pending' })
+    expect(unchanged).not.toHaveProperty('secretRef')
+
+    await backend.mutation(internal.capabilityProviderConnectionCleanup.completeWork, callback)
+    const cleaned = await backend.run(async (ctx) => await ctx.db.get(scheduled._id))
+    expect(cleaned).toMatchObject({ lifecycle: 'revoked', credentialRef: null })
   })
 })

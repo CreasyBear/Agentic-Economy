@@ -24,7 +24,7 @@ import {
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
-import { installCanonicalProviderConnectionFixture } from './capability-publication-harness'
+import { installProviderConnectionFixture } from './capability-publication-harness'
 
 type PublishPreparedCapabilityArgs = FunctionArgs<typeof api.capabilitySupply.publishPreparedCapability>
 type PublicationFixtureInput = Parameters<typeof prepareCapabilityPublicationMutation>[1]
@@ -172,7 +172,7 @@ export async function registerProviderConnection(
 ) {
   if (binding.authority.kind !== 'provider_connection') return
   const suffix = binding.authority.connectionRef.split(':').at(-1) ?? 'default'
-  const result = await installCanonicalProviderConnectionFixture(backend, {
+  const result = await installProviderConnectionFixture(backend, {
     commandId: `command:capability-supply:connection:${binding.authority.connectionRef}`,
     connectionRef: binding.authority.connectionRef,
     businessId,

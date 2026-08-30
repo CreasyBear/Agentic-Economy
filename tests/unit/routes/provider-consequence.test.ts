@@ -57,7 +57,6 @@ const CUSTOMER_SECRET = `0x${'11'.repeat(32)}`
 const PAYMENT_SECRET = `0x${'22'.repeat(32)}`
 const SIGNING_KEY = 'platform-ticket-signing-key-at-least-32-bytes'
 const JOURNAL_TOKEN = 'a'.repeat(43)
-const CANONICAL_CONNECTION_REF = `con_${'3'.repeat(32)}`
 
 type ProviderInvocation = Extract<
   RouteTransportInvocation,
@@ -94,7 +93,6 @@ function invocation(): ProviderInvocation {
       callIdentity: { keyId: 'route-calls:test', signature: 'hmac-sha256:test' },
       authorityGeneration: 7,
       authorityDigest: DIGEST('7'),
-      canonicalConnectionRef: CANONICAL_CONNECTION_REF,
       leaseRef: 'lease:test',
       invocationRef: 'invocation:test',
       operationRef: 'operation:test',
@@ -192,9 +190,8 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     invocationRef: 'invocation:test',
     operationRef: 'operation:test',
     leaseRef: 'lease:test',
-    canonicalLeaseRef: 'lease-canonical:test',
-    canonicalConnectionRef: CANONICAL_CONNECTION_REF,
-    canonicalConnectionGeneration: 7,
+    connectionRef: routeInvocation.binding.authority.connectionRef,
+    authorityGeneration: 7,
     providerRef: 'provider:test',
     adapterId: routeInvocation.binding.adapterId,
     authorityDigest: routeInvocation.authority.authorityDigest,

@@ -219,6 +219,10 @@ export async function publicationFixture(): Promise<PublicationFixture> {
   })
   const connectionWithoutDigest: Omit<ProviderConnection, 'authorityDigest'> = {
     connectionRef: 'connection:demo',
+    owningAccountRef: 'account:owner',
+    installedByPrincipalRef: 'principal:owner',
+    authorityGrantRef: 'grant:connection',
+    authorityGrantGeneration: 1,
     businessId: 'business-1',
     providerRef: 'provider:demo',
     providerAccountRef: 'account:demo',

@@ -30,9 +30,8 @@ const ticketValue = v.object({
   invocationRef: v.string(),
   operationRef: v.string(),
   leaseRef: v.string(),
-  canonicalLeaseRef: v.string(),
-  canonicalConnectionRef: v.string(),
-  canonicalConnectionGeneration: v.number(),
+  connectionRef: v.string(),
+  authorityGeneration: v.number(),
   providerRef: v.string(),
   adapterId: v.string(),
   authorityDigest: v.string(),
@@ -134,9 +133,8 @@ type CanonicalTicket = {
   invocationRef: string
   operationRef: string
   leaseRef: string
-  canonicalLeaseRef: string
-  canonicalConnectionRef: string
-  canonicalConnectionGeneration: number
+  connectionRef: string
+  authorityGeneration: number
   providerRef: string
   adapterId: string
   authorityDigest: string
@@ -188,9 +186,8 @@ function ticketFromRow(row: Doc<'providerConsequenceJournal'>): CanonicalTicket 
     invocationRef: row.invocationRef,
     operationRef: row.operationRef,
     leaseRef: row.leaseRef,
-    canonicalLeaseRef: row.canonicalLeaseRef,
-    canonicalConnectionRef: row.canonicalConnectionRef,
-    canonicalConnectionGeneration: row.canonicalConnectionGeneration,
+    connectionRef: row.connectionRef,
+    authorityGeneration: row.authorityGeneration,
     providerRef: row.providerRef,
     adapterId: row.adapterId,
     authorityDigest: row.authorityDigest,
@@ -258,9 +255,8 @@ function matchesExistingEffect(
     && row.attemptRef === args.attemptRef
     && row.effectGeneration === args.effectGeneration
     && row.leaseRef === args.leaseRef
-    && row.canonicalLeaseRef === admission.canonicalLeaseRef
-    && row.canonicalConnectionRef === admission.canonicalConnectionRef
-    && row.canonicalConnectionGeneration === admission.canonicalConnectionGeneration
+    && row.connectionRef === admission.connectionRef
+    && row.authorityGeneration === admission.authorityGeneration
     && row.providerRef === args.providerRef
     && row.adapterId === args.adapterId
     && row.authorityDigest === args.authorityDigest
@@ -388,8 +384,6 @@ export async function issueProviderConsequenceTicketHandler(
     || connection.providerRef !== args.providerRef
     || connection.adapterId !== args.adapterId
     || connection.authorityDigest !== args.authorityDigest
-    || connection.canonicalConnectionRef === undefined
-    || connection.canonicalConnectionGeneration === undefined
     || connection.secretRef === undefined
     || connection.expiresAt !== undefined && connection.expiresAt <= now) {
     return unavailable('connection_authority_unavailable')
@@ -435,9 +429,12 @@ export async function issueProviderConsequenceTicketHandler(
   })
   if (admission.kind !== 'admitted'
     || admission.owningAccountRef !== customerPointer.owningAccountRef
-    || admission.activeAccountRef !== admission.owningAccountRef
-    || admission.canonicalConnectionRef !== connection.canonicalConnectionRef
-    || admission.canonicalConnectionGeneration !== connection.canonicalConnectionGeneration
+    || admission.activeAccountRef !== lease.activeAccountRef
+    || admission.actorPrincipalRef !== lease.actorPrincipalRef
+    || admission.grantRef !== lease.grantRef
+    || admission.grantGeneration !== lease.grantGeneration
+    || admission.connectionRef !== connection.connectionRef
+    || admission.authorityGeneration !== connection.authorityGeneration
     || admission.secretRef !== customerPointer.secretRef) {
     throw new Error('provider_consequence_effect_admission_failed')
   }
@@ -486,9 +483,8 @@ export async function issueProviderConsequenceTicketHandler(
     invocationRef: args.invocationRef,
     operationRef: args.operationRef,
     leaseRef: args.leaseRef,
-    canonicalLeaseRef: admission.canonicalLeaseRef,
-    canonicalConnectionRef: admission.canonicalConnectionRef,
-    canonicalConnectionGeneration: admission.canonicalConnectionGeneration,
+    connectionRef: admission.connectionRef,
+    authorityGeneration: admission.authorityGeneration,
     providerRef: args.providerRef,
     adapterId: args.adapterId,
     authorityDigest: args.authorityDigest,
@@ -530,9 +526,8 @@ export async function issueProviderConsequenceTicketHandler(
     attemptRef: args.attemptRef,
     effectGeneration: args.effectGeneration,
     leaseRef: ticket.leaseRef,
-    canonicalLeaseRef: ticket.canonicalLeaseRef,
-    canonicalConnectionRef: ticket.canonicalConnectionRef,
-    canonicalConnectionGeneration: ticket.canonicalConnectionGeneration,
+    connectionRef: ticket.connectionRef,
+    authorityGeneration: ticket.authorityGeneration,
     providerRef: ticket.providerRef,
     adapterId: ticket.adapterId,
     authorityDigest: ticket.authorityDigest,

@@ -13,7 +13,7 @@ import {
 } from '../helpers/convex-fixtures'
 import type { CapabilityTransportAuthority } from '@/modules/capability-supply/public'
 import { withSourceWrite } from '../helpers/source-write-admission'
-import { installCanonicalProviderConnectionFixture } from './capability-publication-harness'
+import { installProviderConnectionFixture } from './capability-publication-harness'
 const SECURITY_AUTHORITY: CapabilityTransportAuthority = {
   kind: 'provider_connection',
   connectionRef: 'connection:capability-publication-security',
@@ -103,7 +103,7 @@ async function registerProviderConnection(backend: ConvexFixtureBackend, busines
   if (SECURITY_AUTHORITY.kind !== 'provider_connection') {
     throw new Error('provider connection fixture authority kind changed')
   }
-  const result = await installCanonicalProviderConnectionFixture(backend, {
+  const result = await installProviderConnectionFixture(backend, {
     commandId: 'command:create:capability-publication-security',
     connectionRef: SECURITY_AUTHORITY.connectionRef,
     businessId,

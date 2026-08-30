@@ -280,7 +280,7 @@ function firstPartyProjection(
     status: "live",
     sourceTimestamp: generatedAt,
     statusDetail:
-      "Counts are derived from authoritative Agentic Economy write seams. Historical totals remain gated by the aggregate backfill.",
+      "Counts are derived from authoritative Agentic Economy write seams.",
     metrics,
   };
 }

@@ -154,7 +154,7 @@ export function operationContext(suffix: string): PublicationOperationContext {
   }
 }
 
-export async function installCanonicalProviderConnectionFixture(
+export async function installProviderConnectionFixture(
   backend: ConvexFixtureBackend,
   input: Readonly<{
     businessId: Id<'businesses'>
@@ -424,7 +424,7 @@ export async function registerProviderConnection(
   adapterId = 'http-json:v1',
 ) {
   const { connectionRef, providerRef } = providerAuthority(suffix)
-  const result = await installCanonicalProviderConnectionFixture(backend, {
+  const result = await installProviderConnectionFixture(backend, {
     commandId: `command:create:capability-publication:${suffix}`,
     connectionRef,
     businessId,

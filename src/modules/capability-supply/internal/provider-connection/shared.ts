@@ -10,128 +10,41 @@ import {
   type ProviderConnectionRefusalCode,
 } from './types'
 
-type CanonicalConnectionProjectionSource = Readonly<{
-  connectionRef: string
+export type ProviderConnectionAuthorityProvenance = Readonly<{
   owningAccountRef: string
   installedByPrincipalRef: string
+  authorityGrantRef: string
+  authorityGrantGeneration: number
   secretRef?: string
-  lifecycle: 'active' | 'revoked' | 'deleted'
-  generation: number
-  externalState?: Readonly<{ kind: 'known' | 'unknown'; value: string }>
-  installAction: Readonly<{ grantRef: string; grantGeneration: number }>
-  action?: Readonly<{ grantRef: string; grantGeneration: number }>
-}>
-
-type CanonicalLeaseProjectionSource = Readonly<{
-  leaseRef: string
-  connectionRef: string
-  connectionGeneration: number
-  owningAccountRef: string
-  activeAccountRef: string
-  actorPrincipalRef: string
-  grantRef: string
-  grantGeneration: number
-}>
-
-type LegacyLeaseProjection = Readonly<{
-  canonicalLeaseRef?: string
-  canonicalConnectionRef?: string
-  canonicalConnectionGeneration?: number
-  owningAccountRef?: string
-  activeAccountRef?: string
-  actorPrincipalRef?: string
-  grantRef?: string
-  grantGeneration?: number
-  state?: string
 }>
 
 const VALID_LIFECYCLES = new Set<string>(PROVIDER_CONNECTION_LIFECYCLES)
 
-/**
- * Adds the canonical provenance fields to a legacy compatibility row. The
- * canonical Connection is the only source for these values.
- */
-export function canonicalProviderConnectionProjection(
-  legacy: ProviderConnection,
-  canonical: CanonicalConnectionProjectionSource,
+/** Pins current Account and delegation authority directly onto the provider connection. */
+export function withProviderConnectionAuthority(
+  connection: Omit<ProviderConnection, keyof ProviderConnectionAuthorityProvenance>,
+  authority: ProviderConnectionAuthorityProvenance,
 ): ProviderConnection {
-  const authority = canonical.action ?? canonical.installAction
+  const rebound = {
+    ...connection,
+    ...authority,
+  }
   return Object.freeze({
-    ...legacy,
-    canonicalConnectionRef: canonical.connectionRef,
-    owningAccountRef: canonical.owningAccountRef,
-    installedByPrincipalRef: canonical.installedByPrincipalRef,
-    authorityGrantRef: authority.grantRef,
-    authorityGrantGeneration: authority.grantGeneration,
-    canonicalConnectionGeneration: canonical.generation,
-    ...(canonical.secretRef === undefined ? {} : { secretRef: canonical.secretRef }),
+    ...rebound,
+    authorityDigest: providerConnectionAuthorityDigest(rebound),
   })
 }
 
-/** Exact provenance match, including terminal/unknown states used by cleanup. */
-export function canonicalProviderConnectionProjectionMatches(
-  legacy: ProviderConnection,
-  canonical: CanonicalConnectionProjectionSource,
+/** The provider row is self-contained; no shadow Connection row is consulted. */
+export function providerConnectionAuthorityProvenanceIsValid(
+  connection: ProviderConnection,
 ): boolean {
-  const authority = canonical.action ?? canonical.installAction
-  const expectedSecretRef = canonical.secretRef
-  return legacy.canonicalConnectionRef === canonical.connectionRef
-    && legacy.owningAccountRef === canonical.owningAccountRef
-    && legacy.installedByPrincipalRef === canonical.installedByPrincipalRef
-    && legacy.authorityGrantRef === authority.grantRef
-    && legacy.authorityGrantGeneration === authority.grantGeneration
-    && legacy.canonicalConnectionGeneration === canonical.generation
-    && legacy.secretRef === expectedSecretRef
-    && legacy.credentialRef === (expectedSecretRef ?? null)
-}
-
-/** A legacy row can authorize only while it exactly projects a usable Connection. */
-export function canonicalProviderConnectionProjectionIsCurrent(
-  legacy: ProviderConnection,
-  canonical: CanonicalConnectionProjectionSource,
-): boolean {
-  const externalReady = canonical.externalState === undefined
-    || (canonical.externalState.kind === 'known' && canonical.externalState.value === 'ready')
-  return canonicalProviderConnectionProjectionMatches(legacy, canonical)
-    && canonical.lifecycle === 'active'
-    && externalReady
-    && legacy.lifecycle === 'active'
-}
-
-/** Exact, generation-bound compatibility proof for a canonical lease. */
-export function canonicalProviderLeaseProjectionIsCurrent(
-  legacy: LegacyLeaseProjection,
-  canonicalLease: CanonicalLeaseProjectionSource,
-  canonicalConnection: CanonicalConnectionProjectionSource,
-): boolean {
-  return canonicalConnection.lifecycle === 'active'
-    && canonicalConnection.generation === canonicalLease.connectionGeneration
-    && legacy.canonicalLeaseRef === canonicalLease.leaseRef
-    && legacy.canonicalConnectionRef === canonicalLease.connectionRef
-    && legacy.canonicalConnectionGeneration === canonicalLease.connectionGeneration
-    && legacy.owningAccountRef === canonicalLease.owningAccountRef
-    && legacy.activeAccountRef === canonicalLease.activeAccountRef
-    && legacy.actorPrincipalRef === canonicalLease.actorPrincipalRef
-    && legacy.grantRef === canonicalLease.grantRef
-    && legacy.grantGeneration === canonicalLease.grantGeneration
-    && (legacy.state === undefined || legacy.state === 'active')
-}
-
-export function canonicalProviderLeaseProjection<Lease extends object>(
-  legacy: Lease,
-  canonical: CanonicalLeaseProjectionSource,
-): Lease & Required<LegacyLeaseProjection> {
-  return Object.freeze({
-    ...legacy,
-    canonicalLeaseRef: canonical.leaseRef,
-    canonicalConnectionRef: canonical.connectionRef,
-    canonicalConnectionGeneration: canonical.connectionGeneration,
-    owningAccountRef: canonical.owningAccountRef,
-    activeAccountRef: canonical.activeAccountRef,
-    actorPrincipalRef: canonical.actorPrincipalRef,
-    grantRef: canonical.grantRef,
-    grantGeneration: canonical.grantGeneration,
-  }) as Lease & Required<LegacyLeaseProjection>
+  return validIdentity(connection.owningAccountRef)
+    && validIdentity(connection.installedByPrincipalRef)
+    && validIdentity(connection.authorityGrantRef)
+    && validGeneration(connection.authorityGrantGeneration)
+    && connection.credentialRef === (connection.secretRef ?? null)
+    && isProviderConnectionAuthorityCurrent(connection)
 }
 
 export function refusal(code: ProviderConnectionRefusalCode): Readonly<{ kind: 'refused'; code: ProviderConnectionRefusalCode }> {
@@ -161,9 +74,15 @@ export function normalizeReasonCode(value: string | undefined):
   return { kind: 'ok', ...(value === undefined ? {} : { value }) }
 }
 
-export function providerConnectionAuthorityDigest(connection: Pick<ProviderConnection, 'connectionRef' | 'businessId' | 'providerRef' | 'providerAccountRef' | 'adapterId' | 'credentialRef' | 'grantedScopes' | 'grantedResources' | 'authorityGeneration' | 'expiresAt'>): string {
+export function providerConnectionAuthorityDigest(connection: Pick<ProviderConnection, 'connectionRef' | 'owningAccountRef' | 'installedByPrincipalRef' | 'authorityGrantRef' | 'authorityGrantGeneration' | 'secretRef' | 'businessId' | 'providerRef' | 'providerAccountRef' | 'adapterId' | 'credentialRef' | 'grantedScopes' | 'grantedResources' | 'authorityGeneration' | 'expiresAt'>): string {
   return canonicalDigest({
-    connectionRef: connection.connectionRef, businessId: connection.businessId, providerRef: connection.providerRef,
+    connectionRef: connection.connectionRef,
+    owningAccountRef: connection.owningAccountRef,
+    installedByPrincipalRef: connection.installedByPrincipalRef,
+    authorityGrantRef: connection.authorityGrantRef,
+    authorityGrantGeneration: connection.authorityGrantGeneration,
+    secretRef: connection.secretRef ?? null,
+    businessId: connection.businessId, providerRef: connection.providerRef,
     providerAccountRef: connection.providerAccountRef, adapterId: connection.adapterId, credentialRef: connection.credentialRef,
     grantedScopes: uniqueSorted(connection.grantedScopes), grantedResources: uniqueSorted(connection.grantedResources),
     authorityGeneration: connection.authorityGeneration, expiresAt: connection.expiresAt ?? null,

@@ -11,8 +11,8 @@ import {
 import { api, internal } from './_generated/api'
 import schema from './schema'
 import {
-  PHASE_2_CRON_ACCOUNT_REF,
-  PHASE_2_CRON_PRINCIPAL_REF,
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
   type WorkloadCronSnapshot,
 } from './workloadCron'
 
@@ -454,13 +454,13 @@ async function admitOAuthCleanupWorkload(
   const ownershipRef = 'own_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
   const action = {
     actorPrincipalRef: ownerPrincipalRef,
-    activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+    activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
     correlationRef: 'oauth-cleanup-test:account',
     idempotencyRef: 'oauth-cleanup-test:account',
   }
   await backend.run(async (ctx) => {
     await ctx.db.insert('principals', {
-      principalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      principalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
       kind: 'workload',
       displayName: 'OAuth cleanup workload',
       lifecycle: 'active',
@@ -469,8 +469,8 @@ async function admitOAuthCleanupWorkload(
       updatedAt: 1,
     })
     await ctx.db.insert('accounts', {
-      accountRef: PHASE_2_CRON_ACCOUNT_REF,
-      displayName: 'Phase 2 operations',
+      accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+      displayName: 'System operations',
       lifecycle: 'active',
       recoveryPolicy: { kind: 'no_transfer', revision: 1 },
       creationActorPrincipalRef: ownerPrincipalRef,
@@ -484,7 +484,7 @@ async function admitOAuthCleanupWorkload(
     })
     await ctx.db.insert('accountOwnerships', {
       ownershipRef,
-      accountRef: PHASE_2_CRON_ACCOUNT_REF,
+      accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
       ownerPrincipalRef,
       lifecycle: 'active',
       changeKind: 'creation',
@@ -494,8 +494,8 @@ async function admitOAuthCleanupWorkload(
     })
     await ctx.db.insert('memberships', {
       membershipRef: 'mem_cccccccccccccccccccccccccccccccc',
-      accountRef: PHASE_2_CRON_ACCOUNT_REF,
-      memberPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+      memberPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
       lifecycle: 'active',
       revision: 1,
       createdAt: 1,

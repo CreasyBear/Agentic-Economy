@@ -1,10 +1,11 @@
 import {
   beginProviderConnectionRevocation,
-  canonicalProviderConnectionProjection,
-  canonicalProviderConnectionProjectionIsCurrent,
   createProviderConnection,
+  providerConnectionAuthorityProvenanceIsValid,
+  providerConnectionRevocationRef,
   recordProviderConnectionCleanupResult,
   reauthorizeProviderConnection,
+  withProviderConnectionAuthority,
   type ProviderConnectionAuthorityValidation,
   type ProviderConnectionCredentialResolution,
 } from '../../../src/modules/capability-supply/provider-connection'
@@ -20,30 +21,18 @@ import {
 } from './contracts'
 import {
   cleanupResourceAuthorityMatches,
-  readCanonicalConnectionForProjection,
   readCurrentCleanupResourceAuthority,
   resolveCanonicalBusinessOwner,
+  resolveProviderConnectionProvenance,
 } from './authority'
 export {
-  canonicalConnectionActionContext,
   cleanupResourceAuthorityMatches,
-  createCanonicalConnectionLifecycleService,
-  failClosedCanonicalLifecycleError,
-  readCanonicalConnectionForProjection,
   readCurrentCleanupResourceAuthority,
   resolveCanonicalBusinessOwner,
-  resolveUniqueCanonicalGrant,
+  resolveProviderConnectionProvenance,
+  resolveUniqueProviderConnectionGrant,
   type CanonicalActor,
 } from './authority'
-export {
-  installCanonicalProviderConnection,
-  shareCanonicalProviderConnection,
-  transitionCanonicalProviderConnection,
-} from './persistence'
-import {
-  installCanonicalProviderConnection,
-  transitionCanonicalProviderConnection,
-} from './persistence'
 export {
   projectCommandResult,
   toDomain,
@@ -70,9 +59,24 @@ export async function createHandler(ctx: MutationCtx, args: AuthorityCommandArgs
   const existing = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef)).unique()
   const now = Date.now()
-  const legacyResult = createProviderConnection({
+  const actor = await resolveCanonicalBusinessOwner(ctx, args.businessId)
+  if (actor === null) return { kind: 'refused' as const, code: 'invalid_identity' as const }
+  const provenance = await resolveProviderConnectionProvenance(
+    ctx,
+    actor,
+    'install',
+    [
+      `connection-provider:capability-provider/${args.adapterId}`,
+      `connection-provider:capability-provider/${args.adapterId}:${args.providerAccountRef}`,
+      ...(args.credentialRef === null ? [] : [`secret:${args.credentialRef}`]),
+    ],
+    args.credentialRef,
+  )
+  if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
+  const result = createProviderConnection({
     commandId: args.commandId,
     connectionRef: args.connectionRef,
+    ...provenance,
     businessId: args.businessId,
     providerRef: args.providerRef,
     providerAccountRef: args.providerAccountRef,
@@ -85,51 +89,39 @@ export async function createHandler(ctx: MutationCtx, args: AuthorityCommandArgs
     ...createOptionalFields(args),
     evidenceRefs: args.evidenceRefs,
   }, now, existing === null ? undefined : toDomain(existing))
-  if (legacyResult.kind === 'refused') return legacyResult
-  const actor = await resolveCanonicalBusinessOwner(ctx, args.businessId)
-  if (actor === null) return { kind: 'refused' as const, code: 'invalid_identity' as const }
-  const canonical = await installCanonicalProviderConnection(ctx, {
-    actor,
-    commandId: args.commandId,
-    providerNamespace: `capability-provider/${args.adapterId}`,
-    providerLocator: args.providerAccountRef,
-    credentialRef: args.credentialRef,
-  })
-  if (canonical === null || canonical.owningAccountRef !== actor.accountRef) {
-    return { kind: 'refused' as const, code: 'invalid_transition' as const }
-  }
-  const projected = canonicalProviderConnectionProjection(legacyResult.connection, canonical)
-  if (legacyResult.kind === 'duplicate') {
-    const duplicateMatches = [
-      canonicalProviderConnectionProjectionIsCurrent(projected, canonical),
-      existing !== null,
-      existing !== null && canonicalProviderConnectionProjectionIsCurrent(
-        toDomain(existing), canonical,
-      ),
-    ].every(Boolean)
-    if (!duplicateMatches || existing === null) {
+  if (result.kind === 'refused') return result
+  const connection = result.connection
+  if (result.kind === 'duplicate') {
+    if (existing === null
+      || !providerConnectionAuthorityProvenanceIsValid(toDomain(existing))
+      || existing.owningAccountRef !== actor.accountRef) {
       return { kind: 'refused' as const, code: 'invalid_transition' as const }
     }
-    return projectCommandResult({ ...legacyResult, connection: toDomain(existing) })
+    return projectCommandResult({ ...result, connection: toDomain(existing) })
   }
-  await ctx.db.insert('capabilityProviderConnections', toRow(projected, args.commandId, legacyResult.commandDigest))
-  return projectCommandResult({ ...legacyResult, connection: projected })
+  await ctx.db.insert('capabilityProviderConnections', toRow(connection, args.commandId, result.commandDigest))
+  return projectCommandResult({ ...result, connection })
 }
 
 export async function reauthorizeHandler(ctx: MutationCtx, args: ReauthorizeCommandArgs) {
   const existing = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef)).unique()
   if (existing === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
-  const currentLegacy = toDomain(existing)
-  const currentCanonical = await readCanonicalConnectionForProjection(ctx, currentLegacy, true)
+  const current = toDomain(existing)
   const actor = await resolveCanonicalBusinessOwner(ctx, args.businessId)
-  if (currentCanonical === null || actor === null || currentCanonical.owningAccountRef !== actor.accountRef) {
+  if (!providerConnectionAuthorityProvenanceIsValid(current)
+    || actor === null || current.owningAccountRef !== actor.accountRef) {
     return { kind: 'refused' as const, code: 'invalid_identity' as const }
   }
   const now = Date.now()
-  const legacyResult = reauthorizeProviderConnection(currentLegacy, {
+  const provenance = await resolveProviderConnectionProvenance(
+    ctx, actor, 'refresh', [`connection:${current.connectionRef}`], args.credentialRef,
+  )
+  if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
+  const result = reauthorizeProviderConnection(current, {
     commandId: args.commandId,
     connectionRef: args.connectionRef,
+    ...provenance,
     businessId: args.businessId,
     providerRef: args.providerRef,
     providerAccountRef: args.providerAccountRef,
@@ -145,47 +137,44 @@ export async function reauthorizeHandler(ctx: MutationCtx, args: ReauthorizeComm
     expectedAuthorityGeneration: args.expectedAuthorityGeneration,
     expectedAuthorityDigest: args.expectedAuthorityDigest,
   }, now)
-  if (legacyResult.kind === 'refused') return legacyResult
-  if (legacyResult.kind === 'duplicate') return projectCommandResult({ ...legacyResult, connection: currentLegacy })
-  const canonical = await transitionCanonicalProviderConnection(ctx, {
-    actor,
-    commandId: args.commandId,
-    connection: currentCanonical,
-    operation: 'refresh',
-    externalState: { kind: 'known', value: 'ready' },
-  })
-  if (canonical === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
-  const projected = canonicalProviderConnectionProjection(legacyResult.connection, canonical)
-  await ctx.db.replace(existing._id, toRow(projected, args.commandId, legacyResult.commandDigest))
+  if (result.kind === 'refused') return result
+  if (result.kind === 'duplicate') return projectCommandResult({ ...result, connection: current })
+  const connection = result.connection
+  await ctx.db.replace(existing._id, toRow(connection, args.commandId, result.commandDigest))
   await invalidateActiveLeases(ctx, args.connectionRef, 'generation_changed', now, args.commandId)
-  return projectCommandResult({ ...legacyResult, connection: projected })
+  return projectCommandResult({ ...result, connection })
 }
 
 export async function beginRevocationHandler(ctx: MutationCtx, args: BeginRevocationArgs) {
   const existing = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef)).unique()
   if (existing === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
-  const currentLegacy = toDomain(existing)
-  const currentCanonical = await readCanonicalConnectionForProjection(ctx, currentLegacy, true)
+  const current = toDomain(existing)
   const actor = await resolveCanonicalBusinessOwner(ctx, existing.businessId)
-  if (currentCanonical === null || actor === null || currentCanonical.owningAccountRef !== actor.accountRef) {
+  if (!providerConnectionAuthorityProvenanceIsValid(current)
+    || actor === null || current.owningAccountRef !== actor.accountRef) {
     return { kind: 'refused' as const, code: 'invalid_identity' as const }
   }
   const now = Date.now()
-  const legacyResult = beginProviderConnectionRevocation(currentLegacy, args, now)
-  if (legacyResult.kind === 'refused') return legacyResult
-  const canonical = await transitionCanonicalProviderConnection(ctx, {
-    actor,
-    commandId: args.commandId,
-    connection: currentCanonical,
-    operation: 'revoke',
-    externalState: { kind: 'unknown', value: 'revocation_pending' },
-  })
-  if (canonical === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
-  const projected = canonicalProviderConnectionProjection(legacyResult.connection, canonical)
-  await ctx.db.replace(existing._id, toRow(projected, args.commandId, legacyResult.commandDigest))
+  const result = beginProviderConnectionRevocation(current, args, now)
+  if (result.kind === 'refused') return result
+  const provenance = await resolveProviderConnectionProvenance(
+    ctx, actor, 'revoke', [`connection:${current.connectionRef}`], current.credentialRef,
+  )
+  if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
+  const rebound = withProviderConnectionAuthority(result.connection, provenance)
+  const connection = {
+    ...rebound,
+    revocationRef: providerConnectionRevocationRef({
+      connectionRef: rebound.connectionRef,
+      expectedAuthorityGeneration: rebound.authorityGeneration,
+      expectedAuthorityDigest: rebound.authorityDigest,
+      adapterId: rebound.adapterId,
+    }),
+  }
+  await ctx.db.replace(existing._id, toRow(connection, args.commandId, result.commandDigest))
   await invalidateActiveLeases(ctx, args.connectionRef, 'revocation_started', now, args.commandId)
-  return projectCommandResult({ ...legacyResult, connection: projected })
+  return projectCommandResult({ ...result, connection })
 }
 
 export async function recordCleanupResultHandler(ctx: MutationCtx, args: RecordCleanupResultArgs) {
@@ -208,10 +197,10 @@ export async function readHandler(ctx: QueryCtx, args: { connectionRef: string }
   const row = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef)).unique()
   if (row === null) return null
-  const legacy = toDomain(row)
-  return await readCanonicalConnectionForProjection(ctx, legacy, true) === null
+  const connection = toDomain(row)
+  return connection.lifecycle !== 'active' || !providerConnectionAuthorityProvenanceIsValid(connection)
     ? null
-    : toRow(legacy, row.lastCommandId, row.lastCommandDigest)
+    : toRow(connection, row.lastCommandId, row.lastCommandDigest)
 }
 
 export async function readCleanupTargetHandler(ctx: QueryCtx, args: ReadCleanupTargetArgs) {
@@ -254,16 +243,18 @@ export async function listByBusinessLifecycleHandler(ctx: QueryCtx, args: ListBy
   const rows = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_businessId_and_lifecycle', (query) => query.eq('businessId', args.businessId).eq('lifecycle', args.lifecycle))
     .take(Math.max(1, Math.min(100, Math.trunc(args.limit))))
-  const current = await Promise.all(rows.map(async (row) => await readCanonicalConnectionForProjection(ctx, toDomain(row), args.lifecycle === 'active')))
-  return rows.flatMap((row, index) => current[index] === null ? [] : [toRow(toDomain(row), row.lastCommandId, row.lastCommandDigest)])
+  return rows.flatMap((row) => providerConnectionAuthorityProvenanceIsValid(toDomain(row))
+    ? [toRow(toDomain(row), row.lastCommandId, row.lastCommandDigest)]
+    : [])
 }
 
 export async function listByProviderLifecycleHandler(ctx: QueryCtx, args: ListByProviderLifecycleArgs) {
   const rows = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_providerRef_and_lifecycle', (query) => query.eq('providerRef', args.providerRef).eq('lifecycle', args.lifecycle))
     .take(Math.max(1, Math.min(100, Math.trunc(args.limit))))
-  const current = await Promise.all(rows.map(async (row) => await readCanonicalConnectionForProjection(ctx, toDomain(row), args.lifecycle === 'active')))
-  return rows.flatMap((row, index) => current[index] === null ? [] : [toRow(toDomain(row), row.lastCommandId, row.lastCommandDigest)])
+  return rows.flatMap((row) => providerConnectionAuthorityProvenanceIsValid(toDomain(row))
+    ? [toRow(toDomain(row), row.lastCommandId, row.lastCommandDigest)]
+    : [])
 }
 
 export async function readAtGenerationHandler(
@@ -273,10 +264,10 @@ export async function readAtGenerationHandler(
   const row = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef_and_authorityGeneration', (query) => query.eq('connectionRef', args.connectionRef).eq('authorityGeneration', args.authorityGeneration)).unique()
   if (row === null) return null
-  const legacy = toDomain(row)
-  return await readCanonicalConnectionForProjection(ctx, legacy, true) === null
+  const connection = toDomain(row)
+  return !providerConnectionAuthorityProvenanceIsValid(connection)
     ? null
-    : toRow(legacy, row.lastCommandId, row.lastCommandDigest)
+    : toRow(connection, row.lastCommandId, row.lastCommandDigest)
 }
 
 export async function resolveCredentialRefHandler(

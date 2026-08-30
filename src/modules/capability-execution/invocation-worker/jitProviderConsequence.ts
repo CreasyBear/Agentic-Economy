@@ -36,9 +36,8 @@ export type CanonicalProviderConsequenceTicket = Readonly<{
   invocationRef: string
   operationRef: string
   leaseRef: string
-  canonicalLeaseRef: string
-  canonicalConnectionRef: string
-  canonicalConnectionGeneration: number
+  connectionRef: string
+  authorityGeneration: number
   providerRef: string
   adapterId: string
   authorityDigest: string
@@ -489,7 +488,6 @@ function canonicalTicket(
   if (invocationRef === undefined
     || operationRef === undefined
     || leaseRef === undefined
-    || authority.canonicalConnectionRef === undefined
     || grantedScopes === undefined
     || grantedResources === undefined
     || readinessValidUntil === undefined) return undefined
@@ -514,18 +512,17 @@ function canonicalTicket(
     || !OPAQUE_REF.test(candidate.invocationRef)
     || !OPAQUE_REF.test(candidate.operationRef)
     || !OPAQUE_REF.test(candidate.leaseRef)
-    || !OPAQUE_REF.test(candidate.canonicalLeaseRef)
-    || !OPAQUE_REF.test(candidate.canonicalConnectionRef)
+    || !OPAQUE_REF.test(candidate.connectionRef)
     || !OPAQUE_REF.test(candidate.providerRef)
     || !OPAQUE_REF.test(candidate.adapterId)
     || !OPAQUE_REF.test(candidate.grantRef)
     || candidate.invocationRef !== invocationRef
     || candidate.operationRef !== operationRef
     || candidate.leaseRef !== leaseRef
-    || candidate.canonicalConnectionRef !== authority.canonicalConnectionRef
+    || candidate.connectionRef !== invocation.binding.authority.connectionRef
     || candidate.providerRef !== invocation.binding.authority.providerRef
     || candidate.adapterId !== invocation.binding.adapterId
-    || candidate.canonicalConnectionGeneration !== authority.authorityGeneration
+    || candidate.authorityGeneration !== authority.authorityGeneration
     || candidate.authorityDigest !== authority.authorityDigest
     || !DIGEST.test(candidate.authorityDigest)
     || !sameStrings(candidate.grantedScopes, grantedScopes)
@@ -567,7 +564,6 @@ export function providerConsequenceInvocationDigest(
   if (authority.invocationRef === undefined
     || authority.operationRef === undefined
     || authority.leaseRef === undefined
-    || authority.canonicalConnectionRef === undefined
     || authority.grantedScopes === undefined
     || authority.grantedResources === undefined
     || authority.readinessValidUntil === undefined) return undefined
@@ -578,7 +574,6 @@ export function providerConsequenceInvocationDigest(
       endpointUrl: invocation.binding.endpointUrl,
       configDigest: invocation.binding.configDigest,
       connectionRef: invocation.binding.authority.connectionRef,
-      canonicalConnectionRef: authority.canonicalConnectionRef,
       providerRef: invocation.binding.authority.providerRef,
     },
     authority: {

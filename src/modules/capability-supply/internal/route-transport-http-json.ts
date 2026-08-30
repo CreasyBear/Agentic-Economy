@@ -77,7 +77,6 @@ export type ProviderRouteTransportAuthority = RouteTransportAuthorityCommon &
   Readonly<{
     authorityGeneration: number
     authorityDigest: string
-    canonicalConnectionRef?: string
     leaseRef?: string
     invocationRef?: string
     operationRef?: string

@@ -11,7 +11,7 @@ vi.mock('@/lib/observability/posthog.server', () => posthog)
 
 import { recordServerFunnelEventServer } from '@/modules/observability/funnel.functions'
 
-describe('Phase 2 public funnel event exemption', () => {
+describe('Public funnel event exemption', () => {
   it('recordServerFunnelEventServer discards caller-shaped actor and business provenance before analytics release', async () => {
     const handler = recordServerFunnelEventServer as unknown as (input: {
       data: Record<string, unknown>

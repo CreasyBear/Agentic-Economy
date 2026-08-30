@@ -47,6 +47,11 @@ export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
         .withIndex('by_connectionRef', (query) => query.eq('connectionRef', connectionRef)).unique()
       return row === null ? undefined : {
         connectionRef: row.connectionRef,
+        owningAccountRef: row.owningAccountRef,
+        installedByPrincipalRef: row.installedByPrincipalRef,
+        authorityGrantRef: row.authorityGrantRef,
+        authorityGrantGeneration: row.authorityGrantGeneration,
+        ...(row.secretRef === undefined ? {} : { secretRef: row.secretRef }),
         businessId: String(row.businessId),
         providerRef: row.providerRef,
         providerAccountRef: row.providerAccountRef,

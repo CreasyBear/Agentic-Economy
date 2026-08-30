@@ -406,7 +406,7 @@ function x402RuntimeFactory(
         lookup.connectionRef === invocation.binding.authority.connectionRef
         && lookup.providerRef === ticket.providerRef
         && lookup.adapterId === ticket.adapterId
-        && lookup.authorityGeneration === ticket.canonicalConnectionGeneration
+        && lookup.authorityGeneration === ticket.authorityGeneration
         && lookup.authorityDigest === ticket.authorityDigest
         && lookup.leaseRef === ticket.leaseRef
         ? { kind: 'valid' as const }

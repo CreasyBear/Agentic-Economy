@@ -31,8 +31,8 @@ const context = {
   requestDigest: `sha256:${'b'.repeat(64)}`,
   cleanupAttempt: 1,
   resourceAuthority: {
-    canonicalConnectionRef: `con_${'c'.repeat(32)}`,
-    connectionGeneration: 3,
+    connectionRef: 'connection:test',
+    authorityGeneration: 1,
     owningAccountRef: `acc_${'1'.repeat(32)}`,
     actorPrincipalRef: `prn_${'2'.repeat(32)}`,
     accountRevision: 1,

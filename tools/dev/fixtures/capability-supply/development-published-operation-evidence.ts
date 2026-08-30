@@ -62,11 +62,16 @@ export function developmentProviderConnectionAuthorityDigest(input: Readonly<{
 }>): string {
   return providerConnectionAuthorityDigest({
     connectionRef: input.connectionRef,
+    owningAccountRef: 'account:development',
+    installedByPrincipalRef: 'principal:development',
+    authorityGrantRef: 'grant:development-provider',
+    authorityGrantGeneration: 1,
     businessId: input.businessId,
     providerRef: input.providerRef,
     providerAccountRef: developmentProviderAccountRef(input.providerRef),
     adapterId: input.adapterId,
     credentialRef: developmentProviderCredentialRef(input.providerRef),
+    secretRef: developmentProviderCredentialRef(input.providerRef),
     grantedScopes: input.grantedScopes ?? [],
     grantedResources: input.grantedResources ?? [],
     authorityGeneration: 1,
@@ -85,6 +90,11 @@ function createDevelopmentProviderConnection(input: Readonly<{
   const result = createProviderConnection({
     commandId: `command:create:${input.connectionRef}`,
     connectionRef: input.connectionRef,
+    owningAccountRef: 'account:development',
+    installedByPrincipalRef: 'principal:development',
+    authorityGrantRef: 'grant:development-provider',
+    authorityGrantGeneration: 1,
+    secretRef: developmentProviderCredentialRef(input.providerRef),
     businessId: input.businessId,
     providerRef: input.providerRef,
     providerAccountRef: developmentProviderAccountRef(input.providerRef),
@@ -200,6 +210,10 @@ export function createDevelopmentProviderLeaseIssuer(
       readinessDigest: operation.readiness.qualificationDigest,
       leaseMs,
       evidenceRefs: [...operation.readiness.evidenceRefs],
+      activeAccountRef: connection.owningAccountRef,
+      actorPrincipalRef: connection.installedByPrincipalRef,
+      grantRef: connection.authorityGrantRef,
+      grantGeneration: connection.authorityGrantGeneration,
     }
     const result = issueProviderConnectionLease(
       connection,

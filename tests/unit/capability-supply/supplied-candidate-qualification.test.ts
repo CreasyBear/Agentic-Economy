@@ -91,6 +91,11 @@ const priceDigest = pricingConfigDigest(pricingConfig)
 const providerConnectionCommand: CreateProviderConnectionCommand = {
   commandId: 'command:create:development-reference',
   connectionRef: 'connection:development',
+  owningAccountRef: 'account:owner',
+  installedByPrincipalRef: 'principal:owner',
+  authorityGrantRef: 'grant:connection',
+  authorityGrantGeneration: 1,
+  secretRef: 'env:DEVELOPMENT_REFERENCE_SECRET',
   businessId: candidate.businessId,
   providerRef: 'provider:development',
   providerAccountRef: 'account:development',

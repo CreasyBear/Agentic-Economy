@@ -263,13 +263,13 @@ describe('provider consequence route coverage gaps', () => {
         connectionRef: routeInvocation.binding.authority.connectionRef,
         providerRef: canonicalTicket.providerRef,
         adapterId: canonicalTicket.adapterId,
-        authorityGeneration: canonicalTicket.canonicalConnectionGeneration,
+        authorityGeneration: canonicalTicket.authorityGeneration,
         authorityDigest: canonicalTicket.authorityDigest,
         leaseRef: canonicalTicket.leaseRef,
       })).resolves.toEqual({ kind: 'valid' })
       await expect(runtime.validateProviderConnectionAuthority({
         connectionRef: 'connection:attacker', providerRef: canonicalTicket.providerRef,
-        adapterId: canonicalTicket.adapterId, authorityGeneration: canonicalTicket.canonicalConnectionGeneration,
+        adapterId: canonicalTicket.adapterId, authorityGeneration: canonicalTicket.authorityGeneration,
         authorityDigest: canonicalTicket.authorityDigest, leaseRef: canonicalTicket.leaseRef,
       })).resolves.toMatchObject({ kind: 'unavailable' })
       expect(runtime.x402PaymentSigningAvailable({
@@ -574,7 +574,6 @@ function invocation(): ProviderInvocation {
       maximumSpend: { currency: 'USD', units: '0', exponent: 2 }, expiresAt: NOW + 120_000,
       callIdentity: { keyId: 'route-calls:test', signature: 'hmac-sha256:test' },
       authorityGeneration: 7, authorityDigest: DIGEST('7'), leaseRef: 'lease:test', invocationRef: 'invocation:test',
-      canonicalConnectionRef: `con_${'3'.repeat(32)}`,
       operationRef: 'operation:test', grantedScopes: ['provider:invoke'], grantedResources: ['operation:test'],
       readinessValidUntil: NOW + 120_000, readinessDigest: DIGEST('8'),
     },
@@ -607,8 +606,8 @@ function ticket(routeInvocation: ProviderInvocation = invocation()): CanonicalPr
     version: 'provider-consequence:v1', ticketRef: 'provider-ticket:test', effectRef: 'connection-effect:test',
     requestDigest: requestDigest(routeInvocation), invocationDigest, issuedAt: NOW - 1_000, expiresAt: NOW + 10_000,
     invocationRef: 'invocation:test', operationRef: 'operation:test', leaseRef: 'lease:test',
-    canonicalLeaseRef: 'lease-canonical:test', canonicalConnectionRef: routeInvocation.authority.canonicalConnectionRef!,
-    canonicalConnectionGeneration: 7, providerRef: 'provider:test', adapterId: routeInvocation.binding.adapterId,
+    connectionRef: routeInvocation.binding.authority.connectionRef,
+    authorityGeneration: 7, providerRef: 'provider:test', adapterId: routeInvocation.binding.adapterId,
     authorityDigest: routeInvocation.authority.authorityDigest, grantedScopes: ['provider:invoke'],
     grantedResources: ['operation:test'], readinessValidUntil, readinessDigest,
     owningAccountRef: `acc_${'1'.repeat(32)}`, activeAccountRef: `acc_${'1'.repeat(32)}`,

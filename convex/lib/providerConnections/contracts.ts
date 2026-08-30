@@ -14,12 +14,10 @@ export const lifecycle = v.union(
 )
 export const connectionValue = v.object({
   connectionRef: v.string(),
-  canonicalConnectionRef: v.optional(v.string()),
-  owningAccountRef: v.optional(v.string()),
-  installedByPrincipalRef: v.optional(v.string()),
-  authorityGrantRef: v.optional(v.string()),
-  authorityGrantGeneration: v.optional(v.number()),
-  canonicalConnectionGeneration: v.optional(v.number()),
+  owningAccountRef: v.string(),
+  installedByPrincipalRef: v.string(),
+  authorityGrantRef: v.string(),
+  authorityGrantGeneration: v.number(),
   secretRef: v.optional(v.string()),
   businessId: v.id('businesses'),
   providerRef: v.string(),
@@ -77,8 +75,8 @@ export const cleanupTargetValue = v.object({
   revocationRef: v.optional(v.string()),
   cleanupAttempt: v.optional(v.number()),
   resourceAuthority: v.object({
-    canonicalConnectionRef: v.string(),
-    connectionGeneration: v.number(),
+    connectionRef: v.string(),
+    authorityGeneration: v.number(),
     owningAccountRef: v.string(),
     actorPrincipalRef: v.string(),
     accountRevision: v.number(),
@@ -228,8 +226,8 @@ export type CleanupWorkContext = Readonly<{
 }>
 
 export type CleanupResourceAuthority = Readonly<{
-  canonicalConnectionRef: string
-  connectionGeneration: number
+  connectionRef: string
+  authorityGeneration: number
   owningAccountRef: string
   actorPrincipalRef: string
   accountRevision: number
@@ -241,12 +239,10 @@ export type CleanupResourceAuthority = Readonly<{
 
 export type ProviderConnectionRow = {
   connectionRef: string
-  canonicalConnectionRef?: string
-  owningAccountRef?: string
-  installedByPrincipalRef?: string
-  authorityGrantRef?: string
-  authorityGrantGeneration?: number
-  canonicalConnectionGeneration?: number
+  owningAccountRef: string
+  installedByPrincipalRef: string
+  authorityGrantRef: string
+  authorityGrantGeneration: number
   secretRef?: string
   businessId: Id<'businesses'>
   providerRef: string
@@ -278,14 +274,11 @@ export type ProviderConnectionRow = {
 
 export type ProviderConnectionLeaseRow = {
   leaseRef: string
-  canonicalLeaseRef?: string
-  canonicalConnectionRef?: string
-  canonicalConnectionGeneration?: number
-  owningAccountRef?: string
-  activeAccountRef?: string
-  actorPrincipalRef?: string
-  grantRef?: string
-  grantGeneration?: number
+  owningAccountRef: string
+  activeAccountRef: string
+  actorPrincipalRef: string
+  grantRef: string
+  grantGeneration: number
   invocationRef: string
   operationRef: string
   connectionRef: string
@@ -394,5 +387,3 @@ export type ListByProviderLifecycleArgs = {
   lifecycle: ProviderConnection['lifecycle']
   limit: number
 }
-
-

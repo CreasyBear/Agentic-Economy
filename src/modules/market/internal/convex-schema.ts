@@ -106,12 +106,6 @@ export const marketTables = {
       searchField: 'searchText',
       filterFields: ['generation', 'source', 'access'],
     }),
-  marketAggregateBackfills: defineTable({
-    projection: v.string(),
-    cursor: v.optional(v.string()),
-    completedAt: v.optional(v.number()),
-    updatedAt: v.number(),
-  }).index('by_projection', ['projection']),
   marketEvidenceFacts: defineTable({
     kind: v.union(
       v.literal('ae_invocation'),

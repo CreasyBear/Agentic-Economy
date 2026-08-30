@@ -16,7 +16,6 @@ const CRITICAL_FILES = [
   'convex/lib/providerConnections/leases.ts',
   'convex/lib/providerConnections/lifecycle.ts',
   'convex/lib/providerConnections/owner.ts',
-  'convex/lib/providerConnections/persistence.ts',
   'src/modules/capability-supply/internal/provider-connection/lease.ts',
   'src/modules/capability-supply/internal/provider-connection/shared.ts',
   'src/modules/capability-supply/internal/provider-connection/types.ts',

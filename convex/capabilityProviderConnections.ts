@@ -77,9 +77,6 @@ import {
   reauthorizeOwnerHandler,
   retryOwnerCleanupArgs,
   retryOwnerCleanupHandler,
-  shareOwnerArgs,
-  shareOwnerHandler,
-  ownerShareResult,
   revokeOwnerArgs,
   revokeOwnerHandler,
 } from './lib/providerConnections/owner'
@@ -250,10 +247,4 @@ export const connectX402Owner = mutationGeneric({
   args: connectX402OwnerArgs,
   returns: ownerCommandResult,
   handler: connectX402OwnerHandler,
-})
-
-export const shareOwner = internalMutationGeneric({
-  args: shareOwnerArgs,
-  returns: ownerShareResult,
-  handler: shareOwnerHandler,
 })

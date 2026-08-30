@@ -8,30 +8,8 @@ import {
 
 export { ActorKindValues }
 
-type AnyAuditEventType = (typeof AllAuditEventTypeValues)[number]
-type AnyAuditTargetType = (typeof AllAuditTargetTypeValues)[number]
-export type CurrentAuditEventType = Exclude<AnyAuditEventType, `business_action.${string}`>
-export type CurrentAuditTargetType = Exclude<AnyAuditTargetType, `business_action_${string}`>
-
-function requireNonEmpty<T extends string>(values: readonly T[]): readonly [T, ...T[]] {
-  const [first, ...rest] = values
-  if (first === undefined) {
-    throw new Error('Expected at least one current audit value')
-  }
-  return [first, ...rest]
-}
-
-export const AuditEventTypeValues = requireNonEmpty(
-  AllAuditEventTypeValues.filter(
-    (value): value is CurrentAuditEventType => !value.startsWith('business_action.'),
-  ),
-)
-
-export const AuditTargetTypeValues = requireNonEmpty(
-  AllAuditTargetTypeValues.filter(
-    (value): value is CurrentAuditTargetType => !value.startsWith('business_action_'),
-  ),
-)
+export const AuditEventTypeValues = AllAuditEventTypeValues
+export const AuditTargetTypeValues = AllAuditTargetTypeValues
 
 export const InvalidationSurfaceValues = ['public_catalog', 'registry_projection', 'discovery_manifest'] as const
 

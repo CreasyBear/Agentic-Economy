@@ -30,13 +30,10 @@ export function isProviderConnectionCredentialRef(value: unknown): value is stri
 
 export type ProviderConnection = Readonly<{
   connectionRef: string
-  /** Staged compatibility mapping. Absence is never inferred from legacy IDs. */
-  canonicalConnectionRef?: string
-  owningAccountRef?: string
-  installedByPrincipalRef?: string
-  authorityGrantRef?: string
-  authorityGrantGeneration?: number
-  canonicalConnectionGeneration?: number
+  owningAccountRef: string
+  installedByPrincipalRef: string
+  authorityGrantRef: string
+  authorityGrantGeneration: number
   secretRef?: string
   businessId: string
   providerRef: string
@@ -68,6 +65,11 @@ export type ProviderConnection = Readonly<{
 
 export type AuthorityCommandFields = Readonly<{
   connectionRef: string
+  owningAccountRef: string
+  installedByPrincipalRef: string
+  authorityGrantRef: string
+  authorityGrantGeneration: number
+  secretRef?: string
   businessId: string
   providerRef: string
   providerAccountRef: string
@@ -141,4 +143,8 @@ export type CreateX402ProviderConnectionCommand = Readonly<{
   resourceUrl: string
   evidenceRefs: readonly string[]
   expiresAt?: number
+  owningAccountRef: string
+  installedByPrincipalRef: string
+  authorityGrantRef: string
+  authorityGrantGeneration: number
 }>

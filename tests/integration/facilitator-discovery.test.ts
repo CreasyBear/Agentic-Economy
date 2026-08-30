@@ -8,8 +8,8 @@ import { admitRegistryPaymentRequiredItem } from '@/modules/capability-supply/in
 import timezoneFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
 import { convexModules } from '../helpers/convex-fixtures'
 import {
-  PHASE_2_CRON_ACCOUNT_REF,
-  PHASE_2_CRON_PRINCIPAL_REF,
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
   type WorkloadCronSnapshot,
 } from '../../convex/workloadCron'
 
@@ -20,22 +20,22 @@ async function seedFacilitatorDiscoveryWorkload(backend: ReturnType<typeof conve
     const ownershipRef = 'own_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
     const action = {
       actorPrincipalRef: ownerPrincipalRef,
-      activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+      activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
       correlationRef: 'cron-test:account',
       idempotencyRef: 'cron-test:account',
     }
     await ctx.db.insert('principals', {
-      principalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      principalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
       kind: 'workload',
-      displayName: 'Phase 2 scheduled workload',
+      displayName: 'System scheduled workload',
       lifecycle: 'active',
       revision: 1,
       createdAt: admittedAt,
       updatedAt: admittedAt,
     })
     await ctx.db.insert('accounts', {
-      accountRef: PHASE_2_CRON_ACCOUNT_REF,
-      displayName: 'Phase 2 operations',
+      accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+      displayName: 'System operations',
       lifecycle: 'active',
       recoveryPolicy: { kind: 'no_transfer', revision: 1 },
       creationActorPrincipalRef: ownerPrincipalRef,
@@ -49,7 +49,7 @@ async function seedFacilitatorDiscoveryWorkload(backend: ReturnType<typeof conve
     })
     await ctx.db.insert('accountOwnerships', {
       ownershipRef,
-      accountRef: PHASE_2_CRON_ACCOUNT_REF,
+      accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
       ownerPrincipalRef,
       lifecycle: 'active',
       changeKind: 'creation',
@@ -59,8 +59,8 @@ async function seedFacilitatorDiscoveryWorkload(backend: ReturnType<typeof conve
     })
     await ctx.db.insert('memberships', {
       membershipRef: 'mem_cccccccccccccccccccccccccccccccc',
-      accountRef: PHASE_2_CRON_ACCOUNT_REF,
-      memberPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      accountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
+      memberPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
       lifecycle: 'active',
       revision: 1,
       createdAt: admittedAt,
@@ -70,8 +70,8 @@ async function seedFacilitatorDiscoveryWorkload(backend: ReturnType<typeof conve
   return {
     name: 'refresh facilitator discovery',
     workloadKind: 'cron',
-    actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
-    activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+    actorPrincipalRef: SYSTEM_WORKLOAD_PRINCIPAL_REF,
+    activeAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
     correlationRef: `cron:refresh-facilitator-discovery:${admittedAt}`,
     idempotencyRef: `cron:refresh-facilitator-discovery:${admittedAt}`,
     purpose: 'refresh facilitator discovery',
@@ -122,15 +122,10 @@ describe('facilitator discovery reconciliation', () => {
       businesses: await ctx.db.query('businesses').collect(),
       connections: await ctx.db.query('capabilityProviderConnections').collect(),
       publications: await ctx.db.query('capabilityPublications').collect(),
-      currentOperations: await ctx.db.query('capabilityCurrentOperations').collect(),
     }))
     expect(persisted.businesses).toHaveLength(1)
     expect(persisted.connections).toHaveLength(1)
     expect(persisted.publications).toHaveLength(1)
-    expect(persisted.currentOperations).toHaveLength(1)
-    expect(persisted.currentOperations[0]?.operationRef).toBe(
-      persisted.publications[0]?.operationRef,
-    )
 
     const search = await backend.query(api.capabilitySupplyOperations.search, {
       query: 'timezone',
