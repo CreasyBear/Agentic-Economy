@@ -1,12 +1,18 @@
 import {
   handleMcpRequest,
+  handleMcpRouteRequest,
   postMcp,
   readMcpBody,
 } from './mcp-api-harness'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { defineAction, mcpToolName } from '@/modules/actions'
+import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
+
+afterEach(() => {
+  setHttpRateLimitAdmissionForTests(undefined)
+})
 
 describe('MCP host adapter protocol', () => {
   it('initializes with server information and the tools capability', async () => {
@@ -129,6 +135,72 @@ describe('MCP host adapter protocol', () => {
       status: 405,
       kind: 'METHOD_NOT_ALLOWED',
       code: 'method_not_allowed',
+    })
+  })
+
+  it('returns a correlated retryable problem when MCP request admission is unavailable', async () => {
+    setHttpRateLimitAdmissionForTests(async () => {
+      throw new Error('private admission source detail')
+    })
+    const request = new Request('https://ae.example/mcp', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json, text/event-stream',
+        'content-type': 'application/json',
+        'x-ae-request-id': 'corr_mcp_admission_42',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'admission-unavailable',
+        method: 'tools/list',
+        params: {},
+      }),
+    })
+
+    const response = await handleMcpRouteRequest(request)
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get('content-type')).toContain('application/problem+json')
+    expect(response.headers.get('x-ae-request-id')).toBe('corr_mcp_admission_42')
+    const body = await response.json()
+    expect(body).toMatchObject({
+      status: 503,
+      kind: 'UNAVAILABLE',
+      code: 'mcp_admission_unavailable',
+      retryable: true,
+      detail: 'The MCP endpoint is temporarily unavailable. Retry later.',
+      correlationId: 'corr_mcp_admission_42',
+    })
+    expect(JSON.stringify(body)).not.toContain('private admission source detail')
+  })
+
+  it('preserves correlated Retry-After semantics when MCP admission is limited', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: false, retryAfter: 1_250 }))
+    const request = new Request('https://ae.example/mcp', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json, text/event-stream',
+        'content-type': 'application/json',
+        'x-ae-request-id': 'corr_mcp_limited_42',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'admission-limited',
+        method: 'tools/list',
+        params: {},
+      }),
+    })
+
+    const response = await handleMcpRouteRequest(request)
+
+    expect(response.status).toBe(429)
+    expect(response.headers.get('retry-after')).toBe('2')
+    expect(response.headers.get('x-ae-request-id')).toBe('corr_mcp_limited_42')
+    await expect(response.json()).resolves.toMatchObject({
+      status: 429,
+      kind: 'RESOURCE_EXHAUSTED',
+      code: 'rate_limited',
+      retryable: true,
     })
   })
 

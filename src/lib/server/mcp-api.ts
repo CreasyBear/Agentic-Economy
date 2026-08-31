@@ -18,6 +18,7 @@ import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge
 import { buildProblem, gatewayFailureToProblem, type ProblemDetails, type ProblemKind } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
 import { methodNotAllowed } from '@/lib/server/method-guard'
+import { assertHttpAdmission, rateLimitedResponse } from '@/lib/server/rate-limit'
 import { readBoundedRequestJson, readBoundedRequestText, type BoundedRequestTextResult } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
 import { OPERATION_READ_UNAVAILABLE_PROBLEM } from '@/modules/registry/public'
@@ -364,6 +365,37 @@ type McpRequestOptions = Readonly<{
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
 }>
+
+/**
+ * MCP route boundary. Request admission is infrastructure, so an admission
+ * outage must not escape as an opaque framework 500. Keep the failure outside
+ * JSON-RPC (like authentication and media-type failures), but make it a
+ * truthful, retryable HTTP problem with the same request correlation reference.
+ */
+export async function handleMcpRouteRequest(
+  request: Request,
+  options: McpRequestOptions = {},
+): Promise<Response> {
+  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    let admission
+    try {
+      admission = await assertHttpAdmission(request, 'public-read')
+    } catch {
+      return withRequestCorrelationHeader(problem({
+        status: 503,
+        kind: 'UNAVAILABLE',
+        code: 'mcp_admission_unavailable',
+        retryable: true,
+        detail: 'The MCP endpoint is temporarily unavailable. Retry later.',
+        extras: { correlationId },
+      }), correlationId)
+    }
+    if (!admission.ok) {
+      return withRequestCorrelationHeader(rateLimitedResponse(admission.retryAfter), correlationId)
+    }
+    return withRequestCorrelationHeader(await handleMcpRequest(request, options), correlationId)
+  })
+}
 
 function mcpActionConsequenceResource(action: AnyAction): string {
   const canonicalActionId = action.id.replace(/[A-Z]/g, (character) => `-${character.toLowerCase()}`)

@@ -2,13 +2,22 @@ import { parseJsonEventStream } from '@ai-sdk/provider-utils'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { z } from 'zod'
 
-import { handleMcpRequest as handleMcpRequestImpl } from '@/lib/server/mcp-api'
+import {
+  handleMcpRequest as handleMcpRequestImpl,
+  handleMcpRouteRequest as handleMcpRouteRequestImpl,
+} from '@/lib/server/mcp-api'
 import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 
 export function handleMcpRequest(
   ...args: Parameters<typeof handleMcpRequestImpl>
 ): ReturnType<typeof handleMcpRequestImpl> {
   return handleMcpRequestImpl(...args)
+}
+
+export function handleMcpRouteRequest(
+  ...args: Parameters<typeof handleMcpRouteRequestImpl>
+): ReturnType<typeof handleMcpRouteRequestImpl> {
+  return handleMcpRouteRequestImpl(...args)
 }
 
 export type JsonRpcBody = {
