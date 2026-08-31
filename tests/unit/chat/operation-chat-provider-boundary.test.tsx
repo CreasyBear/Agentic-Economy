@@ -35,6 +35,23 @@ vi.mock('convex/react', () => ({
 
 vi.mock('@tanstack/react-router', () => ({
   HeadContent: () => null,
+  Link: ({
+    to,
+    search,
+    hash,
+    className,
+    children,
+  }: {
+    to: string
+    search?: Record<string, string>
+    hash?: string
+    className?: string
+    children: ReactNode
+  }) => {
+    const query = search === undefined ? '' : `?${new URLSearchParams(search).toString()}`
+    const fragment = hash === undefined ? '' : `#${hash}`
+    return <a href={`${to}${query}${fragment}`} className={className}>{children}</a>
+  },
   Outlet: () => null,
   Scripts: () => null,
   createRootRoute: (options: unknown) => ({ options }),

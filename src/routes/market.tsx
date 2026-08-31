@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 
 import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
@@ -80,7 +80,7 @@ function MarketError() {
       description="Reload this page to fetch the current tools. No Operation was called."
       action={
         <Button asChild className="min-h-touch">
-          <a href="/market?window=30d">Reload catalog</a>
+          <Link to="/market" search={{ window: "30d" }} reloadDocument>Reload catalog</Link>
         </Button>
       }
     />

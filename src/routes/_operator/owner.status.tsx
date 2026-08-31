@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
 
@@ -83,7 +83,7 @@ function OwnerStatusRoute() {
             role="status"
             action={
               <Button asChild className="min-h-touch">
-                <a href="/for-providers">Review supplier setup</a>
+                <Link to="/for-providers">Review supplier setup</Link>
               </Button>
             }
           />
@@ -94,7 +94,7 @@ function OwnerStatusRoute() {
             role="alert"
             action={
               <Button asChild variant="secondary" className="min-h-touch">
-                <a href="/owner/status">Try again</a>
+                <Link to="/owner/status" reloadDocument>Try again</Link>
               </Button>
             }
           />

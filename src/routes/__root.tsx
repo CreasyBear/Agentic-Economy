@@ -2,7 +2,7 @@
 import { ClerkProvider, useAuth } from '@clerk/tanstack-react-start'
 import { ConvexProviderWithClerk } from 'convex/react-clerk'
 import { ConvexReactClient, useConvexAuth, useMutation } from 'convex/react'
-import { HeadContent, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
+import { HeadContent, Link, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 
@@ -121,7 +121,9 @@ function ChatConvexProvider({ children }: { children: ReactNode }) {
         tone="warning"
         action={(
           <Button asChild className="min-h-touch">
-            <a href="/market?window=30d#operations">Browse Operations</a>
+            <Link to="/market" search={{ window: '30d' }} hash="operations">
+              Browse Operations
+            </Link>
           </Button>
         )}
       />
