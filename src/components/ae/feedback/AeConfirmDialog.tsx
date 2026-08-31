@@ -8,7 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { RefObject } from "react";
+import { useRef, type RefObject } from "react";
 
 type AeConfirmDialogProps = {
   open: boolean;
@@ -35,6 +35,8 @@ export function AeConfirmDialog({
   onConfirm,
   returnFocusRef,
 }: AeConfirmDialogProps) {
+  const confirmationInFlightRef = useRef(false);
+
   function handleOpenChange(nextOpen: boolean) {
     if (pending && !nextOpen) {
       return;
@@ -44,10 +46,15 @@ export function AeConfirmDialog({
   }
 
   async function handleConfirm() {
-    if (pending) {
+    if (pending || confirmationInFlightRef.current) {
       return;
     }
-    await onConfirm();
+    confirmationInFlightRef.current = true;
+    try {
+      await onConfirm();
+    } finally {
+      confirmationInFlightRef.current = false;
+    }
   }
 
   return (

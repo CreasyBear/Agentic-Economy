@@ -44,6 +44,36 @@ describe('AeConfirmDialog', () => {
     fireEvent.click(confirm)
     expect(onConfirm).not.toHaveBeenCalled()
   })
+
+  it('blocks duplicate pointer and keyboard activation before pending state propagates', async () => {
+    const confirmation = deferred<void>()
+    const onConfirm = vi.fn(() => confirmation.promise)
+    render(
+      <AeConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Disconnect this agent?"
+        description="The agent will lose access."
+        confirmLabel="Disconnect"
+        onConfirm={onConfirm}
+      />,
+    )
+
+    const confirm = within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: 'Disconnect',
+    })
+    fireEvent.click(confirm, { detail: 1 })
+    fireEvent.click(confirm, { detail: 2 })
+    fireEvent.click(confirm, { detail: 0 })
+
+    expect(onConfirm).toHaveBeenCalledTimes(1)
+
+    confirmation.resolve()
+    await confirmation.promise
+    await Promise.resolve()
+    fireEvent.click(confirm, { detail: 0 })
+    expect(onConfirm).toHaveBeenCalledTimes(2)
+  })
 })
 
 function ConfirmHarness() {
@@ -64,4 +94,12 @@ function ConfirmHarness() {
       />
     </>
   )
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+  return { promise, resolve }
 }
