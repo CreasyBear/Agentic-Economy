@@ -18,6 +18,7 @@ const routeHarness = vi.hoisted(() => ({
   readDirectory: vi.fn(),
   readCanonicalBaseUrl: vi.fn(),
   revokeRef: Symbol('revoke'),
+  disconnectRef: Symbol('disconnect'),
   readApprovalsRef: Symbol('read-approvals'),
   decideApprovalRef: Symbol('decide-approval'),
 }))
@@ -71,6 +72,7 @@ vi.mock('@/lib/server/agent-access-console.functions', () => ({
 }))
 
 vi.mock('@/modules/agent-access/agent-access.functions', () => ({
+  disconnectAgentServer: routeHarness.disconnectRef,
   revokeAgentCredentialServer: routeHarness.revokeRef,
 }))
 
