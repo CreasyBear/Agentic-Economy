@@ -14,13 +14,16 @@ describe('method not allowed response', () => {
       status: 405,
       kind: 'METHOD_NOT_ALLOWED',
       code: 'method_not_allowed',
-      detail: 'Only POST are supported by this route.',
+      detail: 'Only POST is supported by this route.',
     })
   })
 
-  it('preserves the exact order of methods supported by a target', () => {
+  it('preserves the exact order of methods supported by a target', async () => {
     const response = methodNotAllowed(['GET', 'DELETE'])
     expect(response.headers.get('allow')).toBe('GET, DELETE')
+    await expect(response.json()).resolves.toMatchObject({
+      detail: 'Only GET, DELETE are supported by this route.',
+    })
   })
 
   it('lets explicit TRACE handlers own the target Allow and body', async () => {

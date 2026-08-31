@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { operationReadUnavailableResponse } from '@/lib/server/operation-read-problem'
+import { readOperationReadRequest } from '@/lib/server/operation-read-request'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
@@ -34,28 +34,8 @@ export async function handleMarketOperationSearchRequest(request: Request): Prom
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
     let response: Response
     try {
-      response = await withHttpRateLimit(request, 'public-read', async () => {
-        if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) {
-          return problem({ status: 415, kind: 'UNSUPPORTED_MEDIA_TYPE', code: 'invalid_content_type' })
-        }
-        const bounded = await readBoundedRequestJson(request, MAX_OPERATION_SEARCH_BODY_BYTES)
-        if (!bounded.ok) {
-          return problem({
-            status: bounded.code === 'payload_too_large' ? 413 : 400,
-            kind: bounded.code === 'payload_too_large' ? 'PAYLOAD_TOO_LARGE' : 'INVALID_ARGUMENT',
-            code: bounded.code,
-          })
-        }
-        const parsed = operationSearchInputSchema.safeParse(bounded.value)
-        if (!parsed.success) {
-          const detail = parsed.error.issues[0]?.message
-          return problem({
-            status: 400,
-            kind: 'INVALID_ARGUMENT',
-            code: 'invalid_body',
-            ...(detail === undefined ? {} : { detail }),
-          })
-        }
+      const parsed = await readOperationReadRequest(request, MAX_OPERATION_SEARCH_BODY_BYTES, operationSearchInputSchema)
+      response = !parsed.ok ? parsed.response : await withHttpRateLimit(request, 'public-read', async () => {
         const result = operationChoiceSearchOutputSchema.safeParse(await registryOperationsSearchAction.run({
           data: parsed.data,
           context: { caller: 'http', request },

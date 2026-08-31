@@ -95,6 +95,36 @@ describe('public market operation routes', () => {
     expect(response.headers.get('content-type')).toContain('application/problem+json')
     await expect(response.json()).resolves.toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'invalid_body' })
   })
+
+  it.each([
+    ['search', handleMarketOperationSearchRequest],
+    ['detail', handleMarketOperationDetailRequest],
+    ['compare', handleMarketOperationCompareRequest],
+    ['inspect-plan', handleMarketOperationInspectPlanRequest],
+  ])('returns local input errors for %s even when remote admission is unavailable', async (route, handler) => {
+    const admit = vi.fn(async () => { throw new Error('rate limit source unavailable') })
+    setHttpRateLimitAdmissionForTests(admit)
+    const endpoint = `https://ae.test/api/v1/market-operations/${route}`
+
+    const unsupported = await handler(new Request(endpoint, { method: 'POST', body: '{}' }))
+    expect(unsupported.status).toBe(415)
+    await expect(unsupported.json()).resolves.toMatchObject({
+      kind: 'UNSUPPORTED_MEDIA_TYPE',
+      code: 'invalid_content_type',
+    })
+
+    const malformed = await handler(new Request(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{',
+    }))
+    expect(malformed.status).toBe(400)
+    await expect(malformed.json()).resolves.toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_json',
+    })
+    expect(admit).not.toHaveBeenCalled()
+  })
   it('runs anonymous compare through the canonical POST path with exact refs', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     const refs = [
