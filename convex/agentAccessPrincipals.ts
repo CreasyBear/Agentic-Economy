@@ -736,9 +736,10 @@ async function predecessorMaterial(ctx: MutationCtx, successor: Doc<'credentials
 }
 
 async function predecessorCredentialBinding(ctx: MutationCtx, successor: Doc<'credentials'>) {
-  if (successor.predecessorCredentialRef === undefined) return null
+  const predecessorCredentialRef = successor.predecessorCredentialRef
+  if (predecessorCredentialRef === undefined) return null
   const credential = await ctx.db.query('credentials')
-    .withIndex('by_credentialRef', (query) => query.eq('credentialRef', successor.predecessorCredentialRef!)).unique()
+    .withIndex('by_credentialRef', (query) => query.eq('credentialRef', predecessorCredentialRef)).unique()
   if (credential === null) return null
   const binding = await ctx.db.query('externalIdentityBindings')
     .withIndex('by_bindingRef', (query) => query.eq('bindingRef', credential.bindingRef)).unique()

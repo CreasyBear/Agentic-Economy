@@ -582,6 +582,81 @@ async function issueLocalE2EOAuthGrantKey(
   throw new Error('issuance_unavailable')
 }
 
+async function issueReplacementGrantKey(input: Readonly<{
+  ownerId: string
+  grant: AgentAccessOAuthGrant
+  target: Extract<AgentConnectionTarget, { kind: 'replace_credential' }>
+  idempotencyKey: string
+  authorityMode: AgentAccessAuthorityMode
+  policy: AgentAccessPolicy
+}>): Promise<{ keyId: string; replacement: AgentCredentialReplacement }> {
+  const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
+  const successorGrantRef = issuedAgentGrantRef(input.ownerId, input.idempotencyKey)
+  const existing = (await api.list({ subject: input.ownerId, includeInvalid: false, limit: 100 })).data.find((key) => (
+    !key.revoked && !key.expired && key.claims?.aeGrantRef === successorGrantRef
+  ))
+  let createdHere = false
+  const key = existing ?? await api.create({
+    name: `AE Agent replacement ${input.idempotencyKey.slice(-12)}`,
+    subject: input.ownerId,
+    createdBy: input.ownerId,
+    scopes: [...input.grant.requestedScopes],
+    secondsUntilExpiration: input.grant.requestedAccess.expiresInSeconds,
+    claims: {
+      aePurpose: AGENT_ACCESS_PURPOSE,
+      aeGrantRef: successorGrantRef,
+      aeDisplayName: input.grant.displayName,
+      aeAuthorityMode: input.authorityMode,
+      aeIssuanceKey: input.idempotencyKey,
+      aeApplicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
+      aeEnvironment: input.grant.requestedAccess.environment,
+      aeScopes: JSON.stringify(input.grant.requestedScopes),
+      aePrincipalRef: input.target.principalRef,
+      aeConnectionTarget: 'replace_credential',
+    },
+    description: 'Replacement credential for an existing Agentic Economy agent.',
+  }).then((created) => {
+    createdHere = true
+    return created
+  })
+  if (key === undefined) throw new Error('replacement_provider_credential_missing')
+  const createdAt = Date.now()
+  const prepared = await prepareAgentCredentialReplacement({
+    principalRef: input.target.principalRef,
+    issuanceKey: input.idempotencyKey,
+    grantRef: successorGrantRef,
+    credentialId: key.id,
+    applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
+    environment: input.grant.requestedAccess.environment,
+    scopes: input.grant.requestedScopes,
+    authorityMode: input.authorityMode,
+    policy: input.policy,
+    createdAt: existing?.createdAt ?? createdAt,
+    expiresAt: existing?.expiresAt ?? existing?.expiration ?? createdAt + input.grant.requestedAccess.expiresInSeconds * 1_000,
+  })
+  if (prepared.kind !== 'recorded' && prepared.kind !== 'replayed') {
+    if (createdHere) {
+      await api.revoke?.({
+        apiKeyId: key.id,
+        revocationReason: 'Credential replacement registration failed.',
+      }).catch(() => {})
+    }
+    if (prepared.kind === 'conflict') throw new AgentAccessOAuthIssueRefusal('invalid_grant')
+    throw new Error('replacement_registration_unavailable')
+  }
+  return {
+    keyId: key.id,
+    replacement: {
+      principalRef: prepared.principalRef,
+      generation: prepared.generation,
+      successorCredentialRef: prepared.successorCredentialRef,
+      predecessorCredentialRef: prepared.predecessorCredentialRef,
+      predecessorKeyId: prepared.predecessorKeyId,
+      successorGrantRef: prepared.successorGrantRef,
+    },
+  }
+}
+
 async function issueGrantKey(
   grant: AgentAccessOAuthGrant,
   ownerId: string,
@@ -617,66 +692,14 @@ async function issueGrantKey(
       return await issueLocalE2EOAuthGrantKey(inputOwnerId, inputGrant, authorityMode, policy)
     }
     if (inputTarget.kind === 'replace_credential') {
-      const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
-      const successorGrantRef = issuedAgentGrantRef(inputOwnerId, idempotencyKey)
-      const existing = (await api.list({ subject: inputOwnerId, includeInvalid: false, limit: 100 })).data.find((key) => (
-        !key.revoked && !key.expired && key.claims?.aeGrantRef === successorGrantRef
-      ))
-      let createdHere = false
-      const key = existing ?? await api.create({
-        name: `AE Agent replacement ${idempotencyKey.slice(-12)}`,
-        subject: inputOwnerId,
-        createdBy: inputOwnerId,
-        scopes: [...inputGrant.requestedScopes],
-        secondsUntilExpiration: inputGrant.requestedAccess.expiresInSeconds,
-        claims: {
-          aePurpose: AGENT_ACCESS_PURPOSE,
-          aeGrantRef: successorGrantRef,
-          aeDisplayName: inputGrant.displayName,
-          aeAuthorityMode: authorityMode,
-          aeIssuanceKey: idempotencyKey,
-          aeApplicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
-          aeEnvironment: inputGrant.requestedAccess.environment,
-          aeScopes: JSON.stringify(inputGrant.requestedScopes),
-          aePrincipalRef: inputTarget.principalRef,
-          aeConnectionTarget: 'replace_credential',
-        },
-        description: 'Replacement credential for an existing Agentic Economy agent.',
-      }).then((created) => {
-        createdHere = true
-        return created
-      })
-      if (key === undefined) throw new Error('replacement_provider_credential_missing')
-      const createdAt = Date.now()
-      const prepared = await prepareAgentCredentialReplacement({
-        principalRef: inputTarget.principalRef,
-        issuanceKey: idempotencyKey,
-        grantRef: successorGrantRef,
-        credentialId: key.id,
-        applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
-        environment: inputGrant.requestedAccess.environment,
-        scopes: inputGrant.requestedScopes,
+      return await issueReplacementGrantKey({
+        ownerId: inputOwnerId,
+        grant: inputGrant,
+        target: inputTarget,
+        idempotencyKey,
         authorityMode,
         policy,
-        createdAt: existing?.createdAt ?? createdAt,
-        expiresAt: existing?.expiresAt ?? existing?.expiration ?? createdAt + inputGrant.requestedAccess.expiresInSeconds * 1_000,
       })
-      if (prepared.kind !== 'recorded' && prepared.kind !== 'replayed') {
-        if (createdHere) await api.revoke?.({ apiKeyId: key.id, revocationReason: 'Credential replacement registration failed.' }).catch(() => {})
-        if (prepared.kind === 'conflict') throw new AgentAccessOAuthIssueRefusal('invalid_grant')
-        throw new Error('replacement_registration_unavailable')
-      }
-      return {
-        keyId: key.id,
-        replacement: {
-          principalRef: prepared.principalRef,
-          generation: prepared.generation,
-          successorCredentialRef: prepared.successorCredentialRef,
-          predecessorCredentialRef: prepared.predecessorCredentialRef,
-          predecessorKeyId: prepared.predecessorKeyId,
-          successorGrantRef: prepared.successorGrantRef,
-        },
-      }
     }
     const issued = await issueAgentAccessKey({
       ownerId: inputOwnerId,
