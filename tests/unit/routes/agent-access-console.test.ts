@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { enrichAgentAccessActivity, readAgentAccessMoneyReadback } from '@/modules/agent-access/agent-access-console'
+import {
+  enrichAgentDirectoryActivity,
+  projectAgentDirectory,
+  readAgentCredentialSources,
+} from '@/modules/agent-access/agent-access-console'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import {
   accountRefForOwner,
@@ -10,6 +14,7 @@ import {
   type MoneyUsageEvent,
 } from '@/modules/money/public'
 import type { OperationCompareResult } from '@/modules/capability-supply/public'
+import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
 const ownerId = 'owner-console-1'
 const principalId = `prn_${'1'.repeat(32)}`
@@ -75,7 +80,7 @@ const grant = {
 describe('agent access money seam', () => {
   it('reads exact key balance, bounded activity, and per-key spend from the public query port', async () => {
     const ledger = { ...createLedgerState([account]), usageEvents: [usage], usageSummaries: new Map([[`${usage.principalId}\u0000${usage.credentialId}\u0000${usage.amount.currency}`, { principalId: usage.principalId, credentialId: usage.credentialId, callCount: 1, paidCallCount: 1, freeCallCount: 0, grossSpend: { currency: 'USD', units: '500', exponent: 2 }, states: ['paid'] as const }]]) }
-    const [result] = await readAgentAccessMoneyReadback([key], createInMemoryMoneyQueryPort({
+    const [result] = await readAgentCredentialSources([key], createInMemoryMoneyQueryPort({
       ledger,
       resolveOwnerId: (candidate) => candidate === principalId ? ownerId : undefined,
     }), [grant])
@@ -92,12 +97,15 @@ describe('agent access money seam', () => {
 
   it('projects canonical Operation and supplier labels onto task activity', async () => {
     const operationRef = `operation:v1:${'a'.repeat(64)}`
-    const [readback] = await readAgentAccessMoneyReadback([key], createInMemoryMoneyQueryPort({
+    const [readback] = await readAgentCredentialSources([key], createInMemoryMoneyQueryPort({
       ledger: { ...createLedgerState([account]), usageEvents: [{ ...usage, operationKey: operationRef }] },
       resolveOwnerId: () => ownerId,
     }), [grant])
     if (readback === undefined) throw new Error('expected agent readback')
-    const enriched = await enrichAgentAccessActivity([readback], {
+    const enriched = await enrichAgentDirectoryActivity(projectAgentDirectory(
+      [readback],
+      [canonicalAgentRecord([readback])],
+    ), {
       isOperationRef: (value) => value === operationRef,
       compare: async ({ operationRefs }) => {
         expect(operationRefs).toEqual([operationRef])
@@ -112,10 +120,48 @@ describe('agent access money seam', () => {
       },
     })
 
-    expect(enriched[0]?.activity[0]?.operation).toEqual({
+    expect(enriched.details[0]?.activity[0]?.operation).toEqual({
       label: 'Extract invoice fields',
       supplier: 'Ledger Labs',
     })
+  })
+
+  it('groups multiple credentials by canonical principal without merging independent agents', () => {
+    const secondCredential = {
+      key: { ...key, keyId: 'key_console_2', createdAt: 20 },
+      grant: { ...grant, credentialId: 'key_console_2' },
+      principalId,
+      activity: [],
+      dataState: 'empty' as const,
+    }
+    const otherPrincipal = {
+      key: { ...key, keyId: 'key_console_3', name: 'Independent agent', createdAt: 30 },
+      grant: { ...grant, principalId: `prn_${'2'.repeat(32)}`, credentialId: 'key_console_3' },
+      principalId: `prn_${'2'.repeat(32)}`,
+      activity: [],
+      dataState: 'empty' as const,
+    }
+    const firstCredential = {
+      key: { ...key, createdAt: 10 },
+      grant,
+      principalId,
+      activity: [],
+      dataState: 'empty' as const,
+    }
+    const directory = projectAgentDirectory(
+      [firstCredential, secondCredential, otherPrincipal],
+      [
+        canonicalAgentRecord([firstCredential, secondCredential]),
+        canonicalAgentRecord([otherPrincipal]),
+      ],
+    )
+
+    expect(directory.items).toHaveLength(2)
+    expect(directory.details.find(({ agent }) => agent.principalRef === principalId)?.credentials)
+      .toHaveLength(2)
+    expect(directory.details.find(({ agent }) => agent.principalRef === otherPrincipal.principalId)?.credentials)
+      .toHaveLength(1)
+    expect(JSON.stringify(directory)).not.toContain('secret')
   })
 
 })

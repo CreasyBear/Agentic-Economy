@@ -11,13 +11,13 @@ import {
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/ui/button'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { readAgentAccessConsoleServer } from '@/lib/server/agent-access-console.functions'
+import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
 import { formatExactAmount } from '@/modules/money/public'
 import type { AgentActivityView } from '@/modules/agent-access/agent-operator-view-model'
 
 export const Route = createFileRoute('/_operator/activity')({
   ...operatorRouteOptions,
-  loader: () => readAgentAccessConsoleServer(),
+  loader: () => readAgentDirectoryServer(),
   head: () => ({ meta: [
     { title: 'Calls | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
@@ -26,8 +26,8 @@ export const Route = createFileRoute('/_operator/activity')({
 })
 
 function ActivityRoute() {
-  const readbacks = Route.useLoaderData()
-  const activity = readbacks
+  const directory = Route.useLoaderData()
+  const activity = directory.details
     .flatMap((readback) => readback.activity)
     .toSorted((left, right) => right.observedAt - left.observedAt)
   const [selected, setSelected] = useState<AgentActivityView | undefined>()

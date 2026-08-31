@@ -15,7 +15,8 @@ export type AgentActivityView = CreditActivityView & Readonly<{
  * The server projection and React surface share this domain-owned contract so
  * server modules never depend on component files.
  */
-export type AgentOperatorKeyReadback = Readonly<{
+/** Internal source material used to assemble one durable agent. */
+export type AgentCredentialSource = Readonly<{
   key: AgentAccessKeyInventoryItem
   grant?: AgentAccessOwnerGrantReadback
   principalId: string
@@ -23,4 +24,49 @@ export type AgentOperatorKeyReadback = Readonly<{
   activity: readonly AgentActivityView[]
   usage?: KeyUsageView
   dataState: 'source' | 'empty' | 'unavailable'
+}>
+
+export type AgentCredentialSummary = Readonly<{
+  credentialRef: string
+  generation: number
+  lifecycle: 'active' | 'stale' | 'revoked'
+  predecessorCredentialRef?: string
+  issuedAt: number
+  expiresAt: number
+}>
+
+export type AgentDirectoryItem = Readonly<{
+  principalRef: string
+  displayName: string
+  applicationRef: string
+  environment: 'sandbox' | 'production'
+  status: 'connected' | 'attention' | 'expired' | 'disconnected'
+  currentCredentialGeneration?: number
+  lastSeenAt?: number
+}>
+
+export type AgentUsageSummary = Readonly<Omit<KeyUsageView, 'credentialId'>>
+
+/**
+ * Durable agent detail assembled from every credential currently known for a
+ * canonical Principal. Credential locators are identifiers, never secrets.
+ * The legacy readbacks remain available to existing credit/activity consumers
+ * until those consumers move to an aggregate money read model.
+ */
+export type AgentDetail = Readonly<{
+  agent: AgentDirectoryItem
+  credentials: readonly AgentCredentialSummary[]
+  currentCredentialRef?: string
+  authorityMode: AgentAccessKeyInventoryItem['authorityMode']
+  scopes: readonly string[]
+  grant?: AgentAccessOwnerGrantReadback
+  account?: CreditAccountView
+  activity: readonly AgentActivityView[]
+  usage?: AgentUsageSummary
+  dataState: 'source' | 'empty' | 'partial' | 'unavailable'
+}>
+
+export type AgentDirectoryProjection = Readonly<{
+  items: readonly AgentDirectoryItem[]
+  details: readonly AgentDetail[]
 }>

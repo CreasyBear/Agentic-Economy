@@ -1,11 +1,13 @@
 import { createServerFn } from '@tanstack/react-start'
 
-import { loadAgentAccessConsoleReadback } from '@/modules/agent-access/agent-access-console'
+import {
+  loadAgentDirectoryReadback,
+} from '@/modules/agent-access/agent-access-console'
 import { readCapabilityOperationCompare } from '@/modules/capability-supply/operation-source'
 import { isPublicOperationRef } from '@/modules/capability-supply/public'
 
-export const readAgentAccessConsoleServer = createServerFn({ method: 'GET' })
-  .handler(async () => loadAgentAccessConsoleReadback({
+export const readAgentDirectoryServer = createServerFn({ method: 'GET' })
+  .handler(async () => loadAgentDirectoryReadback({
     compare: readCapabilityOperationCompare,
     isOperationRef: isPublicOperationRef,
   }))

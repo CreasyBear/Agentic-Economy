@@ -12,6 +12,7 @@ import type * as actionInvocationControl from "../actionInvocationControl.js";
 import type * as agentAccessOAuth from "../agentAccessOAuth.js";
 import type * as agentAccessPolicy from "../agentAccessPolicy.js";
 import type * as agentAccessPrincipals from "../agentAccessPrincipals.js";
+import type * as agentDirectory from "../agentDirectory.js";
 import type * as agentMoneyReads from "../agentMoneyReads.js";
 import type * as authorityBoundary from "../authorityBoundary.js";
 import type * as authz from "../authz.js";
@@ -198,6 +199,7 @@ declare const fullApi: ApiFromModules<{
   agentAccessOAuth: typeof agentAccessOAuth;
   agentAccessPolicy: typeof agentAccessPolicy;
   agentAccessPrincipals: typeof agentAccessPrincipals;
+  agentDirectory: typeof agentDirectory;
   agentMoneyReads: typeof agentMoneyReads;
   authorityBoundary: typeof authorityBoundary;
   authz: typeof authz;

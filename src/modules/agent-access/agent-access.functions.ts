@@ -204,6 +204,10 @@ const registerIssuedAgentBindingMutation = sourceMutation<RegisterIssuedAgentBin
 const listOwnerGrantReadbacksQuery = sourceQuery<{ requireAuthority: true }, readonly unknown[]>(
   'agentAccessPolicy:listOwnerGrantReadbacks',
 )
+const resolveOwnedCredentialQuery = sourceQuery<
+  { credentialRef: string },
+  { kind: 'resolved'; providerCredentialId: string } | { kind: 'not_found' }
+>('agentDirectory:resolveOwnedCredential')
 
 async function requireCanonicalOwnerAuthorityServer(): Promise<void> {
   await callSourceQuery(listOwnerGrantReadbacksQuery, { requireAuthority: true })
@@ -354,15 +358,21 @@ export const listAgentAccessKeysServer = createServerFn({ method: 'GET' })
     return await listAgentAccessKeys({ principal, api })
   })
 
-export const revokeAgentAccessKeyServer = createServerFn({ method: 'POST' })
-  .validator((data) => z.strictObject({ keyId: z.string().trim().min(1).max(200) }).parse(data))
+export const revokeAgentCredentialServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({ credentialRef: z.string().trim().min(1).max(300) }).parse(data))
   .handler(async ({ data }) => {
     await requireCanonicalOwnerAuthorityServer()
+    const resolved = await callSourceQuery(resolveOwnedCredentialQuery, {
+      credentialRef: data.credentialRef,
+    })
+    if (resolved.kind === 'not_found') {
+      return { kind: 'error' as const, code: 'key_not_found' as const, retryable: false }
+    }
     const principal = await owner()
     const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
     return await revokeAgentAccessKey({
       principal,
-      keyId: data.keyId,
+      keyId: resolved.providerCredentialId,
       api,
       revokeGrant: revokeAgentAccessGrant,
     })

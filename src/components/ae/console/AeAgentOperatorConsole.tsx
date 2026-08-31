@@ -18,19 +18,21 @@ import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
-import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
+import type {
+  AgentDetail,
+  AgentDirectoryItem,
+  AgentDirectoryProjection,
+} from '@/modules/agent-access/agent-operator-view-model'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 import type { PendingOperationApproval } from '@/modules/capability-execution/operation-approval.functions'
 import { suggestContinuation } from '@/modules/market/suggested-continuation'
 
-export type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
-
 export type AeAgentOperatorConsoleProps = Readonly<{
-  items: readonly AgentOperatorKeyReadback[]
+  directory: AgentDirectoryProjection
   loading: boolean
-  onRevoke: (keyId: string) => void | Promise<void>
-  revokingKeyId?: string
+  onRevokeCredential: (credentialRef: string) => void | Promise<void>
+  revokingCredentialRef?: string
   approvals: readonly PendingOperationApproval[]
   approvalsLoading: boolean
   approvalsError?: string
@@ -45,10 +47,10 @@ export type AeAgentOperatorConsoleProps = Readonly<{
 }>
 
 export function AeAgentOperatorConsole({
-  items,
+  directory,
   loading,
-  onRevoke,
-  revokingKeyId,
+  onRevokeCredential,
+  revokingCredentialRef,
   approvals,
   approvalsLoading,
   approvalsError,
@@ -61,56 +63,58 @@ export function AeAgentOperatorConsole({
   getAgentHref,
   onClearSelectedPrincipal,
 }: AeAgentOperatorConsoleProps) {
-  const [localSelected, setLocalSelected] = useState<AgentOperatorKeyReadback>()
-  const [revokeTarget, setRevokeTarget] = useState<Readonly<{ keyId: string; name: string }>>()
+  const directoryItems = directory.items
+  const [localSelected, setLocalSelected] = useState<AgentDirectoryItem>()
+  const [revokeTarget, setRevokeTarget] = useState<Readonly<{ credentialRef: string; name: string }>>()
   const [revokePending, setRevokePending] = useState(false)
   const revokeTriggerRef = useRef<HTMLButtonElement>(null)
   const revokeInFlightRef = useRef(false)
   const routeControlled = getAgentHref !== undefined
-  const selected = routeControlled
-    ? items.find((item) => item.principalId === selectedPrincipalId)
+  const selectedItem = routeControlled
+    ? directoryItems.find((item) => item.principalRef === selectedPrincipalId)
     : localSelected
+  const selected = selectedItem === undefined
+    ? undefined
+    : directory.details.find(({ agent }) => agent.principalRef === selectedItem.principalRef)
   const firstLoadPending = useFirstLoadPending(loading)
-  const columns = useMemo<ColumnDef<AgentOperatorKeyReadback, unknown>[]>(
+  const columns = useMemo<ColumnDef<AgentDirectoryItem, unknown>[]>(
     () => [
       {
         id: 'name',
-        accessorFn: (item) => item.key.name,
+        accessorFn: (item) => item.displayName,
         header: ({ column }) => <AeOperatorSortableHeader label="Name" column={column} />,
-        cell: ({ row }) => <span className="font-medium text-foreground">{row.original.key.name}</span>,
+        cell: ({ row }) => <span className="font-medium text-foreground">{row.original.displayName}</span>,
       },
       {
         id: 'status',
-        accessorFn: (item) => keyStatus(item),
+        accessorFn: (item) => agentStatusLabel(item.status),
         header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
         cell: ({ row }) => {
-          const status = keyStatus(row.original)
+          const status = agentStatusLabel(row.original.status)
           return <Badge variant={status === 'Connected' ? 'default' : 'outline'}>{status}</Badge>
         },
       },
       {
-        id: 'authority',
-        accessorFn: (item) => scopeLabel(item.key.authorityMode),
-        header: ({ column }) => <AeOperatorSortableHeader label="Authority" column={column} />,
-        cell: ({ row }) => scopeLabel(row.original.key.authorityMode),
+        id: 'environment',
+        accessorFn: (item) => environmentLabel(item.environment),
+        header: ({ column }) => <AeOperatorSortableHeader label="Environment" column={column} />,
+        cell: ({ row }) => environmentLabel(row.original.environment),
       },
       {
-        id: 'calls',
-        accessorFn: (item) => item.usage?.callCount ?? 0,
-        header: ({ column }) => <AeOperatorSortableHeader label="Calls" column={column} />,
-        cell: ({ row }) => String(row.original.usage?.callCount ?? 0),
+        id: 'credentials',
+        accessorFn: (item) => item.currentCredentialGeneration ?? 0,
+        header: ({ column }) => <AeOperatorSortableHeader label="Generation" column={column} />,
+        cell: ({ row }) => row.original.currentCredentialGeneration === undefined
+          ? '—'
+          : String(row.original.currentCredentialGeneration),
       },
       {
-        id: 'spend',
-        accessorFn: (item) => formatAmount(item.usage?.grossSpend),
-        header: ({ column }) => <AeOperatorSortableHeader label="Spend" column={column} />,
-        cell: ({ row }) => formatAmount(row.original.usage?.grossSpend),
-      },
-      {
-        id: 'balance',
-        accessorFn: (item) => formatAmount(item.account?.balance),
-        header: ({ column }) => <AeOperatorSortableHeader label="Balance" column={column} />,
-        cell: ({ row }) => formatAmount(row.original.account?.balance),
+        id: 'lastSeen',
+        accessorFn: (item) => item.lastSeenAt ?? 0,
+        header: ({ column }) => <AeOperatorSortableHeader label="Last seen" column={column} />,
+        cell: ({ row }) => row.original.lastSeenAt === undefined
+          ? 'No activity'
+          : formatTimestamp(row.original.lastSeenAt),
       },
     ],
     [],
@@ -136,31 +140,31 @@ export function AeAgentOperatorConsole({
     )
   }
 
-  const revoking = selected !== undefined && revokingKeyId === selected.key.keyId
+  const revoking = selected?.currentCredentialRef !== undefined
+    && revokingCredentialRef === selected.currentCredentialRef
   const revokeDisabled =
-    selected === undefined
-    || revokingKeyId !== undefined
-    || selected.key.revoked
-    || selected.key.expired
-  const keysPhase = stagedListPhase({ firstLoadPending, rows: items })
+    selected?.currentCredentialRef === undefined
+    || revokingCredentialRef !== undefined
+  const agentsPhase = stagedListPhase({ firstLoadPending, rows: directoryItems })
   const missingAgentContinuation = suggestContinuation({
     subject: 'connection',
     state: 'missing',
     actor: 'buyer',
   })
 
-  function requestRevoke(item: AgentOperatorKeyReadback, trigger: HTMLButtonElement) {
+  function requestRevoke(item: AgentDetail, trigger: HTMLButtonElement) {
+    if (item.currentCredentialRef === undefined) return
     revokeTriggerRef.current = trigger
-    setRevokeTarget({ keyId: item.key.keyId, name: item.key.name })
+    setRevokeTarget({ credentialRef: item.currentCredentialRef, name: item.agent.displayName })
   }
 
   async function confirmRevoke() {
     if (revokeTarget === undefined || revokeInFlightRef.current) return
-    const exactKeyId = revokeTarget.keyId
+    const exactCredentialRef = revokeTarget.credentialRef
     revokeInFlightRef.current = true
     setRevokePending(true)
     try {
-      await onRevoke(exactKeyId)
+      await onRevokeCredential(exactCredentialRef)
       setRevokeTarget(undefined)
     } finally {
       revokeInFlightRef.current = false
@@ -179,21 +183,33 @@ export function AeAgentOperatorConsole({
 
       {approvalsSection}
 
+      {selectedPrincipalId === undefined || selected !== undefined ? null : (
+        <Alert>
+          <AlertTitle>Agent not found</AlertTitle>
+          <AlertDescription>
+            <p>This agent is no longer in the directory or the link is stale.</p>
+            <Button type="button" variant="secondary" onClick={onClearSelectedPrincipal}>
+              Return to Agents
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <AeSection
         id="revoke"
-        title="Connected keys"
-        description="Review what each agent can do, its usage, and spend. Revoked or expired access stays visible. Caller keys identify agents. Supplier connections and credentials are managed separately and never appear here."
+        title="Agents"
+        description="Review each independent agent, its current credential generation, activity, and connection state. Historical credentials stay attached to the same durable agent."
       >
-        {keysPhase === 'unloaded' ? (
+        {agentsPhase === 'unloaded' ? (
           <AeRecordTable
             columns={columns}
             data={[]}
-            caption="Connected keys"
-            countLabel="keys"
+            caption="Agents"
+            countLabel="agents"
             loading
             hideFilter
           />
-        ) : items.length === 0 ? (
+        ) : directoryItems.length === 0 ? (
           <AeEmptyState
             title="No agent is connected yet"
             description="Start setup from the agent and approve the request to create access you can revoke."
@@ -206,30 +222,30 @@ export function AeAgentOperatorConsole({
         ) : (
           <AeRecordTable
             columns={columns}
-            data={items}
-            caption="Connected keys"
-            countLabel="keys"
-            filterPlaceholder="Filter keys…"
-            hideFilter={items.length <= 1}
-            getRowId={(item) => item.principalId}
+            data={directoryItems}
+            caption="Agents"
+            countLabel="agents"
+            filterPlaceholder="Filter agents…"
+            hideFilter={directoryItems.length <= 1}
+            getRowId={(item) => item.principalRef}
             {...(getAgentHref === undefined
               ? {
                   rowAction: {
                     kind: 'button' as const,
                     label: 'View',
                     onOpen: setLocalSelected,
-                    getAccessibleLabel: (item: AgentOperatorKeyReadback) =>
-                      `View ${item.key.name}`,
+                    getAccessibleLabel: (item: AgentDirectoryItem) =>
+                      `View ${item.displayName}`,
                   },
                 }
               : {
                   rowAction: {
                     kind: 'link' as const,
                     label: 'Open',
-                    getHref: (item: AgentOperatorKeyReadback) =>
-                      getAgentHref(item.principalId),
-                    getAccessibleLabel: (item: AgentOperatorKeyReadback) =>
-                      `Open ${item.key.name}`,
+                    getHref: (item: AgentDirectoryItem) =>
+                      getAgentHref(item.principalRef),
+                    getAccessibleLabel: (item: AgentDirectoryItem) =>
+                      `Open ${item.displayName}`,
                   },
                 })}
           />
@@ -243,8 +259,8 @@ export function AeAgentOperatorConsole({
           if (routeControlled) onClearSelectedPrincipal?.()
           else setLocalSelected(undefined)
         }}
-        title={selected?.key.name ?? 'Key'}
-        {...(selected === undefined ? {} : { description: keyStatus(selected), facts: keyFacts(selected) })}
+        title={selected?.agent.displayName ?? 'Agent'}
+        {...(selected === undefined ? {} : { description: agentStatusLabel(selected.agent.status), facts: agentFacts(selected) })}
         {...(selected === undefined
           ? {}
           : {
@@ -262,7 +278,10 @@ export function AeAgentOperatorConsole({
             })}
       >
         {selected === undefined ? null : (
-          <p className="mt-4 text-sm text-muted-foreground">{recoveryCopy(selected)}</p>
+          <div className="mt-4 grid gap-3">
+            <p className="text-sm text-muted-foreground">{agentRecoveryCopy(selected)}</p>
+            <CredentialHistory detail={selected} />
+          </div>
         )}
       </AeRecordSheet>
 
@@ -399,48 +418,80 @@ function approvalFacts(approval: PendingOperationApproval): readonly AeFact[] {
   return facts
 }
 
-function keyFacts(item: AgentOperatorKeyReadback): readonly AeFact[] {
-  const usage = item.usage
-  const accountBalance = item.account?.balance
+function agentFacts(detail: AgentDetail): readonly AeFact[] {
+  const accountBalance = detail.account?.balance
   const zeroBalance = accountBalance === undefined ? undefined : { ...accountBalance, units: '0' }
   return [
-    { label: 'Agent key', value: redactedKeyId(item.key.keyId) },
-    { label: 'Application', value: item.key.applicationRef },
-    { label: 'Environment', value: environmentLabel(item.key.environment) },
-    { label: 'Per call', value: formatAmount(item.grant?.budget.maximumSpendPerInvocation) },
-    { label: 'Daily budget', value: formatAmount(item.grant?.budget.maximumDailySpend) },
-    { label: 'Monthly budget', value: formatAmount(item.grant?.budget.maximumMonthlySpend) },
-    { label: 'Rate', value: item.grant === undefined ? 'Unavailable' : `${item.grant.rate.maximumCallsPerMinute}/min · ${item.grant.rate.maximumCallsPerHour}/hour` },
-    { label: 'Concurrency', value: item.grant === undefined ? 'Unavailable' : String(item.grant.budget.maximumConcurrentInvocations) },
-    { label: 'Authority', value: scopeLabel(item.key.authorityMode) },
-    { label: 'Scopes', value: item.key.scopes.length === 0 ? 'None' : item.key.scopes.join(', ') },
-    { label: 'Expires', value: item.key.expiresAt === undefined ? 'Not reported' : formatTimestamp(item.key.expiresAt) },
+    { label: 'Application', value: detail.agent.applicationRef },
+    { label: 'Environment', value: environmentLabel(detail.agent.environment) },
+    { label: 'Credentials', value: String(detail.credentials.length) },
+    { label: 'Current generation', value: detail.agent.currentCredentialGeneration === undefined
+      ? 'None'
+      : String(detail.agent.currentCredentialGeneration) },
+    { label: 'Last seen', value: detail.agent.lastSeenAt === undefined
+      ? 'No activity recorded'
+      : formatTimestamp(detail.agent.lastSeenAt) },
+    { label: 'Current credential', value: detail.currentCredentialRef === undefined
+      ? 'None'
+      : redactedKeyId(detail.currentCredentialRef) },
+    { label: 'Per call', value: formatAmount(detail.grant?.budget.maximumSpendPerInvocation) },
+    { label: 'Daily budget', value: formatAmount(detail.grant?.budget.maximumDailySpend) },
+    { label: 'Monthly budget', value: formatAmount(detail.grant?.budget.maximumMonthlySpend) },
+    { label: 'Rate', value: detail.grant === undefined ? 'Unavailable' : `${detail.grant.rate.maximumCallsPerMinute}/min · ${detail.grant.rate.maximumCallsPerHour}/hour` },
+    { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentInvocations) },
+    { label: 'Authority', value: scopeLabel(detail.authorityMode) },
+    { label: 'Scopes', value: detail.scopes.length === 0 ? 'None' : detail.scopes.join(', ') },
     { label: 'Balance', value: formatAmount(accountBalance) },
-    { label: 'Calls', value: String(usage?.callCount ?? 0) },
-    { label: 'Spend', value: formatAmount(usage?.grossSpend ?? zeroBalance) },
-    { label: 'Unknown', value: usage?.states.includes('outcome_unknown') ? 'Needs review' : 'None' },
-    { label: 'Usage and balance', value: dataLabel(item.dataState), muted: true },
+    { label: 'Calls', value: String(detail.usage?.callCount ?? 0) },
+    { label: 'Spend', value: formatAmount(detail.usage?.grossSpend ?? zeroBalance) },
+    { label: 'Unknown', value: detail.usage?.states.includes('outcome_unknown') ? 'Needs review' : 'None' },
+    { label: 'Usage and balance', value: dataLabel(detail.dataState), muted: true },
   ]
 }
 
-function keyStatus(item: AgentOperatorKeyReadback): 'Revoked' | 'Expired' | 'Needs attention' | 'Connected' {
-  if (item.key.revoked) return 'Revoked'
-  if (item.key.expired) return 'Expired'
-  if (item.grant === undefined) return 'Needs attention'
-  return 'Connected'
+function CredentialHistory({ detail }: Readonly<{ detail: AgentDetail }>) {
+  return (
+    <div className="grid gap-2">
+      <p className="text-sm font-medium text-foreground">Credential history</p>
+      <ul className="m-0 grid list-none gap-2 p-0">
+        {detail.credentials.toReversed().map((credential) => (
+          <li
+            key={credential.credentialRef}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3 text-sm"
+          >
+            <span>Generation {credential.generation}</span>
+            <Badge variant={credential.lifecycle === 'active' ? 'default' : 'outline'}>
+              {credential.lifecycle === 'active'
+                ? 'Current'
+                : credential.lifecycle === 'stale'
+                  ? 'Expired'
+                  : 'Revoked'}
+            </Badge>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 }
 
-function recoveryCopy(item: AgentOperatorKeyReadback): string {
-  if (item.key.revoked || item.key.expired) {
+function agentStatusLabel(status: AgentDirectoryItem['status']): 'Connected' | 'Needs attention' | 'Expired' | 'Disconnected' {
+  if (status === 'connected') return 'Connected'
+  if (status === 'attention') return 'Needs attention'
+  if (status === 'expired') return 'Expired'
+  return 'Disconnected'
+}
+
+function agentRecoveryCopy(detail: AgentDetail): string {
+  if (detail.agent.status === 'disconnected' || detail.agent.status === 'expired') {
     return 'To reconnect, start a new access request from the agent.'
   }
-  if (item.grant === undefined) {
-    return 'This key does not have a current grant. Revoke it, then approve a new access request.'
+  if (detail.agent.status === 'attention' || detail.grant === undefined) {
+    return 'This agent needs attention. Review its current credential before allowing new work.'
   }
-  if (item.usage?.states.includes('outcome_unknown')) {
+  if (detail.usage?.states.includes('outcome_unknown')) {
     return 'One or more calls needs checking. Reconcile the recorded outcome before retrying.'
   }
-  return 'Revoking blocks new calls immediately; prior usage and evidence remain visible.'
+  return 'Revoking the current credential blocks new calls; prior usage and evidence remain visible.'
 }
 
 function RecoveryItem({ title, children }: Readonly<{ title: string; children: string }>) {
@@ -467,7 +518,7 @@ function consequenceLabel(consequence: PendingOperationApproval['authorityReques
   }
 }
 
-function environmentLabel(environment: AgentOperatorKeyReadback['key']['environment']): string {
+function environmentLabel(environment: AgentDirectoryItem['environment']): string {
   switch (environment) {
     case 'sandbox':
       return 'Development'
@@ -480,7 +531,7 @@ function environmentLabel(environment: AgentOperatorKeyReadback['key']['environm
   }
 }
 
-function scopeLabel(mode: AgentOperatorKeyReadback['key']['authorityMode']): string {
+function scopeLabel(mode: AgentDetail['authorityMode']): string {
   switch (mode) {
     case 'inspect_only':
       return 'Browse only'
@@ -501,12 +552,14 @@ function redactedKeyId(keyId: string): string {
   return keyId.length <= 8 ? '••••' : `•••• ${keyId.slice(-8)}`
 }
 
-function dataLabel(state: AgentOperatorKeyReadback['dataState']): string {
+function dataLabel(state: AgentDetail['dataState']): string {
   switch (state) {
     case 'source':
       return 'Usage details are available'
     case 'empty':
       return 'No usage yet'
+    case 'partial':
+      return 'Some usage details are temporarily unavailable'
     case 'unavailable':
       return 'Usage details are temporarily unavailable'
     default: {

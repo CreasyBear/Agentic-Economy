@@ -107,6 +107,20 @@ describe('issued agent binding', () => {
     expect(rows.delegation).toMatchObject({ subjectPrincipalRef: refs.principalRef, resourceRefs: ['*'] })
     expect(rows.accessPrincipal).toMatchObject({ principalId: refs.principalRef, ownerId: rows.membership?.accountRef })
     expect(rows.accessGrant).toMatchObject({ principalId: refs.principalRef, ownerId: rows.membership?.accountRef })
+    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual([expect.objectContaining({
+      principalRef: refs.principalRef,
+      displayName: input.displayName,
+      currentProviderCredentialId: input.credentialId,
+      credentials: [expect.objectContaining({
+        credentialRef: refs.credentialRef,
+        providerCredentialId: input.credentialId,
+        generation: 1,
+        lifecycle: 'active',
+      })],
+    })])
+    await expect(owner.query(api.agentDirectory.resolveOwnedCredential, {
+      credentialRef: refs.credentialRef,
+    })).resolves.toEqual({ kind: 'resolved', providerCredentialId: input.credentialId })
     await expect(backend.run(async (ctx) => {
       const canonical = await resolveCanonicalAgentContext(ctx, input.credentialId, NOW + 1)
       if (canonical === null) return null

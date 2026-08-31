@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
-import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
+import type { AgentCredentialSource, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
+import { projectAgentDirectory } from '@/modules/agent-access/agent-access-console'
+import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeCreditTopUpPanel, type CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import { AeOwnerCredit, creditTopupTargetFromItems } from '@/components/ae/console/AeOwnerCredit'
@@ -26,7 +28,7 @@ vi.mock('@stripe/react-stripe-js/checkout', () => ({
   useCheckoutElements: () => ({ type: 'success', checkout: { confirm: stripeTestState.confirm } }),
 }))
 
-const keyReadback: AgentOperatorKeyReadback = {
+const keyReadback: AgentCredentialSource = {
   key: {
     keyId: 'key_ui_1',
     name: 'UI assistant',
@@ -76,6 +78,8 @@ const keyReadback: AgentOperatorKeyReadback = {
   },
   dataState: 'source',
 }
+const keyDirectory = projectAgentDirectory([keyReadback], [canonicalAgentRecord([keyReadback])])
+const emptyDirectory: AgentDirectoryProjection = { items: [], details: [] }
 
 
 afterEach(() => {
@@ -87,11 +91,15 @@ afterEach(() => {
 describe('owner credit target', () => {
   it('uses the active grant policy before the first credit account exists', () => {
     const { account: _fundedAccount, ...unfundedKeyReadback } = keyReadback
-    expect(creditTopupTargetFromItems([{
+    const unfundedSource = {
       ...unfundedKeyReadback,
       principalId: `prn_${'1'.repeat(32)}`,
       dataState: 'empty',
-    }])).toEqual({
+    } as const
+    expect(creditTopupTargetFromItems(projectAgentDirectory(
+      [unfundedSource],
+      [canonicalAgentRecord([unfundedSource])],
+    ).details)).toEqual({
       principalId: `prn_${'1'.repeat(32)}`,
       currency: 'USD',
       exponent: 2,
@@ -99,8 +107,7 @@ describe('owner credit target', () => {
   })
 
   it('uses the shared funding continuation after an insufficient-credit call', () => {
-    render(<AeOwnerCredit
-      items={[{
+    const source = {
         ...keyReadback,
         activity: [{
           activityRef: 'activity:insufficient',
@@ -116,7 +123,9 @@ describe('owner credit target', () => {
           priceDigest: `sha256:${'a'.repeat(64)}`,
           observedAt: 2,
         }],
-      }]}
+      } as const
+    render(<AeOwnerCredit
+      directory={projectAgentDirectory([source], [canonicalAgentRecord([source])])}
       loading={false}
     />)
 
@@ -269,26 +278,26 @@ describe('assistant access components', () => {
   it('renders per-assistant balance, spend, and permission without internal identifiers', () => {
     render(
       <AeAgentOperatorConsole
-        items={[keyReadback]}
+        directory={keyDirectory}
         loading={false}
-        onRevoke={() => undefined}
+        onRevokeCredential={() => undefined}
         approvals={[]}
         approvalsLoading={false}
         onRetryApprovals={() => undefined}
         onDecideApproval={() => undefined}
       />,
     )
-    expect(screen.getAllByText(/USD 12\.5/u).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Credit' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Credit' })).toBeTruthy()
     expect(screen.getByRole('list')).toBeTruthy()
     expect(screen.getByText('Lost, expired, or revoked agent key')).toBeTruthy()
     expect(screen.getByText('Provider reauthorization required')).toBeTruthy()
     expect(screen.getByText('Outcome uncertain')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'View UI assistant' }))
+    expect(screen.getAllByText(/USD 12\.5/u).length).toBeGreaterThan(0)
     expect(screen.getByText(/USD 5\.005/u)).toBeTruthy()
     expect(screen.getByText('Browse only')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'View UI assistant' }))
-    expect(screen.getByText('Development')).toBeTruthy()
+    expect(screen.getAllByText('Development').length).toBeGreaterThan(0)
     expect(screen.getByText('30/min · 300/hour')).toBeTruthy()
     expect(screen.getByText('USD 25.00')).toBeTruthy()
     expect(screen.queryByText(/scope:|data:|principal|clerk_api_key/u)).toBeNull()
@@ -298,9 +307,9 @@ describe('assistant access components', () => {
     const onDecideApproval = vi.fn()
     render(
       <AeAgentOperatorConsole
-        items={[]}
+        directory={emptyDirectory}
         loading={false}
-        onRevoke={() => undefined}
+        onRevokeCredential={() => undefined}
         approvals={[{
           invocationRef: 'invocation:approval:one',
           operationRef: 'market.email.send:v1',

@@ -15,46 +15,45 @@ import { Button } from '@/components/ui/button'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { addExactAmounts, formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
-import type { AgentActivityView, AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
+import type { AgentActivityView, AgentDetail, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { suggestContinuation } from '@/modules/market/suggested-continuation'
 import { AeCreditTopUpPanel, type CreditTopupPort, type CreditTopupTarget } from './AeCreditTopUpPanel'
 
 export type AeOwnerCreditProps = Readonly<{
-  items: readonly AgentOperatorKeyReadback[]
+  directory: AgentDirectoryProjection
   loading: boolean
   creditTopupPort?: CreditTopupPort
   onCreditRefresh?: () => void | Promise<void>
 }>
 
 type CreditChargeRow = Readonly<{
-  item: AgentOperatorKeyReadback
+  item: AgentDetail
   entry: AgentActivityView
 }>
 
 export function creditTopupTargetFromItems(
-  items: readonly AgentOperatorKeyReadback[],
+  items: readonly AgentDetail[],
 ): CreditTopupTarget | undefined {
   const funded = items.find(({ account }) => account?.evidence === 'source')
   if (funded?.account !== undefined) {
     return {
-      principalId: funded.principalId,
+      principalId: funded.agent.principalRef,
       currency: funded.account.balance.currency,
       exponent: funded.account.balance.exponent,
     }
   }
-  const unfunded = items.find(({ dataState, grant, key }) => dataState === 'empty'
+  const unfunded = items.find(({ dataState, grant, currentCredentialRef }) => dataState === 'empty'
     && grant?.lifecycle === 'active'
-    && !key.revoked
-    && !key.expired)
+    && currentCredentialRef !== undefined)
   const amount = unfunded?.grant?.budget.maximumSpendPerInvocation
   return unfunded === undefined || amount === undefined
     ? undefined
-    : { principalId: unfunded.principalId, currency: amount.currency, exponent: amount.exponent }
+    : { principalId: unfunded.agent.principalRef, currency: amount.currency, exponent: amount.exponent }
 }
 
 export function creditBalanceFromItems(
-  items: readonly AgentOperatorKeyReadback[],
+  items: readonly AgentDetail[],
 ): ExactAmount | undefined {
   const amounts = items.flatMap(({ account }) => (account === undefined ? [] : [account.balance]))
   return amounts.reduce<ExactAmount | undefined>((total, amount, index) => (
@@ -63,11 +62,12 @@ export function creditBalanceFromItems(
 }
 
 export function AeOwnerCredit({
-  items,
+  directory,
   loading,
   creditTopupPort,
   onCreditRefresh,
 }: AeOwnerCreditProps) {
+  const items = directory.details
   const balance = creditBalanceFromItems(items)
   const hasUnavailableData = items.some((item) => item.dataState === 'unavailable')
   const creditTopupTarget = creditTopupTargetFromItems(items)
@@ -92,9 +92,9 @@ export function AeOwnerCredit({
       },
       {
         id: 'agent',
-        accessorFn: (row) => row.item.key.name,
+        accessorFn: (row) => row.item.agent.displayName,
         header: ({ column }) => <AeOperatorSortableHeader label="Agent" column={column} />,
-        cell: ({ row }) => row.original.item.key.name,
+        cell: ({ row }) => row.original.item.agent.displayName,
       },
       {
         id: 'amount',
@@ -221,7 +221,7 @@ export function AeOwnerCredit({
 function chargeFacts(row: CreditChargeRow): readonly { label: string; value: string; muted?: boolean }[] {
   return [
     { label: 'Outcome', value: activityLabel(row.entry) },
-    { label: 'Agent', value: row.item.key.name },
+    { label: 'Agent', value: row.item.agent.displayName },
     { label: 'Amount', value: formatCreditAmount(row.entry.grossAmount) },
     ...(row.entry.operation === undefined
       ? []

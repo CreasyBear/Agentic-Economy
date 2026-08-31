@@ -10,9 +10,9 @@ import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { readAgentAccessConsoleServer } from '@/lib/server/agent-access-console.functions'
-import { revokeAgentAccessKeyServer } from '@/modules/agent-access/agent-access.functions'
-import type { AgentAccessConsoleReadback } from '@/modules/agent-access/agent-access-console'
+import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
+import { revokeAgentCredentialServer } from '@/modules/agent-access/agent-access.functions'
+import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import {
   decideOperationApprovalServer,
   listPendingOperationApprovalsServer,
@@ -32,9 +32,15 @@ export function validateAgentAccessSearch(search: Record<string, unknown>): Agen
 export const Route = createFileRoute('/_operator/agent-access')({
   ...operatorRouteOptions,
   validateSearch: validateAgentAccessSearch,
-  loader: () => readCanonicalBaseUrlServer(),
+  loader: async () => {
+    const canonicalBaseUrl = await readCanonicalBaseUrlServer()
+    const directory = isLocalE2EAuthBypassEnabled()
+      ? emptyAgentDirectory
+      : await readAgentDirectoryServer()
+    return { canonicalBaseUrl, directory }
+  },
   head: () => ({ meta: [
-    { title: 'Keys | Agentic Economy' },
+    { title: 'Agents | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
   ] }),
   component: AgentAccessRoute,
@@ -46,15 +52,15 @@ function AgentAccessRoute() {
 }
 
 function AgentAccessHome() {
-  const canonicalBaseUrl = Route.useLoaderData()
+  const { canonicalBaseUrl, directory: initialDirectory } = Route.useLoaderData()
   const search = Route.useSearch()
   const location = useLocation()
   const navigate = useNavigate()
-  const readConsole = useServerFn(readAgentAccessConsoleServer)
+  const readDirectory = useServerFn(readAgentDirectoryServer)
   const localE2E = isLocalE2EAuthBypassEnabled()
-  const revokeKey = useServerFn(revokeAgentAccessKeyServer)
-  const [items, setItems] = useState<AgentAccessConsoleReadback>([])
-  const [loading, setLoading] = useState(true)
+  const revokeCredential = useServerFn(revokeAgentCredentialServer)
+  const [directory, setDirectory] = useState<AgentDirectoryProjection>(initialDirectory)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
   const [revoking, setRevoking] = useState<string>()
   const readApprovals = useServerFn(listPendingOperationApprovalsServer)
@@ -66,16 +72,16 @@ function AgentAccessHome() {
   const [approvalStatus, setApprovalStatus] = useState<string>()
 
   const load = useCallback(async () => {
-    setLoading(true)
+      setLoading(true)
     try {
-      setItems(await readConsole())
+      setDirectory(await readDirectory())
       setError(undefined)
     } catch {
       setError('Agent access and balance are temporarily unavailable.')
     } finally {
       setLoading(false)
     }
-  }, [readConsole])
+  }, [readDirectory])
   const loadApprovals = useCallback(async () => {
     setApprovalsLoading(true)
     try {
@@ -90,13 +96,11 @@ function AgentAccessHome() {
 
   useEffect(() => {
     if (localE2E) {
-      setItems([])
+      setDirectory(emptyAgentDirectory)
       setError(undefined)
       setLoading(false)
-      return
     }
-    void load()
-  }, [load, localE2E])
+  }, [localE2E])
 
   useEffect(() => {
     if (localE2E) {
@@ -115,16 +119,10 @@ function AgentAccessHome() {
     }
   }, [location.hash, navigate])
 
-  useEffect(() => {
-    if (loading || error !== undefined || search.caller === undefined) return
-    if (items.some((item) => item.principalId === search.caller)) return
-    void navigate({ to: '/agent-access', search: {}, replace: true })
-  }, [error, items, loading, navigate, search.caller])
-
-  async function revoke(keyId: string) {
-    setRevoking(keyId)
+  async function revoke(credentialRef: string) {
+    setRevoking(credentialRef)
     try {
-      const result = await revokeKey({ data: { keyId } })
+      const result = await revokeCredential({ data: { credentialRef } })
       if (result.kind === 'revoked' || result.kind === 'already_revoked') await load()
       else if (result.kind === 'error') setError(result.retryable ? 'Access could not be revoked. Try again.' : 'This access is no longer available to this account.')
     } finally {
@@ -158,8 +156,8 @@ function AgentAccessHome() {
   return (
     <AeOperatorShell
       operatorRole="owner"
-      title="Keys"
-      description="Connect an agent, review its permissions, and revoke caller keys."
+      title="Agents"
+      description="Connect independent agents, review their access, and manage credential history."
       currentPath="/agent-access"
     >
       {localE2E ? (
@@ -183,15 +181,15 @@ function AgentAccessHome() {
         </Alert>
       )}
       <AeAgentOperatorConsole
-        items={items}
+        directory={directory}
         loading={loading}
         {...(search.caller === undefined ? {} : { selectedPrincipalId: search.caller })}
         getAgentHref={(principalId) => `/agent-access?caller=${encodeURIComponent(principalId)}`}
         onClearSelectedPrincipal={() => {
           void navigate({ to: '/agent-access', search: {}, replace: true })
         }}
-        onRevoke={(keyId) => revoke(keyId)}
-        {...(revoking === undefined ? {} : { revokingKeyId: revoking })}
+        onRevokeCredential={(credentialRef) => revoke(credentialRef)}
+        {...(revoking === undefined ? {} : { revokingCredentialRef: revoking })}
         accessUnavailable={error !== undefined}
         approvals={approvals}
         approvalsLoading={approvalsLoading}
@@ -207,6 +205,11 @@ function AgentAccessHome() {
     </AeOperatorShell>
   )
 }
+
+const emptyAgentDirectory: AgentDirectoryProjection = Object.freeze({
+  items: Object.freeze([]),
+  details: Object.freeze([]),
+})
 
 function operationApprovalErrorCopy(code: 'authentication_required' | 'invocation_not_found' | 'authority_not_pending' | 'grant_not_current' | 'invocation_invalid'): string {
   if (code === 'authentication_required') return 'Sign in as the access owner, then try again.'

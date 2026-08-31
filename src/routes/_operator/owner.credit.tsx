@@ -11,8 +11,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { readAgentAccessConsoleServer } from '@/lib/server/agent-access-console.functions'
-import type { AgentAccessConsoleReadback } from '@/modules/agent-access/agent-access-console'
+import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
+import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { beginCreditTopupServer, readCreditPaymentServer } from '@/modules/money/server'
 
 export const Route = createFileRoute('/_operator/owner/credit')({
@@ -27,7 +27,7 @@ export const Route = createFileRoute('/_operator/owner/credit')({
 })
 
 function OwnerCreditRoute() {
-  const readConsole = useServerFn(readAgentAccessConsoleServer)
+  const readDirectory = useServerFn(readAgentDirectoryServer)
   const localE2E = isLocalE2EAuthBypassEnabled()
   const beginCreditTopup = useServerFn(beginCreditTopupServer)
   const readCreditPayment = useServerFn(readCreditPaymentServer)
@@ -35,25 +35,25 @@ function OwnerCreditRoute() {
     begin: (data) => beginCreditTopup({ data }),
     read: (data) => readCreditPayment({ data }),
   }), [beginCreditTopup, readCreditPayment])
-  const [items, setItems] = useState<AgentAccessConsoleReadback>([])
+  const [directory, setDirectory] = useState<AgentDirectoryProjection>(emptyAgentDirectory)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setItems(await readConsole())
+      setDirectory(await readDirectory())
       setError(undefined)
     } catch {
       setError('Credit balance is temporarily unavailable.')
     } finally {
       setLoading(false)
     }
-  }, [readConsole])
+  }, [readDirectory])
 
   useEffect(() => {
     if (localE2E) {
-      setItems([])
+      setDirectory(emptyAgentDirectory)
       setError(undefined)
       setLoading(false)
       return
@@ -96,7 +96,7 @@ function OwnerCreditRoute() {
           </Alert>
         )}
         <AeOwnerCredit
-          items={items}
+          directory={directory}
           loading={loading}
           creditTopupPort={creditTopupPort}
           onCreditRefresh={load}
@@ -105,3 +105,8 @@ function OwnerCreditRoute() {
     </AeOperatorShell>
   )
 }
+
+const emptyAgentDirectory: AgentDirectoryProjection = Object.freeze({
+  items: Object.freeze([]),
+  details: Object.freeze([]),
+})

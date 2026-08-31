@@ -7,7 +7,9 @@ import '../../setup/jsdom-platform'
 
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
 import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
-import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
+import type { AgentCredentialSource, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
+import { projectAgentDirectory } from '@/modules/agent-access/agent-access-console'
+import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
 const routerNavigate = vi.hoisted(() => vi.fn())
 
@@ -22,7 +24,7 @@ const PRINCIPAL_ID = `prn_${'a'.repeat(32)}`
 const FOREIGN_PRINCIPAL_ID = `prn_${'b'.repeat(32)}`
 const KEY_ID_CANARY = 'key_private_canary_12345678'
 
-const caller: AgentOperatorKeyReadback = {
+const caller: AgentCredentialSource = {
   key: {
     keyId: KEY_ID_CANARY,
     name: 'Route assistant',
@@ -53,12 +55,14 @@ const caller: AgentOperatorKeyReadback = {
   activity: [],
   dataState: 'source',
 }
+const directory = projectAgentDirectory([caller], [canonicalAgentRecord([caller])])
+const emptyDirectory: AgentDirectoryProjection = { items: [], details: [] }
 
 function consoleProps() {
   return {
-    items: [caller],
+    directory,
     loading: false,
-    onRevoke: vi.fn(),
+    onRevokeCredential: vi.fn(),
     approvals: [],
     approvalsLoading: false,
     onRetryApprovals: vi.fn(),
@@ -74,13 +78,13 @@ afterEach(() => {
 describe('assistant access owner continuation anchors', () => {
   it('keeps funding on Credit and revocation on Keys', () => {
     const { container: credit } = render(
-      <AeOwnerCredit items={[]} loading={false} />,
+      <AeOwnerCredit directory={emptyDirectory} loading={false} />,
     )
     const { container: keys } = render(
       <AeAgentOperatorConsole
-        items={[]}
+        directory={emptyDirectory}
         loading={false}
-        onRevoke={() => undefined}
+        onRevokeCredential={() => undefined}
         approvals={[]}
         approvalsLoading={false}
         onRetryApprovals={() => undefined}
@@ -101,7 +105,7 @@ describe('assistant access owner continuation anchors', () => {
     render(
       <AeAgentOperatorConsole
         {...consoleProps()}
-        onRevoke={onRevoke}
+        onRevokeCredential={onRevoke}
         selectedPrincipalId={PRINCIPAL_ID}
         getAgentHref={(principalId) => `/agent-access?caller=${principalId}`}
         onClearSelectedPrincipal={onClearSelectedPrincipal}
@@ -112,7 +116,7 @@ describe('assistant access owner continuation anchors', () => {
     expect(dialog.textContent).toContain('•••• 12345678')
     expect(dialog.textContent).not.toContain(KEY_ID_CANARY)
     expect(dialog.textContent).not.toContain(PRINCIPAL_ID)
-    expect(dialog.textContent).not.toMatch(/grant|credential/iu)
+    expect(dialog.textContent).toContain('Credential history')
 
     const trigger = screen.getByRole('button', { name: 'Revoke access now' })
     fireEvent.click(trigger)
@@ -125,7 +129,7 @@ describe('assistant access owner continuation anchors', () => {
     )).toBeDefined()
     expect(confirmation.textContent).not.toContain(KEY_ID_CANARY)
     expect(confirmation.textContent).not.toContain(PRINCIPAL_ID)
-    expect(confirmation.textContent).not.toMatch(/grant|credential/iu)
+    expect(confirmation.textContent).not.toContain('grantRef')
     const cancel = within(confirmation).getByRole('button', { name: 'Cancel' })
     await waitFor(() => expect(document.activeElement).toBe(cancel))
 
@@ -159,7 +163,7 @@ describe('assistant access owner continuation anchors', () => {
     render(
       <AeAgentOperatorConsole
         {...consoleProps()}
-        onRevoke={onRevoke}
+        onRevokeCredential={onRevoke}
         selectedPrincipalId={PRINCIPAL_ID}
         getAgentHref={(principalId) => `/agent-access?caller=${principalId}`}
         onClearSelectedPrincipal={() => undefined}
@@ -173,7 +177,7 @@ describe('assistant access owner continuation anchors', () => {
     })
     fireEvent.click(confirm)
     await waitFor(() => expect(onRevoke).toHaveBeenCalledOnce())
-    expect(onRevoke).toHaveBeenCalledWith(KEY_ID_CANARY)
+    expect(onRevoke).toHaveBeenCalledWith(`credential:${KEY_ID_CANARY}`)
     expect(onRevoke).not.toHaveBeenCalledWith(PRINCIPAL_ID)
 
     const pendingDialog = screen.getByRole('alertdialog')
@@ -195,17 +199,21 @@ describe('assistant access owner continuation anchors', () => {
     expect(document.activeElement).toBe(trigger)
   })
 
-  it('fails closed when the route locator does not match an owner-visible caller', () => {
+  it('renders a clearable not-found state when the route locator is stale', () => {
+    const onClearSelectedPrincipal = vi.fn()
     render(
       <AeAgentOperatorConsole
         {...consoleProps()}
         selectedPrincipalId={FOREIGN_PRINCIPAL_ID}
         getAgentHref={(principalId) => `/agent-access?caller=${principalId}`}
-        onClearSelectedPrincipal={() => undefined}
+        onClearSelectedPrincipal={onClearSelectedPrincipal}
       />,
     )
 
     expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByText('Agent not found')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Return to Agents' }))
+    expect(onClearSelectedPrincipal).toHaveBeenCalledOnce()
     expect(document.body.textContent).not.toContain(FOREIGN_PRINCIPAL_ID)
     expect(document.body.textContent).not.toContain(KEY_ID_CANARY)
   })
