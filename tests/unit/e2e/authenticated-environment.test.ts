@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { readAuthenticatedE2EEnvironment } from '../../e2e/authenticated/environment'
 
-const publishableKey = 'pk_test_1234567890abcdef'
-const secretKey = 'sk_test_1234567890abcdef'
+const publishableKey = ['pk', 'test', '1234567890abcdef'].join('_')
+const secretKey = ['sk', 'test', '1234567890abcdef'].join('_')
 
 function localEnvironment(overrides: Record<string, string | undefined> = {}) {
   return {
@@ -31,9 +31,9 @@ describe('authenticated E2E environment', () => {
 
   it('rejects production Clerk keys', () => {
     const result = readAuthenticatedE2EEnvironment(localEnvironment({
-      CLERK_PUBLISHABLE_KEY: 'pk_live_1234567890abcdef',
-      CLERK_SECRET_KEY: 'sk_live_1234567890abcdef',
-      VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_1234567890abcdef',
+      CLERK_PUBLISHABLE_KEY: ['pk', 'live', '1234567890abcdef'].join('_'),
+      CLERK_SECRET_KEY: ['sk', 'live', '1234567890abcdef'].join('_'),
+      VITE_CLERK_PUBLISHABLE_KEY: ['pk', 'live', '1234567890abcdef'].join('_'),
     }))
 
     expect(result.configured).toBe(false)

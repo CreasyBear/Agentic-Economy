@@ -1,363 +1,59 @@
-import { useEffect, useState } from 'react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
+import { AeAgentAccessAuthorizeForm } from '@/components/ae/agent-access/AeAgentAccessAuthorizeForm'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { AeSection, AeSettingsStack } from '@/components/ae/layout/AeSection'
-import { AeFactList } from '@/components/ae/data/AeFactList'
+import { AeSettingsStack } from '@/components/ae/layout/AeSection'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-
-type PublicAuthorityMode = 'inspect_only' | 'approve_each' | 'bounded_mandate'
-
-const authorityOptions = [
-  {
-    value: 'inspect_only',
-    label: 'Browse only',
-    description: 'Discover, compare, and run free read-only operations.',
-  },
-  {
-    value: 'approve_each',
-    label: 'Ask each time',
-    description: 'Paid or consequential work comes back to you first.',
-  },
-  {
-    value: 'bounded_mandate',
-    label: 'Work within limits',
-    description: 'Paid calls up to $1 each, $5 a day, $20 a month.',
-  },
-] as const
-
-function canSelectAuthority(value: PublicAuthorityMode, ceiling: string | undefined): boolean {
-  if (value === 'inspect_only') return true
-  if (value === 'approve_each') return ceiling !== 'inspect_only'
-  return ceiling === 'bounded_mandate'
-}
-
-type AgentTargetOption = Readonly<{ principalRef: string; displayName: string }>
-
-type ConsentDetails = Readonly<{
-  grantRef?: string
-  clientName?: string
-  mode?: string
-  accessProfile?: 'market' | 'supplier'
-  agentTargets: readonly AgentTargetOption[]
-  agentTargetsNextCursor?: string
-  agentTargetsUnavailable: boolean
-}>
-
-function readConsentDetails(html: string): ConsentDetails {
-  const document = new DOMParser().parseFromString(html, 'text/html')
-  const consent = document.querySelector<HTMLElement>('[data-ae-consent]')
-  const grantRef = consent?.dataset.grantRef
-  const clientName = consent?.dataset.clientName
-  const mode = consent?.dataset.authorityMode
-  const accessProfile = consent?.dataset.accessProfile
-  let agentTargets: readonly AgentTargetOption[] = []
-  let agentTargetsNextCursor: string | undefined
-  let agentTargetsUnavailable = consent?.dataset.agentTargetsUnavailable === 'true'
-  try {
-    const parsed: unknown = JSON.parse(decodeURIComponent(consent?.dataset.agentTargets ?? '%5B%5D'))
-    if (Array.isArray(parsed)) {
-      agentTargets = parsed.flatMap((value) => (
-        typeof value === 'object' && value !== null
-          && 'principalRef' in value && typeof value.principalRef === 'string'
-          && 'displayName' in value && typeof value.displayName === 'string'
-          ? [{ principalRef: value.principalRef, displayName: value.displayName }]
-          : []
-      ))
-    }
-    const encodedCursor = consent?.dataset.agentTargetsNextCursor
-    if (encodedCursor !== undefined && encodedCursor.length > 0) {
-      agentTargetsNextCursor = decodeURIComponent(encodedCursor)
-    }
-  } catch {
-    agentTargets = []
-    agentTargetsNextCursor = undefined
-    agentTargetsUnavailable = true
-  }
-  return {
-    ...(grantRef === undefined || grantRef.length === 0 ? {} : { grantRef }),
-    ...(clientName === undefined || clientName.length === 0 ? {} : { clientName }),
-    ...(mode === undefined || mode.length === 0 ? {} : { mode }),
-    ...(accessProfile === 'market' || accessProfile === 'supplier' ? { accessProfile } : {}),
-    agentTargets,
-    ...(agentTargetsNextCursor === undefined ? {} : { agentTargetsNextCursor }),
-    agentTargetsUnavailable,
-  }
-}
-
+import { readAgentAccessConsentServer } from '@/lib/server/agent-access-consent.functions'
+import { readAgentConsentDetails } from '@/modules/agent-access/consent-read-model'
 
 export const Route = createFileRoute('/_operator/agent-access/authorize')({
-  ...operatorRouteOptions,
   validateSearch: z.object({ user_code: z.string().trim().min(3).max(32).optional() }),
+  loaderDeps: ({ search }) => ({ userCode: search.user_code }),
+  ssr: false,
+  loader: async ({ deps }) => {
+    if (deps.userCode === undefined) return { kind: 'missing' as const }
+    const response = await readAgentAccessConsentServer({ data: { userCode: deps.userCode } })
+    if (response.status < 200 || response.status >= 300) throw new Error('authorization_unavailable')
+    const details = readAgentConsentDetails(response.html)
+    if (details.grantRef === undefined || details.clientName === undefined || details.mode === undefined) {
+      throw new Error('authorization_details_missing')
+    }
+    return {
+      kind: 'ready' as const,
+      userCode: deps.userCode,
+      details: {
+        ...details,
+        grantRef: details.grantRef,
+        clientName: details.clientName,
+        mode: details.mode,
+      },
+    }
+  },
   head: () => ({ meta: [
     { title: 'Review agent access | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
   ] }),
+  pendingComponent: operatorRouteOptions.pendingComponent,
+  errorComponent: operatorRouteOptions.errorComponent,
+  notFoundComponent: operatorRouteOptions.notFoundComponent,
   component: AgentAccessAuthorizeRoute,
 })
 
 function AgentAccessAuthorizeRoute() {
-  const { user_code: userCode } = Route.useSearch()
-  const [status, setStatus] = useState<'idle' | 'approved' | 'denied' | 'error'>('idle')
-  const [pending, setPending] = useState(false)
-  const [consentLoading, setConsentLoading] = useState(userCode !== undefined)
-  const [clientName, setClientName] = useState<string>()
-  const [mode, setMode] = useState<string>()
-  const [accessProfile, setAccessProfile] = useState<'market' | 'supplier'>('market')
-  const [selectedMode, setSelectedMode] = useState<PublicAuthorityMode>('approve_each')
-  const [grantRef, setGrantRef] = useState<string>()
-  const [connectionTarget, setConnectionTarget] = useState<'new_agent' | 'replace_credential'>('new_agent')
-  const [agentTargets, setAgentTargets] = useState<readonly AgentTargetOption[]>([])
-  const [agentTargetsNextCursor, setAgentTargetsNextCursor] = useState<string>()
-  const [agentTargetsLoading, setAgentTargetsLoading] = useState(false)
-  const [agentTargetsError, setAgentTargetsError] = useState<string>()
-  const [replacementPrincipalRef, setReplacementPrincipalRef] = useState<string>()
-
-  useEffect(() => {
-    if (userCode === undefined) {
-      setConsentLoading(false)
-      setClientName(undefined)
-      setMode(undefined)
-      setAccessProfile('market')
-      setGrantRef(undefined)
-      setAgentTargets([])
-      setAgentTargetsNextCursor(undefined)
-      setAgentTargetsError(undefined)
-      setAgentTargetsLoading(false)
-      setConnectionTarget('new_agent')
-      setReplacementPrincipalRef(undefined)
-      return
-    }
-
-    const controller = new AbortController()
-    setConsentLoading(true)
-    setStatus('idle')
-    setClientName(undefined)
-    setMode(undefined)
-    void fetch(`/oauth/authorize?user_code=${encodeURIComponent(userCode)}`, { credentials: 'same-origin', signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('authorization_unavailable')
-        const html = await response.text()
-        const details = readConsentDetails(html)
-        if (details.grantRef === undefined || details.clientName === undefined || details.mode === undefined) {
-          throw new Error('authorization_details_missing')
-        }
-        setGrantRef(details.grantRef)
-        setClientName(details.clientName)
-        setMode(details.mode)
-        setAccessProfile(details.accessProfile ?? 'market')
-        setAgentTargets(details.agentTargets)
-        setAgentTargetsNextCursor(details.agentTargetsNextCursor)
-        setAgentTargetsError(details.agentTargetsUnavailable
-          ? 'Existing agents could not be loaded. Retry before replacing a credential.'
-          : undefined)
-        setConnectionTarget('new_agent')
-        setReplacementPrincipalRef(undefined)
-        setSelectedMode(
-          details.mode === 'inspect_only'
-            ? 'inspect_only'
-            : details.mode === 'bounded_mandate'
-              ? 'bounded_mandate'
-              : 'approve_each',
-        )
-      })
-      .catch((error: unknown) => {
-        if (error instanceof Error && error.name === 'AbortError') return
-        setStatus('error')
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setConsentLoading(false)
-      })
-    return () => controller.abort()
-  }, [userCode])
-
-  async function loadAgentTargets() {
-    if (userCode === undefined || agentTargetsLoading) return
-    setAgentTargetsLoading(true)
-    try {
-      const query = new URLSearchParams({ user_code: userCode })
-      if (agentTargetsNextCursor !== undefined) query.set('agent_cursor', agentTargetsNextCursor)
-      const response = await fetch(`/oauth/authorize?${query.toString()}`, { credentials: 'same-origin' })
-      if (!response.ok) throw new Error('agent_targets_unavailable')
-      const details = readConsentDetails(await response.text())
-      if (details.grantRef !== grantRef || details.agentTargetsUnavailable) {
-        throw new Error('agent_targets_unavailable')
-      }
-      setAgentTargets((current) => {
-        const targets = new Map(current.map((target) => [target.principalRef, target]))
-        for (const target of details.agentTargets) targets.set(target.principalRef, target)
-        return [...targets.values()]
-      })
-      setAgentTargetsNextCursor(details.agentTargetsNextCursor)
-      setAgentTargetsError(undefined)
-    } catch {
-      setAgentTargetsError(agentTargets.length === 0
-        ? 'Existing agents could not be loaded. Retry before replacing a credential.'
-        : 'More agents could not be loaded. The choices already shown are still available.')
-    } finally {
-      setAgentTargetsLoading(false)
-    }
+  const loaded = Route.useLoaderData()
+  if (loaded.kind === 'ready') {
+    return <AeAgentAccessAuthorizeForm key={loaded.details.grantRef} userCode={loaded.userCode} details={loaded.details} />
   }
-
-  async function decide(decision: 'approve' | 'deny') {
-    if (grantRef === undefined) return
-    setPending(true)
-    try {
-      const response = await fetch('/oauth/authorize', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_ref: grantRef,
-          decision,
-          authority_mode: selectedMode,
-          connection_target: connectionTarget,
-          ...(connectionTarget === 'replace_credential' && replacementPrincipalRef !== undefined
-            ? { principal_ref: replacementPrincipalRef }
-            : {}),
-        }).toString(),
-      })
-      setStatus(response.ok ? (decision === 'approve' ? 'approved' : 'denied') : 'error')
-    } catch {
-      setStatus('error')
-    } finally {
-      setPending(false)
-    }
-  }
-
-  const consentReady = grantRef !== undefined && clientName !== undefined && mode !== undefined
-
   return (
     <AeOperatorShell operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
       <AeSettingsStack>
-        {userCode === undefined ? (
-          <Alert variant="destructive"><AlertTitle>This access request is missing a code</AlertTitle><AlertDescription>Start a new request from your agent.</AlertDescription></Alert>
-        ) : status !== 'error' && (consentLoading || !consentReady) ? (
-          <Alert aria-live="polite"><AlertTitle>Loading access request</AlertTitle><AlertDescription>Retrieving the agent name and exact permission before you decide.</AlertDescription></Alert>
-        ) : status === 'idle' ? (
-          <>
-            <AeSection
-              title={clientName === undefined ? 'Connect your agent' : `Connect ${clientName}`}
-              description={accessProfile === 'supplier'
-                ? 'This separate credential can inspect and manage your supplier Operations.'
-                : 'How much may this agent do without asking you?'}
-            >
-              <fieldset className="grid gap-3" disabled={pending}>
-                <legend className="text-sm font-medium text-foreground">Connection</legend>
-                <RadioGroup
-                  value={connectionTarget}
-                  onValueChange={(value) => setConnectionTarget(value as 'new_agent' | 'replace_credential')}
-                  className="grid gap-2 sm:grid-cols-2"
-                >
-                  <Label htmlFor="connection-new" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
-                    <RadioGroupItem id="connection-new" value="new_agent" className="mt-1" />
-                    <span><span className="block font-medium">New agent</span><span className="text-sm font-normal text-muted-foreground">Create an independent agent identity.</span></span>
-                  </Label>
-                  <Label htmlFor="connection-replace" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
-                    <RadioGroupItem id="connection-replace" value="replace_credential" disabled={agentTargets.length === 0} className="mt-1" />
-                    <span><span className="block font-medium">Replace credential</span><span className="text-sm font-normal text-muted-foreground">Keep one agent and rotate only its secret.</span></span>
-                  </Label>
-                </RadioGroup>
-                {connectionTarget === 'replace_credential' ? (
-                  <div className="grid gap-2">
-                    <Label htmlFor="replacement-agent">Agent</Label>
-                    <Select value={replacementPrincipalRef ?? ''} onValueChange={setReplacementPrincipalRef}>
-                      <SelectTrigger id="replacement-agent"><SelectValue placeholder="Choose an agent" /></SelectTrigger>
-                      <SelectContent>
-                        {agentTargets.map((agent) => <SelectItem key={agent.principalRef} value={agent.principalRef}>{agent.displayName}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-sm text-muted-foreground">The agent identity, activity, and credit history stay attached. Its current credential remains usable until the new one is delivered.</p>
-                  </div>
-                ) : null}
-                {agentTargetsError !== undefined || agentTargetsNextCursor !== undefined ? (
-                  <Alert>
-                    <AlertTitle>{agentTargetsError === undefined ? 'More agents are available' : 'Agent list needs refreshing'}</AlertTitle>
-                    <AlertDescription className="grid gap-2">
-                      {agentTargetsError === undefined
-                        ? 'Load the next page if the agent you want is not shown.'
-                        : agentTargetsError}
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-fit"
-                        disabled={agentTargetsLoading}
-                        onClick={() => void loadAgentTargets()}
-                      >
-                        {agentTargetsLoading
-                          ? 'Loading agents…'
-                          : agentTargetsError === undefined
-                            ? 'Load more agents'
-                            : 'Retry agent list'}
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-              </fieldset>
-              {accessProfile === 'supplier' ? (
-                <Alert>
-                  <AlertTitle>Supplier management</AlertTitle>
-                  <AlertDescription>May inspect lifecycle and earnings, publish, recheck, withdraw, and republish your Operations. It cannot spend buyer credit or manage unrelated account settings.</AlertDescription>
-                </Alert>
-              ) : <fieldset className="grid gap-3" disabled={pending}>
-                <legend className="sr-only">Authority</legend>
-                <RadioGroup
-                  aria-describedby="consent-expiry"
-                  value={selectedMode}
-                  onValueChange={(value) => setSelectedMode(value as PublicAuthorityMode)}
-                  className="grid gap-2"
-                >
-                  {authorityOptions.map((option) => {
-                    const disabled = !canSelectAuthority(option.value, mode)
-                    return (
-                      <Label
-                        key={option.value}
-                        htmlFor={`authority-${option.value}`}
-                        className="grid min-h-touch cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-md border border-border px-3 py-3 has-[[data-state=checked]]:border-foreground"
-                      >
-                        <RadioGroupItem
-                          id={`authority-${option.value}`}
-                          value={option.value}
-                          disabled={disabled}
-                          className="mt-1"
-                        />
-                        <span className="grid gap-1">
-                          <span className="font-medium text-foreground">{option.label}</span>
-                          <span className="text-sm font-normal text-muted-foreground">
-                            {disabled ? 'This agent requested narrower access.' : option.description}
-                          </span>
-                        </span>
-                      </Label>
-                    )
-                  })}
-                </RadioGroup>
-              </fieldset>}
-              <AeFactList
-                facts={[
-                  { label: 'Application', value: `${clientName ?? 'Your agent'} · Development · Standard rate limits` },
-                  { label: 'Expiry', value: 'Access expires in seven days. You can revoke it at any time from Agents.' },
-                ]}
-              />
-              <p id="consent-expiry" className="sr-only">Access expires in seven days. You can revoke it at any time from Agents.</p>
-            </AeSection>
-            <div className="flex flex-wrap gap-3">
-              <Button aria-describedby="consent-expiry" variant="default" onClick={() => void decide('approve')} disabled={pending || (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined)}>{pending ? 'Approving…' : 'Approve access'}</Button>
-              <Button aria-describedby="consent-expiry" variant="secondary" onClick={() => void decide('deny')} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
-            </div>
-          </>
-        ) : status === 'approved' ? (
-          <Alert><AlertTitle>Access approved — return to your agent</AlertTitle><AlertDescription>{accessProfile === 'supplier' ? 'AE delivers the separate supplier key to that agent once. It can now manage the approved supplier lifecycle.' : 'AE delivers the caller key to that agent once. It can now finish setup; supplier authority is not included.'}</AlertDescription></Alert>
-        ) : status === 'denied' ? (
-          <Alert><AlertTitle>Access not approved</AlertTitle><AlertDescription>Your agent can start a new request if you want to try again.</AlertDescription></Alert>
-        ) : (
-          <Alert variant="destructive"><AlertTitle>Access request unavailable</AlertTitle><AlertDescription>It may have expired. Start a new request from your agent.</AlertDescription></Alert>
-        )}
+        <Alert variant="destructive">
+          <AlertTitle>This access request is missing a code</AlertTitle>
+          <AlertDescription>Start a new request from your agent.</AlertDescription>
+        </Alert>
       </AeSettingsStack>
     </AeOperatorShell>
   )
