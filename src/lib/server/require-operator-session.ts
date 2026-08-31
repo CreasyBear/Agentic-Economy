@@ -1,6 +1,9 @@
 import { createServerFn } from '@tanstack/react-start'
 
-import { LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
+import {
+  isLocalE2EAuthBypassEnabled,
+  LOCAL_E2E_OPERATOR_PRINCIPAL,
+} from '@/lib/server/local-e2e-bypass'
 import {
   requireClerkServerSession,
 } from '@/lib/server/require-clerk-server-session'
@@ -16,10 +19,20 @@ export type OperatorSessionAdmission = OperatorContext
 const admitOperatorSessionServer = createServerFn()
   .validator((data: { redirectTo: string }) => data)
   .handler(async ({ data }): Promise<OperatorContextReadResult> => {
-    await requireClerkServerSession({
+    const session = await requireClerkServerSession({
       localBypassPrincipal: LOCAL_E2E_OPERATOR_PRINCIPAL,
       redirectTo: data.redirectTo,
     })
+    // Browser acceptance runs intentionally have no Clerk or Convex admin
+    // credential. Give that non-production preview only the owner/developer
+    // shell surfaces; actions and loaders still keep their own local guards.
+    if (isLocalE2EAuthBypassEnabled()) return {
+      kind: 'authorized',
+      userId: session.userId,
+      principalRef: `prn_${'0'.repeat(32)}`,
+      accountRef: 'account:local-e2e-preview',
+      allowedSurfaces: ['owner', 'developer'],
+    }
     return await readOperatorContextThroughSource()
   })
 

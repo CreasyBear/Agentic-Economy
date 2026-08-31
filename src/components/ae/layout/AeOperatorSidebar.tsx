@@ -88,7 +88,7 @@ function LocalPreviewOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
 
 
 export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, navBadges = EMPTY_NAV_BADGES }: AeOperatorSidebarProps) {
-  const { state, isMobile, open, openMobile } = useSidebar()
+  const { state, isMobile, open, openMobile, setOpenMobile } = useSidebar()
   const openCommand = useOpenOperatorCommand()
   const isCollapsed = !isMobile && state === 'collapsed'
   const expanded = isMobile ? openMobile : open
@@ -97,6 +97,9 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
     : navGroupsForContext(operatorContext, operatorRole)
   const utilityItems = operatorUtilityItemsForRole(operatorRole)
   const localPreview = isLocalE2EAuthBypassEnabled()
+  const closeMobileNavigation = () => {
+    if (isMobile) setOpenMobile(false)
+  }
 
   return (
     <Sidebar variant="inset" collapsible="icon" role="complementary" aria-label="Workspace navigation">
@@ -105,7 +108,11 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton asChild size="lg" tooltip="Agentic Economy workspace">
-                <Link to={roleHomeHref[operatorRole]} aria-label={`${roleLabel[operatorRole]} home`}>
+                <Link
+                  to={roleHomeHref[operatorRole]}
+                  aria-label={`${roleLabel[operatorRole]} home`}
+                  onClick={closeMobileNavigation}
+                >
                   <img
                     src={AECON_MARK_SRC}
                     alt=""
@@ -129,7 +136,10 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
                   <SidebarMenuButton
                     type="button"
                     tooltip="Search"
-                    onClick={() => openCommand?.()}
+                    onClick={() => {
+                      closeMobileNavigation()
+                      openCommand?.()
+                    }}
                   >
                     <SearchIcon aria-hidden="true" />
                     <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>Search</span>
@@ -160,6 +170,7 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
                             to={item.href}
                             aria-label={isCollapsed ? item.label : undefined}
                             aria-current={current ? 'page' : undefined}
+                            onClick={closeMobileNavigation}
                           >
                             <Icon aria-hidden="true" />
                             <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.label}</span>
@@ -194,6 +205,7 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
                       to={item.href}
                       aria-label={isCollapsed ? item.label : undefined}
                       aria-current={current ? 'page' : undefined}
+                      onClick={closeMobileNavigation}
                     >
                       <Icon aria-hidden="true" />
                       <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.label}</span>

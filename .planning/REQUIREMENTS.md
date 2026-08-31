@@ -106,6 +106,18 @@ branch refs, mocks, or interface counts as platform proof.
   Accounts are absent from the milestone and cannot enter through compatibility
   fields or historical planning artifacts.
 
+**Shipped evidence — 2026-08-31:** AUTH-02 and the Credential/Principal
+continuity portion of AUTH-05 are implemented for the current one-human-owner,
+multiple-independent-agent boundary. AUTH-01 and AUTH-03 remain partial because
+the milestone wording is broader than this tranche. Evidence covers canonical
+operator authorization, one durable Principal per agent, explicit new-agent vs
+replacement issuance, replay-safe replacement, per-Credential revocation,
+whole-agent disconnection, provider-cleanup attention states, and retained
+history. See `convex/agentAccessPrincipals.test.ts`,
+`tests/unit/agent-access-functions.test.ts`, and
+`tests/unit/ui/agent-access-owner-console.test.tsx`. No organization hierarchy or
+general delegation capability is implied.
+
 ### Commitment and Decision Continuity
 
 - [ ] **CMIT-01**: Inspect creates an expiring, immutable commitment bound to

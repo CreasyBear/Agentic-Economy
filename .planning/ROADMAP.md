@@ -53,6 +53,24 @@ read-only market-resolution work that cannot create authority, spend, or an
 external effect. This prevents “boring first” from becoming a second big-bang
 platform programme.
 
+### Shipped authenticated shell baseline — 2026-08-31
+
+The first credential-housekeeping slice is implemented. Operator routes now
+authorize the requested owner, admin, or developer surface from one canonical
+context before child loaders run; navigation is projected from that same
+context. The owner surface exposes a durable agent directory rather than a key
+list. Agent identity survives Credential replacement, and Credential revocation
+is separate from full agent disconnection. Canonical access is blocked before
+external provider cleanup, replay is idempotent, partial cleanup remains visible
+as `attention`, and historical Credential/activity projections remain readable.
+
+Acceptance evidence is executable in `convex/agentAccessPrincipals.test.ts`,
+`tests/unit/ui/agent-access-owner-console.test.tsx`,
+`tests/unit/operator-navigation.test.ts`, `tests/unit/operator-shell-chrome.test.tsx`,
+and `tests/e2e/local-auth-boundary.spec.ts`. This is evidence for the current
+single-human-owner shell baseline; it does not claim organization hierarchy,
+general delegation, or completion of all Phase 3 authority requirements.
+
 ## Phase 1: System Contract and Buy-vs-Build Boundary
 
 **Goal:** Implementation has one accepted abstraction tower, response language,

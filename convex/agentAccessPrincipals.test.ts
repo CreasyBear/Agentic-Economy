@@ -311,6 +311,144 @@ describe('issued agent binding', () => {
     ])
   })
 
+  it('proves the authenticated two-agent lifecycle from connection through retained history', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await expect(owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})).resolves.toBe(true)
+
+    const agentA = { ...bindingInput(), displayName: 'Agent A' }
+    const agentBIssuance = 'agent-b-platform-journey-12345678'
+    const agentB = {
+      ...bindingInput(),
+      issuanceKey: agentBIssuance,
+      grantRef: issuedAgentGrantRef('user_owner', agentBIssuance),
+      credentialId: 'key_agent_b_platform_journey',
+      displayName: 'Agent B',
+    }
+    await owner.mutation(registerIssuedBinding, { ...agentA, serviceAuth: await assertion(agentA) })
+    await owner.mutation(registerIssuedBinding, { ...agentB, serviceAuth: await assertion(agentB) })
+
+    const connected = await owner.query(api.agentDirectory.listOwned, {})
+    expect(connected).toEqual(expect.arrayContaining([
+      expect.objectContaining({ displayName: 'Agent A', status: 'connected' }),
+      expect.objectContaining({ displayName: 'Agent B', status: 'connected' }),
+    ]))
+    const principalA = connected.find((item) => item.displayName === 'Agent A')?.principalRef
+    const principalB = connected.find((item) => item.displayName === 'Agent B')?.principalRef
+    if (principalA === undefined || principalB === undefined) throw new Error('platform_journey_agent_missing')
+    expect(principalA).not.toBe(principalB)
+
+    const replacementIssuance = 'agent-a-platform-replacement-12345678'
+    const replacement: AgentCredentialReplacementRegistration = {
+      principalRef: principalA,
+      issuanceKey: replacementIssuance,
+      grantRef: issuedAgentGrantRef('user_owner', replacementIssuance),
+      credentialId: 'key_agent_a_platform_replacement',
+      applicationRef: agentA.applicationRef,
+      environment: agentA.environment,
+      scopes: agentA.scopes,
+      authorityMode: agentA.authorityMode,
+      policy: agentA.policy,
+      createdAt: NOW,
+      expiresAt: NOW + 600_000,
+    }
+    const prepared = await owner.mutation(prepareReplacement, {
+      ...replacement,
+      serviceAuth: await operationAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...replacement, scopes: [...replacement.scopes] },
+      ),
+    })
+    const promote = {
+      principalRef: principalA,
+      successorCredentialRef: String(prepared.successorCredentialRef),
+      successorGrantRef: replacement.grantRef,
+    }
+    await owner.mutation(promoteReplacement, {
+      ...promote,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.promoteCredentialReplacementForServer', promote),
+    })
+
+    await expect(backend.run(async (ctx) => ({
+      agentA: await resolveCanonicalAgentContext(ctx, replacement.credentialId, NOW + 1),
+      agentB: await resolveCanonicalAgentContext(ctx, agentB.credentialId, NOW + 1),
+    }))).resolves.toMatchObject({
+      agentA: { principalRef: principalA },
+      agentB: { principalRef: principalB },
+    })
+
+    const spareIssuance = 'agent-a-platform-spare-12345678'
+    const spare: AgentCredentialReplacementRegistration = {
+      ...replacement,
+      issuanceKey: spareIssuance,
+      grantRef: issuedAgentGrantRef('user_owner', spareIssuance),
+      credentialId: 'key_agent_a_platform_spare',
+    }
+    const sparePrepared = await owner.mutation(prepareReplacement, {
+      ...spare,
+      serviceAuth: await operationAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...spare, scopes: [...spare.scopes] },
+      ),
+    })
+    const spareCredentialRef = String(sparePrepared.successorCredentialRef)
+    const revokeSpare = { credentialRef: spareCredentialRef, correlationRef: 'corr-platform-revoke-spare' }
+    const spareRevocation = await owner.mutation(revokeCredentialLifecycle, {
+      ...revokeSpare,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.revokeCredentialForServer', revokeSpare),
+    })
+    expect(spareRevocation).toMatchObject({ kind: 'completed', principalRef: principalA })
+    const spareProvider = {
+      principalRef: principalA,
+      credentialRef: spareCredentialRef,
+      providerCredentialId: spare.credentialId,
+      correlationRef: revokeSpare.correlationRef,
+      outcome: 'revoked' as const,
+    }
+    await owner.mutation(recordProviderRevocation, {
+      ...spareProvider,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', spareProvider),
+    })
+    await expect(backend.run(async (ctx) => ({
+      agentA: await resolveCanonicalAgentContext(ctx, replacement.credentialId, NOW + 1),
+      agentB: await resolveCanonicalAgentContext(ctx, agentB.credentialId, NOW + 1),
+    }))).resolves.toMatchObject({
+      agentA: { principalRef: principalA },
+      agentB: { principalRef: principalB },
+    })
+
+    const disconnect = { principalRef: principalA, correlationRef: 'corr-platform-disconnect-a' }
+    const disconnected = await owner.mutation(disconnectAgentLifecycle, {
+      ...disconnect,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.disconnectAgentForServer', disconnect),
+    })
+    expect(disconnected).toMatchObject({ kind: 'completed', principalRef: principalA })
+    const providerTargets = disconnected.providerTargets as Array<{ credentialRef: string; providerCredentialId: string }>
+    await Promise.all(providerTargets.map(async (target) => {
+      const provider = { ...target, principalRef: principalA, correlationRef: disconnect.correlationRef, outcome: 'revoked' as const }
+      await owner.mutation(recordProviderRevocation, {
+        ...provider,
+        serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', provider),
+      })
+    }))
+
+    const finalDirectory = await owner.query(api.agentDirectory.listOwned, {})
+    expect(finalDirectory).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        principalRef: principalA,
+        status: 'disconnected',
+        credentials: expect.arrayContaining([
+          expect.objectContaining({ generation: 1, lifecycle: 'revoked' }),
+          expect.objectContaining({ generation: 2, lifecycle: 'revoked' }),
+          expect.objectContaining({ generation: 3, lifecycle: 'revoked' }),
+        ]),
+      }),
+      expect.objectContaining({ principalRef: principalB, status: 'connected' }),
+    ]))
+    await expect(backend.run(async (ctx) => resolveCanonicalAgentContext(ctx, agentB.credentialId, NOW + 1)))
+      .resolves.toMatchObject({ principalRef: principalB })
+  })
+
   it('fails closed for anonymous, sibling-owner, and assertion-mismatch calls', async () => {
     const backend = convexTest(schema, modules)
     const input = bindingInput()

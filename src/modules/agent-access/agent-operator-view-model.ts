@@ -50,8 +50,8 @@ export type AgentUsageSummary = Readonly<Omit<KeyUsageView, 'credentialId'>>
 /**
  * Durable agent detail assembled from every credential currently known for a
  * canonical Principal. Credential locators are identifiers, never secrets.
- * The legacy readbacks remain available to existing credit/activity consumers
- * until those consumers move to an aggregate money read model.
+ * Account, activity, and usage are fields of the current agent projection; no
+ * key-shaped compatibility projection is exposed alongside it.
  */
 export type AgentDetail = Readonly<{
   agent: AgentDirectoryItem
