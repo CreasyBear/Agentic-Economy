@@ -14,10 +14,92 @@ import {
   AeSupplyEndpointConfigStep,
   type SupplyAuthorityOption,
   type SupplyEndpointDocumentPreflightResult,
+  type SupplyEndpointPreflightResult,
   type SupplyPublicationImport,
 } from "@/components/ae/supply/AeSupplyEndpointConfigStep";
 
 describe("current supply funnel", () => {
+  it("ignores an obsolete OpenAPI inspection after the edited source changes", async () => {
+    let resolveInspection: ((result: SupplyEndpointDocumentPreflightResult) => void) | undefined;
+    const inspectDocument = vi.fn(() => new Promise<SupplyEndpointDocumentPreflightResult>((resolve) => {
+      resolveInspection = resolve;
+    }));
+    const currentPreflight: SupplyEndpointDocumentPreflightResult = {
+      kind: "preflighted",
+      sourceDigest: sourceHash,
+      truncated: false,
+      outcomes: [{ selector: { path: "/quote", method: "post" }, kind: "executable" }],
+    };
+    const props = {
+      onPreflightDocument: inspectDocument,
+      onPreflight: async () => ({ kind: "prepared" as const, prepared: preparedPublication }),
+      onSubmit: async () => undefined,
+    };
+    const view = render(
+      <AeSupplyEndpointConfigStep initialValue={sourceValue} {...props} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect operations" }));
+    await waitFor(() => expect(inspectDocument).toHaveBeenCalledOnce());
+
+    view.rerender(
+      <AeSupplyEndpointConfigStep
+        initialValue={{ ...sourceValue, sourceRevision: "source:two" }}
+        initialDocumentPreflight={currentPreflight}
+        {...props}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText("POST /quote")).toBeDefined());
+
+    resolveInspection?.({ kind: "refused", reason: "obsolete document refusal" });
+
+    await waitFor(() => {
+      expect(screen.getByText("POST /quote")).toBeDefined();
+      expect(screen.queryByText(/obsolete document refusal/i)).toBeNull();
+    });
+  });
+
+  it("does not apply an obsolete submit result to a newly loaded source", async () => {
+    let resolvePreflight: ((result: SupplyEndpointPreflightResult) => void) | undefined;
+    const preflight = vi.fn(() => new Promise<SupplyEndpointPreflightResult>((resolve) => {
+      resolvePreflight = resolve;
+    }));
+    const documentPreflight: SupplyEndpointDocumentPreflightResult = {
+      kind: "preflighted",
+      sourceDigest: sourceHash,
+      truncated: false,
+      outcomes: [{ selector: { path: "/quote", method: "post" }, kind: "executable" }],
+    };
+    const props = {
+      initialDocumentPreflight: documentPreflight,
+      onPreflight: preflight,
+      onPreflightDocument: async () => documentPreflight,
+      onSubmit: async () => undefined,
+    };
+    const view = render(
+      <AeSupplyEndpointConfigStep initialValue={sourceValue} {...props} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+    await waitFor(() => expect(preflight).toHaveBeenCalledOnce());
+
+    view.rerender(
+      <AeSupplyEndpointConfigStep
+        initialValue={{ ...sourceValue, sourceRevision: "source:replacement" }}
+        {...props}
+      />,
+    );
+    await waitFor(() => expect(screen.getByDisplayValue("source:replacement")).toBeDefined());
+
+    resolvePreflight?.({ kind: "refused", reason: "obsolete submit refusal", fix: "obsolete fix" });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("source:replacement")).toBeDefined();
+      expect(screen.queryByText(/obsolete submit refusal|obsolete fix/i)).toBeNull();
+      expect(screen.getByRole("button", { name: "Check and continue" }).hasAttribute("disabled")).toBe(false);
+    });
+  });
+
   it("selects an available non-secret x402 provider connection", async () => {
     const authority: SupplyAuthorityOption = {
       connectionRef: "connection:x402",

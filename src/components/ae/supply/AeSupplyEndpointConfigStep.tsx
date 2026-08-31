@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/ui/button'
@@ -102,25 +102,41 @@ export function AeSupplyEndpointConfigStep({
   const [errors, setErrors] = useState<EndpointErrors>({})
   const [announcement, setAnnouncement] = useState<string>()
   const [pending, setPending] = useState(false)
+  const documentPreflightRequestRef = useRef(0)
+  const submitRequestRef = useRef(0)
   const formDisabled = disabled || pending || documentPreflightPending
 
   useEffect(() => {
     if (initialValue === undefined) return
+    documentPreflightRequestRef.current += 1
+    submitRequestRef.current += 1
     setValue(editableSource(initialValue))
     setToolName(initialToolName(initialValue))
     setResourceUrl(initialResourceUrl(initialValue))
     setDocumentPreflight(initialDocumentPreflight)
+    setDocumentPreflightPending(false)
+    setPending(false)
     setErrors({})
     setAnnouncement(undefined)
   }, [initialDocumentPreflight, initialValue])
 
+  useEffect(() => () => {
+    documentPreflightRequestRef.current += 1
+    submitRequestRef.current += 1
+  }, [])
+
   function update(patch: Readonly<Partial<EditableSource>>) {
     setValue((current) => ({ ...current, ...patch }))
-    if (patch.documentJson !== undefined) setDocumentPreflight(undefined)
+    if (patch.documentJson !== undefined) {
+      documentPreflightRequestRef.current += 1
+      setDocumentPreflight(undefined)
+      setDocumentPreflightPending(false)
+    }
     setErrors({})
   }
 
   function changeSourceKind(next: SupplySourceKind) {
+    documentPreflightRequestRef.current += 1
     setValue((current) => ({
       ...editableSource(),
       sourceKind: next,
@@ -156,10 +172,13 @@ export function AeSupplyEndpointConfigStep({
       focusField('documentJson')
       return
     }
+    const requestId = documentPreflightRequestRef.current + 1
+    documentPreflightRequestRef.current = requestId
     setDocumentPreflightPending(true)
     setErrors({})
     try {
       const result = await onPreflightDocument(document)
+      if (documentPreflightRequestRef.current !== requestId) return
       if (result.kind === 'refused') {
         const message = `${result.reason}: ${documentPreflightFix(result.reason)}`
         setErrors({ documentJson: documentPreflightFix(result.reason) })
@@ -171,7 +190,9 @@ export function AeSupplyEndpointConfigStep({
       setDocumentPreflight(result)
       setAnnouncement(`AE inspected ${result.outcomes.length} operation${result.outcomes.length === 1 ? '' : 's'}. Select one executable GET or POST operation to continue.`)
     } finally {
-      setDocumentPreflightPending(false)
+      if (documentPreflightRequestRef.current === requestId) {
+        setDocumentPreflightPending(false)
+      }
     }
   }
 
@@ -203,10 +224,13 @@ export function AeSupplyEndpointConfigStep({
       focusField(checked.field)
       return
     }
+    const requestId = submitRequestRef.current + 1
+    submitRequestRef.current = requestId
     setPending(true)
     try {
       const publicationImport = toCapabilityPublicationImport(checked.value)
       const saved = onSaveDraft === undefined ? undefined : await onSaveDraft(publicationImport)
+      if (submitRequestRef.current !== requestId) return
       if (saved?.kind === 'refused') {
         setErrors({ sourceRevision: saved.fix })
         setAnnouncement(`${saved.reason}: ${saved.fix}`)
@@ -214,6 +238,7 @@ export function AeSupplyEndpointConfigStep({
         return
       }
       const preflight = await onPreflight(publicationImport)
+      if (submitRequestRef.current !== requestId) return
       if (preflight.kind === 'refused') {
         const field = preflightField(preflight.reason, checked.value.sourceKind)
         setErrors({ [field]: preflight.fix })
@@ -224,7 +249,7 @@ export function AeSupplyEndpointConfigStep({
       setAnnouncement('AE accepted the source structure. No publication state was written.')
       await onSubmit(publicationImport, preflight.prepared)
     } finally {
-      setPending(false)
+      if (submitRequestRef.current === requestId) setPending(false)
     }
   }
 
