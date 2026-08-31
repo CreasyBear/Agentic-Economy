@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { resolveCanonicalBaseUrl, resolveCanonicalOrigin } from '@/lib/server/canonical-url'
 import { buildPublicBusinessRouteSeo } from '@/modules/seo/public-route'
 import { handleUcpManifestRequest, handleLlmsTxtRequest, handleSitemapXmlRequest } from '../helpers/discovery-fixture-routes'
 import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
@@ -21,6 +21,12 @@ describe('canonical base URL resolution', () => {
         expect(result).toEqual({ kind: 'configured', baseUrl: 'https://agentic.example' })
       }
     )
+  })
+
+  it('reduces a configured canonical URL to the Clerk authorized-party origin', async () => {
+    await withCanonicalEnv({ AE_CANONICAL_BASE_URL: 'https://agentic.example/app/' }, () => {
+      expect(resolveCanonicalOrigin()).toBe('https://agentic.example')
+    })
   })
 
   it('uses the request origin only when the host is allowlisted', async () => {

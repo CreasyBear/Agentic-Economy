@@ -17,6 +17,7 @@ function productionEnvironment(): Record<string, string> {
     AE_CONVEX_SERVER_FUNCTION_TOKEN: 'convex-server-function-token-long-enough',
     VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_example',
     CLERK_SECRET_KEY: 'sk_live_example',
+    CLERK_WEBHOOK_SIGNING_SECRET: 'whsec_live_example',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example.com',
     OPENROUTER_API_KEY: 'openrouter-secret-value',
     AE_CHAT_PROXY_SECRET: 'chat-proxy-secret-value-long-enough',
@@ -94,9 +95,9 @@ describe('deployment manifest validator', () => {
       'AE_CONVEX_SERVER_FUNCTION_TOKEN',
       'VITE_CLERK_PUBLISHABLE_KEY',
       'CLERK_SECRET_KEY',
+      'CLERK_WEBHOOK_SIGNING_SECRET',
       'CLERK_JWT_ISSUER_DOMAIN',
       'AE_CANONICAL_BASE_URL',
-      'AE_CANONICAL_HOST_ALLOWLIST',
       'OPENROUTER_API_KEY',
       'AE_LLM_MODEL',
       'AE_CHAT_PROXY_SECRET',
@@ -142,6 +143,19 @@ describe('deployment manifest validator', () => {
     expect(result.findings).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'malformed', code: 'clerk_publishable_key_invalid', names: ['VITE_CLERK_PUBLISHABLE_KEY'] }),
       expect.objectContaining({ kind: 'malformed', code: 'clerk_secret_key_invalid', names: ['CLERK_SECRET_KEY'] }),
+    ]))
+  })
+
+  it('requires a canonical origin and a valid Clerk webhook signing secret', () => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_CANONICAL_BASE_URL: '',
+      CLERK_WEBHOOK_SIGNING_SECRET: 'not-a-webhook-secret',
+    }, { nodeMajor: 22 })
+
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'missing', code: 'canonical_origin_required', names: ['AE_CANONICAL_BASE_URL'] }),
+      expect.objectContaining({ kind: 'malformed', code: 'clerk_webhook_signing_secret_invalid', names: ['CLERK_WEBHOOK_SIGNING_SECRET'] }),
     ]))
   })
 

@@ -51,10 +51,10 @@ const forbiddenProductionNames = Object.freeze([
 ])
 
 const requiredProduction: readonly RequirementGroup[] = [
-  { scope: 'canonical', code: 'canonical_origin_required', names: ['AE_CANONICAL_BASE_URL', 'AE_CANONICAL_HOST_ALLOWLIST'], mode: 'one-of' },
+  { scope: 'canonical', code: 'canonical_origin_required', names: ['AE_CANONICAL_BASE_URL'], mode: 'all' },
   { scope: 'convex', code: 'convex_source_required', names: ['CONVEX_URL', 'VITE_CONVEX_URL'], mode: 'one-of' },
   { scope: 'convex-auth', code: 'server_function_auth_required', names: ['AE_CONVEX_SERVER_FUNCTION_TOKEN'], mode: 'all' },
-  { scope: 'clerk', code: 'required_configuration_missing', names: ['VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN'], mode: 'all' },
+  { scope: 'clerk', code: 'required_configuration_missing', names: ['VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN', 'CLERK_WEBHOOK_SIGNING_SECRET'], mode: 'all' },
   { scope: 'model-gateway', code: 'required_configuration_missing', names: ['OPENROUTER_API_KEY', 'AE_LLM_MODEL'], mode: 'all' },
   { scope: 'chat-proxy', code: 'required_configuration_missing', names: ['AE_CHAT_PROXY_SECRET'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
@@ -136,7 +136,7 @@ const fieldRules: readonly FieldRule[] = [
 ]
 
 const knownNames = Object.freeze([
-  'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY',
+  'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_WEBHOOK_SIGNING_SECRET',
   'AE_CHAT_PROXY_SECRET', 'AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID',
   'AE_SOURCE_WRITE_SECRET',
   'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY',
@@ -351,6 +351,10 @@ function validateProductionClerkCredentials(
   const secretKey = present(environment, 'CLERK_SECRET_KEY')
   if (secretKey !== undefined && !/^sk_live_[A-Za-z0-9_-]+$/u.test(secretKey)) {
     add('malformed', 'clerk_secret_key_invalid', ['CLERK_SECRET_KEY'], 'clerk')
+  }
+  const webhookSecret = present(environment, 'CLERK_WEBHOOK_SIGNING_SECRET')
+  if (webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(webhookSecret)) {
+    add('malformed', 'clerk_webhook_signing_secret_invalid', ['CLERK_WEBHOOK_SIGNING_SECRET'], 'clerk')
   }
 }
 function validateProductionStripeCredentials(

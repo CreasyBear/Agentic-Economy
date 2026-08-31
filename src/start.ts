@@ -8,7 +8,7 @@ import { apiRequestBoundaryResponse } from '@/lib/server/api-request-boundary'
 
 import { negotiateAgentPage } from '@/lib/http/agent-content-negotiation'
 import { respondWithAgentPageMarkdown } from '@/lib/server/agent-page-markdown'
-import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { resolveCanonicalBaseUrl, resolveCanonicalOrigin } from '@/lib/server/canonical-url'
 import { sanitizeTelemetryError, sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
 
 const requestCorrelationMiddleware = createMiddleware().server(async (ctx) => {
@@ -87,7 +87,9 @@ const apiRequestBoundaryMiddleware = createMiddleware().server((ctx) =>
   apiRequestBoundaryResponse(ctx.request) ?? ctx.next(),
 )
 
-const clerkRequestMiddleware = isLocalE2EAuthBypassEnabled() ? [] : [clerkMiddleware()]
+const clerkRequestMiddleware = isLocalE2EAuthBypassEnabled()
+  ? []
+  : [clerkMiddleware(() => ({ authorizedParties: [resolveCanonicalOrigin()] }))]
 export const startInstance = createStart(() => ({
   requestMiddleware: [
     requestCorrelationMiddleware,
