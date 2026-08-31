@@ -9,20 +9,47 @@ export function issuedAgentGrantRef(ownerSubject: string, issuanceKey: string): 
   return `grt_${canonicalUuidHex({ format: 'issued-agent-grant:v1', ownerSubject, issuanceKey })}`
 }
 
-export function issuedAgentCanonicalRefs(credentialId: string, grantRef: string): Readonly<{
+export function issuedAgentCanonicalRefs(input: Readonly<{
+  ownerAccountRef: string
+  issuanceKey: string
+  credentialId: string
+  generation: number
+  grantRef: string
+}>): Readonly<{
   principalRef: string
   bindingRef: string
   credentialRef: string
   membershipRef: string
   delegationUuid: string
 }> {
-  const hex = canonicalUuidHex({ format: 'issued-agent-identity:v1', credentialId, grantRef })
-  const grantHex = grantRef.slice('grt_'.length)
+  const principalHex = canonicalUuidHex({
+    format: 'issued-agent-principal:v2',
+    ownerAccountRef: input.ownerAccountRef,
+    issuanceKey: input.issuanceKey,
+  })
+  const bindingHex = canonicalUuidHex({
+    format: 'issued-agent-binding:v2',
+    principalRef: `prn_${principalHex}`,
+    credentialId: input.credentialId,
+    generation: String(input.generation),
+  })
+  const credentialHex = canonicalUuidHex({
+    format: 'issued-agent-credential:v2',
+    principalRef: `prn_${principalHex}`,
+    credentialId: input.credentialId,
+    generation: String(input.generation),
+  })
+  const membershipHex = canonicalUuidHex({
+    format: 'issued-agent-membership:v2',
+    ownerAccountRef: input.ownerAccountRef,
+    principalRef: `prn_${principalHex}`,
+  })
+  const delegationHex = input.grantRef.slice('grt_'.length)
   return {
-    principalRef: `prn_${hex}`,
-    bindingRef: `eib_${hex}`,
-    credentialRef: `crd_${hex}`,
-    membershipRef: `mem_${hex}`,
-    delegationUuid: `${grantHex.slice(0, 8)}-${grantHex.slice(8, 12)}-${grantHex.slice(12, 16)}-${grantHex.slice(16, 20)}-${grantHex.slice(20)}`,
+    principalRef: `prn_${principalHex}`,
+    bindingRef: `eib_${bindingHex}`,
+    credentialRef: `crd_${credentialHex}`,
+    membershipRef: `mem_${membershipHex}`,
+    delegationUuid: `${delegationHex.slice(0, 8)}-${delegationHex.slice(8, 12)}-${delegationHex.slice(12, 16)}-${delegationHex.slice(16, 20)}-${delegationHex.slice(20)}`,
   }
 }

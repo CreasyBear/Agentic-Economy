@@ -14,6 +14,7 @@ import {
 import { CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE } from '../../src/modules/agent-access/contract'
 import { defaultSandboxAgentAccessPolicy } from '../../src/modules/agent-access/sandbox-policy'
 import { buildProductionAgentAccessPolicy } from '../../src/modules/agent-access/production-policy'
+import { issuedAgentCanonicalRefs } from '../../src/modules/agent-access/issued-agent-binding'
 
 const policy = defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
 const scopes = [
@@ -54,6 +55,29 @@ const recordedBinding = (grantRef: string, policyDigest = `policy:${grantRef}`) 
 })
 
 describe('agent access', () => {
+  it('keeps agent identity stable while credential generations remain distinct', () => {
+    const first = issuedAgentCanonicalRefs({
+      ownerAccountRef: 'act_owner',
+      issuanceKey: 'agent-install-12345678',
+      credentialId: 'key_first',
+      generation: 1,
+      grantRef: 'grt_first',
+    })
+    const replacement = issuedAgentCanonicalRefs({
+      ownerAccountRef: 'act_owner',
+      issuanceKey: 'agent-install-12345678',
+      credentialId: 'key_second',
+      generation: 2,
+      grantRef: 'grt_second',
+    })
+
+    expect(replacement.principalRef).toBe(first.principalRef)
+    expect(replacement.membershipRef).toBe(first.membershipRef)
+    expect(replacement.bindingRef).not.toBe(first.bindingRef)
+    expect(replacement.credentialRef).not.toBe(first.credentialRef)
+    expect(replacement.delegationUuid).not.toBe(first.delegationUuid)
+  })
+
   it('projects a supply-only key with the bounded supply authority', () => {
     const projected = projectAgentAccessKey(existingKey({
       scopes: [MARKET_SUPPLY_MANAGE_SCOPE],
@@ -326,9 +350,33 @@ describe('agent access', () => {
       registerBinding,
     })
 
-    expect(result).toEqual({ kind: 'error', code: 'issuance_unavailable', retryable: true })
+    expect(result).toEqual({
+      kind: 'error',
+      code: 'issuance_unavailable',
+      retryable: true,
+      reconciliation: 'provider_credential_revoked',
+    })
     expect(registerBinding).toHaveBeenCalledOnce()
     expect(revoke).toHaveBeenCalledWith({ apiKeyId: 'key_fresh', revocationReason: 'Source principal binding failed.' })
+  })
+
+  it('never revokes a pre-existing credential when replay registration is temporarily unavailable', async () => {
+    const revoke = vi.fn()
+    const result = await issueAgentAccessKey({
+      principal: { userId: 'owner_123' },
+      input: { name: 'My assistant', idempotencyKey: 'setup-12345678' },
+      policy,
+      api: {
+        create: vi.fn(),
+        getSecret: vi.fn(),
+        list: vi.fn().mockResolvedValue({ data: [existingKey()] }),
+        revoke,
+      },
+      registerBinding: vi.fn().mockResolvedValue({ kind: 'unavailable' as const }),
+    })
+
+    expect(result).toEqual({ kind: 'error', code: 'issuance_unavailable', retryable: true })
+    expect(revoke).not.toHaveBeenCalled()
   })
 
   it('fails closed without an authenticated owner', async () => {

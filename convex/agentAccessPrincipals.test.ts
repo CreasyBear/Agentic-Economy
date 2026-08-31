@@ -90,7 +90,17 @@ describe('issued agent binding', () => {
     await expect(owner.mutation(registerIssuedBinding, { ...input, serviceAuth }))
       .resolves.toMatchObject({ kind: 'replayed', grantRef: input.grantRef })
 
-    const refs = issuedAgentCanonicalRefs(input.credentialId, input.grantRef)
+    const recordedAccess = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_credentialId', (query) => query.eq('credentialId', input.credentialId))
+      .unique())
+    if (recordedAccess === null) throw new Error('issued_agent_access_missing')
+    const refs = issuedAgentCanonicalRefs({
+      ownerAccountRef: recordedAccess.ownerId,
+      issuanceKey: input.issuanceKey,
+      credentialId: input.credentialId,
+      generation: 1,
+      grantRef: input.grantRef,
+    })
     const rows = await backend.run(async (ctx) => ({
       principal: await ctx.db.query('principals').withIndex('by_principalRef', (query) => query.eq('principalRef', refs.principalRef)).unique(),
       membership: await ctx.db.query('memberships').withIndex('by_membershipRef', (query) => query.eq('membershipRef', refs.membershipRef)).unique(),
@@ -121,6 +131,24 @@ describe('issued agent binding', () => {
     await expect(owner.query(api.agentDirectory.resolveOwnedCredential, {
       credentialRef: refs.credentialRef,
     })).resolves.toEqual({ kind: 'resolved', providerCredentialId: input.credentialId })
+
+    const conflicting = { ...input, credentialId: 'key_different_first_credential' }
+    const conflictingRefs = issuedAgentCanonicalRefs({
+      ownerAccountRef: recordedAccess.ownerId,
+      issuanceKey: conflicting.issuanceKey,
+      credentialId: conflicting.credentialId,
+      generation: 1,
+      grantRef: conflicting.grantRef,
+    })
+    expect(conflictingRefs.principalRef).toBe(refs.principalRef)
+    expect(conflictingRefs.credentialRef).not.toBe(refs.credentialRef)
+    await expect(owner.mutation(registerIssuedBinding, {
+      ...conflicting,
+      serviceAuth: await assertion(conflicting),
+    })).rejects.toThrow()
+    await expect(backend.run(async (ctx) => await ctx.db.query('credentials')
+      .withIndex('by_credentialRef', (query) => query.eq('credentialRef', conflictingRefs.credentialRef))
+      .unique())).resolves.toBeNull()
     await expect(backend.run(async (ctx) => {
       const canonical = await resolveCanonicalAgentContext(ctx, input.credentialId, NOW + 1)
       if (canonical === null) return null

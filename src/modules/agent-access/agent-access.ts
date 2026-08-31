@@ -32,7 +32,12 @@ export type AgentAccessPrincipal = Readonly<{
 
 export type AgentAccessKeyResult =
   | Readonly<{ kind: 'created' | 'replayed'; keyId: string; secret: string; expiresInSeconds: number; authorityMode: AgentAccessAuthorityMode; scopes: readonly string[]; grantRef: string }>
-  | Readonly<{ kind: 'error'; code: 'missing_auth' | 'invalid_input' | 'idempotency_conflict' | 'issuance_unavailable'; retryable: boolean }>
+  | Readonly<{
+      kind: 'error'
+      code: 'missing_auth' | 'invalid_input' | 'idempotency_conflict' | 'issuance_unavailable'
+      retryable: boolean
+      reconciliation?: 'provider_credential_revoked' | 'provider_revocation_required'
+    }>
 
 export type AgentAccessKeyInventoryItem = Readonly<{
   keyId: string
@@ -226,7 +231,6 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
       }
       const binding = await bindAgentPrincipal(input, existing.id, scopes, authorityMode, applicationRef, environment, existing.expiresAt ?? existing.expiration, grantRef, existing.createdAt)
       if (binding === null) {
-        await rollbackAgentKey(input.api, existing.id)
         return { kind: 'error', code: 'issuance_unavailable', retryable: true }
       }
       const secret = input.returnSecret === false ? '' : (await input.api.getSecret(existing.id)).secret
@@ -255,15 +259,24 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
     const expiresAt = createdAt + expiresInSeconds * 1000
     const binding = await bindAgentPrincipal(input, created.id, scopes, authorityMode, applicationRef, environment, expiresAt, grantRef, createdAt)
     if (binding === null) {
-      await rollbackAgentKey(input.api, created.id)
-      return { kind: 'error', code: 'issuance_unavailable', retryable: true }
+      return {
+        kind: 'error',
+        code: 'issuance_unavailable',
+        retryable: true,
+        reconciliation: await rollbackAgentKey(input.api, created.id),
+      }
     }
     try {
       const secret = input.returnSecret === false ? '' : (created.secret ?? (await input.api.getSecret(created.id)).secret)
       return { kind: 'created', keyId: created.id, secret, expiresInSeconds, authorityMode, scopes: [...scopes], grantRef: binding.grantRef }
     } catch (error) {
-      await rollbackAgentKey(input.api, created.id)
-      throw error
+      console.error('[agent-access] credential delivery failed', sanitizeTelemetryError(error))
+      return {
+        kind: 'error',
+        code: 'issuance_unavailable',
+        retryable: true,
+        reconciliation: await rollbackAgentKey(input.api, created.id),
+      }
     }
   } catch (error) {
     console.error('[agent-access] issueAgentAccessKey failed', sanitizeTelemetryError(error))
@@ -319,12 +332,16 @@ function completeGrantBinding(result: AgentAccessGrantRegistrationResult): Agent
   }
 }
 
-async function rollbackAgentKey(api: AgentAccessKeyApi, keyId: string): Promise<void> {
-  if (api.revoke === undefined) return
+async function rollbackAgentKey(
+  api: AgentAccessKeyApi,
+  keyId: string,
+): Promise<'provider_credential_revoked' | 'provider_revocation_required'> {
+  if (api.revoke === undefined) return 'provider_revocation_required'
   try {
     await api.revoke({ apiKeyId: keyId, revocationReason: 'Source principal binding failed.' })
+    return 'provider_credential_revoked'
   } catch {
-    // Best effort rollback: the issuance still fails closed.
+    return 'provider_revocation_required'
   }
 }
 export function projectAgentAccessKey(record: AgentAccessKeyRecord): AgentAccessKeyInventoryItem | undefined {

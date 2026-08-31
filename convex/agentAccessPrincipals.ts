@@ -244,7 +244,13 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       return { kind: 'conflict' as const }
     }
 
-    const refs = issuedAgentCanonicalRefs(input.credentialId, input.grantRef)
+    const refs = issuedAgentCanonicalRefs({
+      ownerAccountRef: owner.accountRef,
+      issuanceKey: input.issuanceKey,
+      credentialId: input.credentialId,
+      generation: 1,
+      grantRef: input.grantRef,
+    })
     const grantDecision = createAgentAccessGrant({
       grantRef: input.grantRef,
       principalId: refs.principalRef,
