@@ -1,5 +1,5 @@
 import { ChevronRightIcon } from 'lucide-react'
-import { useId, type ReactNode } from 'react'
+import { useId, type ReactNode, type Ref } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -9,9 +9,10 @@ type AeSectionProps = {
   children?: ReactNode
   id?: string
   className?: string
+  headingRef?: Ref<HTMLHeadingElement>
 }
 
-export function AeSection({ title, description, children, id, className }: AeSectionProps) {
+export function AeSection({ title, description, children, id, className, headingRef }: AeSectionProps) {
   const generatedTitleId = useId()
   const titleId = `${generatedTitleId}-title`
 
@@ -22,7 +23,12 @@ export function AeSection({ title, description, children, id, className }: AeSec
       {...(id === undefined ? {} : { id })}
     >
       <div className="grid gap-intra">
-        <h2 id={titleId} className="text-base font-semibold tracking-tight text-foreground">
+        <h2
+          ref={headingRef}
+          id={titleId}
+          tabIndex={headingRef === undefined ? undefined : -1}
+          className="text-base font-semibold tracking-tight text-foreground"
+        >
           {title}
         </h2>
         {description === undefined ? null : (

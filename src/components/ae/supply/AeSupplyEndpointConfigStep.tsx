@@ -1,5 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type Ref } from 'react'
 
+import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
+import {
+  AeNavigationSafetyBoundary,
+  type AeNavigationSafetyState,
+} from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -57,6 +62,17 @@ export type EndpointField = 'sourceRevision' | 'contractJson' | 'commercialJson'
 export type EndpointErrors = Partial<Record<EndpointField, string>>
 export type PreflightExtras = Readonly<{ toolName: string; resourceUrl: string }>
 
+export type SupplyEndpointConfigStepProps = Readonly<{
+  initialValue?: SupplyEndpointConfigValue
+  initialDocumentPreflight?: SupplyEndpointDocumentPreflight
+  authorityOptions?: readonly SupplyAuthorityOption[]
+  disabled?: boolean
+  onPreflight: (value: SupplyPublicationImport) => Promise<SupplyEndpointPreflightResult>
+  onPreflightDocument?: (document: Record<string, unknown>) => Promise<SupplyEndpointDocumentPreflightResult>
+  onSaveDraft?: (value: SupplyPublicationImport) => Promise<SupplyEndpointDraftSaveResult>
+  onSubmit: (value: SupplyPublicationImport, prepared: PreparedPublicationMaterial) => Promise<void>
+}>
+
 type EditableSource = Readonly<{
   sourceKind: SupplySourceKind
   sourceRevision: string
@@ -77,6 +93,42 @@ type EditableSource = Readonly<{
   resourceJson: string
 }>
 const MAX_SOURCE_BYTES = 262_144
+
+type SupplyEndpointInternalProps = SupplyEndpointConfigStepProps & Readonly<{
+  onSafetyStateChange?: (state: AeNavigationSafetyState) => void
+  saveActionRef?: Ref<HTMLButtonElement>
+  headingRef?: Ref<HTMLHeadingElement>
+}>
+
+export function AeSupplyEndpointConfigStepWithNavigationSafety(props: SupplyEndpointConfigStepProps) {
+  const [safetyState, setSafetyState] = useState<AeNavigationSafetyState>({
+    dirty: false,
+    pending: false,
+    saveOutcome: 'idle',
+  })
+  const saveActionRef = useRef<HTMLButtonElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+
+  return (
+    <AeNavigationSafetyBoundary
+      state={safetyState}
+      title="Leave source setup?"
+      pendingTitle="Finishing the source save"
+      description="These source changes exist only on this page and will be lost if you leave."
+      pendingDescription="AE is confirming whether the source draft was saved. Stay on this page until the outcome is known."
+      saveActionRef={saveActionRef}
+      headingRef={headingRef}
+    >
+      <AeSupplyEndpointConfigStep
+        {...props}
+        onSafetyStateChange={setSafetyState}
+        saveActionRef={saveActionRef}
+        headingRef={headingRef}
+      />
+    </AeNavigationSafetyBoundary>
+  )
+}
+
 export function AeSupplyEndpointConfigStep({
   initialValue,
   initialDocumentPreflight,
@@ -86,16 +138,10 @@ export function AeSupplyEndpointConfigStep({
   onPreflightDocument,
   onSaveDraft,
   onSubmit,
-}: Readonly<{
-  initialValue?: SupplyEndpointConfigValue
-  initialDocumentPreflight?: SupplyEndpointDocumentPreflight
-  authorityOptions?: readonly SupplyAuthorityOption[]
-  disabled?: boolean
-  onPreflight: (value: SupplyPublicationImport) => Promise<SupplyEndpointPreflightResult>
-  onPreflightDocument?: (document: Record<string, unknown>) => Promise<SupplyEndpointDocumentPreflightResult>
-  onSaveDraft?: (value: SupplyPublicationImport) => Promise<SupplyEndpointDraftSaveResult>
-  onSubmit: (value: SupplyPublicationImport, prepared: PreparedPublicationMaterial) => Promise<void>
-}>) {
+  onSafetyStateChange,
+  saveActionRef,
+  headingRef,
+}: SupplyEndpointInternalProps) {
   const [value, setValue] = useState<EditableSource>(() => editableSource(initialValue))
   const [toolName, setToolName] = useState(() => initialToolName(initialValue))
   const [resourceUrl, setResourceUrl] = useState(() => initialResourceUrl(initialValue))
@@ -105,9 +151,17 @@ export function AeSupplyEndpointConfigStep({
   const [announcement, setAnnouncement] = useState<string>()
   const [unexpectedError, setUnexpectedError] = useState<string>()
   const [pending, setPending] = useState(false)
+  const [saveOutcome, setSaveOutcome] = useState<AeNavigationSafetyState['saveOutcome']>('idle')
+  const [savedBaseline, setSavedBaseline] = useState(() => editableSourceSnapshot(
+    editableSource(initialValue),
+    initialToolName(initialValue),
+    initialResourceUrl(initialValue),
+  ))
   const documentPreflightRequestRef = useRef(0)
   const submitRequestRef = useRef(0)
   const formDisabled = disabled || pending || documentPreflightPending
+  const currentSnapshot = editableSourceSnapshot(value, toolName, resourceUrl)
+  const dirty = currentSnapshot !== savedBaseline
 
   useEffect(() => {
     if (initialValue === undefined) return
@@ -122,7 +176,17 @@ export function AeSupplyEndpointConfigStep({
     setErrors({})
     setAnnouncement(undefined)
     setUnexpectedError(undefined)
+    setSaveOutcome('idle')
+    setSavedBaseline(editableSourceSnapshot(
+      editableSource(initialValue),
+      initialToolName(initialValue),
+      initialResourceUrl(initialValue),
+    ))
   }, [initialDocumentPreflight, initialValue])
+
+  useEffect(() => {
+    onSafetyStateChange?.({ dirty, pending, saveOutcome })
+  }, [dirty, onSafetyStateChange, pending, saveOutcome])
 
   useEffect(() => () => {
     documentPreflightRequestRef.current += 1
@@ -131,6 +195,7 @@ export function AeSupplyEndpointConfigStep({
 
   function update(patch: Readonly<Partial<EditableSource>>) {
     setValue((current) => ({ ...current, ...patch }))
+    setSaveOutcome('idle')
     if (patch.documentJson !== undefined) {
       documentPreflightRequestRef.current += 1
       setDocumentPreflight(undefined)
@@ -138,6 +203,7 @@ export function AeSupplyEndpointConfigStep({
     }
     setErrors({})
     setUnexpectedError(undefined)
+    setSaveOutcome('idle')
   }
 
   function changeSourceKind(next: SupplySourceKind) {
@@ -157,6 +223,16 @@ export function AeSupplyEndpointConfigStep({
     setAnnouncement(undefined)
     setUnexpectedError(undefined)
     setDocumentPreflight(undefined)
+  }
+
+  function updateToolName(next: string) {
+    setToolName(next)
+    setSaveOutcome('idle')
+  }
+
+  function updateResourceUrl(next: string) {
+    setResourceUrl(next)
+    setSaveOutcome('idle')
   }
 
   function selectedConnectionIsAvailable(): boolean {
@@ -239,20 +315,29 @@ export function AeSupplyEndpointConfigStep({
     const requestId = submitRequestRef.current + 1
     submitRequestRef.current = requestId
     setPending(true)
+    setSaveOutcome('idle')
     setUnexpectedError(undefined)
+    let draftConfirmed = false
     try {
       const publicationImport = toCapabilityPublicationImport(checked.value)
       const saved = onSaveDraft === undefined ? undefined : await onSaveDraft(publicationImport)
       if (submitRequestRef.current !== requestId) return
       if (saved?.kind === 'refused') {
+        setSaveOutcome('failed')
         setErrors({ sourceRevision: saved.fix })
         setAnnouncement(`${saved.reason}: ${saved.fix}`)
         focusField('sourceRevision')
         return
       }
+      if (saved !== undefined) {
+        draftConfirmed = true
+        setSavedBaseline(currentSnapshot)
+        setSaveOutcome('saved')
+      }
       const preflight = await onPreflight(publicationImport)
       if (submitRequestRef.current !== requestId) return
       if (preflight.kind === 'refused') {
+        if (!draftConfirmed) setSaveOutcome('failed')
         const field = preflightField(preflight.reason, checked.value.sourceKind)
         setErrors({ [field]: preflight.fix })
         setAnnouncement(`${preflight.reason}: ${preflight.fix}`)
@@ -261,8 +346,13 @@ export function AeSupplyEndpointConfigStep({
       }
       setAnnouncement('AE accepted the source structure. No publication state was written.')
       await onSubmit(publicationImport, preflight.prepared)
+      if (!draftConfirmed) {
+        setSavedBaseline(currentSnapshot)
+        setSaveOutcome('saved')
+      }
     } catch (cause) {
       captureClientExceptionOnClient(cause)
+      if (!draftConfirmed) setSaveOutcome('outcome_unknown')
       const message = 'AE could not confirm this source action. Your source details remain on this page.'
       setUnexpectedError(message)
       setAnnouncement(message)
@@ -273,6 +363,7 @@ export function AeSupplyEndpointConfigStep({
 
   return (
     <AeSection
+      {...(headingRef === undefined ? {} : { headingRef })}
       title="Connect the Operation"
       description="Choose the interface this Operation exposes. AE validates the source before publication changes."
     >
@@ -312,19 +403,34 @@ export function AeSupplyEndpointConfigStep({
             onInspect={() => void inspectOpenApiDocument()}
             onChange={update}
           /> : null}
-          {value.sourceKind === 'mcp' ? <McpFields value={value} disabled={formDisabled} errors={errors} toolName={toolName} onToolNameChange={setToolName} onChange={update} /> : null}
-          {value.sourceKind === 'agent_plugin_mcp' ? <AgentPluginFields value={value} disabled={formDisabled} errors={errors} toolName={toolName} onToolNameChange={setToolName} onChange={update} /> : null}
-          {value.sourceKind === 'x402' ? <X402Fields value={value} disabled={formDisabled} errors={errors} resourceUrl={resourceUrl} onResourceUrlChange={setResourceUrl} onChange={update} /> : null}
+          {value.sourceKind === 'mcp' ? <McpFields value={value} disabled={formDisabled} errors={errors} toolName={toolName} onToolNameChange={updateToolName} onChange={update} /> : null}
+          {value.sourceKind === 'agent_plugin_mcp' ? <AgentPluginFields value={value} disabled={formDisabled} errors={errors} toolName={toolName} onToolNameChange={updateToolName} onChange={update} /> : null}
+          {value.sourceKind === 'x402' ? <X402Fields value={value} disabled={formDisabled} errors={errors} resourceUrl={resourceUrl} onResourceUrlChange={updateResourceUrl} onChange={update} /> : null}
           <TextField id="supply-timeout" label="Request timeout (milliseconds)" value={value.requestTimeoutMs} disabled={formDisabled} {...(errors.requestTimeoutMs === undefined ? {} : { error: errors.requestTimeoutMs })} description="Allowed range: 100–120,000 milliseconds." onChange={(next) => update({ requestTimeoutMs: next })} type="number" />
           <AuthorityField value={value.authority} sourceKind={value.sourceKind} authorityOptions={authorityOptions} disabled={formDisabled} {...(errors.authority === undefined ? {} : { error: errors.authority })} onChange={(next) => update({ authority: next })} />
           <p className="text-sm text-muted-foreground">Public upstream access is supported. For keyed OpenAPI or MCP, choose an existing compatible provider connection; this form never asks for or stores a raw key. x402 authority is non-secret and checked on the server.</p>
           <div role="status" aria-live="polite" className="min-h-5 text-sm text-muted-foreground">{announcement}</div>
         </FieldGroup>
-      <Button type="button" variant="default" disabled={formDisabled} aria-busy={pending || undefined} onClick={() => void submit()} className="min-h-touch">
-        {pending ? 'Checking source' : 'Check and continue'}
-      </Button>
+      <div className="flex min-w-0 flex-col gap-intra sm:flex-row sm:items-center sm:justify-end">
+        {pending ? (
+          <AeInlineState state="saving" description="Confirming the source draft." />
+        ) : saveOutcome === 'outcome_unknown' ? (
+          <AeInlineState state="outcome_unknown" description="Check the current source status before repeating this action." />
+        ) : dirty ? (
+          <AeInlineState state="draft" description="Source changes are not yet saved." />
+        ) : saveOutcome === 'saved' ? (
+          <AeInlineState state="saved" description="The current source draft is confirmed." />
+        ) : null}
+        <Button ref={saveActionRef} type="button" variant="default" disabled={formDisabled} aria-busy={pending || undefined} onClick={() => void submit()} className="min-h-touch">
+          {pending ? 'Checking source' : 'Check and continue'}
+        </Button>
+      </div>
     </AeSection>
   )
+}
+
+function editableSourceSnapshot(value: EditableSource, toolName: string, resourceUrl: string): string {
+  return JSON.stringify({ value, toolName, resourceUrl })
 }
 
 function OpenApiFields({

@@ -18,6 +18,7 @@ import type {
 } from '@/modules/capability-supply/supply-funnel.functions'
 import {
   AeSupplyEndpointConfigStep,
+  AeSupplyEndpointConfigStepWithNavigationSafety,
   type SupplyAuthorityOption,
   type SupplyEndpointConfigValue,
   type SupplyEndpointDocumentPreflight,
@@ -118,6 +119,9 @@ export function AeSupplyFunnel({
   const OfferingEditor = protectEditorNavigation
     ? AeOwnerOfferingEditorWithNavigationSafety
     : AeOwnerOfferingEditor
+  const EndpointConfigStep = protectEditorNavigation
+    ? AeSupplyEndpointConfigStepWithNavigationSafety
+    : AeSupplyEndpointConfigStep
 
   function showUnexpected(cause: unknown, message = 'AE could not confirm this setup action. Reload the authoritative setup before changing or repeating it.') {
     captureClientExceptionOnClient(cause)
@@ -265,7 +269,7 @@ export function AeSupplyFunnel({
           tabIndex={authorityNeedsRebind ? -1 : undefined}
           className="scroll-mt-6 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
-          <AeSupplyEndpointConfigStep
+          <EndpointConfigStep
             {...(initialSource === undefined ? {} : { initialValue: initialSource })}
             {...(initialDocumentPreflight === undefined ? {} : { initialDocumentPreflight })}
             {...(callbacks.preflightDocument === undefined ? {} : { onPreflightDocument: callbacks.preflightDocument })}

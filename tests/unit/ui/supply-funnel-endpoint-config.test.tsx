@@ -7,16 +7,34 @@ import {
   sourceValue,
   x402SourceValue,
 } from "./supply-funnel-harness";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  Link,
+  Outlet,
+  RouterProvider,
+  createBrowserHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "../../setup/jsdom-platform";
 
 import {
   AeSupplyEndpointConfigStep,
+  AeSupplyEndpointConfigStepWithNavigationSafety,
   type SupplyAuthorityOption,
+  type SupplyEndpointDraftSaveResult,
   type SupplyEndpointDocumentPreflightResult,
   type SupplyEndpointPreflightResult,
   type SupplyPublicationImport,
 } from "@/components/ae/supply/AeSupplyEndpointConfigStep";
+
+beforeEach(() => {
+  window.history.replaceState(null, "", "/source");
+});
+
+afterEach(cleanup);
 
 describe("current supply funnel", () => {
   it("ignores an obsolete OpenAPI inspection after the edited source changes", async () => {
@@ -332,8 +350,89 @@ describe("current supply funnel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
 
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Your source details remain on this page"));
+    await waitFor(() => expect(
+      screen.getAllByRole("alert").some((alert) => alert.textContent?.includes("Your source details remain on this page")),
+    ).toBe(true));
     expect(screen.getByDisplayValue(sourceValue.sourceRevision)).toBeTruthy();
     expect(document.body.textContent).not.toContain("private transport detail");
   });
 });
+
+describe("supply source navigation safety", () => {
+  it("holds the requested destination until a confirmed draft save succeeds", async () => {
+    let finishSave: ((result: SupplyEndpointDraftSaveResult) => void) | undefined;
+    const saveDraft = vi.fn(() => new Promise<SupplyEndpointDraftSaveResult>((resolve) => {
+      finishSave = resolve;
+    }));
+    const router = await renderSafetyEditor(saveDraft);
+
+    fireEvent.change(screen.getByLabelText("Source revision"), {
+      target: { value: "source:navigation-safe" },
+    });
+    expect(screen.getByText("Source changes are not yet saved.")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+    fireEvent.click(screen.getByRole("link", { name: "Leave source setup" }));
+
+    expect((await screen.findByRole("alertdialog")).textContent).toContain(
+      "Stay on this page until the outcome is known.",
+    );
+    expect(router.state.location.pathname).toBe("/source");
+
+    finishSave?.({ kind: "saved", revision: 2, sourceDigest: sourceHash });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/done"));
+  });
+
+  it("cancels navigation and retains source fields when draft saving is refused", async () => {
+    let finishSave: ((result: SupplyEndpointDraftSaveResult) => void) | undefined;
+    const saveDraft = vi.fn(() => new Promise<SupplyEndpointDraftSaveResult>((resolve) => {
+      finishSave = resolve;
+    }));
+    const router = await renderSafetyEditor(saveDraft);
+
+    fireEvent.change(screen.getByLabelText("Source revision"), {
+      target: { value: "source:retained" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+    fireEvent.click(screen.getByRole("link", { name: "Leave source setup" }));
+    await screen.findByRole("alertdialog");
+
+    finishSave?.({ kind: "refused", reason: "Draft not stored", fix: "Try saving again." });
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(router.state.location.pathname).toBe("/source");
+    expect(screen.getByDisplayValue("source:retained")).toBeDefined();
+    expect(screen.getByText("Try saving again.")).toBeDefined();
+  });
+});
+
+async function renderSafetyEditor(
+  onSaveDraft: (value: SupplyPublicationImport) => Promise<SupplyEndpointDraftSaveResult>,
+) {
+  const rootRoute = createRootRoute({ component: Outlet });
+  const routeTree = rootRoute.addChildren([
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/source",
+      component: () => (
+        <>
+          <AeSupplyEndpointConfigStepWithNavigationSafety
+            initialValue={sourceValue}
+            onSaveDraft={onSaveDraft}
+            onPreflight={async () => ({ kind: "prepared", prepared: preparedPublication })}
+            onSubmit={async () => undefined}
+          />
+          <Link to={'/done' as never}>Leave source setup</Link>
+        </>
+      ),
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/done",
+      component: () => <h1>Done</h1>,
+    }),
+  ]);
+  const router = createRouter({ routeTree, history: createBrowserHistory() });
+  await router.load();
+  render(<RouterProvider router={router} />);
+  return router;
+}

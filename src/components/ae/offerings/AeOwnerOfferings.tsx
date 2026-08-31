@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Link, useBlocker } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
   BotIcon,
   CheckCircle2Icon,
@@ -10,7 +10,8 @@ import {
 } from 'lucide-react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
+import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
+import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import {
   AeOperatorSortableHeader,
@@ -126,6 +127,8 @@ type OwnerOfferingEditorProps = Readonly<{
   draftKey?: string
   backAction?: ReactNode
   onSafetyStateChange?: (state: OwnerOfferingEditorSafetyState) => void
+  saveActionRef?: Ref<HTMLButtonElement>
+  headingRef?: Ref<HTMLHeadingElement>
 }>
 
 export function AeOwnerOfferingsList({
@@ -236,6 +239,8 @@ export function AeOwnerOfferingEditor({
   draftKey,
   backAction,
   onSafetyStateChange,
+  saveActionRef,
+  headingRef,
 }: OwnerOfferingEditorProps) {
   const [restoredDraft] = useState<OwnerOfferingEditorValue | undefined>(() => {
     if (draftKey === undefined) return undefined
@@ -368,7 +373,7 @@ export function AeOwnerOfferingEditor({
           <p className="text-sm text-muted-foreground">Fills the details below. You can change every field.</p>
         </div>
       )}
-      <AeSection title="Public details" description="Describe the exact tool and outcome agents can inspect before calling it.">
+      <AeSection {...(headingRef === undefined ? {} : { headingRef })} title="Public details" description="Describe the exact tool and outcome agents can inspect before calling it.">
         <FieldGroup className="gap-4">
           <TextInput label="Name" value={value.name} onChange={(name) => update({ name })} disabled={editorDisabled} inputRef={firstFieldRef} {...(invalidField === 'name' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
           <TextInput label="Category" value={value.category} onChange={(category) => update({ category })} disabled={editorDisabled} inputRef={categoryFieldRef} {...(invalidField === 'category' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
@@ -454,13 +459,22 @@ export function AeOwnerOfferingEditor({
 
       <OwnerAccessPathsEditor paths={value.accessPaths} disabled={editorDisabled} onChange={(accessPaths) => update({ accessPaths })} />
 
-      <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-card py-4 sm:flex-row sm:justify-end">
+      <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-card py-4 sm:flex-row sm:items-center">
         <Button asChild variant="secondary" className="min-h-touch">
           {backAction ?? <a href="/owner/offerings">Back to Operations</a>}
         </Button>
-        <Button type="submit" variant="default" disabled={pending || !dirty} aria-busy={pending} className="min-h-touch">
-          {retryingPartialSave ? 'Retry save' : value.status === 'published' ? 'Publish Operation' : 'Save draft'}
-        </Button>
+        <div className="flex min-w-0 flex-col gap-intra sm:ms-auto sm:flex-row sm:items-center">
+          {pending ? (
+            <AeInlineState state="saving" description="Confirming the Operation draft." />
+          ) : result?.kind === 'saved' ? (
+            <AeInlineState state="saved" description="Stored in your supplier account." />
+          ) : dirty ? (
+            <AeInlineState state="draft" description="Changes are not yet saved to your supplier account." />
+          ) : null}
+          <Button ref={saveActionRef} type="submit" variant="default" disabled={pending || !dirty} aria-busy={pending || undefined} className="min-h-touch">
+            {retryingPartialSave ? 'Retry save' : value.status === 'published' ? 'Publish Operation' : 'Save draft'}
+          </Button>
+        </div>
       </div>
     </form>
   )
@@ -473,75 +487,29 @@ export function AeOwnerOfferingEditorWithNavigationSafety(props: OwnerOfferingEd
     draftStorage: 'unavailable',
     saveOutcome: 'idle',
   })
-  const [navigationDialogDismissed, setNavigationDialogDismissed] = useState(false)
-  const navigationTriggerRef = useRef<HTMLElement | null>(null)
-  const shouldBlockNavigation = useCallback(() => {
-    if (!safetyState.dirty) return false
-    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
-      navigationTriggerRef.current = document.activeElement
-    }
-    return true
-  }, [safetyState.dirty])
-  const blocker = useBlocker({
-    shouldBlockFn: shouldBlockNavigation,
-    enableBeforeUnload: shouldBlockNavigation,
-    withResolver: true,
-  })
-  const navigationBlockedDuringSave = useRef(false)
-
-  useEffect(() => {
-    if (blocker.status === 'idle') {
-      navigationBlockedDuringSave.current = false
-      setNavigationDialogDismissed(false)
-      return
-    }
-    if (safetyState.pending) navigationBlockedDuringSave.current = true
-  }, [blocker.status, safetyState.pending])
-
-  useEffect(() => {
-    if (
-      blocker.status !== 'blocked'
-      || !navigationBlockedDuringSave.current
-      || safetyState.pending
-    ) return
-    navigationBlockedDuringSave.current = false
-    setNavigationDialogDismissed(false)
-    if (safetyState.saveOutcome === 'saved') blocker.proceed()
-    else blocker.reset()
-  }, [blocker, safetyState.pending, safetyState.saveOutcome])
+  const saveActionRef = useRef<HTMLButtonElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
 
   return (
-    <>
+    <AeNavigationSafetyBoundary
+      state={safetyState}
+      title="Leave Operation editor?"
+      pendingTitle="Finishing the Operation save"
+      description={safetyState.draftStorage === 'stored'
+        ? 'A draft remains in this browser, but it is not saved to your supplier account.'
+        : 'These changes exist only on this page and will be lost if you leave.'}
+      pendingDescription="AE is confirming whether your Operation was saved. Stay on this page until the outcome is known."
+      saveActionRef={saveActionRef}
+      headingRef={headingRef}
+    >
       <AeOwnerOfferingEditor
         {...props}
         backAction={<Link to="/owner/offerings">Back to Operations</Link>}
         onSafetyStateChange={setSafetyState}
+        saveActionRef={saveActionRef}
+        headingRef={headingRef}
       />
-      <AeConfirmDialog
-        open={blocker.status === 'blocked' && !navigationDialogDismissed}
-        onOpenChange={(open) => {
-          if (open || blocker.status !== 'blocked') return
-          if (safetyState.pending) {
-            setNavigationDialogDismissed(true)
-            return
-          }
-          blocker.reset()
-        }}
-        title={safetyState.pending ? 'Finishing the Operation save' : 'Leave Operation editor?'}
-        description={safetyState.pending
-          ? 'AE is confirming whether your Operation was saved. Stay on this page until the outcome is known.'
-          : safetyState.draftStorage === 'stored'
-            ? 'A draft remains in this browser, but it is not saved to your supplier account.'
-            : 'These changes exist only on this page and will be lost if you leave.'}
-        confirmLabel="Leave anyway"
-        cancelLabel={safetyState.pending ? 'Keep waiting' : 'Continue editing'}
-        showConfirm={!safetyState.pending}
-        returnFocusRef={navigationTriggerRef}
-        onConfirm={() => {
-          if (blocker.status === 'blocked') blocker.proceed()
-        }}
-      />
-    </>
+    </AeNavigationSafetyBoundary>
   )
 }
 

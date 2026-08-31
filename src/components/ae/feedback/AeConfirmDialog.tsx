@@ -22,6 +22,7 @@ type AeConfirmDialogProps = {
   pending?: boolean;
   onConfirm: () => void | Promise<void>;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  returnFocusFallbackRefs?: readonly RefObject<HTMLElement | null>[];
 };
 
 export function AeConfirmDialog({
@@ -36,6 +37,7 @@ export function AeConfirmDialog({
   pending = false,
   onConfirm,
   returnFocusRef,
+  returnFocusFallbackRefs = [],
 }: AeConfirmDialogProps) {
   const confirmationInFlightRef = useRef(false);
 
@@ -62,11 +64,19 @@ export function AeConfirmDialog({
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent
-        onCloseAutoFocus={returnFocusRef === undefined
+        onCloseAutoFocus={returnFocusRef === undefined && returnFocusFallbackRefs.length === 0
           ? undefined
           : (event) => {
               event.preventDefault();
-              returnFocusRef.current?.focus();
+              const targets = [returnFocusRef, ...returnFocusFallbackRefs];
+              const target = targets
+                .map((ref) => ref?.current)
+                .find((element) => element !== null
+                  && element !== undefined
+                  && element.isConnected
+                  && element !== document.body
+                  && !(element instanceof HTMLButtonElement && element.disabled));
+              target?.focus();
             }}
       >
         <AlertDialogHeader>
