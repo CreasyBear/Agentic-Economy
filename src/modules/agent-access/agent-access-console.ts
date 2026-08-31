@@ -29,6 +29,10 @@ export type CanonicalAgentDirectoryRecord = Readonly<{
   environment: 'sandbox' | 'production'
   currentProviderCredentialId: string
   lastSeenAt: number
+  status: 'connected' | 'attention' | 'expired' | 'disconnected'
+  admissionLifecycle: 'active' | 'revoked' | 'expired'
+  authorityMode: AgentAccessKeyInventoryItem['authorityMode']
+  scopes: readonly string[]
   credentials: readonly Readonly<{
     credentialRef: string
     providerCredentialId: string
@@ -76,8 +80,8 @@ export function projectAgentDirectory(
   }
 
   const details = canonicalAgents.flatMap((canonical) => {
-    const sources = byPrincipal.get(canonical.principalRef)
-    return sources === undefined ? [] : [projectAgentDetail(canonical, sources)]
+    const sources = byPrincipal.get(canonical.principalRef) ?? []
+    return [projectAgentDetail(canonical, sources)]
   }).toSorted((left, right) => (
     right.agent.lastSeenAt === left.agent.lastSeenAt
       ? left.agent.displayName.localeCompare(right.agent.displayName)
@@ -99,7 +103,6 @@ function projectAgentDetail(
       || left.key.keyId.localeCompare(right.key.keyId)
   ))
   const current = ordered.find(({ key }) => key.keyId === canonical.currentProviderCredentialId)
-  if (current === undefined) throw new Error('agent_directory_group_empty')
 
   const currentCanonicalCredential = canonical.credentials.find(({ providerCredentialId }) => (
     providerCredentialId === canonical.currentProviderCredentialId
@@ -115,15 +118,11 @@ function projectAgentDetail(
     issuedAt: credential.issuedAt,
     expiresAt: credential.expiresAt,
   }))
-  const active = ordered.filter(({ key, grant }) => (
-    !key.revoked && !key.expired && grant?.lifecycle === 'active'
-  ))
   const hasUnavailable = ordered.some(({ dataState }) => dataState === 'unavailable')
   const allUnavailable = ordered.every(({ dataState }) => dataState === 'unavailable')
-  const hasExpired = ordered.some(({ key }) => key.expired)
-  const status: AgentDirectoryItem['status'] = active.length > 0
-    ? hasUnavailable ? 'attention' : 'connected'
-    : hasExpired ? 'expired' : 'disconnected'
+  const status: AgentDirectoryItem['status'] = canonical.status === 'connected' && hasUnavailable
+    ? 'attention'
+    : canonical.status
   const lastSeenAt = Math.max(
     ...ordered.flatMap(({ key, activity }) => [
       ...(key.createdAt === undefined ? [] : [key.createdAt]),
@@ -137,7 +136,7 @@ function projectAgentDetail(
     applicationRef: canonical.applicationRef,
     environment: canonical.environment,
     status,
-    ...(active.length === 0 ? {} : { currentCredentialGeneration: currentCanonicalCredential.generation }),
+    ...(canonical.admissionLifecycle !== 'active' ? {} : { currentCredentialGeneration: currentCanonicalCredential.generation }),
     lastSeenAt: Math.max(lastSeenAt, canonical.lastSeenAt),
   }
   const activity = ordered
@@ -157,14 +156,14 @@ function projectAgentDetail(
   return {
     agent,
     credentials,
-    ...(active.length === 0 ? {} : { currentCredentialRef: currentCanonicalCredential.credentialRef }),
-    authorityMode: current.key.authorityMode,
-    scopes: current.key.scopes,
-    ...(current.grant === undefined ? {} : { grant: current.grant }),
-    ...(current.account === undefined ? {} : { account: current.account }),
+    ...(canonical.admissionLifecycle !== 'active' ? {} : { currentCredentialRef: currentCanonicalCredential.credentialRef }),
+    authorityMode: current?.key.authorityMode ?? canonical.authorityMode,
+    scopes: current?.key.scopes ?? canonical.scopes,
+    ...(current?.grant === undefined ? {} : { grant: current.grant }),
+    ...(current?.account === undefined ? {} : { account: current.account }),
     activity,
     ...(usage === undefined ? {} : { usage }),
-    dataState: allUnavailable
+    dataState: ordered.length === 0 || allUnavailable
       ? 'unavailable'
       : hasUnavailable
         ? 'partial'

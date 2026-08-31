@@ -63,6 +63,7 @@ function consoleProps() {
     directory,
     loading: false,
     onRevokeCredential: vi.fn(),
+    onDisconnectAgent: vi.fn(),
     approvals: [],
     approvalsLoading: false,
     onRetryApprovals: vi.fn(),
@@ -85,6 +86,7 @@ describe('assistant access owner continuation anchors', () => {
         directory={emptyDirectory}
         loading={false}
         onRevokeCredential={() => undefined}
+        onDisconnectAgent={() => undefined}
         approvals={[]}
         approvalsLoading={false}
         onRetryApprovals={() => undefined}
@@ -100,12 +102,12 @@ describe('assistant access owner continuation anchors', () => {
   })
 
   it('confirms only the exact route-selected caller without exposing locator or key canaries', async () => {
-    const onRevoke = vi.fn()
+    const onDisconnect = vi.fn()
     const onClearSelectedPrincipal = vi.fn()
     render(
       <AeAgentOperatorConsole
         {...consoleProps()}
-        onRevokeCredential={onRevoke}
+        onDisconnectAgent={onDisconnect}
         selectedPrincipalId={PRINCIPAL_ID}
         getAgentHref={(principalId) => `/agent-access?caller=${principalId}`}
         onClearSelectedPrincipal={onClearSelectedPrincipal}
@@ -118,14 +120,14 @@ describe('assistant access owner continuation anchors', () => {
     expect(dialog.textContent).not.toContain(PRINCIPAL_ID)
     expect(dialog.textContent).toContain('Credential history')
 
-    const trigger = screen.getByRole('button', { name: 'Revoke access now' })
+    const trigger = screen.getByRole('button', { name: 'Disconnect agent' })
     fireEvent.click(trigger)
     const confirmation = screen.getByRole('alertdialog', {
-      name: 'Revoke access for Route assistant?',
+      name: 'Disconnect Route assistant?',
     })
-    expect(onRevoke).not.toHaveBeenCalled()
+    expect(onDisconnect).not.toHaveBeenCalled()
     expect(within(confirmation).getByText(
-      'New calls from Route assistant will stop immediately. Reconnecting this agent requires fresh authorization.',
+      'Every active credential, grant, delegation, and provider key for Route assistant will be revoked. Historical activity remains readable.',
     )).toBeDefined()
     expect(confirmation.textContent).not.toContain(KEY_ID_CANARY)
     expect(confirmation.textContent).not.toContain(PRINCIPAL_ID)
@@ -135,7 +137,7 @@ describe('assistant access owner continuation anchors', () => {
 
     fireEvent.click(cancel)
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(onRevoke).not.toHaveBeenCalled()
+    expect(onDisconnect).not.toHaveBeenCalled()
     expect(document.activeElement).toBe(trigger)
 
     fireEvent.click(trigger)
@@ -144,7 +146,7 @@ describe('assistant access owner continuation anchors', () => {
     ))
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(onRevoke).not.toHaveBeenCalled()
+    expect(onDisconnect).not.toHaveBeenCalled()
     expect(document.activeElement).toBe(trigger)
 
     const closeButton = screen
@@ -170,10 +172,10 @@ describe('assistant access owner continuation anchors', () => {
       />,
     )
 
-    const trigger = screen.getByRole('button', { name: 'Revoke access now' })
+    const trigger = screen.getByRole('button', { name: 'Revoke' })
     fireEvent.click(trigger)
     const confirm = within(screen.getByRole('alertdialog')).getByRole('button', {
-      name: 'Revoke agent access',
+      name: 'Revoke credential',
     })
     fireEvent.click(confirm)
     await waitFor(() => expect(onRevoke).toHaveBeenCalledOnce())

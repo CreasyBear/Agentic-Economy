@@ -17,19 +17,10 @@ const SERVICE_KEY = 'agent-access-server-function-key-that-is-at-least-32-bytes'
 const SERVER_SCOPE = 'market_operations:invoke'
 
 type RegisterArgs = Readonly<{ grant: AgentAccessGrant; serviceAuth: CustomerRequestServiceAssertion }>
-type RevokeArgs = Readonly<{
-  grantRef: string
-  ownerId: string
-  credentialId: string
-  principalId: string
-  updatedAt: number
-  serviceAuth: CustomerRequestServiceAssertion
-}>
 type GrantWriteResult = Readonly<Record<string, unknown>>
 type Backend = TestConvex<typeof schema>
 
 const registerGrantForServer = makeFunctionReference<'mutation', RegisterArgs, GrantWriteResult>('agentAccessPolicy:registerGrantForServer')
-const revokeGrantForServer = makeFunctionReference<'mutation', RevokeArgs, GrantWriteResult>('agentAccessPolicy:revokeGrantForServer')
 
 const previousServerKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
 afterEach(() => {
@@ -126,51 +117,4 @@ describe('agent access Convex server grant wrappers', () => {
       .resolves.toMatchObject({ kind: 'recorded', grantRef: current.grantRef, generation: current.generation })
   })
 
-  it('row-binds revoke, preserves durable lifecycle idempotency, and refuses forged command bodies', async () => {
-    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY
-    const backend = convexTest(schema, modules)
-    const current = grant()
-    const canonicalOwnerId = `acc_${'a'.repeat(32)}`
-    await seedCanonicalPrincipal(backend, current, canonicalOwnerId)
-    const registerCommand = { grant: current }
-    const registerAuth = await serviceAuth('agentAccessPolicy.registerGrantForServer', registerCommand, current)
-    await expect(backend.mutation(registerGrantForServer, { grant: current, serviceAuth: registerAuth }))
-      .resolves.toMatchObject({ kind: 'recorded' })
-
-    const wrongRevoke = {
-      grantRef: current.grantRef,
-      ownerId: current.ownerId,
-      credentialId: 'key_other',
-      principalId: current.principalId,
-      updatedAt: 2_000,
-    }
-    const wrongAuth = await serviceAuth('agentAccessPolicy.revokeGrantForServer', wrongRevoke, {
-      principalId: wrongRevoke.principalId,
-      ownerId: wrongRevoke.ownerId,
-      credentialId: wrongRevoke.credentialId,
-    })
-    await expect(backend.mutation(revokeGrantForServer, { ...wrongRevoke, serviceAuth: wrongAuth }))
-      .resolves.toEqual({ kind: 'binding_mismatch', grantRef: current.grantRef })
-
-    const validRevoke = {
-      grantRef: current.grantRef,
-      ownerId: current.ownerId,
-      credentialId: current.credentialId,
-      principalId: current.principalId,
-      updatedAt: 3_000,
-    }
-    const validAuth = await serviceAuth('agentAccessPolicy.revokeGrantForServer', validRevoke, current)
-    await expect(backend.mutation(revokeGrantForServer, { ...validRevoke, serviceAuth: validAuth }))
-      .resolves.toEqual({ kind: 'revoked', grantRef: current.grantRef, generation: current.generation })
-    await expect(backend.mutation(revokeGrantForServer, { ...validRevoke, serviceAuth: validAuth }))
-      .resolves.toEqual({ kind: 'already_revoked', grantRef: current.grantRef, generation: current.generation })
-
-    const stored = await backend.run(async (ctx) => await ctx.db.query('agentAccessGrants')
-      .withIndex('by_grantRef', (query) => query.eq('grantRef', current.grantRef)).unique())
-    expect(stored).toMatchObject({
-      ownerId: canonicalOwnerId,
-      lifecycle: 'revoked',
-      updatedAt: validRevoke.updatedAt,
-    })
-  })
 })

@@ -53,22 +53,6 @@ export type AgentAccessKeyInventoryItem = Readonly<{
   grantRef?: string
 }>
 
-export type AgentAccessKeyRevocationResult =
-  | Readonly<{ kind: 'revoked' | 'already_revoked'; keyId: string }>
-  | Readonly<{ kind: 'error'; code: 'missing_auth' | 'invalid_input' | 'key_not_found' | 'revocation_unavailable'; retryable: boolean }>
-
-export type AgentAccessGrantRevocationInput = Readonly<{
-  grantRef: string
-  ownerId: string
-  credentialId: string
-  principalId: string
-  updatedAt: number
-}>
-
-export type AgentAccessGrantRevocationResult =
-  | Readonly<{ kind: 'revoked' | 'already_revoked'; grantRef: string; generation: number }>
-  | Readonly<{ kind: 'not_found' | 'binding_mismatch'; grantRef: string }>
-
 export type AgentAccessGrantRegistrationInput = Readonly<{
   grantRef: string
   principalId: string
@@ -155,6 +139,27 @@ export type AgentCredentialReplacementTransitionResult =
   | Readonly<{ kind: 'completed' | 'replayed'; providerCredentialId: string }>
   | Readonly<{ kind: 'conflict' | 'unavailable' }>
   | Readonly<{ kind: 'refused'; code: 'authentication_required' }>
+
+export type AgentLifecycleProviderTarget = Readonly<{
+  credentialRef: string
+  providerCredentialId: string
+}>
+
+export type AgentLifecycleCanonicalResult =
+  | Readonly<{
+      kind: 'completed' | 'replayed'
+      principalRef: string
+      providerTargets: readonly AgentLifecycleProviderTarget[]
+      correlationRef: string
+    }>
+  | Readonly<{ kind: 'conflict'; code: string; correlationRef: string }>
+  | Readonly<{ kind: 'refused'; code: 'authentication_required'; correlationRef: string }>
+
+export type AgentLifecycleResult =
+  | Readonly<{ kind: 'completed' | 'replayed'; principalRef: string; correlationRef: string }>
+  | Readonly<{ kind: 'partial'; principalRef: string; correlationRef: string; retryable: true }>
+  | Readonly<{ kind: 'conflict'; code: string; correlationRef: string }>
+  | Readonly<{ kind: 'refused'; code: 'authentication_required' | 'source_unavailable'; correlationRef: string }>
 
 export type AgentAccessPrincipalRegistrationResult = Readonly<{ kind: 'recorded' | 'conflict' | 'unavailable' }>
 
@@ -431,38 +436,6 @@ export async function listAgentAccessKeys(input: Readonly<{
     })
   } catch {
     return []
-  }
-}
-
-export async function revokeAgentAccessKey(input: Readonly<{
-  principal: { userId: string } | undefined
-  keyId: string
-  api: { get: (keyId: string) => Promise<AgentAccessKeyRecord>; revoke: (input: { apiKeyId: string; revocationReason: string }) => Promise<void> }
-  revokeGrant: (input: AgentAccessGrantRevocationInput) => Promise<AgentAccessGrantRevocationResult>
-}>): Promise<AgentAccessKeyRevocationResult> {
-  if (input.principal === undefined) return { kind: 'error', code: 'missing_auth', retryable: false }
-  if (!/^ak_[A-Za-z0-9_]{4,}$/u.test(input.keyId) && !/^key_[A-Za-z0-9_]{4,}$/u.test(input.keyId)) return { kind: 'error', code: 'invalid_input', retryable: false }
-  try {
-    const key = await input.api.get(input.keyId)
-    const claims = key.claims
-    if (key.subject !== input.principal.userId || claims?.aePurpose !== AGENT_ACCESS_PURPOSE) return { kind: 'error', code: 'key_not_found', retryable: false }
-    const grantRef = claims?.aeGrantRef
-    if (typeof grantRef !== 'string' || grantRef.trim().length === 0) return { kind: 'error', code: 'key_not_found', retryable: false }
-    const durable = await input.revokeGrant({
-      grantRef,
-      ownerId: input.principal.userId,
-      credentialId: key.id,
-      principalId: `clerk_api_key:${key.id}`,
-      updatedAt: Date.now(),
-    })
-    if (durable.kind !== 'revoked' && durable.kind !== 'already_revoked') {
-      return { kind: 'error', code: 'revocation_unavailable', retryable: true }
-    }
-    if (key.revoked) return { kind: 'already_revoked', keyId: key.id }
-    await input.api.revoke({ apiKeyId: key.id, revocationReason: 'Revoked by the AE owner' })
-    return { kind: 'revoked', keyId: key.id }
-  } catch {
-    return { kind: 'error', code: 'revocation_unavailable', retryable: true }
   }
 }
 

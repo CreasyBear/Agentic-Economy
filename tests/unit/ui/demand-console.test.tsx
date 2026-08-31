@@ -281,6 +281,7 @@ describe('assistant access components', () => {
         directory={keyDirectory}
         loading={false}
         onRevokeCredential={() => undefined}
+        onDisconnectAgent={() => undefined}
         approvals={[]}
         approvalsLoading={false}
         onRetryApprovals={() => undefined}
@@ -310,6 +311,7 @@ describe('assistant access components', () => {
         directory={emptyDirectory}
         loading={false}
         onRevokeCredential={() => undefined}
+        onDisconnectAgent={() => undefined}
         approvals={[{
           invocationRef: 'invocation:approval:one',
           operationRef: 'market.email.send:v1',

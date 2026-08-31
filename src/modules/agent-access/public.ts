@@ -14,3 +14,4 @@ export type {
   AgentDirectoryProjection,
 } from './agent-operator-view-model'
 export type { AgentConnectionTarget } from './oauth-state'
+export type { AgentLifecycleResult } from './agent-access'

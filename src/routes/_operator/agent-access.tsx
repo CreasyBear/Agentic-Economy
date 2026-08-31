@@ -11,7 +11,8 @@ import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
-import { revokeAgentCredentialServer } from '@/modules/agent-access/agent-access.functions'
+import { disconnectAgentServer, revokeAgentCredentialServer } from '@/modules/agent-access/agent-access.functions'
+import type { AgentLifecycleResult } from '@/modules/agent-access/agent-access'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import {
   decideOperationApprovalServer,
@@ -59,10 +60,11 @@ function AgentAccessHome() {
   const readDirectory = useServerFn(readAgentDirectoryServer)
   const localE2E = isLocalE2EAuthBypassEnabled()
   const revokeCredential = useServerFn(revokeAgentCredentialServer)
+  const disconnectAgent = useServerFn(disconnectAgentServer)
   const [directory, setDirectory] = useState<AgentDirectoryProjection>(initialDirectory)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
-  const [revoking, setRevoking] = useState<string>()
+  const [lifecyclePending, setLifecyclePending] = useState<Readonly<{ kind: 'credential' | 'agent'; ref: string }>>()
   const readApprovals = useServerFn(listPendingOperationApprovalsServer)
   const decideApproval = useServerFn(decideOperationApprovalServer)
   const [approvals, setApprovals] = useState<readonly PendingOperationApproval[]>([])
@@ -119,14 +121,41 @@ function AgentAccessHome() {
     }
   }, [location.hash, navigate])
 
+  async function finishLifecycle(result: AgentLifecycleResult) {
+    if (result.kind === 'completed' || result.kind === 'replayed') {
+      setError(undefined)
+      await load()
+      return
+    }
+    if (result.kind === 'partial') {
+      await load()
+      setError(`Access is blocked in Agentic Economy, but provider cleanup needs another attempt. Reference: ${result.correlationRef}`)
+      return
+    }
+    setError(result.kind === 'conflict'
+      ? `This lifecycle change conflicts with the current agent state. Reference: ${result.correlationRef}`
+      : `This lifecycle change was refused. Reference: ${result.correlationRef}`)
+  }
+
   async function revoke(credentialRef: string) {
-    setRevoking(credentialRef)
+    setLifecyclePending({ kind: 'credential', ref: credentialRef })
     try {
-      const result = await revokeCredential({ data: { credentialRef } })
-      if (result.kind === 'revoked' || result.kind === 'already_revoked') await load()
-      else if (result.kind === 'error') setError(result.retryable ? 'Access could not be revoked. Try again.' : 'This access is no longer available to this account.')
+      await finishLifecycle(await revokeCredential({ data: { credentialRef } }))
+    } catch {
+      setError('Credential revocation is temporarily unavailable. Try again.')
     } finally {
-      setRevoking(undefined)
+      setLifecyclePending(undefined)
+    }
+  }
+
+  async function disconnect(principalRef: string) {
+    setLifecyclePending({ kind: 'agent', ref: principalRef })
+    try {
+      await finishLifecycle(await disconnectAgent({ data: { principalRef } }))
+    } catch {
+      setError('Agent disconnection is temporarily unavailable. Try again.')
+    } finally {
+      setLifecyclePending(undefined)
     }
   }
 
@@ -189,7 +218,8 @@ function AgentAccessHome() {
           void navigate({ to: '/agent-access', search: {}, replace: true })
         }}
         onRevokeCredential={(credentialRef) => revoke(credentialRef)}
-        {...(revoking === undefined ? {} : { revokingCredentialRef: revoking })}
+        onDisconnectAgent={(principalRef) => disconnect(principalRef)}
+        {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
         accessUnavailable={error !== undefined}
         approvals={approvals}
         approvalsLoading={approvalsLoading}

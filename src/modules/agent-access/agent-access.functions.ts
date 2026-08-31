@@ -14,13 +14,13 @@ import {
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
+import { currentRequestCorrelationId } from '@/lib/server/request-correlation'
 
 import {
   issueAgentAccessKey,
   AGENT_ACCESS_MAX_TTL_SECONDS,
   AGENT_ACCESS_MIN_TTL_SECONDS,
   listAgentAccessKeys,
-  revokeAgentAccessKey,
   type AgentAccessKeyCreateInput,
   type AgentAccessKeyRecord,
   type AgentAccessPrincipalRegistration,
@@ -31,6 +31,8 @@ import {
   type AgentCredentialReplacementRegistrationResult,
   type AgentCredentialReplacementTransition,
   type AgentCredentialReplacementTransitionResult,
+  type AgentLifecycleCanonicalResult,
+  type AgentLifecycleResult,
 } from './agent-access'
 import {
   agentAccessPolicySchema,
@@ -42,7 +44,6 @@ import {
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
 } from './contract'
-import { revokeAgentAccessGrant } from './policy.functions'
 import {
   buildProductionAgentAccessPolicy,
   defaultProductionAgentAccessPolicy,
@@ -216,13 +217,29 @@ const promoteCredentialReplacementMutation = sourceMutation<TransitionReplacemen
 const cancelCredentialReplacementMutation = sourceMutation<TransitionReplacementArgs, AgentCredentialReplacementTransitionResult>(
   'agentAccessPrincipals:cancelCredentialReplacementForServer',
 )
+type RevokeCredentialCommand = Readonly<{ credentialRef: string; correlationRef: string }>
+type DisconnectAgentCommand = Readonly<{ principalRef: string; correlationRef: string }>
+type LifecycleMutationArgs<Command> = Command & Readonly<{ serviceAuth: ConvexServerFunctionAssertion }>
+const revokeCredentialMutation = sourceMutation<LifecycleMutationArgs<RevokeCredentialCommand>, AgentLifecycleCanonicalResult>(
+  'agentAccessPrincipals:revokeCredentialForServer',
+)
+const disconnectAgentMutation = sourceMutation<LifecycleMutationArgs<DisconnectAgentCommand>, AgentLifecycleCanonicalResult>(
+  'agentAccessPrincipals:disconnectAgentForServer',
+)
+type ProviderRevocationCommand = Readonly<{
+  principalRef: string
+  credentialRef: string
+  providerCredentialId: string
+  correlationRef: string
+  outcome: 'revoked' | 'failed'
+}>
+type ProviderRevocationResult = Readonly<{ kind: 'completed' | 'replayed' | 'conflict' } | { kind: 'refused'; code: 'authentication_required' }>
+const recordProviderRevocationMutation = sourceMutation<LifecycleMutationArgs<ProviderRevocationCommand>, ProviderRevocationResult>(
+  'agentAccessPrincipals:recordProviderRevocationForServer',
+)
 const listOwnerGrantReadbacksQuery = sourceQuery<{ requireAuthority: true }, readonly unknown[]>(
   'agentAccessPolicy:listOwnerGrantReadbacks',
 )
-const resolveOwnedCredentialQuery = sourceQuery<
-  { credentialRef: string },
-  { kind: 'resolved'; providerCredentialId: string } | { kind: 'not_found' }
->('agentDirectory:resolveOwnedCredential')
 
 async function requireCanonicalOwnerAuthorityServer(): Promise<void> {
   await callSourceQuery(listOwnerGrantReadbacksQuery, { requireAuthority: true })
@@ -420,22 +437,101 @@ export const listAgentAccessKeysServer = createServerFn({ method: 'GET' })
     return await listAgentAccessKeys({ principal, api })
   })
 
+async function lifecycleCanonicalMutation<Command extends Record<string, string>>(
+  operation: string,
+  reference: typeof revokeCredentialMutation | typeof disconnectAgentMutation,
+  command: Command,
+): Promise<AgentLifecycleCanonicalResult> {
+  const serviceAuth = await createConvexServerFunctionAssertion({
+    operation,
+    scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+    command,
+  })
+  return await callSourceMutation(reference as never, { ...command, serviceAuth } as never) as AgentLifecycleCanonicalResult
+}
+
+async function recordProviderRevocation(command: ProviderRevocationCommand): Promise<ProviderRevocationResult> {
+  const operation = 'agentAccessPrincipals.recordProviderRevocationForServer'
+  const serviceAuth = await createConvexServerFunctionAssertion({
+    operation,
+    scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+    command,
+  })
+  return await callSourceMutation(recordProviderRevocationMutation, { ...command, serviceAuth })
+}
+
+async function completeAgentLifecycle(
+  canonical: AgentLifecycleCanonicalResult,
+): Promise<AgentLifecycleResult> {
+  if (canonical.kind === 'conflict' || canonical.kind === 'refused') return canonical
+  const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
+  let partial = false
+  for (const target of canonical.providerTargets) {
+    let outcome: 'revoked' | 'failed' = 'failed'
+    try {
+      const provider = await api.get(target.providerCredentialId)
+      if (!provider.revoked) {
+        await api.revoke({
+          apiKeyId: target.providerCredentialId,
+          revocationReason: 'Agentic Economy owner revoked this credential.',
+        })
+      }
+      outcome = 'revoked'
+    } catch {
+      partial = true
+    }
+    try {
+      const recorded = await recordProviderRevocation({
+        principalRef: canonical.principalRef,
+        credentialRef: target.credentialRef,
+        providerCredentialId: target.providerCredentialId,
+        correlationRef: canonical.correlationRef,
+        outcome,
+      })
+      if (recorded.kind !== 'completed' && recorded.kind !== 'replayed') partial = true
+    } catch {
+      partial = true
+    }
+  }
+  return partial
+    ? { kind: 'partial', principalRef: canonical.principalRef, correlationRef: canonical.correlationRef, retryable: true }
+    : { kind: canonical.kind, principalRef: canonical.principalRef, correlationRef: canonical.correlationRef }
+}
+
+function lifecycleCorrelationRef(): string {
+  return currentRequestCorrelationId() ?? globalThis.crypto.randomUUID()
+}
+
 export const revokeAgentCredentialServer = createServerFn({ method: 'POST' })
   .validator((data) => z.strictObject({ credentialRef: z.string().trim().min(1).max(300) }).parse(data))
-  .handler(async ({ data }) => {
-    await requireCanonicalOwnerAuthorityServer()
-    const resolved = await callSourceQuery(resolveOwnedCredentialQuery, {
-      credentialRef: data.credentialRef,
-    })
-    if (resolved.kind === 'not_found') {
-      return { kind: 'error' as const, code: 'key_not_found' as const, retryable: false }
+  .handler(async ({ data }): Promise<AgentLifecycleResult> => {
+    const correlationRef = lifecycleCorrelationRef()
+    try {
+      await requireCanonicalOwnerAuthorityServer()
+      const command = { credentialRef: data.credentialRef, correlationRef }
+      return await completeAgentLifecycle(await lifecycleCanonicalMutation(
+        'agentAccessPrincipals.revokeCredentialForServer',
+        revokeCredentialMutation,
+        command,
+      ))
+    } catch {
+      return { kind: 'refused', code: 'source_unavailable', correlationRef }
     }
-    const principal = await owner()
-    const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
-    return await revokeAgentAccessKey({
-      principal,
-      keyId: resolved.providerCredentialId,
-      api,
-      revokeGrant: revokeAgentAccessGrant,
-    })
+  })
+
+export const disconnectAgentServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({ principalRef: z.string().trim().min(1).max(300) }).parse(data))
+  .handler(async ({ data }): Promise<AgentLifecycleResult> => {
+    const correlationRef = lifecycleCorrelationRef()
+    try {
+      await requireCanonicalOwnerAuthorityServer()
+      const command = { principalRef: data.principalRef, correlationRef }
+      return await completeAgentLifecycle(await lifecycleCanonicalMutation(
+        'agentAccessPrincipals.disconnectAgentForServer',
+        disconnectAgentMutation,
+        command,
+      ))
+    } catch {
+      return { kind: 'refused', code: 'source_unavailable', correlationRef }
+    }
   })

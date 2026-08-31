@@ -48,22 +48,12 @@ const grantRevocationResult = v.union(
   v.object({ kind: v.literal('not_found'), grantRef: v.string() }),
   v.object({ kind: v.literal('binding_mismatch'), grantRef: v.string() }),
 )
-const grantRevocationForServerResult = v.union(grantRevocationResult, serverAuthRefusal)
 
 type RegisterGrantForServerArgs = {
   grant: AgentAccessGrant
   serviceAuth: Infer<typeof serverServiceAuth>
 }
 type RegisterGrantForServerResult = Infer<typeof grantWriteForServerResult>
-type RevokeGrantForServerArgs = {
-  grantRef: string
-  ownerId: string
-  credentialId: string
-  principalId: string
-  updatedAt: number
-  serviceAuth: Infer<typeof serverServiceAuth>
-}
-type RevokeGrantForServerResult = Infer<typeof grantRevocationForServerResult>
 
 const grantReadResult = v.union(agentAccessGrantValue, v.null())
 const publicGrantReadback = v.object({
@@ -88,7 +78,6 @@ const publicGrantReadback = v.object({
 
 
 const registerGrantServerOperation = 'agentAccessPolicy.registerGrantForServer'
-const revokeGrantServerOperation = 'agentAccessPolicy.revokeGrantForServer'
 
 async function verifyServerAssertion(
   operation: string,
@@ -284,13 +273,11 @@ export const readActiveGrant = internalQuery({
   },
 })
 
+/** Internal lifecycle primitive. Owner-facing revocation uses the canonical
+ * agent lifecycle commands, never this grant-shaped seam directly. */
 export const revokeGrant = internalMutation({
   args: {
-    grantRef: v.string(),
-    ownerId: v.string(),
-    credentialId: v.string(),
-    principalId: v.string(),
-    updatedAt: v.number(),
+    grantRef: v.string(), ownerId: v.string(), credentialId: v.string(), principalId: v.string(), updatedAt: v.number(),
   },
   returns: grantRevocationResult,
   handler: async (ctx, args) => {
@@ -303,44 +290,5 @@ export const revokeGrant = internalMutation({
     if (row.lifecycle !== 'active') return { kind: 'already_revoked' as const, grantRef: row.grantRef, generation: row.generation }
     await ctx.db.patch(row._id, { lifecycle: 'revoked', updatedAt: args.updatedAt })
     return { kind: 'revoked' as const, grantRef: row.grantRef, generation: row.generation }
-  },
-})
-
-export const revokeGrantForServer: RegisteredMutation<'public', RevokeGrantForServerArgs, RevokeGrantForServerResult> = mutation({
-  args: {
-    grantRef: v.string(),
-    ownerId: v.string(),
-    credentialId: v.string(),
-    principalId: v.string(),
-    updatedAt: v.number(),
-    serviceAuth: serverServiceAuth,
-  },
-  returns: grantRevocationForServerResult,
-  handler: async (ctx, args): Promise<RevokeGrantForServerResult> => {
-    const command = {
-      grantRef: args.grantRef,
-      ownerId: args.ownerId,
-      credentialId: args.credentialId,
-      principalId: args.principalId,
-      updatedAt: args.updatedAt,
-    }
-    if (!args.serviceAuth.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
-      || args.serviceAuth.principalId !== args.principalId
-      || args.serviceAuth.ownerId !== args.ownerId
-      || args.serviceAuth.credentialId !== args.credentialId
-      || !await verifyServerAssertion(revokeGrantServerOperation, command, args.serviceAuth)) {
-      return { kind: 'refused' as const, code: 'authentication_required' as const }
-    }
-    const row = await ctx.db.query('agentAccessGrants')
-      .withIndex('by_grantRef', (query) => query.eq('grantRef', args.grantRef)).unique()
-    if (row !== null && (row.grantRef !== command.grantRef
-      || row.credentialId !== command.credentialId
-      || row.principalId !== command.principalId)) {
-      return { kind: 'binding_mismatch' as const, grantRef: row.grantRef }
-    }
-    return await ctx.runMutation(internal.agentAccessPolicy.revokeGrant, {
-      ...command,
-      ownerId: row?.ownerId ?? command.ownerId,
-    })
   },
 })

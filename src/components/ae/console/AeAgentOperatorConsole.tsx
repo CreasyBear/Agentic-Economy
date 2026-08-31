@@ -32,7 +32,8 @@ export type AeAgentOperatorConsoleProps = Readonly<{
   directory: AgentDirectoryProjection
   loading: boolean
   onRevokeCredential: (credentialRef: string) => void | Promise<void>
-  revokingCredentialRef?: string
+  onDisconnectAgent: (principalRef: string) => void | Promise<void>
+  lifecyclePending?: Readonly<{ kind: 'credential' | 'agent'; ref: string }>
   approvals: readonly PendingOperationApproval[]
   approvalsLoading: boolean
   approvalsError?: string
@@ -50,7 +51,8 @@ export function AeAgentOperatorConsole({
   directory,
   loading,
   onRevokeCredential,
-  revokingCredentialRef,
+  onDisconnectAgent,
+  lifecyclePending,
   approvals,
   approvalsLoading,
   approvalsError,
@@ -65,7 +67,10 @@ export function AeAgentOperatorConsole({
 }: AeAgentOperatorConsoleProps) {
   const directoryItems = directory.items
   const [localSelected, setLocalSelected] = useState<AgentDirectoryItem>()
-  const [revokeTarget, setRevokeTarget] = useState<Readonly<{ credentialRef: string; name: string }>>()
+  const [lifecycleTarget, setLifecycleTarget] = useState<
+    | Readonly<{ kind: 'credential'; credentialRef: string; generation: number; name: string }>
+    | Readonly<{ kind: 'agent'; principalRef: string; name: string }>
+  >()
   const [revokePending, setRevokePending] = useState(false)
   const revokeTriggerRef = useRef<HTMLButtonElement>(null)
   const revokeInFlightRef = useRef(false)
@@ -140,11 +145,12 @@ export function AeAgentOperatorConsole({
     )
   }
 
-  const revoking = selected?.currentCredentialRef !== undefined
-    && revokingCredentialRef === selected.currentCredentialRef
-  const revokeDisabled =
-    selected?.currentCredentialRef === undefined
-    || revokingCredentialRef !== undefined
+  const disconnecting = selected !== undefined
+    && lifecyclePending?.kind === 'agent'
+    && lifecyclePending.ref === selected.agent.principalRef
+  const disconnectDisabled = selected === undefined
+    || lifecyclePending !== undefined
+    || selected.agent.status === 'disconnected'
   const agentsPhase = stagedListPhase({ firstLoadPending, rows: directoryItems })
   const missingAgentContinuation = suggestContinuation({
     subject: 'connection',
@@ -152,20 +158,24 @@ export function AeAgentOperatorConsole({
     actor: 'buyer',
   })
 
-  function requestRevoke(item: AgentDetail, trigger: HTMLButtonElement) {
-    if (item.currentCredentialRef === undefined) return
+  function requestCredentialRevoke(item: AgentDetail, credentialRef: string, generation: number, trigger: HTMLButtonElement) {
     revokeTriggerRef.current = trigger
-    setRevokeTarget({ credentialRef: item.currentCredentialRef, name: item.agent.displayName })
+    setLifecycleTarget({ kind: 'credential', credentialRef, generation, name: item.agent.displayName })
   }
 
-  async function confirmRevoke() {
-    if (revokeTarget === undefined || revokeInFlightRef.current) return
-    const exactCredentialRef = revokeTarget.credentialRef
+  function requestDisconnect(item: AgentDetail, trigger: HTMLButtonElement) {
+    revokeTriggerRef.current = trigger
+    setLifecycleTarget({ kind: 'agent', principalRef: item.agent.principalRef, name: item.agent.displayName })
+  }
+
+  async function confirmLifecycle() {
+    if (lifecycleTarget === undefined || revokeInFlightRef.current) return
     revokeInFlightRef.current = true
     setRevokePending(true)
     try {
-      await onRevokeCredential(exactCredentialRef)
-      setRevokeTarget(undefined)
+      if (lifecycleTarget.kind === 'credential') await onRevokeCredential(lifecycleTarget.credentialRef)
+      else await onDisconnectAgent(lifecycleTarget.principalRef)
+      setLifecycleTarget(undefined)
     } finally {
       revokeInFlightRef.current = false
       setRevokePending(false)
@@ -268,11 +278,11 @@ export function AeAgentOperatorConsole({
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={revokeDisabled}
-                  onClick={(event) => requestRevoke(selected, event.currentTarget)}
+                  disabled={disconnectDisabled}
+                  onClick={(event) => requestDisconnect(selected, event.currentTarget)}
                   className="min-h-touch"
                 >
-                  {revoking ? 'Revoking access…' : 'Revoke access now'}
+                  {disconnecting ? 'Disconnecting agent…' : 'Disconnect agent'}
                 </Button>
               ),
             })}
@@ -280,24 +290,34 @@ export function AeAgentOperatorConsole({
         {selected === undefined ? null : (
           <div className="mt-4 grid gap-3">
             <p className="text-sm text-muted-foreground">{agentRecoveryCopy(selected)}</p>
-            <CredentialHistory detail={selected} />
+            <CredentialHistory
+              detail={selected}
+              {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
+              onRequestRevoke={(credentialRef, generation, trigger) => requestCredentialRevoke(selected, credentialRef, generation, trigger)}
+            />
           </div>
         )}
       </AeRecordSheet>
 
       <AeConfirmDialog
-        open={revokeTarget !== undefined}
+        open={lifecycleTarget !== undefined}
         onOpenChange={(open) => {
-          if (!open) setRevokeTarget(undefined)
+          if (!open) setLifecycleTarget(undefined)
         }}
-        title={revokeTarget === undefined ? 'Revoke agent access?' : `Revoke access for ${revokeTarget.name}?`}
-        description={revokeTarget === undefined
+        title={lifecycleTarget === undefined
+          ? 'Change agent access?'
+          : lifecycleTarget.kind === 'credential'
+            ? `Revoke generation ${lifecycleTarget.generation} for ${lifecycleTarget.name}?`
+            : `Disconnect ${lifecycleTarget.name}?`}
+        description={lifecycleTarget === undefined
           ? ''
-          : `New calls from ${revokeTarget.name} will stop immediately. Reconnecting this agent requires fresh authorization.`}
-        confirmLabel="Revoke agent access"
+          : lifecycleTarget.kind === 'credential'
+            ? `Only this credential stops. Any other active credential for ${lifecycleTarget.name} remains usable, and history stays attached to the agent.`
+            : `Every active credential, grant, delegation, and provider key for ${lifecycleTarget.name} will be revoked. Historical activity remains readable.`}
+        confirmLabel={lifecycleTarget?.kind === 'credential' ? 'Revoke credential' : 'Disconnect agent'}
         confirmVariant="destructive"
         pending={revokePending}
-        onConfirm={confirmRevoke}
+        onConfirm={confirmLifecycle}
         returnFocusRef={revokeTriggerRef}
       />
 
@@ -449,7 +469,15 @@ function agentFacts(detail: AgentDetail): readonly AeFact[] {
   ]
 }
 
-function CredentialHistory({ detail }: Readonly<{ detail: AgentDetail }>) {
+function CredentialHistory({
+  detail,
+  lifecyclePending,
+  onRequestRevoke,
+}: Readonly<{
+  detail: AgentDetail
+  lifecyclePending?: Readonly<{ kind: 'credential' | 'agent'; ref: string }>
+  onRequestRevoke: (credentialRef: string, generation: number, trigger: HTMLButtonElement) => void
+}>) {
   return (
     <div className="grid gap-2">
       <p className="text-sm font-medium text-foreground">Credential history</p>
@@ -460,13 +488,28 @@ function CredentialHistory({ detail }: Readonly<{ detail: AgentDetail }>) {
             className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3 text-sm"
           >
             <span>Generation {credential.generation}</span>
-            <Badge variant={credential.lifecycle === 'active' ? 'default' : 'outline'}>
-              {credential.lifecycle === 'active'
-                ? 'Current'
-                : credential.lifecycle === 'stale'
-                  ? 'Expired'
-                  : 'Revoked'}
-            </Badge>
+            <span className="flex items-center gap-2">
+              <Badge variant={credential.lifecycle === 'active' ? 'default' : 'outline'}>
+                {credential.lifecycle === 'active'
+                  ? credential.credentialRef === detail.currentCredentialRef ? 'Current' : 'Active'
+                  : credential.lifecycle === 'stale'
+                    ? 'Expired'
+                    : 'Revoked'}
+              </Badge>
+              {credential.lifecycle === 'active' ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={lifecyclePending !== undefined}
+                  onClick={(event) => onRequestRevoke(credential.credentialRef, credential.generation, event.currentTarget)}
+                >
+                  {lifecyclePending?.kind === 'credential' && lifecyclePending.ref === credential.credentialRef
+                    ? 'Revoking…'
+                    : 'Revoke'}
+                </Button>
+              ) : null}
+            </span>
           </li>
         ))}
       </ul>

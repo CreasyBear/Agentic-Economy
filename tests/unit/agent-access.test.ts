@@ -9,7 +9,6 @@ import {
   issueAgentAccessKey,
   listAgentAccessKeys,
   projectAgentAccessKey,
-  revokeAgentAccessKey,
 } from '../../src/modules/agent-access/agent-access'
 import { CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE } from '../../src/modules/agent-access/contract'
 import { defaultSandboxAgentAccessPolicy } from '../../src/modules/agent-access/sandbox-policy'
@@ -472,85 +471,5 @@ describe('agent access', () => {
     expect(list).toHaveBeenCalledWith({ subject: 'owner_123', includeInvalid: true, limit: 100 })
 
     await expect(listAgentAccessKeys({ principal: undefined, api: { list } })).resolves.toEqual([])
-  })
-  it('fails closed before Clerk when durable binding verification fails', async () => {
-    const order: string[] = []
-    const revokeGrant = vi.fn(async () => {
-      order.push('durable')
-      return { kind: 'binding_mismatch' as const, grantRef: 'setup-12345678' }
-    })
-    const revoke = vi.fn(async () => {
-      order.push('clerk')
-    })
-
-    await expect(revokeAgentAccessKey({
-      principal: { userId: 'owner_123' },
-      keyId: 'key_1234',
-      api: { get: vi.fn().mockResolvedValue(existingKey({ id: 'key_1234' })), revoke },
-      revokeGrant,
-    })).resolves.toEqual({ kind: 'error', code: 'revocation_unavailable', retryable: true })
-    expect(revokeGrant).toHaveBeenCalledWith(expect.objectContaining({
-      grantRef: 'setup-12345678',
-      ownerId: 'owner_123',
-      credentialId: 'key_1234',
-      principalId: 'clerk_api_key:key_1234',
-    }))
-    expect(order).toEqual(['durable'])
-    expect(revoke).not.toHaveBeenCalled()
-  })
-
-  it('allows Clerk revocation after durable revoke or replay', async () => {
-    const order: string[] = []
-    const revoke = vi.fn(async () => {
-      order.push('clerk')
-    })
-    const revokeGrant = vi.fn(async () => {
-      order.push('durable')
-      return { kind: 'already_revoked' as const, grantRef: 'setup-12345678', generation: 3 }
-    })
-
-    await expect(revokeAgentAccessKey({
-      principal: { userId: 'owner_123' },
-      keyId: 'key_1234',
-      api: { get: vi.fn().mockResolvedValue(existingKey({ id: 'key_1234' })), revoke },
-      revokeGrant,
-    })).resolves.toEqual({ kind: 'revoked', keyId: 'key_1234' })
-    expect(order).toEqual(['durable', 'clerk'])
-  })
-
-  it('keeps durable revocation retryable when Clerk fails afterward', async () => {
-    const order: string[] = []
-    const revokeGrant = vi.fn(async () => {
-      order.push('durable')
-      return { kind: 'revoked' as const, grantRef: 'setup-12345678', generation: 1 }
-    })
-    const revoke = vi.fn(async () => {
-      order.push('clerk')
-      throw new Error('clerk_unavailable')
-    })
-
-    await expect(revokeAgentAccessKey({
-      principal: { userId: 'owner_123' },
-      keyId: 'key_1234',
-      api: { get: vi.fn().mockResolvedValue(existingKey({ id: 'key_1234' })), revoke },
-      revokeGrant,
-    })).resolves.toEqual({ kind: 'error', code: 'revocation_unavailable', retryable: true })
-    expect(order).toEqual(['durable', 'clerk'])
-  })
-
-  it('requires a non-empty durable grant reference before either revoke port', async () => {
-    const revokeGrant = vi.fn()
-    const revoke = vi.fn()
-    await expect(revokeAgentAccessKey({
-      principal: { userId: 'owner_123' },
-      keyId: 'key_1234',
-      api: {
-        get: vi.fn().mockResolvedValue(existingKey({ id: 'key_1234', claims: { ...canonicalClaims, aeGrantRef: ' ' } })),
-        revoke,
-      },
-      revokeGrant,
-    })).resolves.toEqual({ kind: 'error', code: 'key_not_found', retryable: false })
-    expect(revokeGrant).not.toHaveBeenCalled()
-    expect(revoke).not.toHaveBeenCalled()
   })
 })

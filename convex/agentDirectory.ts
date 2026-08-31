@@ -16,6 +16,10 @@ const directoryRecord = v.object({
   environment: v.union(v.literal('sandbox'), v.literal('production')),
   currentProviderCredentialId: v.string(),
   lastSeenAt: v.number(),
+  status: v.union(v.literal('connected'), v.literal('attention'), v.literal('expired'), v.literal('disconnected')),
+  admissionLifecycle: v.union(v.literal('active'), v.literal('revoked'), v.literal('expired')),
+  authorityMode: v.union(v.literal('inspect_only'), v.literal('approve_each'), v.literal('bounded_mandate'), v.literal('full_yolo')),
+  scopes: v.array(v.string()),
   credentials: v.array(v.object({
     credentialRef: v.string(),
     providerCredentialId: v.string(),
@@ -85,6 +89,20 @@ export const listOwned = query({
       if (!projectedCredentials.some(({ providerCredentialId }) => (
         providerCredentialId === admission.credentialId
       ))) return undefined
+      const currentCredential = projectedCredentials.find(({ providerCredentialId }) => providerCredentialId === admission.credentialId)
+      const currentBinding = bindings.find(({ providerIdentifier }) => providerIdentifier === admission.credentialId)
+      const providerCleanupPending = bindings.some((binding) => (
+        binding.providerNamespace === 'clerk/api-key'
+        && binding.lifecycle === 'revoked'
+        && (binding.providerState.kind !== 'known' || binding.providerState.value !== 'revoked')
+      ))
+      const status = providerCleanupPending
+        ? 'attention' as const
+        : admission.lifecycle !== 'active' || currentCredential?.lifecycle === 'revoked' || currentBinding?.lifecycle === 'revoked'
+          ? 'disconnected' as const
+          : currentCredential !== undefined && currentCredential.expiresAt <= Date.now()
+            ? 'expired' as const
+            : 'connected' as const
 
       return {
         principalRef: principal.principalRef,
@@ -93,45 +111,14 @@ export const listOwned = query({
         environment: admission.environment,
         currentProviderCredentialId: admission.credentialId,
         lastSeenAt: admission.lastSeenAt,
+        status,
+        admissionLifecycle: admission.lifecycle,
+        authorityMode: admission.authorityMode,
+        scopes: admission.scopes,
         credentials: projectedCredentials,
       }
     }))
 
     return records.flatMap((record) => record === undefined ? [] : [record])
-  },
-})
-
-export const resolveOwnedCredential = query({
-  args: { credentialRef: v.string() },
-  returns: v.union(
-    v.object({
-      kind: v.literal('resolved'),
-      providerCredentialId: v.string(),
-    }),
-    v.object({ kind: v.literal('not_found') }),
-  ),
-  handler: async (ctx, args) => {
-    const actor = await resolveBusinessActor(ctx)
-    if (actor.kind !== 'authenticated_owner') return { kind: 'not_found' as const }
-    const credential = await ctx.db.query('credentials')
-      .withIndex('by_credentialRef', (index) => index.eq('credentialRef', args.credentialRef))
-      .unique()
-    if (credential === null) return { kind: 'not_found' as const }
-    const [membership, binding] = await Promise.all([
-      ctx.db.query('memberships')
-        .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (index) => index
-          .eq('accountRef', actor.canonicalAccountRef)
-          .eq('memberPrincipalRef', credential.principalRef)
-          .eq('lifecycle', 'active'))
-        .unique(),
-      ctx.db.query('externalIdentityBindings')
-        .withIndex('by_bindingRef', (index) => index.eq('bindingRef', credential.bindingRef))
-        .unique(),
-    ])
-    if (membership === null
-      || binding === null
-      || binding.principalRef !== credential.principalRef
-      || binding.providerNamespace !== 'clerk/api-key') return { kind: 'not_found' as const }
-    return { kind: 'resolved' as const, providerCredentialId: binding.providerIdentifier }
   },
 })

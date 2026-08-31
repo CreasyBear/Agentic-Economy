@@ -14,12 +14,9 @@ import {
 } from './policy'
 import type {
   AgentAccessGrantRegistrationResult,
-  AgentAccessGrantRevocationInput,
-  AgentAccessGrantRevocationResult,
 } from './agent-access'
 
 const REGISTER_GRANT_SERVER_OPERATION = 'agentAccessPolicy.registerGrantForServer'
-const REVOKE_GRANT_SERVER_OPERATION = 'agentAccessPolicy.revokeGrantForServer'
 
 type GrantServerRefusal = Readonly<{ kind: 'refused'; code: 'authentication_required' }>
 type RegisterAgentAccessGrantArgs = Readonly<{
@@ -38,16 +35,9 @@ type RegisterAgentAccessGrantSourceResult = Readonly<{
   code: 'grant_exists' | 'generation_stale' | 'grant_material_invalid'
 }> | GrantServerRefusal
 
-type RevokeAgentAccessGrantArgs = AgentAccessGrantRevocationInput & Readonly<{
-  serviceAuth: CustomerRequestServiceAssertion
-}>
-type RevokeAgentAccessGrantSourceResult = AgentAccessGrantRevocationResult | GrantServerRefusal
 
 const registerAgentAccessGrantMutation = sourceMutation<RegisterAgentAccessGrantArgs, RegisterAgentAccessGrantSourceResult>(
   'agentAccessPolicy:registerGrantForServer',
-)
-const revokeAgentAccessGrantMutation = sourceMutation<RevokeAgentAccessGrantArgs, RevokeAgentAccessGrantSourceResult>(
-  'agentAccessPolicy:revokeGrantForServer',
 )
 
 export async function registerAgentAccessGrant(input: AgentAccessGrantInput): Promise<AgentAccessGrantRegistrationResult> {
@@ -69,22 +59,6 @@ export async function registerAgentAccessGrant(input: AgentAccessGrantInput): Pr
   } catch {
     return { kind: 'unavailable' }
   }
-}
-
-export async function revokeAgentAccessGrant(
-  input: AgentAccessGrantRevocationInput,
-): Promise<AgentAccessGrantRevocationResult> {
-  const serviceAuth = await createAgentAccessServerAssertion(
-    REVOKE_GRANT_SERVER_OPERATION,
-    toStableHashValue(input),
-    input,
-  )
-  const result = await callPublicSourceMutation(revokeAgentAccessGrantMutation, {
-    ...input,
-    serviceAuth,
-  })
-  if (result.kind === 'refused') throw new Error('agent_access_grant_server_auth_rejected')
-  return result
 }
 
 async function createAgentAccessServerAssertion(

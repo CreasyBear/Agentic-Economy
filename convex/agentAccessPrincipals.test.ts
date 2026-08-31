@@ -43,6 +43,20 @@ const promoteReplacement = makeFunctionReference<'mutation', AgentCredentialRepl
 const cancelReplacement = makeFunctionReference<'mutation', AgentCredentialReplacementTransition & { serviceAuth: CustomerRequestServiceAssertion }, RegisterResult>(
   'agentAccessPrincipals:cancelCredentialReplacementForServer',
 )
+const revokeCredentialLifecycle = makeFunctionReference<'mutation', { credentialRef: string; correlationRef: string; serviceAuth: CustomerRequestServiceAssertion }, RegisterResult>(
+  'agentAccessPrincipals:revokeCredentialForServer',
+)
+const disconnectAgentLifecycle = makeFunctionReference<'mutation', { principalRef: string; correlationRef: string; serviceAuth: CustomerRequestServiceAssertion }, RegisterResult>(
+  'agentAccessPrincipals:disconnectAgentForServer',
+)
+const recordProviderRevocation = makeFunctionReference<'mutation', {
+  principalRef: string
+  credentialRef: string
+  providerCredentialId: string
+  correlationRef: string
+  outcome: 'revoked' | 'failed'
+  serviceAuth: CustomerRequestServiceAssertion
+}, RegisterResult>('agentAccessPrincipals:recordProviderRevocationForServer')
 
 function bindingInput(subject = 'user_owner'): IssuedAgentBindingRegistration {
   const issuanceKey = 'device-binding-12345678'
@@ -154,10 +168,6 @@ describe('issued agent binding', () => {
         lifecycle: 'active',
       })],
     })])
-    await expect(owner.query(api.agentDirectory.resolveOwnedCredential, {
-      credentialRef: refs.credentialRef,
-    })).resolves.toEqual({ kind: 'resolved', providerCredentialId: input.credentialId })
-
     const conflicting = { ...input, credentialId: 'key_different_first_credential' }
     const conflictingRefs = issuedAgentCanonicalRefs({
       ownerAccountRef: recordedAccess.ownerId,
@@ -320,5 +330,124 @@ describe('issued agent binding', () => {
       credentialId: 'key_tampered_binding',
       serviceAuth,
     })).resolves.toEqual({ kind: 'refused', code: 'authentication_required' })
+  })
+
+  it('revokes one credential or disconnects one agent without crossing principal boundaries', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const agentA = bindingInput()
+    const agentBIssuance = 'agent-b-issuance-12345678'
+    const agentB = {
+      ...bindingInput(), issuanceKey: agentBIssuance, credentialId: 'key_agent_b',
+      grantRef: issuedAgentGrantRef('user_owner', agentBIssuance),
+    }
+    await owner.mutation(registerIssuedBinding, { ...agentA, serviceAuth: await assertion(agentA) })
+    await owner.mutation(registerIssuedBinding, { ...agentB, serviceAuth: await assertion(agentB) })
+    const rows = await owner.query(api.agentDirectory.listOwned, {})
+    const principalA = rows.find((row) => row.currentProviderCredentialId === agentA.credentialId)?.principalRef
+    const principalB = rows.find((row) => row.currentProviderCredentialId === agentB.credentialId)?.principalRef
+    if (principalA === undefined || principalB === undefined) throw new Error('agent principal missing')
+    const credentialA = rows.find((row) => row.principalRef === principalA)?.credentials[0]?.credentialRef
+    if (credentialA === undefined) throw new Error('credential missing')
+
+    const extraIssuance = 'agent-a-extra-credential-12345678'
+    const extra: AgentCredentialReplacementRegistration = {
+      principalRef: principalA,
+      issuanceKey: extraIssuance,
+      grantRef: issuedAgentGrantRef('user_owner', extraIssuance),
+      credentialId: 'key_agent_a_extra',
+      applicationRef: agentA.applicationRef,
+      environment: agentA.environment,
+      scopes: agentA.scopes,
+      authorityMode: agentA.authorityMode,
+      policy: agentA.policy,
+      createdAt: NOW,
+      expiresAt: NOW + 600_000,
+    }
+    const extraPrepared = await owner.mutation(prepareReplacement, {
+      ...extra,
+      serviceAuth: await operationAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...extra, scopes: [...extra.scopes] },
+      ),
+    })
+    const extraCredentialRef = String(extraPrepared.successorCredentialRef)
+    const revokeExtra = { credentialRef: extraCredentialRef, correlationRef: 'corr-revoke-a-extra' }
+    const revokedExtra = await owner.mutation(revokeCredentialLifecycle, {
+      ...revokeExtra,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.revokeCredentialForServer', revokeExtra),
+    })
+    expect(revokedExtra).toMatchObject({ kind: 'completed', principalRef: principalA })
+    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ principalRef: principalA, status: 'attention', currentProviderCredentialId: agentA.credentialId }),
+      expect.objectContaining({ principalRef: principalB, status: 'connected' }),
+    ]))
+    const extraProvider = {
+      principalRef: principalA,
+      credentialRef: extraCredentialRef,
+      providerCredentialId: extra.credentialId,
+      correlationRef: revokeExtra.correlationRef,
+      outcome: 'revoked' as const,
+    }
+    await owner.mutation(recordProviderRevocation, {
+      ...extraProvider,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', extraProvider),
+    })
+    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ principalRef: principalA, status: 'connected', currentProviderCredentialId: agentA.credentialId }),
+    ]))
+
+    const revokeCommand = { credentialRef: credentialA, correlationRef: 'corr-revoke-a' }
+    const revokeAuth = await operationAssertion('agentAccessPrincipals.revokeCredentialForServer', revokeCommand)
+    const revoked = await owner.mutation(revokeCredentialLifecycle, { ...revokeCommand, serviceAuth: revokeAuth })
+    expect(revoked).toMatchObject({ kind: 'completed', principalRef: principalA })
+    expect(revoked.providerTargets).toEqual([expect.objectContaining({ providerCredentialId: agentA.credentialId })])
+    await expect(owner.mutation(revokeCredentialLifecycle, { ...revokeCommand, serviceAuth: revokeAuth }))
+      .resolves.toMatchObject({ kind: 'replayed', principalRef: principalA })
+
+    const providerCommand = {
+      principalRef: principalA,
+      credentialRef: credentialA,
+      providerCredentialId: agentA.credentialId,
+      correlationRef: 'corr-revoke-a',
+      outcome: 'failed' as const,
+    }
+    await expect(owner.mutation(recordProviderRevocation, {
+      ...providerCommand,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', providerCommand),
+    })).resolves.toEqual({ kind: 'completed' })
+    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ principalRef: principalA, status: 'attention' }),
+      expect.objectContaining({ principalRef: principalB, status: 'connected' }),
+    ]))
+    const providerCompleted = { ...providerCommand, outcome: 'revoked' as const }
+    await expect(owner.mutation(recordProviderRevocation, {
+      ...providerCompleted,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', providerCompleted),
+    })).resolves.toEqual({ kind: 'completed' })
+    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        principalRef: principalA,
+        status: 'disconnected',
+        credentials: expect.arrayContaining([expect.objectContaining({ credentialRef: credentialA, lifecycle: 'revoked' })]),
+      }),
+    ]))
+
+    const disconnectCommand = { principalRef: principalB, correlationRef: 'corr-disconnect-b' }
+    const disconnectAuth = await operationAssertion('agentAccessPrincipals.disconnectAgentForServer', disconnectCommand)
+    await expect(owner.mutation(disconnectAgentLifecycle, { ...disconnectCommand, serviceAuth: disconnectAuth }))
+      .resolves.toMatchObject({ kind: 'completed', principalRef: principalB })
+    await expect(owner.mutation(disconnectAgentLifecycle, { ...disconnectCommand, serviceAuth: disconnectAuth }))
+      .resolves.toMatchObject({ kind: 'replayed', principalRef: principalB })
+    const finalRows = await owner.query(api.agentDirectory.listOwned, {})
+    expect(finalRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ principalRef: principalA }),
+      expect.objectContaining({ principalRef: principalB, status: 'attention' }),
+    ]))
+    await expect(backend.run(async (ctx) => ({
+      principal: await ctx.db.query('principals').withIndex('by_principalRef', (query) => query.eq('principalRef', principalB)).unique(),
+      membership: await ctx.db.query('memberships').withIndex('by_memberPrincipalRef_and_lifecycle', (query) => query.eq('memberPrincipalRef', principalB).eq('lifecycle', 'active')).unique(),
+    }))).resolves.toMatchObject({ principal: { lifecycle: 'active' }, membership: { lifecycle: 'active' } })
   })
 })

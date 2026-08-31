@@ -9,7 +9,6 @@ const serverMocks = vi.hoisted(() => ({
   sourceQuery: vi.fn((name: string) => ({ name })),
   sourceMutation: vi.fn((name: string) => ({ name })),
   registerAgentAccessGrant: vi.fn(),
-  revokeAgentAccessGrant: vi.fn(),
 }))
 
 vi.mock('@clerk/tanstack-react-start/server', () => ({
@@ -31,12 +30,13 @@ vi.mock('@/lib/server/convex-source', () => ({
 }))
 vi.mock('@/modules/agent-access/policy.functions', () => ({
   registerAgentAccessGrant: serverMocks.registerAgentAccessGrant,
-  revokeAgentAccessGrant: serverMocks.revokeAgentAccessGrant,
 }))
 
 import {
   buildOwnerAgentAccessPolicy,
+  disconnectAgentServer,
   issueAgentAccessKeyServer,
+  revokeAgentCredentialServer,
 } from '@/modules/agent-access/agent-access.functions'
 
 const amount = (units: string) => ({ currency: 'USD', units, exponent: 2 })
@@ -169,5 +169,52 @@ describe('owner agent-access issuance policy', () => {
       data: { name: 'Server assistant', idempotencyKey: 'identity-12345678' },
     })).resolves.toEqual({ kind: 'error', code: 'missing_auth', retryable: false })
     expect(serverMocks.clerkClient).not.toHaveBeenCalled()
+  })
+
+  it('reports provider cleanup failure as partial and retries from canonical replay', async () => {
+    const canonical = {
+      kind: 'completed' as const,
+      principalRef: 'prn_agent_a',
+      providerTargets: [{ credentialRef: 'crd_agent_a', providerCredentialId: 'key_agent_a' }],
+      correlationRef: 'corr-agent-a',
+    }
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }, input: Record<string, unknown>) => {
+      if (reference.name === 'agentAccessPrincipals:revokeCredentialForServer') return canonical
+      if (reference.name === 'agentAccessPrincipals:recordProviderRevocationForServer') {
+        expect(input).toMatchObject({ outcome: 'failed', providerCredentialId: 'key_agent_a' })
+        return { kind: 'completed' }
+      }
+      throw new Error(`unexpected mutation ${reference.name}`)
+    })
+    clerkApi.get.mockResolvedValue({ id: 'key_agent_a', subject: 'user_123', name: 'Agent A', revoked: false, expired: false, claims: {} })
+    clerkApi.revoke.mockRejectedValueOnce(new Error('provider unavailable'))
+
+    await expect(revokeAgentCredentialServer({ data: { credentialRef: 'crd_agent_a' } }))
+      .resolves.toMatchObject({ kind: 'partial', principalRef: 'prn_agent_a', retryable: true })
+
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }, input: Record<string, unknown>) => {
+      if (reference.name === 'agentAccessPrincipals:revokeCredentialForServer') return { ...canonical, kind: 'replayed' }
+      if (reference.name === 'agentAccessPrincipals:recordProviderRevocationForServer') {
+        expect(input).toMatchObject({ outcome: 'revoked', providerCredentialId: 'key_agent_a' })
+        return { kind: 'completed' }
+      }
+      throw new Error(`unexpected mutation ${reference.name}`)
+    })
+    clerkApi.get.mockResolvedValue({ id: 'key_agent_a', subject: 'user_123', name: 'Agent A', revoked: true, expired: false, claims: {} })
+    await expect(revokeAgentCredentialServer({ data: { credentialRef: 'crd_agent_a' } }))
+      .resolves.toMatchObject({ kind: 'replayed', principalRef: 'prn_agent_a' })
+  })
+
+  it('disconnects only the canonical principal selected by the owner', async () => {
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }, input: Record<string, unknown>) => {
+      if (reference.name === 'agentAccessPrincipals:disconnectAgentForServer') {
+        expect(input).toMatchObject({ principalRef: 'prn_agent_a' })
+        return { kind: 'completed', principalRef: 'prn_agent_a', providerTargets: [], correlationRef: 'corr-disconnect-a' }
+      }
+      throw new Error(`unexpected mutation ${reference.name}`)
+    })
+    await expect(disconnectAgentServer({ data: { principalRef: 'prn_agent_a' } }))
+      .resolves.toEqual({ kind: 'completed', principalRef: 'prn_agent_a', correlationRef: 'corr-disconnect-a' })
+    expect(clerkApi.revoke).not.toHaveBeenCalled()
   })
 })
