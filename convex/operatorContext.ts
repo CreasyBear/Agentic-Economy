@@ -14,7 +14,7 @@ const operatorContextResult = v.union(
     kind: v.literal('authorized'),
     userId: v.string(),
     principalRef: v.string(),
-    accountRef: v.string(),
+    accountRef: v.optional(v.string()),
     allowedSurfaces: v.array(operatorSurface),
   }),
   v.object({
@@ -24,9 +24,9 @@ const operatorContextResult = v.union(
 )
 
 /**
- * Resolve shell access from the same canonical Principal and Account facts
- * used by consequence-bearing owner operations. Clerk identity locates those
- * facts but never supplies ownership itself.
+ * Resolve shell access from canonical Principal, Account, and active admin
+ * membership facts. Clerk identity locates those facts but never supplies
+ * ownership or admin authority itself.
  */
 export const readCurrent = query({
   args: {},
@@ -37,22 +37,50 @@ export const readCurrent = query({
       return { kind: 'denied' as const, reason: 'canonical_owner_required' as const }
     }
 
-    const actor = await resolveBusinessActor(ctx)
-    if (actor.kind !== 'authenticated_owner') {
+    const [actor, adminMembership] = await Promise.all([
+      resolveBusinessActor(ctx),
+      readCurrentActiveAdminMembership(ctx),
+    ])
+    if (actor.kind !== 'authenticated_owner' && adminMembership === undefined) {
       return { kind: 'denied' as const, reason: 'canonical_owner_required' as const }
     }
 
-    const adminMembership = await readCurrentActiveAdminMembership(ctx)
-    const allowedSurfaces = adminMembership === undefined
-      ? ['owner', 'developer'] as const
-      : ['owner', 'admin', 'developer'] as const
+    if (actor.kind === 'authenticated_owner') {
+      const allowedSurfaces = adminMembership === undefined
+        ? ['owner', 'developer'] as const
+        : ['owner', 'admin', 'developer'] as const
+
+      return {
+        kind: 'authorized' as const,
+        userId: identity.subject,
+        principalRef: actor.canonicalPrincipalRef,
+        accountRef: actor.canonicalAccountRef,
+        allowedSurfaces: [...allowedSurfaces],
+      }
+    }
+
+    const binding = await ctx.db
+      .query('externalIdentityBindings')
+      .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+        .eq('providerNamespace', 'clerk/user')
+        .eq('providerIdentifier', identity.tokenIdentifier))
+      .unique()
+    if (binding === null || binding.lifecycle !== 'active') {
+      return { kind: 'denied' as const, reason: 'canonical_owner_required' as const }
+    }
+    const principal = await ctx.db
+      .query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', binding.principalRef))
+      .unique()
+    if (principal === null || principal.kind !== 'human' || principal.lifecycle !== 'active') {
+      return { kind: 'denied' as const, reason: 'canonical_owner_required' as const }
+    }
 
     return {
       kind: 'authorized' as const,
       userId: identity.subject,
-      principalRef: actor.canonicalPrincipalRef,
-      accountRef: actor.canonicalAccountRef,
-      allowedSurfaces: [...allowedSurfaces],
+      principalRef: principal.principalRef,
+      allowedSurfaces: [...(['admin', 'developer'] as const)],
     }
   },
 })

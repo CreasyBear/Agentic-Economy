@@ -6,7 +6,7 @@ export type OperatorContext = Readonly<{
   kind: 'authorized'
   userId: string
   principalRef: string
-  accountRef: string
+  accountRef?: string
   allowedSurfaces: readonly OperatorSurface[]
 }>
 
