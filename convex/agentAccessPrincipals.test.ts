@@ -641,6 +641,10 @@ describe('issued agent binding', () => {
       ...providerCommand,
       serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', providerCommand),
     })).resolves.toEqual({ kind: 'completed' })
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessProviderRevocations')
+      .withIndex('by_principalRef_and_lifecycle', (query) => query
+        .eq('principalRef', principalA).eq('lifecycle', 'pending'))
+      .collect())).resolves.toHaveLength(1)
     await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ principalRef: principalA, status: 'attention' }),
       expect.objectContaining({ principalRef: principalB, status: 'connected' }),
@@ -650,6 +654,10 @@ describe('issued agent binding', () => {
       ...providerCompleted,
       serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', providerCompleted),
     })).resolves.toEqual({ kind: 'completed' })
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessProviderRevocations')
+      .withIndex('by_principalRef_and_lifecycle', (query) => query
+        .eq('principalRef', principalA).eq('lifecycle', 'pending'))
+      .collect())).resolves.toHaveLength(0)
     await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({
         principalRef: principalA,
@@ -773,6 +781,10 @@ describe('issued agent binding', () => {
     expect(first).toMatchObject({ kind: 'completed', hasMore: true })
     const firstTargets = first.providerTargets as Array<{ credentialRef: string; providerCredentialId: string }>
     expect(firstTargets).toHaveLength(25)
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessProviderRevocations')
+      .withIndex('by_principalRef_and_lifecycle', (query) => query
+        .eq('principalRef', agent.principalRef).eq('lifecycle', 'pending'))
+      .collect())).resolves.toHaveLength(25)
     for (const target of firstTargets) {
       const provider = { ...target, principalRef: agent.principalRef, correlationRef: command.correlationRef, outcome: 'revoked' as const }
       await owner.mutation(recordProviderRevocation, {
@@ -784,5 +796,9 @@ describe('issued agent binding', () => {
     const second = await owner.mutation(disconnectAgentLifecycle, { ...command, serviceAuth })
     expect(second).toMatchObject({ hasMore: false })
     expect(second.providerTargets as unknown[]).toHaveLength(5)
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessProviderRevocations')
+      .withIndex('by_principalRef_and_lifecycle', (query) => query
+        .eq('principalRef', agent.principalRef).eq('lifecycle', 'pending'))
+      .collect())).resolves.toHaveLength(5)
   })
 })

@@ -72,7 +72,6 @@ export const credentialValue = v.object({
   predecessorCredentialRef: v.optional(v.string()),
   staleAt: v.optional(v.number()),
   revokedAt: v.optional(v.number()),
-  providerRevocationPending: v.optional(v.boolean()),
 })
 
 export const externalIdentityTables = {
@@ -85,7 +84,6 @@ export const externalIdentityTables = {
     .index('by_credentialRef', ['credentialRef'])
     .index('by_bindingRef_and_generation_and_lifecycle', ['bindingRef', 'generation', 'lifecycle'])
     .index('by_principalRef_and_lifecycle', ['principalRef', 'lifecycle'])
-    .index('by_principalRef_and_providerRevocationPending', ['principalRef', 'providerRevocationPending'])
     .index('by_principalRef_and_issueIdempotencyRef', ['principalRef', 'issueIdempotencyRef'])
     .index('by_predecessorCredentialRef', ['predecessorCredentialRef']),
 } as const
