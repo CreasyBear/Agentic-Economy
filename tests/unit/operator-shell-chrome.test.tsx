@@ -204,6 +204,23 @@ describe('operator shell nested chrome', () => {
     expect(screen.getByRole('link', { name: 'Check system status' }).getAttribute('href')).toBe('/status')
   })
 
+  it('keeps a safe correlation reference visible on route failure', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="owner"
+        title="Settings"
+        description="Account settings."
+        currentPath="/owner/settings"
+      >
+        <OperatorRouteError error={{ correlationRef: 'corr_operator_route_123' }} />
+      </AeOperatorShell>,
+      '/owner/settings',
+    )
+
+    expect(await screen.findByText('corr_operator_route_123')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy support reference' })).toBeTruthy()
+  })
+
   it('keeps the shell and offers recovery when the signed-in account lacks the requested surface', async () => {
     renderAt(
       <AeOperatorShell

@@ -3,6 +3,7 @@ import { Link, useLocation } from '@tanstack/react-router'
 import { SignOutButton } from '@clerk/tanstack-react-start'
 
 import { AeOperatorShell, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorShell'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -46,10 +47,10 @@ export function OperatorRouteError({ error }: { error: unknown }) {
   const { pathname } = useLocation()
   const parentShell = useOperatorShellChrome()
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
+  const correlationRef = operatorErrorCorrelationRef(error)
 
   if (isOperatorSurfaceForbidden(error)) {
-    const body = <OperatorForbiddenBody />
-    if (parentShell !== null) return body
+    if (parentShell !== null) return <OperatorForbiddenBody />
     return (
       <AeOperatorShell
         operatorRole={operatorRole}
@@ -57,7 +58,7 @@ export function OperatorRouteError({ error }: { error: unknown }) {
         description="This signed-in account cannot open the requested workspace."
         currentPath={pathname}
       >
-        {body}
+        <OperatorForbiddenBody />
       </AeOperatorShell>
     )
   }
@@ -67,6 +68,9 @@ export function OperatorRouteError({ error }: { error: unknown }) {
       <AlertTitle>Couldn’t load this page</AlertTitle>
       <AlertDescription>
         <p>Try loading it again. If it still fails, check system status before repeating an Operation call.</p>
+        {correlationRef === undefined
+          ? null
+          : <AeCopyReference label="support reference" value={correlationRef} />}
         <div className="flex w-full flex-wrap gap-intra">
           <Button type="button" className="min-h-touch" onClick={() => window.location.reload()}>
             Try again
@@ -91,6 +95,17 @@ export function OperatorRouteError({ error }: { error: unknown }) {
       {body}
     </AeOperatorShell>
   )
+}
+
+function operatorErrorCorrelationRef(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined
+  for (const key of ['correlationRef', 'correlationId'] as const) {
+    const value = Reflect.get(error, key)
+    if (typeof value === 'string' && value.trim().length > 0 && value.length <= 200) {
+      return value
+    }
+  }
+  return undefined
 }
 
 function OperatorForbiddenBody() {
