@@ -6,6 +6,7 @@ import { useServerFn } from '@tanstack/react-start'
 
 import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
@@ -21,6 +22,15 @@ import {
 } from '@/modules/capability-execution/operation-approval.functions'
 
 export type AgentAccessSearch = Readonly<{ caller?: string }>
+
+type LifecycleCommand = Readonly<{ kind: 'credential' | 'agent'; ref: string }>
+
+type LifecycleIssue = Readonly<{
+  title: string
+  message: string
+  correlationRef?: string
+  retry?: LifecycleCommand
+}>
 
 const canonicalPrincipalIdPattern = /^prn_[0-9a-f]{32}$/u
 
@@ -63,8 +73,9 @@ function AgentAccessHome() {
   const disconnectAgent = useServerFn(disconnectAgentServer)
   const [directory, setDirectory] = useState<AgentDirectoryProjection>(initialDirectory)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string>()
-  const [lifecyclePending, setLifecyclePending] = useState<Readonly<{ kind: 'credential' | 'agent'; ref: string }>>()
+  const [directoryError, setDirectoryError] = useState<string>()
+  const [lifecycleIssue, setLifecycleIssue] = useState<LifecycleIssue>()
+  const [lifecyclePending, setLifecyclePending] = useState<LifecycleCommand>()
   const readApprovals = useServerFn(listPendingOperationApprovalsServer)
   const decideApproval = useServerFn(decideOperationApprovalServer)
   const [approvals, setApprovals] = useState<readonly PendingOperationApproval[]>([])
@@ -77,9 +88,9 @@ function AgentAccessHome() {
       setLoading(true)
     try {
       setDirectory(await readDirectory())
-      setError(undefined)
+      setDirectoryError(undefined)
     } catch {
-      setError('Agent access and balance are temporarily unavailable.')
+      setDirectoryError('Agent access and balance are temporarily unavailable.')
     } finally {
       setLoading(false)
     }
@@ -99,7 +110,7 @@ function AgentAccessHome() {
   useEffect(() => {
     if (localE2E) {
       setDirectory(emptyAgentDirectory)
-      setError(undefined)
+      setDirectoryError(undefined)
       setLoading(false)
     }
   }, [localE2E])
@@ -121,42 +132,66 @@ function AgentAccessHome() {
     }
   }, [location.hash, navigate])
 
-  async function finishLifecycle(result: AgentLifecycleResult) {
+  async function finishLifecycle(result: AgentLifecycleResult, command: LifecycleCommand) {
     if (result.kind === 'completed' || result.kind === 'replayed') {
-      setError(undefined)
+      setLifecycleIssue(undefined)
       await load()
       return
     }
     if (result.kind === 'partial') {
       await load()
-      setError(`Access is blocked in Agentic Economy, but provider cleanup needs another attempt. Reference: ${result.correlationRef}`)
+      setLifecycleIssue({
+        title: 'Provider cleanup incomplete',
+        message: 'Access is blocked in Agentic Economy, but the external provider still needs another cleanup attempt.',
+        correlationRef: result.correlationRef,
+        retry: command,
+      })
       return
     }
-    setError(result.kind === 'conflict'
-      ? `This lifecycle change conflicts with the current agent state. Reference: ${result.correlationRef}`
-      : `This lifecycle change was refused. Reference: ${result.correlationRef}`)
+    if (result.kind === 'conflict') {
+      setLifecycleIssue({
+        title: 'Agent access changed elsewhere',
+        message: 'The saved agent state no longer matches this request. Refresh the directory before deciding what to do next.',
+        correlationRef: result.correlationRef,
+      })
+      return
+    }
+    if (result.kind === 'refused') {
+      setLifecycleIssue({
+        title: 'Agent access change refused',
+        message: result.code === 'authentication_required'
+          ? 'Your owner session no longer authorizes this change. Sign in again before retrying.'
+          : 'The access service is temporarily unavailable. The requested change was not reported as complete.',
+        correlationRef: result.correlationRef,
+        ...(result.code === 'source_unavailable' ? { retry: command } : {}),
+      })
+    }
   }
 
-  async function revoke(credentialRef: string) {
-    setLifecyclePending({ kind: 'credential', ref: credentialRef })
+  async function runLifecycle(command: LifecycleCommand) {
+    setLifecyclePending(command)
     try {
-      await finishLifecycle(await revokeCredential({ data: { credentialRef } }))
+      const result = command.kind === 'credential'
+        ? await revokeCredential({ data: { credentialRef: command.ref } })
+        : await disconnectAgent({ data: { principalRef: command.ref } })
+      await finishLifecycle(result, command)
     } catch {
-      setError('Credential revocation is temporarily unavailable. Try again.')
+      setLifecycleIssue({
+        title: command.kind === 'credential' ? 'Credential revocation unavailable' : 'Agent disconnection unavailable',
+        message: 'The access service did not confirm the change. Retry the same request before taking another action.',
+        retry: command,
+      })
     } finally {
       setLifecyclePending(undefined)
     }
   }
 
-  async function disconnect(principalRef: string) {
-    setLifecyclePending({ kind: 'agent', ref: principalRef })
-    try {
-      await finishLifecycle(await disconnectAgent({ data: { principalRef } }))
-    } catch {
-      setError('Agent disconnection is temporarily unavailable. Try again.')
-    } finally {
-      setLifecyclePending(undefined)
-    }
+  function revoke(credentialRef: string) {
+    return runLifecycle({ kind: 'credential', ref: credentialRef })
+  }
+
+  function disconnect(principalRef: string) {
+    return runLifecycle({ kind: 'agent', ref: principalRef })
   }
 
   async function decidePendingApproval(invocationRef: string, operationRef: string, decision: 'approve' | 'deny') {
@@ -200,12 +235,37 @@ function AgentAccessHome() {
           </Alert>
         </div>
       ) : null}
-      {error === undefined ? null : (
+      {directoryError === undefined ? null : (
         <Alert variant="destructive">
           <AlertTitle>Agent access unavailable</AlertTitle>
           <AlertDescription>
-            <p>{error}</p>
+            <p>{directoryError}</p>
             <Button type="button" variant="secondary" disabled={loading} onClick={() => void load()}>{loading ? 'Trying again…' : 'Try again'}</Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {lifecycleIssue === undefined ? null : (
+        <Alert variant="destructive">
+          <AlertTitle>{lifecycleIssue.title}</AlertTitle>
+          <AlertDescription className="grid gap-3">
+            <p>{lifecycleIssue.message}</p>
+            {lifecycleIssue.correlationRef === undefined
+              ? null
+              : <AeCopyReference label="support reference" value={lifecycleIssue.correlationRef} />}
+            {lifecycleIssue.retry === undefined ? null : (
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-fit"
+                disabled={lifecyclePending !== undefined}
+                onClick={() => {
+                  const retry = lifecycleIssue.retry
+                  if (retry !== undefined) void runLifecycle(retry)
+                }}
+              >
+                {lifecyclePending === undefined ? 'Retry cleanup' : 'Retrying cleanup…'}
+              </Button>
+            )}
           </AlertDescription>
         </Alert>
       )}
@@ -220,7 +280,7 @@ function AgentAccessHome() {
         onRevokeCredential={(credentialRef) => revoke(credentialRef)}
         onDisconnectAgent={(principalRef) => disconnect(principalRef)}
         {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
-        accessUnavailable={error !== undefined}
+        accessUnavailable={directoryError !== undefined}
         approvals={approvals}
         approvalsLoading={approvalsLoading}
         {...(approvalsError === undefined ? {} : { approvalsError })}

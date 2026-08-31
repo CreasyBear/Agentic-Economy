@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -237,5 +237,40 @@ describe('agent-access caller route continuation', () => {
     await waitFor(() => expect(revoke).toHaveBeenCalledWith({ data: { credentialRef: `credential:${KEY_ID}` } }))
     expect(JSON.stringify(revoke.mock.calls)).not.toContain(PRINCIPAL_ID)
     expect(JSON.stringify(revoke.mock.calls)).not.toContain(FOREIGN_PRINCIPAL_ID)
+  })
+
+  it('keeps the directory visible and retries the exact cleanup after a partial provider failure', async () => {
+    const revoke = vi.fn()
+      .mockResolvedValueOnce({
+        kind: 'partial' as const,
+        principalRef: PRINCIPAL_ID,
+        correlationRef: 'corr-provider-cleanup',
+        retryable: true as const,
+      })
+      .mockResolvedValueOnce({
+        kind: 'completed' as const,
+        principalRef: PRINCIPAL_ID,
+        correlationRef: 'corr-provider-cleanup-retry',
+      })
+    installServerFns()
+    routeHarness.serverFns.set(routeHarness.revokeRef, revoke)
+    renderRoute()
+
+    await waitFor(() => expect(routeHarness.consoleProps?.directory).toEqual(directory))
+    const onRevoke = routeHarness.consoleProps?.onRevokeCredential as ((credentialRef: string) => Promise<void>) | undefined
+    await act(async () => onRevoke?.(`credential:${KEY_ID}`))
+
+    expect(screen.getByText('Provider cleanup incomplete')).toBeTruthy()
+    expect(screen.getByText('corr-provider-cleanup')).toBeTruthy()
+    expect(routeHarness.consoleProps?.accessUnavailable).toBe(false)
+    expect(routeHarness.consoleProps?.directory).toEqual(directory)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry cleanup' }))
+    await waitFor(() => expect(revoke).toHaveBeenCalledTimes(2))
+    expect(revoke.mock.calls).toEqual([
+      [{ data: { credentialRef: `credential:${KEY_ID}` } }],
+      [{ data: { credentialRef: `credential:${KEY_ID}` } }],
+    ])
+    await waitFor(() => expect(screen.queryByText('Provider cleanup incomplete')).toBeNull())
   })
 })
