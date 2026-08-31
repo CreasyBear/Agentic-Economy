@@ -37,9 +37,9 @@ const directoryRecord = v.object({
  * admission rows must all agree before an agent is returned.
  */
 export const listOwned = query({
-  args: {},
+  args: { now: v.number() },
   returns: v.array(directoryRecord),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner') return []
 
@@ -100,7 +100,7 @@ export const listOwned = query({
         ? 'attention' as const
         : admission.lifecycle !== 'active' || currentCredential?.lifecycle === 'revoked' || currentBinding?.lifecycle === 'revoked'
           ? 'disconnected' as const
-          : currentCredential !== undefined && currentCredential.expiresAt <= Date.now()
+          : currentCredential !== undefined && currentCredential.expiresAt <= args.now
             ? 'expired' as const
             : 'connected' as const
 

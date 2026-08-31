@@ -43,7 +43,7 @@ export type CanonicalAgentDirectoryRecord = Readonly<{
     expiresAt: number
   }>[]
 }>
-const listOwnedAgentDirectoryQuery = sourceQuery<Record<string, never>, readonly CanonicalAgentDirectoryRecord[]>(
+const listOwnedAgentDirectoryQuery = sourceQuery<Readonly<{ now: number }>, readonly CanonicalAgentDirectoryRecord[]>(
   'agentDirectory:listOwned',
 )
 
@@ -57,7 +57,7 @@ export async function loadAgentDirectoryReadback(
   ])
   const [grants, canonicalAgents] = await Promise.all([
     source.query(listOwnerGrantReadbacksQuery, {}),
-    source.query(listOwnedAgentDirectoryQuery, {}),
+    source.query(listOwnedAgentDirectoryQuery, { now: Date.now() }),
   ])
   const sources = await readAgentCredentialSources(keys, createConvexMoneyQueryPort(), grants)
   return await enrichAgentDirectoryActivity(projectAgentDirectory(sources, canonicalAgents), operations)

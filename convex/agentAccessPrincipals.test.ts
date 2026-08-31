@@ -157,7 +157,7 @@ describe('issued agent binding', () => {
     expect(rows.delegation).toMatchObject({ subjectPrincipalRef: refs.principalRef, resourceRefs: ['*'] })
     expect(rows.accessPrincipal).toMatchObject({ principalId: refs.principalRef, ownerId: rows.membership?.accountRef })
     expect(rows.accessGrant).toMatchObject({ principalId: refs.principalRef, ownerId: rows.membership?.accountRef })
-    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual([expect.objectContaining({
+    await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual([expect.objectContaining({
       principalRef: refs.principalRef,
       displayName: input.displayName,
       currentProviderCredentialId: input.credentialId,
@@ -214,6 +214,19 @@ describe('issued agent binding', () => {
     })
   })
 
+  it('projects credential expiry from the caller-supplied read time', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const input = bindingInput()
+    await owner.mutation(registerIssuedBinding, { ...input, serviceAuth: await assertion(input) })
+
+    await expect(owner.query(api.agentDirectory.listOwned, { now: input.expiresAt - 1 }))
+      .resolves.toEqual([expect.objectContaining({ status: 'connected' })])
+    await expect(owner.query(api.agentDirectory.listOwned, { now: input.expiresAt }))
+      .resolves.toEqual([expect.objectContaining({ status: 'expired' })])
+  })
+
   it('keeps the public supplier scope exact while granting only its canonical connection verbs', () => {
     expect(canonicalAgentDelegationScopes(['market_supply:manage'])).toEqual([
       'connection:install',
@@ -264,7 +277,7 @@ describe('issued agent binding', () => {
       successorCredentialRef: String(prepared.successorCredentialRef),
       successorGrantRef: replacement.grantRef,
     }
-    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual([
+    await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual([
       expect.objectContaining({ principalRef: access.principalId, currentProviderCredentialId: first.credentialId }),
     ])
     const promoteAuth = await operationAssertion('agentAccessPrincipals.promoteCredentialReplacementForServer', transition)
@@ -272,7 +285,7 @@ describe('issued agent binding', () => {
       .resolves.toEqual({ kind: 'completed', providerCredentialId: first.credentialId })
     await expect(owner.mutation(promoteReplacement, { ...transition, serviceAuth: promoteAuth }))
       .resolves.toEqual({ kind: 'replayed', providerCredentialId: first.credentialId })
-    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual([
+    await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual([
       expect.objectContaining({
         principalRef: access.principalId,
         currentProviderCredentialId: replacement.credentialId,
@@ -306,7 +319,7 @@ describe('issued agent binding', () => {
       .resolves.toEqual({ kind: 'completed', providerCredentialId: cancelledInput.credentialId })
     await expect(owner.mutation(cancelReplacement, { ...cancel, serviceAuth: cancelAuth }))
       .resolves.toEqual({ kind: 'replayed', providerCredentialId: cancelledInput.credentialId })
-    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual([
+    await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual([
       expect.objectContaining({ principalRef: access.principalId, currentProviderCredentialId: replacement.credentialId }),
     ])
   })
@@ -328,7 +341,7 @@ describe('issued agent binding', () => {
     await owner.mutation(registerIssuedBinding, { ...agentA, serviceAuth: await assertion(agentA) })
     await owner.mutation(registerIssuedBinding, { ...agentB, serviceAuth: await assertion(agentB) })
 
-    const connected = await owner.query(api.agentDirectory.listOwned, {})
+    const connected = await owner.query(api.agentDirectory.listOwned, { now: NOW })
     expect(connected).toEqual(expect.arrayContaining([
       expect.objectContaining({ displayName: 'Agent A', status: 'connected' }),
       expect.objectContaining({ displayName: 'Agent B', status: 'connected' }),
@@ -432,7 +445,7 @@ describe('issued agent binding', () => {
       })
     }))
 
-    const finalDirectory = await owner.query(api.agentDirectory.listOwned, {})
+    const finalDirectory = await owner.query(api.agentDirectory.listOwned, { now: NOW })
     expect(finalDirectory).toEqual(expect.arrayContaining([
       expect.objectContaining({
         principalRef: principalA,
@@ -482,7 +495,7 @@ describe('issued agent binding', () => {
     }
     await owner.mutation(registerIssuedBinding, { ...agentA, serviceAuth: await assertion(agentA) })
     await owner.mutation(registerIssuedBinding, { ...agentB, serviceAuth: await assertion(agentB) })
-    const rows = await owner.query(api.agentDirectory.listOwned, {})
+    const rows = await owner.query(api.agentDirectory.listOwned, { now: NOW })
     const principalA = rows.find((row) => row.currentProviderCredentialId === agentA.credentialId)?.principalRef
     const principalB = rows.find((row) => row.currentProviderCredentialId === agentB.credentialId)?.principalRef
     if (principalA === undefined || principalB === undefined) throw new Error('agent principal missing')
@@ -517,7 +530,7 @@ describe('issued agent binding', () => {
       serviceAuth: await operationAssertion('agentAccessPrincipals.revokeCredentialForServer', revokeExtra),
     })
     expect(revokedExtra).toMatchObject({ kind: 'completed', principalRef: principalA })
-    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual(expect.arrayContaining([
+    await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ principalRef: principalA, status: 'attention', currentProviderCredentialId: agentA.credentialId }),
       expect.objectContaining({ principalRef: principalB, status: 'connected' }),
     ]))
@@ -532,7 +545,7 @@ describe('issued agent binding', () => {
       ...extraProvider,
       serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', extraProvider),
     })
-    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual(expect.arrayContaining([
+    await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ principalRef: principalA, status: 'connected', currentProviderCredentialId: agentA.credentialId }),
     ]))
 
@@ -555,7 +568,7 @@ describe('issued agent binding', () => {
       ...providerCommand,
       serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', providerCommand),
     })).resolves.toEqual({ kind: 'completed' })
-    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual(expect.arrayContaining([
+    await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ principalRef: principalA, status: 'attention' }),
       expect.objectContaining({ principalRef: principalB, status: 'connected' }),
     ]))
@@ -564,7 +577,7 @@ describe('issued agent binding', () => {
       ...providerCompleted,
       serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', providerCompleted),
     })).resolves.toEqual({ kind: 'completed' })
-    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual(expect.arrayContaining([
+    await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({
         principalRef: principalA,
         status: 'disconnected',
@@ -578,7 +591,7 @@ describe('issued agent binding', () => {
       .resolves.toMatchObject({ kind: 'completed', principalRef: principalB })
     await expect(owner.mutation(disconnectAgentLifecycle, { ...disconnectCommand, serviceAuth: disconnectAuth }))
       .resolves.toMatchObject({ kind: 'replayed', principalRef: principalB })
-    const finalRows = await owner.query(api.agentDirectory.listOwned, {})
+    const finalRows = await owner.query(api.agentDirectory.listOwned, { now: NOW })
     expect(finalRows).toEqual(expect.arrayContaining([
       expect.objectContaining({ principalRef: principalA }),
       expect.objectContaining({ principalRef: principalB, status: 'attention' }),
