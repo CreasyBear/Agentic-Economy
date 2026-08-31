@@ -248,6 +248,20 @@ describe('operator shell nested chrome', () => {
     expect(screen.queryByText('Couldn’t load this page')).toBeNull()
   })
 
+  it('renders forbidden recovery without requiring Clerk in the local auth preview', async () => {
+    shellMocks.localPreview = true
+    renderAt(
+      <OperatorRouteError error={new OperatorSurfaceForbiddenError('admin')} />,
+      '/admin/index-health',
+    )
+
+    expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Return home' }).getAttribute('href')).toBe('/')
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Catalog health' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()
+  })
+
   it('only reports active invoke-scoped buyer access to the shared command panel', async () => {
     renderAt(
       <AeOperatorShell
