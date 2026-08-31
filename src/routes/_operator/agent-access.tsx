@@ -12,7 +12,7 @@ import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
+import { readAgentDirectoryPageServer, readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
 import { disconnectAgentServer, revokeAgentCredentialServer } from '@/modules/agent-access/agent-access.functions'
 import type { AgentLifecycleResult } from '@/modules/agent-access/agent-access'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
@@ -69,11 +69,13 @@ function AgentAccessHome() {
   const location = useLocation()
   const navigate = useNavigate()
   const readDirectory = useServerFn(readAgentDirectoryServer)
+  const readDirectoryPage = useServerFn(readAgentDirectoryPageServer)
   const localE2E = isLocalE2EAuthBypassEnabled()
   const revokeCredential = useServerFn(revokeAgentCredentialServer)
   const disconnectAgent = useServerFn(disconnectAgentServer)
   const [directory, setDirectory] = useState<AgentDirectoryProjection>(initialDirectory)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [directoryError, setDirectoryError] = useState<string>()
   const [lifecycleIssue, setLifecycleIssue] = useState<LifecycleIssue>()
   const [lifecyclePending, setLifecyclePending] = useState<LifecycleCommand>()
@@ -97,6 +99,25 @@ function AgentAccessHome() {
       setLoading(false)
     }
   }, [readDirectory])
+  const loadMore = useCallback(async () => {
+    const cursor = directory.nextCursor
+    if (cursor === undefined || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const next = await readDirectoryPage({ data: { cursor } })
+      setDirectory((current) => ({
+        items: [...current.items, ...next.items],
+        details: [...current.details, ...next.details],
+        ...(next.nextCursor === undefined ? {} : { nextCursor: next.nextCursor }),
+      }))
+      setDirectoryError(undefined)
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setDirectoryError('More agents could not be loaded. The agents already shown are still current.')
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [directory.nextCursor, loadingMore, readDirectoryPage])
   const loadApprovals = useCallback(async () => {
     setApprovalsLoading(true)
     try {
@@ -144,8 +165,10 @@ function AgentAccessHome() {
     if (result.kind === 'partial') {
       await load()
       setLifecycleIssue({
-        title: 'Provider cleanup incomplete',
-        message: 'Access is blocked in Agentic Economy, but the external provider still needs another cleanup attempt.',
+        title: result.code === 'work_remaining' ? 'Disconnection still in progress' : 'Provider cleanup incomplete',
+        message: result.code === 'work_remaining'
+          ? 'One bounded batch is complete. Continue to revoke the remaining credentials for this agent.'
+          : 'Access is blocked in Agentic Economy, but the external provider still needs another cleanup attempt.',
         correlationRef: result.correlationRef,
         retry: command,
       })
@@ -296,6 +319,17 @@ function AgentAccessHome() {
           void decidePendingApproval(invocationRef, operationRef, decision)
         }}
       />
+      {directory.nextCursor === undefined ? null : (
+        <Button
+          type="button"
+          variant="secondary"
+          className="mt-4 w-fit"
+          disabled={loadingMore}
+          onClick={() => void loadMore()}
+        >
+          {loadingMore ? 'Loading more agents…' : 'Load more agents'}
+        </Button>
+      )}
       <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
     </AeOperatorShell>
   )

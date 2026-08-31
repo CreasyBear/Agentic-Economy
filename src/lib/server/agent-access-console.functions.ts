@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
 
 import {
   loadAgentDirectoryReadback,
@@ -11,3 +12,10 @@ export const readAgentDirectoryServer = createServerFn({ method: 'GET' })
     compare: readCapabilityOperationCompare,
     isOperationRef: isPublicOperationRef,
   }))
+
+export const readAgentDirectoryPageServer = createServerFn({ method: 'GET' })
+  .validator((data) => z.strictObject({ cursor: z.string().min(1).max(2_000) }).parse(data))
+  .handler(async ({ data }) => loadAgentDirectoryReadback({
+    compare: readCapabilityOperationCompare,
+    isOperationRef: isPublicOperationRef,
+  }, data.cursor))

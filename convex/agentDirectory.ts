@@ -1,6 +1,8 @@
+import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v } from 'convex/values'
 
-import { query } from './_generated/server'
+import { query, type QueryCtx } from './_generated/server'
+import type { Doc } from './_generated/dataModel'
 import { resolveBusinessActor } from './authz'
 
 const credentialLifecycle = v.union(
@@ -20,6 +22,7 @@ const directoryRecord = v.object({
   admissionLifecycle: v.union(v.literal('active'), v.literal('revoked'), v.literal('expired')),
   authorityMode: v.union(v.literal('inspect_only'), v.literal('approve_each'), v.literal('bounded_mandate'), v.literal('full_yolo')),
   scopes: v.array(v.string()),
+  credentialHistoryTruncated: v.boolean(),
   credentials: v.array(v.object({
     credentialRef: v.string(),
     providerCredentialId: v.string(),
@@ -47,7 +50,37 @@ export const listOwned = query({
       .withIndex('by_accountRef_and_lifecycle', (index) => index
         .eq('accountRef', actor.canonicalAccountRef)
         .eq('lifecycle', 'active'))
-      .collect()
+      .take(50)
+    return await projectMemberships(ctx, memberships, actor.canonicalAccountRef, args.now)
+  },
+})
+
+export const listOwnedPage = query({
+  args: { now: v.number(), paginationOpts: paginationOptsValidator },
+  returns: paginationResultValidator(directoryRecord),
+  handler: async (ctx, args) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') {
+      return { page: [], isDone: true, continueCursor: '' }
+    }
+    const memberships = await ctx.db.query('memberships')
+      .withIndex('by_accountRef_and_lifecycle', (index) => index
+        .eq('accountRef', actor.canonicalAccountRef)
+        .eq('lifecycle', 'active'))
+      .paginate(args.paginationOpts)
+    return {
+      ...memberships,
+      page: await projectMemberships(ctx, memberships.page, actor.canonicalAccountRef, args.now),
+    }
+  },
+})
+
+async function projectMemberships(
+  ctx: QueryCtx,
+  memberships: readonly Doc<'memberships'>[],
+  accountRef: string,
+  now: number,
+) {
     const records = await Promise.all(memberships.map(async (membership) => {
       const [principal, admission, bindings, credentials] = await Promise.all([
         ctx.db.query('principals')
@@ -58,27 +91,56 @@ export const listOwned = query({
           .unique(),
         ctx.db.query('externalIdentityBindings')
           .withIndex('by_principalRef_and_lifecycle', (index) => index.eq('principalRef', membership.memberPrincipalRef))
-          .collect(),
+          .order('desc')
+          .take(101),
         ctx.db.query('credentials')
           .withIndex('by_principalRef_and_lifecycle', (index) => index.eq('principalRef', membership.memberPrincipalRef))
-          .collect(),
+          .order('desc')
+          .take(101),
       ])
       if (principal === null
         || principal.kind !== 'agent'
         || principal.lifecycle !== 'active'
         || admission === null
-        || admission.ownerId !== actor.canonicalAccountRef) return undefined
+        || admission.ownerId !== accountRef) return undefined
 
-      const providerByBinding = new Map(bindings
-        .filter((binding) => binding.providerNamespace === 'clerk/api-key')
-        .map((binding) => [binding.bindingRef, binding.providerIdentifier]))
-      const projectedCredentials = credentials.flatMap((credential) => {
+      const currentProviderBinding = await ctx.db.query('externalIdentityBindings')
+        .withIndex('by_providerNamespace_and_providerIdentifier', (index) => index
+          .eq('providerNamespace', 'clerk/api-key')
+          .eq('providerIdentifier', admission.credentialId))
+        .unique()
+
+      const bindingsTruncated = bindings.length > 100
+      const credentialsTruncated = credentials.length > 100
+      const boundedBindings = bindings.slice(0, 100)
+      if (currentProviderBinding !== null
+        && !boundedBindings.some(({ _id }) => _id === currentProviderBinding._id)) {
+        boundedBindings.push(currentProviderBinding)
+      }
+      const boundedCredentials = credentials.slice(0, 100)
+      if (currentProviderBinding !== null
+        && !boundedCredentials.some(({ bindingRef }) => bindingRef === currentProviderBinding.bindingRef)) {
+        const currentCredential = await ctx.db.query('credentials')
+          .withIndex('by_bindingRef_and_generation_and_lifecycle', (index) => index
+            .eq('bindingRef', currentProviderBinding.bindingRef))
+          .order('desc')
+          .first()
+        if (currentCredential !== null) boundedCredentials.push(currentCredential)
+      }
+
+      const providerByBinding = new Map<string, string>()
+      for (const binding of boundedBindings) {
+        if (binding.providerNamespace === 'clerk/api-key') {
+          providerByBinding.set(binding.bindingRef, binding.providerIdentifier)
+        }
+      }
+      const projectedCredentials = boundedCredentials.flatMap((credential) => {
         const providerCredentialId = providerByBinding.get(credential.bindingRef)
         return providerCredentialId === undefined ? [] : [{
           credentialRef: credential.credentialRef,
           providerCredentialId,
           generation: credential.generation,
-          lifecycle: credential.lifecycle === 'active' && credential.expiresAt <= args.now
+          lifecycle: credential.lifecycle === 'active' && credential.expiresAt <= now
             ? 'stale' as const
             : credential.lifecycle,
           ...(credential.predecessorCredentialRef === undefined
@@ -92,8 +154,8 @@ export const listOwned = query({
         providerCredentialId === admission.credentialId
       ))) return undefined
       const currentCredential = projectedCredentials.find(({ providerCredentialId }) => providerCredentialId === admission.credentialId)
-      const currentBinding = bindings.find(({ providerIdentifier }) => providerIdentifier === admission.credentialId)
-      const providerCleanupPending = bindings.some((binding) => (
+      const currentBinding = boundedBindings.find(({ providerIdentifier }) => providerIdentifier === admission.credentialId)
+      const providerCleanupPending = bindingsTruncated || boundedBindings.some((binding) => (
         binding.providerNamespace === 'clerk/api-key'
         && binding.lifecycle === 'revoked'
         && (binding.providerState.kind !== 'known' || binding.providerState.value !== 'revoked')
@@ -102,7 +164,7 @@ export const listOwned = query({
         ? 'attention' as const
         : admission.lifecycle !== 'active' || currentCredential?.lifecycle === 'revoked' || currentBinding?.lifecycle === 'revoked'
           ? 'disconnected' as const
-          : currentCredential !== undefined && currentCredential.expiresAt <= args.now
+          : currentCredential !== undefined && currentCredential.expiresAt <= now
             ? 'expired' as const
             : 'connected' as const
 
@@ -117,10 +179,10 @@ export const listOwned = query({
         admissionLifecycle: admission.lifecycle,
         authorityMode: admission.authorityMode,
         scopes: admission.scopes,
+        credentialHistoryTruncated: credentialsTruncated || bindingsTruncated,
         credentials: projectedCredentials,
       }
     }))
 
     return records.flatMap((record) => record === undefined ? [] : [record])
-  },
-})
+}

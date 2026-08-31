@@ -218,6 +218,30 @@ describe('owner agent-access issuance policy', () => {
     expect(clerkApi.revoke).not.toHaveBeenCalled()
   })
 
+  it('returns resumable partial state when canonical disconnection has another bounded batch', async () => {
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }) => {
+      if (reference.name === 'agentAccessPrincipals:disconnectAgentForServer') {
+        return {
+          kind: 'completed',
+          principalRef: 'prn_agent_many',
+          providerTargets: [],
+          hasMore: true,
+          correlationRef: 'corr-disconnect-many',
+        }
+      }
+      throw new Error(`unexpected mutation ${reference.name}`)
+    })
+    await expect(disconnectAgentServer({ data: { principalRef: 'prn_agent_many' } }))
+      .resolves.toEqual({
+        kind: 'partial',
+        code: 'work_remaining',
+        principalRef: 'prn_agent_many',
+        correlationRef: 'corr-disconnect-many',
+        retryable: true,
+      })
+    expect(clerkApi.revoke).not.toHaveBeenCalled()
+  })
+
   it('does not call Clerk again when canonical replay has no pending provider work', async () => {
     serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }) => {
       if (reference.name === 'agentAccessPrincipals:revokeCredentialForServer') {
