@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { useMemo, useState, type ReactElement } from 'react'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -232,6 +232,16 @@ describe('operator shell nested chrome', () => {
 })
 
 describe('owner mobile navigation', () => {
+  it('moves between workspace routes without a document navigation', async () => {
+    renderOperatorShell('owner', '/owner/offerings')
+
+    const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
+    const calls = within(mobileNav).getByRole('link', { name: 'Calls' })
+    fireEvent.click(calls)
+
+    await waitFor(() => expect(calls.getAttribute('data-status')).toBe('active'))
+  })
+
   it('renders the exact owner shortcuts from the shared navigation model in order', async () => {
     renderOperatorShell('owner', '/owner/offerings')
 

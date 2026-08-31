@@ -2,6 +2,7 @@
 
 import { SearchIcon, UserRoundIcon } from 'lucide-react'
 import { UserButton, useUser } from '@clerk/tanstack-react-start'
+import { Link } from '@tanstack/react-router'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -99,7 +100,7 @@ export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton asChild size="lg" tooltip="Agentic Economy workspace">
-                <a href={roleHomeHref[operatorRole]} aria-label={`${roleLabel[operatorRole]} home`}>
+                <Link to={roleHomeHref[operatorRole]} aria-label={`${roleLabel[operatorRole]} home`}>
                   <img
                     src={AECON_MARK_SRC}
                     alt=""
@@ -110,7 +111,7 @@ export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY
                     <span className="truncate text-sm font-semibold text-sidebar-foreground">AECON</span>
                     <span className="truncate text-xs text-muted-foreground">{roleLabel[operatorRole]}</span>
                   </span>
-                </a>
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -150,14 +151,14 @@ export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY
                     return (
                       <SidebarMenuItem key={item.href}>
                         <SidebarMenuButton asChild isActive={current} tooltip={item.label}>
-                          <a
-                            href={item.href}
+                          <Link
+                            to={item.href}
                             aria-label={isCollapsed ? item.label : undefined}
                             aria-current={current ? 'page' : undefined}
                           >
                             <Icon aria-hidden="true" />
                             <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.label}</span>
-                          </a>
+                          </Link>
                         </SidebarMenuButton>
                         {badge === undefined ? null : (
                           <SidebarMenuBadge>
@@ -184,14 +185,14 @@ export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY
               return (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton asChild isActive={current} tooltip={item.label}>
-                    <a
-                      href={item.href}
+                    <Link
+                      to={item.href}
                       aria-label={isCollapsed ? item.label : undefined}
                       aria-current={current ? 'page' : undefined}
                     >
                       <Icon aria-hidden="true" />
                       <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.label}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )

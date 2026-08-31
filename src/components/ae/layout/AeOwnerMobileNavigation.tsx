@@ -1,3 +1,5 @@
+import { Link } from '@tanstack/react-router'
+
 import { isOperatorPathActive, mobileNavItemsForRole } from '@/lib/operator/navigation'
 
 type AeOwnerMobileNavigationProps = {
@@ -18,15 +20,15 @@ export function AeOwnerMobileNavigation({ currentPath }: AeOwnerMobileNavigation
           const Icon = item.icon
 
           return (
-            <a
+            <Link
               key={item.href}
-              href={item.href}
+              to={item.href}
               aria-current={current ? 'page' : undefined}
               className="flex min-h-touch min-w-touch flex-col items-center justify-center gap-0.5 rounded-md px-2 py-1 text-xs text-muted-foreground no-underline hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-foreground"
             >
               <Icon aria-hidden="true" className="size-5" />
               <span>{item.label}</span>
-            </a>
+            </Link>
           )
         })}
       </div>
