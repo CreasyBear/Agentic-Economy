@@ -159,6 +159,8 @@ describe('green release baseline', () => {
     )
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e')
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e:a11y')
+    expect(scripts['test:release:source:after-codegen']).not.toContain('test:e2e:authenticated')
+    expect(scripts['test:release:authenticated']).toBe('npm run test:e2e:authenticated:required')
     expect(scripts['test:e2e']).toBe('node tools/dev/run-with-cleanup.mjs playwright test tests/e2e')
     expect(scripts['test:e2e']).not.toMatch(/--grep|testMatch|ignore|\.spec\.ts/u)
     for (const staleFile of [
@@ -202,6 +204,13 @@ describe('green release baseline', () => {
     expect(sourceGate?.env).toBeUndefined()
     const chatGate = source?.steps?.find((step) => step.name === 'Run deterministic operation chat conformance')
     expect(chatGate?.run).toBe('npm run test:chat:conformance')
+
+    const authenticated = workflow.jobs?.['authenticated-platform-proof']
+    expect(authenticated?.if).toContain('confirm_authenticated_platform_e2e')
+    expect(authenticated?.environment).toBe('staging')
+    expect(authenticated?.steps?.find((step) => step.name === 'Prove the authenticated two-agent lifecycle')?.run)
+      .toBe('npm run test:release:authenticated')
+    expect(JSON.stringify(authenticated?.env ?? {})).toContain('AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY')
 
     const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
     for (const upload of uploads) {

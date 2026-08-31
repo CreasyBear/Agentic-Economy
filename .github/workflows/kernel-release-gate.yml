@@ -13,6 +13,11 @@ on:
         required: true
         default: false
         type: boolean
+      confirm_authenticated_platform_e2e:
+        description: 'Run the authenticated two-agent lifecycle against the dedicated test deployment and test Clerk instance.'
+        required: true
+        default: false
+        type: boolean
       confirm_live_gateway_spend:
         description: 'Type the run ID below and confirm the production-approved paid gateway smoke may move at most USD 6.00 total externally (top-up charge plus provider payout).'
         required: true
@@ -157,6 +162,38 @@ jobs:
           path: output/release/playwright-chat-staging-smoke.json
           if-no-files-found: error
           retention-days: 14
+
+  authenticated-platform-proof:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_authenticated_platform_e2e == true
+    name: Dedicated authenticated multi-agent lifecycle proof
+    needs: source-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      AE_AUTHENTICATED_E2E_BASE_URL: ${{ vars.AE_AUTHENTICATED_E2E_BASE_URL }}
+      AE_E2E_OWNER_EMAIL: ${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}
+      CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1
+
+      - name: Frozen dependency install
+        run: npm ci
+
+      - name: Install the authenticated Chromium browser
+        run: npm exec -- playwright install --with-deps chromium
+
+      - name: Prove the authenticated two-agent lifecycle
+        run: npm run test:release:authenticated
 
   live-gateway-proof:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_live_gateway_spend == true
