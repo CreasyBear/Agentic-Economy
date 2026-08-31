@@ -1,8 +1,11 @@
 # Package 3 — Authority and security control plane
 
-Status: preparation contract  
-Scope: Packages 3A–3D  
-Product authority: `PRODUCT.md`  
+Status: preparation contract
+
+Scope: Packages 3A–3D
+
+Product authority: `PRODUCT.md`
+
 Companion evidence: `research/PACKAGE-3-AUTHORITY-SECURITY-REFERENCES.md`
 
 ## Outcome
