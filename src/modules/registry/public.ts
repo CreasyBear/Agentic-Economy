@@ -150,6 +150,7 @@ export {
   searchPublicBusinessOfferingSupply,
   getPublicBusinessOfferingSupplyBySlug,
 } from './internal/search'
+export { OPERATION_READ_UNAVAILABLE_PROBLEM } from './operation-read-problem'
 export {
   buildRegistrySearchDocumentsForCatalog,
 } from './internal/search-documents'

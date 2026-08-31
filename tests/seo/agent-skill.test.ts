@@ -77,6 +77,12 @@ describe('public agent skill', () => {
     expect(body).toContain('literal output plus an `evidenceHash`')
     expect(body).toContain('job stays unproven')
   })
+  it('publishes the canonical catalogue outage rule', () => {
+    expect(body).toContain('`operation_read_unavailable` means no catalogue read completed')
+    expect(body).toContain('It is retryable')
+    expect(body).toContain('never proof that an Operation is absent')
+    expect(body).toContain('never permission to reuse stale terms')
+  })
   it('distinguishes invoke outcomes from status diagnostics', () => {
     expect(body).toContain('it cannot call, retry, or grant authority')
     expect(body).toContain('ae status "$AE_INVOCATION_REF" --json` reads once')
