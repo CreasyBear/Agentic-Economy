@@ -1,4 +1,5 @@
 import { isRedirect } from '@tanstack/react-router'
+import { createServerOnlyFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 
 export const REQUEST_CORRELATION_HEADER = 'X-AE-Request-Id'
@@ -30,9 +31,17 @@ export function runWithRequestCorrelation<T>(
   return callback(correlation)
 }
 
-export function currentRequestCorrelation(): RequestCorrelation | undefined {
+const readCurrentRequestCorrelationOnServer = createServerOnlyFn((): RequestCorrelation | undefined => {
   try {
     return correlationsByRequest.get(getRequest())
+  } catch {
+    return undefined
+  }
+})
+
+export function currentRequestCorrelation(): RequestCorrelation | undefined {
+  try {
+    return readCurrentRequestCorrelationOnServer()
   } catch {
     return undefined
   }

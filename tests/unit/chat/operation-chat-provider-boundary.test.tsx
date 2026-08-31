@@ -38,6 +38,7 @@ vi.mock('convex/react', () => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
+  ClientOnly: ({ children }: { children: ReactNode }) => children,
   HeadContent: () => null,
   Link: ({
     to,
