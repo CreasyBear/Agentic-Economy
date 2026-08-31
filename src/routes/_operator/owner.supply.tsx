@@ -3,7 +3,7 @@ import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeSupplyPublisherHome } from '@/components/ae/supply/AeSupplyPublisherHome'
 import { readOwnerOfferingSupplyServer } from '@/components/ae/offerings/owner-offering.functions'
-import { readOwnerConnectReadinessServer } from '@/modules/money/server'
+import { readOwnerConnectReadinessServer } from '@/modules/money/money.functions'
 import { readOwnerProviderConnectionsServer, readOwnerProviderEarningsServer, readOwnerSupplyFunnelServer } from '@/modules/capability-supply/supply-funnel.functions'
 
 export const Route = createFileRoute('/_operator/owner/supply')({

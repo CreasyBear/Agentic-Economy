@@ -68,9 +68,7 @@ export type {
   StripeWebhookVerifier,
 } from './internal/stripe-webhook'
 export {
-  beginCreditTopupServer,
   beginCreditTopupThroughSource,
-  readCreditPaymentServer,
   readCreditPaymentThroughSource,
 } from './internal/credit-topup-http'
 export type {
@@ -86,7 +84,6 @@ export {
   createOwnerConnectAccountThroughSource,
   createOwnerOnboardingLinkServer,
   createOwnerOnboardingLinkThroughSource,
-  readOwnerConnectReadinessServer,
   readOwnerConnectReadinessThroughSource,
 } from './internal/payout-connect-http'
 export type {

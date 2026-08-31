@@ -1,4 +1,5 @@
 import { AeNotFound } from '@/components/ae/layout/AeNotFound'
+import { PublicRouteError, PublicRoutePending } from '@/components/ae/layout/AePublicRouteStates'
 import { createRouter } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
 
@@ -8,6 +9,8 @@ export function getRouter() {
     routeTree,
     defaultPreload: 'intent',
     defaultPendingMs: 150,
+    defaultPendingComponent: PublicRoutePending,
+    defaultErrorComponent: PublicRouteError,
     defaultViewTransition: true,
     defaultNotFoundComponent: () => <AeNotFound />,
     scrollRestoration: true,

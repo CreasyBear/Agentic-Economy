@@ -2,7 +2,7 @@
 import { ClerkProvider, useAuth } from '@clerk/tanstack-react-start'
 import { ConvexProviderWithClerk } from 'convex/react-clerk'
 import { ConvexReactClient, useConvexAuth, useMutation } from 'convex/react'
-import { HeadContent, Link, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
+import { ClientOnly, HeadContent, Link, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 
@@ -81,13 +81,15 @@ function RootDocument({ children }: { children: ReactNode }) {
         <RouteProgressBar />
         <AeObservabilityBoot />
         <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
-        <Toaster
-          ref={(node) => {
-            node?.setAttribute('aria-live', 'off')
-          }}
-          duration={6000}
-          visibleToasts={5}
-        />
+        <ClientOnly>
+          <Toaster
+            ref={(node) => {
+              node?.setAttribute('aria-live', 'off')
+            }}
+            duration={6000}
+            visibleToasts={5}
+          />
+        </ClientOnly>
         <Scripts />
       </body>
     </html>

@@ -3,7 +3,7 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { AeSupplyEarningsCard } from '@/components/ae/supply/AeSupplyEarningsCard'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { readOwnerConnectReadinessServer } from '@/modules/money/server'
+import { readOwnerConnectReadinessServer } from '@/modules/money/money.functions'
 import { readOwnerProviderEarningsServer } from '@/modules/capability-supply/supply-funnel.functions'
 
 export const Route = createFileRoute('/_operator/owner/settings/payouts')({
