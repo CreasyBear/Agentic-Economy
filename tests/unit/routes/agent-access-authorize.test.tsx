@@ -3,6 +3,13 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentType } from 'react'
+import {
+  RouterContextProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -42,7 +49,7 @@ describe('/agent-access/authorize consent loading', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<Component />)
+    renderComponent()
 
     expect(screen.getByText('Loading access request')).toBeTruthy()
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
@@ -65,7 +72,7 @@ describe('/agent-access/authorize consent loading', () => {
     ))
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<Component />)
+    renderComponent()
 
     expect(await screen.findByRole('button', { name: 'Approve access' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Decline' })).toBeTruthy()
@@ -82,7 +89,7 @@ describe('/agent-access/authorize consent loading', () => {
       .mockResolvedValueOnce(new Response('Approved', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<Component />)
+    renderComponent()
 
     expect(await screen.findByText('How much may this agent do without asking you?')).toBeTruthy()
     expect(screen.getByRole('radio', { name: /Work within limits/ }).getAttribute('data-state')).toBe('checked')
@@ -105,7 +112,7 @@ describe('/agent-access/authorize consent loading', () => {
       .mockResolvedValueOnce(new Response('Approved', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<Component />)
+    renderComponent()
 
     expect(await screen.findByText('Supplier management')).toBeTruthy()
     expect(screen.getByText(/cannot spend buyer credit/)).toBeTruthy()
@@ -118,3 +125,20 @@ describe('/agent-access/authorize consent loading', () => {
     expect(await screen.findByText(/separate supplier key/)).toBeTruthy()
   })
 })
+
+function renderComponent() {
+  const rootRoute = createRootRoute()
+  const routeTree = rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: '/agent-access/authorize' }),
+  ])
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: ['/agent-access/authorize'] }),
+  })
+
+  return render(
+    <RouterContextProvider router={router}>
+      <Component />
+    </RouterContextProvider>,
+  )
+}
