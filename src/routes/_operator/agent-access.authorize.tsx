@@ -3,11 +3,15 @@ import { z } from 'zod'
 
 import { AeAgentAccessAuthorizeForm } from '@/components/ae/agent-access/AeAgentAccessAuthorizeForm'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import {
+  OperatorRouteError,
+  OperatorRouteNotFound,
+  OperatorRoutePending,
+} from '@/components/ae/layout/AeOperatorRouteStates'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAgentAccessConsentServer } from '@/lib/server/agent-access-consent.functions'
-import { readAgentConsentDetails } from '@/modules/agent-access/consent-read-model'
+import { readAgentConsentDetails } from '@/modules/agent-access/public'
 
 export const Route = createFileRoute('/_operator/agent-access/authorize')({
   validateSearch: z.object({ user_code: z.string().trim().min(3).max(32).optional() }),
@@ -36,9 +40,9 @@ export const Route = createFileRoute('/_operator/agent-access/authorize')({
     { title: 'Review agent access | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
   ] }),
-  pendingComponent: operatorRouteOptions.pendingComponent,
-  errorComponent: operatorRouteOptions.errorComponent,
-  notFoundComponent: operatorRouteOptions.notFoundComponent,
+  pendingComponent: OperatorRoutePending,
+  errorComponent: OperatorRouteError,
+  notFoundComponent: OperatorRouteNotFound,
   component: AgentAccessAuthorizeRoute,
 })
 

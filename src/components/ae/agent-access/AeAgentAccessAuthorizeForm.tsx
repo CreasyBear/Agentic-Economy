@@ -12,7 +12,7 @@ import {
   readAgentConsentDetails,
   type AgentConsentDetails,
   type AgentConsentTarget,
-} from '@/modules/agent-access/consent-read-model'
+} from '@/modules/agent-access/public'
 
 type PublicAuthorityMode = 'inspect_only' | 'approve_each' | 'bounded_mandate'
 
