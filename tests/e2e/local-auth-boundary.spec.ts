@@ -59,4 +59,17 @@ test.describe('local auth boundary', () => {
     expect(new URL(page.url()).pathname).toBe('/agent-access')
     await expect(page.getByText('Agent not found')).toHaveCount(0)
   })
+
+  test('keeps forbidden admin recovery inside a safe shell without Clerk', async ({ page }) => {
+    await page.goto('/admin/index-health', { waitUntil: 'networkidle' })
+
+    await expect(page.getByRole('heading', { level: 1, name: 'You don’t have access' })).toBeVisible()
+    await expect(page.getByText('You don’t have access to this workspace')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Return to market' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Get help' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Return home' })).toBeVisible()
+    await expect(page.getByText('Something went wrong')).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Catalog health' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Audit' })).toHaveCount(0)
+  })
 })
