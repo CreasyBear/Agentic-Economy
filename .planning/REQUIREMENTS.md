@@ -1,242 +1,300 @@
-# Requirements: Agentic Economy Maturity Rebaseline
+# Requirements: Agent-First Platform Maturity
 
-**Defined:** 2026-08-26  
-**Core Value:** An autonomous agent can safely discover and invoke a useful capability with explicit Account-scoped authority, attributable effects, and enough human/operator visibility to understand, control, recover, and support the transaction.
+**Defined:** 2026-08-31  
+**Product authority:** [`PRODUCT.md`](../PRODUCT.md)  
+**Design contract:** [`docs/designs/agent-operating-contract.md`](../docs/designs/agent-operating-contract.md)  
+**Core value:** An owner-authorized agent can understand, select, invoke,
+consume, recover, and improve the Operation market with minimum money, latency,
+calls, and context.
 
-## v1 Requirements
+These requirements rebaseline the prior authority-heavy candidate. They preserve
+accepted implementation evidence but do not treat historical phase completion,
+branch refs, mocks, or interface counts as platform proof.
 
-These requirements define the maturity milestone. They extend the accepted Phase 1 foundation and existing Operation product; they do not accept or continue the incomplete Phase 2 implementation.
+## Milestone Requirements
 
-### Principal and Account Authority
+### Agent Experience and Contract
 
-- [ ] **AUTH-01**: Every production authority decision resolves Principal, Account, ownership, membership, Credential, external binding, and workload facts through exactly one integration-owned canonical Convex adapter.
-- [ ] **AUTH-02**: Every consequential HTTP, MCP, CLI, UI, callback, cron, job, worker, and reconciliation entry resolves an explicit Principal and Account or fails closed before any reservation, schedule, secret read, provider call, durable effect, or success audit.
-- [ ] **AUTH-03**: A Credential authenticates a technical Principal but can never own an Account, Operation, Connection, invocation, resource, budget, or commercial fact.
-- [ ] **AUTH-04**: Authority and attribution preserve distinct legal payer, beneficial owner, operator, supplier, beneficiary, tax subject, technical Principal, and Credential roles.
-- [ ] **AUTH-05**: A Principal with access to multiple Accounts must explicitly select an Account; remembered UI state or a caller-supplied identifier is never server authority.
-- [ ] **AUTH-06**: Consequential work revalidates current Principal, Account, resource relationship, policy, budget, delegation, Connection generation, and server time immediately before external or irreversible effect.
-- [ ] **AUTH-07**: Internal functions, scheduled work, callbacks, workers, cron, and reconciliation treat carried context as attributed input rather than propagated authentication and independently revalidate durable authority.
-- [ ] **AUTH-08**: A denied, ambiguous, expired, revoked, cross-Account, or stale-authority request produces the same externally safe denial class and no consequential side effect.
-- [ ] **AUTH-09**: Registered Convex endpoints are thin over explicit least-privilege wrappers and domain commands; handlers cannot use raw database, scheduler, or `run*` capabilities where the accepted design says those capabilities are unavailable.
-- [ ] **AUTH-10**: Static analysis is limited to locally decidable import, builder, and literal-category rules and is never treated as proof of runtime authority, dominance, alias flow, or effect coverage.
+- [ ] **AGEX-01**: One read-only orientation call returns API/MCP versions,
+  environment, server time, authenticated Principal, active owner Account,
+  Credential kind, effective grant summary, budget exposure, limits, service
+  health, and machine-readable contract links without mutation or provider work.
+- [ ] **AGEX-02**: HTTP, MCP, CLI, UI, and bounded chat project one versioned
+  semantic envelope for facts, unknowns, warnings, cost, expiry, correlation,
+  state references, problems, and next actions.
+- [ ] **AGEX-03**: Every non-terminal response provides durable state references
+  and executable next actions with arguments/schema, preconditions, consequence,
+  expiry, and retry class; prose is never the only continuation mechanism.
+- [ ] **AGEX-04**: Search defaults to one-to-three compact candidates; detail,
+  compare, and inspect progressively reveal only requested or safety-critical
+  fields, schemas, and evidence.
+- [ ] **AGEX-05**: Callers can set explicit ceilings for price, committed spend,
+  latency, candidate count, result size, and evidence freshness and receive a
+  structured denial before exceeding one.
+- [ ] **AGEX-06**: Machine lists use stable cursor pagination and bounded page
+  sizes; conditional/delta reads avoid repeated full-state transfer.
+- [ ] **AGEX-07**: A fresh process can resume any accepted invocation, handoff,
+  approval, cancellation, or reconciliation using only durable references and
+  current authentication.
+- [ ] **AGEX-08**: Known, unknown, stale, supplier-claimed, AE-observed,
+  buyer-reported, and AE-derived facts remain machine-distinguishable.
+- [ ] **AGEX-09**: Deterministic parsing, validation, matching, policy, state
+  transitions, and response formatting do not require a model call; any language
+  normalization model is bounded, observable, optional, and has a deterministic
+  fallback.
+- [ ] **AGEX-10**: Closed problem/reason codes map to safe remediation actions and
+  stable correlation refs without leaking secrets, unrelated Account facts, or
+  resource-existence oracles.
 
-### Delegation and Autonomous Ownership
+### Market Intent, Resolution, and Allocation
 
-- [ ] **DELG-01**: A human, organization, autonomous agent, or workload Principal can directly own an Account and resources without being collapsed into a human operator or Credential.
-- [ ] **DELG-02**: An authorized Principal can issue a multi-hop delegation whose Account, resource set, action scope, budget, time window, consequence class, and approval requirements are explicit and inspectable.
-- [ ] **DELG-03**: Every delegation hop can only narrow its parent's authority; any widening of scope, resource, budget, duration, consequence class, or approval posture is rejected.
-- [ ] **DELG-04**: Delegation creation rejects cycles, duplicate ancestry identities, invalid parent generations, and chains beyond the accepted bounded depth.
-- [ ] **DELG-05**: Revoking or advancing any ancestor generation invalidates all affected descendants before their next consequence without rewriting historical attribution.
-- [ ] **DELG-06**: Invocation and audit records preserve the initiating Principal, complete delegation ancestry, effective Principal, Account, Credential/workload context, decision time, and consequence-time revalidation result.
-- [ ] **DELG-07**: Owners and authorized operators can inspect effective delegated authority and revoke or narrow it through canonical control-plane workflows.
+- [ ] **MARK-01**: A caller can create or inline a bounded market intent containing
+  the missing contribution and hard constraints without sending its wider task,
+  files, conversation, plan, memory, or chain of thought.
+- [ ] **MARK-02**: Every resolution records intent, source/freshness, considered
+  Operation revisions, viability, exclusions, ordering evidence, and allocation
+  policy version under one immutable `resolutionRef`.
+- [ ] **MARK-03**: Candidate viability is caller-specific and exactly one of
+  `executable_now`, `setup_required`, or `unavailable`, with reason and next
+  action based on knowable balance, grant, Connection, geography, price, effect,
+  readiness, and lifecycle facts.
+- [ ] **MARK-04**: Search and comparison perform no supplier fan-out, authority
+  acquisition, reservation, charge, secret read, or provider effect; readiness
+  comes from bounded background probes with freshness.
+- [ ] **MARK-05**: Comparison exposes material differences and unknowns without
+  false equivalence, hidden weighting, or opaque composite reputation.
+- [ ] **MARK-06**: Ranking is deterministic and inspectable for equivalent inputs;
+  every feature names provenance, sample size, recency, and policy version.
+- [ ] **MARK-07**: Only qualified AE-observed or explicitly buyer-reported evidence
+  can change allocation; provider completion is not usefulness and replay is not
+  repeat demand.
+- [ ] **MARK-08**: Intent, exposure, selection, invocation, qualified use, repeat,
+  switching, bypass where observable, supplier earnings, and recovery join by
+  stable refs without storing project context.
+- [ ] **MARK-09**: Supplier-facing demand intelligence is aggregated, privacy-
+  thresholded, and cannot reveal a buyer, private intent, or workload.
+- [ ] **MARK-10**: One live category proves two independent comparable paid
+  suppliers, two external harnesses, usable results, supplier earnings, and a
+  later repeat or justified switch through AE.
 
-### Operation Discovery and Supplier Lifecycle
+### Owner-Bound Identity and Authority
 
-- [ ] **DISC-01**: HTTP, MCP, CLI, UI, and the bounded chat adapter project the same canonical Operation reference, version, schemas, provider/source labels, commercial basis, authority needs, and consequence/retry classification.
-- [ ] **DISC-02**: An agent can search, inspect, compare, and inspect-plan an Operation before invocation without acquiring authority, reserving budget, reading a secret, or creating an external effect.
-- [ ] **DISC-03**: Inspect-plan returns applicable Account scope, budget, pricing, approval, Connection, and non-sensitive denial reason information while remaining explicitly non-binding until consequence-time admission.
-- [ ] **SUPP-01**: An authorized supplier Principal can publish and version an Operation with endpoint ownership, schemas, commercial basis, Connection requirements, and consequence/retry semantics.
-- [ ] **SUPP-02**: Supplier activation validates the real registered endpoint, contract compatibility, provider authentication boundary, network/SSRF policy, denial behavior, and reconciliation capability before discovery can select it.
-- [ ] **SUPP-03**: Authorized supplier or staff workflows can suspend, reactivate, and retire an Operation version without erasing its historical invocation, payment, effect, or audit evidence.
-- [ ] **SUPP-04**: Supplier and staff operators can inspect endpoint health, validation, compatibility, publication, suspension, retirement, and support status using canonical facts.
-- [ ] **SUPP-05**: MasterKey, Bazaar, Whop, or another external discovery/provider input is source-labelled and freshness-bounded and can never replace AE Principal/Account identity, canonical Operation history, sole inventory, or authority.
+- [ ] **AUTH-01**: Humans, organizations, agents, and internal workloads have
+  durable technical Principal refs independent of replaceable Credentials and
+  harnesses; every agent/workload Principal is bound to a person- or
+  organization-owned Account.
+- [ ] **AUTH-02**: Credentials authenticate but never own Accounts, Operations,
+  Connections, invocations, budgets, balances, or commercial facts.
+- [ ] **AUTH-03**: An owner can self-serve create, inspect, narrow, revoke, rotate,
+  and recover a direct agent grant and Credential without founder/database work.
+- [ ] **AUTH-04**: A direct grant explicitly bounds Account, Operation or capability
+  scope, environment, actions, effect classes, per-call and aggregate committed
+  spend, rate/concurrency, approval, validity, purpose, and generation.
+- [ ] **AUTH-05**: Grant or Credential rotation preserves Principal identity and
+  history; generation changes invalidate stale consequence admission while
+  allowing bounded overlap/cutover where explicitly configured.
+- [ ] **AUTH-06**: Every consequential surface resolves server-derived Principal,
+  owner Account, Credential, grant, payer, supplier, beneficiary, and operator
+  roles and revalidates current authority immediately before effect.
+- [ ] **AUTH-07**: Missing, ambiguous, expired, revoked, stale, widened,
+  wrong-Account, over-budget, or unapproved authority fails before reservation,
+  schedule, secret read, provider call, charge, or success evidence.
+- [ ] **AUTH-08**: Authority enlargement, funding controls, payout destination,
+  root Credential rotation, and break-glass action require fresh human authority
+  appropriate to consequence.
+- [ ] **AUTH-09**: General multi-hop delegation and ownerless autonomous economic
+  Accounts are absent from the milestone and cannot enter through compatibility
+  fields or historical planning artifacts.
 
-### Invocation, Effects, and Reconciliation
+### Commitment and Decision Continuity
 
-- [ ] **INVK-01**: A caller supplies or receives an Account-scoped invocation/effect identity that remains stable across HTTP, MCP, CLI, registered Convex work, provider dispatch, callbacks, reconciliation, and operator recovery.
-- [ ] **INVK-02**: Repeating the same idempotency identity with materially identical intent returns the existing invocation, while reuse with different Account, Operation version, input digest, authority, budget, provider target, or consequence intent is rejected.
-- [ ] **INVK-03**: Admission durably records validated intent, authority attribution, policy/budget reservation, audit, and asynchronous handoff atomically before acknowledging consequential work.
-- [ ] **INVK-04**: A caller or operator can inspect invocation state and request cancellation only while the accepted effect state proves cancellation is still safe.
-- [ ] **INVK-05**: AE durably correlates attempt, dispatch, provider acknowledgement, observed consequence, payment/settlement evidence, callback/poll result, reconciliation, and compensation as distinct monotonic facts.
-- [ ] **INVK-06**: A timeout, disconnect, malformed response, or additive/irreversible ambiguity remains `unknown` and cannot trigger blind retry or transparent provider failover.
-- [ ] **INVK-07**: Reconciliation observes provider or settlement truth through an authenticated callback, bounded poll, or operator-supplied evidence and converges, compensates, or escalates without overwriting history.
-- [ ] **INVK-08**: Provider resolution is adapter-neutral, Account/policy constrained, source-labelled, and recorded; no registry, provider, facilitator, or settlement rail becomes AE authority or canonical history.
-- [ ] **INVK-09**: For a supported synchronous x402 call, AE records the exact 402 requirements, signed payment identity, verification, settlement response, provider observation, and finality limitations as transactional evidence.
-- [ ] **INVK-10**: A non-x402 provider implements the same AE authority, intent, effect, unknown, reconciliation, audit, and operator contracts through a protocol-specific adapter.
+- [ ] **CMIT-01**: Inspect creates an expiring, immutable commitment bound to
+  caller Principal, owner Account, grant generation, Operation revision,
+  normalized input digest, total price or hard maximum, terms, data use, effects,
+  readiness evidence, and intended consequence.
+- [ ] **CMIT-02**: Commitment creation is read-only with respect to provider effect,
+  secret access, payment, and budget reservation, and reports every currently
+  knowable setup requirement.
+- [ ] **CMIT-03**: Invoke requires a valid commitment for every authenticated,
+  paid, or consequential Operation and rejects caller, Account, grant, input,
+  revision, price, term, effect, readiness, or expiry drift before consequence.
+- [ ] **CMIT-04**: Re-inspection creates a new commitment; prior commitments remain
+  immutable evidence and cannot be silently refreshed or mutated.
+- [ ] **CMIT-05**: Keyless non-consequential execution may use an atomic
+  inspect-and-invoke projection only when the same binding and no-drift
+  invariants are preserved internally.
+- [ ] **CMIT-06**: Commitment responses expose exact monetary, latency, authority,
+  Connection, data-use, effect, cancellation, retry, and remedy implications in
+  machine-readable form.
 
-### Policy and Budgets
+### Invocation, Result, and Recovery
 
-- [ ] **POLI-01**: Consequence admission evaluates Account, Principal/delegation, Operation version, resource/action, amount, currency or asset, time, prior consumption, rate/concurrency limits, approvals, and bounded input against current policy.
-- [ ] **POLI-02**: Budget reservations and consumption are Account-scoped, durable, attributable, replay-safe, and reconciled with the actual commercial/effect outcome.
-- [ ] **POLI-03**: Policy changes, Account freeze, membership/ownership changes, delegation revocation, provider suspension, or Connection revocation deterministically block new affected work and are rechecked for admitted-but-not-yet-effected work.
-- [ ] **POLI-04**: Denial and limit information is structured and supportable without leaking secret values, unrelated Account facts, internal policy details, or a resource-existence oracle.
+- [ ] **INVK-01**: One invocation/effect identity remains stable across transport,
+  registered endpoint, admission, queued work, provider dispatch, callback,
+  payment, result, events, reconciliation, and operator recovery.
+- [ ] **INVK-02**: Same idempotency identity plus identical material intent returns
+  the existing state; reuse with different Account, commitment, revision, input,
+  authority, provider target, amount, or consequence fails.
+- [ ] **INVK-03**: Admission atomically records intent, commitment, current
+  authority, budget reservation, commercial basis, audit, and durable work
+  handoff before acknowledging consequential work.
+- [ ] **INVK-04**: Command, execution, provider observation, payment, settlement,
+  result, cancellation, and reconciliation are distinct correlated monotonic
+  facts; transport success never implies business success.
+- [ ] **INVK-05**: Completed responses contain literal schema-valid output or an
+  artifact reference the caller can consume immediately, with provenance and
+  size/content metadata.
+- [ ] **INVK-06**: Pending, input-required, approval-required, connection-required,
+  or reconciliation-required responses contain current state, expiry/freshness,
+  and exact safe next actions.
+- [ ] **INVK-07**: Cancellation succeeds only when current effect evidence proves
+  it safe; repeated cancellation is idempotent and returns authoritative state.
+- [ ] **INVK-08**: Timeout, disconnect, malformed response, or irreversible
+  ambiguity remains unknown and cannot cause blind retry or silent failover.
+- [ ] **INVK-09**: Reconciliation uses authenticated callback, bounded poll, or
+  attributable operator evidence to converge, compensate, or escalate without
+  overwriting history.
+- [ ] **INVK-10**: Provider and payment adapters implement one domain contract;
+  no external registry, provider, facilitator, or rail becomes AE authority or
+  canonical invocation history.
 
-### Connections and Secrets
+### Self-Serve Supply
 
-- [ ] **SECR-01**: An authorized owner or operator can create, validate, share or lease where policy allows, rotate, revoke, reconcile, and delete a Connection through canonical domain commands.
-- [ ] **SECR-02**: Secret material is retrieved just in time behind a replaceable `SecretStore` port, remains memory-only for the bounded provider operation, and is never returned or persisted in Convex, jobs, UI/API/MCP/CLI output, logs, traces, errors, or evidence.
-- [ ] **SECR-03**: Vault authentication, retrieval, validation, audit, or availability failure blocks new secret-dependent consequential work and produces an owned, redacted operational state.
-- [ ] **SECR-04**: Rotation creates and validates a candidate generation against the intended target before an atomic active-pointer advance; failure preserves the prior active generation and an attributable reconciliation path.
-- [ ] **SECR-05**: Revoked, stale, inactive, orphaned, or superseded secret generations cannot authorize or resume new work, while in-flight ambiguity follows the invocation reconciliation policy.
-- [ ] **SECR-06**: Operators can inspect Connection and secret generation status, freshness, health, rotation, revocation, outage, and recovery without access to secret material.
+- [ ] **SUPP-01**: An owner-authorized supplier can import OpenAPI, MCP, x402, or
+  AE-native metadata into a draft while source claims remain labelled and
+  non-callable until admission/publication.
+- [ ] **SUPP-02**: Draft validation reports exact blocking and warning facts for
+  identity, endpoint, schema, price, effects, data use, authentication, SSRF,
+  retry, remedy, capacity, readiness, and evidence.
+- [ ] **SUPP-03**: A supplier can connect provider credentials, run a safe
+  contract test, inspect redacted evidence, remedy failures, and request or
+  complete admission without staff editing records.
+- [ ] **SUPP-04**: A supplier can version, publish, suspend, withdraw, replace,
+  deprecate, and retire an Operation while historical commitments, invocations,
+  payments, outcomes, and evidence remain bound to their original revision.
+- [ ] **SUPP-05**: Live readiness and non-delivery policy can remove an Operation
+  from viable allocation without erasing it, with exact remedy and reactivation.
+- [ ] **SUPP-06**: Public buyer facts, private supplier economics, provider secrets,
+  platform risk, and staff-only evidence are separate projections over canonical
+  lifecycle state.
+- [ ] **SUPP-07**: Supplier analytics join exposure, selection, qualified use,
+  failure, repeat/switch, gross earnings, fees, refunds, payable, payout, and
+  demand aggregates with provenance and privacy thresholds.
+- [ ] **SUPP-08**: Two suppliers can complete activation, publication, support,
+  payable, and payout without founder/database intervention.
 
-### Commercial Records and Recovery
+### Economic Completion
 
-- [ ] **COMM-01**: Each commercial invocation links distinct buyer charge, provider cost/payable, AE fee or margin, GST/tax treatment, payment/settlement reference, effect observation, and Account attribution.
-- [ ] **COMM-02**: AE exposes no deposit, withdrawal, transferable balance, reusable stored value, or customer wallet ledger and does not collapse payer, owner, operator, supplier, beneficiary, or tax-subject roles.
-- [ ] **COMM-03**: Refund, credit, cancellation, dispute, variance, and compensation are new attributable commands and immutable adjustments rather than destructive edits to prior transaction truth.
-- [ ] **COMM-04**: Buyer, supplier, and staff operators can inspect commercial and reconciliation state and submit or resolve an eligible refund/dispute with explicit reason, evidence, deadlines, and authority.
-- [ ] **COMM-05**: Account-scoped tax invoices, adjustment evidence, GST calculation records, and commercial exports are generated from canonical transaction facts subject to independently owned Australian legal/accounting acceptance.
-- [ ] **COMM-06**: Commercial reconciliation detects and owns differences among buyer charge, provider observation, facilitator/settlement result, payable, refund/dispute, and AE records without manufacturing a successful state.
+- [ ] **ECON-01**: Every paid commitment exposes fee-inclusive total price or hard
+  maximum, currency/asset, expiry, payer, supplier, platform fee/margin, and
+  cancellation/refund/remedy basis before invoke.
+- [ ] **ECON-02**: Budget policy accounts for pending reservations and aggregate
+  committed exposure, not only completed charges, and is atomic under concurrency.
+- [ ] **ECON-03**: Every commercial invocation correlates buyer charge, provider
+  cost/settlement, AE fee, tax treatment, supplier accrued/matured/payable/held/
+  paid state, effect observation, and Account attribution.
+- [ ] **ECON-04**: Refund, credit, cancellation, dispute, reversal, variance, and
+  compensation are immutable attributable adjustments with evidence and
+  deadlines, never edits to prior truth.
+- [ ] **ECON-05**: Stripe Connect hosted or embedded onboarding owns supplier KYC
+  and payout-account collection; AE stores only provider refs, requirements,
+  status, and correlated payout evidence required by its domain.
+- [ ] **ECON-06**: Payout submission, pending, paid, failed, blocked, reversed, and
+  ambiguous states have self-serve/operator recovery and do not manufacture
+  completion from a transport response.
+- [ ] **ECON-07**: Payer funding handoff exposes authoritative constraints, quote,
+  fees, expiry, status, and recovery without creating deposits, withdrawals,
+  transferable balances, or reusable stored value.
+- [ ] **ECON-08**: Buyer, supplier, and operator projections explain unit economics
+  and every exception from the same canonical commercial facts.
 
-### Operability and Support
+### Events and Continuations
 
-- [ ] **OPER-01**: Account-aware UI and equivalent structured CLI/API/MCP workflows let authorized users inspect canonical Principal continuity, Accounts, ownership, membership, external bindings, Credentials, autonomous-agent/workload ownership, and effective authority.
-- [ ] **OPER-02**: Canonical workflows let authorized users change ownership/membership, rotate or revoke Credentials, manage delegations, Connections, policy/budgets, and Operation lifecycle with complete attribution.
-- [ ] **OPER-03**: Owners, operators, and staff can inspect and act on invocation, unknown-effect, reconciliation, refund/dispute, provider, vault, and audit queues through explicitly owned recovery paths.
-- [ ] **OPER-04**: Every control-plane action is classified self-service, approval or dual-control, staff-only, machine-only, or prohibited, with the same authorization semantics across adapters.
-- [ ] **OPER-05**: Dangerous or irreversible human actions show Account and effect scope, require explicit typed confirmation, and produce a durable audit and post-action verification.
-- [ ] **OPER-06**: Break-glass authority is purpose-, scope-, time-, and Principal-bound, requires dual control where policy says so, never uses a shared permanent credential, and always triggers review.
-- [ ] **OPER-07**: Support projections expose stable correlation IDs, status, safe reason codes, evidence freshness, and escalation ownership while redacting secrets and unrelated Account information.
-- [ ] **OPER-08**: UI workflows preserve keyboard access, landmarks, labelled controls, live status, error recovery, and touch-target accessibility, and CLI/MCP/API workflows remain bounded and non-interactive where appropriate.
-- [ ] **OPER-09**: Website chat remains a thin adapter limited to its five canonical Operation tools and cannot acquire arbitrary URL, generic invoke, payment, recovery, supply, secret, or control-plane powers.
+- [ ] **EVNT-01**: AE publishes a versioned event catalogue for invocation,
+  result, reconciliation, Operation lifecycle, grant, commercial, payout, and
+  support changes with stable source event IDs and Account scoping.
+- [ ] **EVNT-02**: Outbound delivery uses a managed provider behind an
+  `EventDelivery` port for signing, endpoint management, retries, throttling,
+  attempts, replay, and consumer self-service; AE does not build those mechanics.
+- [ ] **EVNT-03**: Delivery is at-least-once, ordered only where explicitly
+  guaranteed, and documented with dedupe and out-of-order consumer guidance.
+- [ ] **EVNT-04**: Consumers can inspect endpoint health, attempts, failures,
+  payload schema/version, retention, and replay through a scoped portal or API.
+- [ ] **EVNT-05**: Event-delivery failure never changes canonical invocation or
+  payment truth; operators can correlate and recover it independently.
+- [ ] **EVNT-06**: Event payloads are minimized, redacted, versioned, and contain
+  refs rather than secrets or unnecessary Operation inputs/outputs.
 
-### Audit, Evidence, and Release
+### Operability and Reliability
 
-- [ ] **EVID-01**: Account-scoped audit timelines correlate request, Principal/delegation ancestry, policy decision, invocation, attempt, provider/payment observation, callback/job, reconciliation, operator action, and outcome with stable identifiers.
-- [ ] **EVID-02**: Every durable evidence claim records the exact artifact, Git ref, relevant lock/build/deployment digest, command, tool/runtime version, generation time, freshness/expiry rule, evidence class, owner, and owning gate.
-- [ ] **EVID-03**: Source, test-harness, hosted/external, operational, legal, and commercial evidence have separate owners and cannot substitute for one another.
-- [ ] **EVID-04**: Audit or evidence-sink failure alerts an explicit owner and fails closed wherever continuing would erase attribution for a consequential effect.
-- [ ] **EVID-05**: Hosted smoke uses separately authorized identity, provider, vault, payment, and spend access against an exact deployed revision and never promotes mocks, injected identities, local fixtures, or ignored output to hosted proof.
-- [ ] **EVID-06**: Rollback, reconciliation, backup/restore, retention/disposal, and destructive-operation evidence identifies the exact deployment and requires typed human confirmation where consequences are irreversible.
+- [ ] **OPER-01**: A buyer, supplier, or operator can begin with any public
+  correlation/state ref and inspect the joined authority, commitment, invocation,
+  provider, payment, event, payout, and support timeline permitted to that role.
+- [ ] **OPER-02**: Canonical self-service paths cover owner/agent identity,
+  Credentials, grants, budgets, Connections, Operation lifecycle, invocation,
+  refund/dispute, payout, and event endpoints; staff-only actions are explicit.
+- [ ] **OPER-03**: Exception queues have one owner, severity, reason, age,
+  evidence freshness, safe actions, deadline/SLA, escalation, and immutable
+  action history.
+- [ ] **OPER-04**: Break-glass is purpose-, Account-, Principal-, scope-, and
+  time-bound, never impersonates the original actor, and always triggers review.
+- [ ] **OPER-05**: Sentry captures safe errors/traces and PostHog captures bounded
+  product/market events; secret or arbitrary project payloads never enter either.
+- [ ] **OPER-06**: Each critical flow has declared SLOs and alerts for availability,
+  latency, queue age, unknown-effect age, event failure, payout failure, and
+  allocation freshness with owned response playbooks.
+- [ ] **OPER-07**: Release evidence binds source, lockfile, build, deployment,
+  schema, provider sandbox/live probes, rollback, and compatibility results to an
+  exact revision.
+- [ ] **OPER-08**: Capacity, retry-storm, hot-Account, rate-limit, isolation,
+  retention/deletion, backup/restore, rollback, and incident drills have measured
+  envelopes and retained evidence.
+- [ ] **OPER-09**: API and event compatibility, deprecation, migration, sandbox,
+  and end-of-life policies are machine-discoverable and tested before change.
 
-### Execution and Maturity Gates
+### No-Handrolling and Architecture
 
-- [ ] **GATE-01**: Before product source edits for a phase, an architecture ADR/design acceptance cites current official documentation and mature examples, names exact production registrations/effect paths, defines operability and rollback, and receives independent engineering and adversarial acceptance.
-- [ ] **GATE-02**: Every implementation phase consists of real registered-endpoint vertical slices with a production adapter, domain logic, durable/external effect, hostile denial/no-effect behavior, observability, rollback/recovery, operator path, and exact-revision acceptance.
-- [ ] **GATE-03**: Semantic and adversarial gates predeclare the domain invariant, attacker-controlled and trusted inputs, exact registration/effect path, substitution counterexamples, oracle/no-effect assertions, evidence class, owner, and rerun command before implementation.
-- [ ] **GATE-04**: An independent plan checker must approve each phase plan and an independent post-execution verifier must verify requirements and production composition before phase acceptance.
-- [ ] **GATE-05**: Every phase receives a fresh Ox/red-team acceptance in a separate task after execution and verification; the implementer cannot mark the final semantic gate.
-- [ ] **GATE-06**: A slice stops after two repair passes; a phase stops after two `CHANGES_REQUIRED` verdicts; recurrence of the same trust-defect class, three consecutive repairs to a critical file, or any proof-property/runtime-seam/trust-source/effect-boundary change forces architecture rebaseline.
-- [ ] **GATE-07**: Every plan declares exact production, test, planning, and shared-integration file ownership; parallel work is allowed only for genuinely independent slices with non-overlapping ownership, and out-of-scope writes stop the work.
-- [ ] **GATE-08**: The canonical GSD ROADMAP, STATE, phase artifacts, and lifecycle are the only active execution authority; the historical custom maturity tree remains evidence and cannot contradict current phase/ref/gate state.
-- [ ] **GATE-09**: Every task and phase closes with a terminal task/goal state, exact reachable refs, clean tracked/staged/untracked state, committed or dispositioned evidence, removed or explicitly retained scratch/worktrees, archived task, and reconciled lifecycle records.
-- [ ] **GATE-10**: Scaling or service extraction occurs only after accepted flows produce measured sustained SLO, queue, retry, storage, deployment, or isolation pressure that breaches a predeclared threshold after monolith tuning.
+- [ ] **NHRL-01**: Every infrastructure concern passes a documented buy-vs-build
+  gate covering official support, installed-version fit, semantics, failure/data
+  ownership, security, exportability, cost, and fallback.
+- [ ] **NHRL-02**: Clerk, Convex components, official protocol/payment SDKs,
+  Stripe Connect, managed event delivery, Sentry/PostHog, and a managed secret
+  provider are the defaults identified in the agent operating contract.
+- [ ] **NHRL-03**: A dependency stays behind a narrow domain port and cannot own AE
+  Principal, Account, Operation, commitment, invocation, outcome, or economic
+  truth merely because it provides machinery.
+- [ ] **NHRL-04**: Each mutable lifecycle has exactly one authoritative module;
+  adapters and projections contain no competing policy or transition logic.
+- [ ] **NHRL-05**: Convex remains the sole writable application record and modular
+  monolith until a measured, predeclared extraction trigger is sustained after
+  in-process optimization.
+- [ ] **NHRL-06**: New custom auth protocols, schedulers, queues, rate limiters,
+  webhook delivery/replay systems, KYC/payout collection, telemetry stores,
+  secret vaults, schema parsers, or test runners require an accepted ADR proving
+  the maintained default cannot satisfy a named invariant.
 
-## v2 Requirements
+## Deferred Until Evidence
 
-Deferred differentiators require a measured trigger and explicit roadmap amendment; they are not part of the current candidate roadmap.
+- Multi-hop agent-to-agent delegation.
+- Opaque or composite reputation.
+- Automatic allocation without caller-visible alternatives and rationale.
+- Multiple-region active-active writes or microservices.
+- Enterprise federation and customer-managed keys.
+- Additional market units beyond Operation.
 
-### Evidence and Policy Enhancements
+## Requirement Classes
 
-- **ENHA-01**: Export a portable, selectively disclosed consequence evidence packet when buyer, supplier, or support demand exceeds canonical audit/export views.
-- **ENHA-02**: Simulate Account policy with safe, non-binding “why denied” output when denial and support telemetry demonstrate a usability problem.
+| Class | Requirements |
+|---|---|
+| `MARKET_CORE` | MARK-01..10, CMIT-01..06, qualified-use parts of INVK-05 and SUPP-07 |
+| `PLATFORM_BASELINE` | AGEX-01..10, AUTH-01..09, INVK-01..10, SUPP-01..08, ECON-01..08, EVNT-01..06, OPER-01..09 |
+| `PARTNER_CAPABILITY` | Infrastructure mechanisms selected by NHRL-01..06 |
+| `ADJACENT_PRODUCT` | Deferred items and `PRODUCT.md` non-goals |
 
-### Discovery and Supply Enhancements
+## Coverage
 
-- **ENHA-03**: Federate source-labelled provider discovery when AE's canonical catalogue provenance is accepted and a measurable supply gap exists.
-- **ENHA-04**: Select among compatible providers using inspectable evidence when multiple validated providers, reliable health/cost data, and safe non-effect/failover proof exist.
-- **ENHA-05**: Offer suppliers a digest-bound conformance kit when onboarding volume makes manual conformance a measured bottleneck; AE still performs independent activation proof.
-
-## Out of Scope
-
-| Feature | Reason |
-|---------|--------|
-| Regulated custody, deposits, withdrawals, transferable stored value, reusable balances, or wallets-as-ledgers | Conflicts with the locked Australian B2B reseller posture and materially expands regulatory and safeguarding obligations. |
-| Speculative Quote, Order, or Offer resources for synchronous x402 | No independent lifecycle has been proven beyond Operation, payment requirements, invocation, settlement evidence, and reconciliation. |
-| SAML, SCIM, nested enterprise organizations, or customer-managed keys | No current evidence of need; extension seams are sufficient for this milestone. |
-| Active-active regional writes, dedicated tenant deployments, or self-hosted Infisical | No measured availability, isolation, or deployment trigger. |
-| Hosted app runtime/app store, cards, ads, BNPL, company formation, or tax remittance | Unrelated platform/financial-product expansion outside the Core Value. |
-| Microservices or a second writable system of record | No measured extraction trigger; distributed consistency would make authority and effect truth harder to prove. |
-| Composite reputation | Deferred until defensible sample sizes, dimensions, and manipulation thresholds exist. |
-| Arbitrary URL or generic tool execution | Bypasses canonical Operation contracts, SSRF policy, pricing/authority inspection, and bounded adapter behavior. |
-| Blanket human approval for every consequence | Prevents autonomous agents from operating as first-class Principals; use Account policy, delegation, budgets, consequence classes, thresholds, and selective dual control. |
-| Permanent or shared break-glass credentials | Violates least privilege and independent attribution; use purpose- and time-bound dual-controlled elevation. |
-| MasterKey, Bazaar, Whop, or another external platform as AE identity, sole registry, sole inventory, or sole settlement rail | External platforms are labelled comparative inputs only; AE retains canonical identity, Operation history, authority, and reconciliation. |
-| Dynamic website-chat power beyond the five canonical tools | Chat is a bounded adapter, not a second orchestration, payment, recovery, supply, or control-plane platform. |
-| Automatic retry or transparent provider failover after an unknown irreversible effect | Risks duplicate consequences; observe, reconcile, compensate, or escalate first. |
-| Universal exactly-once external-effect guarantee | AE cannot control every provider, network, callback, and timeout boundary; it guarantees replay-safe admission, explicit outcomes, and reconciliation instead. |
-| Preserving the historical Phase 3+ decomposition or accepting static inventory/interface leaves as maturity | Current phases must be re-derived as actual endpoint vertical slices with production composition and independent acceptance. |
-
-## Traceability
-
-Every v1 requirement maps to exactly one phase. Cross-cutting execution controls are owned by Phase 1, which establishes their acceptance contract; Phases 2–7 inherit those controls in their success criteria without duplicate requirement mappings.
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| AUTH-01 | Phase 2 | Pending |
-| AUTH-02 | Phase 2 | Pending |
-| AUTH-03 | Phase 2 | Pending |
-| AUTH-04 | Phase 2 | Pending |
-| AUTH-05 | Phase 2 | Pending |
-| AUTH-06 | Phase 2 | Pending |
-| AUTH-07 | Phase 2 | Pending |
-| AUTH-08 | Phase 2 | Pending |
-| AUTH-09 | Phase 2 | Pending |
-| AUTH-10 | Phase 2 | Pending |
-| DELG-01 | Phase 3 | Pending |
-| DELG-02 | Phase 3 | Pending |
-| DELG-03 | Phase 3 | Pending |
-| DELG-04 | Phase 3 | Pending |
-| DELG-05 | Phase 3 | Pending |
-| DELG-06 | Phase 3 | Pending |
-| DELG-07 | Phase 3 | Pending |
-| DISC-01 | Phase 6 | Pending |
-| DISC-02 | Phase 6 | Pending |
-| DISC-03 | Phase 6 | Pending |
-| SUPP-01 | Phase 6 | Pending |
-| SUPP-02 | Phase 6 | Pending |
-| SUPP-03 | Phase 6 | Pending |
-| SUPP-04 | Phase 6 | Pending |
-| SUPP-05 | Phase 6 | Pending |
-| INVK-01 | Phase 2 | Pending |
-| INVK-02 | Phase 2 | Pending |
-| INVK-03 | Phase 2 | Pending |
-| INVK-04 | Phase 2 | Pending |
-| INVK-05 | Phase 2 | Pending |
-| INVK-06 | Phase 2 | Pending |
-| INVK-07 | Phase 2 | Pending |
-| INVK-08 | Phase 2 | Pending |
-| INVK-09 | Phase 5 | Pending |
-| INVK-10 | Phase 5 | Pending |
-| POLI-01 | Phase 2 | Pending |
-| POLI-02 | Phase 2 | Pending |
-| POLI-03 | Phase 2 | Pending |
-| POLI-04 | Phase 2 | Pending |
-| SECR-01 | Phase 4 | Pending |
-| SECR-02 | Phase 4 | Pending |
-| SECR-03 | Phase 4 | Pending |
-| SECR-04 | Phase 4 | Pending |
-| SECR-05 | Phase 4 | Pending |
-| SECR-06 | Phase 4 | Pending |
-| COMM-01 | Phase 5 | Pending |
-| COMM-02 | Phase 5 | Pending |
-| COMM-03 | Phase 5 | Pending |
-| COMM-04 | Phase 5 | Pending |
-| COMM-05 | Phase 5 | Pending |
-| COMM-06 | Phase 5 | Pending |
-| OPER-01 | Phase 6 | Pending |
-| OPER-02 | Phase 6 | Pending |
-| OPER-03 | Phase 5 | Pending |
-| OPER-04 | Phase 6 | Pending |
-| OPER-05 | Phase 6 | Pending |
-| OPER-06 | Phase 7 | Pending |
-| OPER-07 | Phase 7 | Pending |
-| OPER-08 | Phase 6 | Pending |
-| OPER-09 | Phase 6 | Pending |
-| EVID-01 | Phase 2 | Pending |
-| EVID-02 | Phase 1 | Pending |
-| EVID-03 | Phase 1 | Pending |
-| EVID-04 | Phase 7 | Pending |
-| EVID-05 | Phase 7 | Pending |
-| EVID-06 | Phase 7 | Pending |
-| GATE-01 | Phase 1 | Pending |
-| GATE-02 | Phase 1 | Pending |
-| GATE-03 | Phase 1 | Pending |
-| GATE-04 | Phase 1 | Pending |
-| GATE-05 | Phase 1 | Pending |
-| GATE-06 | Phase 1 | Pending |
-| GATE-07 | Phase 1 | Pending |
-| GATE-08 | Phase 1 | Pending |
-| GATE-09 | Phase 1 | Pending |
-| GATE-10 | Phase 7 | Pending |
-
-**Coverage:**
-- v1 requirements: 76 total
-- Mapped to phases: 76
-- Unmapped: 0
-- Duplicate mappings: 0
+Every milestone requirement maps to exactly one owning roadmap phase. A later
+phase may exercise an earlier invariant but cannot claim it again as new scope.
 
 ---
-*Requirements defined: 2026-08-26*
-*Last updated: 2026-08-26 after initial definition from locked brief and project research*
+*Rebaselined: 2026-08-31. Pending independent engineering and adversarial review.*

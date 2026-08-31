@@ -1,148 +1,356 @@
-# Roadmap: Agentic Economy Maturity Rebaseline
+# Roadmap: Agent-First Operation Market
 
-> **Candidate canonical planning artifact.** This roadmap is pending a separate fresh engineering-plan review and Ox/red-team challenge. Initialization approval permits only these planning artifacts; it does not authorize phase discussion, phase planning, product edits, or implementation, and it must not auto-advance the lifecycle.
+**Created:** 2026-08-31  
+**Status:** candidate implementation roadmap; planning is authorized, source
+implementation is not implied by this document  
+**Mode:** vertical platform maturity  
+**Product authority:** [`PRODUCT.md`](../PRODUCT.md)  
+**System contract:** [`docs/designs/agent-operating-contract.md`](../docs/designs/agent-operating-contract.md)
 
-## Overview
+## Milestone Definition
 
-This milestone preserves the accepted historical Phase 1 source and acceptance boundary (`ae284871d9d5bad40245182aefd6f2050d53b556`; handoff `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0`) while treating historical Phase 2 as `INCOMPLETE_NOT_ACCEPTED_NOT_MATURE`. The new roadmap begins with a planning-only architecture, threat, and acceptance contract, then proves maturity through dependency-ordered Vertical MVP slices: a direct-authority consequence, delegated autonomous invocation, Connection/secret generation under use, paid commercial recovery, canonical supply and entry-family breadth, and operated release with measured scale. `.planning/maturity-execution/**` remains evidence only and is not the active lifecycle.
+The milestone is complete when a fresh external agent can orient, resolve a
+real gap, inspect and bind a choice, invoke a paid Operation, consume or recover
+the result, and later return for a comparable need—across two harnesses and two
+independent suppliers—without founder/database intervention. Suppliers receive
+payouts, outbound events recover, and an operator can explain the entire chain
+from one correlation reference.
 
-## Phases
+The roadmap follows the agent's causal path. It does not build all identity,
+then all payments, then all UI. Each phase must expose an externally usable
+vertical slice, hostile denial/no-effect proof, operator projection, and exact-
+revision evidence.
 
-- [ ] **Phase 1: Architecture, Threat, and Acceptance Contract** - Accept the planning contract that fixes trust, effect, operability, evidence, ownership, and stop semantics before product edits.
-- [ ] **Phase 2: Direct-Authority Reference Consequence** - Prove one useful provider consequence end to end through an actual production registration and the sole canonical authority adapter.
-- [ ] **Phase 3: Delegated Autonomous Invocation** - Prove that an autonomous-agent or workload Principal can invoke a real consequence through safe, revocable multi-hop delegation.
-- [ ] **Phase 4: Connection and Secret Generation Under Use** - Operate a generation-safe Connection through a real control-plane registration and consume its secret JIT in an accepted consequence.
-- [ ] **Phase 5: Paid Provider Truth and Commercial Recovery** - Complete one paid provider consequence with exact protocol evidence, immutable commercial truth, and operated unknown/refund/dispute recovery.
-- [ ] **Phase 6: Canonical Supply and Entry-Family Breadth** - Let suppliers and operators manage canonical Operations while completing required transport and asynchronous entry families as independent vertical slices.
-- [ ] **Phase 7: Operated Release, Recovery, and Measured Scale** - Demonstrate an exact-revision supported release, recovery drills, evidence ownership, and threshold-driven scaling without premature extraction.
+## Active execution order: boring baseline first
 
-## Locked Vertical MVP Execution Contract
+Before adding net-new ranking, allocation, or commitment behavior, complete the
+small platform seams an agent should never have to reason around. This is a
+forward-implementation tranche, not another architecture phase: implement one
+producer and every immediate consumer, run the smallest dependency cone, then
+move to the next seam.
 
-Phase 1 owns this acceptance contract; Phases 2–7 inherit it without remapping its cross-cutting requirements. Every implementation slice must include an actual registered endpoint/reference, production adapter, domain logic, durable or external effect, hostile denial with proven no-effect, observability, rollback/recovery, an owned operator path, and independent exact-revision acceptance. Each phase requires an independent plan checker before execution, an independent post-execution verifier, and then fresh Ox/red-team acceptance in a separate task; the implementer cannot close the final semantic gate.
+1. **Funding preflight — implemented:** anonymous constraints and an exact,
+   fee-inclusive, non-binding quote; visible payer UI breakdown; bounded input,
+   rate limit, correlation ref, cache policy, and cold-manifest schemas. Checkout
+   creation remains an owner-authorized action.
+2. **HTTP contract hygiene — active next:** every public route returns the same
+   problem language, `Allow` behavior, content-type/body limits, cache semantics,
+   correlation identity, and retry facts. Fix proven inconsistencies; do not
+   create a second transport framework.
+3. **Account readback:** prove current identity, Account, scope, exact balance,
+   bounded activity pagination, and funding continuation across HTTP/MCP/CLI.
+4. **Credential housekeeping:** self-serve inspection, one-time secret display,
+   bounded rotation overlap, immediate revocation, and fresh owner authority for
+   enlargement. Use the selected identity provider rather than custom auth.
+5. **Interrupted-work recovery:** authoritative funding, invocation, payout, and
+   event status from stable refs, with safe retry or reconcile instructions.
+6. **Operational continuation:** managed signed outbound events, attempt history,
+   replay, role-safe audit timelines, and owned exception queues.
 
-Each plan must predeclare exact production, test, planning, and shared-integration file ownership. Work is sequenced unless slices are genuinely independent and ownership is non-overlapping; out-of-scope writes stop the work. A slice stops after two repair passes and a phase stops after two `CHANGES_REQUIRED` verdicts. The same trust-defect class recurring, three consecutive repairs to a critical file, or any proof-property, runtime-seam, trust-source, or effect-boundary change triggers immediate architecture rebaseline. Lifecycle closure requires reachable refs, clean state, dispositioned evidence, archived tasks, and reconciled scratch/worktree and GSD records.
+The easy tranche is items 1–3. Items 4–6 remain platform baseline and are
+completed before their dependent consequential flow, but they do not block
+read-only market-resolution work that cannot create authority, spend, or an
+external effect. This prevents “boring first” from becoming a second big-bang
+platform programme.
 
-## Phase Details
+## Phase 1: System Contract and Buy-vs-Build Boundary
 
-### Phase 1: Architecture, Threat, and Acceptance Contract
-**Goal:** Reviewers can accept one executable architecture, threat, operability, evidence, and acceptance contract before any product source is edited.
-**Mode:** mvp
-**Depends on:** Nothing (first roadmap phase; historical accepted source is preserved input, not a roadmap phase prerequisite to re-execute)
-**Requirements:** EVID-02, EVID-03, GATE-01, GATE-02, GATE-03, GATE-04, GATE-05, GATE-06, GATE-07, GATE-08, GATE-09
-**Success Criteria** (what must be TRUE):
-  1. Reviewers can inspect an exact-ref ADR/design that cites current official documentation and mature examples, confirms installed-version behavior, names the first actual registered endpoint/reference and complete effect path, and makes no product edit.
-  2. Reviewers can identify exactly one canonical Convex Principal/Account adapter contract, least-privilege wrapper shapes, consequence-time authority boundary, effect/unknown state machine, rollback meanings, operator routes, and threat counterexamples.
-  3. Every threat, durable/external effect, operability duty, evidence class, and acceptance claim has an explicit owner plus exact artifact/ref/digest/tool/freshness metadata; evidence classes cannot substitute for one another.
-  4. Every planned slice has exact file ownership, permitted parallel boundaries, predeclared hostile/no-effect gates, repair counters, lifecycle-close duties, and stop/rebaseline rules that reviewers can enforce mechanically.
-  5. An independent plan checker and post-execution verifier approve the planning-only contract, followed by fresh Ox/red-team acceptance in a separate task; until a separate fresh engineering-plan review and Ox challenge accept this candidate roadmap, no phase planning or implementation is authorized.
-**Plans:** TBD
+**Goal:** Implementation has one accepted abstraction tower, response language,
+state-ownership map, threat model, and dependency policy before new platform
+machinery is added.
 
-### Phase 2: Direct-Authority Reference Consequence
-**Goal:** A directly authorized Principal can invoke and recover one useful provider consequence through the actual registered production path with explicit Account authority and durable truth.
-**Mode:** mvp
+**Owns:** NHRL-01..06  
+**Depends on:** none
+
+**Plans:**
+
+1. `01-01` — freeze canonical artifact schemas, refs, digests, provenance classes,
+   lifecycle owners, and cross-plane invariants;
+
+2. `01-02` — freeze the shared envelope, reason taxonomy, next-action schema,
+   compatibility/deprecation rules, and cross-surface conformance fixture;
+
+3. `01-03` — make dependency decisions for Clerk, Convex components, Stripe
+   Connect, managed secrets, Svix, Sentry/PostHog, and official SDKs, including
+   failure/data ownership and fallback;
+
+4. `01-04` — threat-model commitment drift, authority confusion, replay,
+   irreversible ambiguity, event duplication, provider compromise, data leakage,
+   and infrastructure-provider failure.
+
+**Exit evidence:**
+
+- one state owner per mutable lifecycle and no adapter-owned domain policy;
+- an independently reviewed buy-vs-build record for every commodity concern;
+- contract fixtures prove every surface can represent the same facts, unknowns,
+  costs, states, problems, and next actions;
+
+- no source implementation is accepted while a named invariant or failure owner
+  remains ambiguous.
+
+### Phase 01.1: Close ten low-hanging codebase concerns with bounded hardening changes (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
 **Depends on:** Phase 1
-**Requirements:** AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, AUTH-07, AUTH-08, AUTH-09, AUTH-10, INVK-01, INVK-02, INVK-03, INVK-04, INVK-05, INVK-06, INVK-07, INVK-08, POLI-01, POLI-02, POLI-03, POLI-04, EVID-01
-**Success Criteria** (what must be TRUE):
-  1. A Principal explicitly selects an authorized Account and completes one real provider consequence through the chosen registered HTTP Operation endpoint, while the sole canonical adapter preserves Principal, Account, Credential, workload, ownership, membership, and distinct commercial-role attribution.
-  2. Repeating the same Account-scoped intent is replay-safe, conflicting reuse is rejected, and admission atomically records current policy/budget authority, audit, reservation, and asynchronous handoff before acknowledgement.
-  3. Scheduled or internal work independently revalidates current server authority immediately before the effect; attempts, provider observations, unknown outcomes, reconciliation, cancellation, and compensation remain distinct monotonic facts.
-  4. Wrong-Account, ambiguous, expired, revoked, stale, over-budget, or otherwise hostile requests receive a safe denial with no reservation, schedule, secret read, provider call, durable success, or existence leak, while callers and operators can inspect and safely cancel or reconcile the accepted invocation.
-  5. The locked vertical contract is independently plan-checked and post-execution verified, then a fresh separate-task Ox/red-team acceptance proves the actual registered reference, production adapter, durable/external effect, no-effect denial, observability, rollback/recovery, operator path, and exact-revision evidence within the repair/stop budget.
-**Plans:** TBD
-**UI hint:** yes
+**Plans:** 0 plans
 
-### Phase 3: Delegated Autonomous Invocation
-**Goal:** An autonomous-agent or workload Principal can exercise inspectable, monotonically narrowed multi-hop authority over a real consequence and lose that power immediately when an ancestor is revoked.
-**Mode:** mvp
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 01.1 to break down)
+
+## Phase 2: Orient → Viable Resolution
+
+**Goal:** An external agent can understand AE in one cheap call and obtain compact,
+caller-viable, evidence-explained Operations without causing any effect.
+
+**Owns:** AGEX-01..10, MARK-01..06  
+**Depends on:** Phase 1
+
+**Plans:**
+
+1. `02-01` — implement read-only orientation/doctor and machine-readable
+   capability/version/limit discovery;
+
+2. `02-02` — implement bounded market intent, resolution snapshot, fact
+   provenance, and closed viability/exclusion reasons;
+
+3. `02-03` — implement compact/detail/compare disclosure, field groups, stable
+   pagination, conditional/delta reads, and explicit resource ceilings;
+
+4. `02-04` — implement inspectable deterministic allocation features and
+   freshness-bounded background readiness projections;
+
+5. `02-05` — prove HTTP/MCP/CLI/UI/chat semantic parity and prove every discovery
+   path creates no reservation, secret read, provider call, charge, or effect.
+
+**Exit evidence:**
+
+- a fresh agent identifies identity, Account, grant, budget, health, versions,
+  and limits in one read-only interaction;
+
+- top candidates are `executable_now`, `setup_required`, or `unavailable`, with
+  no later failure for a fact already knowable at resolution time;
+
+- default response is compact and full evidence/schema expansion is lazy;
+- the same request produces equivalent resolution semantics across all surfaces.
+
+## Phase 3: Inspect → Commitment → Owner-Bound Authority
+
+**Goal:** An owner can activate and control a durable agent, and the agent can
+bind an inspected choice so the invoked effect cannot drift.
+
+**Owns:** AUTH-01..09, CMIT-01..06  
 **Depends on:** Phase 2
-**Requirements:** DELG-01, DELG-02, DELG-03, DELG-04, DELG-05, DELG-06, DELG-07
-**Success Criteria** (what must be TRUE):
-  1. A human, organization, autonomous-agent, or workload Principal can directly own an Account/resources and issue an inspectable delegation with explicit Account, resources, actions, budget, time window, consequence class, and approval posture.
-  2. A real MCP or CLI-over-HTTP invocation by an autonomous-agent/workload Principal reaches the accepted provider consequence only when every delegation hop narrows its parent and the bounded chain is cycle-free and generation-current.
-  3. Revoking or narrowing any ancestor after admission but before the exact registered worker effect denies the consequence with zero new secret/provider effect while preserving immutable historical and full initiating/effective-actor attribution.
-  4. Owners and authorized operators can inspect effective delegated authority, ancestry, decision/consequence-time facts, and revoke or narrow it through a canonical recovery-capable control-plane path.
-  5. The locked vertical contract is independently plan-checked and post-execution verified, then a fresh separate-task Ox/red-team acceptance proves the actual registered reference, production adapter, effect, hostile no-effect denial, observability, rollback/recovery, operator path, and exact-revision evidence within the repair/stop budget.
-**Plans:** TBD
-**UI hint:** yes
 
-### Phase 4: Connection and Secret Generation Under Use
-**Goal:** Authorized users can operate a Connection safely while a real accepted consequence consumes only its validated active secret generation JIT and fails closed during vault or rotation faults.
-**Mode:** mvp
+**Plans:**
+
+1. `03-01` — establish owner-bound durable Principal, Account context, Credential
+   binding, and separate payer/supplier/operator attribution;
+
+2. `03-02` — use Clerk-supported OAuth/API-key primitives for self-serve direct
+   grants, consent, inspection, revocation, rotation, overlap, and recovery;
+
+3. `03-03` — implement exact Operation/capability scopes, per-call and aggregate
+   committed-spend controls, rate/concurrency, approvals, and generation checks;
+
+4. `03-04` — implement commitment creation and digest binding over caller,
+   authority, Operation revision, inputs, price, terms, data use, effects,
+   readiness, and expiry;
+
+5. `03-05` — adversarially prove every drift, stale authority, wrong Account,
+   enlargement, and expired commitment fails before any consequence.
+
+**Exit evidence:**
+
+- a new external runtime activates, receives a narrow direct grant, inspects it,
+  loses/rotates its Credential, and continues as the same Principal without staff;
+
+- inspect returns every currently knowable prerequisite and creates no effect;
+- argument, price, revision, readiness, effect, caller, grant, or expiry drift
+  produces zero reservation, secret read, provider effect, or charge;
+
+- no active path treats an agent as an ownerless economic Account or implements
+  a general delegation graph.
+
+## Phase 4: Invoke → Result → Durable Continuation
+
+**Goal:** A committed call progresses through explicit execution and payment
+truth and always returns a usable result or a safe resumable recovery path.
+
+**Owns:** INVK-01..10, EVNT-01..06  
 **Depends on:** Phase 3
-**Requirements:** SECR-01, SECR-02, SECR-03, SECR-04, SECR-05, SECR-06
-**Success Criteria** (what must be TRUE):
-  1. An authorized owner/operator can create, validate, share or lease where permitted, rotate, revoke, reconcile, and delete a Connection through an actual registered control-plane path with complete attribution.
-  2. Rotation validates a candidate generation against the intended target before atomic pointer advance; failure preserves the prior active generation, and revoked, stale, orphaned, inactive, or superseded generations cannot start or resume new work.
-  3. The accepted provider consequence retrieves secret material JIT through a replaceable production SecretStore adapter, keeps it memory-only for the bounded operation, and exposes no secret in Convex, jobs, interfaces, logs, traces, errors, evidence, or normal CI output.
-  4. Vault authentication, retrieval, validation, audit, or availability failure starts no new secret-dependent consequence and leaves operators a redacted health, outage, rollback, and reconciliation path.
-  5. The locked vertical contract is independently plan-checked and post-execution verified, then a fresh separate-task Ox/red-team acceptance proves the actual registered reference, production adapter, effect, hostile no-effect denial, observability, rollback/recovery, operator path, and exact-revision evidence within the repair/stop budget.
-**Plans:** TBD
-**UI hint:** yes
 
-### Phase 5: Paid Provider Truth and Commercial Recovery
-**Goal:** Buyers, suppliers, and operators can complete and support one paid provider consequence without confusing protocol observations, external effect truth, or immutable AE commercial records.
-**Mode:** mvp
+**Plans:**
+
+1. `04-01` — bind commitment to atomic admission, invocation/effect identity,
+   idempotency, reservation, audit, and Workpool handoff;
+
+2. `04-02` — separate command, execution, provider observation, payment,
+   settlement, result, cancellation, and reconciliation state machines;
+
+3. `04-03` — implement literal result, pending/input/approval/connection handoff,
+   status, safe cancellation, and fresh-process continuation contracts;
+
+4. `04-04` — implement authenticated callback/bounded poll reconciliation and
+   prove ambiguous irreversible effects never retry or fail over blindly;
+
+5. `04-05` — integrate managed outbound delivery behind `EventDelivery`, publish
+   event schemas, and expose scoped endpoint/attempt/replay self-service;
+
+6. `04-06` — run disconnect, duplicate, out-of-order, timeout, malformed,
+   callback, provider, payment, and event-delivery fault matrices.
+
+**Exit evidence:**
+
+- one committed consequential call produces exactly one effect identity;
+- identical replay returns existing truth and conflicting replay fails;
+- a literal result is immediately consumable, while every incomplete state is
+  resumable by a fresh process from refs and next actions;
+
+- unknown effects remain unknown until evidence converges or escalation owns them;
+- event failure is independently recoverable and cannot alter canonical truth.
+
+## Phase 5: Self-Serve Supplier and Economic Completion
+
+**Goal:** Two suppliers can independently publish, operate, earn, remedy, and
+receive payouts for canonical Operations without bespoke platform assembly.
+
+**Owns:** SUPP-01..08, ECON-01..08  
 **Depends on:** Phase 4
-**Requirements:** INVK-09, INVK-10, COMM-01, COMM-02, COMM-03, COMM-04, COMM-05, COMM-06, OPER-03
-**Success Criteria** (what must be TRUE):
-  1. One real paid endpoint completes through a version-pinned x402 flow where supported or an explicit non-x402 production adapter, while AE records exact payment requirements, signed identity, verification, settlement/provider observations, finality limits, authority, and effect truth separately.
-  2. A fault after provider acceptance but before the response causes exactly one irreversible request and an owned unknown/reconciliation record; callback, bounded poll, or operator evidence converges, compensates, or escalates without blind retry or destructive history edits.
-  3. Buyers, suppliers, and staff can inspect separately attributed buyer charge, provider cost/payable, AE fee/margin, GST/tax, settlement, effect, variance, refund, cancellation, dispute, and compensation facts, and authorized adjustments create immutable new commands with evidence and deadlines.
-  4. Canonical invoices, adjustment evidence, and exports reflect independently accepted Australian legal/accounting treatment and expose no deposit, withdrawal, transferable balance, reusable stored value, customer-wallet ledger, or collapsed payer/owner/operator/supplier/beneficiary/tax roles.
-  5. The locked vertical contract is independently plan-checked and post-execution verified, then a fresh separate-task Ox/red-team acceptance proves the paid registered reference, production adapter, durable/external effect, hostile no-effect denial, observability, rollback/recovery, operator queues, and exact-revision hosted evidence within the repair/stop budget.
-**Plans:** TBD
-**UI hint:** yes
 
-### Phase 6: Canonical Supply and Entry-Family Breadth
-**Goal:** Suppliers, buyers, autonomous agents, operators, and support can discover and operate the same canonical Operations across required entry families without transport-specific authority or business-logic forks.
-**Mode:** mvp
+**Plans:**
+
+1. `05-01` — implement guided native/OpenAPI/MCP/x402 draft import, validation,
+   contract testing, admission feedback, and safe Credential connection;
+
+2. `05-02` — implement version/publish/suspend/withdraw/replace/deprecate/retire
+   lifecycle and freshness-based readiness/non-delivery enforcement;
+
+3. `05-03` — implement fee-inclusive commitment, atomic committed exposure,
+   buyer/provider/platform commercial correlation, and exact adjustments;
+
+4. `05-04` — integrate Stripe Connect hosted/embedded onboarding and canonical
+   accrued→matured→payable/held→paid/blocked/reversed payout state;
+
+5. `05-05` — implement payer-safe funding handoff, refund/dispute, payout
+   ambiguity, and buyer/supplier/operator economic projections;
+
+6. `05-06` — activate and pay two independent suppliers through sandbox and then
+   separately authorized live exact-revision proof.
+
+**Exit evidence:**
+
+- source metadata never becomes callable before admission/publication;
+- suppliers can fix every blocking validation/readiness issue without staff edits;
+- KYC and bank data never transit AE-owned forms or records;
+- buyer charge, supplier payable/payout, AE fee, tax, effect, refund/dispute, and
+  ambiguity remain separately attributable;
+
+- both suppliers complete activation-to-payout with no founder/database action.
+
+## Phase 6: Outcome Accretion and Live Market Proof
+
+**Goal:** Real use improves inspectable allocation, and one dense market cell
+demonstrates return demand rather than a one-off invocation demo.
+
+**Owns:** MARK-07..10  
 **Depends on:** Phase 5
-**Requirements:** DISC-01, DISC-02, DISC-03, SUPP-01, SUPP-02, SUPP-03, SUPP-04, SUPP-05, OPER-01, OPER-02, OPER-04, OPER-05, OPER-08, OPER-09
-**Success Criteria** (what must be TRUE):
-  1. Agents can search, compare, inspect, and inspect-plan the same source-labelled, versioned canonical Operation across HTTP, MCP, CLI, UI, and bounded chat without acquiring authority, reserving budget, reading secrets, or creating effects; inspect-plan remains explicitly non-binding.
-  2. Authorized suppliers can publish/version an Operation and staff can validate its actual endpoint, contract, provider authentication, SSRF/network policy, denial, and reconciliation behavior before activation, then suspend/reactivate/retire it without erasing historical evidence.
-  3. Authorized users and staff can inspect and change canonical identity/Account continuity, ownership/membership, Credentials, delegations, Connections, policy/budgets, and Operation lifecycle through classified self-service, approval/dual-control, staff-only, machine-only, or prohibited paths with identical authorization semantics.
-  4. Required HTTP, MCP, CLI, UI/chat, callback, cron, scheduled-job, worker, and reconciliation registrations each close as an independently accepted production-consumer micro-slice; dangerous human actions identify Account/effect scope, require typed confirmation, remain accessible, and website chat stays limited to five canonical tools.
-  5. Each slice inherits the locked contract and is independently plan-checked and post-execution verified, then fresh separate-task Ox/red-team accepted on its actual registered reference, production adapter, effect, hostile no-effect denial, observability, rollback/recovery, operator/support path, and exact-revision evidence; parallel work occurs only across exact non-overlapping ownership.
-**Plans:** TBD
-**UI hint:** yes
 
-### Phase 7: Operated Release, Recovery, and Measured Scale
-**Goal:** Operators can release, observe, support, recover, and scale the accepted vertical flows using exact-revision evidence and measured thresholds while Convex remains the sole writable modular monolith.
-**Mode:** mvp
+**Plans:**
+
+1. `06-01` — implement qualified-use, buyer-reported outcome, repeat, switch,
+   bypass-when-observable, and supplier-earnings evidence with provenance;
+
+2. `06-02` — implement versioned allocation policy and offline replay/evaluation
+   that explains every ranking change and protects cold-start alternatives;
+
+3. `06-03` — implement privacy-thresholded supplier demand intelligence and
+   data-minimization/retention enforcement;
+
+4. `06-04` — run the live market-cell programme across two harnesses, capturing
+   gap→resolution→commitment→paid result→qualified use→later repeat/switch;
+
+5. `06-05` — review unit economics, failure/recovery cost, supplier incrementality,
+   and whether demand still routes through AE on second use.
+
+**Exit evidence:**
+
+- provider completion, buyer opinion, AE observation, and inference never collapse;
+- replay cannot inflate demand or reputation;
+- a ranking change is reproducible from named evidence and policy version;
+- supplier intelligence cannot identify a buyer/private workload;
+- the milestone contains real repeat or justified switch, supplier earnings, and
+  continued AE allocation—not catalogue size as a proxy.
+
+## Phase 7: Operated Platform
+
+**Goal:** Buyers, suppliers, and operators can run and recover the accepted market
+under declared reliability, compatibility, security, and data-lifecycle proof.
+
+**Owns:** OPER-01..09  
 **Depends on:** Phase 6
-**Requirements:** OPER-06, OPER-07, EVID-04, EVID-05, EVID-06, GATE-10
-**Success Criteria** (what must be TRUE):
-  1. Operators can bind a release to exact source, lock/build/deployment digests and run separately authorized hosted Clerk, provider, vault, payment, callback, audit/telemetry, and spend smokes without treating mocks, fixtures, injected identities, or ignored output as hosted proof.
-  2. Owners and support can use redacted stable correlation IDs, safe reason codes, evidence freshness, alert ownership, and escalation routes; audit/evidence-sink failure alerts an owner and fails closed wherever continuing would erase consequence attribution.
-  3. Operators can complete and evidence stop-new-work, rollback, reconciliation-backlog, backup/restore, retention/disposal, and destructive-operation drills against an exact deployment, with typed confirmation for irreversible actions and purpose/scope/time/Principal-bound reviewed break-glass authority.
-  4. Accepted flows expose measured SLO, queue, retry, rate, storage, deployment, and isolation pressure with load shedding and recovery budgets; service extraction occurs only after a predeclared sustained threshold is breached after modular-monolith tuning.
-  5. The locked vertical contract is independently plan-checked and post-execution verified, then a fresh separate-task Ox/red-team acceptance proves the hosted actual registered references, production adapters, effects, hostile no-effect denial, observability, rollback/recovery, operator/support paths, and exact-revision evidence within the repair/stop budget.
-**Plans:** TBD
-**UI hint:** yes
 
-## Dependency and Parallelism Rationale
+**Plans:**
 
-- Phase 1 fixes the authority/effect and proof contract before any implementation edits.
-- Phase 2 proves direct authority before Phase 3 can safely extend it with delegation.
-- Phase 4 follows consequence-time authority so secret retrieval occurs only after accepted admission, and precedes paid flows that require production credentials.
-- Phase 5 binds payment and commercial recovery to actual provider/effect facts before breadth multiplies the paths.
-- Phase 6 expands only independently accepted vertical patterns; its micro-slices may run in parallel solely when exact production, test, planning, and shared-integration ownership does not overlap.
-- Phase 7 closes hosted operation and measured scaling after representative flows exist. Any new trust boundary or proof/effect seam discovered earlier stops work and returns to Phase 1 rebaseline rather than being patched forward.
+1. `07-01` — build joined role-safe timelines and owned exception queues from one
+   correlation/state ref, including machine and human actions;
+
+2. `07-02` — close all buyer/supplier/operator self-service gaps and implement
+   scoped break-glass with immutable review;
+
+3. `07-03` — establish safe Sentry/PostHog dimensions, SLOs, alerts, playbooks,
+   support ownership, and market/economic dashboards;
+
+4. `07-04` — automate exact-revision release manifests, contract compatibility,
+   sandbox/live probes, rollback, and deprecation evidence;
+
+5. `07-05` — execute capacity, hot-Account, retry-storm, isolation, retention/
+   deletion, backup/restore, rollback, and incident drills;
+
+6. `07-06` — complete independent platform acceptance against Locus/Whop parity
+   maps and the agent operating contract's fresh-process driver's-seat test.
+
+**Exit evidence:**
+
+- any permitted actor can understand current state and safe actions from one ref;
+- every exception has one owner and expiry/SLA;
+- release, rollback, restore, incident, isolation, retention, and scale claims bind
+  to observed evidence, not procedures alone;
+
+- API/event compatibility and deprecation are machine-discoverable;
+- the end-to-end market operates without hidden founder knowledge.
+
+## Dependency Rationale
+
+- Phase 1 prevents infrastructure and vocabulary from becoming a second product.
+- Phase 2 makes the market legible before consequential authority is added.
+- Phase 3 seals the decision and owner control before effects or money expand.
+- Phase 4 proves one durable continuation before multiplying suppliers.
+- Phase 5 makes both sides self-serve and economically complete.
+- Phase 6 allows learning only after trustworthy outcome facts exist.
+- Phase 7 scales and operates a proven loop rather than a speculative platform.
+
+Work may parallelize only inside a phase when file ownership and state ownership
+do not overlap. A changed product boundary, new market unit, new trust source,
+or new irreversible-effect semantic stops the affected plan and returns to the
+Phase 1 contract.
 
 ## Progress
 
-**Candidate status:** No phase is active. Separate fresh engineering-plan review and Ox challenge must accept this roadmap before any lifecycle advance.
+| Phase | Plans | Status | Completed |
+|---|---:|---|---|
+| 1. System Contract and Buy-vs-Build Boundary | 0/4 | Candidate — review required | — |
+| 2. Orient → Viable Resolution | 0/5 | Not started | — |
+| 3. Inspect → Commitment → Owner-Bound Authority | 0/5 | Not started | — |
+| 4. Invoke → Result → Durable Continuation | 0/6 | Not started | — |
+| 5. Self-Serve Supplier and Economic Completion | 0/6 | Not started | — |
+| 6. Outcome Accretion and Live Market Proof | 0/5 | Not started | — |
+| 7. Operated Platform | 0/6 | Not started | — |
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Architecture, Threat, and Acceptance Contract | 0/TBD | Candidate — review required | - |
-| 2. Direct-Authority Reference Consequence | 0/TBD | Not authorized | - |
-| 3. Delegated Autonomous Invocation | 0/TBD | Not authorized | - |
-| 4. Connection and Secret Generation Under Use | 0/TBD | Not authorized | - |
-| 5. Paid Provider Truth and Commercial Recovery | 0/TBD | Not authorized | - |
-| 6. Canonical Supply and Entry-Family Breadth | 0/TBD | Not authorized | - |
-| 7. Operated Release, Recovery, and Measured Scale | 0/TBD | Not authorized | - |
+**Total:** 37 plans across 7 phases.  
+**Next action:** independent engineering and adversarial review of Phase 1 and the
+cross-phase requirement ownership before implementation planning begins.
 
 ---
-*Candidate canonical roadmap created: 2026-08-26; Standard granularity; Vertical MVP mode; pending separate fresh engineering-plan review and Ox challenge.*
+*Candidate roadmap rebaselined: 2026-08-31.*

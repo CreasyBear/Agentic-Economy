@@ -1,7 +1,7 @@
 # Product authority
 
 **Status:** active product charter  
-**Last rebuilt:** 2026-08-24
+**Last rebuilt:** 2026-08-31
 
 ## Category
 
@@ -40,6 +40,27 @@ One invocation is one use of an Operation. The result is the information,
 artifact, judgement, computation, access, or external action that allows the
 agent to continue its own project.
 
+## Supporting market artifacts
+
+The Operation remains the only market unit. Agentic Economy uses five supporting
+artifacts to preserve a legible, resumable decision chain:
+
+- a **market intent** records the bounded missing contribution and hard
+  constraints without taking ownership of the caller's project;
+- a **resolution** records considered, viable, and excluded Operation revisions
+  with provenance and caller-specific reasons;
+- a **commitment** binds an expiring inspection to the caller, exact Operation
+  revision, normalized inputs, price ceiling, terms, data use, effects,
+  readiness, and authority generation;
+- an **invocation** owns one accepted command/effect identity and its durable
+  observations; and
+- **outcome evidence** records AE-observed and buyer-reported use, repeat,
+  switching, recovery, and economic facts with distinct provenance.
+
+These artifacts are not Tasks, Orders, Quotes, Offers, agent sessions, or new
+units of supply. They exist only to make the Operation market safe, inspectable,
+and accretive.
+
 ## Golden journey
 
 1. The agent encounters a capability boundary during work it already owns.
@@ -71,6 +92,43 @@ agent to continue its own project.
 - The external registry discovers possible supply at metadata authority only.
   Registry entries are not executable and are not canonical Operations.
 
+## Agent operating principles
+
+- **One canonical lifecycle:** every surface projects `gap → resolution →
+  commitment → invocation → result → outcome` from the same facts and allowed
+  transitions.
+- **Orient cheaply:** an agent can discover supported versions, identity,
+  Account, delegated authority, budget exposure, limits, and health in one
+  read-only call.
+- **Progressive disclosure:** search is compact; exact schemas, price, terms,
+  effects, data use, and readiness expand only when relevant. Callers never need
+  to re-download the market to learn one next step.
+- **Explicit truth:** known, unknown, stale, supplier-claimed, AE-observed,
+  buyer-reported, and AE-derived facts remain distinguishable.
+- **Machine-actionable continuation:** every non-terminal response contains a
+  durable reference and the exact safe next actions, including preconditions,
+  consequences, expiry, and retry class.
+- **Decision continuity:** invoke must match an unexpired caller-bound commitment;
+  drift fails before reservation, charge, secret access, or provider effect.
+- **Owner-bound agency:** an agent is a durable technical principal acting under
+  authority issued by a person or organization. Credentials authenticate but do
+  not own; the initial platform supports direct bounded delegation rather than a
+  speculative general delegation graph.
+- **Resource awareness:** money, committed exposure, latency, result size,
+  freshness, and external-call cost are visible control inputs. Deterministic
+  market and policy work does not require a model call.
+- **Resumability:** a fresh process can continue, cancel, or reconcile from stable
+  references without hidden session or conversation state.
+- **Bounded accretion:** interactions improve market allocation using market
+  intent, exposure, selection, invocation, outcome, repeat, switching, and
+  supplier evidence. AE does not capture arbitrary prompts, plans, files,
+  conversations, or chain of thought.
+- **Buy commodity machinery:** AE owns market, authority, invocation, economic,
+  and evidence semantics. Authentication, queues/workflows, rate limiting,
+  protocol SDKs, supplier KYC/payout onboarding, outbound webhook delivery,
+  observability, and secret storage use mature maintained products behind narrow
+  ports unless a written decision proves they cannot satisfy an invariant.
+
 ## Ownership boundary
 
 The consuming agent or harness owns:
@@ -91,6 +149,11 @@ Agentic Economy owns:
 - invocation identity, receipts, observation, and recovery;
 - signals about allocation, completion, repeat use, and supplier earnings.
 
+The durable agent principal is separate from its replaceable credentials and
+harness, but remains bound to an owner Account. Legal payer, economic owner,
+runtime actor, supplier, beneficiary, and operator roles remain independently
+attributed.
+
 ## Non-goals
 
 Agentic Economy is not:
@@ -102,6 +165,9 @@ Agentic Economy is not:
 - a general workflow or execution-inspection platform;
 - a speculative abstraction layer above the Operation market;
 - a directory that treats imported metadata as callable truth.
+- an ownerless autonomous-agent banking or legal-personhood system;
+- a custom identity provider, OAuth server, queue, scheduler, webhook delivery
+  service, KYC system, payout rail, observability backend, or secret vault.
 
 Do not recreate product spines from historical compatibility identifiers. If an
 identifier still exists in source but the capability is absent from this
