@@ -53,6 +53,7 @@ const JSON_HELP_FLAGS = {
 } as const
 
 const COMMON_COMMAND_OPTIONS = ['base-url', 'json'] as const
+const PUBLIC_READ_COMMANDS = new Set(['search', 'inspect', 'compare', 'inspect-plan'])
 const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   manifest: ['technical'],
   config: [],
@@ -356,6 +357,26 @@ function validateCommandOptions(parsed: ParsedArgs): void {
   )
 }
 
+function publicReadFailureContinuation(parsed: ParsedArgs, kind: ProblemKind): Readonly<{
+  suggestion: string
+  nextCommand: string
+}> | undefined {
+  if (kind !== 'UNAVAILABLE' || parsed.command === undefined || !PUBLIC_READ_COMMANDS.has(parsed.command)) {
+    return undefined
+  }
+  return {
+    suggestion: 'Check AE service health before retrying this read.',
+    nextCommand: continuationCommand([
+      'ae',
+      'doctor',
+      ...(parsed.options.baseUrlSource === undefined || parsed.options.baseUrlSource === 'hosted_default'
+        ? []
+        : ['--base-url', parsed.options.baseUrl]),
+      ...(parsed.options.json ? ['--json'] : []),
+    ]),
+  }
+}
+
 
 
 async function main(): Promise<number> {
@@ -526,6 +547,11 @@ async function main(): Promise<number> {
       retryAfter = mappedFailure.retryAfter
       suggestion = mappedFailure.suggestion
       nextCommand = mappedFailure.nextCommand
+      const publicReadContinuation = suggestion === undefined && nextCommand === undefined
+        ? publicReadFailureContinuation(parsed, kind)
+        : undefined
+      suggestion ??= publicReadContinuation?.suggestion
+      nextCommand ??= publicReadContinuation?.nextCommand
       if (kind === 'INVALID_ARGUMENT') {
         suggestion ??= 'Review the command arguments and try again.'
         nextCommand ??= `ae help ${parsed.command}`

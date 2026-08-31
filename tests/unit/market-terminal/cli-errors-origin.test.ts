@@ -1,5 +1,6 @@
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createServer } from 'node:http'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -212,6 +213,48 @@ describe('market-terminal CLI error contracts', () => {
       }
     }
   }, 30_000)
+
+  it('routes unavailable public reads to same-origin health without echoing the query', async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(503, { 'content-type': 'application/problem+json' })
+      response.end(JSON.stringify({
+        type: 'about:blank',
+        title: 'Unavailable',
+        status: 503,
+        kind: 'UNAVAILABLE',
+        code: 'operation_read_unavailable',
+        retryable: true,
+      }))
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('cli_read_test_server_missing')
+    const origin = `http://127.0.0.1:${address.port}`
+    const privateQuery = 'TOPSECRET private lookup'
+
+    try {
+      const result = await spawnCli([
+        'search',
+        privateQuery,
+        '--base-url',
+        origin,
+        '--json',
+      ])
+
+      expect(result.status).toBe(1)
+      expect(result.stderr).toBe('')
+      expect(result.stdout).not.toContain(privateQuery)
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        kind: 'UNAVAILABLE',
+        code: 'operation_read_unavailable',
+        retryable: true,
+        suggestion: 'Check AE service health before retrying this read.',
+        nextCommand: `ae doctor --base-url ${origin} --json`,
+      })
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error === undefined ? resolve() : reject(error)))
+    }
+  }, 15_000)
 
   it('falls back to the status kind for a malformed remote problem kind', () => {
     const body = {
