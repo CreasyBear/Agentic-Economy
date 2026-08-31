@@ -450,7 +450,7 @@ async function lifecycleCanonicalMutation<Command extends Record<string, string>
   return await callSourceMutation(reference as never, { ...command, serviceAuth } as never) as AgentLifecycleCanonicalResult
 }
 
-async function recordProviderRevocation(command: ProviderRevocationCommand): Promise<ProviderRevocationResult> {
+export async function recordAgentProviderRevocation(command: ProviderRevocationCommand): Promise<ProviderRevocationResult> {
   const operation = 'agentAccessPrincipals.recordProviderRevocationForServer'
   const serviceAuth = await createConvexServerFunctionAssertion({
     operation,
@@ -481,7 +481,7 @@ async function completeAgentLifecycle(
       partial = true
     }
     try {
-      const recorded = await recordProviderRevocation({
+      const recorded = await recordAgentProviderRevocation({
         principalRef: canonical.principalRef,
         credentialRef: target.credentialRef,
         providerCredentialId: target.providerCredentialId,

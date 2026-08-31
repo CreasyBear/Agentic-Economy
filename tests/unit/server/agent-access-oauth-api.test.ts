@@ -145,6 +145,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     } as const
     const promoted: string[] = []
     const revoked: string[] = []
+    const recorded: string[] = []
     let revokeAttempt = 0
     const options: OAuthApiOptions = {
       store,
@@ -164,6 +165,10 @@ describe('Customer Request OAuth HTTP adapter', () => {
         revokeAttempt += 1
         if (revokeAttempt === 1) throw new Error('provider temporarily unavailable')
         revoked.push(credentialId)
+      },
+      recordProviderRevocation: async (input) => {
+        recorded.push(`${input.principalRef}:${input.credentialRef}:${input.providerCredentialId}`)
+        return { kind: 'completed' }
       },
     }
     const issued = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
@@ -191,6 +196,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(store.grants.get(grant.grantRef)?.status).toBe('approved')
     expect(promoted).toEqual(['prn_agent_a'])
     expect(revoked).toEqual([])
+    expect(recorded).toEqual([])
 
     const delivered = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
@@ -200,6 +206,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     await expect(delivered.json()).resolves.toMatchObject({ access_token: 'successor-secret-once' })
     expect(promoted).toEqual(['prn_agent_a', 'prn_agent_a'])
     expect(revoked).toEqual(['ak_predecessor'])
+    expect(recorded).toEqual(['prn_agent_a:crd_predecessor:ak_predecessor'])
     expect(store.grants.get(grant.grantRef)?.status).toBe('consumed')
   })
 

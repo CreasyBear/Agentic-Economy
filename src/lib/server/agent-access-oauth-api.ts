@@ -62,6 +62,7 @@ import {
   cancelAgentCredentialReplacement,
   prepareAgentCredentialReplacement,
   promoteAgentCredentialReplacement,
+  recordAgentProviderRevocation,
   registerIssuedAgentBinding,
 } from '@/modules/agent-access/agent-access.functions'
 import { assertCsrf } from '@/modules/security/public'
@@ -89,6 +90,13 @@ type OAuthApiOptions = Readonly<{
   promoteReplacement?: (replacement: AgentCredentialReplacement) => Promise<Readonly<{ kind: 'completed' | 'replayed'; providerCredentialId: string } | { kind: 'conflict' | 'unavailable' }>>
   cancelReplacement?: (replacement: AgentCredentialReplacement) => Promise<Readonly<{ kind: 'completed' | 'replayed'; providerCredentialId: string } | { kind: 'conflict' | 'unavailable' }>>
   revokeProviderCredential?: (credentialId: string, reason: string) => Promise<void>
+  recordProviderRevocation?: (input: Readonly<{
+    principalRef: string
+    credentialRef: string
+    providerCredentialId: string
+    correlationRef: string
+    outcome: 'revoked'
+  }>) => Promise<Readonly<{ kind: 'completed' | 'replayed' | 'conflict' } | { kind: 'refused'; code: 'authentication_required' }>>
   rateLimit?: RateLimitAdmission
   devicePollRateLimit?: RateLimitAdmission
   listAgents?: () => Promise<readonly Readonly<{ principalRef: string; displayName: string }>[]>
@@ -460,6 +468,16 @@ async function deliverClaimedGrant(
         await options.revokeProviderCredential(promoted.providerCredentialId, reason)
       } else {
         await clerkClient().apiKeys.revoke({ apiKeyId: promoted.providerCredentialId, revocationReason: reason })
+      }
+      const recorded = await (options.recordProviderRevocation ?? recordAgentProviderRevocation)({
+        principalRef: replacement.principalRef,
+        credentialRef: replacement.predecessorCredentialRef,
+        providerCredentialId: promoted.providerCredentialId,
+        correlationRef: `replacement:${replacement.successorGrantRef}`,
+        outcome: 'revoked',
+      })
+      if (recorded.kind !== 'completed' && recorded.kind !== 'replayed') {
+        throw new Error('replacement_provider_revocation_record_failed')
       }
     }
     const consumed = await completeGrantDelivery(requireStore(options), {
