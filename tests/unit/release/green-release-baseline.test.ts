@@ -206,11 +206,12 @@ describe('green release baseline', () => {
     expect(chatGate?.run).toBe('npm run test:chat:conformance')
 
     const authenticated = workflow.jobs?.['authenticated-platform-proof']
-    expect(authenticated?.if).toContain('confirm_authenticated_platform_e2e')
+    expect(authenticated?.if).toBe("github.event_name == 'workflow_dispatch'")
     expect(authenticated?.environment).toBe('staging')
     expect(authenticated?.steps?.find((step) => step.name === 'Prove the authenticated two-agent lifecycle')?.run)
       .toBe('npm run test:release:authenticated')
     expect(JSON.stringify(authenticated?.env ?? {})).toContain('AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY')
+    expect(authenticated?.env?.AE_RELEASE_SOURCE_REVISION).toBe('${{ github.sha }}')
 
     const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
     for (const upload of uploads) {

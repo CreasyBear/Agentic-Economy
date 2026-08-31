@@ -39,8 +39,12 @@ function validExternalBaseUrl(candidate: string | undefined): boolean {
 export function readAuthenticatedE2EEnvironment(source: EnvironmentSource = process.env) {
   const externalBaseUrl = value(source, 'AE_AUTHENTICATED_E2E_BASE_URL')
   const required = value(source, 'AE_REQUIRE_AUTHENTICATED_E2E') === 'true'
-  const missing = [...sharedNames, ...(externalBaseUrl === undefined ? localNames : [])]
+  const expectedSourceRevision = value(source, 'AE_RELEASE_SOURCE_REVISION')
+  const missing: string[] = [...sharedNames, ...(externalBaseUrl === undefined ? localNames : [])]
     .filter((name) => value(source, name) === undefined)
+  if (required && externalBaseUrl !== undefined && expectedSourceRevision === undefined) {
+    missing.push('AE_RELEASE_SOURCE_REVISION')
+  }
   const invalid: string[] = []
   const publishableKey = value(source, 'CLERK_PUBLISHABLE_KEY')
   const secretKey = value(source, 'CLERK_SECRET_KEY')
@@ -62,6 +66,9 @@ export function readAuthenticatedE2EEnvironment(source: EnvironmentSource = proc
   if (!validExternalBaseUrl(externalBaseUrl)) {
     invalid.push('AE_AUTHENTICATED_E2E_BASE_URL must be HTTPS or a loopback HTTP URL')
   }
+  if (expectedSourceRevision !== undefined && !/^[a-f0-9]{40}$/u.test(expectedSourceRevision)) {
+    invalid.push('AE_RELEASE_SOURCE_REVISION must be a 40-character lowercase Git revision')
+  }
 
   const configured = missing.length === 0 && invalid.length === 0
   return Object.freeze({
@@ -70,6 +77,7 @@ export function readAuthenticatedE2EEnvironment(source: EnvironmentSource = proc
     missing: Object.freeze(missing),
     invalid: Object.freeze(invalid),
     externalBaseUrl,
+    expectedSourceRevision,
     baseURL: externalBaseUrl ?? 'http://127.0.0.1:3021',
     ownerEmail: value(source, 'AE_E2E_OWNER_EMAIL'),
   })

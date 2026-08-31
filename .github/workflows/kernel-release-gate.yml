@@ -13,11 +13,6 @@ on:
         required: true
         default: false
         type: boolean
-      confirm_authenticated_platform_e2e:
-        description: 'Run the authenticated two-agent lifecycle against the dedicated test deployment and test Clerk instance.'
-        required: true
-        default: false
-        type: boolean
       confirm_live_gateway_spend:
         description: 'Type the run ID below and confirm the production-approved paid gateway smoke may move at most USD 6.00 total externally (top-up charge plus provider payout).'
         required: true
@@ -164,14 +159,15 @@ jobs:
           retention-days: 14
 
   authenticated-platform-proof:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_authenticated_platform_e2e == true
-    name: Dedicated authenticated multi-agent lifecycle proof
+    if: github.event_name == 'workflow_dispatch'
+    name: Required exact-revision authenticated multi-agent lifecycle proof
     needs: source-proof
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: staging
     env:
       AE_AUTHENTICATED_E2E_BASE_URL: ${{ vars.AE_AUTHENTICATED_E2E_BASE_URL }}
+      AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
       AE_E2E_OWNER_EMAIL: ${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}
       CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
       CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}

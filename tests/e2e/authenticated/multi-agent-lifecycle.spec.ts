@@ -15,6 +15,7 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     const agentAName = `E2E Agent A ${suffix}`
     const agentBName = `E2E Agent B ${suffix}`
 
+    await expectExactReleaseRevision(page.request, configuredEnvironment.expectedSourceRevision)
     await page.goto('/')
     await clerk.signIn({ page, emailAddress: configuredEnvironment.ownerEmail })
 
@@ -82,7 +83,7 @@ async function replaceAgentCredential(page: Page, name: string, targetName: stri
   const replace = page.getByRole('radio', { name: /Replace credential/ })
   for (let pageNumber = 0; await replace.isDisabled(); pageNumber += 1) {
     if (pageNumber >= 50) throw new Error('replacement_agent_page_limit_exceeded')
-    await page.getByRole('button', { name: /Load more agents|Retry agent list/ }).click()
+    await loadNextConsentPage(page)
   }
   await replace.click()
   const selector = page.getByRole('combobox', { name: 'Agent' })
@@ -97,11 +98,23 @@ async function replaceAgentCredential(page: Page, name: string, targetName: stri
     await page.keyboard.press('Escape')
     const loadMore = page.getByRole('button', { name: /Load more agents|Retry agent list/ })
     if (await loadMore.count() === 0) throw new Error('replacement_agent_not_found')
-    await loadMore.click()
+    await loadNextConsentPage(page)
   }
   await page.getByRole('button', { name: 'Approve access' }).click()
   await expect(page.getByText('Access approved — return to your agent')).toBeVisible()
   return { secret: await exchangeDeviceGrant(page.request, grant.clientId, grant.deviceCode) }
+}
+
+async function loadNextConsentPage(page: Page): Promise<void> {
+  await Promise.all([
+    page.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return url.pathname === '/oauth/authorize'
+        && response.request().method() === 'GET'
+        && response.ok()
+    }),
+    page.getByRole('button', { name: /Load more agents|Retry agent list/ }).click(),
+  ])
 }
 
 async function ensureAgentVisible(page: Page, name: string): Promise<void> {
@@ -111,6 +124,7 @@ async function ensureAgentVisible(page: Page, name: string): Promise<void> {
     const loadMore = page.getByRole('button', { name: 'Load more agents', exact: true })
     if (await loadMore.count() === 0) throw new Error(`agent_not_found:${name}`)
     await loadMore.click()
+    await expect(page.getByRole('button', { name: 'Loading more agents…', exact: true })).toBeHidden()
   }
   await expect(link).toBeVisible()
 }
@@ -120,6 +134,13 @@ async function openAgent(page: Page, name: string): Promise<void> {
   await ensureAgentVisible(page, name)
   await page.getByRole('link', { name: `Open ${name}`, exact: true }).click()
   await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
+}
+
+async function expectExactReleaseRevision(request: APIRequestContext, expected: string | undefined): Promise<void> {
+  if (expected === undefined) return
+  const response = await request.get('/api/v1/release')
+  expect(response.ok()).toBe(true)
+  await expect(response.json()).resolves.toEqual({ kind: 'ok', sourceRevision: expected })
 }
 
 async function beginDeviceGrant(request: APIRequestContext, name: string) {

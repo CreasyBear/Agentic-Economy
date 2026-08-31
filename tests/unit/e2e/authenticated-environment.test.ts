@@ -66,6 +66,29 @@ describe('authenticated E2E environment', () => {
     expect(result.missing).toEqual([])
   })
 
+  it('requires and validates exact release identity for a required external proof', () => {
+    const incomplete = readAuthenticatedE2EEnvironment({
+      CLERK_PUBLISHABLE_KEY: publishableKey,
+      CLERK_SECRET_KEY: secretKey,
+      AE_E2E_OWNER_EMAIL: 'owner+clerk_test@example.com',
+      AE_AUTHENTICATED_E2E_BASE_URL: 'https://staging.agentic.example',
+      AE_REQUIRE_AUTHENTICATED_E2E: 'true',
+    })
+    expect(incomplete.configured).toBe(false)
+    expect(incomplete.missing).toContain('AE_RELEASE_SOURCE_REVISION')
+
+    const exact = readAuthenticatedE2EEnvironment({
+      CLERK_PUBLISHABLE_KEY: publishableKey,
+      CLERK_SECRET_KEY: secretKey,
+      AE_E2E_OWNER_EMAIL: 'owner+clerk_test@example.com',
+      AE_AUTHENTICATED_E2E_BASE_URL: 'https://staging.agentic.example',
+      AE_REQUIRE_AUTHENTICATED_E2E: 'true',
+      AE_RELEASE_SOURCE_REVISION: 'a'.repeat(40),
+    })
+    expect(exact.configured).toBe(true)
+    expect(exact.expectedSourceRevision).toBe('a'.repeat(40))
+  })
+
   it('keeps required mode incomplete until every required value is present', () => {
     const result = readAuthenticatedE2EEnvironment({ AE_REQUIRE_AUTHENTICATED_E2E: 'true' })
 
