@@ -45,8 +45,8 @@ const grant = v.object({
   requestedScopes: v.array(v.string()), requestedAccess, codeChallenge: v.optional(v.string()), codeChallengeMethod: v.optional(v.literal('S256')),
   deviceCodeHash: v.optional(v.string()), userCodeHash: v.optional(v.string()), authorizationCodeHash: v.optional(v.string()),
   status, ownerId: v.optional(v.string()), keyId: v.optional(v.string()), createdAt: v.number(), expiresAt: v.number(),
-  approvedAt: v.optional(v.number()), issuanceStartedAt: v.optional(v.number()), consumedAt: v.optional(v.number()), nextPollAt: v.optional(v.number()),
-  deliveryClaimToken: v.optional(v.string()), displayName: v.string(), denialReason: v.optional(v.literal('access_denied')),
+  approvedAt: v.optional(v.number()), issuanceKey: v.optional(v.string()), issuanceStartedAt: v.optional(v.number()), consumedAt: v.optional(v.number()), nextPollAt: v.optional(v.number()),
+  deliveryClaimToken: v.optional(v.string()), deliveryCredentialHash: v.optional(v.string()), deliveryReplayUntil: v.optional(v.number()), displayName: v.string(), denialReason: v.optional(v.literal('access_denied')),
   connectionTarget: v.optional(connectionTarget), replacement: v.optional(replacement),
 })
 const grantPatch = v.object({
@@ -54,8 +54,8 @@ const grantPatch = v.object({
   codeChallenge: v.optional(v.string()), codeChallengeMethod: v.optional(v.literal('S256')),
   deviceCodeHash: v.optional(v.string()), userCodeHash: v.optional(v.string()), authorizationCodeHash: v.optional(v.string()),
   ownerId: v.optional(v.string()), keyId: v.optional(v.string()), createdAt: v.optional(v.number()), expiresAt: v.optional(v.number()),
-  approvedAt: v.optional(v.number()), issuanceStartedAt: v.optional(v.number()), consumedAt: v.optional(v.number()), nextPollAt: v.optional(v.number()),
-  deliveryClaimToken: v.optional(v.string()), displayName: v.optional(v.string()), denialReason: v.optional(v.literal('access_denied')),
+  approvedAt: v.optional(v.number()), issuanceKey: v.optional(v.string()), issuanceStartedAt: v.optional(v.number()), consumedAt: v.optional(v.number()), nextPollAt: v.optional(v.number()),
+  deliveryClaimToken: v.optional(v.string()), deliveryCredentialHash: v.optional(v.string()), deliveryReplayUntil: v.optional(v.number()), displayName: v.optional(v.string()), denialReason: v.optional(v.literal('access_denied')),
   connectionTarget: v.optional(connectionTarget), replacement: v.optional(replacement),
 })
 const client = v.object({
@@ -283,9 +283,12 @@ function sameGrantMaterial(left: OAuthGrantMaterial, right: OAuthGrantMaterial):
     && left.createdAt === right.createdAt
     && left.expiresAt === right.expiresAt
     && left.approvedAt === right.approvedAt
+    && left.issuanceKey === right.issuanceKey
     && left.consumedAt === right.consumedAt
     && left.nextPollAt === right.nextPollAt
     && left.deliveryClaimToken === right.deliveryClaimToken
+    && left.deliveryCredentialHash === right.deliveryCredentialHash
+    && left.deliveryReplayUntil === right.deliveryReplayUntil
     && left.displayName === right.displayName
     && left.denialReason === right.denialReason
     && JSON.stringify(left.connectionTarget) === JSON.stringify(right.connectionTarget)

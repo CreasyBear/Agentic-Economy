@@ -212,7 +212,7 @@ describe('Customer Request OAuth state machine', () => {
     expect(slow).toEqual({ kind: 'slow_down' })
   })
 
-  it('refuses denied and consumed replays', async () => {
+  it('refuses denied grants and bounds completed delivery replay to the original exchange', async () => {
     const deniedStore = storeFixture()
     const deniedStarted = await deviceGrant(deniedStore)
     const denied = await denyGrant(deniedStore, { userCode: deniedStarted.userCode, ownerId: 'owner-one', now: 1_001 })
@@ -228,7 +228,11 @@ describe('Customer Request OAuth state machine', () => {
     if (claimed.kind !== 'ok') throw new Error('claim failed')
     await completeGrantDelivery(consumedStore, { grantRef: claimed.value.grant.grantRef, claimToken: claimed.value.claimToken, now: 1_003 })
     const replay = await claimGrantDelivery(consumedStore, { credential: { kind: 'device', grantRef: approved.value.grant.grantRef, clientId: deviceClient.clientId }, now: 1_004 })
-    expect(replay).toEqual({ kind: 'refused', reason: 'invalid_grant' })
+    expect(replay.kind).toBe('ok')
+    const wrongClient = await claimGrantDelivery(consumedStore, { credential: { kind: 'device', grantRef: approved.value.grant.grantRef, clientId: 'client-other' }, now: 1_004 })
+    expect(wrongClient).toEqual({ kind: 'refused', reason: 'invalid_grant' })
+    const lateReplay = await claimGrantDelivery(consumedStore, { credential: { kind: 'device', grantRef: approved.value.grant.grantRef, clientId: deviceClient.clientId }, now: 32_003 })
+    expect(lateReplay).toEqual({ kind: 'refused', reason: 'invalid_grant' })
   })
 
   it('enforces PKCE at the claim boundary', async () => {
@@ -298,6 +302,35 @@ describe('Customer Request OAuth state machine', () => {
     })
     expect(resumed.kind).toBe('ok')
     expect(store.grants.get(started.grant.grantRef)?.status).toBe('approved')
+    expect(store.grants.get(started.grant.grantRef)?.issuanceKey).toBe(`oauth-${started.grant.grantRef.replaceAll(':', '-')}`)
+  })
+
+  it('lets only one recovery worker reacquire an abandoned issuance lease', async () => {
+    const store = storeFixture()
+    const started = await deviceGrant(store)
+    await store.updateGrant(started.grant.grantRef, 'pending', {
+      status: 'issuing',
+      ownerId: 'owner-one',
+      issuanceKey: 'oauth-fixed-issuance',
+      issuanceStartedAt: 1_001,
+      connectionTarget: { kind: 'new_agent', displayName: 'Device assistant' },
+    })
+    let issueCount = 0
+    const recover = () => approveGrant(store, {
+      grantRef: started.grant.grantRef,
+      ownerId: 'owner-one',
+      now: 31_001,
+      issueKey: async ({ grant }) => {
+        issueCount += 1
+        expect(grant.issuanceKey).toBe('oauth-fixed-issuance')
+        await Promise.resolve()
+        return { keyId: 'key-recovered' }
+      },
+    })
+    const results = await Promise.all([recover(), recover()])
+    expect(results.filter((result) => result.kind === 'ok')).toHaveLength(1)
+    expect(results.filter((result) => result.kind === 'conflict')).toHaveLength(1)
+    expect(issueCount).toBe(1)
   })
 
   it('defaults approval to a new durable agent and persists the explicit target', async () => {

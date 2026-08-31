@@ -81,7 +81,7 @@ const productionRequestedAccess = {
 type OAuthIssueInput = Parameters<NonNullable<OAuthApiOptions['issueKey']>>[0]
 
 describe('Customer Request OAuth HTTP adapter', () => {
-  it('issues bounded device state, slows polling, and delivers once after approval', async () => {
+  it('issues bounded device state, slows polling, and safely replays an interrupted delivery', async () => {
     const store = storeFixture()
     await store.insertClient({ clientId: 'client-local', clientName: 'Local assistant', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
     const options = { store, now: () => 1_000, issueKey: async () => ({ keyId: 'ak_local' }), getSecret: async () => ({ secret: 'secret-local' }) }
@@ -127,10 +127,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const replay = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code', client_id: 'client-local', device_code: body.device_code,
     }), options)
-    expect(await replay.json()).toEqual({
-      error: 'invalid_grant',
-      error_description: 'The authorization grant is invalid or expired.',
-    })
+    expect(await replay.json()).toMatchObject({ access_token: 'secret-local', token_type: 'Bearer' })
   })
 
   it('promotes an explicitly selected agent only after successor delivery and safely retries provider cleanup', async () => {
@@ -208,6 +205,42 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(revoked).toEqual(['ak_predecessor'])
     expect(recorded).toEqual(['prn_agent_a:crd_predecessor:ak_predecessor'])
     expect(store.grants.get(grant.grantRef)?.status).toBe('consumed')
+  })
+
+  it('recovers a stale persisted issuance from ordinary device polling', async () => {
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-recovery', clientName: 'Recovery agent', redirectUris: [],
+      grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000,
+    })
+    await store.insertGrant({
+      grantRef: 'device:recovery', flow: 'device_code', clientId: 'client-recovery',
+      requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
+      requestedAccess: { environment: 'sandbox', expiresInSeconds: 600 },
+      deviceCodeHash: await hashOAuthValue('recover-device'), userCodeHash: await hashOAuthValue('RECOVER1'),
+      status: 'issuing', ownerId: 'owner-one', createdAt: 1_000, expiresAt: 601_000,
+      issuanceKey: 'oauth-device-recovery', issuanceStartedAt: 1_001,
+      connectionTarget: { kind: 'new_agent', displayName: 'Recovery agent' },
+      displayName: 'Recovery agent',
+    })
+    const issued: string[] = []
+    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: 'client-recovery',
+      device_code: 'recover-device',
+    }), {
+      store,
+      now: () => 31_001,
+      issueKey: async (input) => {
+        issued.push(input.idempotencyKey)
+        return { keyId: 'ak_recovered' }
+      },
+      getSecret: async () => ({ secret: 'recovered-secret' }),
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ access_token: 'recovered-secret' })
+    expect(issued).toEqual(['oauth-device-recovery'])
+    expect(store.grants.get('device:recovery')?.status).toBe('consumed')
   })
 
   it('cancels an unclaimed successor on expiry and leaves the predecessor current', async () => {

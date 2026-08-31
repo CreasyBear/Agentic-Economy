@@ -387,7 +387,27 @@ async function pollDeviceGrantRequest(form: URLSearchParams, request: Request, o
   if (limited !== undefined) return limited
   const client = await readClient(clientId, options)
   if (client === null) return oauthError('invalid_client', 401)
-  const result = await pollDeviceGrant(requireStore(options), { clientId: client.clientId, deviceCode, now: currentNow(options) })
+  const now = currentNow(options)
+  let result = await pollDeviceGrant(requireStore(options), { clientId: client.clientId, deviceCode, now })
+  if (result.kind === 'issuance_recovery_required') {
+    const ownerId = result.grant.ownerId
+    if (ownerId === undefined) return oauthError('server_error', 503)
+    const recovered = await approveGrant(requireStore(options), {
+      grantRef: result.grant.grantRef,
+      ownerId,
+      now,
+      ...(result.grant.connectionTarget === undefined ? {} : { connectionTarget: result.grant.connectionTarget }),
+      issueKey: async ({ grant: sourceGrant, ownerId: sourceOwnerId, target }) => (
+        await issueGrantKey(sourceGrant, sourceOwnerId, target, options)
+      ),
+    })
+    if (recovered.kind !== 'ok') {
+      return recovered.kind === 'refused' && recovered.reason === 'issuance_unavailable'
+        ? oauthError('server_error', 503)
+        : oauthTransitionError(recovered)
+    }
+    result = { kind: 'ready', grant: recovered.value.grant }
+  }
   if (result.kind === 'authorization_pending') return oauthError('authorization_pending', 400)
   if (result.kind === 'slow_down') return oauthError('slow_down', 400)
   if (result.kind !== 'ready') {
@@ -453,7 +473,9 @@ async function deliverClaimedGrant(
   if (keyId === undefined) return oauthError('invalid_grant', 400)
   try {
     const secret = await (options.getSecret ?? defaultOAuthKeySecret)(keyId)
-    if (claimed.value.grant.replacement !== undefined && !isLocalE2EAuthBypassEnabled()) {
+    if (claimed.value.grant.status !== 'consumed'
+      && claimed.value.grant.replacement !== undefined
+      && !isLocalE2EAuthBypassEnabled()) {
       const replacement = claimed.value.grant.replacement
       const promoted = options.promoteReplacement === undefined
         ? await promoteAgentCredentialReplacement({
@@ -567,7 +589,7 @@ async function issueGrantKey(
   options: OAuthApiOptions,
 ): Promise<{ keyId: string; replacement?: AgentCredentialReplacement }> {
   const issue: AgentAccessOAuthIssueKey = async ({ ownerId: inputOwnerId, grant: inputGrant, target: inputTarget }) => {
-    const idempotencyKey = inputGrant.grantRef.replaceAll(':', '-')
+    const idempotencyKey = inputGrant.issuanceKey ?? `oauth-${inputGrant.grantRef.replaceAll(':', '-')}`
     const authorityMode = modeForGrant(inputGrant)
     if (authorityMode === undefined || (inputGrant.requestedAccess.environment === 'production' && authorityMode === 'full_yolo')) {
       throw new AgentAccessOAuthIssueRefusal('invalid_scope')
