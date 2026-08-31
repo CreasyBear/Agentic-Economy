@@ -1,35 +1,22 @@
-import { clerk, clerkSetup } from '@clerk/testing/playwright'
+import { clerk } from '@clerk/testing/playwright'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { authenticatedE2EEnvironment, requireAuthenticatedE2EEnvironment } from './environment'
 
-const configured = process.env.CLERK_PUBLISHABLE_KEY?.trim().length !== 0
-  && process.env.CLERK_PUBLISHABLE_KEY !== undefined
-  && process.env.CLERK_SECRET_KEY?.trim().length !== 0
-  && process.env.CLERK_SECRET_KEY !== undefined
-  && process.env.AE_E2E_OWNER_EMAIL?.trim().length !== 0
-  && process.env.AE_E2E_OWNER_EMAIL !== undefined
-  && ((process.env.AE_AUTHENTICATED_E2E_BASE_URL?.trim().length ?? 0) > 0 || [
-    'VITE_CLERK_PUBLISHABLE_KEY',
-    'CLERK_JWT_ISSUER_DOMAIN',
-    'CONVEX_URL',
-    'VITE_CONVEX_URL',
-    'AE_CONVEX_SERVER_FUNCTION_TOKEN',
-  ].every((name) => process.env[name]?.trim().length !== 0 && process.env[name] !== undefined))
+const environment = authenticatedE2EEnvironment
 
 test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
-  test.skip(!configured, 'Requires a Clerk test owner and a configured Convex-backed application.')
+  test.skip(!environment.configured, 'Requires Clerk test-instance keys, a dedicated owner, and a configured Convex-backed application.')
   test.describe.configure({ mode: 'serial' })
 
-  test.beforeAll(async () => {
-    await clerkSetup()
-  })
-
-  test('keeps two agents independent through replacement and disconnection', async ({ page }) => {
+  test('keeps two agents independent through replacement, selective revocation, and disconnection', async ({ page }) => {
+    const configuredEnvironment = requireAuthenticatedE2EEnvironment()
+    if (configuredEnvironment.ownerEmail === undefined) throw new Error('authenticated_e2e_owner_email_missing')
     const suffix = `${Date.now()}`
     const agentAName = `E2E Agent A ${suffix}`
     const agentBName = `E2E Agent B ${suffix}`
 
     await page.goto('/')
-    await clerk.signIn({ page, emailAddress: process.env.AE_E2E_OWNER_EMAIL! })
+    await clerk.signIn({ page, emailAddress: configuredEnvironment.ownerEmail })
 
     const agentA = await connectNewAgent(page, agentAName)
     const agentB = await connectNewAgent(page, agentBName)
@@ -52,19 +39,22 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     expect(predecessor.status()).toBe(401)
 
     await page.goto(`/agent-access?caller=${encodeURIComponent(identityA.principalRef)}`, { waitUntil: 'networkidle' })
+    await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
     await expect(page.getByText('Generation 1')).toBeVisible()
     await expect(page.getByText('Generation 2')).toBeVisible()
     await expect(page.getByText('Revoked').first()).toBeVisible()
-    await page.getByRole('button', { name: 'Disconnect agent' }).click()
-    await page.getByRole('button', { name: 'Disconnect agent' }).last().click()
+    await page.getByRole('button', { name: 'Revoke', exact: true }).click()
+    await page.getByRole('button', { name: 'Revoke credential' }).click()
     await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
     await expect(page.getByText('Generation 1')).toBeVisible()
     await expect(page.getByText('Generation 2')).toBeVisible()
+    await expect(page.getByText('Revoked', { exact: true })).toHaveCount(2)
 
-    const disconnected = await page.request.get('/api/v1/account', {
+    const selectivelyRevoked = await page.request.get('/api/v1/account', {
       headers: { Authorization: `Bearer ${replacement.secret}` },
     })
-    expect(disconnected.status()).toBe(401)
+    expect(selectivelyRevoked.status()).toBe(401)
     await expectUsableAgent(page.request, agentB.secret)
 
     await page.goto(`/agent-access?caller=${encodeURIComponent(identityB.principalRef)}`, { waitUntil: 'networkidle' })

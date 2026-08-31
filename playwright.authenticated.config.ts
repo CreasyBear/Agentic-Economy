@@ -1,21 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
+import { authenticatedE2EEnvironment, requireAuthenticatedE2EEnvironment } from './tests/e2e/authenticated/environment'
 
-const externalBaseUrl = process.env.AE_AUTHENTICATED_E2E_BASE_URL?.trim() || undefined
-const requiredShared = ['CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'AE_E2E_OWNER_EMAIL'] as const
-const requiredLocal = [
-  'VITE_CLERK_PUBLISHABLE_KEY',
-  'CLERK_JWT_ISSUER_DOMAIN',
-  'CONVEX_URL',
-  'VITE_CONVEX_URL',
-  'AE_CONVEX_SERVER_FUNCTION_TOKEN',
-] as const
-const missing = [...requiredShared, ...(externalBaseUrl === undefined ? requiredLocal : [])]
-  .filter((name) => process.env[name]?.trim().length === 0 || process.env[name] === undefined)
-const configured = missing.length === 0
-
-if (!configured && process.env.AE_REQUIRE_AUTHENTICATED_E2E === 'true') {
-  throw new Error(`Authenticated E2E is required but missing: ${missing.join(', ')}`)
-}
+const environment = authenticatedE2EEnvironment
+if (environment.required) requireAuthenticatedE2EEnvironment()
 
 export default defineConfig({
   testDir: './tests/e2e/authenticated',
@@ -26,18 +13,34 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 15_000 },
   use: {
-    baseURL: externalBaseUrl ?? 'http://127.0.0.1:3021',
+    baseURL: environment.baseURL,
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
-  metadata: { configured, missing },
-  projects: [{
-    name: 'authenticated-chromium',
-    use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1100 } },
-  }],
-  ...(configured && externalBaseUrl === undefined ? {
+  metadata: {
+    configured: environment.configured,
+    missing: environment.missing,
+    invalid: environment.invalid,
+  },
+  projects: environment.configured
+    ? [
+        {
+          name: 'clerk-setup',
+          testMatch: /global\.setup\.ts/u,
+        },
+        {
+          name: 'authenticated-chromium',
+          dependencies: ['clerk-setup'],
+          use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1100 } },
+        },
+      ]
+    : [{
+        name: 'authenticated-chromium',
+        use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1100 } },
+      }],
+  ...(environment.configured && environment.externalBaseUrl === undefined ? {
     webServer: {
       command: 'npm run dev -- --port 3021 --strictPort --host 127.0.0.1',
       url: 'http://127.0.0.1:3021',
