@@ -8,6 +8,8 @@ import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeOwnerOperationFacts } from './AeSupplyPublisherHome'
 import type {
   OwnerSupplyCommandResult,
+  OwnerSellerCanaryPromotionResult,
+  OwnerSellerCanaryReadback,
   OwnerSupplyOfferingReadback,
   SupplyFunnelActionContext,
   SupplyFunnelRefusal,
@@ -24,6 +26,8 @@ import {
   type SupplyEndpointPreflightResult,
   type SupplyPublicationImport,
 } from './AeSupplyEndpointConfigStep'
+import { parseX402FetchTransportConfiguration } from '@/modules/capability-supply/public'
+import { formatExactAmount, rescaleExactAmount } from '@/modules/money/public'
 
 const steps: readonly SupplyFunnelStep[] = ['describe', 'admission', 'readiness', 'test']
 const emptyAuthorityOptions: readonly SupplyAuthorityOption[] = []
@@ -42,6 +46,17 @@ const stepStateLabels: Readonly<Record<OwnerSupplyOfferingReadback['stepStates']
 }
 
 type MaintenanceCallback = (context: SupplyFunnelActionContext) => Promise<OwnerSupplyCommandResult>
+type PromoteCanaryCallback = (
+  context: SupplyFunnelActionContext,
+  canaryRef: string,
+) => Promise<OwnerSellerCanaryPromotionResult>
+type RunCanaryCallback = SupplyFunnelCallbacks['runTest']
+type X402CanaryDisclosure = Readonly<{
+  network: string
+  amount: string
+  atomicUnits: string
+  payTo: string
+}>
 type Feedback = Readonly<{
   message: string
   variant: 'default' | 'destructive'
@@ -55,6 +70,7 @@ export type SupplyFunnelCallbacks = Readonly<{
   admit: (source: SupplyPublicationImport) => Promise<SupplyFunnelStepCompletion>
   runReadiness: (context: SupplyFunnelActionContext) => Promise<SupplyFunnelStepCompletion>
   runTest: (context: SupplyFunnelActionContext) => Promise<SupplyFunnelStepCompletion>
+  promoteCanary?: PromoteCanaryCallback
   recheck?: MaintenanceCallback
   withdraw?: MaintenanceCallback
   republish?: MaintenanceCallback
@@ -67,6 +83,7 @@ export function AeSupplyFunnel({
   initialOffering,
   initialSource,
   initialDocumentPreflight,
+  canary = { kind: 'not_found' },
   authorityOptions = emptyAuthorityOptions,
   callbacks,
 }: Readonly<{
@@ -75,6 +92,7 @@ export function AeSupplyFunnel({
   initialOffering: OwnerOfferingEditorValue
   initialSource?: SupplyEndpointConfigValue
   initialDocumentPreflight?: SupplyEndpointDocumentPreflight
+  canary?: OwnerSellerCanaryReadback
   authorityOptions?: readonly SupplyAuthorityOption[]
   callbacks: SupplyFunnelCallbacks
 }>) {
@@ -83,6 +101,8 @@ export function AeSupplyFunnel({
   const actionContext = contextForOffering(businessId, offering)
   const currentStep = offering.currentStep
   const isX402Test = offering.publication?.source.kind === 'x402'
+  const x402Canary = isX402Test ? x402CanaryDisclosure(offering) : undefined
+  const hasCanaryStatus = canary.kind !== 'not_found'
   const incompatible = offering.publication?.state === 'incompatible'
     || offering.lifecycle.state === 'incompatible'
   const credentialNeedsReplacement = offering.readiness.outcome === 'credential_rejected'
@@ -228,21 +248,27 @@ export function AeSupplyFunnel({
           }}
         />
       ) : null}
-      {currentStep === 'test' && !incompatible && !credentialNeedsReplacement && !authorityNeedsRebind ? (
+      {currentStep === 'test' && !incompatible && !credentialNeedsReplacement && !authorityNeedsRebind && !(isX402Test && hasCanaryStatus) ? (
         <ActionStep
           title="4 · RUN A TEST"
-          heading={isX402Test ? 'Check the payment challenge' : 'Run a real test'}
+          heading={isX402Test ? 'Run one paid seller canary' : 'Run a real test'}
           detail={isX402Test
-            ? 'AE checks the fresh x402 payment challenge for the exact admitted operation. No payment is sent. This is readiness only—not a paid fill, Qualified Use, earnings, settlement, or proof of live availability.'
+            ? x402Canary === undefined
+              ? 'AE cannot disclose the exact canary payment from the current admitted material. Reload or re-admit this Operation before authorizing any payment.'
+              : confirmTest
+                ? `Confirm one AE-funded seller canary on ${x402Canary.network}: ${x402Canary.amount} (${x402Canary.atomicUnits} atomic units) to ${x402Canary.payTo}. This test can transfer testnet USDC. It never charges the buyer and does not create Qualified Use, earnings, or platform rake.`
+                : `Review one AE-funded seller canary on ${x402Canary.network}: ${x402Canary.amount} (${x402Canary.atomicUnits} atomic units) to ${x402Canary.payTo}. No payment is sent until you confirm.`
             : 'AE uses the first valid input example from the admitted contract and sends it to the active operation. This test does not charge anyone.'}
           actionLabel={isX402Test
-            ? 'Check payment challenge (no payment sent).'
+            ? confirmTest
+              ? 'Confirm one Base Sepolia payment'
+              : 'Review paid canary'
             : confirmTest
               ? 'Send the test'
               : 'Review and confirm the test'}
-          disabled={actionContext === undefined}
+          disabled={actionContext === undefined || (isX402Test && x402Canary === undefined)}
           onAction={async () => {
-            if (!isX402Test && !confirmTest) {
+            if (!confirmTest) {
               setConfirmTest(true)
               return
             }
@@ -252,6 +278,17 @@ export function AeSupplyFunnel({
             }
             await showCompletion(await callbacks.runTest(actionContext))
           }}
+        />
+      ) : null}
+      {isX402Test && hasCanaryStatus ? (
+        <SellerCanaryStatus
+          canary={canary}
+          {...(actionContext === undefined ? {} : { context: actionContext })}
+          {...(x402Canary === undefined ? {} : { payment: x402Canary })}
+          retry={callbacks.runTest}
+          {...(callbacks.promoteCanary === undefined ? {} : { promote: callbacks.promoteCanary })}
+          onReload={reload}
+          onFeedback={setFeedback}
         />
       ) : null}
       {actionContext === undefined ? null : (
@@ -266,6 +303,289 @@ export function AeSupplyFunnel({
       )}
     </div>
   )
+}
+
+function SellerCanaryStatus({
+  canary,
+  context,
+  payment,
+  retry,
+  promote,
+  onReload,
+  onFeedback,
+}: Readonly<{
+  canary: Exclude<OwnerSellerCanaryReadback, { kind: 'not_found' }>
+  context?: SupplyFunnelActionContext
+  payment?: X402CanaryDisclosure
+  retry: RunCanaryCallback
+  promote?: PromoteCanaryCallback
+  onReload: () => Promise<void>
+  onFeedback: (feedback: Feedback) => void
+}>) {
+  const [retryOpen, setRetryOpen] = useState(false)
+  const [retryPending, setRetryPending] = useState(false)
+  const retryInFlight = useRef(false)
+  const [promotionOpen, setPromotionOpen] = useState(false)
+  const [promotionPending, setPromotionPending] = useState(false)
+  if (canary.kind === 'error') {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Canary status unavailable</AlertTitle>
+        <AlertDescription>{canary.reason ?? 'AE could not read the exact owner canary. Reload before starting another test.'}</AlertDescription>
+      </Alert>
+    )
+  }
+  if (canary.kind === 'conflict') {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Canary identity conflict</AlertTitle>
+        <AlertDescription>AE found conflicting canary records for this exact Operation revision. Do not run or promote another canary until the records are reconciled.</AlertDescription>
+      </Alert>
+    )
+  }
+
+  const availableCanary = canary
+  const receipt = availableCanary.receipt
+  const canRetry = availableCanary.state === 'refused'
+    && availableCanary.refusal?.retryable === true
+    && availableCanary.reconciliation === undefined
+    && receipt === undefined
+    && payment?.network === 'eip155:84532'
+    && context !== undefined
+  const canPromote = availableCanary.state === 'completed'
+    && availableCanary.resultKind === 'completed'
+    && receipt?.state === 'settled'
+    && availableCanary.promotion.state === 'not_promoted'
+    && context !== undefined
+    && promote !== undefined
+  async function confirmRetry() {
+    if (!canRetry || context === undefined || retryInFlight.current) return
+    retryInFlight.current = true
+    setRetryPending(true)
+    try {
+      const result = await retry(context)
+      onFeedback({
+        message: result.refusal === undefined
+          ? result.message ?? (result.state === 'completed' ? 'The seller canary completed.' : 'The seller canary needs attention.')
+          : refusalMessage(result.refusal),
+        variant: result.refusal === undefined && result.state === 'completed' ? 'default' : 'destructive',
+      })
+      setRetryOpen(false)
+      await onReload()
+    } finally {
+      retryInFlight.current = false
+      setRetryPending(false)
+    }
+  }
+  async function confirmPromotion() {
+    if (!canPromote || context === undefined || promote === undefined || promotionPending) return
+    setPromotionPending(true)
+    try {
+      const result = await promote(context, availableCanary.canaryRef)
+      onFeedback({
+        message: result.kind === 'refused'
+          ? promotionRefusalMessage(result.code)
+          : result.kind === 'replayed'
+            ? 'This exact canary promotion was already recorded. The public catalogue projection is current.'
+            : 'This exact canary passed and the Operation was promoted to the public catalogue.',
+        variant: result.kind === 'refused' ? 'destructive' : 'default',
+      })
+      setPromotionOpen(false)
+      await onReload()
+    } finally {
+      setPromotionPending(false)
+    }
+  }
+
+  return (
+    <AeSection
+      title="Seller canary evidence"
+      description="Authoritative state for the exact paid canary retained by AE. Reloading this route reads the same durable canary reference."
+    >
+      {canary.state === 'reconciliation_required' ? (
+        <Alert variant="destructive">
+          <AlertTitle>Reconciliation required</AlertTitle>
+          <AlertDescription>
+            The payment outcome is ambiguous. AE must reconcile the existing authorization before any retry or promotion. Do not run another canary.
+          </AlertDescription>
+        </Alert>
+      ) : canary.state === 'pending' ? (
+        <Alert>
+          <AlertTitle>Canary is still running</AlertTitle>
+          <AlertDescription>AE has retained this invocation. Reload its status; do not start a second payment.</AlertDescription>
+        </Alert>
+      ) : canary.state === 'refused' && canary.refusal?.retryable === true ? (
+        <Alert variant="destructive">
+          <AlertTitle>Canary retry is available</AlertTitle>
+          <AlertDescription>
+            {canary.refusal.nextAction ?? `AE recorded ${canary.refusal.code}.`}{' '}
+            {canRetry
+              ? 'No payment evidence was retained for this refusal. Review the exact Base Sepolia terms before authorizing one new test payment.'
+              : 'AE cannot safely offer another payment from the current evidence. Reload the exact status or correct the recorded issue before continuing.'}
+          </AlertDescription>
+        </Alert>
+      ) : canary.state === 'refused' ? (
+        <Alert variant="destructive">
+          <AlertTitle>Canary did not pass</AlertTitle>
+          <AlertDescription>
+            {canary.refusal?.nextAction ?? canary.refusal?.code ?? 'The retained canary cannot be promoted.'}{' '}
+            This canary is terminal and cannot be retried. Re-admit only if the recorded remediation actually changes the Operation material.
+          </AlertDescription>
+        </Alert>
+      ) : canary.state === 'cancelled' ? (
+        <Alert variant="destructive">
+          <AlertTitle>Canary was cancelled</AlertTitle>
+          <AlertDescription>
+            The retained canary cannot be retried from this state. Reload its exact evidence before deciding whether the Operation material needs to change.
+          </AlertDescription>
+        </Alert>
+      ) : canary.promotion.state === 'promoted' ? (
+        <Alert>
+          <AlertTitle>Promotion recorded</AlertTitle>
+          <AlertDescription>This exact canary has already promoted the Operation. Replaying promotion is safe but unnecessary.</AlertDescription>
+        </Alert>
+      ) : (
+        <Alert>
+          <AlertTitle>Canary passed</AlertTitle>
+          <AlertDescription>Settlement and contract-valid output are recorded. Promotion remains a separate owner action.</AlertDescription>
+        </Alert>
+      )}
+      <AeFactList facts={sellerCanaryFacts(canary)} />
+      <div className="flex flex-wrap gap-3">
+        <Button type="button" variant="secondary" className="min-h-touch" onClick={() => void onReload()}>
+          Reload canary status
+        </Button>
+        {canRetry && payment !== undefined ? (
+          <>
+            <Button type="button" className="min-h-touch" onClick={() => setRetryOpen(true)}>
+              Review one payment retry
+            </Button>
+            <AeConfirmDialog
+              open={retryOpen}
+              onOpenChange={setRetryOpen}
+              title="Retry with one Base Sepolia payment?"
+              description={`AE will make one new test payment on ${payment.network}: ${payment.amount} (${payment.atomicUnits} atomic units) to ${payment.payTo}. No payment is sent until you confirm. This AE-funded canary never charges the buyer and does not create Qualified Use, earnings, or platform rake.`}
+              confirmLabel="Confirm one Base Sepolia payment"
+              pending={retryPending}
+              onConfirm={confirmRetry}
+            />
+          </>
+        ) : null}
+        {canPromote ? (
+          <>
+            <Button type="button" className="min-h-touch" onClick={() => setPromotionOpen(true)}>
+              Promote to public catalogue
+            </Button>
+            <AeConfirmDialog
+              open={promotionOpen}
+              onOpenChange={setPromotionOpen}
+              title="Promote this exact canary?"
+              description={`AE will publish only the Operation revision sealed by canary ${canary.canaryRef}. Current source, seller claim, readiness, settlement, and output evidence are revalidated atomically.`}
+              confirmLabel="Confirm promotion"
+              pending={promotionPending}
+              onConfirm={confirmPromotion}
+            />
+          </>
+        ) : null}
+      </div>
+    </AeSection>
+  )
+}
+
+function sellerCanaryFacts(
+  canary: Extract<OwnerSellerCanaryReadback, { kind: 'available' }>,
+) {
+  const receipt = canary.receipt
+  return [
+    { label: 'Canary state', value: canary.state },
+    { label: 'Canary reference', value: canary.canaryRef, mono: true },
+    { label: 'Invocation reference', value: canary.invocationRef, mono: true },
+    { label: 'Attempt reference', value: canary.attemptRef ?? 'Not assigned', mono: true },
+    { label: 'Invocation evidence', value: canary.evidenceHash ?? 'Not recorded', mono: true },
+    { label: 'Receipt state', value: receipt?.state ?? 'Not recorded' },
+    { label: 'Receipt reference', value: receipt?.receiptRef ?? 'Not recorded', mono: true },
+    { label: 'Receipt evidence', value: receipt?.evidenceHash ?? 'Not recorded', mono: true },
+    { label: 'Network', value: receipt?.network ?? 'Not recorded', mono: true },
+    { label: 'Asset', value: receipt?.asset ?? 'Not recorded', mono: true },
+    { label: 'Payment identifier', value: receipt?.paymentIdentifier ?? 'Not recorded', mono: true },
+    { label: 'Settlement transaction', value: receipt?.settlementTransactionHash ?? 'Not recorded', mono: true },
+    { label: 'External settlement', value: receipt?.externalSettlementRef ?? 'Not recorded', mono: true },
+    { label: 'Reconciliation required at', value: canary.reconciliation?.requiredAt ?? 'No' },
+    { label: 'Refusal code', value: canary.refusal?.code ?? 'None', mono: true },
+    { label: 'Retry allowed', value: canary.refusal?.retryable === true ? 'Yes' : 'No' },
+    { label: 'Recorded next action', value: canary.refusal?.nextAction ?? 'None' },
+    { label: 'Promotion', value: canary.promotion.state },
+    ...(canary.promotion.state === 'promoted'
+      ? [{ label: 'Promotion evidence', value: canary.promotion.evidenceDigest, mono: true }]
+      : []),
+  ]
+}
+
+function promotionRefusalMessage(code: Extract<OwnerSellerCanaryPromotionResult, { kind: 'refused' }>['code']): string {
+  switch (code) {
+    case 'canary_pending':
+      return 'The canary is still pending. Reload its retained status before promotion.'
+    case 'reconciliation_required':
+      return 'The payment must be reconciled before promotion. Do not start another canary.'
+    case 'target_drift':
+    case 'canary_target_mismatch':
+    case 'canary_identity_mismatch':
+    case 'operation_commitment_stale':
+      return 'The Operation no longer matches the exact canary target. AE will not charge this publication again; reconcile any uncertain payment, then correct and admit a new material revision.'
+    case 'readiness_stale':
+      return 'Current readiness is stale. Refresh readiness and retry promotion of the retained settled canary; do not start another payment.'
+    case 'seller_claim_stale':
+      return 'The seller claim no longer matches the retained canary. AE will not charge this publication again; correct and admit a new material revision.'
+    case 'output_nondeterministic':
+    case 'output_contract_invalid':
+    case 'output_unusable':
+      return 'The canary output did not satisfy the sealed contract evidence required for promotion.'
+    case 'payment_not_settled':
+    case 'payment_evidence_missing':
+    case 'spend_commitment_mismatch':
+      return 'Exact settlement evidence is missing or does not match the canary commitment. Promotion remains blocked.'
+    default:
+      return `Promotion was refused (${code}). Reload the exact canary evidence before taking another action.`
+  }
+}
+
+function x402CanaryDisclosure(offering: OwnerSupplyOfferingReadback): X402CanaryDisclosure | undefined {
+  const material = offering.sourceMaterial
+  if (material?.sourceKind !== 'x402') return undefined
+  const config = parseX402FetchTransportConfiguration(material.binding.adapter.config)
+  let pricing: unknown
+  try {
+    pricing = JSON.parse(material.pricingConfigJson)
+  } catch {
+    return undefined
+  }
+  if (
+    config === undefined
+    || typeof pricing !== 'object'
+    || pricing === null
+    || !('paidAmount' in pricing)
+  ) return undefined
+  const paidAmount = pricing.paidAmount
+  if (
+    typeof paidAmount !== 'object'
+    || paidAmount === null
+    || !('currency' in paidAmount)
+    || !('units' in paidAmount)
+    || !('exponent' in paidAmount)
+    || typeof paidAmount.currency !== 'string'
+    || typeof paidAmount.units !== 'string'
+    || typeof paidAmount.exponent !== 'number'
+  ) return undefined
+  const formatted = formatExactAmount(paidAmount)
+  const atomicAmount = rescaleExactAmount(paidAmount, config.assetAmountExponent)
+  return formatted === undefined || atomicAmount === undefined
+    ? undefined
+    : {
+        network: config.network,
+        amount: `${paidAmount.currency} ${formatted}`,
+        atomicUnits: atomicAmount.units,
+        payTo: config.payTo,
+      }
 }
 
 function SupplyTruthCard({ offering }: Readonly<{ offering: OwnerSupplyOfferingReadback }>) {

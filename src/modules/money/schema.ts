@@ -1,1 +1,5 @@
-export { moneyTables } from './internal/convex-schema'
+export {
+  moneyTables,
+  x402PaymentAuthorizationFailureCodeValue,
+  x402PaymentAuthorizationFailureDetailValue,
+} from './internal/convex-schema'

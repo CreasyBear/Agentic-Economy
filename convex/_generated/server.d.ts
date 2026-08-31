@@ -40,6 +40,12 @@ type Env = {
   readonly AE_ROUTE_CALL_SIGNING_SECRET: string | undefined;
   readonly AE_SITE_URL: string | undefined;
   readonly AE_X402_CDP_ACCOUNT_NAME: string | undefined;
+  readonly AE_X402_CDP_ACCOUNT_POLICY_ID: string | undefined;
+  readonly AE_X402_CDP_CREDENTIAL_GENERATION: string | undefined;
+  readonly AE_X402_CDP_EXPECTED_EVM_ADDRESS: string | undefined;
+  readonly AE_X402_CDP_POLICY_RULES_DIGEST: string | undefined;
+  readonly AE_X402_CDP_PROJECT_POLICY_ID: string | undefined;
+  readonly AE_X402_CUSTODY_DAILY_MAX_ATOMIC: string | undefined;
   readonly AE_X402_CUSTODY_ENABLED: string | undefined;
   readonly AE_X402_CUSTODY_MAX_ATOMIC: string | undefined;
   readonly AE_X402_PAYMENT_CREDENTIAL_REF: string | undefined;

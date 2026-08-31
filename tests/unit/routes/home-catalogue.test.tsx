@@ -101,7 +101,7 @@ describe('catalogue-first home', () => {
         <HomeCapabilityResults read={{ kind: 'ok', operations: [], matchedCount: 0 }} />
       </RouterContextProvider>,
     )
-    expect(screen.getByText(/No Operations are available right now/)).toBeTruthy()
+    expect(screen.getByText(/No Operations are published yet/)).toBeTruthy()
     expect(screen.queryByText('Invoice extract')).toBeNull()
     const browse = screen.getAllByRole('link', { name: 'Browse Operations' })
     expect(browse.some((link) => link.getAttribute('href')?.includes('/market'))).toBe(true)

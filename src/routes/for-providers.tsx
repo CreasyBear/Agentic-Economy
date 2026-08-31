@@ -27,7 +27,7 @@ function SupplyLandingRoute() {
     <AePublicPage>
       <AeSupplyLanding
         tools={readback.kind === 'available' ? readback.tools : []}
-        services={readback.kind === 'available' ? readback.services.services : []}
+        operations={readback.kind === 'available' ? readback.listings : []}
         {...recoveryProps}
       />
     </AePublicPage>

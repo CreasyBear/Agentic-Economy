@@ -5,7 +5,9 @@ import {
   operationCancelAction,
   operationReconcileAction,
   operationStatusAction,
+  operationReconciliationEvidenceInputSchema,
   operationReconciliationEvidenceSchema,
+  x402OperationReconciliationEvidenceSchema,
 } from '@/modules/capability-execution/operation-recovery.actions'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { operationInvokeAction } from '@/modules/capability-execution/operation-invoke.actions'
@@ -41,6 +43,33 @@ const reconciliationEvidenceMaterial = {
 const reconciliationEvidence = {
   ...reconciliationEvidenceMaterial,
   digest: canonicalDigest(reconciliationEvidenceMaterial),
+}
+const x402ReconciliationEvidenceMaterial = {
+  kind: 'x402_payment_reconciliation',
+  version: 1,
+  evidenceRef: 'evidence:x402:one',
+  source: 'provider:one',
+  invocationRef: status.invocationRef,
+  attemptRef: 'operation-attempt:one',
+  effectGeneration: 1,
+  operationRef: status.operationRef,
+  inputDigest: 'sha256:input',
+  requestDigest: 'sha256:request',
+  transportObservationDigest: 'sha256:transport',
+  paymentObservationDigest: 'sha256:payment',
+  providerRef: 'provider:one',
+  paymentIdentifier: 'payment:one',
+  reservationRef: 'external-spend:one',
+  challengeDigest: 'sha256:challenge',
+  amount: { currency: 'USDC', units: '10000', exponent: 6 },
+  settlementStatus: 'settled',
+  paymentResponseDigest: 'sha256:payment-response',
+  transactionHash: `0x${'4'.repeat(64)}`,
+  observedAt: '2026-08-30T22:32:40.000Z',
+} as const
+const x402ReconciliationEvidence = {
+  ...x402ReconciliationEvidenceMaterial,
+  digest: canonicalDigest(x402ReconciliationEvidenceMaterial),
 }
 const receipt: OperationInvokeReceipt = {
   receiptRef: 'receipt:operation-one',
@@ -124,6 +153,44 @@ describe('operation recovery actions', () => {
       transportObservationDigest: 'sha256:transport',
       paymentObservationDigest: 'sha256:payment',
     })
+  })
+
+  it('accepts the exact public x402 recovery evidence shape', () => {
+    expect(x402OperationReconciliationEvidenceSchema.parse(x402ReconciliationEvidence))
+      .toEqual(x402ReconciliationEvidence)
+    expect(operationReconciliationEvidenceInputSchema.parse(x402ReconciliationEvidence))
+      .toEqual(x402ReconciliationEvidence)
+    expect(operationReconcileAction.schema.parse({
+      invocationRef: status.invocationRef,
+      idempotencyKey: 'reconcile:x402:one',
+      evidence: x402ReconciliationEvidence,
+    })).toEqual({
+      invocationRef: status.invocationRef,
+      idempotencyKey: 'reconcile:x402:one',
+      evidence: x402ReconciliationEvidence,
+    })
+  })
+
+  it.each([
+    ['wrong discriminant', { kind: 'action_invocation_reconciliation' }],
+    ['unknown settlement', { settlementStatus: 'unknown' }],
+    ['malformed transaction hash', { transactionHash: '0x1234' }],
+    ['non-canonical units', { amount: { currency: 'USDC', units: '010000', exponent: 6 } }],
+    ['non-canonical currency', { amount: { currency: 'usdc', units: '10000', exponent: 6 } }],
+    ['invalid exponent', { amount: { currency: 'USDC', units: '10000', exponent: 19 } }],
+    ['invalid observed time', { observedAt: 'not-a-time' }],
+    ['unknown field', { providerCredential: 'must-not-cross' }],
+  ])('rejects malformed x402 evidence: %s', (_case, override) => {
+    const malformed = { ...x402ReconciliationEvidence, ...override }
+    expect(x402OperationReconciliationEvidenceSchema.safeParse(malformed).success).toBe(false)
+    expect(operationReconciliationEvidenceInputSchema.safeParse(malformed).success).toBe(false)
+  })
+
+  it('rejects x402 evidence whose canonical digest no longer matches', () => {
+    expect(x402OperationReconciliationEvidenceSchema.safeParse({
+      ...x402ReconciliationEvidence,
+      providerRef: 'provider:tampered',
+    }).success).toBe(false)
   })
 
   it('round-trips additive receipts for success, refund, and reconciliation while preserving absence', () => {

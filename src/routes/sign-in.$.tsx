@@ -1,12 +1,12 @@
 import { SignIn } from '@clerk/tanstack-react-start'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import {
   AeSiteAuthPanel,
   AeSiteAuthStage,
   AeSiteButton,
-  clerkAuthSurfaceAppearance,
+  clerkSignInSurfaceAppearance,
 } from '@/components/ae/website'
 import { sanitizeAuthRedirectTarget } from '@/lib/client/auth-redirect'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
@@ -33,7 +33,7 @@ function SignInRoute() {
   const { redirect } = Route.useSearch()
   const isLocalE2E = isLocalE2EAuthBypassEnabled()
   const isAgentAccessFlow = redirect?.startsWith('/agent-access') ?? false
-  const isProviderFlow = redirect === undefined || redirect.startsWith('/owner')
+  const isProviderFlow = redirect?.startsWith('/owner') ?? false
   const heading = isLocalE2E
     ? 'Local preview sign-in is off'
     : isAgentAccessFlow
@@ -45,9 +45,11 @@ function SignInRoute() {
     ? 'This browser journey does not connect a Clerk account. Nothing is signed in or authorized.'
     : isAgentAccessFlow
       ? 'After you sign in, you’ll return to Access and create a caller identity.'
-      : 'After you sign in, you’ll return to your supplier workspace.'
-  const switchSearch = redirect === undefined ? {} : { redirect }
-
+      : isProviderFlow
+        ? 'After you sign in, you’ll return to your supplier workspace.'
+        : redirect === undefined
+          ? 'After you sign in, you’ll return to your account settings.'
+          : 'After you sign in, you’ll return to where you left off.'
   return (
     <AePublicPage>
       <AeSiteAuthStage labelledBy="sign-in-context-heading" url="/sign-in">
@@ -70,23 +72,10 @@ function SignInRoute() {
             title={heading}
             titleId="sign-in-context-heading"
             body={body}
-            footer={
-              <>
-                Don’t have an account?{' '}
-                <Link
-                  to="/sign-up/$"
-                  params={{ _splat: '' }}
-                  search={switchSearch}
-                  className="inline-flex min-h-touch items-center font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  Create one
-                </Link>
-              </>
-            }
           >
             <SignIn
-              appearance={clerkAuthSurfaceAppearance}
-              fallbackRedirectUrl={redirect ?? '/owner/offerings'}
+              appearance={clerkSignInSurfaceAppearance}
+              fallbackRedirectUrl={redirect ?? '/owner/settings'}
               signUpUrl="/sign-up"
             />
           </AeSiteAuthPanel>

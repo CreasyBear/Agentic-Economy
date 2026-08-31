@@ -9,7 +9,31 @@ import type {
   ProviderConnectionRow,
 } from './contracts'
 
-export function toDomain(row: ProviderConnectionRow): ProviderConnection {
+export type ProviderConnectionAuthorityCompatibilityRow = Omit<
+  ProviderConnectionRow,
+  'owningAccountRef' | 'installedByPrincipalRef' | 'authorityGrantRef' | 'authorityGrantGeneration'
+> & Partial<Pick<
+  ProviderConnectionRow,
+  'owningAccountRef' | 'installedByPrincipalRef' | 'authorityGrantRef' | 'authorityGrantGeneration'
+>>
+
+export function hasProviderConnectionAuthorityFields(
+  row: ProviderConnectionAuthorityCompatibilityRow,
+): row is ProviderConnectionRow {
+  return typeof row.owningAccountRef === 'string'
+    && row.owningAccountRef.length > 0
+    && typeof row.installedByPrincipalRef === 'string'
+    && row.installedByPrincipalRef.length > 0
+    && typeof row.authorityGrantRef === 'string'
+    && row.authorityGrantRef.length > 0
+    && Number.isSafeInteger(row.authorityGrantGeneration)
+    && (row.authorityGrantGeneration ?? 0) >= 1
+}
+
+export function toDomain(row: ProviderConnectionAuthorityCompatibilityRow): ProviderConnection {
+  if (!hasProviderConnectionAuthorityFields(row)) {
+    throw new Error('provider_connection_authority_provenance_missing')
+  }
   return row
 }
 

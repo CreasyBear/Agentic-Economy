@@ -51,6 +51,20 @@ type OfferingCommandResult =
   | Readonly<{ kind: 'ok'; code: string; resultRef?: string; currentRevision?: number }>
   | Readonly<{ kind: 'error'; code: string; reason: string }>
 
+export type EnsureSupplierBusinessResult =
+  | Readonly<{ kind: 'created' | 'existing'; businessId: string; slug: string }>
+  | Readonly<{
+      kind: 'refused'
+      code: 'unauthenticated' | 'invalid_business' | 'slug_taken' | 'multiple_businesses' | 'source_unavailable'
+    }>
+
+type EnsureSupplierBusinessSourceResult =
+  | Readonly<{ kind: 'created' | 'existing'; businessId: string; slug: string }>
+  | Readonly<{
+      kind: 'refused'
+      code: 'unauthenticated' | 'invalid_business' | 'slug_taken' | 'multiple_businesses'
+    }>
+
 type SourceWriteFields = Readonly<{
   sourceWrite: SourceWriteAdmission
   sourceWriteRequest: SourceWriteAdmissionRequest
@@ -126,6 +140,10 @@ const editorSchema = z.object({
 })
 
 const readSupplyQuery = sourceQuery<Record<string, never>, OwnerOfferingSupplyReadResult>('catalog:getCurrentOwnerOfferingSupply')
+const ensureSupplierBusinessMutation = sourceMutation<
+  { name: string; slug: string; website: string; providerIdentifier: string },
+  EnsureSupplierBusinessSourceResult
+>('catalog:ensureSupplierBusiness')
 const createOfferingMutation = sourceMutation<SourceWriteArgs & { offeringRef: string; facts: OfferingFacts }, OfferingCommandResult>('catalog:createBusinessOffering')
 const reviseOfferingMutation = sourceMutation<SourceWriteArgs & { offeringRef: string; expectedRevision: number; facts: OfferingFacts }, OfferingCommandResult>('catalog:reviseBusinessOffering')
 const changeStatusMutation = sourceMutation<SourceWriteArgs & { offeringRef: string; expectedRevision: number; status: OwnerOfferingEditorValue['status'] }, OfferingCommandResult>('catalog:changeBusinessOfferingStatus')
@@ -142,6 +160,21 @@ export const readOwnerOfferingSupplyServer = createServerFn().handler(async (): 
     return { kind: 'error', code: 'source_unavailable', reason: 'The Operation source did not answer. Try again.' }
   }
 })
+
+export const ensureSupplierBusinessServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({
+    name: z.string().trim().min(1).max(160),
+    slug: z.string().trim().max(160),
+    website: z.url().max(2_048),
+    providerIdentifier: z.string().trim().min(1).max(240),
+  }).parse(data))
+  .handler(async ({ data }): Promise<EnsureSupplierBusinessResult> => {
+    try {
+      return await callSourceMutation(ensureSupplierBusinessMutation, data)
+    } catch {
+      return { kind: 'refused', code: 'source_unavailable' }
+    }
+  })
 
 export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
   .validator((data) => editorSchema.parse(data))
@@ -184,21 +217,6 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
       return partialRefusal('Operation details were saved, but its revision could not be confirmed. Try again.', offeringRef, value.expectedRevision, completedSteps)
     }
     const currentRevision = first.currentRevision
-    const status = await write(
-      context,
-      {
-        businessId: data.businessId,
-        offeringRef,
-        expectedRevision: currentRevision,
-        status: value.status,
-        operationKey: `owner-offering:${data.requestKey}:status`,
-        correlationId,
-      },
-      (args) => callSourceMutation(changeStatusMutation, args),
-    )
-    if (status.kind === 'error') return partialRefusal('Operation details were saved, but its public state could not be changed. Try again.', offeringRef, currentRevision, completedSteps)
-    completedSteps.push('public_state')
-
     for (const [index, path] of value.accessPaths.entries()) {
       const accessPathRef = path.accessPathRef ?? `access:${offeringRef}:${data.requestKey}:${index}`
       const pathResult = path.status === 'withdrawn'
@@ -232,6 +250,24 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
       if (pathResult.kind === 'error') return partialRefusal('Operation details were saved, but one access route could not be saved. Try again.', offeringRef, currentRevision, completedSteps)
       completedSteps.push(`access_path_${index}`)
     }
+
+    // A public Operation must never appear before its routes exist. This UI
+    // flow remains a multi-command draft editor; the x402 canary promotion
+    // uses a separate atomic mutation for its final publication transition.
+    const status = await write(
+      context,
+      {
+        businessId: data.businessId,
+        offeringRef,
+        expectedRevision: currentRevision,
+        status: value.status,
+        operationKey: `owner-offering:${data.requestKey}:status`,
+        correlationId,
+      },
+      (args) => callSourceMutation(changeStatusMutation, args),
+    )
+    if (status.kind === 'error') return partialRefusal('Operation details and routes were saved, but its public state could not be changed. Try again.', offeringRef, currentRevision, completedSteps)
+    completedSteps.push('public_state')
 
     return {
       kind: 'saved',

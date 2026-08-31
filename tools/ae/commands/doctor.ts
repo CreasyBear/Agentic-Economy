@@ -1,5 +1,8 @@
 import { SiteDiscoveryManifestSchemaVersion } from '@/modules/discovery/public'
 import { isRecord } from '@/modules/common/is-record'
+import { listMcpActions, mcpToolName } from '@/modules/actions'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import {
   AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS,
   AGENT_ACCOUNT_SELF_ROUTE_CONTRACT,
@@ -24,7 +27,12 @@ import {
   supplyStatusAction,
 } from '@/modules/capability-supply/supply-actions'
 
-import type { CliOptions } from '../lib/args'
+import {
+  HOSTED_DEFAULT_BASE_URL,
+  isLoopbackCliBaseUrl,
+  safeOriginForDiagnostics,
+  type CliOptions,
+} from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { continuationCommand } from '../lib/continuation-command'
 import { callJson, line, printJson } from '../lib/output'
@@ -48,8 +56,9 @@ type InvocationDoctorResult = Readonly<{
 }>
 
 const MARKET_REQUEST_REENTRY_LIMIT = 5
+const MCP_CHECK_TIMEOUT_MS = 5_000
 
-export async function runDoctorCommand(args: readonly string[], options: CliOptions): Promise<void> {
+export async function runDoctorCommand(args: readonly string[], options: CliOptions): Promise<number> {
   const businessId = args[0]?.trim()
   if (args.length > 1 || (businessId !== undefined && (businessId.length === 0 || options.supplier !== true))) {
     throw usageFailure('doctor', 'doctor-usage')
@@ -64,6 +73,7 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
   checks.push(server)
   if (server.state === 'fail') {
     checks.push(
+      { id: 'mcp', state: 'warn', summary: 'MCP initialization was not checked because server identity is unavailable.' },
       { id: 'buyer', state: 'warn', summary: 'Buyer credential was not sent because server identity is unavailable.' },
       { id: 'balance', state: 'warn', summary: 'Balance was not checked because server identity is unavailable.' },
       { id: 'invocation', state: 'warn', summary: 'Invocation recovery was not checked because server identity is unavailable.' },
@@ -75,15 +85,17 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
         : []),
     )
     renderDoctor({ kind: 'degraded', checks }, options)
-    return
+    return options.json ? 0 : 1
   }
+  checks.push(await checkMcp(options.baseUrl))
+  checks.push(...await checkDeployment(options.baseUrl))
   const buyer = resolveAgentAccessCredential(options.baseUrl)
   if (buyer === undefined) {
     checks.push(
       {
         id: 'buyer', state: 'warn',
         summary: 'No buyer credential is selected for this origin; anonymous search and inspection remain available.',
-        nextCommand: 'ae account connections',
+        nextCommand: connectCommand(options.baseUrl, 'buyer'),
       },
       {
         id: 'balance', state: 'warn',
@@ -101,10 +113,12 @@ export async function runDoctorCommand(args: readonly string[], options: CliOpti
     checks.push(...await checkSupplier(options.baseUrl, businessId))
   }
 
-  renderDoctor({
+  const result: DoctorResult = {
     kind: checks.every((check) => check.state === 'pass') ? 'ready' : 'degraded',
     checks,
-  }, options)
+  }
+  renderDoctor(result, options)
+  return !options.json && result.kind === 'degraded' ? 1 : 0
 }
 
 async function checkSupplier(baseUrl: string, businessId: string | undefined): Promise<readonly DoctorCheck[]> {
@@ -114,7 +128,7 @@ async function checkSupplier(baseUrl: string, businessId: string | undefined): P
       {
         id: 'supplier', state: 'warn',
         summary: 'No supplier credential is configured for this origin.',
-        nextCommand: 'ae account connections',
+        nextCommand: connectCommand(baseUrl, 'supplier'),
       },
       { id: 'supplier.readiness', state: 'warn', summary: 'Supplier readiness is unavailable until supplier access is connected.' },
     ]
@@ -132,7 +146,7 @@ async function checkSupplier(baseUrl: string, businessId: string | undefined): P
     const account = agentAccountSelfResultSchema.safeParse(accountOutcome.body)
     if (!accountOutcome.ok || !account.success) {
       return [
-        ...credentialRefusedChecks('supplier'),
+        ...credentialRefusedChecks(baseUrl, 'supplier'),
         { id: 'supplier.readiness', state: 'warn', summary: 'Supplier readiness was not checked because authentication failed.' },
       ]
     }
@@ -141,7 +155,7 @@ async function checkSupplier(baseUrl: string, businessId: string | undefined): P
         {
           id: 'supplier', state: 'fail',
           summary: `Supplier credential is missing ${MARKET_SUPPLY_MANAGE_SCOPE}.`,
-          nextCommand: 'ae connect --supplier',
+          nextCommand: connectCommand(baseUrl, 'supplier'),
         },
         { id: 'supplier.readiness', state: 'warn', summary: 'Supplier readiness was not checked because supplier scope is missing.' },
       ]
@@ -159,7 +173,7 @@ async function checkSupplier(baseUrl: string, businessId: string | undefined): P
     return [supplier, await checkSupplierReadiness(baseUrl, headers, businessId)]
   } catch {
     return [
-      ...credentialRefusedChecks('supplier'),
+      ...credentialRefusedChecks(baseUrl, 'supplier'),
       { id: 'supplier.readiness', state: 'warn', summary: 'Supplier readiness could not be read.' },
     ]
   }
@@ -236,14 +250,14 @@ async function checkBuyer(
     })
     const account = agentAccountSelfResultSchema.safeParse(accountOutcome.body)
     if (!accountOutcome.ok || !account.success) {
-      return credentialRefusedChecks('buyer')
+      return credentialRefusedChecks(baseUrl, 'buyer')
     }
     if (!account.data.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)) {
       return [
         {
           id: 'buyer', state: 'fail',
           summary: `Buyer credential is missing ${MARKET_OPERATIONS_INVOKE_SCOPE}.`,
-          nextCommand: 'ae connect',
+          nextCommand: connectCommand(baseUrl, 'buyer'),
         },
         { id: 'balance', state: 'warn', summary: 'Balance was not checked because buyer scope is missing.' },
         { id: 'invocation', state: 'warn', summary: 'Invocation recovery was not checked because buyer scope is missing.' },
@@ -266,7 +280,7 @@ async function checkBuyer(
       ...(repeatUse === undefined ? [] : [repeatUse]),
     ]
   } catch {
-    return credentialRefusedChecks('buyer')
+    return credentialRefusedChecks(baseUrl, 'buyer')
   }
 }
 
@@ -334,8 +348,8 @@ function marketRequestUnavailable(summary: string): DoctorCheck {
   }
 }
 
-function credentialRefusedChecks(profile: 'buyer' | 'supplier'): readonly DoctorCheck[] {
-  const connect = profile === 'buyer' ? 'ae connect' : 'ae connect --supplier'
+function credentialRefusedChecks(baseUrl: string, profile: 'buyer' | 'supplier'): readonly DoctorCheck[] {
+  const connect = connectCommand(baseUrl, profile)
   if (profile === 'supplier') {
     return [{
       id: 'supplier', state: 'fail',
@@ -375,8 +389,18 @@ function credentialOriginFailure(
   return {
     id: profile, state: 'fail',
     summary: `${profile === 'buyer' ? 'Buyer' : 'Supplier'} credential is not safely bound to the configured origin.`,
-    nextCommand: 'ae account connections',
+    nextCommand: connectCommand(baseUrl, profile),
   }
+}
+
+function connectCommand(baseUrl: string, profile: 'buyer' | 'supplier'): string {
+  return continuationCommand([
+    'ae',
+    'connect',
+    ...(profile === 'supplier' ? ['--supplier'] : []),
+    '--base-url',
+    new URL(baseUrl).origin,
+  ])
 }
 
 async function checkBalance(
@@ -486,12 +510,126 @@ async function checkServer(baseUrl: string): Promise<DoctorCheck> {
   }
 }
 
+async function checkMcp(baseUrl: string): Promise<DoctorCheck> {
+  const expected = listMcpActions()
+    .filter((action) => action.readOnly && action.credentialAdmission === undefined)
+    .map(mcpToolName)
+    .sort()
+  const client = new Client({ name: 'ae-doctor', version: '1.0.0' })
+  const transport = new StreamableHTTPClientTransport(new URL('/mcp', baseUrl), {
+    requestInit: { signal: AbortSignal.timeout(MCP_CHECK_TIMEOUT_MS) },
+  })
+  try {
+    // SDK 1.30.0's declarations disagree only on the optional sessionId spelling.
+    await client.connect(transport as unknown as Parameters<Client['connect']>[0])
+    const actual = (await client.listTools()).tools.map(({ name }) => name).sort()
+    if (actual.length !== expected.length || actual.some((name, index) => name !== expected[index])) {
+      return {
+        id: 'mcp', state: 'fail',
+        summary: 'MCP initialized, but its public tool set does not match this CLI.',
+      }
+    }
+    return {
+      id: 'mcp', state: 'pass',
+      summary: `MCP initialization and ${actual.length} public tools passed.`,
+    }
+  } catch {
+    return {
+      id: 'mcp', state: 'fail',
+      summary: 'MCP initialization or public tool discovery failed.',
+    }
+  } finally {
+    await client.close().catch(() => undefined)
+  }
+}
+
+async function checkDeployment(baseUrl: string): Promise<readonly DoctorCheck[]> {
+  const [readiness, release] = await Promise.all([
+    checkOperationalReadiness(baseUrl),
+    checkReleaseIdentity(baseUrl),
+  ])
+  return [readiness, release]
+}
+
+async function checkOperationalReadiness(baseUrl: string): Promise<DoctorCheck> {
+  try {
+    const outcome = await callJson(baseUrl, '/api/ready')
+    if (outcome.ok && isRecord(outcome.body) && outcome.body.status === 'ready') {
+      return {
+        id: 'readiness', state: 'pass',
+        summary: 'Server operational readiness passed.',
+      }
+    }
+    const code = readinessFailureCode(outcome.body)
+    return {
+      id: 'readiness', state: 'fail',
+      summary: code === undefined
+        ? 'Server is reachable but operational readiness failed. The service operator must restore operational readiness before calls proceed; the caller should not continue or retry.'
+        : `Server is reachable but operational readiness failed (${code}). The service operator must restore operational readiness before calls proceed; the caller should not continue or retry.`,
+    }
+  } catch {
+    return {
+      id: 'readiness', state: 'fail',
+      summary: 'Server manifest was reachable, but operational readiness could not be checked. The service operator must restore the readiness check before calls proceed; the caller should not continue or retry.',
+    }
+  }
+}
+
+function readinessFailureCode(body: unknown): string | undefined {
+  if (!isRecord(body)) return undefined
+  if (isRecord(body.checks)) {
+    for (const check of Object.values(body.checks)) {
+      if (isRecord(check) && safeDiagnosticCode(check.code) !== undefined) {
+        return safeDiagnosticCode(check.code)
+      }
+    }
+  }
+  return safeDiagnosticCode(body.code)
+}
+
+function safeDiagnosticCode(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[a-z][a-z0-9_]{0,63}$/u.test(value)
+    ? value
+    : undefined
+}
+
+async function checkReleaseIdentity(baseUrl: string): Promise<DoctorCheck> {
+  try {
+    const outcome = await callJson(baseUrl, '/api/v1/release')
+    if (
+      outcome.ok
+      && isRecord(outcome.body)
+      && outcome.body.kind === 'ok'
+      && typeof outcome.body.sourceRevision === 'string'
+      && /^[a-f0-9]{40}$/u.test(outcome.body.sourceRevision)
+    ) {
+      return {
+        id: 'release', state: 'pass',
+        summary: `Release identity is ${outcome.body.sourceRevision}.`,
+      }
+    }
+    const reason = isRecord(outcome.body) ? safeDiagnosticCode(outcome.body.reason) : undefined
+    return {
+      id: 'release', state: 'fail',
+      summary: reason === undefined
+        ? 'Release identity is unavailable. The service operator must configure a valid release identity before calls proceed; the caller should not continue or retry.'
+        : `Release identity is unavailable (${reason}). The service operator must configure a valid release identity before calls proceed; the caller should not continue or retry.`,
+    }
+  } catch {
+    return {
+      id: 'release', state: 'fail',
+      summary: 'Release identity could not be checked. The service operator must restore the release identity check before calls proceed; the caller should not continue or retry.',
+    }
+  }
+}
+
 function serverFailure(baseUrl: string, summary: string): DoctorCheck {
-  const origin = new URL(baseUrl)
-  const loopback = origin.hostname === 'localhost' || origin.hostname === '127.0.0.1' || origin.hostname === '::1'
+  const safeOrigin = safeOriginForDiagnostics(baseUrl)
   return {
     id: 'server', state: 'fail', summary,
-    nextCommand: loopback ? 'npm run dev' : 'ae doctor',
+    nextCommand: isLoopbackCliBaseUrl(baseUrl)
+      ? `ae doctor --base-url ${HOSTED_DEFAULT_BASE_URL}`
+      : continuationCommand(['ae', 'config', '--base-url', safeOrigin, '--json']),
   }
 }
 
@@ -505,8 +643,10 @@ function renderDoctor(result: DoctorResult, options: CliOptions): void {
     const marker = check.state === 'pass' ? '✓' : check.state === 'warn' ? '!' : '✗'
     line(`${marker} ${check.summary}`)
   }
-  const nextCommand = result.checks.find((check) => check.state === 'fail' && check.nextCommand !== undefined)?.nextCommand
-    ?? result.checks.find((check) => check.state === 'warn' && check.nextCommand !== undefined)?.nextCommand
-    ?? result.checks.find((check) => check.state === 'pass' && check.nextCommand !== undefined)?.nextCommand
+  const firstFailure = result.checks.find((check) => check.state === 'fail')
+  const nextCommand = firstFailure === undefined
+    ? result.checks.find((check) => check.state === 'warn' && check.nextCommand !== undefined)?.nextCommand
+      ?? result.checks.find((check) => check.state === 'pass' && check.nextCommand !== undefined)?.nextCommand
+    : firstFailure.nextCommand
   if (nextCommand !== undefined) line(`Next: ${nextCommand}`)
 }

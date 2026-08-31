@@ -27,6 +27,31 @@ describe('MCP host adapter protocol', () => {
       serverInfo: { name: 'agentic-economy', version: '1.0.0' },
       capabilities: { tools: expect.any(Object) },
     })
+    const instructions = body.result?.instructions
+    expect(instructions).toBe(
+      'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability. '
+      + 'Search with `ae_registry_operations_search` and a capability phrase. '
+      + 'If multiple supplier Operations match, compare their price, readiness, data use, and effects with `ae_registry_operations_compare`; choose one supplier, then inspect that exact Operation with `ae_registry_operations_detail`. '
+      + 'Use `ae_registry_operations_inspectPlan` only for a bounded multi-Operation composition, not to choose a supplier. '
+      + 'Authenticated clients may use `ae_operation_invoke` only when that tool is admitted and the returned access and authority conditions are satisfied. '
+      + 'If effects are uncertain, use `ae_operation_status` or `ae_operation_reconcile` before retrying. '
+      + 'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution.',
+    )
+    expect(typeof instructions).toBe('string')
+    expect([...String(instructions).matchAll(/`(ae_[^`]+)`/g)].map((match) => match[1])).toEqual([
+      'ae_registry_operations_search',
+      'ae_registry_operations_compare',
+      'ae_registry_operations_detail',
+      'ae_registry_operations_inspectPlan',
+      'ae_operation_invoke',
+      'ae_operation_status',
+      'ae_operation_reconcile',
+    ])
+    expect(instructions).toContain('one bounded outside contribution')
+    expect(instructions).toContain('your existing harness keeps project planning and execution')
+    expect(instructions).not.toMatch(/Agentic Economy (?:owns|plans|executes|orchestrates)/i)
+    expect(instructions).not.toMatch(/api[_ -]?key|bearer|credential|password|secret|private origin|https?:\/\/|localhost/i)
+    expect(instructions).not.toMatch(/\baccount\b|\brequest\b|\bevidence\b|idempotenc/i)
   })
   it('maps top-level MCP request schema failures to Invalid params', async () => {
     const malformedInitialize = await postMcp({
@@ -108,7 +133,8 @@ describe('MCP host adapter protocol', () => {
   })
 
   it('sanitizes thrown MCP action errors', async () => {
-    const secret = 'secret_internal_exception_detail'
+    const secret = 'secret_internal_exception_detail recovery:v1:private'
+    const correlationId = 'corr_mcp_safe_42'
     const throwingAction = defineAction({
       id: 'test.throwing',
       name: 'Throwing test action',
@@ -153,16 +179,34 @@ describe('MCP host adapter protocol', () => {
         },
       },
       { actions: [throwingAction] },
+      { 'x-ae-request-id': correlationId },
     )
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('x-ae-request-id')).toBe(correlationId)
     const body = await readMcpBody(response)
-    const result = body.result as Record<string, unknown>
+    const result = body.result as {
+      isError?: boolean
+      structuredContent?: Record<string, unknown>
+      content?: Array<{ type?: string; text?: string }>
+    }
     expect(result.isError).toBe(true)
-    expect(result.content).toEqual(expect.arrayContaining([
-      { type: 'text', text: expect.stringContaining('action_execution_failed') },
-    ]))
+    const text = result.content?.[0]?.text
+    expect(typeof text).toBe('string')
+    const textFallback = JSON.parse(text ?? 'null') as Record<string, unknown>
+    expect(result.structuredContent).toEqual(textFallback)
+    expect(textFallback).toEqual({
+      type: 'about:blank',
+      title: 'Internal error',
+      status: 500,
+      detail: 'Action execution failed.',
+      kind: 'INTERNAL',
+      code: 'action_execution_failed',
+      retryable: false,
+      correlationId,
+    })
     expect(JSON.stringify(result)).not.toContain(secret)
+    expect(JSON.stringify(result)).not.toContain('recovery:v1:private')
   })
 
   it('returns an error for an unknown tool without invoking an action', async () => {

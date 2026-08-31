@@ -309,7 +309,7 @@ describe('interactive consequence authority', () => {
       },
       runQuery: async (reference: unknown) => {
         const functionName = getFunctionName(reference as never)
-        if (functionName === 'capabilitySupply:authorizeOwnerSupplyAction') return true
+        if (functionName === 'catalog:authorizeSupplierBusiness') return true
         if (functionName === 'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel') {
           return {
             kind: 'available',
@@ -380,7 +380,7 @@ describe('interactive consequence authority', () => {
       },
       runQuery: async (reference: unknown) => {
         const functionName = getFunctionName(reference as never)
-        if (functionName === 'capabilitySupply:authorizeOwnerSupplyAction') return true
+        if (functionName === 'catalog:authorizeSupplierBusiness') return true
         if (functionName === 'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel') {
           return {
             kind: 'available',
@@ -491,7 +491,7 @@ describe('interactive consequence authority', () => {
     expect(externalProbe).toHaveBeenCalledOnce()
   })
 
-  it('owner supply rechecks projected x402 test authority before completion', async () => {
+  it('owner supply surfaces refusal from the separately reauthenticated x402 canary mutation', async () => {
     let authorityReads = 0
     const handler = (runOwnerSupplyTest as unknown as {
       _handler: (ctx: unknown, args: unknown) => Promise<unknown>
@@ -503,15 +503,16 @@ describe('interactive consequence authority', () => {
         return authorityReads === 1 ? currentAuthority : null
       },
       sourceKind: 'x402',
-      testCompleted: true,
+      readinessCompleted: true,
+      canaryResult: { kind: 'refused', code: 'authorization_denied' },
     })
 
     await expect(handler(ctx, ownerSupplyArgs())).resolves.toEqual({
       step: 'test',
       state: 'refused',
-      refusal: 'authorization_denied',
+      refusal: 'canary_admission_refused',
     })
-    expect(authorityReads).toBe(2)
+    expect(authorityReads).toBe(1)
   })
 
   it('owner supply denies a test before reading the offering when no current authority exists', async () => {
@@ -546,17 +547,34 @@ describe('interactive consequence authority', () => {
         return currentAuthority
       },
       sourceKind: 'x402',
-      testCompleted: true,
+      readinessCompleted: true,
       externalProbe,
     })
 
     await expect(handler(ctx, ownerSupplyArgs())).resolves.toMatchObject({
       step: 'test',
       state: 'completed',
-      message: expect.stringContaining('No payment was sent'),
+      message: expect.stringContaining('queued on Base Sepolia'),
     })
-    expect(authorityReads).toBe(2)
+    expect(authorityReads).toBe(1)
     expect(externalProbe).not.toHaveBeenCalled()
+  })
+
+  it('owner supply refuses an x402 canary before exact readiness has completed', async () => {
+    const handler = (runOwnerSupplyTest as unknown as {
+      _handler: (ctx: unknown, args: unknown) => Promise<unknown>
+    })._handler
+    const ctx = ownerSupplyActionContext({
+      authority: () => ownerSupplyAuthority(),
+      sourceKind: 'x402',
+      readinessCompleted: false,
+    })
+
+    await expect(handler(ctx, ownerSupplyArgs())).resolves.toEqual({
+      step: 'test',
+      state: 'refused',
+      refusal: 'health_unhealthy',
+    })
   })
 
   it('owner supply denies authority revoked immediately before a test probe', async () => {
@@ -647,15 +665,19 @@ function ownerSupplyArgs() {
     publicationRef: 'publication:authority-refresh',
     publicationRevision: 1,
     operationKey: 'authority-refresh',
+    correlationId: 'owner-supply-test:authority-refresh',
+    input: {},
   }
 }
 
 function ownerSupplyActionContext(options: Readonly<{
   authority: () => ReturnType<typeof ownerSupplyAuthority> | null
   sourceKind: 'openapi_http' | 'x402'
-  testCompleted?: boolean
+  readinessCompleted?: boolean
   externalProbe?: () => unknown
   recordEffect?: (...args: unknown[]) => unknown
+  canaryResult?: { kind: 'enqueued'; canaryRef: string; invocationRef: string; operationRef: string }
+    | { kind: 'refused'; code: string }
 }>) {
   return {
     auth: {
@@ -667,7 +689,7 @@ function ownerSupplyActionContext(options: Readonly<{
     },
     runQuery: async (reference: unknown) => {
       const functionName = getFunctionName(reference as never)
-      if (functionName === 'capabilitySupply:authorizeOwnerSupplyAction') return true
+      if (functionName === 'catalog:authorizeSupplierBusiness') return true
       if (functionName === 'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel') {
         return {
           kind: 'available',
@@ -683,7 +705,10 @@ function ownerSupplyActionContext(options: Readonly<{
               source: { kind: options.sourceKind },
             },
             operationRef: 'operation:authority-refresh',
-            stepStates: { test: options.testCompleted === true ? 'completed' : 'in_progress' },
+            stepStates: {
+              readiness: options.readinessCompleted === true ? 'completed' : 'in_progress',
+              test: 'in_progress',
+            },
           }],
         }
       }
@@ -700,6 +725,17 @@ function ownerSupplyActionContext(options: Readonly<{
       }
       throw new Error(`unexpected_action:${functionName}`)
     },
-    runMutation: options.recordEffect ?? vi.fn(),
+    runMutation: async (reference: unknown, ...args: unknown[]) => {
+      const functionName = getFunctionName(reference as never)
+      if (functionName === 'capabilitySupplyOwnerCanary:requestSellerOnboardingCanary') {
+        return options.canaryResult ?? {
+          kind: 'enqueued',
+          canaryRef: 'seller-canary:test',
+          invocationRef: 'seller-canary-invocation:test',
+          operationRef: 'operation:authority-refresh',
+        }
+      }
+      return await (options.recordEffect ?? vi.fn())(reference, ...args)
+    },
   }
 }

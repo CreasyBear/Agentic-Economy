@@ -6,6 +6,54 @@ const exponent = v.number()
 const units = v.string()
 const identifier = v.string()
 const evidenceRefs = v.array(v.string())
+export const x402PaymentAuthorizationFailureCodeValue = v.union(
+  v.literal('custody_configuration_invalid'),
+  v.literal('request_fingerprint_context_invalid'),
+  v.literal('material_unavailable'),
+  v.literal('material_identity_invalid'),
+  v.literal('external_spend_identity_invalid'),
+  v.literal('provider_authority_invalid'),
+  v.literal('grant_invalid'),
+  v.literal('managed_authorization_unavailable'),
+)
+export const x402PaymentAuthorizationFailureDetailValue = v.union(
+  v.literal('not_found'),
+  v.literal('inactive'),
+  v.literal('stale_generation'),
+  v.literal('expired'),
+  v.literal('digest_mismatch'),
+  v.literal('credential_unavailable'),
+  v.literal('lease_not_found'),
+  v.literal('lease_inactive'),
+  v.literal('lease_expired'),
+  v.literal('lease_generation_stale'),
+  v.literal('lease_digest_stale'),
+  v.literal('lease_scope_mismatch'),
+  v.literal('lease_resource_mismatch'),
+  v.literal('lease_identity_mismatch'),
+  v.literal('connection_not_found'),
+  v.literal('connection_inactive'),
+  v.literal('connection_expired'),
+  v.literal('readiness_expired'),
+  v.literal('readiness_mismatch'),
+  v.literal('authority_read_failed'),
+)
+const externalSpendExecutionContext = v.union(
+  v.object({
+    kind: v.literal('market'),
+    paymentProfile: v.union(
+      v.literal('base-usdc-exact'),
+      v.literal('base-sepolia-usdc-exact'),
+    ),
+  }),
+  v.object({
+    kind: v.literal('seller_onboarding_canary'),
+    paymentProfile: v.literal('base-sepolia-usdc-exact'),
+    canaryRef: identifier,
+    canaryCommitmentDigest: identifier,
+    fundingBudgetRef: identifier,
+  }),
+)
 
 export const moneyTables = {
   moneyAccounts: defineTable({
@@ -152,6 +200,8 @@ export const moneyTables = {
     providerRef: identifier,
     paymentIdentifier: identifier,
     challengeDigest: identifier,
+    // Optional only for rows written before execution-context identity binding.
+    executionContext: v.optional(externalSpendExecutionContext),
     idempotencyDigest: identifier,
     identityDigest: identifier,
     currency,
@@ -238,6 +288,12 @@ export const moneyTables = {
     paymentAuthorizationValidBefore: v.optional(v.string()),
     paymentAuthorizationExpiresAt: v.optional(v.number()),
     paymentSigningClaimedAt: v.optional(v.number()),
+    // Non-secret, bounded explanation for a managed authorization that stopped
+    // before a payment header was available. This survives the later unpaid
+    // observation so operators do not have to infer the failed transition.
+    authorizationFailureCode: v.optional(x402PaymentAuthorizationFailureCodeValue),
+    authorizationFailureDetail: v.optional(x402PaymentAuthorizationFailureDetailValue),
+    authorizationFailureObservedAt: v.optional(v.number()),
     state: v.union(
       v.literal('prepared'),
       v.literal('possibly_submitted'),
@@ -256,6 +312,8 @@ export const moneyTables = {
       v.literal('unknown'),
     )),
     paymentResponseDigest: v.optional(identifier),
+    quarantinedResponseDigest: v.optional(identifier),
+    quarantinedOutputJson: v.optional(v.string()),
     reconciliationEvidenceRef: v.optional(identifier),
     reconciliationEvidenceDigest: v.optional(identifier),
     evidenceRefs,

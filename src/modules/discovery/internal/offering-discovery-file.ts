@@ -15,18 +15,23 @@ export const DiscoveryPublicSurfacePaths = [
   '/for-agents',
   '/for-providers',
   '/about',
+  '/support',
+  '/status',
   '/privacy/remove-business',
   '/.well-known/ucp',
-  '/api/businesses',
+  '/SKILL.md',
+  '/llms.txt',
+  '/robots.txt',
+  '/sitemap.xml',
   OPERATION_MARKET_SEARCH_PATH,
   OPERATION_MARKET_DETAIL_PATH,
   OPERATION_MARKET_COMPARE_PATH,
   OPERATION_MARKET_INSPECT_PLAN_PATH,
 ] as const
 
-/** Published business portfolios remain facts only; Operation execution has a separate exact-detail boundary. */
+/** Supporting provider facts never become executable merely because they are published. */
 export const DiscoveryListingBoundaryLine =
-  'Provider and publication facts are supporting metadata. Only independently callable Operations appear in the capability catalogue.'
+  'Provider and publication facts are supporting metadata. The Operation catalogue is the canonical market.'
 
 /** Public loop copy shared by the machine-readable discovery surfaces. */
 export const OperationMarketAnonymousBoundaryLine =
@@ -45,7 +50,7 @@ export function operationMarketLines(canonicalBaseUrl: string): readonly string[
     `1. Search by outcome: \`${cli} search "weather forecast" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}\`).`,
     `2. Inspect one exact result: \`${cli} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}\`).`,
     `3. Call it: \`${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait\`. Eligible free keyless reads use the official MCP client.`,
-    `4. Connect only if the call reports \`agent_access_key_required\`: \`npx @agentic-economy/cli connect --base-url "${canonicalBaseUrl}" --mcp\`, then repeat the same call through \`${invoke.method} ${canonicalBaseUrl}${invoke.path}\`.`,
+    `4. Connect only if the call reports \`agent_access_key_required\`: \`${cli} connect --base-url "${canonicalBaseUrl}"\`, then repeat the same call through \`${invoke.method} ${canonicalBaseUrl}${invoke.path}\`.`,
     `5. Keep the receipt: \`${cli} status "$AE_INVOCATION_REF" --base-url "${canonicalBaseUrl}" --json\` (\`${status.method} ${canonicalBaseUrl}${status.path}\`). Use cancel or recover only when that receipt offers the action.`,
     '',
     OperationMarketAnonymousBoundaryLine,
@@ -58,9 +63,6 @@ export function operationMarketLines(canonicalBaseUrl: string): readonly string[
   ]
 }
 
-const offeringLlmsSampleLimit = 12
-const offeringLlmsByteCeiling = 4096
-
 export function buildOfferingLlmsUrlsFromSlugs(
   slugs: readonly string[],
   options: BuildDiscoveryFileOptions,
@@ -68,22 +70,18 @@ export function buildOfferingLlmsUrlsFromSlugs(
   const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl)
   return [...new Set([
     ...DiscoveryPublicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
-    ...slugs.flatMap((slug) => [
-      `${canonicalBaseUrl}/${slug}`,
-      `${canonicalBaseUrl}/${slug}/ucp`,
-      `${canonicalBaseUrl}/api/businesses/${slug}`,
-    ]),
+    ...slugs.map((slug) => `${canonicalBaseUrl}/${slug}`),
   ])]
 }
 
-/** Durable Offering-based assistant index with a bounded inline sample. */
+/** Compact Operation-first assistant index. Business pages remain human-readable supporting facts. */
 export function buildOfferingLlmsTxt(
   businesses: readonly PublicBusinessCatalogApiV2Dto[],
   options: BuildDiscoveryFileOptions & { totalBusinesses?: number },
 ): DiscoveryFileBuildResult {
   const canonicalBaseUrl = trimTrailingSlashes(options.canonicalBaseUrl)
   const urls = buildOfferingLlmsUrlsFromSlugs(businesses.map((business) => business.slug), options)
-  const beforeSample = [
+  const body = [
     '# Agentic Economy',
     '',
     ...operationMarketLines(canonicalBaseUrl),
@@ -94,11 +92,10 @@ export function buildOfferingLlmsTxt(
     `- Human guide: ${canonicalBaseUrl}/for-agents`,
     `- MCP: ${canonicalBaseUrl}/mcp`,
     '',
-    'Published businesses (business catalog; never Agent Services):',
-  ]
-  const afterSample = [
-    `- full list=${canonicalBaseUrl}/api/businesses`,
-    `- total=${options.totalBusinesses ?? businesses.length}; the lines above are a bounded sample`,
+    'Canonical catalogue:',
+    `- Human: ${canonicalBaseUrl}/market`,
+    `- Machine search: POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}`,
+    `- Exact detail: POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}`,
     '',
     'Boundary:',
     `- ${DiscoveryListingBoundaryLine}`,
@@ -107,19 +104,8 @@ export function buildOfferingLlmsTxt(
     `- ${canonicalBaseUrl}/privacy/remove-business`,
     '',
   ]
-  const encoder = new TextEncoder()
-  const framingBytes = encoder.encode([...beforeSample, ...afterSample].join('\n')).length
-  const sample: string[] = []
-  let sampleBytes = 0
-  for (const business of businesses.slice(0, offeringLlmsSampleLimit)) {
-    const line = `- slug=${business.slug} path=/${business.slug}`
-    const cost = encoder.encode(line).length + 1
-    if (sample.length > 0 && framingBytes + sampleBytes + cost > offeringLlmsByteCeiling) break
-    sampleBytes += cost
-    sample.push(line)
-  }
   return {
-    body: [...beforeSample, ...(sample.length === 0 ? ['- none'] : sample), ...afterSample].join('\n'),
+    body: body.join('\n'),
     urls,
   }
 }

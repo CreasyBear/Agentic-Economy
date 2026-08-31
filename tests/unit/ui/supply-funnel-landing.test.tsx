@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { renderWithRouter, service, tool } from "./supply-funnel-harness";
+import { operation, renderWithRouter, tool } from "./supply-funnel-harness";
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -8,7 +8,7 @@ import { AeSupplyLanding } from "@/components/ae/supply/AeSupplyLanding";
 
 describe("supply landing", () => {
   it("leads with the supplier path and published Operation rows", () => {
-    renderWithRouter(<AeSupplyLanding tools={[tool]} services={[service]} />);
+    renderWithRouter(<AeSupplyLanding tools={[tool]} operations={[operation]} />);
     expect(
       screen.getByRole("heading", { name: "Publish an Operation." }),
     ).toBeDefined();
@@ -38,7 +38,7 @@ describe("supply landing", () => {
   });
 
   it("renders the honest empty state", () => {
-    renderWithRouter(<AeSupplyLanding tools={[]} services={[]} />);
-    expect(screen.getByText("No supplier profiles are published yet.")).toBeDefined();
+    renderWithRouter(<AeSupplyLanding tools={[]} operations={[]} />);
+    expect(screen.getByText(/No Operations are published yet/)).toBeDefined();
   });
 });

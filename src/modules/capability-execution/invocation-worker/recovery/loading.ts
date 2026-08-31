@@ -18,6 +18,7 @@ import {
   type RuntimePublishedOperationDescriptor,
 } from '@/modules/capability-supply/public'
 import type { OperationInvokeReceipt } from '@/modules/capability-execution/operation-invoke-contracts'
+import type { ExactAmount } from '@/modules/money/public'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
 import {
@@ -25,10 +26,24 @@ import {
 } from '../../../../../convex/capabilityOperationInvocationProjection'
 import { brokeredChargeReservationForRecovery } from '../charge'
 import { buildBrokeredX402Receipt } from '../brokeredX402'
+import { buildSellerOnboardingCanaryReceipt } from '../sellerCanaryReceipt'
 import type { RecoveredInvocation, RecoveryIdentity } from './contracts'
 
 type RecoveryPort = ReturnType<typeof canonicalPort>
 export type RecoveryControlRow = NonNullable<Awaited<ReturnType<RecoveryPort['readControl']>>>
+
+type RecoveryReceiptState = 'settled' | 'refunded' | 'reconciliation_required'
+type RecoveryReceiptArgs = {
+  state: RecoveryReceiptState
+  evidenceHash: string
+  issuedAt: string
+  externalSettlementRef?: string
+  settlementTransactionHash?: string
+  paymentIdentifier?: string
+  refundState?: OperationInvokeReceipt['refundState']
+  lossState?: OperationInvokeReceipt['lossState']
+}
+type Mutable<T> = { -readonly [K in keyof T]: T[K] }
 
 export async function loadRecoveredInvocation(
   ctx: ActionCtx,
@@ -126,32 +141,14 @@ export async function loadRecoveryWorkContext(
     operation,
     includeBrokeredReservation,
   )
-  const brokeredReceipt = (
-    state: 'settled' | 'refunded' | 'reconciliation_required',
-    evidenceHash: string,
-    issuedAt: string,
-    externalSettlementRef?: string,
-    settlementTransactionHash?: string,
-    paymentIdentifier?: string,
-    refundState?: OperationInvokeReceipt['refundState'],
-    lossState?: OperationInvokeReceipt['lossState'],
-  ) => brokeredReservation === undefined
-    ? undefined
-    : buildBrokeredX402Receipt({
-        operation,
-        invocationRef: recovered.invocationRef,
-        operationRef: recovered.operationRef,
-        state,
-        evidenceHash,
-        issuedAt,
-        ...(brokeredReservation.charge.transactionRef === undefined ? {} : { transactionRef: brokeredReservation.charge.transactionRef }),
-        ...(externalSettlementRef === undefined ? {} : { externalSettlementRef }),
-        ...(settlementTransactionHash === undefined ? {} : { settlementTransactionHash }),
-        ...(paymentIdentifier === undefined ? {} : { paymentIdentifier }),
-        ...(brokeredReservation.charge.transactionRef === undefined ? {} : { accountingTransactionRefs: [brokeredReservation.charge.transactionRef] }),
-        ...(refundState === undefined ? {} : { refundState }),
-        ...(lossState === undefined ? {} : { lossState }),
-      })
+  const brokeredReceipt = recoveryReceiptBuilder({
+    recovered,
+    control,
+    operation,
+    priceAmount,
+    x402Attempt,
+    brokeredReservation,
+  })
   const trustedReconciliationEvidenceDigest: { value?: string } = {}
   const tracer = createDurableActionInvocationTracer({
     action,
@@ -208,6 +205,133 @@ export async function loadRecoveryWorkContext(
     brokeredReceipt,
     trustedReconciliationEvidenceDigest,
   }
+}
+
+function recoveryReceiptBuilder(input: Readonly<{
+  recovered: RecoveredInvocation
+  control: RecoveryControlRow
+  operation: PublishedOperation
+  priceAmount: ExactAmount
+  x402Attempt: Awaited<ReturnType<typeof loadX402Attempt>>
+  brokeredReservation: Awaited<ReturnType<typeof loadBrokeredReservation>>
+}>) {
+  return (
+    state: RecoveryReceiptState,
+    evidenceHash: string,
+    issuedAt: string,
+    externalSettlementRef?: string,
+    settlementTransactionHash?: string,
+    paymentIdentifier?: string,
+    refundState?: OperationInvokeReceipt['refundState'],
+    lossState?: OperationInvokeReceipt['lossState'],
+  ) => {
+    const args: RecoveryReceiptArgs = { state, evidenceHash, issuedAt }
+    if (externalSettlementRef !== undefined) args.externalSettlementRef = externalSettlementRef
+    if (settlementTransactionHash !== undefined) args.settlementTransactionHash = settlementTransactionHash
+    if (paymentIdentifier !== undefined) args.paymentIdentifier = paymentIdentifier
+    if (refundState !== undefined) args.refundState = refundState
+    if (lossState !== undefined) args.lossState = lossState
+    return input.recovered.sellerOnboardingCanary === undefined
+      ? buildBrokeredRecoveryReceipt(input, args)
+      : buildCanaryRecoveryReceipt(input, args)
+  }
+}
+
+function buildCanaryRecoveryReceipt(
+  input: Parameters<typeof recoveryReceiptBuilder>[0],
+  args: RecoveryReceiptArgs,
+): OperationInvokeReceipt | undefined {
+  const { recovered, control, operation, priceAmount, x402Attempt } = input
+  const canary = recovered.sellerOnboardingCanary
+  if (canary === undefined) {
+    throw new Error('seller_onboarding_canary_receipt_requires_canary')
+  }
+  const persistedReceipt = persistedOperationReceipt(recovered)
+  const receiptInput: Mutable<Parameters<typeof buildSellerOnboardingCanaryReceipt>[0]> = {
+    canary,
+    operation,
+    invocationRef: recovered.invocationRef,
+    operationRef: recovered.operationRef,
+    attemptRef: canaryRecoveryAttemptRef(recovered, control, x402Attempt),
+    state: args.state,
+    providerQuotedAmount: priceAmount,
+    evidenceHash: args.evidenceHash,
+    issuedAt: args.issuedAt,
+    refundState: retainedReceiptState(args.refundState, persistedReceipt, 'refundState'),
+    lossState: retainedReceiptState(args.lossState, persistedReceipt, 'lossState'),
+  }
+  const paymentIdentifier = retainedReceiptString(args.paymentIdentifier, persistedReceipt, 'paymentIdentifier')
+  const transactionHash = retainedReceiptString(args.settlementTransactionHash, persistedReceipt, 'settlementTransactionHash')
+  const externalRef = retainedReceiptString(args.externalSettlementRef, persistedReceipt, 'externalSettlementRef')
+  if (paymentIdentifier !== undefined) receiptInput.paymentIdentifier = paymentIdentifier
+  if (transactionHash !== undefined) receiptInput.settlementTransactionHash = transactionHash
+  if (externalRef !== undefined) receiptInput.externalSettlementRef = externalRef
+  return buildSellerOnboardingCanaryReceipt(receiptInput)
+}
+
+function persistedOperationReceipt(recovered: RecoveredInvocation): OperationInvokeReceipt | undefined {
+  return recovered.result !== undefined && 'receipt' in recovered.result
+    ? recovered.result.receipt
+    : undefined
+}
+
+function canaryRecoveryAttemptRef(
+  recovered: RecoveredInvocation,
+  control: RecoveryControlRow,
+  attempt: Awaited<ReturnType<typeof loadX402Attempt>>,
+): string {
+  if (attempt !== null) return attempt.attemptRef
+  if (control.currentAttemptRef !== undefined) return control.currentAttemptRef
+  if (recovered.attemptRef !== undefined) return recovered.attemptRef
+  return `operation-attempt:${recovered.invocationRef}:1`
+}
+
+function retainedReceiptString(
+  supplied: string | undefined,
+  receipt: OperationInvokeReceipt | undefined,
+  field: 'paymentIdentifier' | 'settlementTransactionHash' | 'externalSettlementRef',
+): string | undefined {
+  if (supplied !== undefined) return supplied
+  return receipt === undefined ? undefined : receipt[field]
+}
+
+function retainedReceiptState<K extends 'refundState' | 'lossState'>(
+  supplied: OperationInvokeReceipt[K] | undefined,
+  receipt: OperationInvokeReceipt | undefined,
+  field: K,
+): NonNullable<OperationInvokeReceipt[K]> {
+  if (supplied !== undefined) return supplied
+  if (receipt !== undefined && receipt[field] !== undefined) {
+    return receipt[field] as NonNullable<OperationInvokeReceipt[K]>
+  }
+  return 'unknown'
+}
+
+function buildBrokeredRecoveryReceipt(
+  input: Parameters<typeof recoveryReceiptBuilder>[0],
+  args: RecoveryReceiptArgs,
+): OperationInvokeReceipt | undefined {
+  const { recovered, operation, brokeredReservation } = input
+  if (brokeredReservation === undefined) return undefined
+  const receiptInput: Mutable<Parameters<typeof buildBrokeredX402Receipt>[0]> = {
+    operation,
+    invocationRef: recovered.invocationRef,
+    operationRef: recovered.operationRef,
+    state: args.state,
+    evidenceHash: args.evidenceHash,
+    issuedAt: args.issuedAt,
+  }
+  const transactionRef = brokeredReservation.charge.transactionRef
+  if (transactionRef !== undefined) {
+    receiptInput.transactionRef = transactionRef
+    receiptInput.accountingTransactionRefs = [transactionRef]
+  }
+  if (args.externalSettlementRef !== undefined) receiptInput.externalSettlementRef = args.externalSettlementRef
+  if (args.settlementTransactionHash !== undefined) receiptInput.settlementTransactionHash = args.settlementTransactionHash
+  if (args.paymentIdentifier !== undefined) receiptInput.paymentIdentifier = args.paymentIdentifier
+  if (args.refundState !== undefined) receiptInput.refundState = args.refundState
+  if (args.lossState !== undefined) receiptInput.lossState = args.lossState
+  return buildBrokeredX402Receipt(receiptInput)
 }
 
 type RecoveryMaterial = Readonly<{

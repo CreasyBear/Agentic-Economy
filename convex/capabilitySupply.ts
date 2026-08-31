@@ -22,9 +22,13 @@ import {
   readCapabilityProbeTargetArgs,
   readCapabilityProbeTargetHandler,
   readCapabilityProbeTargetReturns,
+  readOwnerStagedCapabilityProbeTargetArgs,
+  readOwnerStagedCapabilityProbeTargetHandler,
   recordCapabilityProbeResultArgs,
   recordCapabilityProbeResultHandler,
   recordCapabilityProbeResultReturns,
+  recordOwnerStagedCapabilityProbeResultArgs,
+  recordOwnerStagedCapabilityProbeResultHandler,
   scheduleDueCapabilityProbesHandler,
 } from './capabilitySupplyProbes'
 import {
@@ -50,6 +54,11 @@ import {
   recordCapabilityCallEventHandler,
   recordCapabilityCallEventReturns,
 } from './capabilitySupplyLists'
+import {
+  stageOwnerX402CapabilityArgs,
+  stageOwnerX402CapabilityHandler,
+  stageOwnerX402CapabilityReturns,
+} from './capabilitySupplyOwnerStaging'
 
 export {
   publicationPorts,
@@ -84,6 +93,12 @@ export const publishPreparedCapability = mutationGeneric({
   handler: publishPreparedCapabilityHandler,
 })
 
+export const stageOwnerX402Capability = mutationGeneric({
+  args: stageOwnerX402CapabilityArgs,
+  returns: stageOwnerX402CapabilityReturns,
+  handler: stageOwnerX402CapabilityHandler,
+})
+
 export const readCapabilityPublication = queryGeneric({
   args: readCapabilityPublicationArgs,
   returns: v.union(capabilityPublicationValue, v.null()),
@@ -103,10 +118,22 @@ export const readCapabilityProbeTarget = internalQueryGeneric({
   handler: readCapabilityProbeTargetHandler,
 })
 
+export const readOwnerStagedCapabilityProbeTarget = internalQueryGeneric({
+  args: readOwnerStagedCapabilityProbeTargetArgs,
+  returns: readCapabilityProbeTargetReturns,
+  handler: readOwnerStagedCapabilityProbeTargetHandler,
+})
+
 export const recordCapabilityProbeResult = internalMutationGeneric({
   args: recordCapabilityProbeResultArgs,
   returns: recordCapabilityProbeResultReturns,
   handler: recordCapabilityProbeResultHandler,
+})
+
+export const recordOwnerStagedCapabilityProbeResult = internalMutationGeneric({
+  args: recordOwnerStagedCapabilityProbeResultArgs,
+  returns: recordCapabilityProbeResultReturns,
+  handler: recordOwnerStagedCapabilityProbeResultHandler,
 })
 
 export const scheduleDueCapabilityProbes = internalMutationGeneric({

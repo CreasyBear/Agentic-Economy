@@ -103,7 +103,9 @@ export function findAction(id: string): AnyAction | undefined {
 
 /** Actions exposed on the anonymous MCP host; the adapter enforces read-only admission. */
 export function listMcpActions(): readonly AnyAction[] {
-  return actions.filter((action) => action.surfaces.includes('mcp'))
+  return actions.filter((action) =>
+    action.surfaces.includes('mcp') && action.id !== 'registry.search' && action.id !== 'registry.detail'
+  )
 }
 
 /** Deterministic MCP tool name: one derivation, never a hand-maintained map. */

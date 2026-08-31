@@ -1,6 +1,7 @@
 import { makeFunctionReference } from 'convex/server'
 import type { WorkId } from '@convex-dev/workpool'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { privateKeyToAccount } from 'viem/accounts'
 
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
@@ -14,9 +15,34 @@ import {
   type ConvexFixtureBackend,
 } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  x402SellerClaimDigest,
+  x402SellerClaimMessage,
+} from '@/modules/capability-supply/public'
 
 const SERVICE_KEY = 'supplier-provider-connection-test-key-32-bytes'
 const REGISTER_OPERATION = 'agentAccessPrincipals.registerIssuedAgentBindingForServer'
+const SELLER_ACCOUNT = privateKeyToAccount(`0x${'11'.repeat(32)}`)
+
+async function sellerClaim(businessId: string, endpointUrl: string) {
+  const claim = {
+    businessId,
+    endpointUrl,
+    method: 'POST' as const,
+    observationDigest: canonicalDigest({ endpointUrl }),
+    payTo: SELLER_ACCOUNT.address,
+    expiresAt: Date.now() + 600_000,
+  }
+  return {
+    method: claim.method,
+    observationDigest: claim.observationDigest,
+    payTo: claim.payTo,
+    claimExpiresAt: claim.expiresAt,
+    claimDigest: x402SellerClaimDigest(claim),
+    claimSignature: await SELLER_ACCOUNT.signMessage({ message: x402SellerClaimMessage(claim) }),
+  }
+}
 
 const registerBinding = makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(
   'agentAccessPrincipals:registerIssuedAgentBindingForServer',
@@ -118,10 +144,12 @@ describe('supplier-agent provider connection lifecycle', () => {
     const base = { agentPrincipal: principal }
 
     const connectOperationKey = 'supplier-connection:connect:one'
+    const firstClaim = await sellerClaim(String(fixture.businessId), 'https://provider.example/x402')
     const connected = await agentCommand(backend, connectX402, {
       ...base,
       businessId: fixture.businessId,
       resourceUrl: 'https://provider.example/x402',
+      ...firstClaim,
       evidenceRefs: ['evidence:supplier-connect'],
       commandId: connectOperationKey,
       operationKey: connectOperationKey,
@@ -133,6 +161,18 @@ describe('supplier-agent provider connection lifecycle', () => {
     })
     const connection = connected.connection as Record<string, unknown>
     const connectionRef = String(connection.connectionRef)
+
+    const substitutedOperationKey = 'supplier-connection:connect:substituted-endpoint'
+    await expect(agentCommand(backend, connectX402, {
+      ...base,
+      businessId: fixture.businessId,
+      resourceUrl: 'https://provider.example/substituted',
+      ...firstClaim,
+      evidenceRefs: ['evidence:untrusted-observation'],
+      commandId: substitutedOperationKey,
+      operationKey: substitutedOperationKey,
+      correlationId: substitutedOperationKey,
+    })).resolves.toEqual({ kind: 'refused', code: 'invalid_identity' })
 
     const listOperationKey = 'supplier-connection:list:one'
     await expect(agentCommand(backend, listConnections, {
@@ -247,10 +287,12 @@ describe('supplier-agent provider connection lifecycle', () => {
     const principal = await issueSupplierAgent(backend, fixture.owner, 'user_agent-provider-cleanup-callback')
     const base = { agentPrincipal: principal }
     const connectOperationKey = 'supplier-connection:connect:cleanup-callback'
+    const cleanupClaim = await sellerClaim(String(fixture.businessId), 'https://provider.example/x402-cleanup')
     const connected = await agentCommand(backend, connectX402, {
       ...base,
       businessId: fixture.businessId,
       resourceUrl: 'https://provider.example/x402-cleanup',
+      ...cleanupClaim,
       evidenceRefs: ['evidence:supplier-connect'],
       commandId: connectOperationKey,
       operationKey: connectOperationKey,

@@ -11,11 +11,13 @@ import {
   credentialFromEnvironment,
   isPaymentSigningIdempotencyKey,
   readCdpX402PaymentAuthorization,
+  replayCdpX402PaymentSigningIntent,
   readX402PaymentPayerAndNonce,
   verifyExactEvmX402Settlement,
   x402PaymentCredentialRefFromEnvironment,
   type CdpX402RequestFingerprintContext,
   type CdpX402PaymentSigningIntent,
+  type CdpX402PaymentSignerDependencies,
 } from '@/modules/capability-supply/server'
 import type {
   ProviderConnectionAuthorityValidator,
@@ -38,7 +40,7 @@ import {
   readX402EvmReceipt,
 } from './x402Settlement'
 import type { X402AttemptSnapshotForMoney } from './x402Settlement'
-import { BROKERED_X402_MANAGED_CUSTODY_REF } from './x402Route'
+import { X402_MANAGED_CUSTODY_REF } from './x402Route'
 
 type PreparedX402AuthorizationWithFingerprint = X402PreparedAuthorization & Readonly<{
   requestFingerprint?: string
@@ -56,7 +58,7 @@ type StoredX402Authorization = Readonly<{
   requestFingerprint: string
 }>
 
-type X402AttemptMaterial = X402AttemptSnapshotForMoney & Readonly<{
+export type X402AttemptMaterial = X402AttemptSnapshotForMoney & Readonly<{
   state: string
   dispatchRef: string
   attemptRef: string
@@ -77,7 +79,42 @@ type X402AttemptMaterial = X402AttemptSnapshotForMoney & Readonly<{
   paymentAuthorizationValidBefore?: string
   paymentAuthorizationExpiresAt?: number
   paymentSigningClaimedAt?: number
+  authorizationFailureCode?: X402PaymentAuthorizationFailureCode
+  authorizationFailureDetail?: X402PaymentAuthorizationFailureDetail
+  authorizationFailureObservedAt?: number
 }>
+
+type X402PaymentAuthorizationFailureCode =
+  | 'custody_configuration_invalid'
+  | 'request_fingerprint_context_invalid'
+  | 'material_unavailable'
+  | 'material_identity_invalid'
+  | 'external_spend_identity_invalid'
+  | 'provider_authority_invalid'
+  | 'grant_invalid'
+  | 'managed_authorization_unavailable'
+
+type X402PaymentAuthorizationFailureDetail =
+  | 'not_found'
+  | 'inactive'
+  | 'stale_generation'
+  | 'expired'
+  | 'digest_mismatch'
+  | 'credential_unavailable'
+  | 'lease_not_found'
+  | 'lease_inactive'
+  | 'lease_expired'
+  | 'lease_generation_stale'
+  | 'lease_digest_stale'
+  | 'lease_scope_mismatch'
+  | 'lease_resource_mismatch'
+  | 'lease_identity_mismatch'
+  | 'connection_not_found'
+  | 'connection_inactive'
+  | 'connection_expired'
+  | 'readiness_expired'
+  | 'readiness_mismatch'
+  | 'authority_read_failed'
 
 type ManagedCustodyConfiguration = NonNullable<
   ReturnType<typeof cdpX402CustodyConfigurationFromEnvironment>
@@ -86,6 +123,7 @@ type ManagedCustodyConfiguration = NonNullable<
 function managedCustodyConfigurationMatches(
   material: X402AttemptMaterial,
   configuration: ManagedCustodyConfiguration,
+  aeEnvironment: 'sandbox' | 'production',
 ): boolean {
   return (
     typeof material.custodyBudgetRef === 'string'
@@ -96,27 +134,165 @@ function managedCustodyConfigurationMatches(
     && typeof material.custodyDailyMaximumUnits === 'string'
     && material.custodyDailyMaximumUnits.trim().length > 0
     && material.custodyGeneration === configuration.credentialGeneration
-    && material.custodyBudgetRef === cdpX402CustodyBudgetRef(configuration)
+    && material.custodyBudgetRef === cdpX402CustodyBudgetRef(configuration, aeEnvironment)
     && material.custodyDailyMaximumUnits === configuration.dailyMaxAtomic.toString()
   )
 }
 
 function currentManagedCustodyConfiguration(
   material: X402AttemptMaterial,
+  aeEnvironment: 'sandbox' | 'production',
 ): ManagedCustodyConfiguration | undefined {
   const configuration = cdpX402CustodyConfigurationFromEnvironment()
-  return configuration !== undefined && managedCustodyConfigurationMatches(material, configuration)
+  return configuration !== undefined && managedCustodyConfigurationMatches(material, configuration, aeEnvironment)
     ? configuration
     : undefined
 }
 
-function x402MethodFromOperation(operation: PublishedOperation): 'GET' | 'POST' | undefined {
+export function x402MethodFromOperation(operation: PublishedOperation): 'GET' | 'POST' | undefined {
   try {
     const parsed: unknown = JSON.parse(operation.transport.configJson)
     if (!isRecord(parsed) || (parsed.method !== 'GET' && parsed.method !== 'POST')) return undefined
     return parsed.method
   } catch {
     return undefined
+  }
+}
+
+export type ManagedX402SigningRecoveryResult =
+  | Readonly<{ kind: 'signed'; paymentSignatureDigest: string; evidenceDigest: string }>
+  | Readonly<{
+      kind: 'definitive_rejection'
+      statusCode: 400 | 403
+      errorType: 'invalid_request' | 'policy_violation'
+      evidenceDigest: string
+    }>
+  | Readonly<{ kind: 'unresolved'; statusCode?: number; errorType?: string }>
+
+/**
+ * Replays only the exact persisted CDP signing request. This is the recovery
+ * operation documented by CDP for a lost signing response: same typed-data
+ * body and same UUID idempotency key. It never creates a nonce or begins
+ * provider transport, and it deliberately exposes only bounded evidence.
+ */
+export async function replayManagedX402SigningForRecovery(
+  material: X402AttemptMaterial,
+  operation: PublishedOperation,
+  operationRef: string,
+  aeEnvironment: 'sandbox' | 'production',
+  dependencies: Pick<CdpX402PaymentSignerDependencies, 'environment' | 'createClient'> = {},
+): Promise<ManagedX402SigningRecoveryResult> {
+  const method = x402MethodFromOperation(operation)
+  const custodyConfiguration = currentManagedCustodyConfiguration(material, aeEnvironment)
+  if (
+    method === undefined
+    || custodyConfiguration === undefined
+    || material.paymentUnsignedMaterialJson === undefined
+    || material.paymentUnsignedMaterialDigest === undefined
+    || material.paymentSigningIdempotencyKey === undefined
+    || material.paymentPayer === undefined
+    || material.paymentNonce === undefined
+    || material.paymentAuthorizationValidBefore === undefined
+    || material.paymentAuthorizationExpiresAt === undefined
+    || material.requestFingerprint === undefined
+    || !isPaymentSigningIdempotencyKey(material.paymentSigningIdempotencyKey)
+  ) return { kind: 'unresolved' }
+
+  let challenge: X402PaymentSignatureRequest['challenge']
+  let selectedRequirement: X402PaymentSignatureRequest['selectedRequirement']
+  try {
+    challenge = JSON.parse(material.challengeJson) as X402PaymentSignatureRequest['challenge']
+    selectedRequirement = JSON.parse(
+      material.selectedRequirementJson,
+    ) as X402PaymentSignatureRequest['selectedRequirement']
+  } catch {
+    return { kind: 'unresolved' }
+  }
+  if (canonicalDigest(challenge as StableHashValue) !== material.challengeDigest) {
+    return { kind: 'unresolved' }
+  }
+  const request: X402PaymentSignatureRequest = {
+    challenge,
+    credential: material.credentialRef,
+    paymentIdentifier: material.paymentIdentifier,
+    selectedRequirement,
+  }
+  const requestFingerprintContext = {
+    method,
+    operationRef,
+    aeEnvironment,
+  } as const
+  if (
+    cdpX402RequestFingerprint(request, requestFingerprintContext)
+      !== material.requestFingerprint
+  ) return { kind: 'unresolved' }
+  const persistedIntent: CdpX402PaymentSigningIntent = {
+    paymentUnsignedMaterialJson: material.paymentUnsignedMaterialJson,
+    paymentUnsignedMaterialDigest: material.paymentUnsignedMaterialDigest,
+    paymentSigningIdempotencyKey: material.paymentSigningIdempotencyKey,
+    paymentPayer: material.paymentPayer,
+    paymentNonce: material.paymentNonce,
+    paymentAuthorizationValidBefore: material.paymentAuthorizationValidBefore,
+    paymentAuthorizationExpiresAt: material.paymentAuthorizationExpiresAt,
+    requestFingerprint: material.requestFingerprint,
+  }
+  try {
+    const paymentSignature = await replayCdpX402PaymentSigningIntent(
+      persistedIntent,
+      dependencies,
+    )
+    if (paymentSignature === undefined) return { kind: 'unresolved' }
+    const paymentSignatureDigest = canonicalDigest(paymentSignature)
+    return {
+      kind: 'signed',
+      paymentSignatureDigest,
+      evidenceDigest: canonicalDigest({
+        format: 'ae.x402-managed-signing-replay:v1',
+        outcome: 'signature_recovered',
+        paymentSignatureDigest,
+        paymentUnsignedMaterialDigest: material.paymentUnsignedMaterialDigest,
+        requestFingerprint: material.requestFingerprint,
+      }),
+    }
+  } catch (error) {
+    const definitiveRejection = isRecord(error) && (
+      (error.statusCode === 400 && error.errorType === 'invalid_request')
+      || (error.statusCode === 403 && error.errorType === 'policy_violation')
+    )
+    if (definitiveRejection) {
+      const statusCode = error.statusCode as 400 | 403
+      const errorType = error.errorType as 'invalid_request' | 'policy_violation'
+      return {
+        kind: 'definitive_rejection',
+        statusCode,
+        errorType,
+        evidenceDigest: canonicalDigest({
+          format: 'ae.x402-managed-signing-replay:v1',
+          outcome: 'definitive_rejection',
+          statusCode,
+          errorType,
+          paymentUnsignedMaterialDigest: material.paymentUnsignedMaterialDigest,
+          requestFingerprint: material.requestFingerprint,
+        }),
+      }
+    }
+    const statusCode = isRecord(error)
+      && typeof error.statusCode === 'number'
+      && Number.isSafeInteger(error.statusCode)
+      && error.statusCode >= 0
+      && error.statusCode <= 599
+      ? error.statusCode
+      : undefined
+    const errorType = isRecord(error)
+      && typeof error.errorType === 'string'
+      && /^[a-z0-9_]{1,64}$/.test(error.errorType)
+      ? error.errorType
+      : undefined
+    return {
+      kind: 'unresolved',
+      ...(statusCode === undefined ? {} : { statusCode }),
+      ...(errorType === undefined ? {} : { errorType }),
+    }
   }
 }
 
@@ -204,7 +380,12 @@ export async function readX402Authorization(
     || material.paymentIdentifier !== expected.paymentIdentifier
   ) return undefined
   if (expected.useCustodySigner === true) {
-    if (custodyConfiguration === undefined || !managedCustodyConfigurationMatches(material, custodyConfiguration)) {
+    const aeEnvironment = expected.requestFingerprintContext?.aeEnvironment
+    if (
+      custodyConfiguration === undefined
+      || aeEnvironment === undefined
+      || !managedCustodyConfigurationMatches(material, custodyConfiguration, aeEnvironment)
+    ) {
       return undefined
     }
     const requestFingerprint = expected.requestFingerprint ?? material.requestFingerprint
@@ -234,7 +415,8 @@ async function readX402AuthorizationMaterial(
   custodyGeneration?: number,
 ): Promise<X402AttemptMaterial | null> {
   const args = {
-    ...prepared,
+    custodyRef: prepared.custodyRef,
+    authorizationDigest: prepared.authorizationDigest,
     ...(requestFingerprint === undefined ? {} : { requestFingerprint }),
     ...(custodyGeneration === undefined ? {} : { custodyGeneration }),
   }
@@ -278,8 +460,12 @@ async function signAndCommitManagedAuthorization(
   material: X402AttemptMaterial,
   requestFingerprint: string,
   requestFingerprintContext: CdpX402RequestFingerprintContext,
+  ownsSigningClaim = false,
 ): Promise<string | undefined> {
-  const custodyConfiguration = currentManagedCustodyConfiguration(material)
+  const custodyConfiguration = currentManagedCustodyConfiguration(
+    material,
+    requestFingerprintContext.aeEnvironment ?? 'production',
+  )
   if (custodyConfiguration === undefined) return undefined
   let challenge: X402PaymentSignatureRequest['challenge']
   let selectedRequirement: X402PaymentSignatureRequest['selectedRequirement']
@@ -333,8 +519,11 @@ async function signAndCommitManagedAuthorization(
     persistedIntent === undefined
     && (hasPartialIntent
       || material.paymentSignatureDigest !== undefined
-      || material.paymentSigningClaimedAt !== undefined)
+      || (material.paymentSigningClaimedAt !== undefined && !ownsSigningClaim))
   ) throw new Error('x402_payment_reconciliation_required')
+  if (ownsSigningClaim && material.paymentSigningClaimedAt === undefined) {
+    throw new Error('x402_payment_reconciliation_required')
+  }
 
   let committedIntent = persistedIntent
   const paymentSignature = await createCdpEvmX402PaymentSignature(request, {
@@ -357,7 +546,10 @@ async function signAndCommitManagedAuthorization(
       : { persistedIntent }),
   })
   if (paymentSignature === undefined || paymentSignature.length === 0) return undefined
-  const postSignConfiguration = currentManagedCustodyConfiguration(material)
+  const postSignConfiguration = currentManagedCustodyConfiguration(
+    material,
+    requestFingerprintContext.aeEnvironment ?? 'production',
+  )
   if (postSignConfiguration === undefined) {
     throw new Error('x402_payment_custody_generation_conflict')
   }
@@ -393,7 +585,10 @@ async function readOrClaimManagedAuthorization(
   requestFingerprint: string,
   requestFingerprintContext: CdpX402RequestFingerprintContext,
 ): Promise<string | undefined> {
-  const custodyConfiguration = currentManagedCustodyConfiguration(material)
+  const custodyConfiguration = currentManagedCustodyConfiguration(
+    material,
+    requestFingerprintContext.aeEnvironment ?? 'production',
+  )
   if (custodyConfiguration === undefined) return undefined
   if (storedAuthorizationFromMaterial(material) !== undefined) {
     return await signAndCommitManagedAuthorization(
@@ -450,11 +645,20 @@ async function readOrClaimManagedAuthorization(
     }
     throw new Error('x402_payment_reconciliation_required')
   }
+  const claimedMaterial = await readX402AuthorizationMaterial(
+    ctx,
+    prepared,
+    byDigest,
+    requestFingerprint,
+    custodyConfiguration.credentialGeneration,
+  )
+  if (claimedMaterial === null) throw new Error('x402_payment_reconciliation_required')
   const signedHeader = await signAndCommitManagedAuthorization(
     ctx,
-    material,
+    claimedMaterial,
     requestFingerprint,
     requestFingerprintContext,
+    true,
   )
   if (signedHeader === undefined) return undefined
   const reread = await readX402AuthorizationMaterial(
@@ -467,7 +671,10 @@ async function readOrClaimManagedAuthorization(
   if (reread === null) throw new Error('x402_payment_reconciliation_required')
   const first = storedAuthorizationFromMaterial(reread)
   if (first === undefined) throw new Error('x402_payment_reconciliation_required')
-  return currentManagedCustodyConfiguration(reread) === undefined
+  return currentManagedCustodyConfiguration(
+    reread,
+    requestFingerprintContext.aeEnvironment ?? 'production',
+  ) === undefined
     ? undefined
     : signedHeader
 }
@@ -490,6 +697,23 @@ export function createX402PaymentCallbacks(
     onPaymentPossiblySubmitted?: () => void
   }>,
 ): X402PaymentCallbacks {
+  const recordAuthorizationFailure = async (
+    code: X402PaymentAuthorizationFailureCode,
+    detail?: X402PaymentAuthorizationFailureDetail,
+  ): Promise<void> => {
+    if (input.useCustodySigner !== true) return
+    await ctx.runMutation(
+      internal.moneyX402PaymentAttempts.recordX402PaymentAuthorizationFailure,
+      {
+        dispatchRef: input.dispatch.invocationRef,
+        attemptRef: input.durableAttemptRef,
+        effectGeneration: input.effectGeneration,
+        code,
+        ...(detail === undefined ? {} : { detail }),
+      },
+    )
+  }
+
   const readPaymentAuthorization = async (
     prepared: X402PreparedAuthorization,
     byDigest: boolean,
@@ -500,7 +724,11 @@ export function createX402PaymentCallbacks(
           const method = x402MethodFromOperation(input.operation)
           return method === undefined
             ? undefined
-            : { method, operationRef: input.dispatch.operationRef }
+            : {
+                method,
+                operationRef: input.dispatch.operationRef,
+                aeEnvironment: input.dispatch.environment,
+              }
         })()
       : undefined
     const custodyConfiguration = input.useCustodySigner === true
@@ -525,7 +753,7 @@ export function createX402PaymentCallbacks(
       : null
     const expectedMaterial = material ?? cleanupAttempt
     const credentialRef = input.useCustodySigner === true
-      ? BROKERED_X402_MANAGED_CUSTODY_REF
+      ? X402_MANAGED_CUSTODY_REF
       : x402PaymentCredentialRefFromEnvironment()
     const expected = expectedMaterial === null
       ? undefined
@@ -541,46 +769,81 @@ export function createX402PaymentCallbacks(
         ? cleanupAttempt.state
         : undefined
     )
-    if (
-      credentialRef === undefined
-      || material === null
-      || material.state !== 'prepared'
-      || material.credentialRef !== credentialRef
-      || material.dispatchRef !== input.dispatch.invocationRef
-      || material.attemptRef !== input.durableAttemptRef
-      || material.effectGeneration !== input.effectGeneration
-      || material.paymentIdentifier !== input.operationKeyDigest
-      || expected === undefined
-    ) {
+    const releasePreparedReservation = async (): Promise<void> => {
       if (expected !== undefined && cleanupState === 'prepared') {
         const cleanupOutcome = await bestEffortReleaseX402ExternalSpend(
           ctx,
           expected,
           [input.operationKeyDigest],
         )
-        if (cleanupOutcome === 'failed') return undefined
+        if (cleanupOutcome === 'failed') return
       }
+    }
+    if (
+      input.useCustodySigner === true
+      && custodyConfiguration === undefined
+    ) {
+      await recordAuthorizationFailure('custody_configuration_invalid')
+      await releasePreparedReservation()
       return undefined
     }
-    const validation = await input.validateProviderAuthority({
-      connectionRef: input.connectionAuthority.connectionRef,
-      providerRef: input.connectionAuthority.providerRef,
-      adapterId: input.connectionAuthority.adapterId,
-      authorityGeneration: input.connectionAuthority.authorityGeneration,
-      authorityDigest: input.connectionAuthority.authorityDigest,
-      ...(input.leaseRef === undefined || input.leaseAuthority === undefined
-        ? {}
-        : {
-            leaseRef: input.leaseRef,
-            invocationRef: input.dispatch.invocationRef,
-            operationRef: input.dispatch.operationRef,
-            grantedScopes: input.leaseAuthority.grantedScopes,
-            grantedResources: input.leaseAuthority.grantedResources,
-            readinessValidUntil: input.operation.readiness.validUntil,
-            readinessDigest: input.operation.readiness.qualificationDigest,
-          }),
-    })
+    if (input.useCustodySigner === true && requestFingerprintContext === undefined) {
+      await recordAuthorizationFailure('request_fingerprint_context_invalid')
+      await releasePreparedReservation()
+      return undefined
+    }
+    if (material === null) {
+      await recordAuthorizationFailure('material_unavailable')
+      await releasePreparedReservation()
+      return undefined
+    }
+    if (material.state !== 'prepared') {
+      return undefined
+    }
+    if (
+      credentialRef === undefined
+      || material.credentialRef !== credentialRef
+      || material.dispatchRef !== input.dispatch.invocationRef
+      || material.attemptRef !== input.durableAttemptRef
+      || material.effectGeneration !== input.effectGeneration
+      || material.paymentIdentifier !== input.operationKeyDigest
+    ) {
+      await recordAuthorizationFailure('material_identity_invalid')
+      await releasePreparedReservation()
+      return undefined
+    }
+    if (expected === undefined) {
+      await recordAuthorizationFailure('external_spend_identity_invalid')
+      await releasePreparedReservation()
+      return undefined
+    }
+    let validation: Awaited<ReturnType<ProviderConnectionAuthorityValidator>>
+    try {
+      validation = await input.validateProviderAuthority({
+        connectionRef: input.connectionAuthority.connectionRef,
+        providerRef: input.connectionAuthority.providerRef,
+        adapterId: input.connectionAuthority.adapterId,
+        authorityGeneration: input.connectionAuthority.authorityGeneration,
+        authorityDigest: input.connectionAuthority.authorityDigest,
+        ...(input.leaseRef === undefined || input.leaseAuthority === undefined
+          ? {}
+          : {
+              leaseRef: input.leaseRef,
+              invocationRef: input.dispatch.invocationRef,
+              operationRef: input.dispatch.operationRef,
+              grantedScopes: input.leaseAuthority.grantedScopes,
+              grantedResources: input.leaseAuthority.grantedResources,
+              readinessValidUntil: input.operation.readiness.validUntil,
+              readinessDigest: input.operation.readiness.qualificationDigest,
+            }),
+      })
+    } catch {
+      await recordAuthorizationFailure('provider_authority_invalid', 'authority_read_failed')
+      await releasePreparedReservation()
+      return undefined
+    }
     if (validation.kind !== 'valid') {
+      await recordAuthorizationFailure('provider_authority_invalid', validation.reason)
       const cleanupOutcome = await bestEffortReleaseX402ExternalSpend(
         ctx,
         expected,
@@ -596,6 +859,7 @@ export function createX402PaymentCallbacks(
       grantStillValid = false
     }
     if (!grantStillValid) {
+      await recordAuthorizationFailure('grant_invalid')
       await bestEffortReleaseX402ExternalSpend(
         ctx,
         expected,
@@ -618,6 +882,9 @@ export function createX402PaymentCallbacks(
       } : {}),
     })
     if (signature === undefined || signature.length === 0) {
+      if (input.useCustodySigner === true) {
+        await recordAuthorizationFailure('managed_authorization_unavailable')
+      }
       const cleanupOutcome = await bestEffortReleaseX402ExternalSpend(
         ctx,
         expected,
@@ -642,17 +909,20 @@ export function createX402PaymentCallbacks(
       const authorization = readX402PaymentPayerAndNonce(paymentSignature)
       if (authorization === undefined) return false
       return verifyExactEvmX402Settlement({
+        aeEnvironment: input.dispatch.environment,
         response,
         requirement,
         payer: authorization.payer,
         paymentNonce: authorization.nonce,
         receipt: await readX402EvmReceipt(
           requirement.network,
+          requirement.asset,
           response.transaction,
           input.dispatcher,
           input.dispatch.environment,
           authorization.payer,
           authorization.nonce,
+          { minimumConfirmations: 12, timeoutMs: 60_000 },
         ),
       })
     },
@@ -663,7 +933,7 @@ export function createX402PaymentCallbacks(
         || request.paymentIdentifier !== input.operationKeyDigest
       ) return undefined
       const paymentCredentialRef = input.useCustodySigner === true
-        ? BROKERED_X402_MANAGED_CUSTODY_REF
+        ? X402_MANAGED_CUSTODY_REF
         : x402PaymentCredentialRefFromEnvironment()
       if (paymentCredentialRef === undefined || request.credential !== paymentCredentialRef) return undefined
       const method = input.useCustodySigner === true
@@ -674,6 +944,7 @@ export function createX402PaymentCallbacks(
         ? cdpX402RequestFingerprint(request, {
             method: method as 'GET' | 'POST',
             operationRef: input.dispatch.operationRef,
+            aeEnvironment: input.dispatch.environment,
           })
         : undefined
       const selectedRequirementJson = JSON.stringify(request.selectedRequirement)
@@ -684,7 +955,7 @@ export function createX402PaymentCallbacks(
       const custody = custodyConfiguration === undefined
         ? undefined
         : {
-            budgetRef: cdpX402CustodyBudgetRef(custodyConfiguration),
+            budgetRef: cdpX402CustodyBudgetRef(custodyConfiguration, input.dispatch.environment),
             generation: custodyConfiguration.credentialGeneration,
             dailyMaximum: {
               currency: request.paymentAmount.currency,

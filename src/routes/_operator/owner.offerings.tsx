@@ -1,10 +1,17 @@
-import { Link, createFileRoute, Outlet, useLocation } from '@tanstack/react-router'
+import { Link, createFileRoute, Outlet, useLocation, useRouter } from '@tanstack/react-router'
+import { useServerFn } from '@tanstack/react-start'
+import { useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeOwnerOfferingsList, type OwnerOfferingSummary } from '@/components/ae/offerings/AeOwnerOfferings'
-import { readOwnerOfferingSupplyServer } from '@/components/ae/offerings/owner-offering.functions'
+import {
+  ensureSupplierBusinessServer,
+  readOwnerOfferingSupplyServer,
+} from '@/components/ae/offerings/owner-offering.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/offerings')({
@@ -16,6 +23,12 @@ export const Route = createFileRoute('/_operator/owner/offerings')({
 
 function OwnerOfferingsRoute() {
   const location = useLocation()
+  const router = useRouter()
+  const ensureSupplierBusiness = useServerFn(ensureSupplierBusinessServer)
+  const [providerName, setProviderName] = useState('')
+  const [providerWebsite, setProviderWebsite] = useState('')
+  const [identityPending, setIdentityPending] = useState(false)
+  const [identityError, setIdentityError] = useState<string>()
   const result = Route.useLoaderData()
   if (location.pathname !== '/owner/offerings') return <Outlet />
 
@@ -37,7 +50,88 @@ function OwnerOfferingsRoute() {
       {result.kind === 'error' ? (
         <Alert variant="destructive"><AlertTitle>Operations did not load</AlertTitle><AlertDescription>{result.reason ?? 'Sign in again or retry this page.'}</AlertDescription></Alert>
       ) : result.kind === 'not_found' ? (
-        <Alert><AlertTitle>No supplier identity is available</AlertTitle><AlertDescription><p>Operations require a current supplier identity.</p><Button asChild variant="secondary"><Link to="/for-providers">Review supplier setup</Link></Button></AlertDescription></Alert>
+        <div className="grid max-w-xl gap-4">
+          <Alert>
+            <AlertTitle>Create your supplier identity</AlertTitle>
+            <AlertDescription>
+              This starts an unpublished supplier workspace. Nothing appears in the market until an exact Operation passes verification.
+            </AlertDescription>
+          </Alert>
+          <FieldGroup>
+            <Field {...(identityError === undefined ? {} : { 'data-invalid': true })}>
+              <FieldLabel htmlFor="supplier-name">Provider name</FieldLabel>
+              <Input
+                id="supplier-name"
+                value={providerName}
+                disabled={identityPending}
+                onChange={(event) => {
+                  setProviderName(event.currentTarget.value)
+                  setIdentityError(undefined)
+                }}
+              />
+              <FieldDescription>The name agents will see after an Operation is verified and published.</FieldDescription>
+            </Field>
+            <Field {...(identityError === undefined ? {} : { 'data-invalid': true })}>
+              <FieldLabel htmlFor="supplier-website">Provider website</FieldLabel>
+              <Input
+                id="supplier-website"
+                type="url"
+                placeholder="https://api.example.com"
+                value={providerWebsite}
+                disabled={identityPending}
+                onChange={(event) => {
+                  setProviderWebsite(event.currentTarget.value)
+                  setIdentityError(undefined)
+                }}
+              />
+              <FieldDescription>Use the HTTPS origin that controls the x402 endpoint.</FieldDescription>
+              {identityError === undefined ? null : <FieldError>{identityError}</FieldError>}
+            </Field>
+          </FieldGroup>
+          <Button
+            type="button"
+            className="min-h-touch justify-self-start"
+            disabled={identityPending}
+            aria-busy={identityPending || undefined}
+            onClick={() => {
+              void (async () => {
+                const name = providerName.trim()
+                let website: URL
+                try {
+                  website = new URL(providerWebsite)
+                  if (website.protocol !== 'https:') throw new Error('not_https')
+                } catch {
+                  setIdentityError('Enter a valid HTTPS provider website.')
+                  return
+                }
+                if (name.length === 0) {
+                  setIdentityError('Enter the provider name.')
+                  return
+                }
+                setIdentityPending(true)
+                try {
+                  const created = await ensureSupplierBusiness({
+                    data: {
+                      name,
+                      slug: name,
+                      website: website.origin,
+                      providerIdentifier: website.hostname,
+                    },
+                  })
+                  if (created.kind === 'refused') {
+                    setIdentityError(supplierIdentityError(created.code))
+                    return
+                  }
+                  await router.invalidate()
+                } finally {
+                  setIdentityPending(false)
+                }
+              })()
+            }}
+          >
+            {identityPending ? 'Creating supplier…' : 'Create supplier workspace'}
+          </Button>
+        </div>
       ) : result.offerings.some((item) => item.revision === undefined) ? (
         <div className="grid gap-4">
           <Alert><AlertTitle>One Operation needs repair</AlertTitle><AlertDescription>Its current revision could not be read, so it is not shown or editable.</AlertDescription></Alert>
@@ -46,6 +140,14 @@ function OwnerOfferingsRoute() {
       ) : <AeOwnerOfferingsList offerings={offerings} projectionState={projectionState(result)} />}
     </AeOperatorShell>
   )
+}
+
+function supplierIdentityError(code: string): string {
+  if (code === 'slug_taken') return 'That provider name is already in use. Choose a more specific name.'
+  if (code === 'multiple_businesses') return 'This account has more than one supplier identity. Resolve that conflict before continuing.'
+  if (code === 'unauthenticated') return 'Sign in again before creating a supplier workspace.'
+  if (code === 'invalid_business') return 'Check the provider name and HTTPS website.'
+  return 'The supplier workspace could not be created. Try again.'
 }
 
 function projectionState(result: Extract<Awaited<ReturnType<typeof readOwnerOfferingSupplyServer>>, { kind: 'available' }>): 'current' | 'projection_pending' {

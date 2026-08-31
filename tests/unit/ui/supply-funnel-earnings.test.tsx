@@ -7,8 +7,8 @@ import { describe, expect, it, vi } from "vitest";
 import { AeSupplyEarningsCard } from "@/components/ae/supply/AeSupplyEarningsCard";
 
 describe("current supply funnel", () => {
-  it("shows recorded daily balance copy and Connect setup without payout mutation controls", () => {
-    const exact = { currency: "USD", units: "5000", exponent: 2 };
+  it("explains a ready account's held payout threshold without mutation controls", () => {
+    const exact = { currency: "USD", units: "500", exponent: 2 };
     render(
       <AeSupplyEarningsCard
         readback={{
@@ -22,7 +22,83 @@ describe("current supply funnel", () => {
                 kind: "ok",
                 businessId: "business-1",
                 grossAccrual: exact,
-                rake: { ...exact, units: "500" },
+                rake: { ...exact, units: "50" },
+                providerNet: exact,
+                paidOut: { ...exact, units: "0" },
+                held: exact,
+                recoveryDue: { ...exact, units: "0" },
+                truncated: false,
+                evidence: "source",
+              },
+              payout: {
+                kind: "ok",
+                businessId: "business-1",
+                accountState: "ready",
+                payoutState: "held_threshold",
+                payoutRef: "payout-1",
+                providerNet: exact,
+                minimumPayout: { ...exact, units: "1000" },
+                evidence: "source",
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText("Waiting for minimum payout"),
+    ).toBeDefined();
+    expect(
+      screen.getByText("USD 5.00 of USD 10.00"),
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        "Your payout account is ready. Payout begins when supplier earnings reach the minimum shown above.",
+      ),
+    ).toBeDefined();
+    expect(
+      screen.queryByRole("button", { name: "Set up payouts" }),
+    ).toBeNull();
+    for (const name of [
+      "Start payout",
+      "Confirm payout",
+      "Recover transfer",
+      "Reconcile transfer",
+    ]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    expect(screen.queryByText("Durable transfer evidence")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Refresh recorded status" }),
+    ).toBeNull();
+    expect(
+      moneyServerMocks.readOwnerPayoutTransferServer,
+    ).not.toHaveBeenCalled();
+    expect(moneyServerMocks).not.toHaveProperty(
+      "beginOwnerPayoutTransferServer",
+    );
+    expect(moneyServerMocks).not.toHaveProperty(
+      "recoverOwnerPayoutTransferServer",
+    );
+  });
+
+  it("keeps Connect setup available when the payout account has not started", () => {
+    const exact = { currency: "USD", units: "500", exponent: 2 };
+    render(
+      <AeSupplyEarningsCard
+        readback={{
+          kind: "available",
+          businessId: "business-1",
+          accountsTruncated: false,
+          accounts: [
+            {
+              currency: "USD",
+              earnings: {
+                kind: "ok",
+                businessId: "business-1",
+                grossAccrual: exact,
+                rake: { ...exact, units: "50" },
                 providerNet: exact,
                 paidOut: { ...exact, units: "0" },
                 held: exact,
@@ -47,35 +123,10 @@ describe("current supply funnel", () => {
     );
 
     expect(
-      screen.getByText(
-        "Payouts become available when your payout account and supplier configuration are ready.",
-      ),
-    ).toBeDefined();
-    expect(
       screen.getByRole("button", { name: "Set up payouts" }),
     ).toBeDefined();
-    expect(screen.queryByText("Minimum payout")).toBeNull();
-    for (const name of [
-      "Start payout",
-      "Confirm payout",
-      "Recover transfer",
-      "Reconcile transfer",
-    ]) {
-      expect(screen.queryByRole("button", { name })).toBeNull();
-    }
-    expect(screen.queryByText("Durable transfer evidence")).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Refresh recorded status" }),
-    ).toBeNull();
-    expect(
-      moneyServerMocks.readOwnerPayoutTransferServer,
-    ).not.toHaveBeenCalled();
-    expect(moneyServerMocks).not.toHaveProperty(
-      "beginOwnerPayoutTransferServer",
-    );
-    expect(moneyServerMocks).not.toHaveProperty(
-      "recoverOwnerPayoutTransferServer",
-    );
+    expect(screen.queryByText("Waiting for minimum payout")).toBeNull();
+    expect(screen.queryByText("USD 5.00 of USD 10.00")).toBeNull();
   });
 
   it("renders persisted transfer evidence with read-only refresh and verified wording", async () => {

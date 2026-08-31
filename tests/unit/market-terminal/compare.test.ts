@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { runCompareCommand } from '../../../tools/ae/commands/compare'
 import type { CliOptions } from '../../../tools/ae/lib/args'
+import { commandUsage } from '../../../tools/ae/lib/help'
 import { CliFailure } from '../../../tools/ae/lib/output'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { projectOperationCompareChoices } from '@/modules/registry/operation-choice-contracts'
@@ -127,7 +128,10 @@ describe('anonymous Operation compare CLI', () => {
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
     expect(JSON.parse(String(init?.body))).toEqual({ operationRefs: refs })
-    expect(JSON.parse(output.join(''))).toEqual(result)
+    expect(JSON.parse(output.join(''))).toEqual({
+      ...result,
+      nextCommands: [],
+    })
   })
   it('renders canonical comparison facts and gates technical identity behind --technical', async () => {
     const output: string[] = []
@@ -146,7 +150,8 @@ describe('anonymous Operation compare CLI', () => {
     expect(human).toContain('Reference Services — Reference quote')
     expect(human).toContain('price: USD 1.25')
     expect(human).toContain('Price:')
-    expect(human).not.toContain(operation.operationRef)
+    expect(human).toContain('Choose one supplier, then inspect its exact Operation:')
+    expect(human).toContain(`ae inspect ${operation.operationRef}`)
 
     output.length = 0
     await runCompareCommand(refs, { ...options, json: false, technical: true })
@@ -156,22 +161,65 @@ describe('anonymous Operation compare CLI', () => {
     expect(technical).toContain('source=publication')
   })
 
-  it('accepts one exact ref before network work', async () => {
+  it('hands one exact ref to inspect without performing meaningless comparison work', async () => {
+    expect(commandUsage('compare')).toBe(
+      'ae compare <operation-ref> <operation-ref> [<operation-ref> ...]',
+    )
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(runCompareCommand([refs[0]!], {
+      ...options,
+      baseUrl: 'http://[::1]:3024',
+      baseUrlSource: 'flag',
+      technical: true,
+    })).rejects.toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'compare-needs-alternative',
+      suggestion: 'Inspect this Operation directly, or search for another supplier to compare.',
+      nextCommand: `ae inspect ${refs[0]} --base-url 'http://[::1]:3024' --json --technical`,
+    } satisfies Partial<CliFailure>)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('returns one exact inspect continuation per supplier and preserves the selected origin and output mode', async () => {
     const output: string[] = []
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
       output.push(String(chunk))
       return true
     })
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(result), {
+    const secondOperation = {
+      ...operation,
+      operationRef: refs[1]!,
+      business: { businessId: 'business:alternative', slug: 'alternative', name: 'Alternative Services' },
+    }
+    const compared = projectOperationCompareChoices(operationCompareOutputSchema.parse({
+      kind: 'ok',
+      schemaVersion: 'registry-operations:v1',
+      operations: [operation, secondOperation],
+      facts: [],
+      navigation: [],
+    }))
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(compared), {
       status: 200,
       headers: { 'content-type': 'application/json' },
-    }))
-    vi.stubGlobal('fetch', fetchMock)
+    })))
 
-    await runCompareCommand([refs[0]!], { ...options, technical: true })
+    await runCompareCommand(refs, {
+      ...options,
+      baseUrl: 'http://[::1]:3024',
+      baseUrlSource: 'flag',
+      technical: true,
+    })
 
-    expect(JSON.parse(output.join(''))).toEqual(result)
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ operationRefs: [refs[0]] })
+    expect(JSON.parse(output.join(''))).toEqual({
+      ...compared,
+      nextCommands: refs.map((operationRef) => ({
+        operationRef,
+        command: `ae inspect ${operationRef} --base-url 'http://[::1]:3024' --json --technical`,
+      })),
+    })
+    expect(output.join('')).not.toMatch(/credential|password|secret|idempotency/iu)
   })
 
   it.each([

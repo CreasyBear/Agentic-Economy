@@ -23,6 +23,7 @@ import {
 import { throwOperationReadFailure } from '../lib/operation-read-failure'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { operationContinuationForCli } from '../lib/suggested-continuation-adapter'
+import { continuationCommand } from '../lib/continuation-command'
 /** Read one exact current Market Operation without a caller credential. */
 export async function runInspectCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const operationRef = args[0]?.trim()
@@ -57,13 +58,74 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
   if (result.kind === 'unavailable') {
     throwOperationReadFailure({ reason: result.reason })
   }
+  const operation = result.operation
+  const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
+  const callable = operation.availability.posture === 'routeable' && invokeNavigation !== undefined
+  // The installed CLI calls the brokered invoke route, whose canonical
+  // contract requires buyer access even when the upstream provider is public.
+  const requiresBuyerCredential = invokeNavigation !== undefined
+  const hasBuyerCredential = requiresBuyerCredential
+    ? await hasCurrentBuyerInvokeCredential(options.baseUrl)
+    : false
+  const continuation = operationContinuationForCli({
+    operationRef: operation.operationRef,
+    searchQuery: operation.summary,
+    availabilityPosture: operation.availability.posture === 'routeable' && !callable
+      ? 'integrated'
+      : operation.availability.posture,
+    requiresBuyerCredential,
+    hasBuyerCredential,
+  })
+  const originContinuation = options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+    ? []
+    : ['--base-url', options.baseUrl]
+  const outputContinuation = options.json ? ['--json'] : []
+  const technicalContinuation = options.technical
+    && continuation.command?.startsWith('ae search ') === true
+    ? ['--technical']
+    : []
+  const continuationSuffix = continuationCommand([
+    ...originContinuation,
+    ...outputContinuation,
+    ...technicalContinuation,
+  ])
+  const inputExample = operation.contract.inputExamples?.[0]?.input
+  const callCommand = callable
+    ? continuationCommand([
+        'ae', 'call', operation.operationRef,
+        '--input', inputExample === undefined ? '<json>' : JSON.stringify(inputExample),
+        ...originContinuation,
+        ...outputContinuation,
+      ])
+    : undefined
+  const nextCommand = continuation.kind === 'copy_command' && callCommand !== undefined
+    ? callCommand
+    : continuation.command === undefined
+      ? undefined
+      : continuationSuffix.length === 0
+        ? continuation.command
+        : `${continuation.command} ${continuationSuffix}`
+  const renderedContinuation = nextCommand === undefined
+    ? continuation
+    : { ...continuation, command: nextCommand }
+
   if (options.json) {
-    printJson(result)
+    const jsonResult = options.technical
+      ? result
+      : {
+          ...result,
+          operation: withoutNavigation(operation),
+        }
+    printJson({
+      ...jsonResult,
+      continuation: renderedContinuation,
+      ...(nextCommand === undefined ? {} : { nextCommand }),
+      ...(callCommand === undefined ? {} : { callCommand }),
+    })
     return
   }
 
   heading(`Market Operation ${operationRef} (${outcome.durationMs}ms)`)
-  const operation = result.operation
   line(`  ${operationLabel(operation)}`)
   line(`  ${operation.summary}`)
   line('')
@@ -78,26 +140,24 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
       ? 'none'
       : operation.effects.map((effect) => effect.class.replace(/_/gu, ' ')).join(', ')}`,
   )
-  const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
-  const callable = operation.availability.posture === 'routeable' && invokeNavigation !== undefined
-  // The installed CLI calls the brokered invoke route, whose canonical
-  // contract requires buyer access even when the upstream provider is public.
-  const requiresBuyerCredential = invokeNavigation !== undefined
-  const continuation = operationContinuationForCli({
-    operationRef: operation.operationRef,
-    availabilityPosture: operation.availability.posture === 'routeable' && !callable
-      ? 'integrated'
-      : operation.availability.posture,
-    requiresBuyerCredential,
-    hasBuyerCredential: requiresBuyerCredential
-      ? await hasCurrentBuyerInvokeCredential(options.baseUrl)
-      : false,
-  })
-  line(`  next: ${continuation.command ?? continuation.label}`)
+  line(`  next: ${nextCommand ?? continuation.label}`)
+  if (callCommand !== undefined && callCommand !== nextCommand) {
+    line(`  after authorization: ${callCommand}`)
+  }
+  if (callCommand !== undefined) {
+    line('  safeguard: AE rechecks the current total price and buyer authority before dispatch.')
+  }
   if (continuation.warning !== undefined) line(`  warning: ${continuation.warning}`)
   if (operation.contract.inputExamples?.[0] !== undefined) {
     line(`  example input: ${JSON.stringify(operation.contract.inputExamples[0].input)}`)
   }
+}
+
+function withoutNavigation<T extends Readonly<{ navigation: unknown }>>(
+  operation: T,
+): Omit<T, 'navigation'> {
+  const { navigation: _navigation, ...compact } = operation
+  return compact
 }
 
 async function hasCurrentBuyerInvokeCredential(baseUrl: string): Promise<boolean> {

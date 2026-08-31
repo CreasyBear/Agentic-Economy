@@ -62,8 +62,14 @@ export function throwOperationReadFailure(input: {
         code,
         retryable: true,
       })
-    case 'mapping_unavailable':
     case 'operation_unavailable':
+      throw new CliFailure(`The requested Market Operation${input.operationRef === undefined ? '' : ` ${input.operationRef}`} is not currently callable; the supplier must restore it.`, {
+        kind: 'UNAVAILABLE',
+        code,
+        retryable: false,
+        ...(input.operationRef === undefined ? {} : { detail: { operationRef: input.operationRef } }),
+      })
+    case 'mapping_unavailable':
     case 'source_unavailable':
     case 'temporarily_unavailable':
       throw new CliFailure(`The requested Market Operation${input.operationRef === undefined ? '' : ` ${input.operationRef}`} is unavailable.`, {

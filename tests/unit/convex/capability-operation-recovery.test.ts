@@ -353,6 +353,47 @@ function projectionContext(initialRow: RecoveryRow) {
 }
 
 describe('capability operation recovery Convex adapters', () => {
+  it('admits the exact x402 reconciliation evidence object in both public Convex actions', () => {
+    const expectedFields = [
+      'amount',
+      'attemptRef',
+      'challengeDigest',
+      'digest',
+      'effectGeneration',
+      'evidenceRef',
+      'inputDigest',
+      'invocationRef',
+      'kind',
+      'observedAt',
+      'operationRef',
+      'paymentIdentifier',
+      'paymentObservationDigest',
+      'paymentResponseDigest',
+      'providerRef',
+      'requestDigest',
+      'reservationRef',
+      'settlementStatus',
+      'source',
+      'transactionHash',
+      'transportObservationDigest',
+      'version',
+    ]
+    for (const action of [reconcileInvocation, reconcileOwnerInvocation]) {
+      const registered = action as unknown as { exportArgs(): string }
+      const args = JSON.parse(registered.exportArgs()) as {
+        value: Record<string, { fieldType: { type: string; value?: Array<{ type: string; value: Record<string, unknown> }> } }>
+      }
+      const evidence = args.value.evidence?.fieldType
+      expect(evidence?.type).toBe('union')
+      const x402 = evidence?.value?.find((member) => {
+        if (member.type !== 'object') return false
+        const kind = member.value.kind as { fieldType?: { value?: unknown } } | undefined
+        return kind?.fieldType?.value === 'x402_payment_reconciliation'
+      })
+      expect(Object.keys(x402?.value ?? {}).sort()).toEqual(expectedFields)
+    }
+  })
+
   it('recovers by stable principal identity after the original grant is absent or rotated', async () => {
     const statusContext = recoveryContext({
       row,

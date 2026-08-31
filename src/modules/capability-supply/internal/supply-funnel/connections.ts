@@ -6,8 +6,23 @@ import {
   sourceMutation,
   sourceQuery,
 } from "@/lib/server/convex-source";
+import { sourceWriteAdmissionFromContext } from "@/lib/server/source-write-admission";
+import { sourceWriteRequestFromAdmission } from "@/modules/security/source-write-admission";
 import type { PayoutStatusView, ProviderEarningsView } from "@/modules/money/public";
 import type { ProviderConnectionOwnerProjection } from "../../provider-connection";
+import {
+  inspectX402SellerEndpoint,
+  type X402SellerEndpointMethod,
+} from "../x402-seller-endpoint-inspector";
+import {
+  validX402SellerClaimTime,
+  x402SellerClaimDigest,
+  x402SellerClaimMessage,
+} from "../x402-seller-claim";
+import {
+  canonicalEvmAddress,
+  verifyEip191Message,
+} from "../x402-evm-protocol";
 import { OWNER_SUPPLY_UNAVAILABLE_MESSAGE } from "./types";
 
 export type OwnerProviderConnectionCommandResult =
@@ -40,12 +55,26 @@ const readOwnerProviderConnectionsQuery = sourceQuery<
   Record<string, never>,
   readonly ProviderConnectionOwnerProjection[]
 >("capabilityProviderConnections:listOwner");
+const authorizeSupplierBusinessQuery = sourceQuery<
+  { businessId: string },
+  boolean
+>("catalog:authorizeSupplierBusiness");
 const connectOwnerX402Mutation = sourceMutation<
   {
     businessId: string;
     resourceUrl: string;
     commandId: string;
+    operationKey: string;
+    correlationId: string;
+    method: "GET" | "POST";
+    observationDigest: string;
+    payTo: string;
+    claimExpiresAt: number;
+    claimDigest: string;
+    claimSignature: string;
     evidenceRefs: readonly string[];
+    sourceWrite: Awaited<ReturnType<typeof sourceWriteAdmissionFromContext>>;
+    sourceWriteRequest: ReturnType<typeof sourceWriteRequestFromAdmission>;
   },
   OwnerProviderConnectionCommandResult
 >("capabilityProviderConnections:connectX402Owner");
@@ -90,7 +119,17 @@ export const ownerConnectionCommandSchema = z.strictObject({
 export const connectOwnerX402InputSchema = z.strictObject({
   businessId: z.string().min(1),
   resourceUrl: z.url().max(2_048),
+  method: z.enum(["GET", "POST"]),
+  environment: z.enum(["sandbox", "production"]),
+  claimExpiresAt: z.number().int().nonnegative(),
+  claimSignature: z.string().regex(/^0x[0-9a-fA-F]{130}$/),
   commandId: z.string().min(1).max(256),
+});
+export const inspectOwnerX402InputSchema = connectOwnerX402InputSchema.pick({
+  businessId: true,
+  resourceUrl: true,
+  method: true,
+  environment: true,
 });
 export const retryOwnerProviderConnectionCleanupInputSchema =
   ownerConnectionCommandSchema.pick({ connectionRef: true, commandId: true });
@@ -121,17 +160,149 @@ export async function readOwnerProviderConnections(): Promise<
 
 export async function connectOwnerX402({
   data,
+  context,
 }: {
   data: z.infer<typeof connectOwnerX402InputSchema>;
+  context: unknown;
 }): Promise<OwnerProviderConnectionCommandResult> {
   try {
+    if (!await callSourceQuery(authorizeSupplierBusinessQuery, { businessId: data.businessId })) {
+      return { kind: "refused", code: "authorization_denied" };
+    }
+    const inspection = await inspectX402SellerEndpoint({
+      endpointUrl: data.resourceUrl,
+      method: data.method,
+      aeEnvironment: data.environment,
+    });
+    if (inspection.kind === "refused") {
+      return { kind: "refused", code: `inspection_${inspection.reason}` };
+    }
+    if (inspection.payment.selection.kind !== "selected") {
+      return {
+        kind: "refused",
+        code: `inspection_${inspection.payment.selection.kind}`,
+      };
+    }
+    if (inspection.discovery.kind !== "admitted") {
+      return {
+        kind: "refused",
+        code: inspection.discovery.kind === "absent"
+          ? "inspection_bazaar_missing"
+          : `inspection_${inspection.discovery.reason}`,
+      };
+    }
+    const selectedAlternativeId = inspection.payment.selection.alternativeId;
+    const selected = inspection.payment.accepts.find(
+      (candidate) => candidate.alternativeId === selectedAlternativeId,
+    );
+    const now = Date.now();
+    const payTo = selected === undefined
+      ? undefined
+      : canonicalEvmAddress(selected.payTo);
+    if (payTo === undefined || !validX402SellerClaimTime(data.claimExpiresAt, now)) {
+      return { kind: "refused", code: "claim_invalid" };
+    }
+    const claim = {
+      businessId: data.businessId,
+      endpointUrl: inspection.endpoint.url,
+      method: data.method,
+      observationDigest: inspection.digest,
+      payTo,
+      expiresAt: data.claimExpiresAt,
+    } as const;
+    const claimVerified = await verifyEip191Message({
+      address: claim.payTo,
+      message: x402SellerClaimMessage(claim),
+      signature: data.claimSignature,
+    });
+    if (!claimVerified) return { kind: "refused", code: "claim_invalid" };
+    const command = {
+      businessId: data.businessId,
+      resourceUrl: inspection.endpoint.url,
+      commandId: data.commandId,
+      operationKey: data.commandId,
+      correlationId: data.commandId,
+      method: data.method,
+      observationDigest: inspection.digest,
+      payTo: claim.payTo,
+      claimExpiresAt: data.claimExpiresAt,
+      claimDigest: x402SellerClaimDigest(claim),
+      claimSignature: data.claimSignature,
+      evidenceRefs: [`x402-endpoint-inspection:${inspection.digest}`],
+    };
+    const sourceWrite = await sourceWriteAdmissionFromContext({
+      context,
+      command,
+      scope: "catalog_publish",
+      operationKey: data.commandId,
+      correlationId: data.commandId,
+    });
     return await callSourceMutation(connectOwnerX402Mutation, {
-      ...data,
-      evidenceRefs: [],
+      ...command,
+      sourceWrite,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
     });
   } catch {
     return { kind: "refused", code: "source_unavailable" };
   }
+}
+
+export async function inspectOwnerX402({
+  data,
+}: {
+  data: z.infer<typeof inspectOwnerX402InputSchema>;
+}) {
+  if (!await callSourceQuery(authorizeSupplierBusinessQuery, { businessId: data.businessId })) {
+    return {
+      kind: "refused" as const,
+      reason: "authorization_denied" as const,
+      action: "Sign in as the supplier owner before inspecting this endpoint.",
+      probe: { observedAt: Date.now() },
+    };
+  }
+  const inspection = await inspectX402SellerEndpoint({
+    endpointUrl: data.resourceUrl,
+    method: data.method as X402SellerEndpointMethod,
+    aeEnvironment: data.environment,
+  });
+  if (inspection.kind === "refused" || inspection.payment.selection.kind !== "selected") {
+    return inspection;
+  }
+  if (inspection.discovery.kind !== "admitted") {
+    return {
+      kind: "refused" as const,
+      reason: inspection.discovery.kind === "absent"
+        ? "bazaar_missing" as const
+        : inspection.discovery.reason,
+      action: "Publish a valid x402 Bazaar declaration with bounded input, output, and example metadata.",
+      probe: inspection.probe,
+    };
+  }
+  const selectedAlternativeId = inspection.payment.selection.alternativeId;
+  const selected = inspection.payment.accepts.find(
+    (candidate) => candidate.alternativeId === selectedAlternativeId,
+  );
+  const payTo = selected === undefined
+    ? undefined
+    : canonicalEvmAddress(selected.payTo);
+  if (payTo === undefined) return inspection;
+  const expiresAt = Date.now() + 10 * 60 * 1_000;
+  const claim = {
+    businessId: data.businessId,
+    endpointUrl: inspection.endpoint.url,
+    method: data.method,
+    observationDigest: inspection.digest,
+    payTo,
+    expiresAt,
+  } as const;
+  return {
+    ...inspection,
+    claim: {
+      payTo: claim.payTo,
+      expiresAt,
+      message: x402SellerClaimMessage(claim),
+    },
+  };
 }
 
 export async function reconnectOwnerProviderConnection({

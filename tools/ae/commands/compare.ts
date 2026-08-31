@@ -7,6 +7,7 @@ import { OPERATION_MARKET_COMPARE_PATH } from '@/modules/registry/operation-entr
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
+import { continuationCommand } from '../lib/continuation-command'
 import { usageFailure } from '../lib/help'
 import {
   formatOperationAvailability,
@@ -35,9 +36,25 @@ export async function runCompareCommand(args: readonly string[], options: CliOpt
     operationRefs: args.map((arg) => arg.trim()),
   })
   if (!parsedInput.success) {
-    throw new CliFailure('Compare requires one to four exact operation references.', {
+    throw new CliFailure('Compare requires two to four exact operation references.', {
       kind: 'INVALID_ARGUMENT',
       code: 'compare-input',
+    })
+  }
+  if (parsedInput.data.operationRefs.length === 1) {
+    const operationRef = parsedInput.data.operationRefs[0]!
+    throw new CliFailure('A comparison needs at least two Operations.', {
+      kind: 'INVALID_ARGUMENT',
+      code: 'compare-needs-alternative',
+      suggestion: 'Inspect this Operation directly, or search for another supplier to compare.',
+      nextCommand: continuationCommand([
+        'ae', 'inspect', operationRef,
+        ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+          ? []
+          : ['--base-url', options.baseUrl]),
+        ...(options.json ? ['--json'] : []),
+        ...(options.technical ? ['--technical'] : []),
+      ]),
     })
   }
 
@@ -58,12 +75,25 @@ export async function runCompareCommand(args: readonly string[], options: CliOpt
   if (result.kind === 'unavailable') {
     throwOperationReadFailure({ reason: result.reason })
   }
+  const nextCommands = result.operations.map((operation) => ({
+    operationRef: operation.operationRef,
+    command: continuationCommand([
+      'ae', 'inspect', operation.operationRef,
+      ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+        ? []
+        : ['--base-url', options.baseUrl]),
+      ...(options.json ? ['--json'] : []),
+      ...(options.technical ? ['--technical'] : []),
+    ]),
+  }))
   if (options.json) {
-    printJson(result)
+    printJson({ ...result, nextCommands })
     return
   }
 
   printHumanComparison(result, parsedInput.data.operationRefs.length, options.technical === true)
+  line('  Choose one supplier, then inspect its exact Operation:')
+  for (const next of nextCommands) line(`    ${next.command}`)
 }
 
 type AvailableComparison = Extract<ReturnType<typeof operationChoiceCompareOutputSchema.parse>, { kind: 'ok' }>

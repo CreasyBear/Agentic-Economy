@@ -79,6 +79,22 @@ const projectCapabilityOperation = (
 )
 
 describe('capability operation search ranking', () => {
+  it('projects and searches the current supplier display name without changing Operation identity', async () => {
+    const baseline = sourceRecord('capability:supplier-name', 'Stable bounded result', ['bounded'])
+    const renamed = { ...baseline, business: { ...baseline.business, name: 'Example Intelligence' } }
+    const projected = projectCapabilityOperation(renamed, 2_000)
+    const result = await searchCapabilityOperations(sourcePort([renamed]), { query: 'Example Intelligence' }, 2_000)
+
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.items[0]?.business).toEqual({
+      businessId: baseline.business.businessId,
+      slug: baseline.business.slug,
+      name: 'Example Intelligence',
+    })
+    expect(result.items[0]?.operationRef).toBe(projected.operationRef)
+  })
+
   it('refuses capacity overflow based on raw source rows even when malformed rows were dropped', async () => {
     const result = await searchCapabilityOperations({
       ...sourcePort([]),
@@ -140,6 +156,50 @@ describe('capability operation search ranking', () => {
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
     expect(result.items.map(({ operationId }) => operationId)).toEqual(['capability:bitcoin.price'])
+  })
+
+  it('treats an unmatched place as call input rather than a second capability requirement', async () => {
+    const result = await searchCapabilityOperations(sourcePort([
+      sourceRecord('capability:weather.current', 'Current weather conditions', ['weather', 'temperature', 'forecast']),
+      sourceRecord('capability:bitcoin.price', 'Bitcoin price', ['bitcoin', 'price']),
+      sourceRecord('capability:timezone.convert', 'Pay per call timezone conversion', ['timezone', 'convert']),
+    ]), { query: 'current weather in Perth' }, 2_000)
+
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.items.map(({ operationId }) => operationId)).toEqual([
+      'capability:weather.current',
+    ])
+    expect(result.ranking[0]?.score).toBeGreaterThan(0)
+  })
+
+  it.each([
+    'business-class award availability from PER to JFK, 10–20 Nov 2026',
+    'plese chek busines clas awrad availabilty from PER to JFK in Nov 2026',
+  ])('finds award availability from task-shaped constraints and light typos: %s', async (query) => {
+    const result = await searchCapabilityOperations(sourcePort([
+      sourceRecord(
+        'capability:flight.award-availability',
+        'Business class flight award availability',
+        ['airline', 'flight', 'award', 'availability', 'business class', 'points', 'miles'],
+      ),
+      sourceRecord(
+        'capability:business.registry',
+        'Business registration lookup',
+        ['business', 'company', 'registry'],
+      ),
+      sourceRecord(
+        'capability:weather.forecast',
+        'Weather forecast',
+        ['weather', 'forecast'],
+      ),
+    ]), { query }, 2_000)
+
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.items.map(({ operationId }) => operationId)).toEqual([
+      'capability:flight.award-availability',
+    ])
   })
 
   it.each([
@@ -219,6 +279,33 @@ describe('capability operation search ranking', () => {
       { value: 'weather', operationRef: 'operation:v1:' + 'b'.repeat(64), searchText: ['Open-Meteo weather forecast'] },
     ])).toEqual([])
   })
+
+  it.each(['lookup', 'search', 'find current results'])(
+    'does not turn a non-empty zero-signal query into a catalogue browse: %s',
+    async (query) => {
+      const records = [
+        sourceRecord('capability:bitcoin.price', 'Bitcoin price', ['bitcoin', 'price']),
+        sourceRecord('capability:weather.forecast', 'Weather forecast', ['weather', 'forecast']),
+      ]
+
+      expect(rankOperationSearchText(query, records.map((record) => ({
+        value: record.operationId,
+        operationRef: projectCapabilityOperation(record, 2_000).operationRef,
+        searchText: record.searchTerms,
+      })))).toEqual([])
+
+      await expect(searchCapabilityOperations(
+        sourcePort(records),
+        { query },
+        2_000,
+      )).resolves.toMatchObject({
+        kind: 'no_candidates',
+        query,
+        matchedCount: 0,
+        ranking: [],
+      })
+    },
+  )
 
   it('makes empty query behavior explicit and carries stable bounded ranks/counts across pages', async () => {
     const records = [
@@ -421,5 +508,41 @@ describe('capability operation search ranking', () => {
       style: 'form',
       explode: true,
     }])
+  })
+  it('preserves draft-07 definitions and local references through the public wire contract', () => {
+    const record = sourceRecord('capability:draft-seven', 'Draft-07 schema', ['schema'])
+    const operation = projectCapabilityOperation({
+      ...record,
+      contract: {
+        ...record.contract,
+        inputSchema: {
+          $schema: 'http://json-schema.org/draft-07/schema#',
+          type: 'object',
+          definitions: {
+            Request: {
+              type: 'object',
+              properties: { asset: { type: 'string' } },
+              required: ['asset'],
+            },
+          },
+          properties: {
+            request: { $ref: '#/definitions/Request' },
+          },
+          required: ['request'],
+        },
+      },
+      parameterMappings: [],
+    }, 2_000)
+
+    expect(operation.contract.inputJsonSchema).toMatchObject({
+      definitions: {
+        Request: {
+          properties: { asset: { type: 'string' } },
+        },
+      },
+      properties: { request: { $ref: '#/definitions/Request' } },
+    })
+    expect(deserializeOperationDescriptor(serializeOperationDescriptor(operation)))
+      .toEqual(operation)
   })
 })

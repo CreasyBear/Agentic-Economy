@@ -7,6 +7,7 @@ import {
   jsonObject,
   operationInvokeAuthorityValue,
   operationResultValue,
+  sellerOnboardingCanaryExecutionEnvelopeValue,
   usageValue,
 } from '@/modules/capability-execution/convex'
 
@@ -38,6 +39,11 @@ export const providerLeaseAuthorityValue = v.object({
   approvalDecisionRef: v.string(),
   approvalDecisionDigest: v.string(),
 })
+export const currentProviderConnectionAuthorityValue = v.union(
+  v.object({ kind: v.literal('credentialless_x402') }),
+  v.object({ kind: v.literal('credentialed') }),
+  v.null(),
+)
 export const dispatchState = v.union(
   v.literal('enqueued'),
   v.literal('running'),
@@ -106,6 +112,7 @@ export const openDispatchValue = v.object({
   environment,
   state: v.union(v.literal('pending'), v.literal('completed'), v.literal('refused'), v.literal('reconciliation_required'), v.literal('cancelled')),
   operationRef: v.string(),
+  sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
   idempotencyKey: v.string(),
   inputDigest: v.string(),
   requestDigest: v.string(),
@@ -179,6 +186,7 @@ export const recoveryValue = v.object({
     v.literal('cancelled'),
   ),
   operationRef: v.string(),
+  sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
   inputDigest: v.string(),
   requestDigest: v.string(),
   grantGeneration: v.number(),
@@ -253,6 +261,7 @@ export const reserveArgs = {
   applicationRef: v.string(), grantRef: v.string(), environment, operationRef: v.string(), idempotencyKey: v.string(),
   inputDigest: v.string(), requestDigest: v.string(), grantGeneration: v.number(), policyDigest: v.string(), grantExpiresAt: v.number(),
   operationJson: v.optional(v.string()), inputJson: v.optional(v.string()), now: v.number(),
+  sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
 } as const
 export const reservationValue = v.object({
   principalId: v.string(),
@@ -319,4 +328,3 @@ export const reconciledInvocationAuthorityResult = v.union(
   v.object({ kind: v.literal('authorized'), authority: reconciledInvocationAuthorityValue }),
   v.object({ kind: v.literal('refused') }),
 )
-

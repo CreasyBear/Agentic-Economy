@@ -66,7 +66,6 @@ describe('action registry', () => {
   it('exposes MCP actions and keeps the anonymous tier read-only', () => {
     const exposed = listMcpActions()
     expect(exposed.map((action) => action.id)).toEqual([
-      'registry.search', 'registry.detail',
       'registry.operations.search', 'registry.operations.detail',
       'registry.operations.compare', 'registry.operations.inspectPlan',
       'agentAccess.whoami',
@@ -86,7 +85,6 @@ describe('action registry', () => {
     expect(exposed.slice(-12).every((action) => action.surfaces.includes('cli'))).toBe(true)
     const anonymous = exposed.filter((action) => action.readOnly && action.credentialAdmission === undefined)
     expect(anonymous.map((action) => action.id)).toEqual([
-      'registry.search', 'registry.detail',
       'registry.operations.search', 'registry.operations.detail',
       'registry.operations.compare', 'registry.operations.inspectPlan',
     ])
@@ -103,7 +101,6 @@ describe('action registry', () => {
       )
     }
     expect(exposed.map((action) => mcpToolName(action))).toEqual([
-      'ae_registry_search', 'ae_registry_detail',
       'ae_registry_operations_search', 'ae_registry_operations_detail',
       'ae_registry_operations_compare', 'ae_registry_operations_inspectPlan',
       'ae_agentAccess_whoami',

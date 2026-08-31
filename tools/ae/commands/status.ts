@@ -13,6 +13,7 @@ import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
+import { continuationCommand } from '../lib/continuation-command'
 import {
   connectionContinuationForCli,
   creditContinuationForCli,
@@ -210,20 +211,12 @@ export function renderStatusResult(
   body: unknown,
   options: CliOptions,
 ): void {
-  if (options.json) {
-    printJson(body)
-    return
-  }
-  heading(`${title} ${invocationRef}`)
   const record = asRecord(body)
-  table([
-    ['status', typeof record?.state === 'string' ? record.state : typeof record?.kind === 'string' ? record.kind : 'unknown'],
-    ['operation', typeof record?.operationRef === 'string' ? record.operationRef : 'unknown'],
-  ])
+  let continuation
   if (record?.kind === 'found' || record?.kind === 'refused') {
     const parsedState = operationInvokeStatusStateSchema.safeParse(record.state)
     const usage = asRecord(record.usage)
-    const continuation = usage?.chargeState === 'insufficient_credit'
+    continuation = usage?.chargeState === 'insufficient_credit'
       ? creditContinuationForCli()
       : invocationContinuationForCli({
           kind: record.kind,
@@ -231,9 +224,36 @@ export function renderStatusResult(
           ...(parsedState.success ? { state: parsedState.data } : {}),
           ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
         })
-    if (continuation?.command !== undefined) line(`  next: ${continuation.command}`)
-    if (continuation?.warning !== undefined) line(`  warning: ${continuation.warning}`)
   }
+  const continuationSuffix = continuationCommand([
+    ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+      ? []
+      : ['--base-url', options.baseUrl]),
+    ...(options.json ? ['--json'] : []),
+  ])
+  const nextCommand = continuation?.command === undefined
+    ? undefined
+    : continuationSuffix.length === 0
+      ? continuation.command
+      : `${continuation.command} ${continuationSuffix}`
+  const warning = continuation?.warning
+  if (options.json) {
+    printJson(record === undefined || nextCommand === undefined
+      ? body
+      : {
+          ...record,
+          nextCommand,
+          ...(warning === undefined ? {} : { warning }),
+        })
+    return
+  }
+  heading(`${title} ${invocationRef}`)
+  table([
+    ['status', typeof record?.state === 'string' ? record.state : typeof record?.kind === 'string' ? record.kind : 'unknown'],
+    ['operation', typeof record?.operationRef === 'string' ? record.operationRef : 'unknown'],
+  ])
+  if (nextCommand !== undefined) line(`  next: ${nextCommand}`)
+  if (continuation?.warning !== undefined) line(`  warning: ${continuation.warning}`)
   line(JSON.stringify(body, undefined, 2))
 }
 

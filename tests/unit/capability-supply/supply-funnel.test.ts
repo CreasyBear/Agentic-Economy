@@ -47,6 +47,8 @@ import {
   filterOwnerSupplyAuthorityOptions,
   readOwnerProviderConnectionsServer,
   readOwnerSupplyFunnelServer,
+  readOwnerSellerCanaryStatusServer,
+  promoteOwnerSellerCanaryServer,
   resolveSupplyPricing,
 } from "@/modules/capability-supply/supply-funnel.functions";
 
@@ -180,6 +182,79 @@ describe("owner supply source read failures", () => {
     await expect(
       readOwnerSupplyFunnelServer({ data: { businessId: "business:owner" } }),
     ).resolves.toEqual({ kind: "incomplete" });
+  });
+});
+
+describe("owner seller canary server seam", () => {
+  const target = {
+    businessId: "business:owner",
+    offeringRef: "offering:one",
+    offeringRevision: 1,
+    offeringSourceHash: `sha256:${"a".repeat(64)}`,
+    publicationRef: "publication:one",
+    publicationRevision: 1,
+  };
+  const status = {
+    kind: "available" as const,
+    canaryRef: "seller-canary:one",
+    invocationRef: "invocation:one",
+    operationRef: "operation:one",
+    offeringRef: target.offeringRef,
+    offeringRevision: target.offeringRevision,
+    publicationRef: target.publicationRef,
+    publicationRevision: target.publicationRevision,
+    state: "completed" as const,
+    resultKind: "completed" as const,
+    promotion: { state: "not_promoted" as const },
+    updatedAt: 1,
+  };
+
+  beforeEach(() => {
+    sourceMocks.callSourceQuery.mockReset();
+    sourceMocks.callSourceMutation.mockReset();
+    sourceMocks.sourceWriteAdmissionFromContext.mockReset();
+    sourceMocks.sourceWriteAdmissionFromContext.mockImplementation(
+      async ({ command }: { command: { operationKey: string; correlationId: string } }) =>
+        (await withSourceWrite("catalog_publish", command)).sourceWrite,
+    );
+  });
+
+  it("reads the exact backend target so refresh does not depend on component state", async () => {
+    sourceMocks.callSourceQuery.mockResolvedValueOnce(status);
+    await expect(readOwnerSellerCanaryStatusServer({ data: target })).resolves.toEqual(status);
+    expect(sourceMocks.callSourceQuery).toHaveBeenCalledWith(
+      expect.anything(),
+      target,
+    );
+  });
+
+  it("uses one stable promotion identity and safely replays the exact canary", async () => {
+    sourceMocks.callSourceQuery.mockResolvedValue(status);
+    sourceMocks.callSourceMutation
+      .mockResolvedValueOnce({ ...status, kind: "promoted", promotionEvidenceDigest: "sha256:promotion", outputDigest: "sha256:output" })
+      .mockResolvedValueOnce({ ...status, kind: "replayed", promotionEvidenceDigest: "sha256:promotion", outputDigest: "sha256:output" });
+
+    const data = { ...target, canaryRef: status.canaryRef };
+    await promoteOwnerSellerCanaryServer({ data });
+    await promoteOwnerSellerCanaryServer({ data });
+
+    expect(sourceMocks.callSourceQuery).toHaveBeenNthCalledWith(1, expect.anything(), target);
+    expect(sourceMocks.callSourceQuery).toHaveBeenNthCalledWith(2, expect.anything(), target);
+    expect(sourceMocks.callSourceMutation).toHaveBeenCalledTimes(2);
+    const first = sourceMocks.callSourceMutation.mock.calls[0]?.[1];
+    const second = sourceMocks.callSourceMutation.mock.calls[1]?.[1];
+    expect(first).toMatchObject({ businessId: target.businessId, canaryRef: status.canaryRef });
+    expect(first?.operationKey).toBe(second?.operationKey);
+    expect(first?.sourceWrite).toMatchObject({ scope: "catalog_publish" });
+  });
+
+  it("refuses a stale canary reference before source-write admission", async () => {
+    sourceMocks.callSourceQuery.mockResolvedValueOnce(status);
+    await expect(promoteOwnerSellerCanaryServer({
+      data: { ...target, canaryRef: "seller-canary:stale" },
+    })).resolves.toEqual({ kind: "refused", code: "canary_target_mismatch" });
+    expect(sourceMocks.sourceWriteAdmissionFromContext).not.toHaveBeenCalled();
+    expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled();
   });
 });
 const OWNER_BUSINESS_ID = "business:owner";

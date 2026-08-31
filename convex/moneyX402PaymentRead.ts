@@ -1,4 +1,8 @@
 import { v, type Infer } from 'convex/values'
+import {
+  x402PaymentAuthorizationFailureCodeValue,
+  x402PaymentAuthorizationFailureDetailValue,
+} from '@/modules/money/schema'
 
 import type { QueryCtx } from './_generated/server'
 import {
@@ -27,6 +31,10 @@ const x402PaymentAuthorizationMaterial = v.object({
   challengeJson: v.string(),
   selectedRequirementJson: v.string(),
   providerEndpoint: v.string(),
+  scheme: v.string(),
+  network: v.string(),
+  asset: v.string(),
+  payTo: v.string(),
   credentialRef: v.string(),
   amountUnits: v.string(),
   currency: v.string(),
@@ -48,6 +56,9 @@ const x402PaymentAuthorizationMaterial = v.object({
   paymentAuthorizationValidBefore: v.optional(v.string()),
   paymentAuthorizationExpiresAt: v.optional(v.number()),
   paymentSigningClaimedAt: v.optional(v.number()),
+  authorizationFailureCode: v.optional(x402PaymentAuthorizationFailureCodeValue),
+  authorizationFailureDetail: v.optional(x402PaymentAuthorizationFailureDetailValue),
+  authorizationFailureObservedAt: v.optional(v.number()),
   state: attemptStateValue,
   transportObservationDigest: v.optional(v.string()),
   transportRequestDigest: v.optional(v.string()),
@@ -91,6 +102,7 @@ const x402PaymentAttemptReadValue = v.object({
   paymentIdentifier: v.string(),
   operationKeyDigest: v.string(),
   challengeDigest: v.string(),
+  challengeJson: v.string(),
   selectedRequirementJson: v.string(),
   providerEndpoint: v.string(),
   scheme: v.string(),
@@ -118,6 +130,9 @@ const x402PaymentAttemptReadValue = v.object({
   paymentAuthorizationValidBefore: v.optional(v.string()),
   paymentAuthorizationExpiresAt: v.optional(v.number()),
   paymentSigningClaimedAt: v.optional(v.number()),
+  authorizationFailureCode: v.optional(x402PaymentAuthorizationFailureCodeValue),
+  authorizationFailureDetail: v.optional(x402PaymentAuthorizationFailureDetailValue),
+  authorizationFailureObservedAt: v.optional(v.number()),
   state: attemptStateValue,
   preparedAt: v.number(),
   submissionStartedAt: v.optional(v.number()),
@@ -127,6 +142,8 @@ const x402PaymentAttemptReadValue = v.object({
   paymentObservationDigest: v.optional(v.string()),
   settlementStatus: v.optional(x402PaymentSettlementStatusValue),
   paymentResponseDigest: v.optional(v.string()),
+  quarantinedResponseDigest: v.optional(v.string()),
+  quarantinedOutputJson: v.optional(v.string()),
   reconciliationEvidenceRef: v.optional(v.string()),
   reconciliationEvidenceDigest: v.optional(v.string()),
   evidenceRefs: v.array(v.string()),
@@ -207,6 +224,10 @@ function authorizationMaterial(row: AttemptRow): Infer<typeof x402PaymentAuthori
     challengeJson: row.challengeJson,
     selectedRequirementJson: row.selectedRequirementJson,
     providerEndpoint: row.providerEndpoint,
+    scheme: row.scheme,
+    network: row.network,
+    asset: row.asset,
+    payTo: row.payTo,
     amountUnits: row.amountUnits,
     currency: row.currency,
     exponent: row.exponent,
@@ -228,6 +249,9 @@ function authorizationMaterial(row: AttemptRow): Infer<typeof x402PaymentAuthori
     ...(row.paymentAuthorizationValidBefore === undefined ? {} : { paymentAuthorizationValidBefore: row.paymentAuthorizationValidBefore }),
     ...(row.paymentAuthorizationExpiresAt === undefined ? {} : { paymentAuthorizationExpiresAt: row.paymentAuthorizationExpiresAt }),
     ...(row.paymentSigningClaimedAt === undefined ? {} : { paymentSigningClaimedAt: row.paymentSigningClaimedAt }),
+    ...(row.authorizationFailureCode === undefined ? {} : { authorizationFailureCode: row.authorizationFailureCode }),
+    ...(row.authorizationFailureDetail === undefined ? {} : { authorizationFailureDetail: row.authorizationFailureDetail }),
+    ...(row.authorizationFailureObservedAt === undefined ? {} : { authorizationFailureObservedAt: row.authorizationFailureObservedAt }),
     state: row.state,
     ...(row.transportObservationDigest === undefined ? {} : { transportObservationDigest: row.transportObservationDigest }),
     ...(row.transportRequestDigest === undefined ? {} : { transportRequestDigest: row.transportRequestDigest }),
@@ -240,6 +264,11 @@ function authorizationMaterial(row: AttemptRow): Infer<typeof x402PaymentAuthori
 }
 
 function attemptRead(row: AttemptRow): Infer<typeof x402PaymentAttemptReadValue> {
+  const hasQuarantinedResponseDigest = row.quarantinedResponseDigest !== undefined
+  const hasQuarantinedOutputJson = row.quarantinedOutputJson !== undefined
+  if (hasQuarantinedResponseDigest !== hasQuarantinedOutputJson) {
+    throw new Error('x402_payment_quarantined_output_conflict')
+  }
   return {
     dispatchRef: row.dispatchRef,
     attemptRef: row.attemptRef,
@@ -249,6 +278,7 @@ function attemptRead(row: AttemptRow): Infer<typeof x402PaymentAttemptReadValue>
     paymentIdentifier: row.paymentIdentifier,
     operationKeyDigest: row.operationKeyDigest,
     challengeDigest: row.challengeDigest,
+    challengeJson: row.challengeJson,
     selectedRequirementJson: row.selectedRequirementJson,
     providerEndpoint: row.providerEndpoint,
     scheme: row.scheme,
@@ -276,6 +306,9 @@ function attemptRead(row: AttemptRow): Infer<typeof x402PaymentAttemptReadValue>
     ...(row.paymentAuthorizationValidBefore === undefined ? {} : { paymentAuthorizationValidBefore: row.paymentAuthorizationValidBefore }),
     ...(row.paymentAuthorizationExpiresAt === undefined ? {} : { paymentAuthorizationExpiresAt: row.paymentAuthorizationExpiresAt }),
     ...(row.paymentSigningClaimedAt === undefined ? {} : { paymentSigningClaimedAt: row.paymentSigningClaimedAt }),
+    ...(row.authorizationFailureCode === undefined ? {} : { authorizationFailureCode: row.authorizationFailureCode }),
+    ...(row.authorizationFailureDetail === undefined ? {} : { authorizationFailureDetail: row.authorizationFailureDetail }),
+    ...(row.authorizationFailureObservedAt === undefined ? {} : { authorizationFailureObservedAt: row.authorizationFailureObservedAt }),
     state: row.state,
     preparedAt: row.preparedAt,
     ...(row.submissionStartedAt === undefined ? {} : { submissionStartedAt: row.submissionStartedAt }),
@@ -285,6 +318,12 @@ function attemptRead(row: AttemptRow): Infer<typeof x402PaymentAttemptReadValue>
     ...(row.paymentObservationDigest === undefined ? {} : { paymentObservationDigest: row.paymentObservationDigest }),
     ...(row.settlementStatus === undefined ? {} : { settlementStatus: row.settlementStatus }),
     ...(row.paymentResponseDigest === undefined ? {} : { paymentResponseDigest: row.paymentResponseDigest }),
+    ...(row.quarantinedResponseDigest === undefined || row.quarantinedOutputJson === undefined
+      ? {}
+      : {
+          quarantinedResponseDigest: row.quarantinedResponseDigest,
+          quarantinedOutputJson: row.quarantinedOutputJson,
+        }),
     ...(row.reconciliationEvidenceRef === undefined ? {} : { reconciliationEvidenceRef: row.reconciliationEvidenceRef }),
     ...(row.reconciliationEvidenceDigest === undefined ? {} : { reconciliationEvidenceDigest: row.reconciliationEvidenceDigest }),
     evidenceRefs: row.evidenceRefs,

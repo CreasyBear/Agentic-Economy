@@ -22,6 +22,7 @@ export type OperatorNavItem = {
   label: string
   icon: LucideIcon
   tier: OperatorNavTier
+  mobilePrimary?: boolean
 }
 
 export type OperatorNavTier = 'core' | 'advanced'
@@ -52,8 +53,8 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
     id: 'records',
     label: 'Records',
     items: [
-      { href: '/owner/offerings', label: 'Operations', icon: Boxes, tier: 'core' },
-      { href: '/activity', label: 'Calls', icon: Activity, tier: 'core' },
+      { href: '/owner/offerings', label: 'Operations', icon: Boxes, tier: 'core', mobilePrimary: true },
+      { href: '/activity', label: 'Calls', icon: Activity, tier: 'core', mobilePrimary: true },
       { href: '/agent-access', label: 'Keys', icon: KeyRound, tier: 'core' },
       { href: '/owner/credit', label: 'Credit', icon: Wallet, tier: 'core' },
       { href: '/owner/status', label: 'Supplier', icon: Building2, tier: 'core' },
@@ -63,7 +64,7 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
     id: 'work',
     label: 'Work',
     items: [
-      { href: '/owner/supply', label: 'Publish', icon: UploadCloud, tier: 'core' },
+      { href: '/owner/supply', label: 'Publish', icon: UploadCloud, tier: 'core', mobilePrimary: true },
     ],
   },
   {
@@ -100,7 +101,7 @@ const operatorUtilityItems: readonly OperatorUtilityItem[] = [
   { href: '/market', label: 'Catalog', icon: Store },
   { href: '/', label: 'Home', icon: Gauge },
   { href: '/for-agents', label: 'Agent setup', icon: Bot },
-  { href: '/privacy/remove-business', label: 'Help & corrections', icon: CircleHelp },
+  { href: '/support', label: 'Help', icon: CircleHelp },
 ] as const
 
 export const roleHomeHref: Record<OperatorRole, string> = {
@@ -110,7 +111,7 @@ export const roleHomeHref: Record<OperatorRole, string> = {
 }
 
 export const roleLabel: Record<OperatorRole, string> = {
-  owner: 'Supplier workspace',
+  owner: 'Account workspace',
   admin: 'Administration',
   developer: 'Developer tools',
 }
@@ -177,6 +178,12 @@ export function listOperatorCommandDestinations(role: OperatorRole): readonly Op
 
 export function operatorUtilityItemsForRole(_role: OperatorRole): readonly OperatorUtilityItem[] {
   return operatorUtilityItems
+}
+
+export function mobileNavItemsForRole(role: OperatorRole): readonly OperatorNavItem[] {
+  return baseNavGroupsForRole(role)
+    .flatMap((group) => group.items)
+    .filter((item) => item.mobilePrimary === true)
 }
 
 export function formatOperatorNavBadge(value: OperatorNavBadgeValue): string | undefined {

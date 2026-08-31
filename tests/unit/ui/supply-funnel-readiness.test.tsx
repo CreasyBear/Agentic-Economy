@@ -17,12 +17,11 @@ import { emptyOwnerOfferingEditorValue } from "@/components/ae/offerings/AeOwner
 import type { SupplyFunnelStep } from "@/modules/capability-supply/supply-funnel.functions";
 
 describe("current supply funnel", () => {
-  it("distinguishes an x402 readiness challenge from a paid fill", async () => {
+  it("requires explicit confirmation and discloses the exact paid x402 canary", async () => {
     const runTest = vi.fn(async () => ({
       step: "test" as const,
       state: "completed" as const,
-      message:
-        "The exact admitted operation returned a fresh valid x402 payment challenge. No payment was sent.",
+      message: "The exact paid canary was queued.",
     }));
     const callbacks: SupplyFunnelCallbacks = {
       saveOffering: async (value) => ({
@@ -50,22 +49,25 @@ describe("current supply funnel", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "Check payment challenge (no payment sent).",
+        name: "Review paid canary",
       }),
     ).toBeDefined();
-    expect(screen.getByText(/readiness only/i)).toBeDefined();
-    expect(
-      screen.getByText(
-        /not a paid fill, Qualified Use, earnings, settlement, or proof of live availability/i,
-      ),
-    ).toBeDefined();
-    expect(screen.queryByText("Send the test")).toBeNull();
+    expect(screen.getByText(/eip155:84532/i)).toBeDefined();
+    expect(screen.getByText(/USD 0.01 \(10000 atomic units\)/i)).toBeDefined();
+    expect(screen.getByText(/0x1111111111111111111111111111111111111111/i)).toBeDefined();
+    expect(screen.getByText(/No payment is sent until you confirm/i)).toBeDefined();
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Check payment challenge (no payment sent).",
+        name: "Review paid canary",
       }),
     );
+    expect(runTest).not.toHaveBeenCalled();
+    await waitFor(() => expect(
+      screen.getByRole("button", { name: "Confirm one Base Sepolia payment" }),
+    ).toBeDefined());
+    expect(screen.getByText(/This test can transfer testnet USDC/i)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm one Base Sepolia payment" }));
     await waitFor(() => expect(runTest).toHaveBeenCalledOnce());
   });
 

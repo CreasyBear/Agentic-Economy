@@ -13,10 +13,13 @@ import {
   type ProviderConnection,
   type ProviderConnectionCommandResult,
 } from '../../../src/modules/capability-supply/provider-connection'
-import { validPublicHttpsEndpoint } from '../../../src/modules/capability-supply/public'
-import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
+import {
+  canonicalEvmAddress,
+  validPublicHttpsEndpoint,
+} from '../../../src/modules/capability-supply/convex'
+import { canonicalDigest, isCanonicalDigest } from '../../../src/modules/common/canonical-digest'
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
-import type { Id } from '../../_generated/dataModel'
+import type { Doc, Id } from '../../_generated/dataModel'
 import { marketDispatchWorkpool } from '../../marketDispatchWorkpool'
 import {
   enqueueCleanupWork,
@@ -25,9 +28,18 @@ import {
   toDomain,
   toRow,
 } from './lifecycle'
+import {
+  ensureOwnerProviderConnectionGrant,
+  type CanonicalActor,
+} from './authority'
 import { lifecycle } from './contracts'
 import { resolveBusinessActor } from '../../authz'
 import { accountRef, principalRef } from '../../../src/modules/principal-account/public'
+import {
+  validX402SellerClaimTime,
+  x402SellerClaimDigest,
+} from '../../../src/modules/capability-supply/public'
+import { requireSourceWrite, sourceWriteArgs } from '../../sourceWriteAdmission'
 
 export const ownerProjection = v.object({
   connectionRef: v.string(),
@@ -91,7 +103,16 @@ export const connectX402OwnerArgs = {
   businessId: v.id('businesses'),
   resourceUrl: v.string(),
   commandId: v.string(),
+  operationKey: v.string(),
+  correlationId: v.string(),
+  method: v.union(v.literal('GET'), v.literal('POST')),
+  observationDigest: v.string(),
+  payTo: v.string(),
+  claimExpiresAt: v.number(),
+  claimDigest: v.string(),
+  claimSignature: v.string(),
   evidenceRefs: v.array(v.string()),
+  ...sourceWriteArgs,
 } as const
 type ReauthorizeOwnerArgs = {
   connectionRef: string
@@ -113,13 +134,94 @@ type ConnectX402OwnerArgs = {
   businessId: Id<'businesses'>
   resourceUrl: string
   commandId: string
+  operationKey: string
+  correlationId: string
+  method: 'GET' | 'POST'
+  observationDigest: string
+  payTo: string
+  claimExpiresAt: number
+  claimDigest: string
+  claimSignature: string
   evidenceRefs: string[]
+  sourceWrite?: unknown
+  sourceWriteRequest?: unknown
+}
+
+type VerifiedConnectionSellerClaim = Readonly<{
+  businessId: string
+  endpointUrl: string
+  method: 'GET' | 'POST'
+  observationDigest: string
+  payTo: `0x${string}`
+  expiresAt: number
+}>
+
+async function verifiedConnectionSellerClaim(
+  args: ConnectX402OwnerArgs,
+  canonicalResourceUrl: string,
+  now: number,
+): Promise<
+  | Readonly<{ kind: 'verified'; claim: VerifiedConnectionSellerClaim }>
+  | Readonly<{ kind: 'refused'; code: 'invalid_identity' | 'invalid_time' | 'invalid_digest' | 'invalid_resource' }>
+> {
+  const payTo = canonicalEvmAddress(args.payTo)
+  if (payTo === undefined || !isCanonicalDigest(args.observationDigest)) {
+    return { kind: 'refused', code: 'invalid_identity' }
+  }
+  if (!validX402SellerClaimTime(args.claimExpiresAt, now)) {
+    return { kind: 'refused', code: 'invalid_time' }
+  }
+  const claim = {
+    businessId: String(args.businessId),
+    endpointUrl: canonicalResourceUrl,
+    method: args.method,
+    observationDigest: args.observationDigest,
+    payTo,
+    expiresAt: args.claimExpiresAt,
+  } as const
+  if (args.claimDigest !== x402SellerClaimDigest(claim)) {
+    return { kind: 'refused', code: 'invalid_identity' }
+  }
+  return /^0x[0-9a-fA-F]{130}$/u.test(args.claimSignature)
+    ? { kind: 'verified', claim }
+    : { kind: 'refused', code: 'invalid_digest' }
 }
 
 export type ProviderConnectionActor = Readonly<{
   canonicalPrincipalRef: string
   canonicalAccountRef: string
+  authorityGrantRef?: string
 }>
+
+function providerGrantResources(connection: ProviderConnection): readonly string[] {
+  if (connection.adapterId === 'x402-fetch:v2') {
+    return [
+      'connection-provider:x402',
+      `connection-provider:x402:${connection.grantedResources[0] ?? connection.providerAccountRef.replace(/^x402:/u, '')}`,
+    ]
+  }
+  const providerNamespace = `capability-provider/${connection.adapterId}`
+  return [
+    `connection-provider:${providerNamespace}`,
+    `connection-provider:${providerNamespace}:${connection.providerAccountRef}`,
+    ...(connection.credentialRef === null ? [] : [`secret:${connection.credentialRef}`]),
+  ]
+}
+
+async function exactGrantRefForConnection(
+  ctx: MutationCtx,
+  actor: ProviderConnectionActor,
+  canonicalActor: CanonicalActor,
+  connection: ProviderConnection,
+  repeatCommand: boolean,
+): Promise<string> {
+  if (actor.authorityGrantRef !== undefined) return actor.authorityGrantRef
+  if (repeatCommand) return connection.authorityGrantRef
+  return (await ensureOwnerProviderConnectionGrant(ctx, canonicalActor, {
+    connectionRef: connection.connectionRef,
+    providerResourceRefs: providerGrantResources(connection),
+  })).grantRef
+}
 
 export function projectOwnerProjection(connection: ProviderConnection, now: number) {
   const projection = projectProviderConnectionOwner(connection, now)
@@ -179,7 +281,7 @@ export async function reauthorizeProviderConnectionForActor(
   actor: ProviderConnectionActor,
   now: number,
 ) {
-  const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor)
+  const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor, false)
   if (owned === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   const { row } = owned
   const current = toDomain(row)
@@ -187,12 +289,16 @@ export async function reauthorizeProviderConnectionForActor(
     principalRef: principalRef(actor.canonicalPrincipalRef),
     accountRef: accountRef(actor.canonicalAccountRef),
   }
+  const expectedGrantRef = await exactGrantRefForConnection(
+    ctx, actor, canonicalActor, current, row.lastCommandId === args.commandId,
+  )
   const provenance = await resolveProviderConnectionProvenance(
     ctx,
     canonicalActor,
     'refresh',
     [`connection:${current.connectionRef}`],
     current.credentialRef,
+    expectedGrantRef,
   )
   if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   const result = reauthorizeProviderConnection(current, {
@@ -295,15 +401,21 @@ export async function revokeProviderConnectionForActor(
   const result = beginProviderConnectionRevocation(owned === null ? undefined : toDomain(owned.row), args, now)
   if (result.kind === 'applied' && owned !== null) {
     const { row } = owned
+    const current = toDomain(row)
+    const canonicalActor = {
+      principalRef: principalRef(actor.canonicalPrincipalRef),
+      accountRef: accountRef(actor.canonicalAccountRef),
+    }
+    const expectedGrantRef = await exactGrantRefForConnection(
+      ctx, actor, canonicalActor, current, row.lastCommandId === args.commandId,
+    )
     const provenance = await resolveProviderConnectionProvenance(
       ctx,
-      {
-        principalRef: principalRef(actor.canonicalPrincipalRef),
-        accountRef: accountRef(actor.canonicalAccountRef),
-      },
+      canonicalActor,
       'revoke',
       [`connection:${result.connection.connectionRef}`],
       result.connection.credentialRef,
+      expectedGrantRef,
     )
     if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
     const rebound = withProviderConnectionAuthority(result.connection, provenance)
@@ -463,14 +575,18 @@ export async function reauthorizeOwnerHandler(ctx: MutationCtx, args: Reauthoriz
 }
 
 export async function connectX402OwnerHandler(ctx: MutationCtx, args: ConnectX402OwnerArgs) {
+  const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
+  if (sourceWrite.kind === 'rejected') {
+    return { kind: 'refused' as const, code: 'invalid_identity' as const }
+  }
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') {
     return { kind: 'refused' as const, code: 'invalid_identity' as const }
   }
-  return await connectX402ProviderConnectionForActor(ctx, args, actor)
+  return await connectX402ProviderConnectionForActor(ctx, args, actor, true)
 }
 
-export async function connectX402ProviderConnectionForActor(
+async function prepareX402ConnectionClaim(
   ctx: MutationCtx,
   args: ConnectX402OwnerArgs,
   actor: ProviderConnectionActor,
@@ -478,13 +594,83 @@ export async function connectX402ProviderConnectionForActor(
   const ownedBusiness = await readProviderBusinessForActor(ctx, args.businessId, actor)
   const resourceUrl = validPublicHttpsEndpoint(args.resourceUrl)
   const now = Date.now()
-  if (ownedBusiness === null || resourceUrl === undefined) {
+  if (ownedBusiness === null || resourceUrl === undefined || resourceUrl.hash !== '') {
     return { kind: 'refused' as const, code: 'invalid_identity' as const }
   }
-  if (![
-    ownedBusiness.business.publicStatus === 'published', resourceUrl.hash === '',
-  ].every(Boolean)) return { kind: 'refused' as const, code: 'invalid_identity' as const }
   const canonicalResourceUrl = resourceUrl.toString()
+  const verification = await verifiedConnectionSellerClaim(args, canonicalResourceUrl, now)
+  return verification.kind === 'refused'
+    ? verification
+    : {
+        kind: 'prepared' as const,
+        ownedBusiness,
+        resourceUrl,
+        canonicalResourceUrl,
+        claim: verification.claim,
+        now,
+      }
+}
+
+async function resolveX402ConnectionAuthority(
+  ctx: MutationCtx,
+  actor: CanonicalActor,
+  input: Readonly<{
+    connectionRef: string
+    canonicalResourceUrl: string
+    existing: Doc<'capabilityProviderConnections'> | null
+    provisionOwnerGrant: boolean
+    commandId: string
+    delegatedGrantRef?: string
+  }>,
+) {
+  const installResources = [
+    'connection-provider:x402',
+    `connection-provider:x402:${input.canonicalResourceUrl}`,
+  ]
+  const expectedGrantRef = input.existing !== null
+    && input.existing.lastCommandId === input.commandId
+    ? input.existing.authorityGrantRef
+    : input.provisionOwnerGrant
+      ? (await ensureOwnerProviderConnectionGrant(ctx, actor, {
+          connectionRef: input.connectionRef,
+          providerResourceRefs: installResources,
+        })).grantRef
+      : input.delegatedGrantRef
+  if (expectedGrantRef === undefined) return null
+  return await resolveProviderConnectionProvenance(
+    ctx,
+    actor,
+    input.existing === null ? 'install' : 'refresh',
+    input.existing === null ? installResources : [`connection:${input.connectionRef}`],
+    null,
+    expectedGrantRef,
+  )
+}
+
+async function persistX402ConnectionResult(
+  ctx: MutationCtx,
+  existing: Doc<'capabilityProviderConnections'> | null,
+  commandId: string,
+  result: ProviderConnectionCommandResult,
+) {
+  if (result.kind !== 'applied') return
+  const row = toRow(result.connection, commandId, result.commandDigest)
+  if (existing === null) await ctx.db.insert('capabilityProviderConnections', row)
+  else await ctx.db.replace(existing._id, row)
+}
+
+export async function connectX402ProviderConnectionForActor(
+  ctx: MutationCtx,
+  args: ConnectX402OwnerArgs,
+  actor: ProviderConnectionActor,
+  provisionOwnerGrant = false,
+) {
+  // Connections are private supplier infrastructure. Publication happens only
+  // after the Operation is admitted, so first-party onboarding must work while
+  // the supplier business is still unpublished.
+  const prepared = await prepareX402ConnectionClaim(ctx, args, actor)
+  if (prepared.kind === 'refused') return prepared
+  const { ownedBusiness, resourceUrl, canonicalResourceUrl, claim, now } = prepared
   const connectionRef = `connection:x402:${canonicalDigest({ businessId: String(args.businessId), resourceUrl: canonicalResourceUrl })}`
   const providerRef = `provider:x402:${resourceUrl.host}`
   const providerAccountRef = `x402:${canonicalResourceUrl}`
@@ -493,30 +679,55 @@ export async function connectX402ProviderConnectionForActor(
   if (existing !== null && String(existing.businessId) !== String(args.businessId)) {
     return { kind: 'refused' as const, code: 'invalid_identity' as const }
   }
-  const provenance = await resolveProviderConnectionProvenance(
-    ctx,
-    {
-      principalRef: principalRef(ownedBusiness.actor.canonicalPrincipalRef),
-      accountRef: accountRef(ownedBusiness.actor.canonicalAccountRef),
-    },
-    'install',
-    ['connection-provider:x402', `connection-provider:x402:${canonicalResourceUrl}`],
-    null,
-  )
+  const canonicalActor = {
+    principalRef: principalRef(ownedBusiness.actor.canonicalPrincipalRef),
+    accountRef: accountRef(ownedBusiness.actor.canonicalAccountRef),
+  }
+  const provenance = await resolveX402ConnectionAuthority(ctx, canonicalActor, {
+    connectionRef,
+    canonicalResourceUrl,
+    existing,
+    provisionOwnerGrant,
+    commandId: args.commandId,
+    ...(actor.authorityGrantRef === undefined
+      ? {}
+      : { delegatedGrantRef: actor.authorityGrantRef }),
+  })
   if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
-  const result = createX402ProviderConnection({
+  const connectionCommand = {
     commandId: args.commandId,
     connectionRef,
     businessId: String(args.businessId),
     providerRef,
     providerAccountRef,
     resourceUrl: canonicalResourceUrl,
-    evidenceRefs: args.evidenceRefs,
+    evidenceRefs: [
+      ...args.evidenceRefs,
+      `x402-payee-claim:${x402SellerClaimDigest(claim)}`,
+    ],
     ...provenance,
-  }, now, existing === null ? undefined : toDomain(existing))
-  if (result.kind === 'refused') return result
-  if (result.kind === 'applied') {
-    await ctx.db.insert('capabilityProviderConnections', toRow(result.connection, args.commandId, result.commandDigest))
   }
+  const result = existing === null
+    ? createX402ProviderConnection(connectionCommand, now)
+    : existing.lastCommandId === args.commandId
+      ? createX402ProviderConnection(connectionCommand, now, toDomain(existing))
+      : reauthorizeProviderConnection({
+        ...toDomain(existing),
+        evidenceRefs: toDomain(existing).evidenceRefs.filter((ref) =>
+          !ref.startsWith('x402-endpoint-inspection:')
+          && !ref.startsWith('x402-payee-claim:')),
+      }, {
+        ...connectionCommand,
+        adapterId: 'x402-fetch:v2',
+        credentialRef: null,
+        requestedScopes: [],
+        grantedScopes: [],
+        requestedResources: [canonicalResourceUrl],
+        grantedResources: [canonicalResourceUrl],
+        expectedAuthorityGeneration: existing.authorityGeneration,
+        expectedAuthorityDigest: existing.authorityDigest,
+      }, now)
+  if (result.kind === 'refused') return result
+  await persistX402ConnectionResult(ctx, existing, args.commandId, result)
   return projectOwnerResult(result, now)
 }

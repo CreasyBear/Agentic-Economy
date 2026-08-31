@@ -26,7 +26,8 @@ describe('discovery files', () => {
     expect(llms.body).not.toContain('/api/v1/registry')
     expect(llms.body).toContain('/api/v1/market-operations/search')
 
-    expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
+    expect(llms.body).not.toContain('slug=fremantle-heat-pump-repairs')
+    expect(llms.body).toContain('Canonical catalogue:')
     expect(sitemap.body).toContain('<loc>http://localhost:3000/fremantle-heat-pump-repairs</loc>')
     expect(serialized).not.toContain('demo-listed-provider')
     expect(serialized).not.toMatch(/\.well-known\/ae-routing|\/v1\/route/)
@@ -35,7 +36,7 @@ describe('discovery files', () => {
     )
   })
 
-  it('builds llms.txt from canonical links and source-owned Offering disposition only', () => {
+  it('builds llms.txt from canonical Operation links without embedding provider records', () => {
     const state = createFixtureDiscoverySourceState()
     const revision = state.revisions.at(0)
 
@@ -55,8 +56,8 @@ describe('discovery files', () => {
     }
     const result = buildLlmsTxt(maliciousState, { canonicalBaseUrl: 'https://ae.example', routingBaseUrl: 'https://route.ae.example' })
 
-    expect(result.body).toContain('https://ae.example/demo-listed-provider/ucp')
-    expect(result.body).toContain('disposition=current')
+    expect(result.body).not.toContain('https://ae.example/demo-listed-provider/ucp')
+    expect(result.body).not.toContain('disposition=current')
     // `/mcp` is the current MCP host endpoint (T6), no longer retired routing-v1 vocabulary.
     expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route/)
     expect(result.body).toContain('- MCP: https://ae.example/mcp')
@@ -78,11 +79,15 @@ describe('discovery files', () => {
     expect(result.urls).toEqual(
       expect.arrayContaining([
         'https://ae.example/',
-        'https://ae.example/api/businesses',
         'https://ae.example/demo-listed-provider',
-        'https://ae.example/demo-listed-provider/ucp',
+        'https://ae.example/api/v1/market-operations/search',
+        'https://ae.example/api/v1/market-operations/detail',
       ])
     )
+    expect(result.urls).not.toEqual(expect.arrayContaining([
+      'https://ae.example/api/businesses',
+      'https://ae.example/demo-listed-provider/ucp',
+    ]))
   })
 
   it('builds sitemap.xml with public static and published business URLs only', () => {

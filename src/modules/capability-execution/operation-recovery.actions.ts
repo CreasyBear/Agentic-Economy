@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { jsonValueSchema } from '@/modules/capability-contract/public'
+import { exactAmountSchema } from '@/modules/money/public'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
   operationInvokeReceiptSchema,
@@ -95,9 +96,48 @@ export const operationReconciliationEvidenceSchema: z.ZodType<ReconciliationEvid
   }
 })
 
+export const x402OperationReconciliationEvidenceSchema = z.strictObject({
+  kind: z.literal('x402_payment_reconciliation'),
+  version: z.literal(1),
+  evidenceRef: boundedText(300),
+  source: boundedText(300),
+  invocationRef: boundedText(300),
+  attemptRef: boundedText(300),
+  effectGeneration: z.number().int().positive(),
+  operationRef: boundedText(300),
+  inputDigest: boundedText(300),
+  requestDigest: boundedText(300),
+  transportObservationDigest: boundedText(300),
+  paymentObservationDigest: boundedText(300),
+  providerRef: boundedText(300),
+  paymentIdentifier: boundedText(300),
+  reservationRef: boundedText(300),
+  challengeDigest: boundedText(300),
+  amount: exactAmountSchema,
+  settlementStatus: z.enum(['settled', 'not_settled']),
+  paymentResponseDigest: boundedText(300),
+  transactionHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+  observedAt: boundedText(80).refine((value) => Number.isFinite(Date.parse(value)), 'observedAt must be an ISO timestamp.'),
+  digest: boundedText(300),
+}).superRefine((evidence, context) => {
+  const { digest, ...material } = evidence
+  if (canonicalDigest(material) !== digest) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['digest'], message: 'digest does not match x402 reconciliation evidence.' })
+  }
+})
+
+export const operationReconciliationEvidenceInputSchema = z.union([
+  operationReconciliationEvidenceSchema,
+  x402OperationReconciliationEvidenceSchema,
+])
+
+export type OperationReconciliationEvidenceInput = z.infer<
+  typeof operationReconciliationEvidenceInputSchema
+>
+
 export type OperationReconcileActionInput = Readonly<{
   invocationRef: string
-  evidence: ReconciliationEvidence
+  evidence: OperationReconciliationEvidenceInput
   idempotencyKey: string
 }>
 
@@ -112,7 +152,7 @@ export const operationCancelInputSchema: z.ZodType<OperationCancelActionInput> =
 
 export const operationReconcileInputSchema: z.ZodType<OperationReconcileActionInput> = z.strictObject({
   invocationRef: boundedText(300),
-  evidence: operationReconciliationEvidenceSchema,
+  evidence: operationReconciliationEvidenceInputSchema,
   idempotencyKey: boundedText(200),
 })
 

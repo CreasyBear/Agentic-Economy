@@ -3,6 +3,8 @@ import { createServerFn } from "@tanstack/react-start";
 import {
   connectOwnerX402,
   connectOwnerX402InputSchema,
+  inspectOwnerX402,
+  inspectOwnerX402InputSchema,
   ownerConnectionCommandSchema,
   readOwnerProviderConnections,
   readOwnerProviderEarnings,
@@ -17,6 +19,10 @@ import {
   republishOwnerCapability,
   runOwnerSupplyReadiness,
   runOwnerSupplyTest,
+  readOwnerSellerCanaryStatus,
+  promoteOwnerSellerCanary,
+  ownerSellerCanaryStatusInputSchema,
+  ownerSellerCanaryPromotionInputSchema,
   ownerSupplyActionInputSchema,
   ownerSupplyMaintenanceInputSchema,
   ownerSupplyReadInputSchema,
@@ -54,6 +60,8 @@ export type {
   OwnerSupplyFunnelReadback,
   OwnerSupplyMaintenanceInput,
   OwnerSupplyOfferingReadback,
+  OwnerSellerCanaryReadback,
+  OwnerSellerCanaryPromotionResult,
   OwnerSupplyReadbackSource,
   SupplyCallLogRow,
   SupplyFunnelActionContext,
@@ -65,6 +73,7 @@ export type {
 } from "./internal/supply-funnel/types";
 
 export { filterOwnerSupplyAuthorityOptions } from "./internal/supply-funnel/connections";
+export { connectOwnerX402, inspectOwnerX402 } from "./internal/supply-funnel/connections";
 export { loadSupplyLandingReadback } from "./internal/supply-funnel/landing";
 export { ownerPublicationImport } from "./internal/supply-funnel/publication-import";
 export { ownerPublicationWithCatalogOrigin } from "./internal/supply-funnel/publication-admit";
@@ -82,6 +91,10 @@ export const readOwnerProviderConnectionsServer = createServerFn().handler(
 export const connectOwnerX402Server = createServerFn({ method: "POST" })
   .validator((data) => connectOwnerX402InputSchema.parse(data))
   .handler(connectOwnerX402);
+
+export const inspectOwnerX402Server = createServerFn({ method: "POST" })
+  .validator((data) => inspectOwnerX402InputSchema.parse(data))
+  .handler(inspectOwnerX402);
 
 export const reconnectOwnerProviderConnectionServer = createServerFn({
   method: "POST",
@@ -128,6 +141,14 @@ export const runOwnerSupplyReadinessServer = createServerFn({ method: "POST" })
 export const runOwnerSupplyTestServer = createServerFn({ method: "POST" })
   .validator((data) => ownerSupplyActionInputSchema.parse(data))
   .handler(runOwnerSupplyTest);
+
+export const readOwnerSellerCanaryStatusServer = createServerFn()
+  .validator((data) => ownerSellerCanaryStatusInputSchema.parse(data))
+  .handler(readOwnerSellerCanaryStatus);
+
+export const promoteOwnerSellerCanaryServer = createServerFn({ method: "POST" })
+  .validator((data) => ownerSellerCanaryPromotionInputSchema.parse(data))
+  .handler(promoteOwnerSellerCanary);
 
 export const recheckOwnerCapabilityServer = createServerFn({ method: "POST" })
   .validator((data) => ownerSupplyMaintenanceInputSchema.parse(data))

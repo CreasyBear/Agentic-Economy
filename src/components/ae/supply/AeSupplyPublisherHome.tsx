@@ -1,5 +1,5 @@
 import { Link, useRouter } from '@tanstack/react-router'
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -90,7 +90,10 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
             }
           />
         ) : (
-          <SupplyOfferingsTable offerings={readback.offerings} />
+          <div className="grid gap-4">
+            <PublishedOperationsAttention offerings={readback.offerings} />
+            <SupplyOfferingsTable offerings={readback.offerings} />
+          </div>
         )}
       </AeSection>
       <AeOwnerProviderConnections businessId={readback.businessId} connections={connections} />
@@ -122,6 +125,55 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
     </div>
   )
 }
+
+function PublishedOperationsAttention({
+  offerings,
+}: Readonly<{ offerings: readonly OwnerSupplyOfferingReadback[] }>) {
+  const titleId = useId()
+  const attentionOfferings = offerings.filter((offering) =>
+    offering.publication !== undefined
+    && offering.status !== 'retired'
+    && offering.publication.state !== 'superseded'
+    && !offering.live.available)
+
+  if (attentionOfferings.length === 0) return null
+
+  const title = attentionOfferings.length === 1
+    ? '1 published Operation needs attention'
+    : `${attentionOfferings.length} published Operations need attention`
+
+  return (
+    <Alert role="region" aria-labelledby={titleId}>
+      <AlertTitle id={titleId}>{title}</AlertTitle>
+      <AlertDescription className="mt-2 w-full">
+        <ul className="m-0 grid w-full list-none divide-y divide-border p-0">
+          {attentionOfferings.map((offering) => {
+            const continuation = supplierContinuationForOffering(offering)
+            return (
+              <li
+                key={offering.offeringRef}
+                className="flex min-w-0 flex-col gap-2 py-2 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <span className="min-w-0 break-words font-medium text-foreground">
+                  {offering.name}
+                </span>
+                <Button asChild size="sm" variant="secondary" className="min-h-touch w-full sm:w-auto">
+                  <a
+                    href={continuation.href}
+                    aria-label={`${continuation.label} for ${offering.name}`}
+                  >
+                    {continuation.label}
+                  </a>
+                </Button>
+              </li>
+            )
+          })}
+        </ul>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 function OwnerEarningsCard({ earnings, connect }: Readonly<{
   earnings: OwnerProviderEarningsReadback
   connect?: OwnerConnectReadinessReadback

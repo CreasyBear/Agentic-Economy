@@ -9,8 +9,10 @@ import {
   type CanonicalClaimInput,
 } from '@/modules/action-invocation/runtime'
 import {
+  cdpX402CustodyConfigurationFromEnvironment,
   paymentLaneAdmission,
   signRouteTransportCall,
+  validSellerCanaryPayee,
   type EconomicRail,
 } from '@/modules/capability-supply/server'
 import {
@@ -22,6 +24,7 @@ import {
 import {
   materializeRuntimePublishedOperation,
   parsePublishedOperationSnapshot,
+  type PublishedOperation,
   type RuntimePublishedOperationDescriptor,
 } from '@/modules/capability-supply/public'
 import { currentOperationCommitmentsMatch } from '../current-operation-commitment'
@@ -29,6 +32,12 @@ import {
   isPrincipalEnvironmentCompatibleWithOperation,
   operationEnvironmentMismatchNextAction,
 } from '@/modules/capability-execution/operation-invoke-contracts'
+import {
+  createSellerOnboardingCanaryCommitment,
+  sellerOnboardingCanaryExecutionEnvelope,
+  type SellerOnboardingCanaryExecutionEnvelope,
+} from '@/modules/capability-supply/public'
+import type { ExternalSpendExecutionContext } from '@/modules/money/public'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
@@ -49,6 +58,142 @@ import {
   type ConnectionAuthority,
 } from './lease'
 import { routeCallSigningKey } from './x402Route'
+
+export type SellerCanaryOperationSnapshot = Readonly<{
+  operationJson: string
+  operationRef: string
+  offeringRef: string
+  offeringRevision: number
+  offeringSourceHash: string
+  accessPathRef: string
+  accessPathSourceHash: string
+  publicationRef: string
+  publicationRevision: number
+  sellerPayTo: string
+  sellerClaimDigest: string
+  readinessDigest: string
+  readinessObservedAt: number
+  readinessValidUntil: number
+}>
+
+export function sellerCanaryExecutionContext(
+  envelope: SellerOnboardingCanaryExecutionEnvelope,
+): ExternalSpendExecutionContext {
+  return {
+    kind: 'seller_onboarding_canary',
+    paymentProfile: 'base-sepolia-usdc-exact',
+    canaryRef: envelope.canaryRef,
+    canaryCommitmentDigest: envelope.canaryCommitmentDigest,
+    fundingBudgetRef: envelope.funding.budgetRef,
+  }
+}
+
+export function exactSellerCanarySnapshotMatches(input: Readonly<{
+  dispatch: OpenDispatch
+  snapshot: SellerCanaryOperationSnapshot
+  operation: PublishedOperation
+}>): boolean {
+  const { dispatch, snapshot, operation } = input
+  const envelope = dispatch.sellerOnboardingCanary
+  if (envelope === undefined) return false
+  try {
+    const reconstructed = createSellerOnboardingCanaryCommitment({
+      ownerId: envelope.ownerId,
+      businessId: envelope.businessId,
+      offeringRef: envelope.offeringRef,
+      offeringRevision: envelope.offeringRevision,
+      offeringSourceHash: envelope.offeringSourceHash,
+      accessPathRef: envelope.accessPathRef,
+      accessPathSourceHash: envelope.accessPathSourceHash,
+      publicationRef: envelope.publicationRef,
+      publicationRevision: envelope.publicationRevision,
+      draftOperationRef: envelope.operationRef,
+      operationMaterialDigest: envelope.operationMaterialDigest,
+      contractDigest: envelope.contractDigest,
+      bindingDigest: envelope.bindingDigest,
+      priceDigest: envelope.priceDigest,
+      sellerPayTo: envelope.sellerPayTo,
+      sellerClaimDigest: envelope.sellerClaimDigest,
+      readinessDigest: envelope.readinessDigest,
+      readinessObservedAt: envelope.readinessObservedAt,
+      readinessValidUntil: envelope.readinessValidUntil,
+      expectedOutputSchemaDigest: envelope.expectedOutputSchemaDigest,
+      expectedOutputEvidenceDigest: envelope.expectedOutputEvidenceDigest,
+      inputDigest: envelope.inputDigest,
+      idempotencyKey: envelope.idempotencyKey,
+      fundingBudgetRef: envelope.funding.budgetRef,
+      fundingPrincipalId: envelope.funding.principalId,
+      fundingOwnerId: envelope.funding.ownerId,
+      fundingCredentialId: envelope.funding.credentialId,
+      fundingApplicationRef: envelope.funding.applicationRef,
+      fundingGrantRef: envelope.funding.grantRef,
+      fundingGrantGeneration: envelope.funding.grantGeneration,
+      fundingPolicyDigest: envelope.funding.policyDigest,
+      requestedSpend: envelope.funding.requestedSpend,
+      maximumSpend: envelope.funding.maximumSpend,
+      expiresAt: envelope.expiresAt,
+      now: 0,
+    })
+    const regeneratedEnvelope = sellerOnboardingCanaryExecutionEnvelope(reconstructed)
+    if (canonicalDigest(regeneratedEnvelope as StableHashValue)
+      !== canonicalDigest(envelope as StableHashValue)) return false
+    const expectedOutputSchemaDigest = canonicalDigest(operation.contract.outputSchema as StableHashValue)
+    const expectedOutputEvidenceDigest = canonicalDigest({
+      kind: 'seller_onboarding_canary_expected_output:v1',
+      operationMaterialDigest: operation.materialDigest,
+      contractDigest: operation.identity.contractDigest,
+      inputDigest: dispatch.inputDigest,
+      outputSchema: operation.contract.outputSchema,
+      evidence: operation.contract.evidence,
+    } as StableHashValue)
+    const payment = operation.identity.payment
+    return dispatch.environment === 'sandbox'
+      && operation.runtimeEnvironment === 'sandbox'
+      && payment.kind === 'x402'
+      && envelope.invocationRef === dispatch.invocationRef
+      && envelope.operationRef === dispatch.operationRef
+      && envelope.inputDigest === dispatch.inputDigest
+      && envelope.idempotencyKey === dispatch.idempotencyKey
+      && envelope.funding.principalId === dispatch.principalId
+      && envelope.funding.ownerId === dispatch.ownerId
+      && envelope.funding.credentialId === dispatch.credentialId
+      && envelope.funding.applicationRef === dispatch.applicationRef
+      && envelope.funding.grantRef === dispatch.grantRef
+      && envelope.funding.grantGeneration === dispatch.grantGeneration
+      && envelope.funding.policyDigest === dispatch.policyDigest
+      && envelope.accountingPolicy.recordBuyerUsage === false
+      && envelope.accountingPolicy.accrueProviderEarnings === false
+      && envelope.accountingPolicy.accruePlatformRake === false
+      && envelope.accountingPolicy.recordQualifiedUse === false
+      && envelope.businessId === operation.identity.businessId
+      && envelope.publicationRef === operation.identity.publicationRef
+      && envelope.publicationRevision === operation.identity.publicationRevision
+      && envelope.operationMaterialDigest === operation.materialDigest
+      && envelope.contractDigest === operation.identity.contractDigest
+      && envelope.bindingDigest === operation.identity.bindingDigest
+      && envelope.priceDigest === operation.priceDigest
+      && envelope.sellerPayTo.toLowerCase() === payment.payTo.toLowerCase()
+      && envelope.expectedOutputSchemaDigest === expectedOutputSchemaDigest
+      && envelope.expectedOutputEvidenceDigest === expectedOutputEvidenceDigest
+      && envelope.operationRef === snapshot.operationRef
+      && envelope.offeringRef === snapshot.offeringRef
+      && envelope.offeringRevision === snapshot.offeringRevision
+      && envelope.offeringSourceHash === snapshot.offeringSourceHash
+      && envelope.accessPathRef === snapshot.accessPathRef
+      && envelope.accessPathSourceHash === snapshot.accessPathSourceHash
+      && envelope.publicationRef === snapshot.publicationRef
+      && envelope.publicationRevision === snapshot.publicationRevision
+      && envelope.sellerPayTo.toLowerCase() === snapshot.sellerPayTo.toLowerCase()
+      && envelope.sellerClaimDigest === snapshot.sellerClaimDigest
+      && envelope.readinessDigest === snapshot.readinessDigest
+      && envelope.readinessObservedAt === snapshot.readinessObservedAt
+      && envelope.readinessValidUntil === snapshot.readinessValidUntil
+      && operation.readiness.observedAt === envelope.readinessObservedAt
+      && operation.readiness.validUntil === envelope.readinessValidUntil
+  } catch {
+    return false
+  }
+}
 
 export async function prepareInvocationRun(
   ctx: ActionCtx,
@@ -116,22 +261,56 @@ export async function prepareInvocationRun(
     scopes: principalRow.scopes,
     authorityMode: principalRow.authorityMode,
   }
-  const grant = await ctx.runQuery(internal.agentAccessPolicy.readActiveGrant, {
-    credentialId: principal.credentialId,
-    environment: principal.environment,
-    principalId: principal.principalId,
-    applicationRef: principal.applicationRef,
-    generation: dispatch.grantGeneration,
-    now: Date.now(),
-  })
+  const sellerCanary = dispatch.sellerOnboardingCanary
+  const grantReadAt = Date.now()
+  const grant = sellerCanary === undefined
+    ? await ctx.runQuery(internal.agentAccessPolicy.readActiveGrant, {
+        credentialId: principal.credentialId,
+        environment: principal.environment,
+        principalId: principal.principalId,
+        applicationRef: principal.applicationRef,
+        grantRef: dispatch.grantRef,
+        ownerId: dispatch.ownerId,
+        generation: dispatch.grantGeneration,
+        now: grantReadAt,
+      })
+    : dispatch.environment !== 'sandbox'
+      ? null
+      : await ctx.runQuery(
+          internal.capabilitySupplyCanaryFunding.readExactSellerOnboardingCanaryPlatformGrant,
+          {
+            sellerOwnerId: sellerCanary.ownerId,
+            expected: {
+              kind: 'persisted_dispatch',
+              grantRef: dispatch.grantRef,
+              principalId: dispatch.principalId,
+              ownerId: dispatch.ownerId,
+              credentialId: dispatch.credentialId,
+              applicationRef: dispatch.applicationRef,
+              environment: 'sandbox',
+              generation: dispatch.grantGeneration,
+              policyDigest: dispatch.policyDigest,
+              expiresAt: dispatch.grantExpiresAt,
+            },
+            now: grantReadAt,
+          },
+        )
   if (grant === null) return await refuseBeforeClaim(ctx, dispatch, 'grant_not_found', false, 'Refresh the agent grant and retry.')
   const actor = { callerRef: principal.credentialId, principalRef: principal.principalId }
   const initialAttemptRef = `operation-attempt:${dispatch.invocationRef}:1`
   const leaseOwner = `operation-worker:${dispatch.invocationRef}`
 
-  const currentSnapshot = await ctx.runQuery(internal.capabilitySupplyOperations.readCurrentPublishedOperationSnapshot, {
-    operationRef: dispatch.operationRef,
-  })
+  const currentSnapshot = sellerCanary === undefined
+    ? await ctx.runQuery(internal.capabilitySupplyOperations.readCurrentPublishedOperationSnapshot, {
+        operationRef: dispatch.operationRef,
+      })
+    : await ctx.runQuery(
+        internal.capabilitySupplyCurrentOperation.readExactSellerCanaryOperationSnapshot,
+        {
+          publicationRef: sellerCanary.publicationRef,
+          revision: sellerCanary.publicationRevision,
+        },
+      )
   if (currentSnapshot === null) {
     return await refuseBeforeClaim(ctx, dispatch, 'operation_not_current', false, 'The operation publication changed; retry discovery.')
   }
@@ -140,12 +319,38 @@ export async function prepareInvocationRun(
   if (reservedOperation === undefined || currentOperation === undefined) {
     return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'The admitted operation snapshot is invalid.')
   }
-  if (!currentOperationCommitmentsMatch({
-    operationRef: dispatch.operationRef,
-    pinned: reservedOperation,
-    current: currentOperation,
+  if (sellerCanary !== undefined) {
+    const payment = currentOperation.identity.payment
+    const custody = cdpX402CustodyConfigurationFromEnvironment()
+    if (
+      payment.kind !== 'x402'
+      || custody === undefined
+      || !validSellerCanaryPayee(payment.payTo, custody.expectedEvmAddress)
+      || !validSellerCanaryPayee(sellerCanary.sellerPayTo, custody.expectedEvmAddress)
+    ) {
+      return await refuseBeforeClaim(
+        ctx,
+        dispatch,
+        'provider_refused',
+        false,
+        'The seller payee must be a valid EVM address distinct from the managed canary payer.',
+      )
+    }
+  }
+  if (sellerCanary === undefined) {
+    if (!currentOperationCommitmentsMatch({
+      operationRef: dispatch.operationRef,
+      pinned: reservedOperation,
+      current: currentOperation,
+    })) {
+      return await refuseBeforeClaim(ctx, dispatch, 'operation_not_current', false, 'The operation publication changed; retry discovery.')
+    }
+  } else if (!exactSellerCanarySnapshotMatches({
+    dispatch,
+    snapshot: currentSnapshot as SellerCanaryOperationSnapshot,
+    operation: currentOperation,
   })) {
-    return await refuseBeforeClaim(ctx, dispatch, 'operation_not_current', false, 'The operation publication changed; retry discovery.')
+    return await refuseBeforeClaim(ctx, dispatch, 'operation_not_current', false, 'The sealed seller canary no longer matches its exact staged operation.')
   }
   const operation = currentOperation
   let descriptor: RuntimePublishedOperationDescriptor
@@ -169,10 +374,22 @@ export async function prepareInvocationRun(
   }
   if (!descriptor.validateInput(input)) return await refuseBeforeClaim(ctx, dispatch, 'input_invalid', false)
   const isX402 = operation.identity.adapterId === 'x402-fetch:v2'
-  const economicRail: EconomicRail = isX402
+  if (sellerCanary !== undefined && !isX402) {
+    return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'Seller onboarding canaries require the exact x402 transport.')
+  }
+  const executionContext = sellerCanary === undefined
+    ? undefined
+    : sellerCanaryExecutionContext(sellerCanary)
+  const economicRail: EconomicRail = sellerCanary !== undefined
+    ? 'managed_testnet_canary'
+    : isX402
     ? dispatch.environment === 'production' ? 'brokered_x402' : 'provider_direct_x402'
     : 'ae_internal'
-  const laneAdmission = paymentLaneAdmission({ rail: economicRail, environment: dispatch.environment })
+  const laneAdmission = paymentLaneAdmission({
+    rail: economicRail,
+    environment: dispatch.environment,
+    ...(executionContext === undefined ? {} : { executionContext }),
+  })
   if (laneAdmission.kind === 'refused') {
     return await refuseBeforeClaim(ctx, dispatch, laneAdmission.code, false, 'This operation settles provider-direct; invoke a brokered operation instead.')
   }
@@ -200,6 +417,17 @@ export async function prepareInvocationRun(
     return await refuseBeforeClaim(ctx, dispatch, 'price_changed', false, 'The published price changed; retry discovery.')
   }
   if (
+    sellerCanary !== undefined
+    && (
+      sellerCanary.expiresAt <= Date.now()
+      || compareExactAmounts(pricingAmount, sellerCanary.funding.requestedSpend) !== 0
+      || compareExactAmounts(sellerCanary.funding.requestedSpend, sellerCanary.funding.maximumSpend) === undefined
+      || compareExactAmounts(sellerCanary.funding.requestedSpend, sellerCanary.funding.maximumSpend)! > 0
+    )
+  ) {
+    return await refuseBeforeClaim(ctx, dispatch, 'price_changed', false, 'The sealed seller canary funding or expiry no longer matches the staged call.')
+  }
+  if (
     economicRail === 'brokered_x402'
     && (pricingConfig.providerAmount === undefined || pricingConfig.platformFee === undefined)
   ) {
@@ -210,6 +438,7 @@ export async function prepareInvocationRun(
   const connectionAuthority: ConnectionAuthority | undefined = operation.binding.authority.kind === 'provider_connection'
     ? authoritySnapshot
     : undefined
+  let isCredentiallessX402Connection = false
   if (operation.binding.authority.kind === 'provider_connection') {
     if (
       connectionAuthority === undefined
@@ -217,16 +446,34 @@ export async function prepareInvocationRun(
       || connectionAuthority.providerRef !== operation.binding.authority.providerRef
       || connectionAuthority.adapterId !== operation.binding.adapter.adapterId
     ) return await refuseBeforeClaim(ctx, dispatch, 'provider_refused', false, 'Provider connection authority is stale.')
-    const approval = await ctx.runQuery(internal.capabilityOperationInvocations.readProviderLeaseAuthority, {
-      connectionRef: connectionAuthority.connectionRef,
-      authorityGeneration: connectionAuthority.authorityGeneration,
-    })
-    if (
-      approval === null
-      || approval.providerRef !== connectionAuthority.providerRef
-      || approval.adapterId !== connectionAuthority.adapterId
-      || approval.authorityDigest !== connectionAuthority.authorityDigest
-    ) return await refuseBeforeClaim(ctx, dispatch, 'provider_refused', false, 'Provider approval is not current.')
+    const currentConnection = await ctx.runQuery(
+      internal.capabilityOperationInvocations.readCurrentProviderConnectionAuthority,
+      {
+        connectionRef: connectionAuthority.connectionRef,
+        providerRef: connectionAuthority.providerRef,
+        adapterId: connectionAuthority.adapterId,
+        authorityGeneration: connectionAuthority.authorityGeneration,
+        authorityDigest: connectionAuthority.authorityDigest,
+        resourceUrl: operation.binding.endpointUrl,
+        now: Date.now(),
+      },
+    )
+    if (currentConnection === null) {
+      return await refuseBeforeClaim(ctx, dispatch, 'provider_refused', false, 'Provider connection authority is stale.')
+    }
+    isCredentiallessX402Connection = currentConnection.kind === 'credentialless_x402'
+    if (!isCredentiallessX402Connection) {
+      const approval = await ctx.runQuery(internal.capabilityOperationInvocations.readProviderLeaseAuthority, {
+        connectionRef: connectionAuthority.connectionRef,
+        authorityGeneration: connectionAuthority.authorityGeneration,
+      })
+      if (
+        approval === null
+        || approval.providerRef !== connectionAuthority.providerRef
+        || approval.adapterId !== connectionAuthority.adapterId
+        || approval.authorityDigest !== connectionAuthority.authorityDigest
+      ) return await refuseBeforeClaim(ctx, dispatch, 'provider_refused', false, 'Provider approval is not current.')
+    }
   }
   const authorityMaximumSpend = validateOperationInvokeAuthority({
     authority: dispatch.authority,
@@ -361,8 +608,10 @@ export async function prepareInvocationRun(
     input,
     isX402,
     economicRail,
+    executionContext,
     pricingConfig,
     connectionAuthority,
+    isCredentiallessX402Connection,
     authorityMaximumSpend,
     persistedAuthority,
     authorityBasis,

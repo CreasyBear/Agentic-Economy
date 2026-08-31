@@ -14,10 +14,10 @@ export type {
 export {
   SITE_DISCOVERY_SUMMARY_LINES,
   SiteDiscoveryEndpointKindValues,
-  SiteDiscoveryManifestSchemaVersion,
   buildSiteDiscoveryManifest,
   projectCompactSiteDiscoveryManifest,
 } from './internal/site-manifest'
+export { SiteDiscoveryManifestSchemaVersion } from './site-manifest-version'
 export type {
   SiteDiscoveryEndpointContract,
   SiteDiscoveryEndpointKind,

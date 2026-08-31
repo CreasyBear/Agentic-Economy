@@ -10,6 +10,7 @@
   "scripts": {
     "ae": "tsx tools/ae/cli.ts",
     "build:cli": "npm run build --workspace @agentic-economy/cli",
+    "pack:cli:public": "npm run build:cli && npm pack ./packages/cli --pack-destination ./public/downloads",
     "test:cli-package": "npm test --workspace @agentic-economy/cli",
     "parity:check": "node eval/parity/check-parity.mjs",
     "audit:actions": "node scripts/audit-action-surfaces.mjs",

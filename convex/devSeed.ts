@@ -218,26 +218,11 @@ export const seedDevCatalog = internalMutation({
     // Self-heal the fixed dev-seed identity before authority admission.
     await provisionDevSeedCatalogIdentityRows(ctx)
     const authority = await admitDevSeedCatalogAuthority(ctx, 'seedDevCatalog')
-    // Reconcile existing capability publications before catalog and offering ingest.
+    // The development catalog owns only its declared fixtures. Market
+    // Operations are admitted through supplier/facilitator flows, so startup
+    // must never sweep or rewrite unrelated supplier businesses.
     const bundle = buildDevSeedCatalogState(DEV_SEED_BUSINESS_FIXTURES, authority.accountRef)
     const result = await persistDevSeedCatalogState(ctx.db, bundle, authority.accountRef)
-    let offeringSeed: {
-      processed: number
-      seeded: number
-      errors: string[]
-      nextCursor: string | null
-      done: boolean
-    } = await ctx.runMutation(internal.devSeed.seedOfferingSupply, { cursor: null })
-    while (true) {
-      if (offeringSeed.errors.length > 0) {
-        throw new Error(`dev_seed_offering_supply:${offeringSeed.errors.join(',')}`)
-      }
-      if (offeringSeed.done) break
-      if (offeringSeed.nextCursor === null) throw new Error('dev_seed_offering_supply_cursor_missing')
-      offeringSeed = await ctx.runMutation(internal.devSeed.seedOfferingSupply, {
-        cursor: offeringSeed.nextCursor,
-      })
-    }
     return {
       ...result,
       kind: 'seeded' as const,

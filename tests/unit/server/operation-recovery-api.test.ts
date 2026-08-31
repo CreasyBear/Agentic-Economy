@@ -78,6 +78,33 @@ function reconciliationEvidence() {
   return { ...material, digest: canonicalDigest(material) }
 }
 
+function x402ReconciliationEvidence() {
+  const material = {
+    kind: 'x402_payment_reconciliation' as const,
+    version: 1 as const,
+    evidenceRef: 'evidence:x402:one',
+    source: 'provider:one',
+    invocationRef,
+    attemptRef: 'operation-attempt:one',
+    effectGeneration: 1,
+    operationRef,
+    inputDigest: 'sha256:input',
+    requestDigest: 'sha256:request',
+    transportObservationDigest: 'sha256:transport',
+    paymentObservationDigest: 'sha256:payment',
+    providerRef: 'provider:one',
+    paymentIdentifier: 'payment:one',
+    reservationRef: 'external-spend:one',
+    challengeDigest: 'sha256:challenge',
+    amount: { currency: 'USDC', units: '10000', exponent: 6 },
+    settlementStatus: 'settled' as const,
+    paymentResponseDigest: 'sha256:payment-response',
+    transactionHash: `0x${'4'.repeat(64)}`,
+    observedAt: '2026-08-30T22:32:40.000Z',
+  }
+  return { ...material, digest: canonicalDigest(material) }
+}
+
 describe('operation recovery HTTP adapters', () => {
   it('signs only the neutral internal admission command for status, cancel, and reconcile', async () => {
     installTestSourceWriteSecret()
@@ -243,6 +270,41 @@ describe('operation recovery HTTP adapters', () => {
       invocationRef,
       evidence,
       idempotencyKey: 'reconcile:one',
+    }))
+  })
+
+  it('admits exact x402 recovery evidence and rejects malformed evidence before service dispatch', async () => {
+    const executor = service()
+    const evidence = x402ReconciliationEvidence()
+    const accepted = await handleOperationInvokeReconcilePost(
+      new Request(`https://ae.example/api/v1/operations/${invocationRef}/reconcile`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ idempotencyKey: 'reconcile:x402:one', evidence }),
+      }),
+      invocationRef,
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, operationInvokeService: executor },
+    )
+    const malformed = await handleOperationInvokeReconcilePost(
+      new Request(`https://ae.example/api/v1/operations/${invocationRef}/reconcile`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: 'reconcile:x402:malformed',
+          evidence: { ...evidence, transactionHash: '0x1234' },
+        }),
+      }),
+      invocationRef,
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, operationInvokeService: executor },
+    )
+
+    expect(accepted.status).toBe(200)
+    expect(malformed.status).toBe(400)
+    expect(executor.reconcileInvocation).toHaveBeenCalledTimes(1)
+    expect(executor.reconcileInvocation).toHaveBeenCalledWith(expect.objectContaining({
+      invocationRef,
+      idempotencyKey: 'reconcile:x402:one',
+      evidence,
     }))
   })
 

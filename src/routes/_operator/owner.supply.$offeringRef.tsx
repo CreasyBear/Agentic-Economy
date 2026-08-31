@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { brandNonEmpty } from "@/modules/common/ids";
+import { canonicalDigest } from "@/modules/common/canonical-digest";
 
 import { AeOperatorShell } from "@/components/ae/layout/AeOperatorShell";
 import type { OwnerOfferingEditorValue } from "@/components/ae/offerings/AeOwnerOfferings";
@@ -18,18 +19,21 @@ import {
   filterOwnerSupplyAuthorityOptions,
   admitOwnerCapabilityServer,
   readOwnerSupplyFunnelServer,
+  readOwnerSellerCanaryStatusServer,
   readOwnerProviderConnectionsServer,
   ownerSupplyActionContext,
   preflightOwnerOpenApiDocumentServer,
   preflightOwnerCapabilityServer,
   recheckOwnerCapabilityServer,
   republishOwnerCapabilityServer,
+  promoteOwnerSellerCanaryServer,
   runOwnerSupplyReadinessServer,
   runOwnerSupplyTestServer,
   withdrawOwnerCapabilityServer,
   type OwnerSupplyAdmissionResult,
   type OwnerSupplyCommandResult,
   type OwnerSupplyMaintenanceInput,
+  type OwnerSellerCanaryReadback,
   type SupplyFunnelActionContext,
   type SupplyFunnelRefusal,
   type SupplyFunnelStepCompletion,
@@ -47,6 +51,7 @@ export const Route = createFileRoute("/_operator/owner/supply/$offeringRef")({
         source: undefined,
         durableOffering: undefined,
         authorityOptions: [],
+        canary: { kind: "not_found" } as OwnerSellerCanaryReadback,
       };
     }
     const [supply, authorityOptions] = await Promise.all([
@@ -67,12 +72,19 @@ export const Route = createFileRoute("/_operator/owner/supply/$offeringRef")({
             (item) => item.offeringRef === params.offeringRef,
           )
         : undefined;
+    const canaryContext = durableOffering === undefined
+      ? undefined
+      : ownerSupplyActionContext(offerings.businessId, durableOffering);
+    const canary = durableOffering?.source?.kind === "x402" && canaryContext !== undefined
+      ? await readOwnerSellerCanaryStatusServer({ data: canaryContext })
+      : { kind: "not_found" as const };
     return {
       supply,
       offerings,
       source,
       durableOffering,
       authorityOptions,
+      canary,
     };
   },
   head: () => ({
@@ -95,6 +107,7 @@ function OwnerSupplyDetailRoute() {
   const recheck = useServerFn(recheckOwnerCapabilityServer);
   const withdraw = useServerFn(withdrawOwnerCapabilityServer);
   const republish = useServerFn(republishOwnerCapabilityServer);
+  const promoteCanary = useServerFn(promoteOwnerSellerCanaryServer);
   const durableOffering = result.durableOffering;
   const editorSource = result.source;
   if (result.supply.kind === "incomplete") {
@@ -199,6 +212,7 @@ function OwnerSupplyDetailRoute() {
           businessId,
           result.authorityOptions,
         )}
+        canary={result.canary}
         callbacks={{
           saveOffering: async (value) => {
             requestKey.current ??= crypto.randomUUID();
@@ -266,7 +280,17 @@ function OwnerSupplyDetailRoute() {
             test({
               data: {
                 ...actionContext,
-                operationKey: `owner-supply:test:${crypto.randomUUID()}`,
+                operationKey: ownerSupplyTestOperationKey(
+                  actionContext,
+                  durableOffering.source?.kind === "x402",
+                ),
+              },
+            }),
+          promoteCanary: async (actionContext, canaryRef) =>
+            promoteCanary({
+              data: {
+                ...actionContext,
+                canaryRef,
               },
             }),
           ...(context === undefined
@@ -281,6 +305,23 @@ function OwnerSupplyDetailRoute() {
       />
     </AeOperatorShell>
   );
+}
+
+export function ownerSupplyTestOperationKey(
+  context: SupplyFunnelActionContext,
+  isX402: boolean,
+): string {
+  if (!isX402) return `owner-supply:test:${crypto.randomUUID()}`;
+  const digest = canonicalDigest({
+    kind: "owner-supply-x402-canary:v1",
+    businessId: context.businessId,
+    offeringRef: context.offeringRef,
+    offeringRevision: context.offeringRevision,
+    offeringSourceHash: context.offeringSourceHash,
+    publicationRef: context.publicationRef,
+    publicationRevision: context.publicationRevision,
+  });
+  return `owner-supply:x402-canary:${digest.slice("sha256:".length)}`;
 }
 
 function ownerAdmissionCompletion(

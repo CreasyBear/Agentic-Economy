@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { useMemo, useState, type ReactElement } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -15,11 +15,34 @@ import '../setup/jsdom-platform'
 const shellMocks = vi.hoisted(() => ({
   readAgentKeys: vi.fn(async (): Promise<unknown[]> => []),
   readBuyerCredentialPresence: undefined as undefined | (() => Promise<boolean>),
+  localPreview: false,
+  useUser: vi.fn(() => ({
+    isLoaded: true,
+    isSignedIn: true,
+    user: {
+      id: 'user_private_ada',
+      fullName: 'Ada Lovelace',
+      primaryEmailAddress: { emailAddress: 'ada@supply.example' } as { emailAddress: string } | null,
+    },
+    sessionId: 'session_private_ada',
+  })),
+  userButton: vi.fn((_props: unknown) => undefined),
 }))
 
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-start')>()),
   useServerFn: () => shellMocks.readAgentKeys,
+}))
+vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
+  useUser: shellMocks.useUser,
+  UserButton: (props: unknown) => {
+    shellMocks.userButton(props)
+    return <button type="button" aria-label="Account menu" />
+  },
+}))
+vi.mock('@/lib/client/local-e2e-auth', () => ({
+  isLocalE2EAuthBypassEnabled: () => shellMocks.localPreview,
 }))
 vi.mock('@/components/ae/command-panel', () => ({
   CommandPanelProvider: ({
@@ -48,6 +71,9 @@ afterEach(() => {
   shellMocks.readAgentKeys.mockReset()
   shellMocks.readAgentKeys.mockResolvedValue([])
   shellMocks.readBuyerCredentialPresence = undefined
+  shellMocks.localPreview = false
+  shellMocks.useUser.mockClear()
+  shellMocks.userButton.mockClear()
 })
 
 describe('operator shell nested chrome', () => {
@@ -118,7 +144,7 @@ describe('operator shell nested chrome', () => {
     expect(heading.parentElement?.previousElementSibling).toBeNull()
     expect(screen.getByText('AECON')).toBeTruthy()
     expect(document.querySelector(`img[src="${AECON_MARK_SRC}"]`)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Supplier workspace home' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Account workspace home' })).toBeTruthy()
   })
 
   it('drops the record-header icon on operator lists', async () => {
@@ -171,7 +197,9 @@ describe('operator shell nested chrome', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Couldn’t load this page' })).toBeNull()
-    expect(screen.getByText('Workspace unavailable')).toBeTruthy()
+    expect(screen.getByText('Couldn’t load this page')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Check system status' }).getAttribute('href')).toBe('/status')
   })
 
   it('only reports active invoke-scoped buyer access to the shared command panel', async () => {
@@ -200,6 +228,160 @@ describe('operator shell nested chrome', () => {
       { revoked: false, expired: false, scopes: ['market_operations:invoke'] },
     ])
     await expect(readPresence()).resolves.toBe(true)
+  })
+})
+
+describe('owner mobile navigation', () => {
+  it('renders the exact owner shortcuts from the shared navigation model in order', async () => {
+    renderOperatorShell('owner', '/owner/offerings')
+
+    const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
+    const links = within(mobileNav).getAllByRole('link')
+
+    expect(links.map((link) => link.textContent)).toEqual(['Operations', 'Calls', 'Publish'])
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/owner/offerings',
+      '/activity',
+      '/owner/supply',
+    ])
+    expect(links.filter((link) => link.getAttribute('aria-current') === 'page'))
+      .toEqual([links[0]])
+    expect(mobileNav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(3)
+  })
+
+  it('marks one descendant destination current and none on an unrelated owner route', async () => {
+    const descendant = renderOperatorShell('owner', '/owner/offerings/new')
+    const descendantNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
+
+    expect(within(descendantNav).getAllByRole('link')
+      .filter((link) => link.getAttribute('aria-current') === 'page')
+      .map((link) => link.textContent))
+      .toEqual(['Operations'])
+
+    descendant.unmount()
+    renderOperatorShell('owner', '/owner/settings')
+    const unrelatedNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
+
+    expect(within(unrelatedNav).getAllByRole('link')
+      .filter((link) => link.hasAttribute('aria-current')))
+      .toEqual([])
+  })
+
+  it('is owner-only while preserving the full sidebar navigation', async () => {
+    const owner = renderOperatorShell('owner', '/owner/offerings')
+    const sidebarNav = await screen.findByRole('navigation', { name: 'Operator navigation' })
+
+    expect(within(sidebarNav).getByRole('link', { name: 'Operations' })).toBeTruthy()
+    expect(within(sidebarNav).getByRole('link', { name: 'Calls' })).toBeTruthy()
+    expect(within(sidebarNav).getByRole('link', { name: 'Keys' })).toBeTruthy()
+    expect(within(sidebarNav).getByRole('link', { name: 'Credit' })).toBeTruthy()
+    expect(within(sidebarNav).getByRole('link', { name: 'Supplier' })).toBeTruthy()
+    expect(within(sidebarNav).getByRole('link', { name: 'Publish' })).toBeTruthy()
+    expect(within(sidebarNav).getByRole('link', { name: 'Settings' })).toBeTruthy()
+
+    owner.unmount()
+    renderOperatorShell('admin', '/admin')
+
+    expect(screen.queryByRole('navigation', { name: 'Owner primary navigation' })).toBeNull()
+    expect(await screen.findByRole('navigation', { name: 'Operator navigation' })).toBeTruthy()
+  })
+
+  it('hides at md, clears mobile content, preserves desktop padding, and respects the safe area', async () => {
+    renderOperatorShell('owner', '/owner/offerings')
+
+    const mobileNav = await screen.findByRole('navigation', { name: 'Owner primary navigation' })
+    const content = screen.getByTestId('operator-content')
+
+    expect(mobileNav.classList.contains('md:hidden')).toBe(true)
+    expect(mobileNav.classList.contains('pb-[env(safe-area-inset-bottom,0px)]')).toBe(true)
+    expect(content.classList.contains('pb-[calc(4rem+env(safe-area-inset-bottom,0px))]')).toBe(true)
+    expect(content.classList.contains('md:pb-gutter')).toBe(true)
+    for (const link of within(mobileNav).getAllByRole('link')) {
+      expect(link.classList.contains('min-h-touch')).toBe(true)
+      expect(link.classList.contains('min-w-touch')).toBe(true)
+      expect(link.classList.contains('focus-visible:ring-2')).toBe(true)
+    }
+  })
+})
+
+describe('owner account identity', () => {
+  it('keeps the active account and maintained Clerk menu visible in expanded owner chrome', async () => {
+    renderOperatorShell('owner', '/owner/offerings')
+
+    const account = await screen.findByRole('group', { name: 'Signed in as ada@supply.example' })
+    expect(within(account).getByText('ada@supply.example').classList.contains('sr-only')).toBe(false)
+    expect(within(account).getByRole('button', { name: 'Account menu' })).toBeTruthy()
+    expect(shellMocks.userButton).toHaveBeenCalledOnce()
+    expect(shellMocks.userButton.mock.calls[0]?.[0]).toMatchObject({
+      appearance: {
+        elements: {
+          avatarBox: 'size-6',
+          userButtonTrigger: expect.stringContaining('focus-visible:ring-2'),
+        },
+      },
+      userProfileMode: 'modal',
+    })
+    expect(document.body.textContent).not.toContain('user_private_ada')
+    expect(document.body.textContent).not.toContain('session_private_ada')
+  })
+
+  it('retains identity semantics when the desktop sidebar is collapsed', async () => {
+    renderOperatorShell('owner', '/owner/offerings')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Collapse navigation' }))
+
+    const account = screen.getByRole('group', { name: 'Signed in as ada@supply.example' })
+    expect(within(account).getByText('ada@supply.example').classList.contains('sr-only')).toBe(true)
+    expect(within(account).getByRole('button', { name: 'Account menu' })).toBeTruthy()
+  })
+
+  it('falls back to the human name only when the primary email is absent', async () => {
+    shellMocks.useUser.mockReturnValueOnce({
+      isLoaded: true,
+      isSignedIn: true,
+      user: {
+        id: 'user_private_ada',
+        fullName: 'Ada Lovelace',
+        primaryEmailAddress: null,
+      },
+      sessionId: 'session_private_ada',
+    })
+
+    renderOperatorShell('owner', '/owner/offerings')
+
+    const account = await screen.findByRole('group', { name: 'Signed in as Ada Lovelace' })
+    expect(within(account).getByText('Ada Lovelace')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('user_private_ada')
+  })
+
+  it('keeps the identity visible inside the mobile drawer', async () => {
+    const desktopWidth = window.innerWidth
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
+
+    try {
+      renderOperatorShell('owner', '/owner/offerings')
+      fireEvent.click(await screen.findByRole('button', { name: 'Open operator navigation' }))
+
+      const account = await screen.findByRole('group', { name: 'Signed in as ada@supply.example' })
+      expect(within(account).getByText('ada@supply.example').classList.contains('sr-only')).toBe(false)
+      expect(within(account).getByRole('button', { name: 'Account menu' })).toBeTruthy()
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: desktopWidth })
+    }
+  })
+
+  it('renders an explicit local context without invoking Clerk identity primitives', async () => {
+    shellMocks.localPreview = true
+
+    renderOperatorShell('owner', '/owner/offerings')
+
+    const account = await screen.findByRole('group', { name: 'Local preview account context' })
+    expect(within(account).getByText('Local preview')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Account menu' })).toBeNull()
+    expect(shellMocks.useUser).not.toHaveBeenCalled()
+    expect(shellMocks.userButton).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain('user_private_ada')
+    expect(document.body.textContent).not.toContain('session_private_ada')
   })
 })
 
@@ -234,6 +416,20 @@ function OperatorShellHarness() {
   )
 }
 
+function renderOperatorShell(operatorRole: 'owner' | 'admin', currentPath: string) {
+  return renderAt(
+    <AeOperatorShell
+      operatorRole={operatorRole}
+      title="Operator workspace"
+      description="Operator workspace content."
+      currentPath={currentPath}
+    >
+      <div>Workspace body</div>
+    </AeOperatorShell>,
+    currentPath,
+  )
+}
+
 function renderAt(ui: ReactElement, pathname: string) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
@@ -246,6 +442,8 @@ function renderAt(ui: ReactElement, pathname: string) {
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings/workspace' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings/connections' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/supply' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/activity' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
   ])
   const router = createRouter({

@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import { createElement } from 'react'
 import type { ReactNode } from 'react'
-import { Route as OwnerSupplyDetailRoute } from '@/routes/_operator/owner.supply.$offeringRef'
+import {
+  Route as OwnerSupplyDetailRoute,
+  ownerSupplyTestOperationKey,
+} from '@/routes/_operator/owner.supply.$offeringRef'
 const routeMocks = vi.hoisted(() => ({
   loaderData: undefined as unknown,
   funnelProps: undefined as
@@ -21,6 +24,7 @@ const routeMocks = vi.hoisted(() => ({
   preflightDocumentRef: Symbol('preflightDocument'),
   readinessRef: Symbol('readiness'),
   testRef: Symbol('test'),
+  promoteRef: Symbol('promote'),
   recheckRef: Symbol('recheck'),
   withdrawRef: Symbol('withdraw'),
   republishRef: Symbol('republish'),
@@ -63,6 +67,7 @@ vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
   republishOwnerCapabilityServer: routeMocks.republishRef,
   runOwnerSupplyReadinessServer: routeMocks.readinessRef,
   runOwnerSupplyTestServer: routeMocks.testRef,
+  promoteOwnerSellerCanaryServer: routeMocks.promoteRef,
   withdrawOwnerCapabilityServer: routeMocks.withdrawRef,
   filterOwnerSupplyAuthorityOptions: () => [],
   ownerSupplyActionContext: () => undefined,
@@ -75,6 +80,24 @@ afterEach(() => {
   routeMocks.funnelProps = undefined
   routeMocks.serverFnResults.clear()
   vi.clearAllMocks()
+})
+
+it('keeps one x402 canary operation key stable for the exact offering and publication revision', () => {
+  const context = {
+    businessId: 'business:one',
+    offeringRef: 'offering:one',
+    offeringRevision: 3,
+    offeringSourceHash: `sha256:${'a'.repeat(64)}`,
+    publicationRef: 'publication:one',
+    publicationRevision: 2,
+  }
+  const first = ownerSupplyTestOperationKey(context, true)
+  const retry = ownerSupplyTestOperationKey({ ...context }, true)
+  const nextRevision = ownerSupplyTestOperationKey({ ...context, publicationRevision: 3 }, true)
+
+  expect(retry).toBe(first)
+  expect(nextRevision).not.toBe(first)
+  expect(first).toMatch(/^owner-supply:x402-canary:[0-9a-f]{64}$/u)
 })
 
 const PREPARED_DIGEST = `sha256:${'b'.repeat(64)}`

@@ -25,8 +25,14 @@ const app = defineApp({
     CDP_API_KEY_SECRET: v.optional(v.string()),
     CDP_WALLET_SECRET: v.optional(v.string()),
     AE_X402_CDP_ACCOUNT_NAME: v.optional(v.string()),
+    AE_X402_CDP_EXPECTED_EVM_ADDRESS: v.optional(v.string()),
+    AE_X402_CDP_ACCOUNT_POLICY_ID: v.optional(v.string()),
+    AE_X402_CDP_PROJECT_POLICY_ID: v.optional(v.string()),
+    AE_X402_CDP_POLICY_RULES_DIGEST: v.optional(v.string()),
+    AE_X402_CDP_CREDENTIAL_GENERATION: v.optional(v.string()),
     AE_X402_CUSTODY_ENABLED: v.optional(v.string()),
     AE_X402_CUSTODY_MAX_ATOMIC: v.optional(v.string()),
+    AE_X402_CUSTODY_DAILY_MAX_ATOMIC: v.optional(v.string()),
   },
 })
 

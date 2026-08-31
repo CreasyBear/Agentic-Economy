@@ -38,13 +38,18 @@ export function AeSiteFooter() {
                       <AeMarkedDivider orientation="vertical" />
                     </div>
                   ) : null}
-                  <div className="grid content-start gap-related">
+                  <section
+                    aria-labelledby={column.id}
+                    className="grid content-start gap-related"
+                  >
                     {index > 0 ? (
                       <div className="md:hidden">
                         <AeMarkedDivider orientation="horizontal" />
                       </div>
                     ) : null}
-                    <p className="font-sans text-sm font-medium">{column.title}</p>
+                    <h2 id={column.id} className="font-sans text-sm font-medium">
+                      {column.title}
+                    </h2>
                     <ul className="grid gap-2">
                       {column.links.map((link) => (
                         <li key={link.label}>
@@ -52,7 +57,7 @@ export function AeSiteFooter() {
                         </li>
                       ))}
                     </ul>
-                  </div>
+                  </section>
                 </div>
               ))}
             </nav>

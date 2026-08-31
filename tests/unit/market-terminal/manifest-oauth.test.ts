@@ -75,6 +75,11 @@ describe('market terminal manifest OAuth contract', () => {
     expect(serialized).not.toContain('outputJsonSchema')
     expect(compact.fullContract).toBe('ae manifest --technical --json')
     expect((compact.call as JsonRecord).connected).toMatchObject({ transport: 'operation.invoke:v1' })
+    expect(compact.account).toMatchObject({
+      disconnect: 'ae account disconnect',
+      disconnectDefaultProfile: 'market',
+      disconnectSupplier: 'ae account disconnect supplier',
+    })
   })
 
   it('serializes the registration request accepted by the OAuth handler', async () => {

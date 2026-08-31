@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -200,6 +200,133 @@ describe('operator command panel', () => {
     ).toBe(`/operations/${encodeURIComponent(TEST_OPERATION_REF)}`)
   })
 
+  it('opens the newly selected Operation when ArrowDown and Enter arrive in one input turn', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(twoOperationSearchPayload())))
+    const readDetail = vi.fn(async (operationRef: string): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(operationRef),
+    }))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = screen.getByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+    const options = await screen.findAllByRole('option')
+    expect(options).toHaveLength(2)
+
+    act(() => {
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'Enter' })
+    })
+
+    expect(readDetail).toHaveBeenCalledTimes(1)
+    expect(readDetail).toHaveBeenCalledWith(SECOND_TEST_OPERATION_REF)
+    expect(await screen.findByRole('button', { name: 'Copy Operation reference' })).toBeTruthy()
+  })
+
+  it('preserves ArrowDown and Enter until deferred search results can open the second Operation', async () => {
+    let resolveSearch: ((response: Response) => void) | undefined
+    const deferredSearch = new Promise<Response>((resolve) => {
+      resolveSearch = resolve
+    })
+    const fetchSearch = vi.fn(async () => await deferredSearch)
+    vi.stubGlobal('fetch', fetchSearch)
+    const readDetail = vi.fn(async (operationRef: string): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(operationRef),
+    }))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = screen.getByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'twitter' } })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(readDetail).not.toHaveBeenCalled()
+    await waitFor(() => expect(fetchSearch).toHaveBeenCalledTimes(1))
+    if (resolveSearch === undefined) throw new Error('deferred_search_not_started')
+    resolveSearch(jsonResponse(twoOperationSearchPayload()))
+
+    await waitFor(() => {
+      expect(readDetail).toHaveBeenCalledTimes(1)
+      expect(readDetail).toHaveBeenCalledWith(SECOND_TEST_OPERATION_REF)
+    })
+    expect(await screen.findByRole('button', { name: 'Copy Operation reference' })).toBeTruthy()
+  })
+
+  it('uses the live input query when change, ArrowDown, and Enter precede the React commit', async () => {
+    rememberRecentOperationRef(RECENT_TEST_OPERATION_REF)
+    let resolveSearch: ((response: Response) => void) | undefined
+    const deferredSearch = new Promise<Response>((resolve) => {
+      resolveSearch = resolve
+    })
+    const fetchSearch = vi.fn(async () => await deferredSearch)
+    vi.stubGlobal('fetch', fetchSearch)
+    const readDetail = vi.fn(async (operationRef: string): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(operationRef),
+    }))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = screen.getByRole('combobox', { name: 'Search operations' })
+    expect(screen.getByRole('option', { name: new RegExp(RECENT_TEST_OPERATION_REF) })).toBeTruthy()
+
+    act(() => {
+      fireEvent.change(input, { target: { value: 'twitter' } })
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'Enter' })
+    })
+
+    expect(readDetail).not.toHaveBeenCalled()
+    await waitFor(() => expect(fetchSearch).toHaveBeenCalledTimes(1))
+    if (resolveSearch === undefined) throw new Error('deferred_search_not_started')
+    resolveSearch(jsonResponse(twoOperationSearchPayload()))
+
+    await waitFor(() => {
+      expect(readDetail).toHaveBeenCalledTimes(1)
+      expect(readDetail).toHaveBeenCalledWith(SECOND_TEST_OPERATION_REF)
+    })
+  })
+
+  it('keeps final-query intent across character input commits queued in one turn', async () => {
+    rememberRecentOperationRef(RECENT_TEST_OPERATION_REF)
+    let resolveSearch: ((response: Response) => void) | undefined
+    const deferredSearch = new Promise<Response>((resolve) => {
+      resolveSearch = resolve
+    })
+    const fetchSearch = vi.fn(async () => await deferredSearch)
+    vi.stubGlobal('fetch', fetchSearch)
+    const readDetail = vi.fn(async (operationRef: string): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(operationRef),
+    }))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = screen.getByRole('combobox', { name: 'Search operations' })
+    expect(screen.getByRole('option', { name: new RegExp(RECENT_TEST_OPERATION_REF) })).toBeTruthy()
+
+    act(() => {
+      for (const value of ['t', 'tw', 'twi', 'twit', 'twitt', 'twitte', 'twitter']) {
+        fireEvent.input(input, { target: { value } })
+      }
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'Enter' })
+    })
+
+    expect(readDetail).not.toHaveBeenCalled()
+    await waitFor(() => expect(fetchSearch).toHaveBeenCalledTimes(1))
+    if (resolveSearch === undefined) throw new Error('deferred_search_not_started')
+    resolveSearch(jsonResponse(twoOperationSearchPayload()))
+
+    await waitFor(() => {
+      expect(readDetail).toHaveBeenCalledTimes(1)
+      expect(readDetail).toHaveBeenCalledWith(SECOND_TEST_OPERATION_REF)
+    })
+  })
+
   it('copies the public reference and ready-to-run inspect and call commands', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
@@ -278,9 +405,8 @@ describe('operator command panel', () => {
     })
     const recent = await screen.findByRole('option', { name: new RegExp(TEST_OPERATION_REF) })
     expect(recent.textContent).toContain(TEST_OPERATION_REF)
-    const persisted = JSON.stringify(window.localStorage)
-    expect(persisted).toContain(TEST_OPERATION_REF)
-    expect(persisted).not.toContain('weather forecast')
+    expect(readRecentOperationRefs()).toContain(TEST_OPERATION_REF)
+    expect(window.localStorage.getItem('ae:command-panel:recent-operation-refs:v1')).not.toContain('weather forecast')
   })
 
   it('does not offer a call command without a published input example and guides setup when uncallable', async () => {
@@ -304,7 +430,7 @@ describe('operator command panel', () => {
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
     expect(await screen.findByText(/not currently callable/iu)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Copy Inspect availability' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Find callable alternatives' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Continue supplier setup' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Copy Call command' })).toBeNull()
   })
@@ -363,7 +489,7 @@ describe('operator command panel', () => {
 
     expect(await screen.findByText('Integration available')).toBeTruthy()
     expect(screen.queryByText('Ready now')).toBeNull()
-    expect(screen.getByRole('link', { name: 'Inspect Operation' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Find callable alternatives' })).toBeTruthy()
   })
 
   it('pops one inspect layer per Escape before closing, then survives ⌘K flicker', async () => {
@@ -421,6 +547,32 @@ describe('operator command panel', () => {
     expect(await screen.findByText(/temporarily unavailable/)).toBeTruthy()
   })
 
+  it('turns a no-match result into clear and browse continuations', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      ...operationSearchPayload(),
+      items: [],
+      matchedCount: 0,
+    })))
+
+    const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(),
+    }))
+    renderPanel({ openImmediately: true, readDetail })
+    const input = screen.getByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'teleport a sandwich' } })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(await screen.findByText(/No Operations matched/)).toBeTruthy()
+    expect(readDetail).not.toHaveBeenCalled()
+    const browse = screen.getByRole('link', { name: 'Browse current Operations' })
+    expect(browse.getAttribute('href')).toBe('/market?window=30d#operations')
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect((input as HTMLInputElement).value).toBe('')
+  })
+
   it('rejects the retired keyless authentication discriminator', async () => {
     vi.stubGlobal(
       'fetch',
@@ -445,6 +597,8 @@ function jsonResponse(payload: unknown): Response {
 
 /** Shared canonical-ref constant valid under the published operationRef regex. */
 const TEST_OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
+const SECOND_TEST_OPERATION_REF = `operation:v1:${'b'.repeat(64)}`
+const RECENT_TEST_OPERATION_REF = `operation:v1:${'c'.repeat(64)}`
 
 function operationSearchPayload(authentication: unknown = { kind: 'ae_api_key' }) {
   return {
@@ -471,13 +625,33 @@ function operationSearchPayload(authentication: unknown = { kind: 'ae_api_key' }
   }
 }
 
+function twoOperationSearchPayload() {
+  const first = operationSearchPayload()
+  const firstItem = first.items[0]
+  if (firstItem === undefined) throw new Error('operation_search_fixture_missing')
+  return {
+    ...first,
+    items: [
+      firstItem,
+      {
+        ...firstItem,
+        operationRef: SECOND_TEST_OPERATION_REF,
+        capabilityId: 'convert.currency.exchange-rate',
+        title: 'Currency exchange rate',
+        summary: 'Current exchange rate for a currency pair.',
+      },
+    ],
+    matchedCount: 2,
+  }
+}
+
 /** Runtime-validated through the published detail contract — no casts. */
-export function detailFixture(): PublicOperationDescriptor {
+export function detailFixture(operationRef: string = TEST_OPERATION_REF): PublicOperationDescriptor {
   const parsed = operationDetailOutputSchema.parse({
     kind: 'found',
     schemaVersion: 'registry-operations:v1',
     operation: {
-      operationRef: TEST_OPERATION_REF,
+      operationRef,
       operationId: 'op_test_a',
       callVia: '/api/v1/operations/call',
       paymentLane: 'brokered',

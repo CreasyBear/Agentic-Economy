@@ -11,7 +11,13 @@ export const recoveryArgs = {
   invocationRef: v.string(),
   principalId: v.string(),
   credentialId: v.string(),
-  mode: v.union(v.literal('status'), v.literal('cancel'), v.literal('reconcile')),
+  mode: v.union(
+    v.literal('status'),
+    v.literal('cancel'),
+    v.literal('reconcile'),
+    v.literal('reconcile_pre_submission'),
+    v.literal('reconcile_managed_signing'),
+  ),
   idempotencyKey: v.optional(v.string()),
   evidence: v.optional(v.union(reconciliationEvidenceValue, x402PaymentReconciliationEvidenceValue)),
 } as const

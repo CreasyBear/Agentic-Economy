@@ -278,6 +278,7 @@ export {
   parseAdmittedX402CatalogPayment,
   parseHttpJsonTransportConfiguration,
   parseMcpJsonRpcTransportConfiguration,
+  parsePinnedX402PaymentRequiredJson,
   parseX402FetchTransportConfiguration,
   readHttpJsonProbeConfiguration,
   validPublicHttpsEndpoint,
@@ -478,7 +479,48 @@ export {
   type SupplyAuditEventRow,
 } from './internal/shared'
 export { defaultSupplyPricingConfig } from './internal/supply-funnel/pricing-port'
-export { transportObservationDigest } from './internal/x402-invocation-policy'
+export {
+  paymentLaneAdmission,
+  transportObservationDigest,
+} from './internal/x402-invocation-policy'
+export type {
+  EconomicRail,
+  PaymentLaneAdmission,
+} from './internal/x402-invocation-policy'
+export {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
+  BASE_SEPOLIA_NETWORK,
+  BASE_SEPOLIA_USDC_ADDRESS,
+  isX402PaymentRequirementForProfile,
+  normalizeX402PaymentRequirement,
+  x402PaymentProfileForEnvironment,
+} from './internal/x402-payment-profile'
+export type {
+  X402AeEnvironment,
+  X402PaymentProfile,
+} from './internal/x402-payment-profile'
+export {
+  validX402SellerClaimTime,
+  x402SellerClaimDigest,
+  x402SellerClaimMessage,
+} from './internal/x402-seller-claim'
+export type { X402SellerClaim } from './internal/x402-seller-claim'
+export {
+  canonicalEvmAddress,
+  evmAddressEquals,
+  isEvmAddress,
+  isNonzeroEvmAddress,
+  utf8ToHex,
+  verifyEip191Message,
+  type EvmAddress,
+  type Hex,
+} from './internal/x402-evm-protocol'
+export {
+  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+  x402SellerCanaryAdmissionEvidenceRef,
+  x402SellerCanaryAdmissionIsSatisfied,
+} from './internal/x402-seller-onboarding/admission'
 
 const MAX_OPAQUE_CONFIG_BYTES = 65_536
 const encoder = new TextEncoder()
@@ -655,3 +697,40 @@ export function capabilityBindingEligibilityHash(input: Readonly<{
 }>): string {
   return canonicalDigest(input as StableHashValue)
 }
+
+export {
+  SELLER_ONBOARDING_CANARY_PURPOSE,
+  createSellerOnboardingCanaryCommitment,
+  createX402SellerOnboarding,
+  evaluateX402SellerPromotion,
+  projectSellerOnboardingCanaryStatus,
+  sellerCanaryCompletionEvidenceMatches,
+  sellerOnboardingCanaryExecutionEnvelope,
+  transitionX402SellerOnboarding,
+  validX402SellerIdentity,
+  x402SellerIdentityDigest,
+} from './internal/x402-seller-onboarding'
+export type {
+  CreateSellerOnboardingCanaryInput,
+  CreateX402SellerOnboardingCommand,
+  CurrentSellerCanaryOperationCommitment,
+  EvaluateX402SellerPromotionInput,
+  OperationExecutionPurpose,
+  SellerCanaryOutputEvidenceRequirement,
+  SellerOnboardingCanaryCommitment,
+  SellerOnboardingCanaryExecutionEnvelope,
+  SellerOnboardingCanaryInvocationObservation,
+  SellerOnboardingCanaryPromotionEvidence,
+  SellerOnboardingCanaryStatus,
+  X402CanaryEvidence,
+  X402CanaryPaymentOutcome,
+  X402SellerIdentity,
+  X402SellerOnboarding,
+  X402SellerOnboardingCommand,
+  X402SellerOnboardingRefusal,
+  X402SellerOnboardingResult,
+  X402SellerOnboardingState,
+  X402SellerPromotionAnchor,
+  X402SellerPromotionRefusal,
+  X402SellerPromotionResult,
+} from './internal/x402-seller-onboarding'

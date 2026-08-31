@@ -88,9 +88,24 @@ const publicOperationCardPart = v.union(
   v.object({
     ...publicCardChrome,
     kind: v.literal('execute'),
-    state: v.literal('complete'),
+    state: v.union(
+      v.literal('completed'),
+      v.literal('pending'),
+      v.literal('needs_authority'),
+      v.literal('reconciliation_required'),
+      v.literal('refused'),
+    ),
     operationRefs: v.array(v.string()),
     name: v.optional(v.string()),
+    invocationRef: v.optional(v.string()),
+    outputPreview: v.optional(v.string()),
+    outputTruncated: v.optional(v.boolean()),
+    facts: v.array(publicFact),
+    receiptRef: v.optional(v.string()),
+    evidenceHash: v.optional(v.string()),
+    summary: v.string(),
+    nextAction: v.optional(v.string()),
+    retryable: v.optional(v.boolean()),
   }),
 )
 
@@ -181,14 +196,40 @@ function sanitizeStoredCard(stored: Record<string, unknown>): PublicOperationCar
     }
   }
   if (stored.kind === 'execute') {
+    const state = stored.state === 'completed'
+      || stored.state === 'pending'
+      || stored.state === 'needs_authority'
+      || stored.state === 'reconciliation_required'
+      || stored.state === 'refused'
+      ? stored.state
+      : 'refused'
     return {
       type: 'operation-card',
       kind: 'execute',
       toolId: stored.toolId as PublicOperationCard['toolId'],
       title,
-      state: 'complete',
+      state,
       operationRefs,
       ...(typeof stored.name === 'string' ? { name: sanitizeSummary(stored.name) } : {}),
+      ...(typeof stored.invocationRef === 'string'
+        ? { invocationRef: sanitizeSummary(stored.invocationRef) }
+        : {}),
+      ...(typeof stored.outputPreview === 'string'
+        ? { outputPreview: sanitizePublicString(stored.outputPreview, MAX_PUBLIC_TEXT_CHARS) }
+        : {}),
+      ...(stored.outputTruncated === true ? { outputTruncated: true } : {}),
+      facts: sanitizeFacts(stored.facts),
+      ...(typeof stored.receiptRef === 'string'
+        ? { receiptRef: sanitizeSummary(stored.receiptRef) }
+        : {}),
+      ...(typeof stored.evidenceHash === 'string'
+        ? { evidenceHash: sanitizeSummary(stored.evidenceHash) }
+        : {}),
+      summary: typeof stored.summary === 'string' ? sanitizeSummary(stored.summary) : 'Call result recorded.',
+      ...(typeof stored.nextAction === 'string'
+        ? { nextAction: sanitizeSummary(stored.nextAction) }
+        : {}),
+      ...(typeof stored.retryable === 'boolean' ? { retryable: stored.retryable } : {}),
     }
   }
   return null

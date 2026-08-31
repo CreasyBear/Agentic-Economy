@@ -19,6 +19,7 @@ const SCHEMA_KEYS = new Set([
   "const",
   "contains",
   "default",
+  "definitions",
   "dependentRequired",
   "dependentSchemas",
   "deprecated",
@@ -124,6 +125,7 @@ function projectSchemaValue(
     if (
       key === "properties" ||
       key === "$defs" ||
+      key === "definitions" ||
       key === "patternProperties"
     ) {
       if (!isRecord(child))

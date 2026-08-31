@@ -25,12 +25,19 @@ import {
   sourceWriteRequestArg,
 } from '../../sourceWriteAdmission'
 import {
+  isCanonicalCredentiallessX402ProviderConnection,
+  validateProviderConnectionAuthority,
+  type ProviderConnection,
+} from '@/modules/capability-supply/provider-connection'
+import {
   materializeRuntimePublishedOperation,
   parsePublishedOperationSnapshot,
   type PublishedOperation,
+  validPublicHttpsEndpoint,
 } from '@/modules/capability-supply/public'
 import { isPublicOperationRef } from '@/modules/capability-supply/public'
 import { type AdmitArgs, type OperationInvokePrincipal } from './admission'
+import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
 
 type OperationInvocationRow = Doc<'capabilityOperationInvocations'>
 type OperationResult = Infer<typeof operationResultValue>
@@ -94,6 +101,7 @@ export type RecoveryRow = Readonly<{
   environment: 'sandbox' | 'production'
   state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
   operationRef: string
+  sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   inputDigest: string
   requestDigest: string
   grantGeneration: number
@@ -129,6 +137,9 @@ function projectRecoveryRow(row: OperationInvocationRow): RecoveryRow | null {
     environment: row.environment,
     state: row.state,
     operationRef: row.operationRef,
+    ...(row.sellerOnboardingCanary === undefined
+      ? {}
+      : { sellerOnboardingCanary: structuredClone(row.sellerOnboardingCanary) }),
     inputDigest: row.inputDigest,
     requestDigest: row.requestDigest,
     grantGeneration: row.grantGeneration,
@@ -773,7 +784,7 @@ function recoveryProjectionTransitionAllowed(row: OperationInvocationRow, args: 
     || resetsPendingRecovery(row, args)
 }
 
-function recoveryProjectionPatch(args: ProjectRecoveryArgs) {
+function recoveryProjectionPatch(row: OperationInvocationRow, args: ProjectRecoveryArgs) {
   return {
     state: args.state,
     ...(args.clearResult ? { result: undefined } : args.result === undefined ? {} : { result: args.result }),
@@ -781,6 +792,7 @@ function recoveryProjectionPatch(args: ProjectRecoveryArgs) {
     ...(args.clearAttemptRef ? { attemptRef: undefined } : args.attemptRef === undefined ? {} : { attemptRef: args.attemptRef }),
     ...(args.clearEvidenceHash ? { evidenceHash: undefined } : {}),
     ...(args.clearDispatchState ? { dispatchState: undefined } : args.dispatchState === undefined ? {} : { dispatchState: args.dispatchState }),
+    ...(resetsPendingRecovery(row, args) ? { reconciliation: undefined } : {}),
     updatedAt: args.now,
   }
 }
@@ -811,7 +823,7 @@ export async function projectRecoveryHandler(
   }
   if (isCompletedProjection(row)) return { kind: 'recorded' as const }
   if (!recoveryProjectionTransitionAllowed(row, args)) return { kind: 'recorded' as const }
-  await ctx.db.patch(row._id, recoveryProjectionPatch(args))
+  await ctx.db.patch(row._id, recoveryProjectionPatch(row, args))
   return { kind: 'recorded' as const }
 }
 
@@ -848,4 +860,50 @@ export async function readProviderLeaseAuthorityHandler(
     approvalDecisionRef: approval.decisionRef,
     approvalDecisionDigest: approval.decisionDigest,
   }
+}
+
+export async function readCurrentProviderConnectionAuthorityHandler(
+  ctx: QueryCtx,
+  args: Readonly<{
+    connectionRef: string
+    providerRef: string
+    adapterId: string
+    authorityGeneration: number
+    authorityDigest: string
+    resourceUrl: string
+    now: number
+  }>,
+) {
+  const connection = await ctx.db.query('capabilityProviderConnections')
+    .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef))
+    .unique()
+  if (connection === null) return null
+  const current: ProviderConnection = {
+    ...connection,
+    businessId: String(connection.businessId),
+  }
+  const exactAuthority = [
+    current.connectionRef === args.connectionRef,
+    current.providerRef === args.providerRef,
+    current.adapterId === args.adapterId,
+    validateProviderConnectionAuthority(
+      current,
+      args.authorityGeneration,
+      args.authorityDigest,
+      args.now,
+    ).kind === 'valid',
+  ].every(Boolean)
+  if (!exactAuthority) return null
+  if (!isCanonicalCredentiallessX402ProviderConnection(current)) {
+    return { kind: 'credentialed' as const }
+  }
+  const resource = validPublicHttpsEndpoint(args.resourceUrl)
+  return [
+    resource !== undefined,
+    resource?.hash === '',
+    current.grantedResources.length === 1,
+    current.grantedResources[0] === resource?.toString(),
+  ].every(Boolean)
+    ? { kind: 'credentialless_x402' as const }
+    : null
 }

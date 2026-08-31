@@ -11,7 +11,7 @@ import {
   pricingConfigDigest,
 } from '@/modules/money/public'
 import {
-  operationInvokeReceiptAsset,
+  operationInvokeReceiptPaymentProfile,
   type OperationInvokeReceipt,
 } from '@/modules/capability-execution/operation-invoke-contracts'
 import type { ActionCtx } from '../../../../convex/_generated/server'
@@ -55,6 +55,13 @@ export function buildBrokeredX402Receipt(input: Readonly<{
 }>): OperationInvokeReceipt | undefined {
   const identityPricing = normalizePricingConfig(input.operation.identity.pricingConfig)
   const operationPricing = normalizePricingConfig(input.operation.pricingConfig)
+  const paymentProfile = input.operation.identity.payment.kind === 'x402'
+    ? operationInvokeReceiptPaymentProfile(
+        input.operation.runtimeEnvironment,
+        input.operation.identity.payment.network,
+        input.operation.identity.payment.asset,
+      )
+    : undefined
   if (
     identityPricing.kind === 'invalid'
     || operationPricing.kind === 'invalid'
@@ -67,8 +74,7 @@ export function buildBrokeredX402Receipt(input: Readonly<{
     || input.operation.identity.priceDigest !== input.operation.priceDigest
     || pricingConfigDigest(identityPricing.config) !== pricingConfigDigest(operationPricing.config)
     || input.operation.identity.payment.kind !== 'x402'
-    || input.operation.identity.payment.network !== 'eip155:8453'
-    || input.operation.identity.payment.asset.toLowerCase() !== operationInvokeReceiptAsset.toLowerCase()
+    || paymentProfile === undefined
     || input.evidenceHash.trim().length === 0
     || input.issuedAt.trim().length === 0
   ) return undefined
@@ -83,12 +89,13 @@ export function buildBrokeredX402Receipt(input: Readonly<{
     providerQuotedAmount,
     agenticEconomyFee,
     totalBuyerAuthorization,
+    network: paymentProfile.network,
+    asset: paymentProfile.asset,
   } as StableHashValue
   return {
     receiptRef: `receipt:${canonicalDigest(receiptIdentity)}`,
     state: input.state,
-    network: 'eip155:8453',
-    asset: operationInvokeReceiptAsset,
+    ...paymentProfile,
     providerQuotedAmount,
     agenticEconomyFee,
     totalBuyerAuthorization,

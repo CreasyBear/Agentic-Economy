@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-const registry = vi.hoisted(() => ({ run: vi.fn() }))
+const market = vi.hoisted(() => ({ read: vi.fn() }))
 
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => ({
@@ -10,7 +10,8 @@ vi.mock('@tanstack/react-start', () => ({
 }))
 vi.mock('@/modules/actions', () => ({
   listMcpActions: () => [
-    { id: 'public-read', readOnly: true, credentialAdmission: undefined },
+    { id: 'registry.operations.search', readOnly: true, credentialAdmission: undefined },
+    { id: 'registry.services_list', readOnly: true, credentialAdmission: undefined },
     { id: 'credentialed-read', readOnly: true, credentialAdmission: { kind: 'credential' } },
   ],
   describeActionForAgent: (action: { id: string }) => ({
@@ -20,18 +21,15 @@ vi.mock('@/modules/actions', () => ({
     boundaries: ['no account mutation'],
   }),
 }))
-vi.mock('@/modules/registry/registry.actions', () => ({
-  registryServicesListAction: {
-    schema: { parse: (value: unknown) => value },
-    run: registry.run,
-  },
+vi.mock('@/modules/market/server', () => ({
+  readMarketRouteProjection: market.read,
 }))
 
 import { loadSupplyLandingReadbackServer } from '@/lib/server/supply-landing.functions'
 
 describe('Supply landing public exemption', () => {
-  it('loadSupplyLandingReadbackServer returns only credential-free public tools and registry projections', async () => {
-    registry.run.mockResolvedValue({ items: [], cursor: null, hasMore: false })
+  it('loadSupplyLandingReadbackServer returns only credential-free Operation tools and canonical listings', async () => {
+    market.read.mockResolvedValue({ window: '30d', catalog: { kind: 'no_candidates', matchedCount: 0 } })
 
     const result = await (loadSupplyLandingReadbackServer as unknown as () => Promise<unknown>)()
 
@@ -39,18 +37,15 @@ describe('Supply landing public exemption', () => {
     expect(result).toEqual({
       kind: 'available',
       tools: [{
-        id: 'public-read',
+        id: 'registry.operations.search',
         name: 'Public read',
         summary: 'Reads public registry data.',
         boundaries: ['no account mutation'],
       }],
-      services: { items: [], cursor: null, hasMore: false },
+      listings: [],
       evidence: 'source',
     })
-    expect(JSON.stringify(result)).not.toMatch(/credentialed-read|secret|ownerId|accountRef/u)
-    expect(registry.run).toHaveBeenCalledWith({
-      data: { limit: 10 },
-      context: { caller: 'ui' },
-    })
+    expect(JSON.stringify(result)).not.toMatch(/credentialed-read|registry\.services_list|secret|ownerId|accountRef/u)
+    expect(market.read).toHaveBeenCalledWith('30d')
   })
 })

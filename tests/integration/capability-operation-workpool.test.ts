@@ -94,8 +94,10 @@ function publicReceipt(
   }
 }
 
-async function seedKeylessLookup(backend: ConvexFixtureBackend): Promise<string> {
-  const suffix = 'workpool-lookup'
+async function seedKeylessLookup(
+  backend: ConvexFixtureBackend,
+  suffix = 'workpool-lookup',
+): Promise<string> {
   const { businessId, owner } = await publishedBusinessOwner(backend, suffix)
   await seedCatalogOffering(backend, businessId, suffix, '/lookup', 'GET')
   const source = capabilityPublicationInput(businessId, suffix)
@@ -905,7 +907,8 @@ describe('capability operation Workpool lifecycle', () => {
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
 
     const backend = convexTestWithWorkers()
-    const operationRef = await seedKeylessLookup(backend)
+    const operationRef = await seedKeylessLookup(backend, 'workpool-lookup-primary')
+    const alternativeOperationRef = await seedKeylessLookup(backend, 'workpool-lookup-alternative')
     const scopes = [CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, MARKET_OPERATIONS_INVOKE_SCOPE] as const
     const seeded = await seedPrincipal(backend, 'served-cli', Date.now(), operationRef, scopes)
     const principal = seeded.principal
@@ -961,19 +964,29 @@ describe('capability operation Workpool lifecycle', () => {
       const search = await runCli(['search', 'lookup']) as {
         kind: string
         items: Array<{ operationRef: string }>
+        nextCommand: string
       }
-      expect(search).toMatchObject({ kind: 'ok', items: [{ operationRef }] })
+      const comparedOperationRefs = search.items.map((item) => item.operationRef)
+      expect(search.kind).toBe('ok')
+      expect(comparedOperationRefs).toEqual(expect.arrayContaining([
+        operationRef,
+        alternativeOperationRef,
+      ]))
+      expect(search.nextCommand).toBe(`ae compare ${comparedOperationRefs.slice(0, 4).join(' ')} --base-url ${served.origin} --json`)
       await expect(runCli(['inspect', operationRef])).resolves.toMatchObject({
         kind: 'found',
         operation: { operationRef },
       })
-      await expect(runCli(['compare', operationRef])).resolves.toMatchObject({
+      await expect(runCli(['compare', ...comparedOperationRefs])).resolves.toMatchObject({
         kind: 'ok',
-        operations: [{ operationRef }],
+        operations: expect.arrayContaining([
+          expect.objectContaining({ operationRef }),
+          expect.objectContaining({ operationRef: alternativeOperationRef }),
+        ]),
       })
-      await expect(runCli(['inspect-plan', operationRef])).resolves.toMatchObject({
+      await expect(runCli(['inspect-plan', ...comparedOperationRefs])).resolves.toMatchObject({
         kind: 'ok',
-        operationRefs: [operationRef],
+        operationRefs: comparedOperationRefs,
       })
 
       const idempotencyKey = 'served-cli-golden-replay'

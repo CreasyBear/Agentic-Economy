@@ -6,6 +6,21 @@ import type { ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
+vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
+  useUser: () => ({
+    isLoaded: true,
+    isSignedIn: true,
+    user: {
+      id: 'user_private_ada',
+      fullName: 'Ada Lovelace',
+      primaryEmailAddress: { emailAddress: 'ada@supply.example' },
+    },
+    sessionId: 'session_private_ada',
+  }),
+  UserButton: () => <button type="button" aria-label="Account menu" />,
+}))
+
 import { Route as AgentAccessAuthorizeRoute } from '@/routes/_operator/agent-access.authorize'
 
 const Component = AgentAccessAuthorizeRoute.options.component as ComponentType

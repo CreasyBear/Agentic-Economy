@@ -43,7 +43,6 @@ export async function readHomeCapabilities(): Promise<HomeCapabilityRead> {
     const projection = await readMarketRouteServer({
       data: {
         window: "30d",
-        availability: "routeable",
       },
     });
     if (projection.catalog.kind !== "ok") {

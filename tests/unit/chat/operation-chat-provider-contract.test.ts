@@ -1,5 +1,6 @@
-import { generateText } from 'ai'
-import { describe, expect, it } from 'vitest'
+import { generateText, stepCountIs, type ToolSet } from 'ai'
+import { describe, expect, it, vi } from 'vitest'
+import type { ToolCtx } from '@convex-dev/agent'
 
 import {
   CHAT_TOOL_IDS,
@@ -12,9 +13,12 @@ import {
 } from '@/modules/model-gateway/public'
 import {
   openRouterProseResponse,
+  openRouterToolCallResponse,
   startOpenRouterContractServer,
 } from '../../helpers/openrouter-contract-server'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
+
+const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
 
 const AUTHORITY = {
   principalRef: `prn_${'1'.repeat(32)}`,
@@ -71,6 +75,63 @@ describe('Operation chat OpenRouter contract', () => {
         expect(canonical).toBeDefined()
         expect(CHAT_TOOL_NAME_MAP.canonicalToProvider[canonical!]).toBe(name)
       }
+    } finally {
+      restoreEnv()
+      await server.close()
+    }
+  })
+
+  it('feeds the literal completed Operation result into the model continuation step', async () => {
+    const invokeToolName = CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.invoke']
+    const freshValue = 'fresh-provider-value-7f9c'
+    const completed = {
+      kind: 'completed' as const,
+      invocationRef: 'invocation:provider-contract:1',
+      operationRef: OPERATION_REF,
+      output: { providerFreshValue: freshValue },
+      evidenceHash: 'evidence:provider-contract:1',
+      usage: {
+        usageRef: 'usage:provider-contract:1',
+        observedAt: 1,
+        chargeState: 'paid' as const,
+        amount: { currency: 'USD', units: '125', exponent: 2 },
+        priceDigest: 'price:provider-contract:1',
+      },
+    }
+    const server = await startOpenRouterContractServer([
+      openRouterToolCallResponse(invokeToolName, {
+        operationRef: OPERATION_REF,
+        input: { company: 'Acme' },
+      }),
+      openRouterProseResponse({
+        oneLine: `Continued with ${freshValue}.`,
+        summary: 'The returned provider value is available for the caller-owned task.',
+        whatToDoNow: 'Use the value in the next task step.',
+      }),
+    ])
+    const restoreEnv = server.installEnv()
+
+    try {
+      const config = openRouterGatewayConfig()
+      const model = openRouterModel(config, config.model)
+      const agent = createChatAgent(model, AUTHORITY)
+      const runAction = vi.fn(async () => completed)
+      const ctx = { runAction, runQuery: vi.fn() } as unknown as ToolCtx
+      const tools = Object.fromEntries(Object.entries(agent.options.tools ?? {}).map(
+        ([name, tool]) => [name, { ...tool, ctx }],
+      )) as ToolSet
+
+      const result = await generateText({
+        model,
+        prompt: 'Find and use the company enrichment contribution.',
+        tools,
+        stopWhen: stepCountIs(2),
+      })
+
+      expect(runAction).toHaveBeenCalledTimes(1)
+      expect(server.requests).toHaveLength(2)
+      expect(JSON.stringify(server.requests[1]?.messages)).toContain(freshValue)
+      expect(result.text).toContain(freshValue)
     } finally {
       restoreEnv()
       await server.close()

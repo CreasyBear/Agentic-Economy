@@ -5,6 +5,8 @@ import { cancelRecovery } from './cancellation'
 import { expireAuthorizationRecovery } from './expiry'
 import { readRecoveryStatus } from './status'
 import { reconcileRecovery } from './reconciliation'
+import { reconcilePreSubmissionRecovery } from './preSubmission'
+import { reconcileManagedSigningRecovery } from './managedSigning'
 import {
   recoveryArgs,
   type InternalRecoveryResult,
@@ -15,6 +17,8 @@ export {
   expireAuthorizationRecovery,
   readRecoveryStatus,
   reconcileRecovery,
+  reconcilePreSubmissionRecovery,
+  reconcileManagedSigningRecovery,
   recoveryArgs,
 }
 export type {
@@ -29,31 +33,72 @@ export async function recoverCapabilityOperationInvocation(
     invocationRef: string
     principalId: string
     credentialId: string
-    mode: 'status' | 'cancel' | 'reconcile'
+    mode: 'status' | 'cancel' | 'reconcile' | 'reconcile_pre_submission' | 'reconcile_managed_signing'
     idempotencyKey?: string
     evidence?: ObjectType<typeof recoveryArgs>['evidence']
   }>,
 ): Promise<InternalRecoveryResult> {
   switch (args.mode) {
     case 'status':
-      if (args.idempotencyKey !== undefined || args.evidence !== undefined) {
-        return recoveryNotFound(args.invocationRef)
-      }
-      return readRecoveryStatus(ctx, args)
+      return recoverStatus(ctx, args)
     case 'cancel':
-      if (args.idempotencyKey === undefined || args.evidence !== undefined) {
-        return recoveryNotFound(args.invocationRef)
-      }
-      return cancelRecovery(ctx, { ...args, idempotencyKey: args.idempotencyKey })
+      return recoverCancellation(ctx, args)
     case 'reconcile':
-      if (args.idempotencyKey !== undefined || args.evidence === undefined) {
-        return recoveryNotFound(args.invocationRef)
-      }
-      return reconcileRecovery(ctx, { ...args, evidence: args.evidence })
+      return recoverSubmittedReconciliation(ctx, args)
+    case 'reconcile_pre_submission':
+      return recoverServerPreSubmission(ctx, args)
+    case 'reconcile_managed_signing':
+      return recoverManagedSigning(ctx, args)
     default: {
       const _exhaustive: never = args.mode
       void _exhaustive
       return recoveryNotFound(args.invocationRef)
     }
   }
+}
+
+async function recoverManagedSigning(
+  ctx: ActionCtx,
+  args: RecoveryCommand,
+): Promise<InternalRecoveryResult> {
+  if (args.idempotencyKey !== undefined || args.evidence !== undefined) {
+    return recoveryNotFound(args.invocationRef)
+  }
+  return reconcileManagedSigningRecovery(ctx, args)
+}
+
+type RecoveryCommand = Parameters<typeof recoverCapabilityOperationInvocation>[1]
+
+async function recoverStatus(ctx: ActionCtx, args: RecoveryCommand): Promise<InternalRecoveryResult> {
+  if (args.idempotencyKey !== undefined || args.evidence !== undefined) {
+    return recoveryNotFound(args.invocationRef)
+  }
+  return readRecoveryStatus(ctx, args)
+}
+
+async function recoverCancellation(ctx: ActionCtx, args: RecoveryCommand): Promise<InternalRecoveryResult> {
+  if (args.idempotencyKey === undefined || args.evidence !== undefined) {
+    return recoveryNotFound(args.invocationRef)
+  }
+  return cancelRecovery(ctx, { ...args, idempotencyKey: args.idempotencyKey })
+}
+
+async function recoverSubmittedReconciliation(
+  ctx: ActionCtx,
+  args: RecoveryCommand,
+): Promise<InternalRecoveryResult> {
+  if (args.idempotencyKey !== undefined || args.evidence === undefined) {
+    return recoveryNotFound(args.invocationRef)
+  }
+  return reconcileRecovery(ctx, { ...args, evidence: args.evidence })
+}
+
+async function recoverServerPreSubmission(
+  ctx: ActionCtx,
+  args: RecoveryCommand,
+): Promise<InternalRecoveryResult> {
+  if (args.idempotencyKey !== undefined || args.evidence !== undefined) {
+    return recoveryNotFound(args.invocationRef)
+  }
+  return reconcilePreSubmissionRecovery(ctx, args)
 }

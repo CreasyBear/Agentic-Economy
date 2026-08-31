@@ -21,6 +21,8 @@ import {
 } from './capabilitySupplyOperationOriginMap'
 import {
   publishedOperationSnapshotReturns,
+  sellerCanaryOperationSnapshotReturns,
+  readExactSellerCanaryOperationSnapshotHandler,
   readCurrentPublishedOperationSnapshotHandler,
 } from './capabilitySupplyCurrentOperation'
 
@@ -57,4 +59,10 @@ export const readCurrentPublishedOperationSnapshot = internalQueryGeneric({
   args: { operationRef: v.string() },
   returns: publishedOperationSnapshotReturns,
   handler: readCurrentPublishedOperationSnapshotHandler,
+})
+
+export const readExactSellerCanaryOperationSnapshot = internalQueryGeneric({
+  args: { publicationRef: v.string(), revision: v.number() },
+  returns: sellerCanaryOperationSnapshotReturns,
+  handler: readExactSellerCanaryOperationSnapshotHandler,
 })

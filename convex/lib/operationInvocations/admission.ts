@@ -28,6 +28,7 @@ import {
 } from '@/modules/capability-execution/operation-invoke'
 import { currentOperationCommitmentsMatch } from '@/modules/capability-execution/current-operation-commitment'
 import { recordMarketEvidenceFact } from '../../marketEvidence'
+import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
 
 export function assertJsonObject(value: unknown): asserts value is Record<string, JsonValue> {
   if (!isRecord(value) || !isBoundedJsonValue(value)) throw new Error('operation_invocation_json_invalid')
@@ -89,6 +90,7 @@ export type ReserveArgs = Readonly<{
   grantExpiresAt: number
   operationJson?: string
   inputJson?: string
+  sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   now: number
 }>
 
@@ -204,6 +206,42 @@ function existingReservationMatches(existing: InvocationRow, args: ReserveArgs):
     existing.invocationRef === args.invocationRef,
     operationSnapshotMatches(existing, args),
     existing.inputJson === args.inputJson,
+    canonicalOptionalCanary(existing.sellerOnboardingCanary) === canonicalOptionalCanary(args.sellerOnboardingCanary),
+  ].every(Boolean)
+}
+
+function canonicalOptionalCanary(
+  value: SellerOnboardingCanaryExecutionEnvelope | undefined,
+): string | undefined {
+  return value === undefined ? undefined : canonicalDigest(value as never)
+}
+
+function canaryEnvelopeMatchesReservation(args: ReserveArgs): boolean {
+  const canary = args.sellerOnboardingCanary
+  if (canary === undefined) return true
+  return [
+    args.environment === 'sandbox',
+    canary.executionPurpose === 'seller_onboarding_canary',
+    canary.invocationRef === args.invocationRef,
+    canary.operationRef === args.operationRef,
+    canary.inputDigest === args.inputDigest,
+    canary.idempotencyKey === args.idempotencyKey,
+    canary.readinessValidUntil > args.now,
+    canary.expiresAt > args.now,
+    canary.expiresAt <= canary.readinessValidUntil,
+    canary.funding.kind === 'ae_owned',
+    canary.funding.principalId === args.principalId,
+    canary.funding.ownerId === args.ownerId,
+    canary.funding.credentialId === args.credentialId,
+    canary.funding.applicationRef === args.applicationRef,
+    canary.funding.grantRef === args.grantRef,
+    canary.funding.grantGeneration === args.grantGeneration,
+    canary.funding.policyDigest === args.policyDigest,
+    canary.funding.ledgerEffects === 'external_spend_only',
+    canary.accountingPolicy.recordBuyerUsage === false,
+    canary.accountingPolicy.accrueProviderEarnings === false,
+    canary.accountingPolicy.accruePlatformRake === false,
+    canary.accountingPolicy.recordQualifiedUse === false,
   ].every(Boolean)
 }
 
@@ -288,6 +326,7 @@ export async function reserveHandler(
   ctx: MutationCtx,
   args: ReserveArgs,
 ): Promise<ReserveResult> {
+  if (!canaryEnvelopeMatchesReservation(args)) return { kind: 'conflict' }
   const existing = await ctx.db.query('capabilityOperationInvocations')
     .withIndex('by_credentialId_and_idempotencyKey', (query) => query.eq('credentialId', args.credentialId).eq('idempotencyKey', args.idempotencyKey))
     .unique()
@@ -328,6 +367,9 @@ export async function reserveHandler(
     ...reservation,
     ...(args.operationJson === undefined ? {} : { operationJson: args.operationJson }),
     ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
+    ...(args.sellerOnboardingCanary === undefined
+      ? {}
+      : { sellerOnboardingCanary: structuredClone(args.sellerOnboardingCanary) }),
     ownerId: args.ownerId,
     state: 'pending',
     createdAt: args.now,
@@ -369,6 +411,7 @@ function abandonmentIdentityMatches(row: InvocationRow, args: AbandonArgs): bool
     row.inputDigest === args.inputDigest,
     row.requestDigest === args.requestDigest,
     row.invocationRef === args.invocationRef,
+    canonicalOptionalCanary(row.sellerOnboardingCanary) === canonicalOptionalCanary(args.sellerOnboardingCanary),
   ].every(Boolean)
 }
 

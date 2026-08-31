@@ -1,9 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeFactList, type AeFact } from '@/components/ae/data/AeFactList'
+import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -28,7 +29,7 @@ export type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-oper
 export type AeAgentOperatorConsoleProps = Readonly<{
   items: readonly AgentOperatorKeyReadback[]
   loading: boolean
-  onRevoke: (keyId: string) => void
+  onRevoke: (keyId: string) => void | Promise<void>
   revokingKeyId?: string
   approvals: readonly PendingOperationApproval[]
   approvalsLoading: boolean
@@ -38,6 +39,9 @@ export type AeAgentOperatorConsoleProps = Readonly<{
   onRetryApprovals: () => void
   onDecideApproval: (invocationRef: string, operationRef: string, decision: 'approve' | 'deny') => void
   accessUnavailable?: boolean
+  selectedPrincipalId?: string
+  getAgentHref?: (principalId: string) => string
+  onClearSelectedPrincipal?: () => void
 }>
 
 export function AeAgentOperatorConsole({
@@ -53,8 +57,19 @@ export function AeAgentOperatorConsole({
   onRetryApprovals,
   onDecideApproval,
   accessUnavailable = false,
+  selectedPrincipalId,
+  getAgentHref,
+  onClearSelectedPrincipal,
 }: AeAgentOperatorConsoleProps) {
-  const [selected, setSelected] = useState<AgentOperatorKeyReadback>()
+  const [localSelected, setLocalSelected] = useState<AgentOperatorKeyReadback>()
+  const [revokeTarget, setRevokeTarget] = useState<Readonly<{ keyId: string; name: string }>>()
+  const [revokePending, setRevokePending] = useState(false)
+  const revokeTriggerRef = useRef<HTMLButtonElement>(null)
+  const revokeInFlightRef = useRef(false)
+  const routeControlled = getAgentHref !== undefined
+  const selected = routeControlled
+    ? items.find((item) => item.principalId === selectedPrincipalId)
+    : localSelected
   const firstLoadPending = useFirstLoadPending(loading)
   const columns = useMemo<ColumnDef<AgentOperatorKeyReadback, unknown>[]>(
     () => [
@@ -134,6 +149,25 @@ export function AeAgentOperatorConsole({
     actor: 'buyer',
   })
 
+  function requestRevoke(item: AgentOperatorKeyReadback, trigger: HTMLButtonElement) {
+    revokeTriggerRef.current = trigger
+    setRevokeTarget({ keyId: item.key.keyId, name: item.key.name })
+  }
+
+  async function confirmRevoke() {
+    if (revokeTarget === undefined || revokeInFlightRef.current) return
+    const exactKeyId = revokeTarget.keyId
+    revokeInFlightRef.current = true
+    setRevokePending(true)
+    try {
+      await onRevoke(exactKeyId)
+      setRevokeTarget(undefined)
+    } finally {
+      revokeInFlightRef.current = false
+      setRevokePending(false)
+    }
+  }
+
   return (
     <div className="grid gap-8">
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{approvalStatus ?? ''}</p>
@@ -177,7 +211,9 @@ export function AeAgentOperatorConsole({
             countLabel="keys"
             filterPlaceholder="Filter keys…"
             hideFilter={items.length <= 1}
-            onRowClick={setSelected}
+            {...(getAgentHref === undefined
+              ? { onRowClick: setLocalSelected }
+              : { getRowHref: (item: AgentOperatorKeyReadback) => getAgentHref(item.principalId) })}
           />
         )}
       </AeSection>
@@ -185,7 +221,9 @@ export function AeAgentOperatorConsole({
       <AeRecordSheet
         open={selected !== undefined}
         onOpenChange={(open) => {
-          if (!open) setSelected(undefined)
+          if (open) return
+          if (routeControlled) onClearSelectedPrincipal?.()
+          else setLocalSelected(undefined)
         }}
         title={selected?.key.name ?? 'Key'}
         {...(selected === undefined ? {} : { description: keyStatus(selected), facts: keyFacts(selected) })}
@@ -197,7 +235,7 @@ export function AeAgentOperatorConsole({
                   type="button"
                   variant="secondary"
                   disabled={revokeDisabled}
-                  onClick={() => onRevoke(selected.key.keyId)}
+                  onClick={(event) => requestRevoke(selected, event.currentTarget)}
                   className="min-h-touch"
                 >
                   {revoking ? 'Revoking access…' : 'Revoke access now'}
@@ -209,6 +247,22 @@ export function AeAgentOperatorConsole({
           <p className="mt-4 text-sm text-muted-foreground">{recoveryCopy(selected)}</p>
         )}
       </AeRecordSheet>
+
+      <AeConfirmDialog
+        open={revokeTarget !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setRevokeTarget(undefined)
+        }}
+        title={revokeTarget === undefined ? 'Revoke agent access?' : `Revoke access for ${revokeTarget.name}?`}
+        description={revokeTarget === undefined
+          ? ''
+          : `New calls from ${revokeTarget.name} will stop immediately. Reconnecting this agent requires fresh authorization.`}
+        confirmLabel="Revoke agent access"
+        confirmVariant="destructive"
+        pending={revokePending}
+        onConfirm={confirmRevoke}
+        returnFocusRef={revokeTriggerRef}
+      />
 
       <AeSection title="Recovery" description="The next step depends on what stopped the call.">
         <ul className="m-0 grid list-none divide-y divide-border p-0">

@@ -58,8 +58,9 @@ describe('site brief markdown', () => {
   const body = buildSiteBriefMarkdown(options)
 
   it('starts with the public call loop and connects only at the authority boundary', () => {
-    expect(body).toContain('npx @agentic-economy/cli connect --base-url "https://ae.example" --mcp')
-    expect(body.indexOf('ae search "<job>"')).toBeLessThan(body.indexOf('npx @agentic-economy/cli connect'))
+    expect(body).toContain('ae connect --base-url "https://ae.example"')
+    expect(body).not.toContain('ae connect --base-url "https://ae.example" --mcp')
+    expect(body.indexOf('ae search "<job>"')).toBeLessThan(body.indexOf('ae connect'))
     expect(body).toContain('ae inspect "$AE_OPERATION_REF" --base-url "https://ae.example" --json')
     expect(body).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
     expect(body).toContain('official MCP client')
@@ -78,7 +79,8 @@ describe('site brief markdown', () => {
 
   it('builds a machine guide for non-HTML /for-agents requests', () => {
     const guide = buildForAgentsMarkdown(options)
-    expect(guide).toContain('npx @agentic-economy/cli connect --base-url "https://ae.example" --mcp')
+    expect(guide).toContain('ae connect --base-url "https://ae.example"')
+    expect(guide).not.toContain('ae connect --base-url "https://ae.example" --mcp')
     expect(guide).toContain('POST body example')
     expect(guide).toContain('application/problem+json')
     expect(guide).toContain('ae inspect "$AE_OPERATION_REF" --base-url "https://ae.example" --json')

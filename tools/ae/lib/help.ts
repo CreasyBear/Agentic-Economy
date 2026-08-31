@@ -1,4 +1,8 @@
-import { COMMANDS, type CommandManifestEntry } from '../commands/manifest'
+import {
+  COMMANDS,
+  ROOT_COMMAND_GROUPS,
+  type CommandManifestEntry,
+} from '../commands/manifest'
 import { CliFailure } from './output'
 
 export const CLI_ENTRYPOINT = 'ae'
@@ -26,8 +30,21 @@ export function usageFailure(path: string, code: string): CliFailure {
   })
 }
 
-export function rootCommandHelpLines(): readonly string[] {
-  return Object.entries(COMMANDS).map(([name, metadata]) => (
-    `  ${commandUsage(name)}\n      ${metadata.summary}`
-  ))
+export type RootCommandHelpGroup = Readonly<{
+  id: string
+  title: string
+  commands: readonly Readonly<{ name: string; summary: string }>[]
+}>
+
+export function rootCommandHelpGroups(
+  knownCommands: readonly string[] = Object.keys(COMMANDS),
+): readonly RootCommandHelpGroup[] {
+  const runnable = new Set(knownCommands)
+  return ROOT_COMMAND_GROUPS.map((group) => ({
+    ...group,
+    commands: Object.entries(COMMANDS)
+      .filter(([name, metadata]) => runnable.has(name) && metadata.group === group.id)
+      .sort(([, left], [, right]) => left.rootOrder - right.rootOrder)
+      .map(([name, metadata]) => ({ name, summary: metadata.summary })),
+  })).filter((group) => group.commands.length > 0)
 }

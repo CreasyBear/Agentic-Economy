@@ -14,6 +14,7 @@ beforeEach(() => {
 })
 
 import { abandon, reserve } from '../../../convex/capabilityOperationInvocations'
+import { invokeArgs } from '../../../convex/lib/operationInvocations/contracts'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 
 type Row = Record<string, unknown> & { _id: string }
@@ -145,6 +146,57 @@ const args = (overrides: Record<string, unknown> = {}): Record<string, unknown> 
   now,
   ...overrides,
 })
+const canaryEnvelope = (overrides: Record<string, unknown> = {}) => ({
+  executionPurpose: 'seller_onboarding_canary',
+  canaryRef: 'seller-canary:one',
+  canaryCommitmentDigest: 'sha256:canary-one',
+  invocationRef: 'operation-invocation:v1:one',
+  operationRef: 'operation:one',
+  ownerId: 'owner:one',
+  businessId: 'business:one',
+  offeringRef: 'offering:one',
+  offeringRevision: 1,
+  offeringSourceHash: 'sha256:offering-one',
+  accessPathRef: 'access-path:one',
+  accessPathSourceHash: 'sha256:access-one',
+  publicationRef: 'publication:one',
+  publicationRevision: 1,
+  operationMaterialDigest: baseOperation.materialDigest,
+  contractDigest: baseOperation.identity.contractDigest,
+  bindingDigest: baseOperation.identity.bindingDigest,
+  priceDigest: baseOperation.priceDigest,
+  sellerPayTo: `0x${'1'.repeat(40)}`,
+  sellerClaimDigest: 'sha256:claim-one',
+  readinessDigest: 'sha256:readiness-one',
+  readinessObservedAt: now - 1,
+  readinessValidUntil: now + 30_000,
+  expectedOutputSchemaDigest: 'sha256:output-schema-one',
+  expectedOutputEvidenceDigest: 'sha256:output-evidence-one',
+  expiresAt: now + 30_000,
+  inputDigest: 'sha256:input-one',
+  idempotencyKey: 'idempotency:one',
+  funding: {
+    kind: 'ae_owned',
+    principalId: 'principal:one',
+    ownerId: 'owner:one',
+    credentialId: 'credential:one',
+    applicationRef: 'application:one',
+    grantRef: 'grant:one',
+    grantGeneration: 1,
+    policyDigest: 'sha256:policy-one',
+    budgetRef: 'budget:canary',
+    maximumSpend: { currency: 'USDC', units: '2000', exponent: 6 },
+    requestedSpend: { currency: 'USDC', units: '1000', exponent: 6 },
+    ledgerEffects: 'external_spend_only',
+  },
+  accountingPolicy: {
+    recordBuyerUsage: false,
+    accrueProviderEarnings: false,
+    accruePlatformRake: false,
+    recordQualifiedUse: false,
+  },
+  ...overrides,
+})
 const abandonmentArgs = (overrides: Record<string, unknown> = {}): Record<string, unknown> => {
   const reservation = args(overrides)
   delete reservation.operationJson
@@ -186,6 +238,41 @@ function invocation(overrides: Record<string, unknown> = {}): Row {
 }
 
 describe('capability operation reservation admission', () => {
+  it('keeps seller canary authority out of the public invoke contract', () => {
+    expect('sellerOnboardingCanary' in invokeArgs).toBe(false)
+  })
+
+  it('persists and replays only the exact complete seller canary envelope', async () => {
+    const ctx = context()
+    const canary = canaryEnvelope()
+    await expect(reserveHandler(ctx, args({ sellerOnboardingCanary: canary })))
+      .resolves.toMatchObject({ kind: 'reserved' })
+    expect(ctx.db.rows('capabilityOperationInvocations')[0]).toMatchObject({
+      sellerOnboardingCanary: canary,
+    })
+    await expect(reserveHandler(ctx, args({ sellerOnboardingCanary: canary })))
+      .resolves.toMatchObject({ kind: 'replayed' })
+    await expect(reserveHandler(ctx, args({
+      sellerOnboardingCanary: canaryEnvelope({
+        funding: { ...canary.funding, budgetRef: 'budget:attacker' },
+      }),
+    }))).resolves.toEqual({ kind: 'conflict' })
+  })
+
+  it('fails closed on crossed environment or partial canary reservation identity', async () => {
+    const production = context({ environment: 'production' })
+    await expect(reserveHandler(production, args({
+      environment: 'production',
+      sellerOnboardingCanary: canaryEnvelope(),
+    }))).resolves.toEqual({ kind: 'conflict' })
+    const wrongOperation = context()
+    await expect(reserveHandler(wrongOperation, args({
+      sellerOnboardingCanary: canaryEnvelope({ operationRef: 'operation:swapped' }),
+    }))).resolves.toEqual({ kind: 'conflict' })
+    expect(production.db.rows('capabilityOperationInvocations')).toHaveLength(0)
+    expect(wrongOperation.db.rows('capabilityOperationInvocations')).toHaveLength(0)
+  })
+
   it('replays the persisted reservation before quota checks and does not double-count it', async () => {
     const ctx = context({
       policy: { rate: { maximumCallsPerMinute: 1, maximumCallsPerHour: 1 }, budget: { maximumConcurrentInvocations: 1 } },

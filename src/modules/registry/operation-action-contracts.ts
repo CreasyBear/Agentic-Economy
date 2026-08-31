@@ -136,7 +136,7 @@ export const registryOperationsCompareContract = {
   schema: operationCompareInputSchema,
   surfaces: operationMarketActionSurfaces,
   name: 'Compare executable operations',
-  summary: 'Compare up to four exact current operation references without selecting or authorizing one.',
+  summary: 'Compare up to four exact current operation references without selecting or authorizing one; after choosing a supplier, inspect that exact reference with registry.operations.detail.',
   boundaries,
   outputSchema: operationChoiceCompareOutputSchema,
   parameters: compareParameters,

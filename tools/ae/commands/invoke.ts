@@ -1,5 +1,7 @@
 import { isRecord } from '@/modules/common/is-record'
 import { randomUUID } from 'node:crypto'
+import { Buffer } from 'node:buffer'
+import type { Readable } from 'node:stream'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   operationInvokeInputSchema,
@@ -7,11 +9,15 @@ import {
   type OperationInvokeResult,
 } from '@/modules/capability-execution/operation-invoke-contracts'
 import type { OperationInvokeStatusResult } from '@/modules/capability-execution/operation-recovery-contracts'
+import { operationDetailOutputSchema } from '@/modules/capability-supply/public'
+import { OPERATION_MARKET_DETAIL_PATH } from '@/modules/registry/operation-entry'
 
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
+import { continuationCommand } from '../lib/continuation-command'
+import { throwOperationReadFailure } from '../lib/operation-read-failure'
 import {
   connectionContinuationForCli,
   creditContinuationForCli,
@@ -25,6 +31,24 @@ import {
   terminalResult,
 } from './status'
 
+const MAX_OPERATION_INVOKE_BODY_BYTES = 256 * 1024
+
+async function readBoundedStdin(stdin: Readable): Promise<string> {
+  const chunks: Buffer[] = []
+  let totalBytes = 0
+  for await (const chunk of stdin) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    totalBytes += bytes.byteLength
+    if (totalBytes > MAX_OPERATION_INVOKE_BODY_BYTES) {
+      throw new CliFailure('Operation input is too large.', {
+        kind: 'PAYLOAD_TOO_LARGE',
+        code: 'payload_too_large',
+      })
+    }
+    chunks.push(bytes)
+  }
+  return Buffer.concat(chunks, totalBytes).toString('utf8')
+}
 
 
 function parseInvokeResult(value: unknown): OperationInvokeResult {
@@ -81,8 +105,38 @@ function resolveIdempotencyKey(options: CliOptions): string {
   return randomUUID()
 }
 
+async function requireOperationCanBenefitFromBuyerConnection(
+  baseUrl: string,
+  operationRef: string,
+): Promise<void> {
+  const outcome = await callJson(baseUrl, OPERATION_MARKET_DETAIL_PATH, {
+    method: 'POST',
+    body: JSON.stringify({ operationRef }),
+  })
+  const parsed = operationDetailOutputSchema.safeParse(requireOk(outcome, OPERATION_MARKET_DETAIL_PATH))
+  if (!parsed.success) {
+    throw new CliFailure('The market returned an invalid operation detail result.', {
+      kind: 'UNAVAILABLE',
+      code: 'operation-detail-result-invalid',
+    })
+  }
+  if (parsed.data.kind === 'not_found') {
+    throwOperationReadFailure({ reason: 'operation_not_found', operationRef })
+  }
+  if (parsed.data.kind === 'unavailable') {
+    throwOperationReadFailure({ reason: parsed.data.reason, operationRef })
+  }
+  if (
+    parsed.data.operation.availability.posture !== 'routeable'
+    || !parsed.data.operation.navigation.some(({ relation }) => relation === 'invoke')
+  ) {
+    throwOperationReadFailure({ reason: 'operation_unavailable', operationRef })
+  }
+}
+
 function invokeOutput(
   result: OperationInvokeResult | OperationInvokeStatusResult,
+  options: CliOptions,
 ): Record<string, unknown> {
   const invocationRef = 'invocationRef' in result ? result.invocationRef : undefined
   const continuation = result.kind === 'completed' && result.usage.chargeState === 'insufficient_credit'
@@ -92,7 +146,17 @@ function invokeOutput(
       : result.kind === 'reconciliation_required'
         ? invocationContinuationForCli({ kind: 'found', invocationRef, state: 'reconciliation_required' })
         : invocationContinuationForCli({ kind: 'found', invocationRef, state: 'in_progress' })
-  const nextCommand = continuation?.command
+  const continuationSuffix = continuationCommand([
+    ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+      ? []
+      : ['--base-url', options.baseUrl]),
+    ...(options.json ? ['--json'] : []),
+  ])
+  const nextCommand = continuation?.command === undefined
+    ? undefined
+    : continuationSuffix.length === 0
+      ? continuation.command
+      : `${continuation.command} ${continuationSuffix}`
   return {
     ...result,
     ...(nextCommand === undefined ? {} : { nextCommand }),
@@ -140,8 +204,8 @@ async function waitForOperationResult(
 export async function runInvokeCommand(
   args: readonly string[],
   options: CliOptions,
+  stdin: Readable = process.stdin,
 ): Promise<void> {
-  const credential = resolveAgentAccessCredential(options.baseUrl)
   const operationRef = args[0]?.trim()
   if (
     args.length !== 1
@@ -151,10 +215,12 @@ export async function runInvokeCommand(
     throw usageFailure('call', 'call-usage')
   }
 
-  const rawInput = options.input?.trim()
-  if (rawInput === undefined || rawInput.length === 0) {
+  const configuredInput = options.input?.trim()
+  if (configuredInput === undefined || configuredInput.length === 0) {
     throw usageFailure('call', 'call-usage')
   }
+  const rawInput = (configuredInput === '-' ? await readBoundedStdin(stdin) : configuredInput).trim()
+  if (rawInput.length === 0) throw usageFailure('call', 'call-usage')
   let input: unknown
   try {
     input = JSON.parse(rawInput)
@@ -164,7 +230,16 @@ export async function runInvokeCommand(
   if (!isRecord(input)) {
     throw new CliFailure('Operation input must be a JSON object.', { kind: 'INVALID_ARGUMENT', code: 'invoke-input' })
   }
+  const parsedInput = invokeCommandDescriptor.inputSchema.safeParse({ operationRef, input, idempotencyKey: resolveIdempotencyKey(options) })
+  if (!parsedInput.success) {
+    throw new CliFailure('Operation input or identity does not match operation.invoke:v1.', {
+      kind: 'INVALID_ARGUMENT',
+      code: 'invoke-input',
+    })
+  }
+  const credential = resolveAgentAccessCredential(options.baseUrl)
   if (credential === undefined) {
+    await requireOperationCanBenefitFromBuyerConnection(options.baseUrl, operationRef)
     const continuation = connectionContinuationForCli('buyer')
     throw new CliFailure('No AE agent credential is configured. Run ae connect, then repeat the same call.', {
       kind: 'UNAUTHENTICATED',
@@ -175,14 +250,7 @@ export async function runInvokeCommand(
     })
   }
 
-  const idempotencyKey = resolveIdempotencyKey(options)
-  const parsedInput = invokeCommandDescriptor.inputSchema.safeParse({ operationRef, input, idempotencyKey })
-  if (!parsedInput.success) {
-    throw new CliFailure('Operation input or identity does not match operation.invoke:v1.', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'invoke-input',
-    })
-  }
+  const idempotencyKey = parsedInput.data.idempotencyKey
   if (!options.json) process.stderr.write(`Call prepared: operationRef=${operationRef}. A durable retry identity has been retained.\n`)
 
   const apiKey = requireAgentAccessKey('invoke', options)
@@ -216,7 +284,7 @@ export async function runInvokeCommand(
   const result = accepted.kind === 'pending' && options.wait === true
     ? await waitForOperationResult(options, operationRef, idempotencyKey, accepted)
     : accepted
-  const rendered = invokeOutput(result)
+  const rendered = invokeOutput(result, options)
 
   if (options.json) {
     printJson(rendered)

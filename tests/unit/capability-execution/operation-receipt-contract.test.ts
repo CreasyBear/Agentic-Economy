@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   operationInvokeReceiptAsset,
+  operationInvokeReceiptBaseSepoliaAsset,
+  operationInvokeReceiptPaymentProfile,
   operationInvokeReceiptSchema,
   operationInvokeResultSchema,
   type OperationInvokeReceipt,
@@ -39,19 +41,31 @@ const receipt = (): OperationInvokeReceipt => ({
   issuedAt: '2026-08-20T00:00:00.000Z',
 })
 
-function pricedOperation(pricingConfig: PricingConfig): PublishedOperation {
+function pricedOperation(
+  pricingConfig: PricingConfig,
+  profile: Readonly<{
+    environment: 'sandbox' | 'production'
+    network: 'eip155:8453' | 'eip155:84532'
+    asset: typeof operationInvokeReceiptAsset | typeof operationInvokeReceiptBaseSepoliaAsset
+  }> = {
+    environment: 'production',
+    network: 'eip155:8453',
+    asset: operationInvokeReceiptAsset,
+  },
+): PublishedOperation {
   const fixture = buildDevelopmentPublishedOperationEvidence().operation
   const price = { kind: 'fixed' as const, amount: pricingConfig.paidAmount }
   const priceDigest = canonicalDigest(pricingConfig as StableHashValue)
   const identity = {
     ...fixture.identity,
+    runtimeEnvironment: profile.environment,
     pricingConfig,
     priceDigest,
     price,
     payment: {
       kind: 'x402' as const,
-      network: 'eip155:8453',
-      asset: operationInvokeReceiptAsset,
+      network: profile.network,
+      asset: profile.asset,
       payTo: '0xprovider',
       currency: 'USD',
       routeAmountExponent: 2,
@@ -60,6 +74,7 @@ function pricedOperation(pricingConfig: PricingConfig): PublishedOperation {
   }
   return {
     ...fixture,
+    runtimeEnvironment: profile.environment,
     identity,
     pricingConfig,
     priceDigest,
@@ -90,6 +105,33 @@ describe('operation invocation receipts', () => {
       'providerReceipt',
     ]) expect(serialized).not.toContain(sensitiveName)
     expect(operationInvokeReceiptSchema.safeParse({ ...candidate, providerReceipt: 'raw-provider-receipt' }).success).toBe(false)
+  })
+
+  it('accepts only the two exact network and USDC receipt pairs', () => {
+    const baseSepolia = {
+      ...receipt(),
+      network: 'eip155:84532' as const,
+      asset: operationInvokeReceiptBaseSepoliaAsset,
+    }
+    expect(operationInvokeReceiptSchema.parse(baseSepolia)).toEqual(baseSepolia)
+    expect(operationInvokeReceiptSchema.safeParse({
+      ...baseSepolia,
+      asset: operationInvokeReceiptAsset,
+    }).success).toBe(false)
+    expect(operationInvokeReceiptSchema.safeParse({
+      ...receipt(),
+      asset: operationInvokeReceiptBaseSepoliaAsset,
+    }).success).toBe(false)
+    expect(operationInvokeReceiptPaymentProfile(
+      'production',
+      baseSepolia.network,
+      baseSepolia.asset,
+    )).toBeUndefined()
+    expect(operationInvokeReceiptPaymentProfile(
+      'sandbox',
+      'eip155:8453',
+      operationInvokeReceiptAsset,
+    )).toBeUndefined()
   })
 
   it('accepts additive receipts on terminal result variants', () => {
@@ -138,6 +180,17 @@ describe('operation invocation receipts', () => {
     })).toMatchObject({ kind: 'reconciliation_required', receipt: { state: 'reconciliation_required' } })
   })
 
+  it('keeps ordinary public completions usage-bound', () => {
+    expect(operationInvokeResultSchema.safeParse({
+      kind: 'completed',
+      invocationRef: 'invocation:ordinary',
+      operationRef: 'operation:ordinary',
+      output: { ok: true },
+      evidenceHash: 'sha256:evidence',
+      receipt: receipt(),
+    }).success).toBe(false)
+  })
+
   it('builds a stable receipt only for pinned explicit brokered pricing', () => {
     const operation = pricedOperation({
       version: 'pricing:v2',
@@ -179,6 +232,51 @@ describe('operation invocation receipts', () => {
     const legacy = pricedOperation({ version: 'pricing:v2', unit: 'call', paidAmount: amount('110') })
     expect(buildBrokeredX402Receipt({ ...input, operation: legacy })).toBeUndefined()
     expect(buildBrokeredX402Receipt({ ...input, operation: { ...operation, priceDigest: 'sha256:wrong' } })).toBeUndefined()
+  })
+
+  it('builds Base Sepolia receipts only for sandbox operations', () => {
+    const pricingConfig: PricingConfig = {
+      version: 'pricing:v2',
+      unit: 'call',
+      paidAmount: amount('110'),
+      providerAmount: amount('100'),
+      platformFee: amount('10'),
+    }
+    const sandboxOperation = pricedOperation(pricingConfig, {
+      environment: 'sandbox',
+      network: 'eip155:84532',
+      asset: operationInvokeReceiptBaseSepoliaAsset,
+    })
+    const receiptInput = {
+      operation: sandboxOperation,
+      invocationRef: 'invocation:sandbox',
+      operationRef: sandboxOperation.operationId,
+      state: 'settled' as const,
+      evidenceHash: 'sha256:sandbox-evidence',
+      issuedAt: '2026-08-30T00:00:00.000Z',
+    }
+    expect(buildBrokeredX402Receipt(receiptInput)).toMatchObject({
+      network: 'eip155:84532',
+      asset: operationInvokeReceiptBaseSepoliaAsset,
+    })
+    expect(buildBrokeredX402Receipt({
+      ...receiptInput,
+      operation: { ...sandboxOperation, runtimeEnvironment: 'production' },
+    })).toBeUndefined()
+    if (sandboxOperation.identity.payment.kind !== 'x402') throw new Error('expected_x402_payment')
+    expect(buildBrokeredX402Receipt({
+      ...receiptInput,
+      operation: {
+        ...sandboxOperation,
+        identity: {
+          ...sandboxOperation.identity,
+          payment: {
+            ...sandboxOperation.identity.payment,
+            asset: operationInvokeReceiptAsset,
+          },
+        },
+      },
+    })).toBeUndefined()
   })
 
   it('round-trips receipts through terminal and reconciliation projections', () => {

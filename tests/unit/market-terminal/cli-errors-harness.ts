@@ -44,5 +44,6 @@ export function spawnCliSync(
     cwd: process.cwd(),
     encoding: 'utf8',
     env: options?.env,
+    maxBuffer: 4 * 1024 * 1024,
   })
 }

@@ -1,4 +1,10 @@
 import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
+import {
+  aeCliEaccesFallbackCommand,
+  aeCliInstallCommand,
+  aeMcpInstallCommand,
+  aeMcpListCommand,
+} from '@/lib/cli-distribution'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { operationInvokeResultKindValues } from '@/modules/capability-execution/operation-invoke-contracts'
 import { operationInvokeStatusStateValues } from '@/modules/capability-execution/operation-recovery-contracts'
@@ -12,7 +18,7 @@ import {
   OperationMarketIdempotencyLine,
   OperationMarketInvokeScopeLine,
 } from './offering-discovery-file'
-import { findAction, listMcpActions, mcpToolName } from '@/modules/actions'
+import { listMcpActions, mcpToolName } from '@/modules/actions'
 import {
   OPERATION_MARKET_COMPARE_PATH,
   OPERATION_MARKET_DETAIL_PATH,
@@ -41,7 +47,6 @@ export function buildPublicAgentSkillMarkdown(options: {
     action.readOnly && action.credentialAdmission === undefined ? [mcpToolName(action)] : [],
   )
   const operationMcpToolNames = [...authenticatedToolNames]
-  const invokeInputExample = JSON.stringify(invoke.example.actionInput)
   const invokeHttpExample = JSON.stringify(invoke.example.http.body ?? {})
   const operationOutcomes = operationInvokeResultKindValues.join(' | ')
   const operationStatusStates = operationInvokeStatusStateValues.join(' | ')
@@ -49,14 +54,14 @@ export function buildPublicAgentSkillMarkdown(options: {
   return [
     '---',
     'name: agentic-economy',
-    'description: Pick your entry, search and inspect live Operations, call eligible keyless reads free, and connect only when the selected capability requires it.',
+    'description: Search and inspect live Operations; connect only when a selected call requires it.',
     '---',
     '',
     '# Agentic Economy — Operation market loop',
     '',
     '## 1. Pick your path',
     '',
-    '**AE tools visible in your harness?** Their names begin with `ae_` — registry search, detail, and compare read Operations anonymously and free, so call them directly; invoke/status tools work after one connection.',
+    '**AE tools visible?** Their names begin with `ae_`; catalogue reads work anonymously and free, while invoke and status require connection.',
     '',
     '**Not connected yet?**',
     '',
@@ -64,14 +69,28 @@ export function buildPublicAgentSkillMarkdown(options: {
     `curl -fsSL ${base}/.well-known/ucp`,
     '```',
     '',
-    `Read \`${base}/llms.txt\`, then \`${base}/for-agents\`. Install the CLI only for local execution:`,
+    `Read \`${base}/llms.txt\` and \`${base}/for-agents\`. For local execution:`,
     '```sh',
-    'npm install --global @agentic-economy/cli',
+    aeCliInstallCommand(base),
+    `${cli} --version`,
     `export AE_CLI_BASE_URL="${base}"`,
-    `${cli} manifest --json`,
+    `${cli} search "weather forecast" --json`,
     '```',
     '',
-    'If neither entry fits your job, tell your human what you needed.',
+    'On npm `EACCES`, use the user-owned prefix (no sudo):',
+    '```sh',
+    aeCliEaccesFallbackCommand(base),
+    'export PATH="$HOME/.local/bin:$PATH"',
+    `${cli} --version`,
+    '```',
+    '',
+    'Install MCP into exactly one current harness (`<agent>` = `codex`, `claude-code`, or `cursor`), then restart it:',
+    '```sh',
+    aeMcpInstallCommand(base),
+    aeMcpListCommand(),
+    '```',
+    '',
+    'If neither entry fits, tell your human what you needed.',
     '',
     '## Supplier path',
     '',
@@ -106,7 +125,7 @@ export function buildPublicAgentSkillMarkdown(options: {
     `curl -sS '${base}${OPERATION_MARKET_DETAIL_PATH}' -H 'content-type: application/json' --data '{"operationRef":"operation:v1:…"}'`,
     '```',
     '',
-    'Source-checkout helper:',
+    'CLI:',
     '```sh',
     `${cli} inspect "$AE_OPERATION_REF" --json`,
     '```',
@@ -129,16 +148,14 @@ export function buildPublicAgentSkillMarkdown(options: {
     `${cli} connect --json`,
     '```',
     '',
-    `Device flow: \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.register}\` → \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}\` → approve \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...\` → \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.token}\`. Existing \`AE_API_KEY\` values are validated; nonempty is not proof.`,
+    `Device flow: \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.register}\` → \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}\` → approve \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...\` → \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.token}\`. Existing \`AE_API_KEY\` is validated.`,
     '',
     'The AE key identifies the caller. It never contains or grants a provider credential, endpoint override, payment approval, or silent consequential authority.',
-    `Use \`${cli} connect --mcp\` to write an importable Streamable HTTP MCP connection alongside the origin-bound key.`,
-    '',
     '## 6. Authenticated gateway details',
     '',
     `HTTP: \`${invoke.route.method} ${base}${invoke.route.path}\` with \`Authorization: Bearer $AE_API_KEY\`, \`Content-Type: ${OPERATION_INVOKE_ROUTE_CONTRACT.media.request}\`, and only schema-valid material in the body.`,
     OperationMarketInvokeScopeLine,
-    `Schema-valid action input example: \`${invokeInputExample}\`. HTTP POST body example: \`${invokeHttpExample}\`. The canonical input JSON schema ships in every Operation detail response.`,
+    `Body example: \`${invokeHttpExample}\`. The canonical input schema ships in Operation detail.`,
     `The request JSON body field \`idempotencyKey\` is required. ${OperationMarketIdempotencyLine} The same key with identical material replays the original state; changed material is refused.`,
     'Never send a provider, URL, method, credential, price, payment recipient, or approval.',
     '',
@@ -173,11 +190,7 @@ export function buildPublicAgentSkillMarkdown(options: {
     '',
     `Endpoint: \`${base}/mcp\`. Anonymous tools: ${anonymousToolNames.map((name) => `\`${name}\``).join(', ') || 'none'}. Authenticated tools: ${operationMcpToolNames.map((name) => `\`${name}\``).join(', ') || 'none'}.`,
     'Static tool names do not enumerate live Operations.',
-    `Official MCP SDK lifecycle (protocol \`${MCP_LATEST_PROTOCOL_VERSION}\`): connect to \`${base}/mcp\` (the client performs initialization); the server is stateless and may omit \`Mcp-Session-Id\`; call \`tools/list\` before \`tools/call\`; close the client transport.`,
-    '',
-    '## Business catalog is business-only',
-    '',
-    `\`${registeredActionId('registry.search')}\` and \`${registeredActionId('registry.detail')}\` read published businesses; they do not authorize execution. Only an admitted, published Operation is callable.`,
+    `Official SDK protocol \`${MCP_LATEST_PROTOCOL_VERSION}\`: the client performs initialization at \`${base}/mcp\`; the stateless server may omit \`Mcp-Session-Id\`; call \`tools/list\` before \`tools/call\`, then close.`,
     '',
     '## Stop rules',
     '',
@@ -192,11 +205,4 @@ export function buildPublicAgentSkillMarkdown(options: {
     'A job closes only on evidence a response actually returned: anonymous reads carry literal output plus an `evidenceHash`, and invocation results expose usage or evidence fields only when recorded for that result.',
     'Without that evidence the job stays unproven — say so rather than claiming success.',
   ].join('\n')
-}
-
-
-function registeredActionId(actionId: string): string {
-  const action = findAction(actionId)
-  if (action === undefined) throw new Error(`Action is not registered: ${actionId}`)
-  return action.id
 }

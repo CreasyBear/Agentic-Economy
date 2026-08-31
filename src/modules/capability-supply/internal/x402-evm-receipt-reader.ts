@@ -11,9 +11,9 @@ import {
 import { fetch as guardedFetch, type Agent } from 'undici'
 
 import {
-  BASE_NETWORK,
-  BASE_USDC_ADDRESS,
-} from './cdp-x402-payment-signer'
+  x402PaymentProfileForEnvironment,
+  type X402AeEnvironment,
+} from './x402-payment-profile'
 import type { X402EvmReceipt } from './x402-settlement-verifier'
 
 /**
@@ -48,19 +48,27 @@ async function readGuardedRpcResult(
 
 export async function readGuardedX402EvmReceipt(input: Readonly<{
   target: URL
+  aeEnvironment: X402AeEnvironment
   network: string
+  asset: string
   transactionHash: string
   payer: string
   nonce: string
   dispatcher: Agent
+  minimumConfirmations?: number
+  confirmationTimeoutMs?: number
 }>): Promise<X402EvmReceipt | undefined> {
   const { defaultDnsResolver, isPublicHttpTarget } = await import('@/modules/network-guard/public')
+  const profile = x402PaymentProfileForEnvironment(input.aeEnvironment)
   if (
-    input.target.protocol !== 'https:'
-    || input.network !== BASE_NETWORK
+    profile === undefined
+    || input.target.protocol !== 'https:'
+    || input.network !== profile.network
+    || input.asset.toLowerCase() !== profile.asset.toLowerCase()
     || !/^0x[0-9a-fA-F]{64}$/.test(input.transactionHash)
     || !isAddress(input.payer)
     || !/^0x[0-9a-fA-F]{64}$/.test(input.nonce)
+    || !validConfirmationWait(input.minimumConfirmations, input.confirmationTimeoutMs)
     || !await isPublicHttpTarget(input.target, defaultDnsResolver)
   ) {
     return undefined
@@ -82,17 +90,24 @@ export async function readGuardedX402EvmReceipt(input: Readonly<{
         },
       }),
     })
+    const minimumConfirmations = input.minimumConfirmations ?? 1
+    const receiptPromise = minimumConfirmations === 1
+      ? client.getTransactionReceipt({ hash: input.transactionHash as Hex })
+      : client.waitForTransactionReceipt({
+          hash: input.transactionHash as Hex,
+          confirmations: minimumConfirmations,
+          timeout: input.confirmationTimeoutMs,
+        })
     const [receipt, transaction, latestBlock] = await Promise.all([
-      client.getTransactionReceipt({
-        hash: input.transactionHash as Hex,
-      }),
+      receiptPromise,
       client.getTransaction({
         hash: input.transactionHash as Hex,
       }),
-      client.getBlockNumber(),
+      client.getBlock(),
     ])
     if (
-      latestBlock < receipt.blockNumber
+      latestBlock.number === null
+      || latestBlock.number < receipt.blockNumber
       || transaction.hash.toLowerCase() !== receipt.transactionHash.toLowerCase()
       || receipt.transactionHash.toLowerCase() !== input.transactionHash.toLowerCase()
       || typeof receipt.blockHash !== 'string'
@@ -102,19 +117,20 @@ export async function readGuardedX402EvmReceipt(input: Readonly<{
       || transaction.blockNumber !== receipt.blockNumber
     ) return undefined
     const authorizationState = await client.readContract({
-      address: BASE_USDC_ADDRESS as Address,
+      address: profile.asset as Address,
       abi: eip3009ABI,
       functionName: 'authorizationState',
       args: [input.payer as Address, input.nonce as Hex],
-      blockNumber: receipt.blockNumber,
+      blockNumber: latestBlock.number,
     })
     if (typeof authorizationState !== 'boolean') return undefined
     return {
       transactionHash: receipt.transactionHash,
       status: receipt.status,
-      confirmations: latestBlock - receipt.blockNumber + 1n,
+      confirmations: latestBlock.number - receipt.blockNumber + 1n,
       blockHash: receipt.blockHash,
       blockNumber: receipt.blockNumber,
+      observedBlockTimestamp: latestBlock.timestamp,
       authorizationState,
       transactionTo: transaction.to,
       transactionInput: transaction.input,
@@ -127,4 +143,19 @@ export async function readGuardedX402EvmReceipt(input: Readonly<{
   } catch {
     return undefined
   }
+}
+
+function validConfirmationWait(
+  minimumConfirmations: number | undefined,
+  timeoutMs: number | undefined,
+): boolean {
+  return (
+    minimumConfirmations === undefined
+    || (Number.isSafeInteger(minimumConfirmations)
+      && minimumConfirmations >= 1
+      && minimumConfirmations <= 64)
+  ) && (
+    timeoutMs === undefined
+    || (Number.isSafeInteger(timeoutMs) && timeoutMs >= 1_000 && timeoutMs <= 120_000)
+  )
 }

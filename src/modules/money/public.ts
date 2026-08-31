@@ -751,6 +751,7 @@ export {
   decideExternalSpendReconciliation,
   decideExternalSpendReversal,
   externalSpendCustodyPolicyRefusal,
+  externalSpendExecutionContextForFacts,
   externalSpendFinalizationCommandRefusal,
   externalSpendIdentityDigest,
   externalSpendIdentityFromReservation,
@@ -765,11 +766,14 @@ export {
   mintExternalSpendIdentity,
   sameExternalSpendIdentity,
   externalSpendStateForSettlement,
+  EXTERNAL_SPEND_PAYMENT_PROFILES,
 } from "./internal/external-spend";
 export type {
+  ExternalSpendExecutionContext,
   ExternalSpendFinalizationCommand,
   ExternalSpendIdentity,
   ExternalSpendPaymentFacts,
+  ExternalSpendPaymentProfile,
   ExternalSpendReservation,
   ExternalSpendReservationState,
   ExternalSpendSettlementStatus,

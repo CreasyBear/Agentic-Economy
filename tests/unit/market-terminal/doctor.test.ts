@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { listMcpActions, mcpToolName } from '@/modules/actions'
 import { spawnCli } from './cli-errors-harness'
 
 const temporaryDirectories: string[] = []
@@ -15,9 +16,78 @@ afterEach(async () => {
 })
 
 describe('ae doctor', () => {
+  it('routes an unreachable remote origin to configuration truth instead of doctor recursion', async () => {
+    const origin = 'https://ae-unreachable.invalid'
+    const configContinuation = `ae config --base-url ${origin} --json`
+    const directory = makeConfigDirectory()
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], {
+      env: cleanEnvironment(directory),
+    })
+
+    expect(json.status).toBe(0)
+    expect(json.stderr).toBe('')
+    expect(JSON.parse(json.stdout)).toEqual({
+      kind: 'degraded',
+      checks: [
+        { id: 'origin', state: 'pass', summary: `Configured origin is ${origin}.` },
+        {
+          id: 'server', state: 'fail', summary: 'AE server is not reachable.',
+          nextCommand: configContinuation,
+        },
+        { id: 'mcp', state: 'warn', summary: 'MCP initialization was not checked because server identity is unavailable.' },
+        { id: 'buyer', state: 'warn', summary: 'Buyer credential was not sent because server identity is unavailable.' },
+        { id: 'balance', state: 'warn', summary: 'Balance was not checked because server identity is unavailable.' },
+        { id: 'invocation', state: 'warn', summary: 'Invocation recovery was not checked because server identity is unavailable.' },
+      ],
+    })
+    expect(json.stdout).not.toContain('ae doctor')
+    expect(json.stdout).not.toContain('npm run')
+
+    const human = await spawnCli(['doctor', '--base-url', origin], {
+      env: cleanEnvironment(directory),
+    })
+    expect(human.status).toBe(1)
+    expect(human.stderr).toBe('')
+    expect(human.stdout).toContain('✗ AE server is not reachable.')
+    expect(human.stdout).toContain(`Next: ${configContinuation}`)
+    expect(human.stdout).not.toContain('Next: ae doctor')
+    expect(human.stdout).not.toContain('npm run')
+  })
+
+  it('routes an unreachable loopback origin through the installed CLI to hosted AE', async () => {
+    const origin = 'http://127.0.0.1:1'
+    const hostedDoctor = 'ae doctor --base-url https://agentic-economy-phi.vercel.app'
+    const directory = makeConfigDirectory()
+
+    const json = await spawnCli(['doctor', '--base-url', origin, '--json'], {
+      env: cleanEnvironment(directory),
+    })
+
+    expect(json.status).toBe(0)
+    expect(json.stderr).toBe('')
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      kind: 'degraded',
+      checks: expect.arrayContaining([{
+        id: 'server', state: 'fail', summary: 'AE server is not reachable.',
+        nextCommand: hostedDoctor,
+      }]),
+    })
+    expect(json.stdout).not.toContain('npm run')
+
+    const human = await spawnCli(['doctor', '--base-url', origin], {
+      env: cleanEnvironment(directory),
+    })
+    expect(human.status).toBe(1)
+    expect(human.stderr).toBe('')
+    expect(human.stdout).toContain(`Next: ${hostedDoctor}`)
+    expect(human.stdout).not.toContain('npm run')
+  })
+
   it('returns one degraded diagnosis and inspects connections before authorizing a new identity', async () => {
     const requests: Array<{ method: string; path: string }> = []
     const origin = await startServer((request, response) => {
+      if (respondHealthyDeployment(request, response)) return
       requests.push({ method: request.method ?? '', path: request.url ?? '' })
       respondJson(response, {
         schemaVersion: 'ae-site-discovery:v2',
@@ -38,7 +108,10 @@ describe('ae doctor', () => {
       checks: [
         { id: 'origin', state: 'pass', summary: `Configured origin is ${origin}.` },
         { id: 'server', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
-        { id: 'buyer', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and inspection remain available.', nextCommand: 'ae account connections' },
+        { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
+        { id: 'readiness', state: 'pass', summary: 'Server operational readiness passed.' },
+        { id: 'release', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
+        { id: 'buyer', state: 'warn', summary: 'No buyer credential is selected for this origin; anonymous search and inspection remain available.', nextCommand: `ae connect --base-url ${origin}` },
         { id: 'balance', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
         { id: 'invocation', state: 'warn', summary: 'Invocation recovery is unavailable until a buyer credential is connected.' },
       ],
@@ -53,6 +126,7 @@ describe('ae doctor', () => {
     let invocationState: 'pending' | 'reconciliation_required' = 'reconciliation_required'
     const observed: Array<{ method: string; path: string; authorization?: string; body?: string }> = []
     const origin = await startServer((request, response) => {
+      if (respondHealthyDeployment(request, response)) return
       const chunks: Buffer[] = []
       request.on('data', (chunk: Buffer) => chunks.push(chunk))
       request.on('end', () => {
@@ -113,6 +187,9 @@ describe('ae doctor', () => {
       checks: [
         { id: 'origin', state: 'pass', summary: `Configured origin is ${origin}.` },
         { id: 'server', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
+        { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
+        { id: 'readiness', state: 'pass', summary: 'Server operational readiness passed.' },
+        { id: 'release', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
         { id: 'buyer', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_operations:invoke.' },
         { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
         {
@@ -132,7 +209,7 @@ describe('ae doctor', () => {
     ])
 
     const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
-    expect(human.status).toBe(0)
+    expect(human.status).toBe(1)
     expect(human.stderr).toBe('')
     expect(human.stdout).toContain('AE doctor: degraded')
     expect(human.stdout).toContain('! A reconciliation-required invocation needs attention.')
@@ -162,6 +239,7 @@ describe('ae doctor', () => {
     const priorOperationRef = `operation:v1:${'d'.repeat(64)}`
     const statusBodies: unknown[] = []
     const origin = await startServer((request, response) => {
+      if (respondHealthyDeployment(request, response)) return
       const chunks: Buffer[] = []
       request.on('data', (chunk: Buffer) => chunks.push(chunk))
       request.on('end', () => {
@@ -268,6 +346,7 @@ describe('ae doctor', () => {
     const detailRequests: Array<{ authorization?: string; body: unknown }> = []
     let current = true
     const origin = await startServer((request, response) => {
+      if (respondHealthyDeployment(request, response)) return
       const chunks: Buffer[] = []
       request.on('data', (chunk: Buffer) => chunks.push(chunk))
       request.on('end', () => {
@@ -368,6 +447,7 @@ describe('ae doctor', () => {
     const supplierSecret = 'FAKE_SUPPLIER_SECRET_8431'
     const supplierRequests: Array<{ path: string; body: unknown }> = []
     const origin = await startServer((request, response) => {
+      if (respondHealthyDeployment(request, response)) return
       const chunks: Buffer[] = []
       request.on('data', (chunk: Buffer) => chunks.push(chunk))
       request.on('end', () => {
@@ -446,6 +526,9 @@ describe('ae doctor', () => {
       checks: [
         { id: 'origin', state: 'pass' },
         { id: 'server', state: 'pass' },
+        { id: 'mcp', state: 'pass' },
+        { id: 'readiness', state: 'pass' },
+        { id: 'release', state: 'pass' },
         { id: 'buyer', state: 'pass' },
         { id: 'balance', state: 'pass' },
         { id: 'invocation', state: 'pass' },
@@ -468,6 +551,7 @@ describe('ae doctor', () => {
     const secret = 'FAKE_MISMATCHED_SECRET_9097'
     const requests: string[] = []
     const origin = await startServer((request, response) => {
+      if (respondHealthyDeployment(request, response)) return
       requests.push(request.url ?? '')
       respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
     })
@@ -490,15 +574,30 @@ describe('ae doctor', () => {
       expect.objectContaining({
           id: 'buyer', state: 'fail',
           summary: 'Buyer credential is not safely bound to the configured origin.',
-          nextCommand: 'ae account connections',
+          nextCommand: `ae connect --base-url ${origin}`,
       }),
     ]))
     expect(requests).toEqual(['/.well-known/ucp'])
+
+    const human = await spawnCli(['doctor', '--base-url', origin], {
+      env: {
+        ...cleanEnvironment(directory),
+        AE_API_KEY: secret,
+        AE_API_KEY_ORIGIN: 'https://private.example.test/credential?token=hidden',
+      },
+    })
+    expect(human.status).toBe(1)
+    expect(human.stderr).toBe('')
+    expect(human.stdout).toContain('AE doctor: degraded')
+    expect(human.stdout).toContain('✗ Buyer credential is not safely bound to the configured origin.')
+    expect(human.stdout).not.toContain(secret)
+    expect(human.stdout).not.toContain('private.example.test')
   })
 
   it('returns ready when the buyer can safely continue the market loop', async () => {
     const buyerSecret = 'FAKE_READY_BUYER_SECRET_7351'
     const origin = await startServer((request, response) => {
+      if (respondHealthyDeployment(request, response)) return
       const chunks: Buffer[] = []
       request.on('data', (chunk: Buffer) => chunks.push(chunk))
       request.on('end', () => {
@@ -539,18 +638,29 @@ describe('ae doctor', () => {
       checks: [
         { id: 'origin', state: 'pass', summary: `Configured origin is ${origin}.` },
         { id: 'server', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
+        { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
+        { id: 'readiness', state: 'pass', summary: 'Server operational readiness passed.' },
+        { id: 'release', state: 'pass', summary: `Release identity is ${'a'.repeat(40)}.` },
         { id: 'buyer', state: 'pass', summary: 'Buyer credential is origin-bound, authenticated, and has market_operations:invoke.' },
         { id: 'balance', state: 'pass', summary: 'Buyer balance is available and the account is active.' },
         { id: 'invocation', state: 'pass', summary: 'No pending or reconciliation-required invocation needs attention.' },
         { id: 'market_requests', state: 'pass', summary: 'No private market requests need rechecking.' },
       ],
     })
+
+    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    expect(human.status).toBe(0)
+    expect(human.stderr).toBe('')
+    expect(human.stdout).toContain('AE doctor: ready')
+    expect(human.stdout).toContain('✓ No pending or reconciliation-required invocation needs attention.')
+    expect(human.stdout).not.toContain(buyerSecret)
   })
 
   it('does not send a bound credential when the server manifest names another origin', async () => {
     const secret = 'FAKE_SERVER_IDENTITY_SECRET_1790'
     const requests: Array<{ path: string; authorization?: string }> = []
     const origin = await startServer((request, response) => {
+      if (respondHealthyDeployment(request, response)) return
       requests.push({
         path: request.url ?? '',
         ...(request.headers.authorization === undefined ? {} : { authorization: request.headers.authorization }),
@@ -577,6 +687,83 @@ describe('ae doctor', () => {
       ]),
     })
     expect(requests).toEqual([{ path: '/.well-known/ucp' }])
+
+    const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
+    expect(human.status).toBe(1)
+    expect(human.stderr).toBe('')
+    expect(human.stdout).toContain('AE doctor: degraded')
+    expect(human.stdout).toContain('✗ AE server manifest origin does not match the configured origin.')
+    expect(human.stdout).not.toContain(secret)
+  })
+
+  it('reports manifest compatibility separately from failed operational readiness and release identity', async () => {
+    const secret = 'FAKE_DIAGNOSTIC_SECRET_6712'
+    const origin = await startServer((request, response) => {
+      if (request.url === '/mcp' && respondHealthyDeployment(request, response)) return
+      if (request.url === '/.well-known/ucp') {
+        respondJson(response, { schemaVersion: 'ae-site-discovery:v2', origin })
+        return
+      }
+      if (request.url === '/api/ready') {
+        respondJson(response, {
+          kind: 'UNAVAILABLE',
+          code: 'server_not_ready',
+          checks: {
+            config: { status: 'failed', code: 'deployment_manifest_invalid' },
+            convex: { status: 'failed', code: 'convex_probe_skipped' },
+          },
+          diagnostics: { configured: [{ name: 'AE_SECRET', configured: false }] },
+        }, 503)
+        return
+      }
+      if (request.url === '/api/v1/release') {
+        respondJson(response, { kind: 'unavailable', reason: 'source_revision_unconfigured' }, 503)
+        return
+      }
+      respondJson(response, { error: 'unexpected', secret }, 404)
+    })
+    const directory = makeConfigDirectory()
+
+    const result = await spawnCli(['doctor', '--base-url', origin, '--json'], {
+      env: cleanEnvironment(directory),
+    })
+
+    expect(result.status).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(result.stdout).not.toContain(secret)
+    expect(JSON.parse(result.stdout)).toEqual({
+      kind: 'degraded',
+      checks: [
+        { id: 'origin', state: 'pass', summary: `Configured origin is ${origin}.` },
+        { id: 'server', state: 'pass', summary: 'AE server is reachable and manifest ae-site-discovery:v2 is compatible.' },
+        { id: 'mcp', state: 'pass', summary: 'MCP initialization and 4 public tools passed.' },
+        {
+          id: 'readiness', state: 'fail',
+          summary: 'Server is reachable but operational readiness failed (deployment_manifest_invalid). The service operator must restore operational readiness before calls proceed; the caller should not continue or retry.',
+        },
+        {
+          id: 'release', state: 'fail',
+          summary: 'Release identity is unavailable (source_revision_unconfigured). The service operator must configure a valid release identity before calls proceed; the caller should not continue or retry.',
+        },
+        {
+          id: 'buyer', state: 'warn',
+          summary: 'No buyer credential is selected for this origin; anonymous search and inspection remain available.',
+          nextCommand: `ae connect --base-url ${origin}`,
+        },
+        { id: 'balance', state: 'warn', summary: 'Balance is unavailable until a buyer credential is connected.' },
+        { id: 'invocation', state: 'warn', summary: 'Invocation recovery is unavailable until a buyer credential is connected.' },
+      ],
+    })
+
+    const human = await spawnCli(['doctor', '--base-url', origin], {
+      env: cleanEnvironment(directory),
+    })
+    expect(human.status).toBe(1)
+    expect(human.stderr).toBe('')
+    expect(human.stdout).toContain('✗ Server is reachable but operational readiness failed (deployment_manifest_invalid). The service operator must restore operational readiness before calls proceed; the caller should not continue or retry.')
+    expect(human.stdout).toContain('✗ Release identity is unavailable (source_revision_unconfigured). The service operator must configure a valid release identity before calls proceed; the caller should not continue or retry.')
+    expect(human.stdout).not.toContain('Next: ae connect')
+    expect(human.stdout).not.toContain(secret)
   })
 })
 
@@ -594,6 +781,69 @@ async function startServer(
 function respondJson(response: ServerResponse, body: unknown, status = 200): void {
   response.writeHead(status, { 'content-type': 'application/json' })
   response.end(JSON.stringify(body))
+}
+
+function respondHealthyDeployment(request: IncomingMessage, response: ServerResponse): boolean {
+  if (request.url === '/mcp' && request.method === 'GET') {
+    response.writeHead(405)
+    response.end()
+    return true
+  }
+  if (request.url === '/mcp' && request.method === 'POST') {
+    const chunks: Buffer[] = []
+    request.on('data', (chunk: Buffer) => chunks.push(chunk))
+    request.on('end', () => {
+      const message = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+        id?: string | number
+        method?: string
+        params?: { protocolVersion?: string }
+      }
+      if (message.method === 'notifications/initialized') {
+        response.writeHead(202)
+        response.end()
+        return
+      }
+      if (message.method === 'initialize') {
+        respondJson(response, {
+          jsonrpc: '2.0', id: message.id,
+          result: {
+            protocolVersion: message.params?.protocolVersion,
+            capabilities: { tools: {} },
+            serverInfo: { name: 'ae-doctor-test', version: '1.0.0' },
+          },
+        })
+        return
+      }
+      if (message.method === 'tools/list') {
+        respondJson(response, {
+          jsonrpc: '2.0', id: message.id,
+          result: {
+            tools: listMcpActions()
+              .filter((action) => action.readOnly && action.credentialAdmission === undefined)
+              .map((action) => ({
+                name: mcpToolName(action),
+                inputSchema: { type: 'object', additionalProperties: true },
+              })),
+          },
+        })
+        return
+      }
+      respondJson(response, {
+        jsonrpc: '2.0', id: message.id,
+        error: { code: -32601, message: 'Method not found' },
+      })
+    })
+    return true
+  }
+  if (request.url === '/api/ready') {
+    respondJson(response, { status: 'ready', checks: { config: 'ready', convex: 'ready' }, diagnostics: {} })
+    return true
+  }
+  if (request.url === '/api/v1/release') {
+    respondJson(response, { kind: 'ok', sourceRevision: 'a'.repeat(40) })
+    return true
+  }
+  return false
 }
 
 function makeConfigDirectory(): string {

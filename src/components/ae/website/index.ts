@@ -27,6 +27,10 @@ export type { AeSiteResourceItem } from './AeSiteResourceList'
 export { AeSiteCover } from './AeSiteCover'
 export { AeSiteAuthStage } from './AeSiteAuthStage'
 export { AeSiteAuthPanel, AeSiteAuthSubmit } from './AeSiteAuthPanel'
-export { clerkAppearance, clerkAuthSurfaceAppearance } from './clerk-appearance'
+export {
+  clerkAppearance,
+  clerkAuthSurfaceAppearance,
+  clerkSignInSurfaceAppearance,
+} from './clerk-appearance'
 export { parseHeadingNotation } from './heading-notation'
 export type { HeadingSegment } from './heading-notation'

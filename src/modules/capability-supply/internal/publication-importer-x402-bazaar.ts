@@ -1,5 +1,6 @@
 import {
   isBoundedJsonValue,
+  validateJsonSchema,
   type JsonValue,
 } from "@/modules/capability-contract/public";
 import { isRecord } from "@/modules/common/is-record";
@@ -29,8 +30,9 @@ export type BazaarAdmission =
       kind: "admitted";
       method: "GET" | "POST";
       inputSchema: Readonly<Record<string, JsonValue>>;
+      inputExample: Readonly<Record<string, JsonValue>>;
       outputSchema: Readonly<Record<string, JsonValue>>;
-      query: BazaarAdmissionQuery | undefined;
+      query?: BazaarAdmissionQuery;
     }>;
 
 export type BazaarDiscoveryInfo = Readonly<{
@@ -95,8 +97,13 @@ export function admitBazaarDiscoveryInfo(
   }
 
   const inputSchema = inputSchemaFromExtension(extension, method);
-  const outputSchema = outputSchemaFromInfo(info.output);
-  if (inputSchema === undefined || outputSchema === undefined) {
+  const outputSchema = outputSchemaFromExtension(extension, info.output);
+  const inputExample = inputExampleFromInfo(input, method, inputSchema);
+  if (
+    inputSchema === undefined ||
+    inputExample === undefined ||
+    outputSchema === undefined
+  ) {
     return { kind: "refused", reason: "schema_missing" };
   }
   if (method === "GET") {
@@ -104,15 +111,52 @@ export function admitBazaarDiscoveryInfo(
     if (query === undefined) {
       return { kind: "refused", reason: "selector_invalid" };
     }
-    return { kind: "admitted", method, inputSchema, outputSchema, query };
+    return {
+      kind: "admitted",
+      method,
+      inputSchema,
+      inputExample,
+      outputSchema,
+      query,
+    };
   }
   return {
     kind: "admitted",
     method,
     inputSchema,
+    inputExample,
     outputSchema,
-    query: undefined,
   };
+}
+
+function inputExampleFromInfo(
+  input: Readonly<Record<string, unknown>>,
+  method: "GET" | "POST",
+  inputSchema: Readonly<Record<string, JsonValue>> | undefined,
+): Readonly<Record<string, JsonValue>> | undefined {
+  const candidate = method === "GET" ? input.queryParams : input.body;
+  if (
+    inputSchema === undefined ||
+    !isRecord(candidate) ||
+    !isBoundedJsonValue(candidate)
+  ) {
+    return undefined;
+  }
+  // `next_token` is a public pagination input in the admitted transport, but
+  // persisting a concrete cursor would be indistinguishable from fixed token
+  // material to the publication credential guard. A provider example does not
+  // need the optional cursor to teach or probe the first page, so omit it and
+  // then prove the remaining source example still conforms to the exact schema.
+  const sanitized = Object.fromEntries(
+    Object.entries(candidate).filter(([name]) => name !== "next_token"),
+  );
+  if (
+    !isBoundedJsonValue(sanitized) ||
+    !validateJsonSchema(inputSchema, sanitized)
+  ) {
+    return undefined;
+  }
+  return sanitized as Readonly<Record<string, JsonValue>>;
 }
 
 function inputSchemaFromExtension(
@@ -133,13 +177,25 @@ function inputSchemaFromExtension(
   return objectJsonSchema(source);
 }
 
-function outputSchemaFromInfo(
+function outputSchemaFromExtension(
+  extension: Readonly<Record<string, unknown>>,
   output: unknown,
 ): Readonly<Record<string, JsonValue>> | undefined {
   if (!isRecord(output) || output.type !== "json" || !isRecord(output.example)) return undefined;
-  return isBoundedJsonValue(output.example)
-    ? jsonSchemaFromExampleObject(output.example)
+  const schema = isRecord(extension.schema) ? extension.schema : undefined;
+  const properties = isRecord(schema?.properties) ? schema.properties : undefined;
+  const outputDeclaration = isRecord(properties?.output) ? properties.output : undefined;
+  const outputProperties = isRecord(outputDeclaration?.properties)
+    ? outputDeclaration.properties
     : undefined;
+  const declaredValue = outputProperties?.example;
+  const declared = objectJsonSchema(declaredValue);
+  if (isRecord(declaredValue) && Object.hasOwn(declaredValue, "properties")) {
+    return declared !== undefined && validateJsonSchema(declared, output.example)
+      ? declared
+      : undefined;
+  }
+  return isBoundedJsonValue(output.example) ? jsonSchemaFromExampleObject(output.example) : undefined;
 }
 
 function objectJsonSchema(

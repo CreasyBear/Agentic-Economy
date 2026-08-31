@@ -8,6 +8,8 @@ import { api, internal } from './_generated/api'
 import { action, type ActionCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 import { resolveBusinessActor } from './authz'
+import { jsonObject } from '@/modules/capability-execution/convex'
+import { sourceWriteArgs } from './sourceWriteAdmission'
 
 const ownerSupplyCompletedValue = v.object({
   step: v.union(v.literal('readiness'), v.literal('test')),
@@ -17,6 +19,8 @@ const ownerSupplyCompletedValue = v.object({
   message: v.string(),
   publicationRef: v.optional(v.string()),
   operationRef: v.optional(v.string()),
+  canaryRef: v.optional(v.string()),
+  invocationRef: v.optional(v.string()),
 })
 const ownerSupplyActionResultValue = v.union(
   ownerSupplyCompletedValue,
@@ -43,6 +47,7 @@ const ownerSupplyActionResultValue = v.union(
       v.literal('health_unhealthy'), v.literal('health_stale'),
       v.literal('eligibility_integrity_failure'), v.literal('withdrawn'),
       v.literal('incompatible_revision'),
+      v.literal('canary_admission_refused'),
     ),
   }),
 )
@@ -55,6 +60,9 @@ const ownerSupplyInput = {
   publicationRef: v.string(),
   publicationRevision: v.number(),
   operationKey: v.string(),
+  correlationId: v.optional(v.string()),
+  input: v.optional(jsonObject),
+  ...sourceWriteArgs,
 }
 
 type OwnerSupplyOffering = Readonly<{
@@ -66,7 +74,7 @@ type OwnerSupplyOffering = Readonly<{
   operationRef?: string
   publisher?: string
   sourceKind?: string
-  testCompleted?: boolean
+  readinessCompleted?: boolean
 }>
 async function ownerSupplyOffering(
   ctx: ActionCtx,
@@ -96,7 +104,7 @@ async function ownerSupplyOffering(
       ? {}
       : { publicationRevision: offering.publication.publicationRevision }),
     ...(offering.operationRef === undefined ? {} : { operationRef: offering.operationRef }),
-    testCompleted: offering.stepStates.test === 'completed',
+    readinessCompleted: offering.stepStates.readiness === 'completed',
     ...(offering.publication === undefined ? {} : {
       publisher: offering.publication.authorityMode,
       sourceKind: offering.publication.source.kind,
@@ -109,7 +117,7 @@ type OwnerSupplyAuthority = Extract<Awaited<ReturnType<typeof resolveBusinessAct
 async function currentOwnerSupplyAuthority(ctx: ActionCtx, businessId: Id<'businesses'>): Promise<OwnerSupplyAuthority | null> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return null
-  return await ctx.runQuery(internal.capabilitySupply.authorizeOwnerSupplyAction, { businessId })
+  return await ctx.runQuery(api.catalog.authorizeSupplierBusiness, { businessId })
     ? actor
     : null
 }
@@ -162,10 +170,16 @@ export const runOwnerSupplyReadiness = action({
     if (probeAuthority === null) {
       return { step: 'readiness', state: 'refused', refusal: 'authorization_denied' }
     }
-    const result = await ctx.runAction(internal.capabilitySupplyReadiness.probe, {
-      publicationRef: args.publicationRef,
-      expectedRevision: args.publicationRevision,
-    })
+    const result = offering.sourceKind === 'x402'
+      ? await ctx.runAction(internal.capabilitySupplyReadiness.probeOwnerStaged, {
+          publicationRef: args.publicationRef,
+          expectedRevision: args.publicationRevision,
+          businessId: args.businessId,
+        })
+      : await ctx.runAction(internal.capabilitySupplyReadiness.probe, {
+          publicationRef: args.publicationRef,
+          expectedRevision: args.publicationRevision,
+        })
     if (!sameOwnerSupplyAuthority(
       probeAuthority,
       await currentOwnerSupplyAuthority(ctx, args.businessId),
@@ -189,7 +203,9 @@ export const runOwnerSupplyReadiness = action({
       revision: args.offeringRevision,
       publicationRef: args.publicationRef,
       ...(offering.operationRef === undefined ? {} : { operationRef: offering.operationRef }),
-      message: 'The admitted public operation is ready.',
+      message: offering.sourceKind === 'x402'
+        ? 'The exact staged Operation is ready for the seller canary. It is not public yet.'
+        : 'The admitted public operation is ready.',
     }
   },
 })
@@ -212,13 +228,30 @@ export const runOwnerSupplyTest = action({
     if (offering === undefined || offering.operationRef === undefined) {
       return { step: 'test', state: 'refused', refusal: 'revision_changed' }
     }
-    // x402 Test is the already-projected exact no-payment challenge, never a paid call.
     if (offering.sourceKind === 'x402') {
-      if (!offering.testCompleted) {
+      if (!offering.readinessCompleted) {
         return { step: 'test', state: 'refused', refusal: 'health_unhealthy' }
       }
-      if (await currentOwnerSupplyAuthority(ctx, args.businessId) === null) {
-        return { step: 'test', state: 'refused', refusal: 'authorization_denied' }
+      if (args.correlationId === undefined) return { step: 'test', state: 'refused', refusal: 'authorization_denied' }
+      const canary = await ctx.runMutation(internal.capabilitySupplyOwnerCanary.requestSellerOnboardingCanary, {
+        businessId: args.businessId,
+        offeringRef: args.offeringRef,
+        offeringRevision: args.offeringRevision,
+        offeringSourceHash: args.offeringSourceHash,
+        publicationRef: args.publicationRef,
+        publicationRevision: args.publicationRevision,
+        input: args.input ?? {},
+        operationKey: args.operationKey,
+        correlationId: args.correlationId,
+        ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
+        ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
+      })
+      if (canary.kind === 'refused') {
+        return {
+          step: 'test',
+          state: 'refused',
+          refusal: canary.code === 'input_invalid' ? 'input_invalid' : 'canary_admission_refused',
+        }
       }
       return {
         step: 'test',
@@ -226,8 +259,10 @@ export const runOwnerSupplyTest = action({
         offeringRef: args.offeringRef,
         revision: args.offeringRevision,
         publicationRef: args.publicationRef,
-        operationRef: offering.operationRef,
-        message: 'The exact admitted operation returned a fresh valid x402 payment challenge. No payment was sent.',
+        operationRef: canary.operationRef,
+        canaryRef: canary.canaryRef,
+        invocationRef: canary.invocationRef,
+        message: 'The exact seller canary was admitted and queued on Base Sepolia. Publication remains blocked until settlement and output evidence pass.',
       }
     }
     const taskStartedAt = Date.now()

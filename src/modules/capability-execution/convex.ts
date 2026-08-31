@@ -3,6 +3,8 @@ export {
   jsonObject,
   jsonValue,
   operationInvokeAuthorityValue,
+  operationExecutionPurposeValue,
+  sellerOnboardingCanaryExecutionEnvelopeValue,
   operationInvokeReceiptValue,
   invocationReconciliationValue,
   operationResultValue,
@@ -17,6 +19,7 @@ export {
   buildCanonicalTerminalOutcomeCommand,
   x402PaymentReconciliationEvidenceValue,
 } from '@/modules/action-invocation/runtime'
+export { buildSellerOnboardingCanaryReceipt } from './invocation-worker/sellerCanaryReceipt'
 export type {
   CanonicalClaimSnapshot,
   CanonicalTerminalOutcome,

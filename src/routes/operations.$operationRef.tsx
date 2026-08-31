@@ -102,6 +102,7 @@ function CurrentOperationDetail({
   const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
   const continuation = continuationForOperationFacts({
     operationRef: operation.operationRef,
+    searchQuery: operation.summary,
     availabilityPosture: operation.availability.posture === 'routeable' && invokeNavigation === undefined
       ? 'integrated'
       : operation.availability.posture,
@@ -157,18 +158,18 @@ function CurrentOperationDetail({
               )}
             </AeSection>
 
-            <AeSection title="Example input and output" description="Published examples only. Missing examples are never inferred.">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Example
-                  title="Example input"
-                  value={inputExample?.input}
-                  empty="No example input is published. Use the input schema below."
-                />
-                <Example
-                  title="Example output"
-                  empty="No example output is published. Validate the response against the output schema below."
-                />
-              </div>
+            <AeSection title="Example input" description="Published input only. Missing examples are never inferred.">
+              <Example
+                title="Example input"
+                value={inputExample?.input}
+                empty="No example input is published. Use the input schema below."
+              />
+              <a
+                href="#technical-contract"
+                className="inline-flex min-h-touch items-center justify-self-start text-sm font-medium text-foreground underline underline-offset-4"
+              >
+                Read the input and output schemas
+              </a>
             </AeSection>
 
             <AeSection id="price-and-terms" title="Price and terms" description="The exact buyer authorization and published commercial terms for this capability.">
@@ -210,7 +211,7 @@ function CurrentOperationDetail({
           <OperationAccessSidecard continuation={continuation} invokeInput={invokeInput} />
         </div>
 
-        <details id="technical-contract" className="scroll-mt-6 rounded-card border border-border bg-card">
+        <details id="technical-contract" className="scroll-mt-anchor rounded-card border border-border bg-card">
           <summary className="flex min-h-touch cursor-pointer items-center px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             Technical contract, schemas, digests, and references
           </summary>
@@ -278,9 +279,7 @@ function OperationAccessSidecard({
           {continuationDescription(continuation)}
         </p>
       </div>
-      {continuation.label === 'Inspect Operation' && continuation.command !== undefined ? (
-        <AeCopyCommand label={continuation.label} code={continuation.command} />
-      ) : continuation.kind === 'navigate' && continuation.href !== undefined ? (
+      {continuation.kind === 'navigate' && continuation.href !== undefined ? (
         <Button asChild className="min-h-touch w-full">
           <a href={continuation.href}>{continuation.label}</a>
         </Button>
@@ -300,7 +299,7 @@ function continuationDescription(continuation: SuggestedContinuation): string {
   if (continuation.warning !== undefined) return continuation.warning
   if (continuation.label === 'Connect agent') return 'Connect an agent before making this protected call.'
   if (continuation.label === 'Call Operation') return 'Your agent access is ready. Copy the exact call command.'
-  return 'This Operation is inspectable but not currently callable.'
+  return 'Browse the current catalogue for a callable alternative.'
 }
 
 /**
@@ -402,7 +401,7 @@ function Ref({ value }: Readonly<{ value: string }>) {
 }
 
 function BusinessLink({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
-  return <Link to="/$slug" params={{ slug: operation.business.slug }} className="font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{operation.business.name}</Link>
+  return <span className="font-medium text-foreground">{operation.business.name}</span>
 }
 
 function ParameterList({ title, parameters, empty }: Readonly<{ title: string; parameters: readonly PublicOperationParameter[]; empty: string }>) {

@@ -88,8 +88,10 @@ describe('discovery prompt-injection protection', () => {
     expect(llms.body).not.toContain('<b>HTML</b>')
     expect(llms.body).not.toContain('\u202E')
     expect(llms.body).not.toContain('Owner disclosure')
-    expect(llms.body).toContain('slug=demo-inquiry-provider')
-    expect(llms.body).toContain('disposition=current')
+    expect(llms.body).not.toContain('slug=demo-inquiry-provider')
+    expect(llms.body).not.toContain('disposition=current')
+    expect(llms.body).toContain('The Operation catalogue is the canonical market')
+    expect(llms.urls).toContain('https://ae.example/demo-inquiry-provider')
   })
 
 })

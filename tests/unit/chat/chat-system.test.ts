@@ -46,7 +46,7 @@ describe('transcript projector', () => {
     expect(JSON.stringify(turns)).not.toContain('private.example')
   })
 
-  it('projects search rows from PublicOperationChoice fields and never surfaces execute output', () => {
+  it('projects search rows and preserves a canonical completed call handback', () => {
     const executeSecret = 'EXECUTE_OUTPUT_SECRET'
     const searchRef = `operation:v1:${'b'.repeat(64)}`
     const turns = projectTranscriptTurns([{
@@ -88,11 +88,19 @@ describe('transcript projector', () => {
           type: `tool-${providerSafeActionToolName('operation.invoke')}`,
           state: 'output-available',
           output: {
-            kind: 'ok',
+            kind: 'completed',
+            invocationRef: 'invocation:chat:weather:1',
             operationRef: searchRef,
-            name: 'Weather finder',
             output: { forecast: executeSecret, nested: { evidenceHash: executeSecret } },
-            evidenceHash: executeSecret,
+            evidenceHash: 'evidence:weather:1',
+            usage: {
+              usageRef: 'usage:weather:1',
+              observedAt: 1,
+              chargeState: 'paid',
+              amount: { currency: 'USD', units: '25', exponent: 2 },
+              priceDigest: 'price:weather:1',
+              durationMs: 850,
+            },
           },
         },
       ],
@@ -115,10 +123,234 @@ describe('transcript projector', () => {
       { label: 'Data use', value: 'Public' },
     ])
     expect(execute?.kind).toBe('execute')
-    expect(execute?.kind === 'execute' ? execute.name : undefined).toBe('Weather finder')
-    expect(JSON.stringify(turns)).not.toContain(executeSecret)
+    expect(execute?.kind === 'execute' ? execute.state : undefined).toBe('completed')
+    expect(execute?.kind === 'execute' ? execute.invocationRef : undefined).toBe('invocation:chat:weather:1')
+    expect(execute?.kind === 'execute' ? execute.outputPreview : undefined).toContain(executeSecret)
+    expect(execute?.kind === 'execute' ? execute.facts : undefined).toEqual([
+      { label: 'Charge', value: 'USD 0.25 · Paid' },
+      { label: 'Duration', value: '850 ms' },
+    ])
+    expect(execute?.kind === 'execute' ? execute.continuation : undefined).toMatchObject({
+      label: 'View receipt',
+      href: '/operations/invocations/invocation:chat:weather:1',
+    })
     expect(JSON.stringify(turns)).not.toContain('Look up forecasts')
     expect(JSON.stringify(turns)).not.toContain('sky-co')
+  })
+
+  it('projects the actual JSON-wrapped tool-result shape and keeps unresolved states explicit', () => {
+    const partType = `tool-${providerSafeActionToolName('operation.invoke')}`
+    const completed = projectTranscriptTurns([{
+      id: 'assistant-wire-shape',
+      role: 'assistant',
+      parts: [{
+        type: partType,
+        toolCallId: 'tool-call-1',
+        state: 'output-available',
+        output: {
+          type: 'json',
+          value: {
+            kind: 'completed',
+            invocationRef: 'invocation:wire:1',
+            operationRef,
+            output: { answer: 42 },
+            evidenceHash: 'evidence:wire:1',
+            usage: {
+              usageRef: 'usage:wire:1',
+              observedAt: 1,
+              chargeState: 'free_tier',
+              amount: { currency: 'USD', units: '0', exponent: 2 },
+              priceDigest: 'price:wire:1',
+            },
+          },
+        },
+      }],
+    }])[0]?.tools[0]
+
+    expect(completed).toMatchObject({
+      kind: 'execute',
+      state: 'completed',
+      invocationRef: 'invocation:wire:1',
+      outputPreview: '{\n  "answer": 42\n}',
+    })
+
+    const unresolved = projectTranscriptTurns([{
+      id: 'assistant-reconcile',
+      role: 'assistant',
+      parts: [{
+        type: partType,
+        toolCallId: 'tool-call-2',
+        state: 'output-available',
+        output: {
+          kind: 'reconciliation_required',
+          invocationRef: 'invocation:wire:2',
+          operationRef,
+          evidence: {
+            attemptRef: 'attempt:wire:2',
+            effectGeneration: 1,
+            requiredAt: '2026-08-30T00:00:00.000Z',
+            retry: 'reconcile_before_retry',
+            evidenceSource: 'provider timeout after submit',
+          },
+        },
+      }],
+    }])[0]?.tools[0]
+
+    expect(unresolved).toMatchObject({
+      kind: 'execute',
+      state: 'reconciliation_required',
+      invocationRef: 'invocation:wire:2',
+      continuation: { kind: 'reconcile' },
+    })
+    expect(unresolved?.kind === 'execute' ? unresolved.summary : '').toMatch(/Do not retry/i)
+  })
+
+  it('preserves a completed handback through the stored-card projection boundary', () => {
+    rememberAnonymousChatHandoff('handoff-call', [{
+      id: 'assistant-call-handoff',
+      role: 'assistant',
+      parts: [{
+        type: `tool-${providerSafeActionToolName('operation.invoke')}`,
+        toolCallId: 'tool-call-stored-1',
+        state: 'output-available',
+        output: {
+          type: 'json',
+          value: {
+            kind: 'completed',
+            invocationRef: 'invocation:stored:1',
+            operationRef,
+            output: { usable: true },
+            evidenceHash: 'evidence:stored:1',
+            usage: {
+              usageRef: 'usage:stored:1',
+              observedAt: 1,
+              chargeState: 'free_tier',
+              amount: { currency: 'USD', units: '0', exponent: 2 },
+              priceDigest: 'price:stored:1',
+            },
+          },
+        },
+      }],
+    }])
+
+    const stored = readAnonymousChatHandoff('handoff-call')
+    const execute = projectTranscriptTurns(stored)[0]?.tools[0]
+    expect(execute).toMatchObject({
+      kind: 'execute',
+      state: 'completed',
+      invocationRef: 'invocation:stored:1',
+      outputPreview: '{\n  "usable": true\n}',
+      continuation: { label: 'View receipt' },
+    })
+    clearAnonymousChatHandoff('handoff-call')
+  })
+
+  it('keeps every canonical interrupted or refused business state distinct from transport completion', () => {
+    const partType = `tool-${providerSafeActionToolName('operation.invoke')}`
+    const outputs = [
+      {
+        kind: 'pending',
+        invocationRef: 'invocation:states:pending',
+        operationRef,
+        retryAfterMs: 1_000,
+      },
+      {
+        kind: 'needs_authority',
+        invocationRef: 'invocation:states:authority',
+        operationRef,
+        authorityRequest: {
+          kind: 'approve_each',
+          operationRef,
+          consequence: 'external_effect',
+          retryClass: 'reconcile_before_retry',
+          maximumSpend: { currency: 'USD', units: '200', exponent: 2 },
+          dataFields: ['recipient'],
+        },
+      },
+      {
+        kind: 'refused',
+        operationRef,
+        code: 'budget_exceeded',
+        retryable: false,
+        nextAction: 'Increase the bounded mandate before trying again.',
+      },
+    ] as const
+
+    const cards = outputs.map((output, index) => projectTranscriptTurns([{
+      id: `assistant-state-${index}`,
+      role: 'assistant',
+      parts: [{
+        type: partType,
+        toolCallId: `tool-call-state-${index}`,
+        state: 'output-available',
+        output,
+      }],
+    }])[0]?.tools[0])
+
+    expect(cards.map((card) => card?.kind === 'execute' ? card.state : undefined))
+      .toEqual(['pending', 'needs_authority', 'refused'])
+    expect(cards[0]?.kind === 'execute' ? cards[0].continuation?.label : undefined).toBe('Check call status')
+    expect(cards[1]?.kind === 'execute' ? cards[1].nextAction : undefined).toMatch(/pending approval/i)
+    expect(cards[2]?.kind === 'execute' ? cards[2].nextAction : undefined).toMatch(/bounded mandate/i)
+  })
+
+  it('renders every JSON value shape and makes a truncated preview recoverable by invocation identity', () => {
+    const partType = `tool-${providerSafeActionToolName('operation.invoke')}`
+    const values = [null, 'literal', [1, true], { answer: 42 }] as const
+
+    for (const [index, output] of values.entries()) {
+      const card = projectTranscriptTurns([{
+        id: `assistant-output-${index}`,
+        role: 'assistant',
+        parts: [{
+          type: partType,
+          state: 'output-available',
+          output: {
+            kind: 'completed',
+            invocationRef: `invocation:output:${index}`,
+            operationRef,
+            output,
+            evidenceHash: `evidence:output:${index}`,
+            usage: {
+              usageRef: `usage:output:${index}`,
+              observedAt: 1,
+              chargeState: 'free_tier',
+              amount: { currency: 'USD', units: '0', exponent: 2 },
+              priceDigest: `price:output:${index}`,
+            },
+          },
+        }],
+      }])[0]?.tools[0]
+      expect(card?.kind === 'execute' ? card.outputPreview : undefined).toBe(JSON.stringify(output, null, 2))
+    }
+
+    const longCard = projectTranscriptTurns([{
+      id: 'assistant-output-long',
+      role: 'assistant',
+      parts: [{
+        type: partType,
+        state: 'output-available',
+        output: {
+          kind: 'completed',
+          invocationRef: 'invocation:output:long',
+          operationRef,
+          output: 'x'.repeat(9_000),
+          evidenceHash: 'evidence:output:long',
+          usage: {
+            usageRef: 'usage:output:long',
+            observedAt: 1,
+            chargeState: 'free_tier',
+            amount: { currency: 'USD', units: '0', exponent: 2 },
+            priceDigest: 'price:output:long',
+          },
+        },
+      }],
+    }])[0]?.tools[0]
+
+    expect(longCard?.kind === 'execute' ? longCard.outputTruncated : undefined).toBe(true)
+    expect(longCard?.kind === 'execute' ? longCard.outputPreview?.length : undefined).toBe(8_000)
+    expect(longCard?.kind === 'execute' ? longCard.continuation?.href : undefined)
+      .toBe('/operations/invocations/invocation:output:long')
   })
 
   it('projects compare contrasts from comparison facts, not a second search list', () => {

@@ -325,6 +325,7 @@ export async function persistedInvocationAuthorityIsCurrent(
     )
     .unique()
   if (invocation === null || !invocationMatchesAuthorityExpectation(invocation, expected)) {
+    recordPersistedAuthorityFailure(expected, 'invocation_mismatch')
     return false
   }
   const now = Date.now()
@@ -337,6 +338,7 @@ export async function persistedInvocationAuthorityIsCurrent(
     )
     .unique()
   if (!bindingIsCurrent(binding, invocation)) {
+    recordPersistedAuthorityFailure(expected, 'binding_not_current')
     return false
   }
   const [agentPrincipal, principal, account, grant, credential] = await Promise.all([
@@ -375,6 +377,7 @@ export async function persistedInvocationAuthorityIsCurrent(
       .unique(),
   ])
   if (!credentialIsCurrent(credential, binding, invocation, now)) {
+    recordPersistedAuthorityFailure(expected, 'credential_not_current')
     return false
   }
   const [membership, ownership] = account === null
@@ -399,13 +402,18 @@ export async function persistedInvocationAuthorityIsCurrent(
           .unique(),
       ])
   if (!principalAuthorityIsCurrent({ invocation, agentPrincipal, principal, now })) {
+    recordPersistedAuthorityFailure(expected, 'principal_not_current')
     return false
   }
   if (!accountAuthorityIsCurrent({ invocation, account, membership, ownership })) {
+    recordPersistedAuthorityFailure(expected, 'account_not_current')
     return false
   }
-  if (!grantAuthorityIsCurrent(grant, invocation, now)) return false
-  return await currentInvocationDelegationAncestryIsValid(ctx, {
+  if (!grantAuthorityIsCurrent(grant, invocation, now)) {
+    recordPersistedAuthorityFailure(expected, 'grant_not_current')
+    return false
+  }
+  const delegationCurrent = await currentInvocationDelegationAncestryIsValid(ctx, {
       leafGrantRef: invocation.grantRef,
       expectedGeneration: invocation.grantGeneration,
       accountRef: invocation.ownerId,
@@ -413,6 +421,28 @@ export async function persistedInvocationAuthorityIsCurrent(
       operationRef: invocation.operationRef,
       now,
     })
+  if (!delegationCurrent) {
+    recordPersistedAuthorityFailure(expected, 'delegation_not_current')
+  }
+  return delegationCurrent
+}
+
+function recordPersistedAuthorityFailure(
+  expected: PersistedInvocationAuthorityExpectation,
+  reason:
+    | 'invocation_mismatch'
+    | 'binding_not_current'
+    | 'credential_not_current'
+    | 'principal_not_current'
+    | 'account_not_current'
+    | 'grant_not_current'
+    | 'delegation_not_current',
+): void {
+  console.warn('persisted_invocation_authority_refused', {
+    invocationRef: expected.invocationRef,
+    attemptRef: expected.attemptRef,
+    reason,
+  })
 }
 
 async function currentInvocationDelegationAncestryIsValid(

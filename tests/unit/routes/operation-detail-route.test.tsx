@@ -180,12 +180,13 @@ describe('/operations/$operationRef', () => {
     )
 
     expect(screen.getByRole('heading', { level: 1, name: 'Invoice line-item extraction' })).toBeTruthy()
-    expect(screen.getAllByRole('link', { name: 'Ledger Labs' })[0]?.getAttribute('href')).toBe('/ledger-labs')
+    expect(screen.getAllByText('Ledger Labs').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('link', { name: 'Ledger Labs' })).toBeNull()
     expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { level: 3, name: 'Example input' })).toBeTruthy()
     expect(screen.getAllByText(/https:\/\/docs\.example\/invoice\.pdf/).length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { level: 3, name: 'Example output' })).toBeTruthy()
-    expect(screen.getByText(/No example output is published/)).toBeTruthy()
+    expect(screen.queryByRole('heading', { level: 3, name: 'Example output' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Read the input and output schemas' }).getAttribute('href')).toBe('#technical-contract')
     expect(screen.getByRole('heading', { level: 3, name: 'Exact price breakdown' })).toBeTruthy()
     expect(screen.getByText('USD 1.00')).toBeTruthy()
     expect(screen.getByText('USD 0.25')).toBeTruthy()
@@ -270,8 +271,7 @@ describe('/operations/$operationRef', () => {
     expect(screen.getByText('provider owned')).toBeTruthy()
     const access = screen.getByRole('complementary', { name: 'What you can do next' })
     expect(within(access).getByText(/inspectable but not currently callable/i)).toBeTruthy()
-    expect(within(access).getByRole('button', { name: 'Copy Inspect Operation' })).toBeTruthy()
-    expect(within(access).queryByRole('link')).toBeNull()
+    expect(within(access).getByRole('link', { name: 'Find callable alternatives' })).toBeTruthy()
     expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
@@ -293,8 +293,8 @@ describe('/operations/$operationRef', () => {
     })
 
     const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(continuation).getByRole('button', { name: 'Copy Inspect availability' })).toBeTruthy()
-    expect(within(continuation).queryByText(/inspectable but not currently callable/i)).toBeNull()
+    expect(within(continuation).getByRole('link', { name: 'Find callable alternatives' })).toBeTruthy()
+    expect(within(continuation).getByText(/not currently callable/i)).toBeTruthy()
   })
 
   it.each([

@@ -7,6 +7,11 @@ import {
   CodeBlockTitle,
 } from '@/components/ai-elements/code-block'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import {
+  aeCliInstallCommand,
+  aeMcpInstallCommand,
+  aeMcpListCommand,
+} from '@/lib/cli-distribution'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 export type AeAssistantInstallFunnelProps = Readonly<{
@@ -20,11 +25,11 @@ export function AeAssistantInstallFunnel({
   const cli = 'ae'
   const steps = [
     {
-      id: 'connect',
-      title: 'Connect',
+      id: 'install',
+      title: 'Install and verify',
       access: 'Once per device',
-      description: 'Opens browser approval, stores one origin-bound key with user-only permissions, verifies it, and writes an MCP file to import into your harness. No wallet or environment editing.',
-      code: `npx @agentic-economy/cli connect --base-url "${baseUrl}" --mcp`,
+      description: 'Installs the pinned, dependency-free CLI from this Agentic Economy deployment. The version check proves the executable is ready before you start.',
+      code: `${aeCliInstallCommand(baseUrl)}\n${cli} --version`,
     },
     {
       id: 'search',
@@ -32,6 +37,13 @@ export function AeAssistantInstallFunnel({
       access: 'Public catalogue',
       description: 'Describe the outcome in ordinary language. Results include current availability, total price, authentication, and last verification.',
       code: `${cli} search "weather forecast" --base-url "${baseUrl}" --json`,
+    },
+    {
+      id: 'mcp',
+      title: 'Add MCP to your harness',
+      access: 'Once per harness',
+      description: 'Replace <agent> with codex, claude-code, or cursor. The pinned installer preserves the existing config and changes exactly that harness; restart it after verification.',
+      code: `${aeMcpInstallCommand(baseUrl)}\n${aeMcpListCommand()}\n${cli} doctor --base-url "${baseUrl}" --json`,
     },
     {
       id: 'inspect',
@@ -43,9 +55,16 @@ export function AeAssistantInstallFunnel({
     {
       id: 'call',
       title: 'Call',
-      access: 'Connected',
-      description: 'Pass schema-valid input. AE creates and retains the retry identity, then returns one durable receipt reference.',
+      access: 'Public when eligible',
+      description: 'Pass schema-valid input. Eligible keyless reads run immediately; otherwise AE returns the exact connection or authority step without starting the call.',
       code: `${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${baseUrl}" --wait`,
+    },
+    {
+      id: 'connect',
+      title: 'Connect if asked',
+      access: 'Once per device',
+      description: 'Opens browser approval, stores one origin-bound key with user-only permissions, and verifies it. No provider accounts or environment editing.',
+      code: `${cli} connect --base-url "${baseUrl}"`,
     },
     {
       id: 'wait',
@@ -67,8 +86,8 @@ export function AeAssistantInstallFunnel({
 
   return (
     <AeSection
-      title="Connect once. Call any listed capability."
-      description="One setup command, one catalogue, one call shape, and one receipt. Search and inspection remain public."
+      title="Install once. Verify both entry points."
+      description="One pinned CLI and one pinned MCP installer. Search and inspection remain public; connect only when a call asks."
     >
       <ol className="m-0 grid list-none divide-y divide-border p-0">
           {steps.map(({ id, title, access, description, code }, index) => (

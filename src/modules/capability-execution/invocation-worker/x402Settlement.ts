@@ -1,5 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
+import { operationInvokeReceiptPaymentProfile } from '@/modules/capability-execution/operation-invoke-contracts'
 import { Agent } from 'undici'
 import {
   paymentObservationDigest,
@@ -23,6 +24,7 @@ import {
 import { env, type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
 import type { ChargeSettlementResult, OpenDispatch } from '../../../../convex/capabilityOperationInvocationProjection'
+import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
 
 export type ExternalSpendSettlement =
   | Readonly<{ kind: 'settled'; settlementStatus: 'settled' | 'not_settled' }>
@@ -31,6 +33,8 @@ export type ExternalSpendSettlement =
 export type X402AttemptSnapshotForMoney = Readonly<{
   reservationRef?: string
   selectedRequirementJson: string
+  network: string
+  asset: string
   paymentIdentifier: string
   challengeDigest: string
   amountUnits: string
@@ -103,12 +107,15 @@ export function configuredX402RpcUrl(
 
 export async function readX402EvmReceipt(
   network: string,
+  asset: string,
   transactionHash: string,
   dispatcher: Agent,
   environment: 'sandbox' | 'production',
   payer: string,
   nonce: string,
+  confirmation?: Readonly<{ minimumConfirmations: number; timeoutMs: number }>,
 ): Promise<X402EvmReceipt | undefined> {
+  if (operationInvokeReceiptPaymentProfile(environment, network, asset) === undefined) return undefined
   const targets = configuredX402RpcUrls(network, environment)
   if (targets.length === 0) return undefined
 
@@ -116,11 +123,19 @@ export async function readX402EvmReceipt(
     try {
       return await readGuardedX402EvmReceipt({
         target,
+        aeEnvironment: environment,
         network,
+        asset,
         transactionHash,
         payer,
         nonce,
         dispatcher,
+        ...(confirmation === undefined
+          ? {}
+          : {
+              minimumConfirmations: confirmation.minimumConfirmations,
+              confirmationTimeoutMs: confirmation.timeoutMs,
+            }),
       })
     } catch {
       return undefined
@@ -147,6 +162,8 @@ function x402EvmReceiptsAgree(left: X402EvmReceipt, right: X402EvmReceipt): bool
       || !X402_EVM_HASH_PATTERN.test(receipt.blockHash)
       || typeof receipt.blockNumber !== 'bigint'
       || receipt.blockNumber < 0n
+      || typeof receipt.observedBlockTimestamp !== 'bigint'
+      || receipt.observedBlockTimestamp < 0n
       || typeof receipt.authorizationState !== 'boolean'
       || (receipt.transactionTo !== null && typeof receipt.transactionTo !== 'string')
       || typeof receipt.transactionInput !== 'string'
@@ -170,6 +187,7 @@ function x402EvmReceiptsAgree(left: X402EvmReceipt, right: X402EvmReceipt): bool
     || left.confirmations !== right.confirmations
     || left.blockHash !== right.blockHash
     || left.blockNumber !== right.blockNumber
+    || left.observedBlockTimestamp !== right.observedBlockTimestamp
     || left.authorizationState !== right.authorizationState
     || left.transactionTo !== right.transactionTo
     || left.transactionInput !== right.transactionInput
@@ -279,6 +297,7 @@ export function externalSpendPaymentFactsFromDispatch(
     grantGeneration: number
     environment: 'sandbox' | 'production'
     operationRef: string
+    sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   }>,
   input: Readonly<{
     attemptRef: string
@@ -292,6 +311,15 @@ export function externalSpendPaymentFactsFromDispatch(
     custodyDailyMaximum?: ExactAmount
   }>,
 ): ExternalSpendPaymentFacts {
+  const executionContext = dispatch.sellerOnboardingCanary === undefined
+    ? undefined
+    : {
+        kind: 'seller_onboarding_canary' as const,
+        paymentProfile: 'base-sepolia-usdc-exact' as const,
+        canaryRef: dispatch.sellerOnboardingCanary.canaryRef,
+        canaryCommitmentDigest: dispatch.sellerOnboardingCanary.canaryCommitmentDigest,
+        fundingBudgetRef: dispatch.sellerOnboardingCanary.funding.budgetRef,
+      }
   return {
     principalId: dispatch.principalId,
     credentialId: dispatch.credentialId,
@@ -306,6 +334,7 @@ export function externalSpendPaymentFactsFromDispatch(
     paymentIdentifier: input.paymentIdentifier,
     challengeDigest: input.challengeDigest,
     amount: input.amount,
+    ...(executionContext === undefined ? {} : { executionContext }),
     ...(input.custodyRef === undefined ? {} : { custodyRef: input.custodyRef }),
     ...(input.custodyGeneration === undefined ? {} : { custodyGeneration: input.custodyGeneration }),
     ...(input.custodyDailyMaximum === undefined ? {} : { custodyDailyMaximum: input.custodyDailyMaximum }),
@@ -321,6 +350,10 @@ export function externalSpendIdentityFromAttempt(
 ): ExternalSpendIdentity | undefined {
   if (
     operation.binding.authority.kind !== 'provider_connection'
+    || operation.identity.payment.kind !== 'x402'
+    || operationInvokeReceiptPaymentProfile(dispatch.environment, attempt.network, attempt.asset) === undefined
+    || attempt.network !== operation.identity.payment.network
+    || attempt.asset.toLowerCase() !== operation.identity.payment.asset.toLowerCase()
     || attempt.reservationRef === undefined
   ) return undefined
   const amount = exactAmountSchema.safeParse({
@@ -395,14 +428,27 @@ export async function settleX402TransportObservation(
         recorded.evidenceRefs,
         recorded.providerReceiptDigest,
       )
-  return external.kind === 'settled'
-    ? {
-        kind: 'settled',
-        outcome: external.settlementStatus === 'settled'
-          ? 'released'
-          : 'not_released',
-      }
-    : external
+  if (external.kind !== 'settled') return external
+  if (
+    input.dispatch.sellerOnboardingCanary !== undefined
+    && external.settlementStatus === 'settled'
+    && (recorded.identity === undefined || recorded.settlementRef === undefined)
+  ) return { kind: 'reconciliation_required' }
+  return {
+    kind: 'settled',
+    outcome: external.settlementStatus === 'settled'
+      ? 'released'
+      : 'not_released',
+    ...(recorded.identity === undefined
+      ? {}
+      : {
+          externalSettlementRef: recorded.identity.reservationRef,
+          paymentIdentifier: recorded.identity.paymentIdentifier,
+        }),
+    ...(recorded.settlementRef === undefined
+      ? {}
+      : { settlementTransactionHash: recorded.settlementRef }),
+  }
 }
 
 export type X402TransportObservationRecord = Readonly<{
@@ -477,6 +523,14 @@ export async function recordX402TransportObservation(
     ...(settlementDigest === undefined
       ? {}
       : { paymentResponseDigest: settlementDigest }),
+    ...(x402SettlementStatus === 'unknown'
+      && input.observation.responseDigest !== undefined
+      && input.observation.outputJson !== undefined
+      ? {
+          quarantinedResponseDigest: input.observation.responseDigest,
+          quarantinedOutputJson: input.observation.outputJson,
+        }
+      : {}),
     observedAt: Date.now(),
   })
   return {

@@ -23,15 +23,20 @@ import {
   recoveryResultValue,
   usageValue,
   buildCanonicalTerminalOutcomeCommand,
+  buildSellerOnboardingCanaryReceipt,
   type CanonicalClaimSnapshot,
   type CanonicalTerminalOutcome,
   type DurableActionInvocationPort,
   type OperationInvokePersistedAuthority,
   type PublicInvocationStatus,
 } from '@/modules/capability-execution/convex'
-import type { OperationInvokeResult } from '@/modules/capability-execution/operation-invoke-contracts'
+import {
+  operationInvokeReceiptPaymentProfile,
+  type OperationInvokeResult,
+} from '@/modules/capability-execution/operation-invoke-contracts'
 import type { ActionCtx } from './_generated/server'
 import { internal } from './_generated/api'
+import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-execution'
 
 export type OpenDispatch = Readonly<{
   invocationRef: string
@@ -42,6 +47,7 @@ export type OpenDispatch = Readonly<{
   environment: 'sandbox' | 'production'
   state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
   operationRef: string
+  sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   idempotencyKey: string
   inputDigest: string
   requestDigest: string
@@ -100,6 +106,7 @@ export type RecoveryRow = Readonly<{
   environment: 'sandbox' | 'production'
   state: 'pending' | 'completed' | 'refused' | 'reconciliation_required' | 'cancelled'
   operationRef: string
+  sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
   inputDigest: string
   requestDigest: string
   grantGeneration: number
@@ -696,6 +703,184 @@ export async function projectOuterResult(
         code: observation.failureCode ?? 'provider_refused',
         retryable: false,
       },
+      attemptRef,
+      dispatchState: 'failed',
+    },
+    recordedAt,
+  )
+}
+
+/**
+ * Finalize the internal seller-onboarding canary without inventing a buyer
+ * usage event. Its only economic record is the separately reserved/finalized
+ * external-spend identity; no qualified-use or market-ledger mutation occurs
+ * here.
+ */
+export async function projectSellerOnboardingCanaryResult(
+  ctx: ActionCtx,
+  dispatch: OpenDispatch,
+  operation: PublishedOperation,
+  descriptor: RuntimePublishedOperationDescriptor,
+  observation: RouteTransportObservation,
+  recordedAt: string,
+  settlement: ChargeSettlementResult,
+  attemptRef: string,
+  effectGeneration: number,
+  validatedOutput: ContractOutputValidation,
+  retainedSnapshot: CanonicalClaimSnapshot,
+): Promise<void> {
+  const canary = dispatch.sellerOnboardingCanary
+  const payment = operation.identity.payment
+  const profile = payment.kind === 'x402'
+    ? operationInvokeReceiptPaymentProfile(
+        dispatch.environment,
+        payment.network,
+        payment.asset,
+      )
+    : undefined
+  if (
+    canary === undefined
+    || dispatch.environment !== 'sandbox'
+    || profile === undefined
+    || profile.network !== 'eip155:84532'
+    || descriptor.price.kind !== 'fixed'
+  ) throw new Error('seller_canary_projection_identity_invalid')
+
+  const evidenceHash = observation.responseDigest
+    ?? (observation.outputJson === undefined
+      ? transportObservationDigest(observation)
+      : canonicalDigest(observation.outputJson))
+  const settled = settlement.kind === 'settled' ? settlement : undefined
+  const knownSettled = settled?.outcome === 'released'
+    && settled.externalSettlementRef !== undefined
+    && settled.settlementTransactionHash !== undefined
+    && settled.paymentIdentifier !== undefined
+  const knownNotSettled = settled?.outcome === 'not_released'
+    && observation.releaseStarted === false
+  const receipt = buildSellerOnboardingCanaryReceipt({
+    canary,
+    operation,
+    invocationRef: dispatch.invocationRef,
+    operationRef: dispatch.operationRef,
+    attemptRef,
+    state: knownSettled
+      ? 'settled'
+      : knownNotSettled
+        ? 'refunded'
+        : 'reconciliation_required',
+    providerQuotedAmount: descriptor.price.amount,
+    ...(settlement.paymentIdentifier === undefined
+      ? {}
+      : { paymentIdentifier: settlement.paymentIdentifier }),
+    ...(settled?.settlementTransactionHash === undefined
+      ? {}
+      : { settlementTransactionHash: settled.settlementTransactionHash }),
+    ...(settled?.externalSettlementRef === undefined
+      ? {}
+      : { externalSettlementRef: settled.externalSettlementRef }),
+    refundState: knownSettled ? 'not_applicable' : knownNotSettled ? 'released' : 'unknown',
+    lossState: knownSettled
+      ? validatedOutput.valid ? 'none' : 'provider_output_invalid'
+      : knownNotSettled ? 'none' : 'unknown',
+    evidenceHash,
+    issuedAt: recordedAt,
+  })
+  if (receipt === undefined) throw new Error('seller_canary_receipt_identity_invalid')
+  const successful = knownSettled
+    && validatedOutput.valid
+    && observation.disposition === 'succeeded'
+    && observation.outputJson !== undefined
+    && observation.releaseStarted
+  if (successful) {
+    await finalizeOperationDispatch(
+      ctx,
+      dispatch,
+      retainedSnapshot,
+      canonicalTerminalOutcome(observation, recordedAt, true, 'released'),
+      {
+        state: 'completed',
+        result: {
+          kind: 'completed',
+          invocationRef: dispatch.invocationRef,
+          operationRef: dispatch.operationRef,
+          output: validatedOutput.output,
+          evidenceHash,
+          receipt,
+        },
+        evidenceHash,
+        attemptRef,
+        dispatchState: 'completed',
+      },
+      recordedAt,
+    )
+    return
+  }
+
+  const ambiguous = settlement.kind === 'reconciliation_required'
+    || (!knownSettled && !knownNotSettled)
+    || observation.disposition === 'unknown'
+    || observation.disposition === 'partial'
+  if (ambiguous) {
+    await finalizeOperationDispatch(
+      ctx,
+      dispatch,
+      retainedSnapshot,
+      canonicalTerminalOutcome({
+        ...observation,
+        disposition: 'unknown',
+        releaseStarted: true,
+      }, recordedAt, validatedOutput.valid, 'unknown'),
+      {
+        state: 'reconciliation_required',
+        result: {
+          kind: 'reconciliation_required',
+          invocationRef: dispatch.invocationRef,
+          operationRef: dispatch.operationRef,
+          evidence: {
+            attemptRef,
+            effectGeneration,
+            requiredAt: new Date(Date.parse(recordedAt) + 1_000).toISOString(),
+            retry: 'reconcile_before_retry',
+            evidenceSource: `seller-canary:${canary.canaryRef}`,
+          },
+          receipt,
+        },
+        evidenceHash,
+        attemptRef,
+        dispatchState: 'reconciliation_required',
+      },
+      recordedAt,
+    )
+    return
+  }
+
+  const paidButInvalid = knownSettled && !validatedOutput.valid
+  await finalizeOperationDispatch(
+    ctx,
+    dispatch,
+    retainedSnapshot,
+    paidButInvalid
+      ? {
+          kind: 'returned',
+          businessOutcome: 'seller_onboarding_canary_output_invalid',
+          resultRef: `seller-canary-result:v1:${evidenceHash}`,
+          resultDigest: evidenceHash,
+          resultReferenceable: true,
+          release: 'released',
+        }
+      : canonicalTerminalOutcome(observation, recordedAt, false, 'not_released'),
+    {
+      state: 'refused',
+      result: {
+        kind: 'refused',
+        operationRef: dispatch.operationRef,
+        code: paidButInvalid
+          ? 'seller_canary_output_invalid'
+          : observation.failureCode ?? 'provider_refused',
+        retryable: false,
+        receipt,
+      },
+      evidenceHash,
       attemptRef,
       dispatchState: 'failed',
     },

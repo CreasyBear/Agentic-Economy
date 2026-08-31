@@ -121,10 +121,21 @@ describe('facilitator discovery reconciliation', () => {
     const persisted = await backend.run(async (ctx) => ({
       businesses: await ctx.db.query('businesses').collect(),
       connections: await ctx.db.query('capabilityProviderConnections').collect(),
+      contracts: await ctx.db.query('capabilityContractDocuments').collect(),
       publications: await ctx.db.query('capabilityPublications').collect(),
     }))
     expect(persisted.businesses).toHaveLength(1)
     expect(persisted.connections).toHaveLength(1)
+    expect(JSON.parse(persisted.contracts[0]?.documentJson ?? '{}')).toMatchObject({
+      inputExamples: [{
+        label: 'Provider example',
+        input: {
+          from: 'America/New_York',
+          to: 'Asia/Tokyo',
+          time: '2026-07-04T15:30',
+        },
+      }],
+    })
     expect(persisted.publications).toHaveLength(1)
 
     const search = await backend.query(api.capabilitySupplyOperations.search, {

@@ -1,4 +1,5 @@
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import {
@@ -30,6 +31,26 @@ export const EXTERNAL_SPEND_SUBMISSION_STATUSES = [
 ] as const
 export type ExternalSpendSubmissionStatus = (typeof EXTERNAL_SPEND_SUBMISSION_STATUSES)[number]
 
+export const EXTERNAL_SPEND_PAYMENT_PROFILES = [
+  'base-usdc-exact',
+  'base-sepolia-usdc-exact',
+] as const
+export type ExternalSpendPaymentProfile =
+  (typeof EXTERNAL_SPEND_PAYMENT_PROFILES)[number]
+
+export type ExternalSpendExecutionContext =
+  | Readonly<{
+      kind: 'market'
+      paymentProfile: ExternalSpendPaymentProfile
+    }>
+  | Readonly<{
+      kind: 'seller_onboarding_canary'
+      paymentProfile: 'base-sepolia-usdc-exact'
+      canaryRef: string
+      canaryCommitmentDigest: string
+      fundingBudgetRef: string
+    }>
+
 export type ExternalSpendPaymentFacts = Readonly<{
   principalId: string
   credentialId: string
@@ -44,6 +65,11 @@ export type ExternalSpendPaymentFacts = Readonly<{
   paymentIdentifier: string
   challengeDigest: string
   amount: ExactAmount
+  /**
+   * Optional only while legacy market callers and rows are migrated. New
+   * identities always materialize the environment-bound market context.
+   */
+  executionContext?: ExternalSpendExecutionContext
   custodyRef?: string
   custodyGeneration?: number
   custodyDailyMaximum?: ExactAmount
@@ -114,12 +140,20 @@ export type ExternalSpendMutationResult =
 export function mintExternalSpendIdentity(
   facts: ExternalSpendPaymentFacts,
 ): ExternalSpendIdentity {
-  const idempotencyDigest = canonicalDigest({
-    format: 'ae.money.external-spend-idempotency:v1',
+  const executionContext = externalSpendExecutionContextForFacts(facts)
+  if (executionContext === undefined) {
+    throw new Error('external_spend_execution_context_invalid')
+  }
+  const material = {
     ...facts,
+    executionContext,
+  }
+  const idempotencyDigest = canonicalDigest({
+    format: 'ae.money.external-spend-idempotency:v2',
+    ...material,
   } as StableHashValue)
   return {
-    ...facts,
+    ...material,
     reservationRef: `external-spend:${idempotencyDigest}`,
     idempotencyDigest,
   }
@@ -143,6 +177,9 @@ export function externalSpendIdentityFromReservation(
     paymentIdentifier: reservation.paymentIdentifier,
     challengeDigest: reservation.challengeDigest,
     amount: reservation.amount,
+    ...(reservation.executionContext === undefined
+      ? {}
+      : { executionContext: reservation.executionContext }),
     ...(reservation.custodyRef === undefined
       ? {}
       : { custodyRef: reservation.custodyRef }),
@@ -172,7 +209,9 @@ export function externalSpendIdentityMatchingReservationRef(
 
 export function externalSpendIdentityDigest(identity: ExternalSpendIdentity): string {
   return canonicalDigest({
-    format: 'ae.money.external-spend-identity:v1',
+    format: identity.executionContext === undefined
+      ? 'ae.money.external-spend-identity:v1'
+      : 'ae.money.external-spend-identity:v2',
     ...identity,
   } as StableHashValue)
 }
@@ -218,8 +257,7 @@ export function sameExternalSpendIdentity(
   left: ExternalSpendIdentity,
   right: ExternalSpendIdentity,
 ): boolean {
-  return left.reservationRef === right.reservationRef
-    && left.principalId === right.principalId
+  return left.principalId === right.principalId
     && left.credentialId === right.credentialId
     && left.grantRef === right.grantRef
     && left.grantGeneration === right.grantGeneration
@@ -232,13 +270,14 @@ export function sameExternalSpendIdentity(
     && left.paymentIdentifier === right.paymentIdentifier
     && left.challengeDigest === right.challengeDigest
     && compareExactAmounts(left.amount, right.amount) === 0
+    && sameExternalSpendExecutionContext(left, right)
     && left.custodyRef === right.custodyRef
     && left.custodyGeneration === right.custodyGeneration
     && (left.custodyDailyMaximum === undefined
       ? right.custodyDailyMaximum === undefined
       : right.custodyDailyMaximum !== undefined
         && compareExactAmounts(left.custodyDailyMaximum, right.custodyDailyMaximum) === 0)
-    && left.idempotencyDigest === right.idempotencyDigest
+    && sameExternalSpendIdentityReference(left, right)
 }
 
 export function externalSpendStateForSettlement(
@@ -270,6 +309,7 @@ export function externalSpendPaymentFactsValid(
     && Number.isSafeInteger(input.effectGeneration)
     && input.effectGeneration > 0
     && (input.environment === 'sandbox' || input.environment === 'production')
+    && externalSpendExecutionContextForFacts(input) !== undefined
     && exactAmountSchema.safeParse(input.amount).success
     && externalSpendCustodyPolicyRefusal(input) === undefined
 }
@@ -281,6 +321,7 @@ export function externalSpendCustodyPolicyRefusal(
   | 'external_spend_custody_policy_invalid'
   | 'external_spend_custody_daily_limit_exceeded'
 > | undefined {
+  const executionContext = externalSpendExecutionContextForFacts(input)
   const custodyFields = [
     input.custodyRef,
     input.custodyGeneration,
@@ -288,9 +329,17 @@ export function externalSpendCustodyPolicyRefusal(
   ]
   const supplied = custodyFields.filter((value) => value !== undefined).length
   if (supplied === 0) {
-    return undefined
+    return executionContext?.kind === 'seller_onboarding_canary'
+      ? 'external_spend_custody_policy_invalid'
+      : undefined
   }
-  if (supplied !== custodyFields.length || input.environment !== 'production') {
+  const custodyContextValid = executionContext?.kind === 'market'
+    ? input.environment === 'production'
+      && executionContext.paymentProfile === 'base-usdc-exact'
+    : executionContext?.kind === 'seller_onboarding_canary'
+      && input.environment === 'sandbox'
+      && executionContext.paymentProfile === 'base-sepolia-usdc-exact'
+  if (supplied !== custodyFields.length || !custodyContextValid) {
     return 'external_spend_custody_policy_invalid'
   }
   const { custodyRef, custodyGeneration, custodyDailyMaximum } = input
@@ -318,6 +367,135 @@ export function externalSpendCustodyPolicyRefusal(
   return comparison > 0
     ? 'external_spend_custody_daily_limit_exceeded'
     : undefined
+}
+
+/**
+ * Resolves legacy ordinary calls to their environment-bound market profile.
+ * Explicit contexts are accepted only when their full discriminated shape and
+ * environment/profile pair agree.
+ */
+export function externalSpendExecutionContextForFacts(
+  input: Pick<ExternalSpendPaymentFacts, 'environment' | 'executionContext'>,
+): ExternalSpendExecutionContext | undefined {
+  if (input.executionContext === undefined) {
+    return input.environment === 'production'
+      ? { kind: 'market', paymentProfile: 'base-usdc-exact' }
+      : input.environment === 'sandbox'
+        ? { kind: 'market', paymentProfile: 'base-sepolia-usdc-exact' }
+        : undefined
+  }
+  const context: unknown = input.executionContext
+  if (!isRecord(context)) return undefined
+  if (context.kind === 'market') {
+    if (!hasExactKeys(context, ['kind', 'paymentProfile'])) return undefined
+    const expectedProfile = input.environment === 'production'
+      ? 'base-usdc-exact'
+      : input.environment === 'sandbox'
+        ? 'base-sepolia-usdc-exact'
+        : undefined
+    return expectedProfile !== undefined
+      && context.paymentProfile === expectedProfile
+      ? {
+          kind: 'market',
+          paymentProfile: expectedProfile,
+        }
+      : undefined
+  }
+  if (
+    context.kind !== 'seller_onboarding_canary'
+    || !hasExactKeys(context, [
+      'kind',
+      'paymentProfile',
+      'canaryRef',
+      'canaryCommitmentDigest',
+      'fundingBudgetRef',
+    ])
+    || input.environment !== 'sandbox'
+    || context.paymentProfile !== 'base-sepolia-usdc-exact'
+    || !boundedRef(context.canaryRef)
+    || typeof context.canaryCommitmentDigest !== 'string'
+    || !isCanonicalDigest(context.canaryCommitmentDigest)
+    || !boundedRef(context.fundingBudgetRef)
+  ) return undefined
+  return {
+    kind: 'seller_onboarding_canary',
+    paymentProfile: 'base-sepolia-usdc-exact',
+    canaryRef: context.canaryRef,
+    canaryCommitmentDigest: context.canaryCommitmentDigest,
+    fundingBudgetRef: context.fundingBudgetRef,
+  }
+}
+
+function sameExternalSpendExecutionContext(
+  left: ExternalSpendPaymentFacts,
+  right: ExternalSpendPaymentFacts,
+): boolean {
+  const leftContext = externalSpendExecutionContextForFacts(left)
+  const rightContext = externalSpendExecutionContextForFacts(right)
+  return leftContext !== undefined
+    && rightContext !== undefined
+    && canonicalDigest(leftContext as StableHashValue)
+      === canonicalDigest(rightContext as StableHashValue)
+}
+
+function sameExternalSpendIdentityReference(
+  left: ExternalSpendIdentity,
+  right: ExternalSpendIdentity,
+): boolean {
+  if (
+    left.reservationRef === right.reservationRef
+    && left.idempotencyDigest === right.idempotencyDigest
+  ) return true
+  const leftLegacy = legacyMarketIdentityReference(left)
+  const rightLegacy = legacyMarketIdentityReference(right)
+  return leftLegacy !== undefined
+    && rightLegacy !== undefined
+    && leftLegacy.reservationRef === rightLegacy.reservationRef
+    && leftLegacy.idempotencyDigest === rightLegacy.idempotencyDigest
+}
+
+function legacyMarketIdentityReference(
+  identity: ExternalSpendIdentity,
+): Readonly<{ reservationRef: string; idempotencyDigest: string }> | undefined {
+  const executionContext = externalSpendExecutionContextForFacts(identity)
+  if (executionContext?.kind !== 'market') return undefined
+  if (identity.executionContext === undefined) {
+    return {
+      reservationRef: identity.reservationRef,
+      idempotencyDigest: identity.idempotencyDigest,
+    }
+  }
+  const {
+    executionContext: _executionContext,
+    reservationRef: _reservationRef,
+    idempotencyDigest: _idempotencyDigest,
+    ...legacyFacts
+  } = identity
+  const idempotencyDigest = canonicalDigest({
+    format: 'ae.money.external-spend-idempotency:v1',
+    ...legacyFacts,
+  } as StableHashValue)
+  return {
+    reservationRef: `external-spend:${idempotencyDigest}`,
+    idempotencyDigest,
+  }
+}
+
+function boundedRef(value: unknown): value is string {
+  return typeof value === 'string'
+    && value === value.trim()
+    && value.trim().length > 0
+    && value.length <= 512
+}
+
+function hasExactKeys(
+  value: Readonly<Record<string, unknown>>,
+  expected: readonly string[],
+): boolean {
+  const actual = Object.keys(value).sort()
+  const sortedExpected = [...expected].sort()
+  return actual.length === sortedExpected.length
+    && actual.every((key, index) => key === sortedExpected[index])
 }
 
 export function externalSpendIdentityMaterialValid(
@@ -482,7 +660,10 @@ export function decideExternalSpendReconciliation(input: Readonly<{
   const reconciliationDigest = externalSpendReconciliationDigest(command)
   const target =
     command.settlementStatus === 'settled' ? 'settled' : 'released'
-  if (input.reservation.state !== 'outcome_unknown') {
+  if (
+    input.reservation.state !== 'outcome_unknown'
+    && input.reservation.state !== 'reserved'
+  ) {
     return (
       input.reservation.reconciliationDigest === reconciliationDigest
       && input.reservation.state === target

@@ -4,7 +4,7 @@ import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 import { buildPublicAgentSkillMarkdown } from '@/modules/discovery/public'
 import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
 import { listMcpActions, listOperationRouteDescriptors, mcpToolName } from '@/modules/actions'
-import { handlePublicAgentSkillRequest } from '@/routes/SKILL[.]md'
+import handlePublicAgentSkillNitroRequest, { handlePublicAgentSkillRequest } from '@/routes/SKILL[.]md'
 
 const body = buildPublicAgentSkillMarkdown({
   canonicalBaseUrl: 'https://ae.example',
@@ -35,7 +35,8 @@ describe('public agent skill', () => {
       '## 1. Pick your path',
       '/llms.txt',
       '/for-agents',
-      'npm install --global @agentic-economy/cli',
+      'npm install --global "https://ae.example/downloads/agentic-economy-cli-0.1.0.tgz"',
+      'ae --version',
       'tell your human what you needed',
       '## 2. Price rule — before any paid call',
       'state the total price and the required inputs',
@@ -49,6 +50,10 @@ describe('public agent skill', () => {
     }
     expect(body).toMatch(/names begin with `ae_`/u)
     expect(body).toContain('anonymously and free')
+    expect(body).toContain('npm install --global --prefix "$HOME/.local" "https://ae.example/downloads/agentic-economy-cli-0.1.0.tgz"')
+    expect(body).toContain('npx --yes add-mcp@2.3.0 "https://ae.example/mcp" --name agentic-economy --transport http --global --agent "<agent>" --yes')
+    expect(body).toContain('npx --yes add-mcp@2.3.0 list --global --agent "<agent>"')
+    expect(body).not.toContain('npx @agentic-economy/cli')
   })
 
   it('gives supplier agents a bounded owner-approved onboarding path', () => {
@@ -126,13 +131,14 @@ describe('public agent skill', () => {
     expect(body).toContain('explicit authority approval')
     expect(body).toContain('return literal output plus an `evidenceHash`')
   })
-  it('documents the installed MCP lifecycle and the business-only catalog boundary', () => {
+  it('documents the installed MCP lifecycle without teaching the legacy business registry', () => {
     expect(body).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)
     expect(body).toContain('the client performs initialization')
     expect(body).toContain('may omit `Mcp-Session-Id`')
     expect(body).toContain('`tools/list` before `tools/call`')
-    expect(body).toContain('Business catalog is business-only')
-    expect(body).toContain('`registry.search` and `registry.detail` read published businesses')
+    expect(body).not.toContain('Business catalog is business-only')
+    expect(body).not.toContain('`registry.search`')
+    expect(body).not.toContain('`registry.detail`')
   })
 
   it('removes the old alternate entry vocabulary and unsupported claims', () => {
@@ -159,8 +165,21 @@ describe('public agent skill', () => {
       const text = await response.text()
       canonicalText ??= text
       expect(text).toBe(canonicalText)
-      expect(text).toContain('ae manifest --json')
+      expect(text).toContain('ae search "weather forecast" --json')
       expect(text).toContain('ae recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
     }
+  })
+
+  it('answers HEAD probes with the same discovery headers and no body', async () => {
+    const response = handlePublicAgentSkillNitroRequest({
+      req: new Request('https://ae.example/SKILL.md', { method: 'HEAD' }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('text/markdown')
+    expect(await response.text()).toBe('')
+    expect(handlePublicAgentSkillNitroRequest({
+      req: new Request('https://ae.example/SKILL.md', { method: 'POST' }),
+    }).status).toBe(405)
   })
 })

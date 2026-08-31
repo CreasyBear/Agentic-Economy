@@ -18,6 +18,7 @@ import {
 } from '@x402/extensions/payment-identifier'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isBoundedJsonValue, type JsonValue } from '@/modules/common/bounded-json'
 import { containsForbiddenSignatureKey } from '@/modules/common/forbidden-signature-key'
 import { isRecord } from '@/modules/common/is-record'
 import { stableStringify } from '@/modules/common/stable-hash'
@@ -28,18 +29,38 @@ import {
   cdpX402CustodyConfigurationFromEnvironment,
   type CdpX402CustodyConfiguration,
 } from './server-credential'
+import {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
+  BASE_SEPOLIA_USDC_ADDRESS,
+  isX402PaymentRequirementForProfile,
+  normalizeX402PaymentRequirement,
+  x402PaymentProfileForEnvironment,
+  type X402AeEnvironment,
+  type X402PaymentProfile,
+} from './x402-payment-profile'
 import type { X402PaymentSignatureRequest } from '../route-transport-runtime'
 
-export const BASE_NETWORK = 'eip155:8453' as const
-export const BASE_USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
+/** @deprecated Use the explicit payment profile constants for new code. */
+export const BASE_NETWORK = BASE_MAINNET_NETWORK
+/** @deprecated Use the explicit payment profile constants for new code. */
+export const BASE_USDC_ADDRESS = BASE_MAINNET_USDC_ADDRESS
 export const PAYMENT_SIGNING_IDEMPOTENCY_KEY_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+const MAX_CDP_POLICY_RULES = 10
+const MAX_CDP_POLICY_RULES_BYTES = 64 * 1024
+const utf8Encoder = new TextEncoder()
+
+export type CdpX402PolicyIdentity = Readonly<{
+  id: string
+  scope: 'account' | 'project'
+  rules: readonly unknown[]
+}>
 
 type CdpClientLike = Readonly<{
   policies: Readonly<{
-    getPolicyById: (options: Readonly<{ id: string }>) => Promise<Readonly<{
-      id: string
-      scope: 'account' | 'project'
-    }>>
+    getPolicyById: (
+      options: Readonly<{ id: string }>,
+    ) => Promise<CdpX402PolicyIdentity>
   }>
   evm: Readonly<{
     getAccount: (options: Readonly<{ name: string }>) => Promise<Readonly<{
@@ -111,6 +132,7 @@ export type CdpX402PaymentSigningIntent = Readonly<{
 
 export type CdpX402PaymentSignerDependencies = Readonly<{
   environment?: StringEnvironment
+  aeEnvironment?: X402AeEnvironment
   createClient?: (configuration: CdpX402CustodyConfiguration) => CdpClientLike
   persistedIntent?: CdpX402PaymentSigningIntent
   onUnsignedMaterial?: (intent: CdpX402PaymentSigningIntent) => Promise<void> | void
@@ -127,6 +149,7 @@ export type CdpX402PaymentAuthorization = Readonly<{
 export type CdpX402RequestFingerprintContext = Readonly<{
   method: 'GET' | 'POST'
   operationRef: string
+  aeEnvironment?: X402AeEnvironment
 }>
 
 /** Binds one CDP authorization to the exact x402 request it is allowed to pay. */
@@ -134,22 +157,150 @@ export function cdpX402RequestFingerprint(
   request: X402PaymentSignatureRequest,
   context: CdpX402RequestFingerprintContext,
 ): string {
+  const profile = x402PaymentProfileForEnvironment(
+    context.aeEnvironment ?? 'production',
+  )
+  const selectedRequirement = normalizeX402PaymentRequirement(
+    request.selectedRequirement,
+  )
   return canonicalDigest({
-    version: 1,
-    network: request.selectedRequirement.network,
-    asset: normalizeIdentityString(request.selectedRequirement.asset),
-    amount: request.selectedRequirement.amount,
-    payTo: normalizeIdentityString(request.selectedRequirement.payTo),
+    version: 2,
+    aeEnvironment: profile?.aeEnvironment ?? 'unsupported',
+    profile: profile?.profile ?? 'unsupported',
+    network: selectedRequirement.network,
+    asset: normalizeIdentityString(selectedRequirement.asset),
+    amount: selectedRequirement.amount,
+    payTo: normalizeIdentityString(selectedRequirement.payTo),
     route: request.challenge.resource.url,
     method: context.method,
     operationRef: context.operationRef,
     paymentIdentifier: request.paymentIdentifier,
-    challengeDigest: canonicalDigest(request.challenge),
+    challengeDigest: canonicalDigest({
+      ...request.challenge,
+      accepts: request.challenge.accepts.map((requirement) =>
+        normalizeX402PaymentRequirement(requirement)),
+    }),
   })
 }
 
 export function isPaymentSigningIdempotencyKey(value: unknown): value is string {
   return typeof value === 'string' && PAYMENT_SIGNING_IDEMPOTENCY_KEY_PATTERN.test(value)
+}
+
+/**
+ * Seals the exact non-secret policy documents that are allowed to govern CDP
+ * signing. Descriptions and timestamps are deliberately excluded; policy IDs,
+ * scopes, rule order, criteria, conditions, contracts, payees, and caps remain
+ * inside the canonical digest.
+ */
+export function cdpX402PolicyRulesDigest(
+  accountPolicy: CdpX402PolicyIdentity,
+  projectPolicy: CdpX402PolicyIdentity,
+): string | undefined {
+  const accountRules = boundedCdpPolicyRules(accountPolicy.rules)
+  const projectRules = boundedCdpPolicyRules(projectPolicy.rules)
+  if (accountRules === undefined || projectRules === undefined) return undefined
+  const material = {
+    kind: 'ae.x402.cdp-policy-rules:v1',
+    accountPolicy: {
+      id: accountPolicy.id.toLowerCase(),
+      scope: accountPolicy.scope,
+      rules: accountRules,
+    },
+    projectPolicy: {
+      id: projectPolicy.id.toLowerCase(),
+      scope: projectPolicy.scope,
+      rules: projectRules,
+    },
+  } as const
+  const encoded = stableStringify(material)
+  if (utf8Encoder.encode(encoded).byteLength > MAX_CDP_POLICY_RULES_BYTES) {
+    return undefined
+  }
+  return canonicalDigest(material)
+}
+
+const TRANSFER_WITH_AUTHORIZATION_TYPES = {
+  primaryType: 'TransferWithAuthorization',
+  types: {
+    TransferWithAuthorization: [
+      { name: 'from', type: 'address' },
+      { name: 'to', type: 'address' },
+      { name: 'value', type: 'uint256' },
+      { name: 'validAfter', type: 'uint256' },
+      { name: 'validBefore', type: 'uint256' },
+      { name: 'nonce', type: 'bytes32' },
+    ],
+  },
+} as const
+
+/**
+ * CDP's policy engine is fail-secure: a request is rejected when no accept
+ * rule matches. The seller canary therefore uses a payee-agnostic wallet rule
+ * and keeps the dynamic seller address inside AE's canonical Operation,
+ * request fingerprint, reservation, and per-call/daily budget fences.
+ */
+export function cdpX402SellerCanaryPolicyRules(
+  payerAddress: string,
+  maximumAtomic: string,
+): Readonly<{ accountRules: readonly unknown[]; projectRules: readonly unknown[] }> {
+  return {
+    accountRules: [{
+      action: 'accept',
+      operation: 'signEvmTypedData',
+      criteria: [{
+        type: 'evmTypedDataVerifyingContract',
+        addresses: [BASE_SEPOLIA_USDC_ADDRESS],
+        operator: 'in',
+      }, {
+        type: 'evmTypedDataField',
+        conditions: [{
+          path: 'from',
+          operator: 'in',
+          addresses: [payerAddress],
+        }, {
+          path: 'value',
+          operator: '<=',
+          value: maximumAtomic,
+        }],
+        types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+      }],
+    }],
+    projectRules: [{
+      action: 'reject',
+      operation: 'signEvmTypedData',
+      criteria: [{
+        type: 'evmTypedDataVerifyingContract',
+        addresses: [BASE_SEPOLIA_USDC_ADDRESS],
+        operator: 'not in',
+      }],
+    }, {
+      action: 'reject',
+      operation: 'signEvmTypedData',
+      criteria: [{
+        type: 'evmTypedDataField',
+        conditions: [{
+          path: 'value',
+          operator: '>',
+          value: maximumAtomic,
+        }],
+        types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+      }],
+    }],
+  }
+}
+
+export function cdpX402SellerCanaryPolicyIsExact(
+  accountPolicy: CdpX402PolicyIdentity,
+  projectPolicy: CdpX402PolicyIdentity,
+  payerAddress: string,
+  maximumAtomic: string,
+): boolean {
+  const expected = cdpX402SellerCanaryPolicyRules(payerAddress, maximumAtomic)
+  return canonicalDigest(accountPolicy.rules as StableHashValue)
+      === canonicalDigest(expected.accountRules as StableHashValue)
+    && canonicalDigest(projectPolicy.rules as StableHashValue)
+      === canonicalDigest(expected.projectRules as StableHashValue)
 }
 
 /**
@@ -169,38 +320,34 @@ export function readCdpX402PaymentAuthorization(
   ) return undefined
 
   try {
+    const profile = x402PaymentProfileForEnvironment(
+      context.aeEnvironment ?? 'production',
+    )
+    if (profile === undefined) return undefined
     const requestFingerprint = cdpX402RequestFingerprint(request, context)
     if (
       expectedRequestFingerprint !== undefined
       && expectedRequestFingerprint !== requestFingerprint
     ) return undefined
-    const selectedRequirement = request.selectedRequirement
-    const selectedTransferMethod = selectedRequirement.extra.assetTransferMethod
+    const selectedRequirement = normalizeX402PaymentRequirement(
+      request.selectedRequirement,
+    )
     if (
       request.challenge.x402Version !== 2
-      || selectedRequirement.scheme !== 'exact'
-      || selectedRequirement.network !== BASE_NETWORK
-      || selectedRequirement.asset.toLowerCase() !== BASE_USDC_ADDRESS.toLowerCase()
-      || !decimalAtomicAmount(selectedRequirement.amount)
-      || !isEip3009TransferMethod(selectedTransferMethod)
+      || !isX402PaymentRequirementForProfile(selectedRequirement, profile)
       || !request.challenge.accepts.some(
-        (candidate) => canonicalDigest(candidate) === canonicalDigest(selectedRequirement),
+        (candidate) => canonicalDigest(normalizeX402PaymentRequirement(candidate))
+          === canonicalDigest(selectedRequirement),
       )
     ) return undefined
 
     const decoded = decodePaymentSignatureHeader(paymentSignature)
-    const returnedTransferMethod = isRecord(decoded.accepted.extra)
-      ? decoded.accepted.extra.assetTransferMethod
-      : undefined
+    if (!isRecord(decoded.accepted.extra)) return undefined
+    const returnedRequirement = normalizeX402PaymentRequirement(decoded.accepted)
     if (
       decoded.x402Version !== 2
-      || decoded.accepted.scheme !== selectedRequirement.scheme
-      || decoded.accepted.network !== selectedRequirement.network
-      || decoded.accepted.asset.toLowerCase() !== selectedRequirement.asset.toLowerCase()
-      || decoded.accepted.amount !== selectedRequirement.amount
-      || decoded.accepted.payTo.toLowerCase() !== selectedRequirement.payTo.toLowerCase()
-      || !isEip3009TransferMethod(returnedTransferMethod)
-      || canonicalDigest(decoded.accepted) !== canonicalDigest(selectedRequirement)
+      || !isX402PaymentRequirementForProfile(returnedRequirement, profile)
+      || canonicalDigest(returnedRequirement) !== canonicalDigest(selectedRequirement)
       || !isRecord(decoded.payload)
       || !isEIP3009Payload(decoded.payload as ExactEvmPayloadV2)
     ) return undefined
@@ -240,15 +387,28 @@ export async function createCdpEvmX402PaymentSignature(
   request: X402PaymentSignatureRequest,
   dependencies: CdpX402PaymentSignerDependencies = {},
 ): Promise<string | undefined> {
+  const requestedAeEnvironment = dependencies.aeEnvironment
+    ?? dependencies.requestFingerprintContext?.aeEnvironment
+    ?? 'production'
+  if (
+    dependencies.aeEnvironment !== undefined
+    && dependencies.requestFingerprintContext?.aeEnvironment !== undefined
+    && dependencies.aeEnvironment !== dependencies.requestFingerprintContext.aeEnvironment
+  ) return undefined
+  const profile = x402PaymentProfileForEnvironment(requestedAeEnvironment)
+  if (profile === undefined) return undefined
   const configuration = cdpX402CustodyConfigurationFromEnvironment(
     dependencies.environment,
   )
   if (configuration === undefined) return undefined
 
   const identifier = paymentIdentifier(request.paymentIdentifier)
-  const fingerprintContext = dependencies.requestFingerprintContext ?? {
-    method: 'GET' as const,
-    operationRef: `cdp-x402:${identifier}`,
+  const fingerprintContext = {
+    ...(dependencies.requestFingerprintContext ?? {
+      method: 'GET' as const,
+      operationRef: `cdp-x402:${identifier}`,
+    }),
+    aeEnvironment: profile.aeEnvironment,
   }
   const requestFingerprint = cdpX402RequestFingerprint(request, fingerprintContext)
 
@@ -257,23 +417,27 @@ export async function createCdpEvmX402PaymentSignature(
   let required: PaymentRequired
   let offeredRequirement: X402PaymentSignatureRequest['selectedRequirement']
   try {
-    const selectedDigest = canonicalDigest(request.selectedRequirement)
+    const selectedDigest = canonicalDigest(
+      normalizeX402PaymentRequirement(request.selectedRequirement),
+    )
     const offered = request.challenge.accepts.find(
-      (candidate) => canonicalDigest(candidate) === selectedDigest,
+      (candidate) => canonicalDigest(normalizeX402PaymentRequirement(candidate))
+        === selectedDigest,
     )
     if (
       offered === undefined
-      || !supportedRequirement(request, offered, configuration.maxAtomic)
+      || !supportedRequirement(request, offered, profile, configuration.maxAtomic)
     ) return undefined
-    offeredRequirement = offered
+    offeredRequirement = normalizeX402PaymentRequirement(offered)
 
     const extensions = request.challenge.extensions === undefined
       ? undefined
       : structuredClone(request.challenge.extensions)
     const paymentIdentifierExtension = extensions?.['payment-identifier']
-    if (!isPaymentIdentifierExtension(paymentIdentifierExtension)) return undefined
-    if (extensions === undefined) return undefined
-    appendPaymentIdentifierToExtensions(extensions, identifier)
+    if (extensions !== undefined && paymentIdentifierExtension !== undefined) {
+      if (!isPaymentIdentifierExtension(paymentIdentifierExtension)) return undefined
+      appendPaymentIdentifierToExtensions(extensions, identifier)
+    }
 
     cdp = dependencies.createClient?.(configuration)
       ?? (new CdpClient({
@@ -290,6 +454,8 @@ export async function createCdpEvmX402PaymentSignature(
       || accountPolicy.scope !== 'account'
       || projectPolicy.id.toLowerCase() !== configuration.projectPolicyId
       || projectPolicy.scope !== 'project'
+      || cdpX402PolicyRulesDigest(accountPolicy, projectPolicy)
+        !== configuration.policyRulesDigest
     ) return undefined
     account = await cdp.evm.getAccount({ name: configuration.accountName })
     if (
@@ -297,12 +463,21 @@ export async function createCdpEvmX402PaymentSignature(
       || !hasPolicy(account.policies, configuration.projectPolicyId)
       || !sameEvmAddress(account.address, configuration.expectedEvmAddress)
     ) return undefined
+    if (
+      profile.aeEnvironment === 'sandbox'
+      && !cdpX402SellerCanaryPolicyIsExact(
+        accountPolicy,
+        projectPolicy,
+        account.address,
+        configuration.maxAtomic.toString(),
+      )
+    ) return undefined
 
     required = {
       x402Version: request.challenge.x402Version,
       resource: { ...request.challenge.resource },
       accepts: [{ ...offeredRequirement, extra: { ...offeredRequirement.extra } }] as PaymentRequired['accepts'],
-      extensions,
+      ...(extensions === undefined ? {} : { extensions }),
     }
   } catch {
     return undefined
@@ -321,7 +496,12 @@ export async function createCdpEvmX402PaymentSignature(
     )
     if (material === undefined) throw new Error('x402_payment_unsigned_identity_conflict')
   } else {
-    material = await captureUnsignedMaterial(required, account.address, identifier)
+    material = await captureUnsignedMaterial(
+      required,
+      account.address,
+      identifier,
+      profile,
+    )
     if (material === undefined) return undefined
     const paymentSigningIdempotencyKey = crypto.randomUUID()
     if (!isPaymentSigningIdempotencyKey(paymentSigningIdempotencyKey)) {
@@ -364,10 +544,77 @@ export async function createCdpEvmX402PaymentSignature(
   return header
 }
 
+/**
+ * Forensic replay for an already-persisted signing intent. Unlike normal
+ * signing, this permits an historically malformed EIP-712 domain so CDP can
+ * replay the exact old request under the same idempotency key. It never builds
+ * a payment header or starts provider transport.
+ */
+export async function replayCdpX402PaymentSigningIntent(
+  intent: CdpX402PaymentSigningIntent,
+  dependencies: Pick<CdpX402PaymentSignerDependencies, 'environment' | 'createClient'> = {},
+): Promise<string | undefined> {
+  if (!isPaymentSigningIdempotencyKey(intent.paymentSigningIdempotencyKey)) return undefined
+  let material: CdpX402PaymentUnsignedMaterial
+  try {
+    const parsed: unknown = JSON.parse(intent.paymentUnsignedMaterialJson)
+    if (
+      !isRecoverableUnsignedMaterial(parsed)
+      || containsForbiddenSignatureKey(parsed)
+      || stableStringify(parsed as StableHashValue) !== intent.paymentUnsignedMaterialJson
+      || canonicalDigest(parsed) !== intent.paymentUnsignedMaterialDigest
+      || parsed.authorization.from.toLowerCase() !== intent.paymentPayer
+      || parsed.authorization.nonce.toLowerCase() !== intent.paymentNonce
+      || parsed.authorization.validBefore !== intent.paymentAuthorizationValidBefore
+      || paymentAuthorizationExpiryFromValidBefore(parsed.typedData.message.validBefore)
+        ?.paymentAuthorizationExpiresAt !== intent.paymentAuthorizationExpiresAt
+    ) return undefined
+    material = parsed
+  } catch {
+    return undefined
+  }
+  const configuration = cdpX402CustodyConfigurationFromEnvironment(dependencies.environment)
+  if (configuration === undefined) return undefined
+  const cdp = dependencies.createClient?.(configuration)
+    ?? (new CdpClient({
+      apiKeyId: configuration.apiKeyId,
+      apiKeySecret: configuration.apiKeySecret,
+      walletSecret: configuration.walletSecret,
+    }) as CdpClientLike)
+  const [accountPolicy, projectPolicy] = await Promise.all([
+    cdp.policies.getPolicyById({ id: configuration.accountPolicyId }),
+    cdp.policies.getPolicyById({ id: configuration.projectPolicyId }),
+  ])
+  if (
+    accountPolicy.id.toLowerCase() !== configuration.accountPolicyId
+    || accountPolicy.scope !== 'account'
+    || projectPolicy.id.toLowerCase() !== configuration.projectPolicyId
+    || projectPolicy.scope !== 'project'
+    || cdpX402PolicyRulesDigest(accountPolicy, projectPolicy) !== configuration.policyRulesDigest
+  ) return undefined
+  const account = await cdp.evm.getAccount({ name: configuration.accountName })
+  if (
+    !hasPolicy(account.policies, configuration.accountPolicyId)
+    || !hasPolicy(account.policies, configuration.projectPolicyId)
+    || !sameEvmAddress(account.address, configuration.expectedEvmAddress)
+    || account.address.toLowerCase() !== intent.paymentPayer
+  ) return undefined
+  const result = await cdp.evm.signTypedData({
+    address: account.address,
+    domain: material.typedData.domain,
+    types: material.typedData.types,
+    primaryType: material.typedData.primaryType,
+    message: material.typedData.message,
+    idempotencyKey: intent.paymentSigningIdempotencyKey,
+  })
+  return isSignature(result.signature) ? result.signature : undefined
+}
+
 async function captureUnsignedMaterial(
   required: PaymentRequired,
   address: string,
   identifier: string,
+  profile: X402PaymentProfile,
 ): Promise<CdpX402PaymentUnsignedMaterial | undefined> {
   let capturedTypedData: CdpX402TypedData | undefined
   const captureSigner: ClientEvmSigner = {
@@ -385,12 +632,17 @@ async function captureUnsignedMaterial(
 
   try {
     const core = new x402Client()
-    core.register(BASE_NETWORK, new ExactEvmScheme(captureSigner))
+    core.register(profile.network, new ExactEvmScheme(captureSigner))
     const payload = await core.createPaymentPayload(required)
+    const encodedPaymentIdentifier = extractPaymentIdentifier(payload)
+    const paymentIdentifierDeclared
+      = required.extensions?.['payment-identifier'] !== undefined
     if (
       payload.x402Version !== 2
       || payload.accepted === undefined
-      || extractPaymentIdentifier(payload) !== identifier
+      || (paymentIdentifierDeclared
+        ? encodedPaymentIdentifier !== identifier
+        : encodedPaymentIdentifier !== null)
       || !isRecord(payload.payload)
       || !isEIP3009Payload(payload.payload as ExactEvmPayloadV2)
       || !isSignature(payload.payload.signature)
@@ -481,6 +733,7 @@ function readPersistedUnsignedMaterial(
     || parsed.authorization.from.toLowerCase() !== accountAddress.toLowerCase()
     || parsed.authorization.to.toLowerCase() !== offeredRequirement.payTo.toLowerCase()
     || parsed.authorization.value !== offeredRequirement.amount
+    || parsed.typedData.domain.chainId !== chainIdFromNetwork(offeredRequirement.network)
     || intent.paymentPayer !== parsed.authorization.from.toLowerCase()
     || intent.paymentNonce !== parsed.authorization.nonce.toLowerCase()
   ) return undefined
@@ -563,7 +816,6 @@ function normalizeTypedDataRecord(value: Record<string, unknown>): Record<string
 
 function normalizeTypedDataValue(value: unknown): unknown {
   if (typeof value === 'bigint') return value.toString(10)
-  if (typeof value === 'number' && Number.isInteger(value)) return value.toString(10)
   if (Array.isArray(value)) return value.map((entry) => normalizeTypedDataValue(entry))
   if (isRecord(value)) {
     return Object.fromEntries(
@@ -574,6 +826,17 @@ function normalizeTypedDataValue(value: unknown): unknown {
 }
 
 function isUnsignedMaterial(value: unknown): value is CdpX402PaymentUnsignedMaterial {
+  return isUnsignedMaterialShape(value, true)
+}
+
+function isRecoverableUnsignedMaterial(value: unknown): value is CdpX402PaymentUnsignedMaterial {
+  return isUnsignedMaterialShape(value, false)
+}
+
+function isUnsignedMaterialShape(
+  value: unknown,
+  requireSchemaValidDomain: boolean,
+): value is CdpX402PaymentUnsignedMaterial {
   if (!isRecord(value) || value.x402Version !== 2) return false
   if (!isRecord(value.resource) || typeof value.resource.url !== 'string') return false
   if (!isRecord(value.accepted) || !isRecord(value.accepted.extra)) return false
@@ -600,12 +863,35 @@ function isUnsignedMaterial(value: unknown): value is CdpX402PaymentUnsignedMate
     || !isRecord(value.typedData.types)
     || typeof value.typedData.primaryType !== 'string'
     || !isRecord(value.typedData.message)
+    || (requireSchemaValidDomain && (
+      typeof value.typedData.domain.chainId !== 'number'
+      || !Number.isSafeInteger(value.typedData.domain.chainId)
+      || value.typedData.domain.chainId <= 0
+    ))
   ) return false
   return true
 }
 
+function chainIdFromNetwork(network: string): number | undefined {
+  const match = /^eip155:([1-9][0-9]*)$/.exec(network)
+  if (match?.[1] === undefined) return undefined
+  const chainId = Number(match[1])
+  return Number.isSafeInteger(chainId) && chainId > 0 ? chainId : undefined
+}
+
 function hasPolicy(policies: readonly string[] | undefined, expectedPolicyId: string): boolean {
   return policies?.some((policyId) => policyId.toLowerCase() === expectedPolicyId) ?? false
+}
+
+function boundedCdpPolicyRules(value: unknown): readonly JsonValue[] | undefined {
+  if (
+    !Array.isArray(value)
+    || value.length < 1
+    || value.length > MAX_CDP_POLICY_RULES
+    || !isBoundedJsonValue(value)
+    || value.some((rule) => !isRecord(rule))
+  ) return undefined
+  return value
 }
 
 function sameEvmAddress(left: string, right: string): boolean {
@@ -616,26 +902,11 @@ function sameEvmAddress(left: string, right: string): boolean {
 function supportedRequirement(
   request: X402PaymentSignatureRequest,
   requirement: X402PaymentSignatureRequest['selectedRequirement'],
+  profile: X402PaymentProfile,
   maxAtomic: bigint,
 ): boolean {
-  try {
-    if (
-      request.challenge.x402Version !== 2
-      || requirement.scheme !== 'exact'
-      || requirement.network !== BASE_NETWORK
-      || requirement.asset.toLowerCase() !== BASE_USDC_ADDRESS.toLowerCase()
-      || !decimalAtomicAmount(requirement.amount)
-      || !isEip3009TransferMethod(requirement.extra.assetTransferMethod)
-    ) return false
-    const amount = BigInt(requirement.amount)
-    return amount <= maxAtomic
-  } catch {
-    return false
-  }
-}
-
-function isEip3009TransferMethod(value: unknown): boolean {
-  return value === 'eip3009'
+  return request.challenge.x402Version === 2
+    && isX402PaymentRequirementForProfile(requirement, profile, maxAtomic)
 }
 
 function paymentIdentifier(externalSpendIdentity: string): string {

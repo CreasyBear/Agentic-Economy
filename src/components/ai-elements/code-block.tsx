@@ -8,10 +8,10 @@ import type { ComponentProps, CSSProperties, HTMLAttributes } from "react";
 import {
   createContext,
   memo,
+  useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
 } from "react";
 import type {
   BundledLanguage,
@@ -358,37 +358,43 @@ const CodeBlockContent = ({
   language: BundledLanguage;
   showLineNumbers?: boolean;
 }) => {
-  // Memoized raw tokens for immediate display
   const rawTokens = useMemo(() => createRawTokens(code), [code]);
-
-  // Synchronous cache lookup — avoids setState in effect for cached results
-  const syncTokens = useMemo(
-    () => highlightCode(code, language) ?? rawTokens,
-    [code, language, rawTokens]
+  const tokensCacheKey = useMemo(
+    () => getTokensCacheKey(code, language),
+    [code, language]
   );
 
-  // Async highlighting result, keyed so stale results never render for new input
-  const [asyncResult, setAsyncResult] = useState<{
-    code: string;
-    language: BundledLanguage;
-    tokens: TokenizedCode;
-  } | null>(null);
+  const getSnapshot = useCallback(
+    () => tokensCache.get(tokensCacheKey) ?? rawTokens,
+    [rawTokens, tokensCacheKey]
+  );
+  const getServerSnapshot = useCallback(() => rawTokens, [rawTokens]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      const notify = () => onStoreChange();
+      const cached = highlightCode(code, language, notify);
 
-    highlightCode(code, language, (tokens) => {
-      if (!cancelled) {
-        setAsyncResult({ code, language, tokens });
+      if (cached) {
+        return () => undefined;
       }
-    });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [code, language]);
+      const cacheSubscribers = subscribers.get(tokensCacheKey);
+      return () => {
+        cacheSubscribers?.delete(notify);
+        if (cacheSubscribers?.size === 0) {
+          subscribers.delete(tokensCacheKey);
+        }
+      };
+    },
+    [code, language, tokensCacheKey]
+  );
 
-  const tokenized = asyncResult?.code === code && asyncResult.language === language ? asyncResult.tokens : syncTokens;
+  const tokenized = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot
+  );
 
   return (
     <div

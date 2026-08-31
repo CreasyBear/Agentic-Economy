@@ -1,6 +1,7 @@
 'use client'
 
-import { SearchIcon } from 'lucide-react'
+import { SearchIcon, UserRoundIcon } from 'lucide-react'
+import { UserButton, useUser } from '@clerk/tanstack-react-start'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -21,6 +22,7 @@ import {
 
 import { useOpenOperatorCommand } from '@/components/ae/layout/operator-command-context'
 import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import {
   formatOperatorNavBadge,
   isOperatorPathActive,
@@ -40,14 +42,55 @@ type AeOperatorSidebarProps = {
 
 const EMPTY_NAV_BADGES: OperatorNavBadges = {}
 
+function AuthenticatedOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
+  const { isLoaded, isSignedIn, user } = useUser()
+  const identity = user?.primaryEmailAddress?.emailAddress ?? user?.fullName ?? 'Signed-in account'
+  const accountContext = isLoaded && isSignedIn ? `Signed in as ${identity}` : 'Signed-in account'
+
+  return (
+    <div
+      role="group"
+      aria-label={accountContext}
+      className="flex min-h-8 min-w-0 items-center gap-2 rounded-md p-1 group-data-[collapsible=icon]:size-8!"
+    >
+      <UserButton
+        userProfileMode="modal"
+        appearance={{
+          elements: {
+            avatarBox: 'size-6',
+            userButtonTrigger: 'size-8 rounded-md focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+          },
+        }}
+      />
+      <span className={isCollapsed ? 'sr-only' : 'min-w-0 truncate text-xs text-muted-foreground'}>
+        {identity}
+      </span>
+    </div>
+  )
+}
+
+function LocalPreviewOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
+  return (
+    <div
+      role="group"
+      aria-label="Local preview account context"
+      className="flex min-h-8 min-w-0 items-center gap-2 rounded-md p-2 text-muted-foreground group-data-[collapsible=icon]:size-8!"
+    >
+      <UserRoundIcon aria-hidden="true" className="size-4 shrink-0" />
+      <span className={isCollapsed ? 'sr-only' : 'min-w-0 truncate text-xs'}>Local preview</span>
+    </div>
+  )
+}
+
 
 export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY_NAV_BADGES }: AeOperatorSidebarProps) {
   const { state, isMobile, open, openMobile } = useSidebar()
   const openCommand = useOpenOperatorCommand()
-  const isCollapsed = state === 'collapsed'
+  const isCollapsed = !isMobile && state === 'collapsed'
   const expanded = isMobile ? openMobile : open
   const navGroups = navGroupsForRole(operatorRole)
   const utilityItems = operatorUtilityItemsForRole(operatorRole)
+  const localPreview = isLocalE2EAuthBypassEnabled()
 
   return (
     <Sidebar variant="inset" collapsible="icon" role="complementary" aria-label="Workspace navigation">
@@ -154,6 +197,15 @@ export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY
               )
             })}
           </SidebarMenu>
+          {operatorRole === 'owner' ? (
+            <SidebarMenu>
+              <SidebarMenuItem>
+                {localPreview
+                  ? <LocalPreviewOwnerAccount isCollapsed={isCollapsed} />
+                  : <AuthenticatedOwnerAccount isCollapsed={isCollapsed} />}
+              </SidebarMenuItem>
+            </SidebarMenu>
+          ) : null}
         </SidebarFooter>
       </nav>
       <SidebarRail

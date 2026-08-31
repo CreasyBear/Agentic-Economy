@@ -13,7 +13,7 @@ import {
 } from '@/components/ae/website'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
-import type { ServiceDto } from '@/modules/registry/public'
+import type { OperationCardViewModel } from '@/modules/market/operation-view-model'
 
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 
@@ -33,14 +33,29 @@ const SUPPLY_PREP = [
   'An existing owner-controlled provider connection if the upstream requires credentials. Never paste a raw key into the Operation form.',
 ] as const
 
+const SUPPLY_SOURCE_FIT = [
+  {
+    title: 'Public OpenAPI or MCP',
+    body: 'Publish a public HTTPS route or remote MCP tool without giving AE a provider secret.',
+  },
+  {
+    title: 'Keyed OpenAPI or MCP',
+    body: 'Sign in first, create an owner-controlled provider connection, then select it from the Operation. If setup offers no compatible connection, that source cannot be published yet.',
+  },
+  {
+    title: 'Public x402 endpoint',
+    body: 'Connect the public resource URL and prove control of the payout address. Never paste a wallet private key into an Operation.',
+  },
+] as const
+
 export function AeSupplyLanding({
   tools,
-  services,
+  operations,
   sourceError,
   onRetry,
 }: Readonly<{
   tools: readonly SupplyLandingTool[]
-  services: readonly ServiceDto[]
+  operations: readonly OperationCardViewModel[]
   sourceError?: string
   onRetry?: () => void
 }>) {
@@ -99,6 +114,14 @@ export function AeSupplyLanding({
           <p className="text-sm text-muted-foreground">
             Creating the supplier account and business is an owner step. After that, an owner can approve a separate agent credential for maintenance. <Link to="/SKILL.md" hash="supplier-path" className="font-medium text-foreground underline underline-offset-4">Read the supplier agent path</Link>.
           </p>
+          <div className="grid gap-related sm:grid-cols-3" aria-label="Supported source paths">
+            {SUPPLY_SOURCE_FIT.map((source) => (
+              <article key={source.title} className="grid content-start gap-intra rounded-card border border-border bg-card p-gutter">
+                <h3 className="font-semibold text-foreground">{source.title}</h3>
+                <p className="text-sm text-muted-foreground">{source.body}</p>
+              </article>
+            ))}
+          </div>
         </div>
       </AeSiteSection>
       <AeSiteSection ariaLabel="How to publish an Operation" scheme="surface">
@@ -128,7 +151,7 @@ export function AeSupplyLanding({
         </div>
       </AeSiteSection>
       <AeSiteSection ariaLabel="What agents can inspect" scheme="surface">
-        <AeSupplyAgentProof tools={tools} services={services} />
+        <AeSupplyAgentProof tools={tools} operations={operations} />
       </AeSiteSection>
     </>
   )

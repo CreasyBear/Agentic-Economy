@@ -147,7 +147,7 @@ export function AeMarketPage({
   }
 
   return (
-    <div id="operations" className="scroll-mt-6">
+    <div id="operations" className="scroll-mt-anchor">
       <AePageHeader
         eyebrow="Catalog"
         title={title}

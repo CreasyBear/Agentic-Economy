@@ -8,6 +8,7 @@ import {
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
+import { continuationCommand } from '../lib/continuation-command'
 import { recoveryTransportFailure, requireAgentAccessKey } from './status'
 
 function recoverPath(invocationRef: string): string {
@@ -78,9 +79,19 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
     })
   }
 
+  const continuationSuffix = continuationCommand([
+    ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+      ? []
+      : ['--base-url', options.baseUrl]),
+    ...(options.json ? ['--json'] : []),
+  ])
+  const statusCommand = `ae status ${parsedInput.data.invocationRef}`
+  const nextCommand = continuationSuffix.length === 0
+    ? statusCommand
+    : `${statusCommand} ${continuationSuffix}`
   const rendered = {
     ...parsedResult.data,
-    nextCommand: `ae status ${parsedInput.data.invocationRef}`,
+    nextCommand,
   }
   if (options.json) {
     printJson(rendered)

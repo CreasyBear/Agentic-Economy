@@ -11,7 +11,16 @@ import {
   formatOperationPrice,
   formatOperationReadiness,
 } from '@/modules/market/operation-view-model'
-import { readExactAmount } from '@/modules/money/public'
+import {
+  operationInvokeResultKindValues,
+  operationInvokeResultSchema,
+  type OperationInvokeResult,
+} from '@/modules/capability-execution/operation-invoke-contracts'
+import {
+  suggestContinuation,
+  type SuggestedContinuation,
+} from '@/modules/market/suggested-continuation'
+import { formatCurrencyAmount, readExactAmount } from '@/modules/money/public'
 
 export const CHAT_TOOL_IDS = [
   'registry.operations.search',
@@ -58,6 +67,8 @@ export type OperationFact = Readonly<{
   value: string
 }>
 
+export type OperationExecutionState = OperationInvokeResult['kind']
+
 type CardChrome = Readonly<{
   toolId: ChatToolId
   title: string
@@ -82,9 +93,19 @@ export type OperationCardProjection =
     })
   | (CardChrome & {
       kind: 'execute'
-      state: 'complete'
+      state: OperationExecutionState
       operationRefs: readonly string[]
       name?: string
+      invocationRef?: string
+      outputPreview?: string
+      outputTruncated?: boolean
+      facts: readonly OperationFact[]
+      receiptRef?: string
+      evidenceHash?: string
+      summary: string
+      nextAction?: string
+      retryable?: boolean
+      continuation?: SuggestedContinuation
     })
 
 const REFUSAL_SUMMARIES: Readonly<Record<string, string>> = {
@@ -140,6 +161,11 @@ function stringField(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0
     ? Array.from(value.trim()).slice(0, 120).join('')
     : undefined
+}
+
+function boundedString(value: unknown, maximum: number): string | undefined {
+  if (typeof value !== 'string' || value.trim().length === 0) return undefined
+  return Array.from(value.trim()).slice(0, maximum).join('')
 }
 
 function addRef(refs: string[], value: unknown): void {
@@ -441,6 +467,139 @@ function inspectPlanFacts(output: Record<string, unknown>): OperationFact[] {
   return facts
 }
 
+const MAX_EXECUTE_OUTPUT_PREVIEW_CHARS = 8_000
+
+const CHARGE_STATE_LABELS = {
+  free_tier: 'Free tier',
+  paid: 'Paid',
+  insufficient_credit: 'Insufficient credit',
+  outcome_unknown: 'Outcome unknown',
+  refunded: 'Refunded',
+} as const
+
+function invocationContinuation(
+  state: Exclude<OperationExecutionState, 'refused'>,
+  invocationRef: string,
+): SuggestedContinuation {
+  return suggestContinuation({
+    subject: 'invocation',
+    state: state === 'completed'
+      ? 'completed'
+      : state === 'reconciliation_required'
+        ? 'reconciliation_required'
+        : 'pending',
+    invocationRef,
+  })
+}
+
+function outputPreview(value: OperationInvokeResult & { kind: 'completed' }): Readonly<{
+  text: string
+  truncated: boolean
+}> {
+  const serialized = JSON.stringify(value.output, null, 2)
+  const characters = Array.from(serialized)
+  return {
+    text: characters.slice(0, MAX_EXECUTE_OUTPUT_PREVIEW_CHARS).join(''),
+    truncated: characters.length > MAX_EXECUTE_OUTPUT_PREVIEW_CHARS,
+  }
+}
+
+function receiptFacts(result: Extract<OperationInvokeResult, { receipt?: unknown }>): OperationFact[] {
+  return result.receipt === undefined
+    ? []
+    : [{ label: 'Receipt', value: result.receipt.state.replaceAll('_', ' ') }]
+}
+
+function projectInvokeResult(result: OperationInvokeResult): OperationCardProjection {
+  const operationRefs = result.operationRef === undefined ? [] : [result.operationRef]
+  if (result.kind === 'completed') {
+    const preview = outputPreview(result)
+    const facts: OperationFact[] = [
+      {
+        label: 'Charge',
+        value: `${formatCurrencyAmount(result.usage.amount)} · ${CHARGE_STATE_LABELS[result.usage.chargeState]}`,
+      },
+      ...(result.usage.durationMs === undefined
+        ? []
+        : [{ label: 'Duration', value: `${result.usage.durationMs} ms` }]),
+      ...receiptFacts(result),
+    ]
+    return {
+      ...chrome('operation.invoke'),
+      kind: 'execute',
+      state: result.kind,
+      operationRefs,
+      invocationRef: result.invocationRef,
+      outputPreview: preview.text,
+      ...(preview.truncated ? { outputTruncated: true } : {}),
+      facts,
+      ...(result.receipt === undefined ? {} : { receiptRef: result.receipt.receiptRef }),
+      evidenceHash: result.evidenceHash,
+      summary: 'The Operation returned a result the calling agent can use now.',
+      continuation: invocationContinuation(result.kind, result.invocationRef),
+    }
+  }
+  if (result.kind === 'pending') {
+    return {
+      ...chrome('operation.invoke'),
+      kind: 'execute',
+      state: result.kind,
+      operationRefs,
+      invocationRef: result.invocationRef,
+      facts: [{ label: 'Check after', value: `${result.retryAfterMs} ms` }],
+      summary: 'The call was accepted, but no terminal result is recorded yet.',
+      continuation: invocationContinuation(result.kind, result.invocationRef),
+    }
+  }
+  if (result.kind === 'needs_authority') {
+    const maximumSpend = result.authorityRequest.maximumSpend
+    return {
+      ...chrome('operation.invoke'),
+      kind: 'execute',
+      state: result.kind,
+      operationRefs,
+      invocationRef: result.invocationRef,
+      facts: [
+        { label: 'Consequence', value: result.authorityRequest.consequence.replaceAll('_', ' ') },
+        ...(maximumSpend === undefined
+          ? []
+          : [{ label: 'Maximum spend', value: formatCurrencyAmount(maximumSpend) }]),
+      ],
+      summary: 'The call is paused until the required authority is granted.',
+      nextAction: 'Review the pending approval in the agent console.',
+      continuation: invocationContinuation(result.kind, result.invocationRef),
+    }
+  }
+  if (result.kind === 'reconciliation_required') {
+    return {
+      ...chrome('operation.invoke'),
+      kind: 'execute',
+      state: result.kind,
+      operationRefs,
+      invocationRef: result.invocationRef,
+      facts: [
+        { label: 'Attempt', value: result.evidence.attemptRef },
+        { label: 'Effect generation', value: String(result.evidence.effectGeneration) },
+        ...receiptFacts(result),
+      ],
+      ...(result.receipt === undefined ? {} : { receiptRef: result.receipt.receiptRef }),
+      summary: 'The external effect is uncertain. Do not retry this call until it is reconciled.',
+      continuation: invocationContinuation(result.kind, result.invocationRef),
+    }
+  }
+  return {
+    ...chrome('operation.invoke'),
+    kind: 'execute',
+    state: result.kind,
+    operationRefs,
+    facts: receiptFacts(result),
+    ...(result.receipt === undefined ? {} : { receiptRef: result.receipt.receiptRef }),
+    summary: REFUSAL_SUMMARIES[result.code] ?? result.code.replaceAll('_', ' '),
+    ...(result.nextAction === undefined ? {} : { nextAction: result.nextAction }),
+    retryable: result.retryable,
+  }
+}
+
 function chrome(toolId: ChatToolId): CardChrome {
   return { toolId, title: CHAT_TOOL_TITLES[toolId] }
 }
@@ -511,16 +670,8 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): O
         facts: inspectPlanFacts(output),
         operationRefs: collectOperationRefs(output, []),
       }
-    case 'operation.invoke': {
-      const name = stringField(output.name)
-      return {
-        ...chrome(toolId),
-        kind: 'execute',
-        state: 'complete',
-        operationRefs: collectOperationRefs(output, []),
-        ...(name === undefined ? {} : { name }),
-      }
-    }
+    case 'operation.invoke':
+      return statusCard(toolId, 'error', 'Tool unavailable')
     default: {
       const exhaustive: never = toolId
       return exhaustive
@@ -553,12 +704,34 @@ function projectStoredCard(part: Record<string, unknown>): OperationCardProjecti
   }
   if (part.kind === 'execute' || toolId === 'operation.invoke') {
     const name = stringField(part.name)
+    const state = part.state === 'complete'
+      ? 'completed'
+      : operationInvokeResultKindValues.find((value) => value === part.state)
+    if (state === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
+    const invocationRef = boundedString(part.invocationRef, 400)
+    const outputPreview = boundedString(part.outputPreview, MAX_EXECUTE_OUTPUT_PREVIEW_CHARS)
+    const receiptRef = boundedString(part.receiptRef, 400)
+    const evidenceHash = boundedString(part.evidenceHash, 400)
+    const summary = boundedString(part.summary, 320) ?? 'Call result recorded.'
+    const nextAction = boundedString(part.nextAction, 320)
     return {
       ...chrome(toolId),
       kind: 'execute',
-      state: 'complete',
+      state,
       operationRefs: refs,
       ...(name === undefined ? {} : { name }),
+      ...(invocationRef === undefined ? {} : { invocationRef }),
+      ...(outputPreview === undefined ? {} : { outputPreview }),
+      ...(part.outputTruncated === true ? { outputTruncated: true } : {}),
+      facts: projectStoredFacts(part.facts),
+      ...(receiptRef === undefined ? {} : { receiptRef }),
+      ...(evidenceHash === undefined ? {} : { evidenceHash }),
+      summary,
+      ...(nextAction === undefined ? {} : { nextAction }),
+      ...(typeof part.retryable === 'boolean' ? { retryable: part.retryable } : {}),
+      ...(state === 'refused' || invocationRef === undefined
+        ? {}
+        : { continuation: invocationContinuation(state, invocationRef) }),
     }
   }
   const count = typeof part.count === 'number' && Number.isSafeInteger(part.count) && part.count >= 0
@@ -590,6 +763,17 @@ export function projectOperationCard(part: unknown): OperationCardProjection | n
   const output = outputRecord(part)
   const kind = output?.kind
   if (kind === 'error') return statusCard(toolId, 'error', 'Tool unavailable')
+  if (toolId === 'operation.invoke') {
+    if (kind === 'chat_tool_refused') {
+      const reason = typeof output?.reason === 'string' ? REFUSAL_SUMMARIES[output.reason] : undefined
+      return statusCard(toolId, 'refused', reason ?? 'Request refused')
+    }
+    if (output === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
+    const result = operationInvokeResultSchema.safeParse(output)
+    return result.success
+      ? projectInvokeResult(result.data)
+      : statusCard(toolId, 'error', 'Tool unavailable')
+  }
   const refused = kind === 'refused'
     || kind === 'unavailable'
     || kind === 'chat_tool_refused'
@@ -649,9 +833,18 @@ export function serializeOperationCard(card: OperationCardProjection): Record<st
         kind: 'execute',
         toolId: card.toolId,
         title: card.title,
-        state: 'complete',
+        state: card.state,
         operationRefs: [...card.operationRefs],
         ...(card.name === undefined ? {} : { name: card.name }),
+        ...(card.invocationRef === undefined ? {} : { invocationRef: card.invocationRef }),
+        ...(card.outputPreview === undefined ? {} : { outputPreview: card.outputPreview }),
+        ...(card.outputTruncated === true ? { outputTruncated: true } : {}),
+        facts: card.facts.map((fact) => ({ ...fact })),
+        ...(card.receiptRef === undefined ? {} : { receiptRef: card.receiptRef }),
+        ...(card.evidenceHash === undefined ? {} : { evidenceHash: card.evidenceHash }),
+        summary: card.summary,
+        ...(card.nextAction === undefined ? {} : { nextAction: card.nextAction }),
+        ...(card.retryable === undefined ? {} : { retryable: card.retryable }),
       }
     default: {
       const exhaustive: never = card
@@ -662,7 +855,7 @@ export function serializeOperationCard(card: OperationCardProjection): Record<st
 
 export function operationCardState(
   card: OperationCardProjection,
-): 'working' | 'complete' | 'refused' | 'error' {
+): 'working' | 'pending' | 'complete' | 'attention' | 'refused' | 'error' {
   switch (card.kind) {
     case 'working':
       return 'working'
@@ -670,8 +863,12 @@ export function operationCardState(
       return card.state
     case 'choices':
     case 'inspect':
-    case 'execute':
       return 'complete'
+    case 'execute':
+      if (card.state === 'completed') return 'complete'
+      if (card.state === 'pending') return 'pending'
+      if (card.state === 'refused') return 'refused'
+      return 'attention'
     default: {
       const exhaustive: never = card
       return exhaustive

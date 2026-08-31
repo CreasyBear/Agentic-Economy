@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Readable } from 'node:stream'
 
 import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
 import type { CliOptions } from '../../../tools/ae/lib/args'
@@ -25,6 +26,46 @@ function setApiKey(value: string, origin = options.baseUrl): void {
 }
 
 describe('market-terminal authenticated operation invocation', () => {
+  it('checks anonymous availability before suggesting buyer connection', async () => {
+    const operationRef = `operation:v1:${'a'.repeat(64)}`
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(
+      callableOperationDetail(operationRef),
+    ), { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(runInvokeCommand([operationRef], { ...options, input: '{}' })).rejects.toMatchObject({
+      kind: 'UNAUTHENTICATED',
+      code: 'agent_access_key_required',
+      nextCommand: 'ae connect',
+    } satisfies Partial<CliFailure>)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe('https://market.example/api/v1/market-operations/detail')
+    expect(new Headers(init?.headers).get('Authorization')).toBeNull()
+    expect(JSON.parse(String(init?.body))).toEqual({ operationRef })
+  })
+
+  it('does not suggest connect or retry when supplier setup is incomplete', async () => {
+    const operationRef = `operation:v1:${'b'.repeat(64)}`
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'unavailable',
+      schemaVersion: 'registry-operations:v1',
+      operationRef,
+      reason: 'setup_required',
+      navigation: [],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(runInvokeCommand([operationRef], { ...options, input: '{}' })).rejects.toMatchObject({
+      kind: 'FAILED_PRECONDITION',
+      code: 'setup_required',
+      retryable: undefined,
+      nextCommand: undefined,
+      suggestion: undefined,
+    } satisfies Partial<CliFailure>)
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
   it('rejects a missing JSON positional before requiring the application key', async () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
@@ -102,6 +143,73 @@ describe('market-terminal authenticated operation invocation', () => {
     const stdout = write.mock.calls.flat().join('')
     expect(stdout).not.toContain('ae-test-caller-key')
     expect(stdout).not.toContain('idem-cli-one')
+  })
+
+  it('reads piped JSON input and sends the same canonical operation payload', async () => {
+    setApiKey('ae-test-caller-key')
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'completed',
+      invocationRef: 'invocation:stdin',
+      operationRef: 'operation:v1:test',
+      output: { value: 1 },
+      evidenceHash: 'sha256:stdin',
+      usage: {
+        usageRef: 'usage:stdin',
+        observedAt: 100,
+        chargeState: 'free_tier',
+        priceDigest: 'sha256:price',
+        amount: { currency: 'USD', units: '0', exponent: 2 },
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runInvokeCommand(
+      ['operation:v1:test'],
+      { ...options, input: '-', idempotencyKey: 'idem-cli-stdin' },
+      Readable.from(['{"query":"hello from stdin"}']),
+    )
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      operationRef: 'operation:v1:test',
+      input: { query: 'hello from stdin' },
+      idempotencyKey: 'idem-cli-stdin',
+    })
+  })
+
+  it.each([
+    {
+      name: 'empty',
+      contents: '',
+      failure: { kind: 'INVALID_ARGUMENT', code: 'call-usage' },
+    },
+    {
+      name: 'malformed',
+      contents: '{',
+      failure: { kind: 'INVALID_ARGUMENT', code: 'invoke-input' },
+    },
+    {
+      name: 'non-object',
+      contents: '[]',
+      failure: { kind: 'INVALID_ARGUMENT', code: 'invoke-input' },
+    },
+    {
+      name: 'oversized',
+      contents: 'x'.repeat((256 * 1024) + 1),
+      failure: { kind: 'PAYLOAD_TOO_LARGE', code: 'payload_too_large' },
+    },
+  ])('rejects $name piped input before any network request', async ({ contents, failure }) => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(runInvokeCommand(
+      ['operation:v1:test'],
+      { ...options, input: '-' },
+      Readable.from([contents]),
+    )).rejects.toMatchObject(failure)
+
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('never prints raw idempotency material in human output', async () => {
@@ -232,8 +340,44 @@ describe('market-terminal authenticated operation invocation', () => {
 
     expect(JSON.parse(write.mock.calls.flat().join(''))).toMatchObject({
       kind: 'completed',
-      nextCommand: 'ae account balance',
+      nextCommand: 'ae account balance --json',
     })
   })
 
 })
+
+function callableOperationDetail(operationRef: string): Record<string, unknown> {
+  return {
+    kind: 'found',
+    schemaVersion: 'registry-operations:v1',
+    operation: {
+      operationRef,
+      operationId: 'reference.lookup',
+      callVia: '/api/v1/operations/call',
+      paymentLane: 'brokered',
+      contract: {
+        capabilityId: 'reference.lookup', version: 1,
+        inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' },
+        customerAnnotations: [],
+      },
+      business: { businessId: 'business:reference', slug: 'reference', name: 'Reference Services' },
+      offering: { offeringRef: 'offering:reference', revision: 1, label: 'Reference lookup', summary: 'Look up a reference.' },
+      summary: 'Look up a reference.',
+      commercial: {
+        price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
+        materialTerms: [], relationship: { kind: 'none', summary: 'No commercial relationship.' },
+      },
+      dataUse: [], effects: [], evidence: [],
+      cancellation: { kind: 'unsupported' },
+      recovery: { idempotency: 'required', recovery: 'retry_safe' },
+      authentication: { kind: 'ae_api_key' },
+      transport: { method: 'GET', pathTemplate: '/lookup', responseStatus: 200, responseContentType: 'application/json', requestTimeoutMs: 5_000 },
+      provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
+      availability: { posture: 'routeable' },
+      navigation: [{
+        relation: 'invoke', pathTemplate: '/api/v1/operations/call', method: 'POST',
+        actionId: 'agentic-economy.operation-invoke', authentication: 'required', surfaces: ['cli'],
+      }],
+    },
+  }
+}

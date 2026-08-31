@@ -24,6 +24,8 @@ import {
   type SuppliedCandidateRef,
   type CapabilityOfferingRow,
   type CapabilityBindingRow,
+  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+  x402SellerCanaryAdmissionEvidenceRef,
 } from '@/modules/capability-supply/public'
 import {
   createProviderConnection,
@@ -352,6 +354,33 @@ describe('ADR-009 supplied-candidate qualification', () => {
     ])
     expect(result.sources.every(({ ref, digest }) => ref.length > 0 && digest.startsWith('sha256:')))
       .toBe(true)
+  })
+  it('keeps an exact seller-canary publication unrouteable until that revision is admitted', async () => {
+    const required = await qualifySuppliedCandidate(ports({
+      loadPublicationAtRevision: async () => publication({
+        sourceKind: 'x402',
+        registrationEvidenceRefs: [
+          'fixture:publication-registration',
+          X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+        ],
+      }),
+    }), { candidate, now })
+    expect(required).toMatchObject({
+      status: 'blocked',
+      reasons: ['seller_canary_admission_required'],
+    })
+
+    const admitted = await qualifySuppliedCandidate(ports({
+      loadPublicationAtRevision: async () => publication({
+        sourceKind: 'x402',
+        registrationEvidenceRefs: [
+          'fixture:publication-registration',
+          X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+          x402SellerCanaryAdmissionEvidenceRef(canonicalDigest({ canary: 'completed' })),
+        ],
+      }),
+    }), { candidate, now })
+    expect(admitted).toMatchObject({ status: 'eligible', reasons: [] })
   })
   it('records credential rejection as durable unavailable state over stale healthy readiness', async () => {
     const basePublication = publication()

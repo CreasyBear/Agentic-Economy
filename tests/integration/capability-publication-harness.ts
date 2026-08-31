@@ -229,6 +229,7 @@ export async function installProviderConnectionFixture(
   })
   return await backend.mutation(internal.capabilityProviderConnections.create, {
     connectionRef: input.connectionRef,
+    authorityGrantRef: grantRef,
     businessId: input.businessId,
     providerRef: input.providerRef,
     providerAccountRef: input.providerAccountRef,

@@ -12,6 +12,9 @@ import {
   recordX402PaymentSignatureDigestArgs,
   recordX402PaymentSignatureDigestHandler,
   recordX402PaymentSignatureDigestReturns,
+  recordX402PaymentAuthorizationFailureArgs,
+  recordX402PaymentAuthorizationFailureHandler,
+  recordX402PaymentAuthorizationFailureReturns,
   recordX402PaymentSigningIntentArgs,
   recordX402PaymentSigningIntentHandler,
   recordX402PaymentSigningIntentReturns,
@@ -65,6 +68,12 @@ export const recordX402PaymentSignatureDigest = internalMutation({
   args: recordX402PaymentSignatureDigestArgs,
   returns: recordX402PaymentSignatureDigestReturns,
   handler: recordX402PaymentSignatureDigestHandler,
+})
+
+export const recordX402PaymentAuthorizationFailure = internalMutation({
+  args: recordX402PaymentAuthorizationFailureArgs,
+  returns: recordX402PaymentAuthorizationFailureReturns,
+  handler: recordX402PaymentAuthorizationFailureHandler,
 })
 
 export const readX402PaymentAuthorization = internalQuery({

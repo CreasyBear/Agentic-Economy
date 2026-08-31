@@ -266,6 +266,27 @@ describe("registry origin adapters", () => {
     expect(result.entries[0]).not.toHaveProperty("exactPrice");
   });
 
+  it("accepts bounded Treg routed-child metadata without importing it as authority", async () => {
+    const shelf = tregShelf("companies");
+    shelf.capabilities[0]!.endpoints[0] = {
+      ...tregEndpoint("companies.search", "core"),
+      routed_children: ["apollo.companies.enrich", "hunter.companies.enrich"],
+    };
+    const result = await fetchTregCatalog({
+      fetch: async (url) =>
+        url.endsWith("/catalog/platforms")
+          ? json({ platforms: [tregPlatform("companies", 2)] })
+          : json(shelf),
+    });
+
+    expect(result.complete).toBe(true);
+    expect(result.entries[0]).toMatchObject({
+      upstreamEndpointId: "companies.search",
+      authority: "source_metadata_only",
+    });
+    expect(result.entries[0]).not.toHaveProperty("routed_children");
+  });
+
   it("marks an incomplete Treg shelf traversal without claiming coverage", async () => {
     const result = await fetchTregCatalog({
       maxShelves: 1,
@@ -281,6 +302,24 @@ describe("registry origin adapters", () => {
       incompleteReason: "page_ceiling_reached",
       fetchedShelfCount: 1,
       sourceReportedCount: 4,
+    });
+  });
+
+  it("bounds a larger Treg platform index after validating it", async () => {
+    const platforms = Array.from({ length: 9 }, (_, index) =>
+      tregPlatform(`platform-${index}`, 2),
+    );
+    const result = await fetchTregCatalog({
+      fetch: async (url) =>
+        url.endsWith("/catalog/platforms")
+          ? json({ platforms })
+          : json(tregShelf(new URL(url).pathname.split("/").at(-1)!)),
+    });
+
+    expect(result).toMatchObject({
+      complete: false,
+      incompleteReason: "page_ceiling_reached",
+      fetchedShelfCount: 8,
     });
   });
 
@@ -546,5 +585,6 @@ function tregEndpoint(id: string, tier: string) {
     has_example: false,
     input: null,
     test_request: null,
+    routed_children: undefined as string[] | undefined,
   };
 }

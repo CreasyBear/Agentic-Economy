@@ -3,8 +3,13 @@ import { z } from 'zod'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
 import {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
+  BASE_SEPOLIA_NETWORK,
+  BASE_SEPOLIA_USDC_ADDRESS,
   type PublishedOperation,
   type RuntimePublishedOperationDescriptor,
+  x402PaymentProfileForEnvironment,
 } from '@/modules/capability-supply/public'
 import {
   exactAmountSchema,
@@ -117,13 +122,41 @@ export const operationInvokeReceiptStateValues = [
 ] as const
 export const operationInvokeReceiptStateSchema = z.enum(operationInvokeReceiptStateValues)
 
-export const operationInvokeReceiptAsset = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
+export const operationInvokeReceiptAsset = BASE_MAINNET_USDC_ADDRESS
+export const operationInvokeReceiptBaseSepoliaAsset = BASE_SEPOLIA_USDC_ADDRESS
 
-export type OperationInvokeReceipt = Readonly<{
+export type OperationInvokeReceiptPaymentProfile =
+  | Readonly<{
+      network: typeof BASE_MAINNET_NETWORK
+      asset: typeof operationInvokeReceiptAsset
+    }>
+  | Readonly<{
+      network: typeof BASE_SEPOLIA_NETWORK
+      asset: typeof operationInvokeReceiptBaseSepoliaAsset
+    }>
+
+export function operationInvokeReceiptPaymentProfile(
+  environment: AgentAccessPrincipal['environment'],
+  network: string,
+  asset: string,
+): OperationInvokeReceiptPaymentProfile | undefined {
+  const profile = x402PaymentProfileForEnvironment(environment)
+  if (
+    profile?.profile === 'base-usdc-exact'
+    && network === profile.network
+    && asset.toLowerCase() === profile.asset.toLowerCase()
+  ) return { network: profile.network, asset: profile.asset }
+  if (
+    profile?.profile === 'base-sepolia-usdc-exact'
+    && network === profile.network
+    && asset.toLowerCase() === profile.asset.toLowerCase()
+  ) return { network: profile.network, asset: profile.asset }
+  return undefined
+}
+
+type OperationInvokeReceiptFields = Readonly<{
   receiptRef: string
   state: (typeof operationInvokeReceiptStateValues)[number]
-  network: 'eip155:8453'
-  asset: typeof operationInvokeReceiptAsset
   providerQuotedAmount: ExactAmount
   agenticEconomyFee: ExactAmount
   totalBuyerAuthorization: ExactAmount
@@ -139,11 +172,11 @@ export type OperationInvokeReceipt = Readonly<{
   issuedAt: string
 }>
 
-export const operationInvokeReceiptSchema: z.ZodType<OperationInvokeReceipt> = z.strictObject({
+export type OperationInvokeReceipt = OperationInvokeReceiptFields & OperationInvokeReceiptPaymentProfile
+
+const operationInvokeReceiptFields = {
   receiptRef: z.string().min(1),
   state: operationInvokeReceiptStateSchema,
-  network: z.literal('eip155:8453'),
-  asset: z.literal(operationInvokeReceiptAsset),
   providerQuotedAmount: exactAmountSchema,
   agenticEconomyFee: exactAmountSchema,
   totalBuyerAuthorization: exactAmountSchema,
@@ -157,7 +190,20 @@ export const operationInvokeReceiptSchema: z.ZodType<OperationInvokeReceipt> = z
   externalSettlementRef: z.string().min(1).exactOptional(),
   evidenceHash: z.string().min(1),
   issuedAt: z.string().min(1),
-})
+} as const
+
+export const operationInvokeReceiptSchema: z.ZodType<OperationInvokeReceipt> = z.discriminatedUnion('network', [
+  z.strictObject({
+    ...operationInvokeReceiptFields,
+    network: z.literal(BASE_MAINNET_NETWORK),
+    asset: z.literal(operationInvokeReceiptAsset),
+  }),
+  z.strictObject({
+    ...operationInvokeReceiptFields,
+    network: z.literal(BASE_SEPOLIA_NETWORK),
+    asset: z.literal(operationInvokeReceiptBaseSepoliaAsset),
+  }),
+]).meta({ id: 'OperationInvokeReceipt' })
 
 export const operationInvokeUsageSchema: z.ZodType<OperationInvokeUsageSummary> = z.strictObject({
   usageRef: z.string().min(1),
@@ -167,7 +213,7 @@ export const operationInvokeUsageSchema: z.ZodType<OperationInvokeUsageSummary> 
   priceDigest: z.string().min(1),
   transactionRef: z.string().min(1).exactOptional(),
   durationMs: z.number().int().nonnegative().exactOptional(),
-})
+}).meta({ id: 'OperationInvokeUsage' })
 
 export const operationInvokeResultKindValues = [
   'completed',

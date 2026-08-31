@@ -10,6 +10,7 @@ type CommandContinuation = SuggestedContinuation & Readonly<{ command: string }>
 
 export type OperationContinuationFacts = Readonly<{
   operationRef: string
+  searchQuery: string
   availabilityPosture: 'integrated' | 'routeable' | 'unavailable'
   requiresBuyerCredential: boolean
   hasBuyerCredential: boolean
@@ -20,6 +21,7 @@ export type ContinuationState =
       subject: 'operation'
       state: 'ready' | 'connection_required' | 'inspect_only' | 'unavailable'
       operationRef: string
+      searchQuery: string
     }>
   | Readonly<{
       subject: 'invocation'
@@ -75,7 +77,11 @@ export function suggestContinuation(state: ContinuationState): SuggestedContinua
   if (state.subject === 'connection') {
     return state.actor === 'buyer'
       ? { label: 'Connect agent', kind: 'navigate', command: 'ae connect', href: '/for-agents' }
-      : { label: 'Connect provider', kind: 'navigate', href: '/owner/settings/connections' }
+      : {
+          label: 'Connect provider',
+          kind: 'navigate',
+          href: '/owner/settings/connections#provider-x402-resource-url',
+        }
   }
   return { label: 'Add credit', kind: 'navigate', command: 'ae account balance', href: '/owner/credit#fund' }
 }
@@ -95,7 +101,14 @@ export function continuationForOperationFacts(
     subject: 'operation',
     state,
     operationRef: input.operationRef,
+    searchQuery: normalizedAlternativeSearchQuery(input.searchQuery),
   })
+}
+
+function normalizedAlternativeSearchQuery(value: string): string {
+  const normalized = value.replace(/\s+/gu, ' ').trim()
+  const query = normalized.length === 0 ? 'current Operation alternatives' : normalized
+  return query.length <= 200 ? query : query.slice(0, 200).trimEnd()
 }
 
 function operationContinuation(
@@ -113,18 +126,34 @@ function operationContinuation(
   }
   if (state.state === 'inspect_only') {
     return {
-      label: 'Inspect Operation',
+      label: 'Find callable alternatives',
       kind: 'navigate',
-      command: `ae inspect ${state.operationRef}`,
-      href: `/operations/${state.operationRef}`,
+      command: callableAlternativesCommand(state.searchQuery),
+      href: callableAlternativesHref(state.searchQuery),
+      warning: 'This Operation is inspectable but not currently callable.',
     }
   }
   return {
-    label: 'Inspect availability',
-    kind: 'copy_command',
-    command: `ae inspect ${state.operationRef}`,
+    label: 'Find callable alternatives',
+    kind: 'navigate',
+    command: callableAlternativesCommand(state.searchQuery),
+    href: callableAlternativesHref(state.searchQuery),
     warning: 'This Operation is not currently callable.',
   }
+}
+
+function callableAlternativesCommand(searchQuery: string): string {
+  const escaped = searchQuery.replaceAll("'", "'\\''")
+  return `ae search '${escaped}' --filters '{"availability":["routeable"]}'`
+}
+
+function callableAlternativesHref(searchQuery: string): string {
+  const query = new URLSearchParams({
+    window: '30d',
+    query: searchQuery,
+    availability: 'routeable',
+  })
+  return `/market?${query.toString()}`
 }
 
 function invocationContinuation(
@@ -153,9 +182,9 @@ function invocationContinuation(
     return { label: 'Review cancellation', kind: 'copy_command', command: `ae status ${state.invocationRef}` }
   }
   return {
-    label: 'Review reconciliation',
+    label: 'Prepare reconciliation',
     kind: 'reconcile',
-    command: `ae status ${state.invocationRef}`,
+    command: 'ae help recover',
     warning: 'The external effect may have started. Reconcile before retrying.',
   }
 }

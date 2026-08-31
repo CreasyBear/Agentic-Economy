@@ -25,6 +25,7 @@ const MAX_AGENTIC_MARKET_PAGES = 8;
 const MAX_AGENTIC_MARKET_SWEEPS = 2;
 const DEFAULT_AGENTIC_MARKET_SWEEPS = 1;
 const MAX_TREG_SHELVES = 8;
+const MAX_TREG_PLATFORM_INDEX = 1_000;
 const MIN_AGENTIC_MARKET_SERVICE_COVERAGE = 0.95;
 
 type SourceFetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -121,7 +122,9 @@ const tregPlatform = z.strictObject({
   providers: z.array(boundedText(160)).max(100),
 });
 const tregPlatformIndex = z.strictObject({
-  platforms: z.array(tregPlatform).max(MAX_TREG_SHELVES),
+  // The source index is larger than the bounded number of shelves one refresh
+  // traverses. Validate the full index, then apply MAX_TREG_SHELVES below.
+  platforms: z.array(tregPlatform).max(MAX_TREG_PLATFORM_INDEX),
   generated_from: z.literal("catalog").optional(),
 });
 const tregEndpoint = z.strictObject({
@@ -150,6 +153,10 @@ const tregEndpoint = z.strictObject({
   input: z.unknown().nullable(),
   test_request: z.unknown().nullable(),
   observed: z.unknown().optional(),
+  // Treg exposes the concrete provider routes behind a canonical endpoint.
+  // This is routing metadata only; keep it bounded and deliberately exclude it
+  // from AE's imported endpoint identity and authority projection.
+  routed_children: z.array(boundedText(240)).max(100).optional(),
 });
 const tregCapability = z.strictObject({
   id: boundedText(240),

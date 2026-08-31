@@ -5,7 +5,7 @@
  * used by shadcn and product components; surfaces do not invent
  * their own palettes, type scales, radii, or elevation systems.
  */
-@layer reset, theme, base, components, utilities;
+@layer reset, theme, base, clerk, components, utilities;
 
 @import "@fontsource-variable/inter";
 @import "@fontsource/dm-mono";

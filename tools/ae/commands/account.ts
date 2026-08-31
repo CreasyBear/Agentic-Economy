@@ -125,14 +125,27 @@ async function readAccountMoney(
       kind: 'UNAVAILABLE', code: `account-${subcommand}-result-invalid`,
     })
   }
-  const nextCommand = subcommand === 'activity'
+  const nextCursor = subcommand === 'activity'
     && parsed.data.kind === 'available'
     && 'nextCursor' in parsed.data
-    && parsed.data.nextCursor !== undefined
+    ? parsed.data.nextCursor
+    : undefined
+  if (nextCursor !== undefined && /[\u0000-\u001f\u007f-\u009f]/u.test(nextCursor)) {
+    throw new CliFailure('The server returned an invalid account activity cursor.', {
+      kind: 'UNAVAILABLE', code: 'account-activity-result-invalid',
+    })
+  }
+  const nextCommand = subcommand === 'activity'
+    && parsed.data.kind === 'available'
+    && nextCursor !== undefined
     ? continuationCommand([
         'ae', 'account', 'activity', currency,
         ...(options.limit === undefined ? [] : ['--limit', options.limit]),
-        '--cursor', parsed.data.nextCursor,
+        '--cursor', nextCursor,
+        ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+          ? []
+          : ['--base-url', options.baseUrl]),
+        ...(options.json ? ['--json'] : []),
       ])
     : undefined
   if (options.json) {
@@ -172,6 +185,7 @@ async function readAccountMoney(
 
 function listConnections(options: CliOptions): void {
   const selectedOrigin = new URL(options.baseUrl).origin
+  const credentialSource = resolveAgentAccessCredential(options.baseUrl)?.source ?? 'none'
   const items = listStoredConnections().map((item) => ({
     ...item,
     selected: item.origin === selectedOrigin,
@@ -179,19 +193,42 @@ function listConnections(options: CliOptions): void {
       options.baseUrl,
       item.profile === 'supplier' ? MARKET_SUPPLY_MANAGE_SCOPE : MARKET_OPERATIONS_INVOKE_SCOPE,
     )?.source === 'stored',
-  })).map((item) => ({
-    ...item,
-    state: item.active
+  })).map((item) => {
+    const state = item.active
       ? 'selected_active'
       : item.selected
         ? 'selected_overridden'
-        : 'stored_for_other_origin',
-  }))
+        : 'stored_for_other_origin'
+    return {
+      ...item,
+      state,
+      ...(state === 'stored_for_other_origin'
+        ? {
+            statusCommand: continuationCommand([
+              'ae', 'account', 'status',
+              item.profile,
+              '--base-url', item.origin,
+            ]),
+          }
+        : {}),
+    }
+  })
+  const useExistingCommands = items.flatMap((item) => (
+    'statusCommand' in item && typeof item.statusCommand === 'string' ? [item.statusCommand] : []
+  ))
+  const nextCommand = credentialSource !== 'none'
+    ? undefined
+    : useExistingCommands.length === 1
+      ? useExistingCommands[0]
+      : useExistingCommands.length === 0
+        ? continuationCommand(['ae', 'connect', '--base-url', selectedOrigin])
+        : undefined
   const result = {
     kind: 'connections' as const,
     selectedOrigin,
-    credentialSource: resolveAgentAccessCredential(options.baseUrl)?.source ?? 'none',
+    credentialSource,
     items,
+    ...(nextCommand === undefined ? {} : { nextCommand }),
   }
   if (options.json) {
     printJson(result)
@@ -201,24 +238,28 @@ function listConnections(options: CliOptions): void {
   if (items.length === 0) {
     line('No stored connections for any origin.')
     line('Anonymous search and inspection remain available. Connect only after selecting an Operation that requires access.')
-    return
+  } else {
+    for (const item of items) {
+      table([
+        ['origin', item.origin],
+        ['profile', item.profile],
+        ['status', item.state.replaceAll('_', ' ')],
+        ['connected', item.connectedAt],
+        ['scope', item.scope ?? 'unknown'],
+        ...('statusCommand' in item && typeof item.statusCommand === 'string'
+          ? [['status command', item.statusCommand] as const]
+          : []),
+      ])
+      line()
+    }
   }
-  for (const item of items) {
-    table([
-      ['origin', item.origin],
-      ['profile', item.profile],
-      ['status', item.state.replaceAll('_', ' ')],
-      ['connected', item.connectedAt],
-      ['scope', item.scope ?? 'unknown'],
-    ])
-    line()
-  }
+  if (nextCommand !== undefined) line(`Next: ${nextCommand}`)
 }
 
-function disconnectCurrentAccount(options: CliOptions, profile?: 'market' | 'supplier'): void {
+function disconnectCurrentAccount(options: CliOptions, profile: 'market' | 'supplier'): void {
   const requiredScope = profile === 'supplier' ? MARKET_SUPPLY_MANAGE_SCOPE : MARKET_OPERATIONS_INVOKE_SCOPE
   const active = resolveAgentAccessCredential(options.baseUrl, requiredScope)
-  if (active?.source === 'environment') {
+  if (profile === 'market' && active?.source === 'environment') {
     throw new CliFailure('The selected credential comes from AE_API_KEY. Remove that environment variable to disconnect it.', {
       kind: 'FAILED_PRECONDITION',
       code: 'environment_credential_cannot_be_removed',
@@ -228,6 +269,7 @@ function disconnectCurrentAccount(options: CliOptions, profile?: 'market' | 'sup
   const result = {
     kind: 'disconnected' as const,
     origin: removed.origin,
+    profile,
     removed: removed.removed,
     nextAction: removed.removed
       ? profile === 'supplier'
@@ -242,6 +284,7 @@ function disconnectCurrentAccount(options: CliOptions, profile?: 'market' | 'sup
   heading('Disconnect AE')
   table([
     ['origin', result.origin],
+    ['profile', result.profile],
     ['removed', result.removed ? 'yes' : 'no'],
   ])
   line(result.nextAction)
@@ -255,13 +298,14 @@ export async function runAccountCommand(args: readonly string[], options: CliOpt
     return
   }
   const rawDisconnectProfile = args[1]
-  const disconnectProfile = rawDisconnectProfile === 'market' || rawDisconnectProfile === 'supplier'
+  const requestedProfile = rawDisconnectProfile === 'market' || rawDisconnectProfile === 'supplier'
     ? rawDisconnectProfile
     : undefined
-  const statusProfile = disconnectProfile
+  const disconnectProfile = requestedProfile ?? 'market'
+  const statusProfile = requestedProfile
   if ((subcommand !== 'disconnect' && subcommand !== 'status' && args.length > 1)
     || (subcommand === 'status' && (args.length > 2 || (rawDisconnectProfile !== undefined && statusProfile === undefined)))
-    || (subcommand === 'disconnect' && (args.length > 2 || (rawDisconnectProfile !== undefined && disconnectProfile === undefined)))
+    || (subcommand === 'disconnect' && (args.length > 2 || (rawDisconnectProfile !== undefined && requestedProfile === undefined)))
     || !['status', 'connections', 'disconnect'].includes(subcommand)) {
     throw usageFailure('account', 'account-usage')
   }

@@ -1,18 +1,34 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import type { ExternalSpendSettlementStatus } from '@/modules/money/public'
+import {
+  externalSpendExecutionContextForFacts,
+  type ExternalSpendExecutionContext,
+  type ExternalSpendSettlementStatus,
+} from '@/modules/money/public'
 
 import type { RouteTransportObservation } from '../route-transport-runtime'
 
-export type EconomicRail = 'provider_direct_x402' | 'brokered_x402' | 'ae_internal'
+export type EconomicRail =
+  | 'provider_direct_x402'
+  | 'brokered_x402'
+  | 'managed_testnet_canary'
+  | 'ae_internal'
 
 export type PaymentLaneAdmission =
-  | Readonly<{ kind: 'admitted'; lane: 'brokered' | 'provider_direct_x402' }>
+  | Readonly<{
+      kind: 'admitted'
+      lane: 'brokered' | 'provider_direct_x402' | 'managed_testnet_canary'
+    }>
   | Readonly<{
     kind: 'refused'
     lane: 'provider_direct_x402'
     code: 'payment_lane_not_brokered'
   }>
+  | Readonly<{
+      kind: 'refused'
+      lane: EconomicRail
+      code: 'payment_lane_execution_context_invalid'
+    }>
 
 /**
  * V1 brokers every paid call so AE can validate the output before value moves, take its rake on
@@ -20,15 +36,60 @@ export type PaymentLaneAdmission =
  * between buyer and provider outside AE's ledger and forfeits all three, so production admits only
  * the brokered lane. Non-production keeps the direct rail open because the host-parity and
  * provider-conformance scenarios are our only executable proof that the x402 machinery still works.
+ * The one managed non-production exception is an explicit seller-onboarding
+ * canary on AE sandbox, which maps to CDP's `environment: "development"` and
+ * the Base Sepolia profile used by its maintained x402 spend-control example.
  */
 export function paymentLaneAdmission(
-  input: Readonly<{ rail: EconomicRail; environment: string }>,
+  input: Readonly<{
+    rail: EconomicRail
+    environment: string
+    executionContext?: ExternalSpendExecutionContext
+  }>,
 ): PaymentLaneAdmission {
+  const explicitContext = input.executionContext
+  const resolvedContext = (
+    input.environment === 'sandbox'
+    || input.environment === 'production'
+  )
+    ? externalSpendExecutionContextForFacts({
+        environment: input.environment,
+        ...(explicitContext === undefined
+          ? {}
+          : { executionContext: explicitContext }),
+      })
+    : undefined
+  if (
+    explicitContext !== undefined
+    && (
+      resolvedContext === undefined
+      || (resolvedContext.kind === 'seller_onboarding_canary'
+        && input.rail !== 'managed_testnet_canary')
+      || (resolvedContext.kind === 'market'
+        && input.rail === 'managed_testnet_canary')
+    )
+  ) {
+    return {
+      kind: 'refused',
+      lane: input.rail,
+      code: 'payment_lane_execution_context_invalid',
+    }
+  }
   switch (input.rail) {
     case 'ae_internal':
       return { kind: 'admitted', lane: 'brokered' }
     case 'brokered_x402':
       return { kind: 'admitted', lane: 'brokered' }
+    case 'managed_testnet_canary':
+      return input.environment === 'sandbox'
+        && explicitContext !== undefined
+        && resolvedContext?.kind === 'seller_onboarding_canary'
+        ? { kind: 'admitted', lane: 'managed_testnet_canary' }
+        : {
+            kind: 'refused',
+            lane: 'managed_testnet_canary',
+            code: 'payment_lane_execution_context_invalid',
+          }
     case 'provider_direct_x402':
       return input.environment === 'production'
         ? {

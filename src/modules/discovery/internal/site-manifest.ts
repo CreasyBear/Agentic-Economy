@@ -32,23 +32,18 @@ import {
 } from './operation-contract'
 import { PublicAgentSkillPath } from './agent-skill'
 import { DiscoveryListingBoundaryLine, DiscoveryPublicSurfacePaths } from './discovery-files'
-import {
-  DeveloperDiscoveryArtifacts,
-  DeveloperDiscoveryPublicRoutes,
-  DeveloperDiscoveryUnsupportedCapabilities,
-} from '../developer-discovery'
+import { DeveloperDiscoveryUnsupportedCapabilities } from '../developer-discovery'
 import type { DeveloperDiscoveryUnsupportedCapability } from '../developer-discovery'
 import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
 import { describeActionForAgent, findAction } from '@/modules/actions'
+import { SiteDiscoveryManifestSchemaVersion } from '../site-manifest-version'
 
 const AGENT_HTTP_AUTHENTICATION = 'clerk_api_key' as const
 export const SITE_DISCOVERY_SUMMARY_LINES = Object.freeze([
-  'AE publishes current listings from registered businesses and admitted market operations.',
+  'AE publishes a canonical catalogue of admitted market Operations.',
   'Paid market work goes through POST /api/v1/operations/call.',
-  'Published listings are evidence for comparison; they do not by themselves prove booking, payment, dispatch, or fulfilment.',
+  'Discovery supports comparison; it does not by itself prove execution, payment, or fulfilment.',
 ])
-
-export const SiteDiscoveryManifestSchemaVersion = 'ae-site-discovery:v2' as const
 
 export const SiteDiscoveryEndpointKindValues = [
   'site_entry_point',
@@ -189,15 +184,12 @@ export type SiteDiscoveryManifestContract = Readonly<{
     publicIndexUrl: string
     humanGuideUrl: string
   }>
-  businessManifestUrlTemplate: string
   boundary: string
   generatedHash: string
   unsupportedCapabilities: readonly DeveloperDiscoveryUnsupportedCapability[]
 }>
 
 export const SiteDiscoveryManifestPath = '/.well-known/ucp' as const
-const businessManifestPath = '/{slug}/ucp' as const
-
 const humanSurfaceLabels: Readonly<Record<string, string>> = {
   '/': 'Human entry point',
   '/market': 'Operation catalogue',
@@ -313,8 +305,7 @@ export function buildSiteDiscoveryManifest(
       publicIndexUrl: `${origin}/llms.txt`,
       humanGuideUrl: `${origin}/for-agents`,
     },
-    businessManifestUrlTemplate: `${origin}${businessManifestPath}`,
-    boundary: `${DiscoveryListingBoundaryLine} The published business catalog is business-only; an Agent Service is one admitted Market Operation.`,
+    boundary: DiscoveryListingBoundaryLine,
     unsupportedCapabilities: DeveloperDiscoveryUnsupportedCapabilities,
   } as const
 
@@ -369,7 +360,7 @@ export function projectCompactSiteDiscoveryManifest(
       recovery: manifest.operationGateway.recovery,
     },
     assistantSetup: manifest.assistantSetup,
-    fullSchemas: `${manifest.origin}/api/discovery/schema`,
+    fullContract: `${manifest.origin}${SiteDiscoveryManifestPath}?technical=1`,
     boundary: manifest.boundary,
   } as const
   return {
@@ -385,18 +376,11 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
     ...humanSurfaceLabels,
     ...Object.fromEntries(operationRoutes.map((route) => [route.path, `Operation ${route.actionId}`])),
     ...Object.fromEntries(OPERATION_MARKET_ACTION_ENTRIES.map((entry) => [entry.pathTemplate, `Operation ${entry.relation}`])),
-    ...Object.fromEntries(DeveloperDiscoveryPublicRoutes.map((route) => [route.path, route.label])),
-    ...Object.fromEntries(DeveloperDiscoveryArtifacts.map((artifact) => [artifact.route, artifact.label])),
-    '/api/businesses': 'Published business catalog list',
-    '/api/businesses/search?q=': 'Published business catalog search',
-    '/api/businesses/{slug}': 'Published business catalog detail',
   }
   const paths: readonly string[] = [
     ...operationRoutes.map((route) => route.path),
     ...DiscoveryPublicSurfacePaths,
     PublicAgentSkillPath,
-    ...DeveloperDiscoveryPublicRoutes.map((route) => route.path),
-    ...DeveloperDiscoveryArtifacts.map((artifact) => artifact.route),
   ]
 
   const seen = new Set<string>()
@@ -446,12 +430,8 @@ function kindFor(path: string, operationRoutes: readonly SiteDiscoveryOperationR
   if (operationRoute?.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId) return 'operation_reconcile'
   if (path === SiteDiscoveryManifestPath) return 'site_entry_point'
   if (path === PublicAgentSkillPath) return 'assistant_setup'
-  if (path === businessManifestPath) return 'business_manifest'
   if (path === '/privacy/remove-business') return 'privacy_request'
   if (path.startsWith('/api/discovery/')) return 'discovery_artifact'
-  if (path === '/api/businesses') return 'catalog_list'
-  if (path.startsWith('/api/businesses/search')) return 'catalog_search'
-  if (path.startsWith('/api/businesses/')) return 'catalog_detail'
   if (path.startsWith('/api/')) return 'discovery_file'
   if (path.includes('.')) return 'discovery_file'
   return 'human_surface'
@@ -484,6 +464,6 @@ function mediaTypeFor(path: string, operationRoutes: readonly SiteDiscoveryOpera
   if (path.endsWith('.txt')) return 'text/plain'
   if (path.endsWith('.xml')) return 'application/xml'
   if (path.endsWith('.md')) return 'text/markdown'
-  if (path.startsWith('/api/') || path === businessManifestPath || path === SiteDiscoveryManifestPath) return 'application/json'
+  if (path.startsWith('/api/') || path === SiteDiscoveryManifestPath) return 'application/json'
   return 'text/html'
 }

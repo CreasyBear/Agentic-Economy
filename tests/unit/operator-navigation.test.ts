@@ -126,7 +126,7 @@ describe('operator navigation', () => {
 
   it('exposes public utility links for operator sidebar footers', () => {
     expect(operatorUtilityItemsForRole('owner').map((item) => item.href))
-      .toEqual(['/market', '/', '/for-agents', '/privacy/remove-business'])
+      .toEqual(['/market', '/', '/for-agents', '/support'])
   })
 
   it('keeps administration destinations exclusive to the admin role', () => {

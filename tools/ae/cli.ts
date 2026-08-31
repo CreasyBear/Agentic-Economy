@@ -10,19 +10,30 @@
  * whatever `--base-url` points at. It never proves hosted behavior.
  */
 
-import { COMMANDS } from './commands/manifest'
-import { parseArgs, safeOriginForDiagnostics, type CliOptions, type ParsedArgs } from './lib/args'
+import { COMMANDS, ROOT_HELP_START } from './commands/manifest'
+import {
+  HOSTED_DEFAULT_BASE_URL,
+  isLoopbackCliBaseUrl,
+  parseArgs,
+  safeOriginForDiagnostics,
+  type CliOptions,
+  type ParsedArgs,
+} from './lib/args'
 import { CliFailure, printJson, sourceErrorToCliFailure } from './lib/output'
+import { continuationCommand } from './lib/continuation-command'
 import {
   CLI_ENTRYPOINT,
   commandMetadata,
   commandUsage,
-  rootCommandHelpLines,
+  rootCommandHelpGroups,
 } from './lib/help'
 import { MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import type { ProblemKind } from '@/lib/errors'
+import cliPackage from '../../packages/cli/package.json'
 
-type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<void>
+declare const __AE_CLI_BUILD_REVISION__: string | undefined
+
+type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<void | number>
 
 const JSON_HELP_FLAGS = {
   '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, local Vite when Convex is loopback, or the hosted origin.' },
@@ -30,12 +41,13 @@ const JSON_HELP_FLAGS = {
   '--cursor': { type: 'string', description: 'Opaque search, account activity, request, or history continuation cursor.' },
   '--state': { type: 'string', description: 'Canonical invocation state filter; history only.' },
   '--filters': { type: 'string', description: 'Canonical JSON search filters; search only.' },
-  '--input': { type: 'string', description: 'Schema-valid JSON object for call or supplier lifecycle write.' },
+  '--input': { type: 'string', description: 'Schema-valid JSON object for call or supplier lifecycle write; call alone accepts - to read it from standard input.' },
   '--mcp': { type: 'boolean', description: 'Write a user-only Streamable HTTP MCP connection file after connect.' },
   '--supplier': { type: 'boolean', description: 'Request a separate owner-approved supplier credential with market_supply:manage.' },
   '--json': { type: 'boolean', description: 'Emit exactly one machine-readable JSON value on stdout.' },
   '--help': { type: 'boolean', description: 'Show help without performing command work.' },
-  '--technical': { type: 'boolean', description: 'Include operation identity and evidence metadata in human compare output.' },
+  '--version': { type: 'boolean', description: 'Show CLI version, executable, runtime, and build revision without contacting a server.' },
+  '--technical': { type: 'boolean', description: 'Include per-Operation navigation in JSON search results or inspect results, or identity and evidence metadata in human compare output.' },
   '--idempotency-key': { type: 'string', description: 'Optional stable retry identity for a call, private market request, or supplier lifecycle write.' },
   '--wait': { type: 'boolean', description: 'Wait for a bounded call result; timeout preserves recovery detail.' },
 } as const
@@ -43,8 +55,9 @@ const JSON_HELP_FLAGS = {
 const COMMON_COMMAND_OPTIONS = ['base-url', 'json'] as const
 const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   manifest: ['technical'],
-  search: ['limit', 'cursor', 'filters'],
-  inspect: [],
+  config: [],
+  search: ['limit', 'cursor', 'filters', 'technical'],
+  inspect: ['technical'],
   compare: ['technical'],
   'inspect-plan': [],
   connect: ['mcp', 'supplier'],
@@ -157,6 +170,11 @@ function jsonHelp(
       ? {
         usage: `${CLI_ENTRYPOINT} <command> [args] [flags]`,
         commands,
+        groups: rootCommandHelpGroups(knownCommands).map((group) => ({
+          id: group.id,
+          title: group.title,
+          commands: group.commands.map(({ name }) => name),
+        })),
       }
       : commandHelpProjection(requested)),
     flags: JSON_HELP_FLAGS,
@@ -173,61 +191,64 @@ function jsonHelp(
     } : {}),
   }
 }
-function printAuthenticatedOperationHelp(): void {
-  process.stdout.write([
-    '',
-    'Authenticated Operation actions:',
-    `  call: ${AUTH_HELP.authenticatedOperations.call}`,
-    `  history: ${AUTH_HELP.authenticatedOperations.history}`,
-    `  request: ${AUTH_HELP.authenticatedOperations.request}`,
-    `  status: ${AUTH_HELP.authenticatedOperations.status}`,
-    `  wait: ${AUTH_HELP.authenticatedOperations.wait}`,
-    `  cancel: ${AUTH_HELP.authenticatedOperations.cancel} (${AUTH_HELP.cancelRequirements})`,
-    `  reconcile: ${AUTH_HELP.authenticatedOperations.reconcile}`,
-  ].join('\n') + '\n')
-}
 
 function printUsage(): void {
+  const groups = rootCommandHelpGroups()
+  const nameWidth = Math.max(...groups.flatMap(({ commands }) => commands.map(({ name }) => name.length))) + 2
+  const groupedCommands = groups.map((group) => [
+    group.title.toUpperCase(),
+    ...group.commands.map(({ name, summary }) => `  ${(name + ':').padEnd(nameWidth)} ${summary}`),
+  ].join('\n')).join('\n\n')
   process.stdout.write(`AE CLI - exercise AE the way an external agent would.
 
 Usage: ${CLI_ENTRYPOINT} <command> [args] [flags]
 
-Canonical Operation commands (need a running server; hosted by default, or the managed local Vite origin when Convex is loopback):
-${rootCommandHelpLines().join('\n')}
+START HERE
+${ROOT_HELP_START.map((example) => `  ${example}`).join('\n')}
 
-Flags:
+${groupedCommands}
+
+UNIVERSAL FLAGS
   --base-url <url>   server to call (env: AE_CLI_BASE_URL or AE_CANONICAL_BASE_URL)
-  Credentials:
-  AE_API_KEY <token>          reusable caller credential for credentialed commands
-  AE_API_KEY_ORIGIN <origin>  exact origin bound to AE_API_KEY; required with HTTPS except loopback HTTP development
   --json             machine-readable output
-  --limit <n>        bounded page size for search, account activity, or history
-  --cursor <cursor>  opaque continuation cursor for search, account activity, or history
-  --state <state>    canonical invocation state filter (history only)
-  --filters '<json>' canonical search filters (search only)
-  --technical        human compare output with operation identity and evidence metadata
-  --supplier         connect a separate owner-approved supplier credential
-  --mcp              write the matching MCP connection after connect validates the credential
-  --idempotency-key <key>  optional stable retry identity; call generates one when omitted
-  --wait             bounded call wait; timeout returns durable recovery detail
-  --help
+  --help             show help
+  --version          show local CLI version and build provenance
+
+LEARN MORE
+  ae help <command>         exact arguments and safety guidance
+  ae help <command> --json  machine-readable command help
+  ae help --json            machine-readable root help
 `)
 }
 
-function printUsageWithAuthenticatedOperationHelp(): void {
-  printUsage()
-  printAuthenticatedOperationHelp()
+function versionProjection(): Readonly<{
+  kind: 'VERSION'
+  version: string
+  buildRevision: string
+  executable: string
+  runtime: string
+}> {
+  const embeddedRevision = typeof __AE_CLI_BUILD_REVISION__ === 'string'
+    ? __AE_CLI_BUILD_REVISION__
+    : undefined
+  return {
+    kind: 'VERSION',
+    version: cliPackage.version,
+    buildRevision: embeddedRevision ?? (process.env.AE_SOURCE_REVISION?.trim() || 'development'),
+    executable: process.argv[1] ?? 'ae',
+    runtime: process.version,
+  }
 }
 
 function printCommandHelp(command: string | undefined, positionals: readonly string[]): void {
   const requested = commandHelpName(command, positionals)
   if (requested === undefined) {
-    printUsageWithAuthenticatedOperationHelp()
+    printUsage()
     return
   }
   const metadata = commandMetadata(requested)
   if (metadata === undefined) {
-    printUsageWithAuthenticatedOperationHelp()
+    printUsage()
     return
   }
   const lines = [
@@ -257,6 +278,17 @@ function printCommandHelp(command: string | undefined, positionals: readonly str
       '  Supplier profile: ae connect --supplier requests market_supply:manage separately and does not replace the buyer credential.',
     )
   }
+  if (metadata.authentication === 'buyer') {
+    lines.push(
+      '',
+      'Authentication:',
+      `  Credential: ${AUTH_HELP.credential}`,
+      `  Credential origin: ${AUTH_HELP.credentialOrigin}`,
+      `  Scope: ${AUTH_HELP.scope}`,
+      `  Origin policy: ${AUTH_HELP.origin}`,
+      `  Next: ${AUTH_HELP.next}`,
+    )
+  }
   if (requested.startsWith('supply')) {
     lines.push(
       '',
@@ -268,7 +300,6 @@ function printCommandHelp(command: string | undefined, positionals: readonly str
     )
   }
   process.stdout.write(lines.join('\n') + '\n')
-  if (requested === 'connect') printAuthenticatedOperationHelp()
 }
 type HelpPathResult = Readonly<{
   path?: string
@@ -331,6 +362,7 @@ async function main(): Promise<number> {
   const [
     accountCommands,
     cancelCommands,
+    configCommands,
     marketOperationCommands,
     connectCommands,
     doctorCommands,
@@ -347,6 +379,7 @@ async function main(): Promise<number> {
   ] = await Promise.all([
     import('./commands/account'),
     import('./commands/cancel'),
+    import('./commands/config'),
     import('./commands/market-operations'),
     import('./commands/connect'),
     import('./commands/doctor'),
@@ -366,6 +399,7 @@ async function main(): Promise<number> {
   )
   const commands: Record<string, CommandRunner> = {
     manifest: manifestCommands.runManifestCommand,
+    config: configCommands.runConfigCommand,
     ...marketOperationRunners,
     connect: connectCommands.runConnectCommand,
     doctor: doctorCommands.runDoctorCommand,
@@ -403,6 +437,15 @@ async function main(): Promise<number> {
     return 1
   }
   const isHelp = parsed.command === 'help' || parsed.options.help
+  if (parsed.options.version) {
+    const version = versionProjection()
+    if (parsed.options.json) {
+      printJson(version)
+    } else {
+      process.stdout.write(`ae ${version.version} (${version.buildRevision})\n`)
+    }
+    return 0
+  }
   if (isHelp) {
     const helpPath = resolveHelpPath(parsed.command, parsed.positionals, commands)
     if (helpPath.error !== undefined) {
@@ -438,7 +481,7 @@ async function main(): Promise<number> {
       })
       return 1
     }
-    printUsageWithAuthenticatedOperationHelp()
+    printUsage()
     return 1
   }
 
@@ -460,8 +503,8 @@ async function main(): Promise<number> {
 
   try {
     validateCommandOptions(parsed)
-    await run(parsed.positionals, parsed.options)
-    return 0
+    const exitCode = await run(parsed.positionals, parsed.options)
+    return exitCode ?? 0
   } catch (error) {
     let exitCode: number
     let message: string
@@ -491,9 +534,15 @@ async function main(): Promise<number> {
       exitCode = 1
       kind = 'UNAVAILABLE'
       code = 'connection_refused'
-      message = `Could not reach ${safeOriginForDiagnostics(parsed.options.baseUrl)}.`
-      suggestion = 'Start the AE server, then retry the command.'
-      nextCommand = 'npm run dev'
+      const safeOrigin = safeOriginForDiagnostics(parsed.options.baseUrl)
+      message = `Could not reach ${safeOrigin}.`
+      if (isLoopbackCliBaseUrl(parsed.options.baseUrl)) {
+        suggestion = 'Local AE is not running; check the hosted AE service instead.'
+        nextCommand = `ae doctor --base-url ${HOSTED_DEFAULT_BASE_URL}`
+      } else {
+        suggestion = 'Check network access and confirm the configured AE origin.'
+        nextCommand = continuationCommand(['ae', 'config', '--base-url', safeOrigin, '--json'])
+      }
     } else {
       exitCode = 1
       kind = 'INTERNAL'

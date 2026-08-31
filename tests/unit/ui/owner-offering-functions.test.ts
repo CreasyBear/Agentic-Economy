@@ -88,4 +88,22 @@ describe('owner offering replay fencing', () => {
     expect(sourceMocks.callSourceMutation).toHaveBeenCalledTimes(1)
     expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({ operationKey: 'owner-offering:request-a:revise' })
   })
+
+  it('persists every access path before making the Operation public', async () => {
+    sourceMocks.callSourceMutation
+      .mockResolvedValueOnce({ kind: 'ok', code: 'revised', resultRef: value.offeringRef, currentRevision: 2 })
+      .mockResolvedValueOnce({ kind: 'ok', code: 'access_path_upserted', resultRef: 'access:request-a' })
+      .mockResolvedValueOnce({ kind: 'ok', code: 'status_changed', resultRef: value.offeringRef, currentRevision: 2 })
+
+    const result = await saveOwnerOfferingServer({
+      data: { requestKey: 'request-a', businessId: 'business:owner', value },
+    })
+
+    expect(result.kind).toBe('saved')
+    expect(sourceMocks.callSourceMutation.mock.calls.map((call) => call[1]?.operationKey)).toEqual([
+      'owner-offering:request-a:revise',
+      'owner-offering:request-a:path-0',
+      'owner-offering:request-a:status',
+    ])
+  })
 })

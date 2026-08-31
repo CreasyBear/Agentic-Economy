@@ -21,13 +21,17 @@ import type * as capabilityOperationInvocationIdentity from "../capabilityOperat
 import type * as capabilityOperationInvocationProjection from "../capabilityOperationInvocationProjection.js";
 import type * as capabilityOperationInvocationWorker from "../capabilityOperationInvocationWorker.js";
 import type * as capabilityOperationInvocations from "../capabilityOperationInvocations.js";
+import type * as capabilityOperationPreSubmissionRecovery from "../capabilityOperationPreSubmissionRecovery.js";
 import type * as capabilityOperationX402AuthorizationExpiry from "../capabilityOperationX402AuthorizationExpiry.js";
 import type * as capabilityProviderApprovals from "../capabilityProviderApprovals.js";
 import type * as capabilityProviderConnectionAgents from "../capabilityProviderConnectionAgents.js";
 import type * as capabilityProviderConnectionCleanup from "../capabilityProviderConnectionCleanup.js";
+import type * as capabilityProviderConnectionMigration from "../capabilityProviderConnectionMigration.js";
 import type * as capabilityProviderConnections from "../capabilityProviderConnections.js";
 import type * as capabilityProviderConsequenceJournal from "../capabilityProviderConsequenceJournal.js";
 import type * as capabilitySupply from "../capabilitySupply.js";
+import type * as capabilitySupplyCanaryFunding from "../capabilitySupplyCanaryFunding.js";
+import type * as capabilitySupplyCanaryFundingPreflight from "../capabilitySupplyCanaryFundingPreflight.js";
 import type * as capabilitySupplyCommands from "../capabilitySupplyCommands.js";
 import type * as capabilitySupplyCurrentOperation from "../capabilitySupplyCurrentOperation.js";
 import type * as capabilitySupplyEligiblePorts from "../capabilitySupplyEligiblePorts.js";
@@ -39,6 +43,7 @@ import type * as capabilitySupplyOperationPorts from "../capabilitySupplyOperati
 import type * as capabilitySupplyOperationQueries from "../capabilitySupplyOperationQueries.js";
 import type * as capabilitySupplyOperationShared from "../capabilitySupplyOperationShared.js";
 import type * as capabilitySupplyOperations from "../capabilitySupplyOperations.js";
+import type * as capabilitySupplyOwnerCanary from "../capabilitySupplyOwnerCanary.js";
 import type * as capabilitySupplyOwnerFunnel from "../capabilitySupplyOwnerFunnel.js";
 import type * as capabilitySupplyOwnerFunnelAgentRead from "../capabilitySupplyOwnerFunnelAgentRead.js";
 import type * as capabilitySupplyOwnerFunnelCommands from "../capabilitySupplyOwnerFunnelCommands.js";
@@ -47,6 +52,7 @@ import type * as capabilitySupplyOwnerFunnelProjection_contracts from "../capabi
 import type * as capabilitySupplyOwnerFunnelProjection_offering_projection from "../capabilitySupplyOwnerFunnelProjection/offering_projection.js";
 import type * as capabilitySupplyOwnerFunnelRead from "../capabilitySupplyOwnerFunnelRead.js";
 import type * as capabilitySupplyOwnerSourceMaterial from "../capabilitySupplyOwnerSourceMaterial.js";
+import type * as capabilitySupplyOwnerStaging from "../capabilitySupplyOwnerStaging.js";
 import type * as capabilitySupplyOwnerSupply from "../capabilitySupplyOwnerSupply.js";
 import type * as capabilitySupplyProbes from "../capabilitySupplyProbes.js";
 import type * as capabilitySupplyProjection from "../capabilitySupplyProjection.js";
@@ -200,13 +206,17 @@ declare const fullApi: ApiFromModules<{
   capabilityOperationInvocationProjection: typeof capabilityOperationInvocationProjection;
   capabilityOperationInvocationWorker: typeof capabilityOperationInvocationWorker;
   capabilityOperationInvocations: typeof capabilityOperationInvocations;
+  capabilityOperationPreSubmissionRecovery: typeof capabilityOperationPreSubmissionRecovery;
   capabilityOperationX402AuthorizationExpiry: typeof capabilityOperationX402AuthorizationExpiry;
   capabilityProviderApprovals: typeof capabilityProviderApprovals;
   capabilityProviderConnectionAgents: typeof capabilityProviderConnectionAgents;
   capabilityProviderConnectionCleanup: typeof capabilityProviderConnectionCleanup;
+  capabilityProviderConnectionMigration: typeof capabilityProviderConnectionMigration;
   capabilityProviderConnections: typeof capabilityProviderConnections;
   capabilityProviderConsequenceJournal: typeof capabilityProviderConsequenceJournal;
   capabilitySupply: typeof capabilitySupply;
+  capabilitySupplyCanaryFunding: typeof capabilitySupplyCanaryFunding;
+  capabilitySupplyCanaryFundingPreflight: typeof capabilitySupplyCanaryFundingPreflight;
   capabilitySupplyCommands: typeof capabilitySupplyCommands;
   capabilitySupplyCurrentOperation: typeof capabilitySupplyCurrentOperation;
   capabilitySupplyEligiblePorts: typeof capabilitySupplyEligiblePorts;
@@ -218,6 +228,7 @@ declare const fullApi: ApiFromModules<{
   capabilitySupplyOperationQueries: typeof capabilitySupplyOperationQueries;
   capabilitySupplyOperationShared: typeof capabilitySupplyOperationShared;
   capabilitySupplyOperations: typeof capabilitySupplyOperations;
+  capabilitySupplyOwnerCanary: typeof capabilitySupplyOwnerCanary;
   capabilitySupplyOwnerFunnel: typeof capabilitySupplyOwnerFunnel;
   capabilitySupplyOwnerFunnelAgentRead: typeof capabilitySupplyOwnerFunnelAgentRead;
   capabilitySupplyOwnerFunnelCommands: typeof capabilitySupplyOwnerFunnelCommands;
@@ -226,6 +237,7 @@ declare const fullApi: ApiFromModules<{
   "capabilitySupplyOwnerFunnelProjection/offering_projection": typeof capabilitySupplyOwnerFunnelProjection_offering_projection;
   capabilitySupplyOwnerFunnelRead: typeof capabilitySupplyOwnerFunnelRead;
   capabilitySupplyOwnerSourceMaterial: typeof capabilitySupplyOwnerSourceMaterial;
+  capabilitySupplyOwnerStaging: typeof capabilitySupplyOwnerStaging;
   capabilitySupplyOwnerSupply: typeof capabilitySupplyOwnerSupply;
   capabilitySupplyProbes: typeof capabilitySupplyProbes;
   capabilitySupplyProjection: typeof capabilitySupplyProjection;

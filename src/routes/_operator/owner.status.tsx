@@ -90,7 +90,7 @@ function OwnerStatusRoute() {
         ) : (
           <AeEmptyState
             title="Status unavailable"
-            description="Try again in a moment. If this keeps happening, contact support through corrections."
+            description="Try again in a moment. If this keeps happening, open Help."
             role="alert"
             action={
               <Button asChild variant="secondary" className="min-h-touch">

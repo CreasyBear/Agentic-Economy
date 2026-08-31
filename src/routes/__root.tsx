@@ -8,6 +8,8 @@ import { Toaster } from 'sonner'
 
 
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
+import { AePageState } from '@/components/ae/layout/AePageState'
+import { Button } from '@/components/ui/button'
 import { SITE_THEME_COLOR_HEX } from '@/components/ui/theme-meta'
 
 import { REQUEST_FAILED_TOAST_EVENT, type RequestFailedToastDetail } from '@/lib/http/toast-error-funnel'
@@ -113,14 +115,16 @@ function ChatConvexProvider({ children }: { children: ReactNode }) {
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
   if (!convexUrl) {
     return (
-      <main className="grid min-h-screen place-items-center p-6">
-        <section className="max-w-md text-center" role="status" aria-live="polite">
-          <h1 className="text-lg font-semibold">Chat is unavailable</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            The chat service is not configured. The catalog is still available.
-          </p>
-        </section>
-      </main>
+      <AePageState
+        title="Chat is unavailable"
+        description="Chat is not configured. The Operation catalogue remains available."
+        tone="warning"
+        action={(
+          <Button asChild className="min-h-touch">
+            <a href="/market?window=30d#operations">Browse Operations</a>
+          </Button>
+        )}
+      />
     )
   }
   return <ConfiguredChatConvexProvider convexUrl={convexUrl}>{children}</ConfiguredChatConvexProvider>

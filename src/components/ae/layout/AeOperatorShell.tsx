@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/sidebar'
 
 import { AeOperatorBreadcrumbs } from '@/components/ae/layout/AeOperatorBreadcrumbs'
+import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
 import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
 import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
 import { AeRecordHeader } from '@/components/ae/layout/AeRecordHeader'
@@ -226,7 +227,10 @@ function RootOperatorShell(props: AeOperatorShellProps) {
                 </CommandPanelProvider>
               </div>
             </header>
-            <div className="flex min-h-0 flex-1 flex-col px-gutter pb-gutter">
+            <div
+              data-testid="operator-content"
+              className="flex min-h-0 flex-1 flex-col px-gutter pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-gutter"
+            >
               <AeRecordHeader
                 title={title}
                 description={description}
@@ -237,6 +241,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
               <div className="min-h-0 flex-1 pt-intra">{children}</div>
             </div>
           </SidebarInset>
+          {operatorRole === 'owner' ? <AeOwnerMobileNavigation currentPath={currentPath} /> : null}
         </SidebarProvider>
       </OperatorShellChromeContext.Provider>
     </OperatorCommandOpenContext.Provider>

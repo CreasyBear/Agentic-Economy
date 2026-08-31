@@ -151,8 +151,8 @@ describe("facilitator discovery ingest", () => {
         kind: "admitted",
         method: "POST",
         inputSchema: { type: "object" },
+        inputExample: {},
         outputSchema: { type: "object" },
-        query: undefined,
       },
     );
     expect(decision.kind).toBe("admit");
@@ -215,6 +215,19 @@ describe("facilitator discovery ingest", () => {
       { kind: "standalone" },
       { kind: "standalone" },
     ]);
+    expect(JSON.parse(result.admitted[0]?.sourceImportJson ?? "{}"))
+      .toMatchObject({
+        contract: {
+          inputExamples: [{
+            label: "Provider example",
+            input: {
+              from: "America/New_York",
+              to: "Asia/Tokyo",
+              time: "2026-07-04T15:30",
+            },
+          }],
+        },
+      });
     expect(result.admitted[1]?.price).toMatchObject({
       provider: { units: "100", exponent: 6 },
       platformFee: { units: "10", exponent: 6 },

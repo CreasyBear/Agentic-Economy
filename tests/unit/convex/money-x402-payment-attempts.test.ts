@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   claimX402PaymentAuthorization,
@@ -6,14 +6,17 @@ import {
   markX402PaymentPossiblySubmitted,
   observeX402PaymentAttempt,
   prepareX402PaymentAuthorization,
+  readX402PaymentAttempt,
   readX402PaymentAuthorization,
   readX402PaymentAuthorizationByDigest,
   reconcileX402PaymentAttempt,
+  recordX402PaymentAuthorizationFailure,
   recordX402PaymentObservation,
   recordX402PaymentSignatureDigest,
   recordX402PaymentSigningIntent,
 } from '../../../convex/moneyX402PaymentAttempts'
 import { queueExpiredX402Authorization } from '../../../convex/capabilityOperationX402AuthorizationExpiry'
+import { X402_PAYMENT_SIGNING_CLAIM_LEASE_MS } from '../../../convex/moneyX402PaymentAuthorization'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -44,8 +47,12 @@ const claim = (claimX402PaymentAuthorization as unknown as HandlerExport)._handl
 const prepare = (prepareX402PaymentAuthorization as unknown as HandlerExport)._handler
 const read = (readX402PaymentAuthorization as unknown as HandlerExport)._handler
 const readByDigest = (readX402PaymentAuthorizationByDigest as unknown as HandlerExport)._handler
+const readAttempt = (readX402PaymentAttempt as unknown as HandlerExport)._handler
 const recordDigest = (recordX402PaymentSignatureDigest as unknown as HandlerExport)._handler
 const recordIntent = (recordX402PaymentSigningIntent as unknown as HandlerExport)._handler
+const recordAuthorizationFailure = (
+  recordX402PaymentAuthorizationFailure as unknown as HandlerExport
+)._handler
 const markPossiblySubmitted = (markX402PaymentPossiblySubmitted as unknown as HandlerExport)._handler
 const observe = (observeX402PaymentAttempt as unknown as HandlerExport)._handler
 const recordObservation = (recordX402PaymentObservation as unknown as HandlerExport)._handler
@@ -64,6 +71,8 @@ const paymentNonce = `0x${'11'.repeat(32)}`
 const signingKey = '11111111-1111-4111-8111-111111111111'
 const paymentAuthorizationValidBefore = '999'
 const paymentAuthorizationExpiresAt = 999_000
+const quarantinedResponseDigest = canonicalDigest('paid-response')
+const quarantinedOutputJson = JSON.stringify({ result: 'usable-after-reconciliation' })
 
 const unsignedMaterial = {
   x402Version: 2,
@@ -140,6 +149,10 @@ describe('money x402 payment authorization attempt', () => {
       custodyGeneration: 3,
     })
     expect(material).toMatchObject({
+      scheme: 'exact',
+      network: 'eip155:8453',
+      asset: '0x833589',
+      payTo: '0xrecipient',
       paymentUnsignedMaterialJson: unsignedMaterialJson,
       paymentUnsignedMaterialDigest: unsignedMaterialDigest,
       paymentSigningIdempotencyKey: signingKey,
@@ -176,6 +189,61 @@ describe('money x402 payment authorization attempt', () => {
       .rejects.toThrow('x402_payment_unsigned_identity_conflict')
     await expect(recordDigest({ db }, digestArgs({ paymentPayer: '0xother' })))
       .rejects.toThrow('x402_payment_authorization_material_invalid')
+  })
+
+  it('persists the latest bounded pre-sign refusal stage and replays the same evidence', async () => {
+    const db = new MemoryDb()
+    db.seed(attempt())
+    const args = {
+      dispatchRef: 'invocation:test',
+      attemptRef: 'attempt:test',
+      effectGeneration: 1,
+      code: 'provider_authority_invalid',
+    }
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(123_456)
+
+    try {
+      await expect(recordAuthorizationFailure({ db }, args)).resolves.toBeNull()
+      await expect(recordAuthorizationFailure({ db }, args)).resolves.toBeNull()
+      await expect(recordAuthorizationFailure({ db }, {
+        ...args,
+        code: 'grant_invalid',
+      })).resolves.toBeNull()
+      expect(db.rows('moneyX402PaymentAttempts')[0]).toMatchObject({
+        authorizationFailureCode: 'grant_invalid',
+        authorizationFailureObservedAt: 123_456,
+      })
+      expect(db.patchCalls).toHaveLength(2)
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+
+  it('refuses invalid detail or post-sign authorization failure evidence', async () => {
+    const args = {
+      dispatchRef: 'invocation:test',
+      attemptRef: 'attempt:test',
+      effectGeneration: 1,
+      code: 'provider_authority_invalid',
+    }
+    const invalidDetail = new MemoryDb()
+    invalidDetail.seed(attempt())
+    await expect(recordAuthorizationFailure({ db: invalidDetail }, {
+      ...args,
+      code: 'grant_invalid',
+      detail: 'connection_not_found',
+    })).rejects.toThrow('x402_payment_authorization_failure_detail_invalid')
+
+    for (const evidence of [
+      { state: 'possibly_submitted', submissionStartedAt: 1 },
+      { paymentSignatureDigest: firstDigest },
+    ]) {
+      const db = new MemoryDb()
+      db.seed({ ...attempt(), ...evidence })
+      await expect(recordAuthorizationFailure({ db }, args))
+        .rejects.toThrow('x402_payment_authorization_failure_state_invalid')
+      expect(db.patchCalls).toHaveLength(0)
+    }
   })
 
   it.each([
@@ -267,6 +335,82 @@ describe('money x402 payment authorization attempt', () => {
       paymentAuthorizationValidBefore,
       paymentAuthorizationExpiresAt,
     })
+  })
+
+  it('keeps a bare signing claim pending before its lease expires', async () => {
+    const now = 100_000
+    const db = new MemoryDb()
+    db.seed({
+      ...attempt(),
+      paymentSigningClaimedAt: now - X402_PAYMENT_SIGNING_CLAIM_LEASE_MS + 1,
+    })
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now)
+
+    try {
+      await expect(claim({ db }, claimArgs())).resolves.toEqual({ kind: 'pending' })
+      expect(db.patchCalls).toHaveLength(0)
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+
+  it('reclaims a bare signing claim after its lease expires', async () => {
+    const now = 100_000
+    const db = new MemoryDb()
+    db.seed({
+      ...attempt(),
+      paymentSigningClaimedAt: now - X402_PAYMENT_SIGNING_CLAIM_LEASE_MS,
+    })
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now)
+
+    try {
+      await expect(claim({ db }, claimArgs())).resolves.toEqual({ kind: 'claimed' })
+      expect(db.rows('moneyX402PaymentAttempts')[0]).toMatchObject({
+        paymentSigningClaimedAt: now,
+      })
+      expect(db.patchCalls).toEqual([{
+        id: db.rows('moneyX402PaymentAttempts')[0]?._id,
+        value: { paymentSigningClaimedAt: now },
+      }])
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+
+  it.each([
+    ['unsigned material JSON', { paymentUnsignedMaterialJson: unsignedMaterialJson }],
+    ['unsigned material digest', { paymentUnsignedMaterialDigest: unsignedMaterialDigest }],
+    ['signing idempotency key', { paymentSigningIdempotencyKey: signingKey }],
+    ['signature digest', { paymentSignatureDigest: firstDigest }],
+    ['payer', { paymentPayer }],
+    ['nonce', { paymentNonce }],
+    ['authorization valid-before', { paymentAuthorizationValidBefore }],
+    ['authorization expiry', { paymentAuthorizationExpiresAt }],
+    ['complete unsigned intent', {
+      paymentUnsignedMaterialJson: unsignedMaterialJson,
+      paymentUnsignedMaterialDigest: unsignedMaterialDigest,
+      paymentSigningIdempotencyKey: signingKey,
+      paymentPayer,
+      paymentNonce,
+      paymentAuthorizationValidBefore,
+      paymentAuthorizationExpiresAt,
+    }],
+  ])('does not reclaim an expired claim with authorization identity evidence: %s', async (_label, evidence) => {
+    const now = 100_000
+    const db = new MemoryDb()
+    db.seed({
+      ...attempt(),
+      paymentSigningClaimedAt: now - X402_PAYMENT_SIGNING_CLAIM_LEASE_MS,
+      ...evidence,
+    })
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now)
+
+    try {
+      await expect(claim({ db }, claimArgs())).resolves.toEqual({ kind: 'pending' })
+      expect(db.patchCalls).toHaveLength(0)
+    } finally {
+      nowSpy.mockRestore()
+    }
   })
 
   it('refuses a different request fingerprint before reading or claiming', async () => {
@@ -391,6 +535,8 @@ describe('money x402 payment authorization attempt', () => {
       transportRequestDigest: args.transportRequestDigest,
       settlementStatus,
       paymentResponseDigest: args.paymentResponseDigest,
+      quarantinedResponseDigest: args.quarantinedResponseDigest,
+      quarantinedOutputJson: args.quarantinedOutputJson,
       observedAt: 1_000,
     })
     const before = JSON.stringify(db.rows('moneyX402PaymentAttempts'))
@@ -399,6 +545,161 @@ describe('money x402 payment authorization attempt', () => {
 
     expect(db.patchCalls).toHaveLength(0)
     expect(JSON.stringify(db.rows('moneyX402PaymentAttempts'))).toBe(before)
+  })
+
+  it.each([
+    ['observed', 'settled'],
+    ['reconciliation_required', 'unknown'],
+  ] as const)(
+    'enriches an early %s payment result with the canonical transport observation exactly once',
+    async (state, settlementStatus) => {
+      const db = new MemoryDb()
+      const args = paymentObservationArgs({ settlementStatus })
+      db.seed({
+        ...attempt(),
+        state,
+        operationRef: args.operationRef,
+        inputDigest: args.inputDigest,
+        settlementStatus,
+        paymentResponseDigest: args.paymentResponseDigest,
+        observedAt: 900,
+      })
+
+      await expect(recordObservation({ db }, args)).resolves.toBeNull()
+      await expect(recordObservation({ db }, args)).resolves.toBeNull()
+
+      expect(db.rows('moneyX402PaymentAttempts')[0]).toMatchObject({
+        state,
+        operationRef: args.operationRef,
+        inputDigest: args.inputDigest,
+        settlementStatus,
+        paymentResponseDigest: args.paymentResponseDigest,
+        paymentObservationDigest: args.paymentObservationDigest,
+        transportObservationDigest: args.transportObservationDigest,
+        transportRequestDigest: args.transportRequestDigest,
+        ...(settlementStatus === 'unknown'
+          ? {
+              quarantinedResponseDigest,
+              quarantinedOutputJson,
+            }
+          : {}),
+        observedAt: args.observedAt,
+      })
+      expect(db.patchCalls).toHaveLength(1)
+    },
+  )
+
+  it('refuses to complete a partially persisted transport observation', async () => {
+    const db = new MemoryDb()
+    const args = paymentObservationArgs({ settlementStatus: 'unknown' })
+    db.seed({
+      ...attempt(),
+      state: 'reconciliation_required',
+      operationRef: args.operationRef,
+      inputDigest: args.inputDigest,
+      settlementStatus: args.settlementStatus,
+      paymentResponseDigest: args.paymentResponseDigest,
+      paymentObservationDigest: args.paymentObservationDigest,
+      observedAt: 900,
+    })
+
+    await expect(recordObservation({ db }, args))
+      .rejects.toThrow('x402_payment_observation_attribution_invalid')
+    expect(db.patchCalls).toHaveLength(0)
+  })
+
+  it('durably reads a normalized paid response as quarantined while settlement remains unknown', async () => {
+    const db = new MemoryDb()
+    db.seed({ ...attempt(), state: 'possibly_submitted', submissionStartedAt: 11 })
+    const args = paymentObservationArgs({ settlementStatus: 'unknown' })
+
+    await expect(recordObservation({ db, runMutation: async () => null }, args)).resolves.toBeNull()
+
+    const persisted = await readAttempt({ db }, {
+      dispatchRef: 'invocation:test',
+      attemptRef: 'attempt:test',
+      effectGeneration: 1,
+    })
+    expect(persisted).toMatchObject({
+      state: 'reconciliation_required',
+      settlementStatus: 'unknown',
+      quarantinedResponseDigest,
+      quarantinedOutputJson,
+    })
+    expect(persisted).not.toHaveProperty('outputJson')
+  })
+
+  it.each([
+    ['partial pair', { quarantinedOutputJson: undefined }],
+    ['settled observation', {
+      settlementStatus: 'settled',
+      quarantinedResponseDigest,
+      quarantinedOutputJson,
+    }],
+    ['noncanonical digest', { quarantinedResponseDigest: 'sha256:not-canonical' }],
+    ['malformed JSON', { quarantinedOutputJson: '{not-json' }],
+    ['non-normalized JSON', { quarantinedOutputJson: '{ "result": "usable-after-reconciliation" }' }],
+    ['oversized JSON', { quarantinedOutputJson: JSON.stringify('x'.repeat(512 * 1024)) }],
+  ])('refuses invalid quarantined output: %s', async (_label, overrides) => {
+    const db = new MemoryDb()
+    db.seed({ ...attempt(), state: 'possibly_submitted', submissionStartedAt: 11 })
+
+    await expect(recordObservation({ db }, paymentObservationArgs({
+      settlementStatus: 'unknown',
+      ...overrides,
+    }))).rejects.toThrow('x402_payment_quarantined_output_invalid')
+    expect(db.patchCalls).toHaveLength(0)
+  })
+
+  it.each([
+    ['response digest', { quarantinedResponseDigest: canonicalDigest('different-response') }],
+    ['output JSON', { quarantinedOutputJson: JSON.stringify({ result: 'different' }) }],
+  ])('refuses replay when quarantined %s drifts', async (_label, overrides) => {
+    const db = new MemoryDb()
+    const args = paymentObservationArgs({ settlementStatus: 'unknown' })
+    db.seed({ ...attempt(), state: 'possibly_submitted', submissionStartedAt: 11 })
+    await recordObservation({ db, runMutation: async () => null }, args)
+    db.patchCalls.length = 0
+
+    await expect(recordObservation({ db }, { ...args, ...overrides }))
+      .rejects.toThrow('x402_payment_quarantined_output_conflict')
+    expect(db.patchCalls).toHaveLength(0)
+  })
+
+  it('refuses a partially persisted quarantined output', async () => {
+    const db = new MemoryDb()
+    const args = paymentObservationArgs({ settlementStatus: 'unknown' })
+    db.seed({
+      ...attempt(),
+      ...args,
+      state: 'reconciliation_required',
+      quarantinedOutputJson: undefined,
+    })
+
+    await expect(recordObservation({ db }, args))
+      .rejects.toThrow('x402_payment_quarantined_output_conflict')
+    await expect(readAttempt({ db }, {
+      dispatchRef: 'invocation:test',
+      attemptRef: 'attempt:test',
+      effectGeneration: 1,
+    })).rejects.toThrow('x402_payment_quarantined_output_conflict')
+    expect(db.patchCalls).toHaveLength(0)
+  })
+
+  it('refuses pre-existing quarantined output on an unobserved attempt', async () => {
+    const db = new MemoryDb()
+    const args = paymentObservationArgs({ settlementStatus: 'unknown' })
+    db.seed({
+      ...attempt(),
+      state: 'possibly_submitted',
+      submissionStartedAt: 11,
+      quarantinedResponseDigest,
+      quarantinedOutputJson,
+    })
+
+    await expect(recordObservation({ db }, args))
+      .rejects.toThrow('x402_payment_quarantined_output_conflict')
+    expect(db.patchCalls).toHaveLength(0)
   })
 
   it.each([
@@ -899,6 +1200,7 @@ function observationArgs(): Record<string, unknown> {
 }
 
 function paymentObservationArgs(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const settlementStatus = overrides.settlementStatus ?? 'settled'
   return {
     dispatchRef: 'invocation:test',
     attemptRef: 'attempt:test',
@@ -909,8 +1211,11 @@ function paymentObservationArgs(overrides: Record<string, unknown> = {}): Record
     transportObservationDigest: 'sha256:transport-observation',
     transportRequestDigest: 'sha256:transport-request',
     paymentObservationDigest: 'sha256:payment-observation',
-    settlementStatus: 'settled',
+    settlementStatus,
     paymentResponseDigest: 'sha256:payment-response',
+    ...(settlementStatus === 'unknown'
+      ? { quarantinedResponseDigest, quarantinedOutputJson }
+      : {}),
     observedAt: 2_000,
     ...overrides,
   }

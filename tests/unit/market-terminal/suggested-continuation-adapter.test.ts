@@ -12,10 +12,12 @@ import { suggestContinuation } from '@/modules/market/suggested-continuation'
 describe('CLI suggested-continuation adapter', () => {
   const operationRef = `operation:v1:${'a'.repeat(64)}`
   const invocationRef = `invocation:v1:${'b'.repeat(64)}`
+  const searchQuery = 'Current weather forecast for a city'
 
   it('uses the shared safe Operation projection', () => {
     expect(operationContinuationForCli({
       operationRef,
+      searchQuery,
       availabilityPosture: 'routeable',
       requiresBuyerCredential: true,
       hasBuyerCredential: false,
@@ -28,6 +30,7 @@ describe('CLI suggested-continuation adapter', () => {
 
     const routeable = operationContinuationForCli({
       operationRef,
+      searchQuery,
       availabilityPosture: 'routeable',
       requiresBuyerCredential: true,
       hasBuyerCredential: true,
@@ -36,6 +39,7 @@ describe('CLI suggested-continuation adapter', () => {
       subject: 'operation',
       state: 'ready',
       operationRef,
+      searchQuery,
     }))
     expect(routeable).toMatchObject({
       label: 'Call Operation',
@@ -44,6 +48,7 @@ describe('CLI suggested-continuation adapter', () => {
 
     expect(operationContinuationForCli({
       operationRef,
+      searchQuery,
       availabilityPosture: 'integrated',
       requiresBuyerCredential: true,
       hasBuyerCredential: true,
@@ -51,6 +56,7 @@ describe('CLI suggested-continuation adapter', () => {
       subject: 'operation',
       state: 'inspect_only',
       operationRef,
+      searchQuery,
     }))
   })
 
@@ -60,9 +66,9 @@ describe('CLI suggested-continuation adapter', () => {
       invocationRef,
       state: 'reconciliation_required',
     })).toEqual({
-      label: 'Review reconciliation',
+      label: 'Prepare reconciliation',
       kind: 'reconcile',
-      command: `ae status ${invocationRef}`,
+      command: 'ae help recover',
       warning: 'The external effect may have started. Reconcile before retrying.',
     })
   })

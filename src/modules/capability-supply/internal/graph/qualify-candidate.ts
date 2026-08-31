@@ -21,6 +21,7 @@ import { contractRefFromRow } from '../offering/registration'
 import { offeringIntegrityIsValid } from '../offering/integrity'
 import { publicationLifecycle } from '../publication/lifecycle'
 import { parseAdmittedTransportCatalogMetadata } from '../transport-adapters'
+import { x402SellerCanaryAdmissionIsSatisfied } from '../x402-seller-onboarding/admission'
 
 import {
   exactCurrentCatalogOperationIsRouteable,
@@ -41,6 +42,7 @@ export type SuppliedCandidateRef = Readonly<{
 export type SuppliedCandidateQualificationReason =
   | 'publication_missing'
   | 'publication_not_current'
+  | 'seller_canary_admission_required'
   | 'candidate_reference_mismatch'
   | 'business_not_currently_published'
   | 'contract_missing_or_inactive'
@@ -97,6 +99,10 @@ export async function qualifySuppliedCandidate(
   const reasons: SuppliedCandidateQualificationReason[] = []
   const publicationCurrent = publication.disposition === 'current'
   if (!publicationCurrent) reasons.push('publication_not_current')
+  const sellerCanaryAdmissionCurrent = x402SellerCanaryAdmissionIsSatisfied(
+    publication.registrationEvidenceRefs,
+  )
+  if (!sellerCanaryAdmissionCurrent) reasons.push('seller_canary_admission_required')
   if (
     publication.networkId !== candidate.networkId
     || publication.businessId !== candidate.businessId
@@ -304,6 +310,7 @@ export async function qualifySuppliedCandidate(
       method: bindingMethod,
       businessCurrent,
       publicationCurrent,
+      sellerCanaryAdmissionCurrent,
       contractCurrent,
       offeringCurrent,
       bindingCurrent,

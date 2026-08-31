@@ -1,19 +1,20 @@
 import type { ReactNode } from 'react'
+import { Link } from '@tanstack/react-router'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { Badge } from '@/components/ui/badge'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
-import type { ServiceDto } from '@/modules/registry/public'
-import { formatPublishedPrice } from '@/components/ae/services/money'
+import type { OperationCardViewModel } from '@/modules/market/operation-view-model'
 
 const INITIAL_PROOF_COUNT = 3
 
 export function AeSupplyAgentProof({
   tools,
-  services,
+  operations,
 }: Readonly<{
   tools: readonly SupplyLandingTool[]
-  services: readonly ServiceDto[]
+  operations: readonly OperationCardViewModel[]
 }>) {
   return (
     <AeSection
@@ -22,15 +23,15 @@ export function AeSupplyAgentProof({
     >
       <div className="grid gap-8">
         <div className="grid gap-3">
-          <h3 className="text-sm font-medium text-foreground">Published supplier profiles</h3>
-          {services.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No supplier profiles are published yet.</p>
+          <h3 className="text-sm font-medium text-foreground">Operations agents can find now</h3>
+          {operations.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No Operations are published yet. Be the first supplier to add one bounded job.</p>
           ) : (
             <ProofList
-              items={services}
-              remainingLabel="more listed"
-              getKey={(service) => service.id}
-              render={(service) => <ServiceProofRow service={service} />}
+              items={operations}
+              remainingLabel="more Operations"
+              getKey={(operation) => operation.operationRef}
+              render={(operation) => <OperationProofRow operation={operation} />}
             />
           )}
         </div>
@@ -102,25 +103,28 @@ function ToolProofRow({ tool }: Readonly<{ tool: SupplyLandingTool }>) {
   )
 }
 
-function ServiceProofRow({ service }: Readonly<{ service: ServiceDto }>) {
-  const firstOffering = service.ae.offerings[0]
-  const priceText = firstOffering?.price === undefined
-    ? (firstOffering?.pricingSummary ?? 'Price supplied in the listing')
-    : formatPublishedPrice(firstOffering.price)
+function OperationProofRow({ operation }: Readonly<{ operation: OperationCardViewModel }>) {
   return (
     <div className="grid gap-2">
       <div className="grid gap-1 sm:grid-cols-[1fr_auto] sm:items-start">
         <div>
-          <p className="font-medium text-foreground">{service.name}</p>
-          <p className="text-sm text-muted-foreground">{service.category}</p>
+          <Link
+            to="/operations/$operationRef"
+            params={{ operationRef: operation.operationRef }}
+            className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {operation.title}
+          </Link>
+          <p className="text-sm text-muted-foreground">{operation.supplierName} · {operation.category.label}</p>
         </div>
-        <p className="text-sm text-muted-foreground">{priceText}</p>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <Badge variant={operation.readiness === 'Routeable' ? 'success' : operation.readiness === 'Integrated' ? 'warning' : 'outline'}>
+            {operation.readinessLabel}
+          </Badge>
+          <span className="text-sm tabular-nums text-muted-foreground">{operation.price}</span>
+        </div>
       </div>
-      <p className="text-sm text-muted-foreground">{firstOffering?.summary ?? service.category}</p>
-      <div className="flex flex-wrap gap-3 text-sm">
-        <a href={service.ae.links.business} className="inline-flex min-h-touch items-center underline underline-offset-4">Supplier profile</a>
-        <a href={service.ae.links.manifest} className="inline-flex min-h-touch items-center underline underline-offset-4">Operation manifest</a>
-      </div>
+      <p className="text-sm text-muted-foreground">{operation.summary}</p>
     </div>
   )
 }

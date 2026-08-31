@@ -135,7 +135,7 @@ async function patchPreReleaseRefusal(ctx: MutationCtx, row: InvocationRow): Pro
 
 export async function completeWorkHandler(
   ctx: MutationCtx,
-  { context, result }: {
+  { workId, context, result }: {
     workId: string
     context: { invocationRef: string }
     result: WorkResult
@@ -143,7 +143,9 @@ export async function completeWorkHandler(
 ): Promise<null> {
   const row = await ctx.db.query('capabilityOperationInvocations')
     .withIndex('by_invocationRef', (query) => query.eq('invocationRef', context.invocationRef)).unique()
-  if (row === null || row.state !== 'pending') return null
+  // workId is the persisted work generation. A late callback from the prior
+  // generation must never finalize or refuse a newly re-armed invocation.
+  if (row === null || row.state !== 'pending' || row.workId !== workId) return null
   if (isRecordedSuccess(result)) {
     await ctx.db.patch(row._id, { dispatchState: 'completed', updatedAt: Date.now() })
     return null

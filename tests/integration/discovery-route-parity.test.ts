@@ -21,7 +21,6 @@ import {
   OPERATION_MARKET_INSPECT_PLAN_PATH,
   OPERATION_MARKET_SEARCH_PATH,
 } from '@/modules/registry/operation-entry'
-import { registryDetailAction, registryListAction } from '@/modules/registry/registry.actions'
 import {
   buildLlmsTxt,
   buildRobotsTxt,
@@ -33,6 +32,7 @@ import {
   listPublicBusinessOfferingSupply,
   searchPublicBusinessOfferingSupply,
 } from '@/modules/registry/public'
+import { registryDetailAction, registryListAction } from '@/modules/registry/registry.actions'
 import { Route as MarketOperationCompareRoute } from '@/routes/api.v1.market-operations.compare'
 import { Route as MarketOperationDetailRoute } from '@/routes/api.v1.market-operations.detail'
 import { Route as MarketOperationInspectPlanRoute } from '@/routes/api.v1.market-operations.inspect-plan'
@@ -96,7 +96,9 @@ describe('discovery route parity', () => {
       slug: 'fremantle-heat-pump-repairs',
       businessName: 'Fremantle Heat Pump Repairs',
     })
-    expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
+    expect(llms.body).toContain('The Operation catalogue is the canonical market')
+    expect(llms.body).not.toContain('slug=fremantle-heat-pump-repairs')
+    expect(llms.urls).toContain('https://ae.example/fremantle-heat-pump-repairs')
     expect(sitemap.body).toContain('https://ae.example/fremantle-heat-pump-repairs')
     expect(JSON.stringify({ page, registryList, registrySearch, apiDetail, ucp, llms })).not.toContain(
       'demo-listed-provider'
@@ -135,7 +137,7 @@ describe('discovery route parity', () => {
       reason: 'No public business catalog exists for this slug.',
     })
     expect(suppressedManifest.status).toBe(404)
-    expect(suppressedLlms.body).not.toContain('fremantle-heat-pump-repairs')
+    expect(suppressedLlms.urls).not.toContain('https://ae.example/fremantle-heat-pump-repairs')
     expect(suppressedSitemap.body).not.toContain('fremantle-heat-pump-repairs')
   })
 
@@ -180,8 +182,6 @@ describe('discovery route parity', () => {
       .map(advertisedRoute)
     const apiPaths = apiRoutes.map((route) => new URL(route.url).pathname)
     const expectedApiPaths = [
-      '/api/businesses',
-      ...state.businesses.map((business) => `/api/businesses/${business.slug}`),
       OPERATION_MARKET_SEARCH_PATH,
       OPERATION_MARKET_DETAIL_PATH,
       OPERATION_MARKET_COMPARE_PATH,
@@ -195,31 +195,14 @@ describe('discovery route parity', () => {
         .every((route) => route.method === 'POST'),
     ).toBe(true)
 
-    const listRoute = apiRoutes.find((route) => new URL(route.url).pathname === '/api/businesses')
-    const businessDetailRoute = apiRoutes.find(
-      (route) => new URL(route.url).pathname === '/api/businesses/demo-listed-provider',
-    )
     const searchRoute = apiRoutes.find((route) => new URL(route.url).pathname === OPERATION_MARKET_SEARCH_PATH)
     const operationDetailRoute = apiRoutes.find((route) => new URL(route.url).pathname === OPERATION_MARKET_DETAIL_PATH)
     if (
-      listRoute === undefined
-      || businessDetailRoute === undefined
-      || searchRoute === undefined
+      searchRoute === undefined
       || operationDetailRoute === undefined
     ) {
-      throw new Error('Expected current llms list, search, and detail URLs to be present.')
+      throw new Error('Expected current llms Operation search and detail URLs to be present.')
     }
-
-    const listBody = listPublicBusinessOfferingSupply(state, {
-      paginationOpts: { cursor: null, numItems: 20 },
-    })
-    const detailBody = getPublicBusinessOfferingSupplyBySlug(state, {
-      slug: new URL(businessDetailRoute.url).pathname.split('/').at(-1) ?? '',
-    })
-
-    expect(registryListAction.outputSchema.safeParse(listBody).success).toBe(true)
-    expect(listBody.page.map((item) => item.slug)).toContain('demo-listed-provider')
-    expect(registryDetailAction.outputSchema.safeParse(detailBody).success).toBe(true)
     const restoreMarketOperationSource = installMarketOperationSource()
     const operationDetailResponse = await routeHandler(MarketOperationDetailRoute, 'POST')({
       request: new Request(`${origin}${OPERATION_MARKET_DETAIL_PATH}`, {
@@ -376,7 +359,8 @@ async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySo
   // `$slug` data dependency), so they cannot fall through to the business-catalog
   // pageMatch below — that lookup only resolves registered provider slugs.
   if (path === '/for-agents' || path === '/for-providers' || path === '/privacy/remove-business'
-    || path === '/market' || path === '/about' || path === '/terms' || path === '/privacy') {
+    || path === '/market' || path === '/about' || path === '/terms' || path === '/privacy'
+    || path === '/support' || path === '/status' || path === '/SKILL.md') {
     return route.method === 'GET'
   }
 

@@ -48,6 +48,9 @@ export async function recordCapabilityProbeResult(
     evidenceRefs: readonly string[]
     now?: number
   }>,
+  options?: Readonly<{
+    allowUnpublishedBusiness?: (businessId: string) => Promise<boolean>
+  }>,
 ): Promise<RecordCapabilityProbeResult> {
   const publication = await ports.loadPublicationAtRevision(args.publicationRef, args.expectedRevision)
   if (publication === null || publication.disposition !== 'current') {
@@ -62,13 +65,15 @@ export async function recordCapabilityProbeResult(
   const currentConnection = binding?.authority.kind === 'provider_connection'
     ? await ports.loadProviderConnection(binding.authority.connectionRef)
     : undefined
+  const businessIsProbeable = business !== null
+    || (await options?.allowUnpublishedBusiness?.(publication.businessId) ?? false)
   const now = args.now ?? Date.now()
   const expectedHealthState = args.outcome === 'healthy' ? 'healthy' : 'unhealthy'
   const expectedCredentialState = args.outcome === 'credential_unavailable' || args.outcome === 'credential_rejected' ? 'unavailable' : 'ready'
   if (
     binding === null
     || offering === null
-    || business === null
+    || !businessIsProbeable
     || contract.kind !== 'found'
     || offering.status !== 'active'
     || binding.admission !== 'admitted'

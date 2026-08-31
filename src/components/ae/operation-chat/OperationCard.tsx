@@ -1,7 +1,10 @@
 import { AeFactList } from '@/components/ae/data/AeFactList'
+import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperationPrice } from '@/components/ae/market/AeOperationPrice'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Item,
@@ -131,27 +134,60 @@ function CardBody({ projection }: { projection: OperationCardProjection }) {
         : <AeFactList density="compact" facts={projection.facts} />
     case 'execute': {
       const operationRef = projection.operationRefs[0]
-      if (projection.name === undefined) return null
-      if (operationRef === undefined) {
-        return (
-          <Item variant="muted" size="sm">
-            <ItemContent>
-              <ItemTitle>{projection.name}</ItemTitle>
-            </ItemContent>
-          </Item>
-        )
-      }
       return (
-        <Item asChild variant="muted" size="sm">
-          <a href={inspectHref(operationRef)} aria-label={chatViewOperation(projection.name)}>
-            <ItemMedia variant="icon" aria-hidden="true" className="font-mono text-xs font-semibold">
-              {choiceInitial(projection.name)}
-            </ItemMedia>
-            <ItemContent>
-              <ItemTitle>{projection.name}</ItemTitle>
-            </ItemContent>
-          </a>
-        </Item>
+        <div className="grid gap-related">
+          <Alert variant={projection.state === 'reconciliation_required' ? 'destructive' : 'default'}>
+            <AlertTitle>{executeStateTitle(projection.state)}</AlertTitle>
+            <AlertDescription>{projection.summary}</AlertDescription>
+          </Alert>
+          {projection.name === undefined || operationRef === undefined ? null : (
+            <Item asChild variant="muted" size="sm">
+              <a href={inspectHref(operationRef)} aria-label={chatViewOperation(projection.name)}>
+                <ItemMedia variant="icon" aria-hidden="true" className="font-mono text-xs font-semibold">
+                  {choiceInitial(projection.name)}
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>{projection.name}</ItemTitle>
+                </ItemContent>
+              </a>
+            </Item>
+          )}
+          {projection.outputPreview === undefined ? null : (
+            <section className="grid min-w-0 gap-intra" aria-label="Operation result">
+              <h4 className="text-sm font-semibold text-foreground">Returned output</h4>
+              <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-muted/35 p-3 font-mono text-xs leading-5 text-foreground">
+                {projection.outputPreview}
+              </pre>
+              {projection.outputTruncated === true ? (
+                <p className="text-xs text-muted-foreground">Preview truncated. Open the call receipt for the canonical result.</p>
+              ) : null}
+            </section>
+          )}
+          {projection.facts.length === 0 ? null : (
+            <AeFactList density="compact" facts={projection.facts} />
+          )}
+          {projection.invocationRef === undefined ? null : (
+            <AeFactList density="compact" facts={[{
+              label: 'Call reference',
+              value: <AeCopyReference label="call reference" value={projection.invocationRef} />,
+            }]} />
+          )}
+          {projection.receiptRef === undefined ? null : (
+            <AeFactList density="compact" facts={[{
+              label: 'Receipt reference',
+              value: <AeCopyReference label="receipt reference" value={projection.receiptRef} />,
+            }]} />
+          )}
+          {projection.evidenceHash === undefined ? null : (
+            <details className="group border-t border-border pt-intra">
+              <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Evidence</summary>
+              <AeCopyReference label="evidence hash" value={projection.evidenceHash} className="mt-intra" />
+            </details>
+          )}
+          {projection.nextAction === undefined ? null : (
+            <p className="text-sm text-muted-foreground"><span className="font-medium text-foreground">Next:</span> {projection.nextAction}</p>
+          )}
+        </div>
       )
     }
     default: {
@@ -161,9 +197,36 @@ function CardBody({ projection }: { projection: OperationCardProjection }) {
   }
 }
 
+function executeStateTitle(state: Extract<OperationCardProjection, { kind: 'execute' }>['state']): string {
+  if (state === 'completed') return 'Result ready'
+  if (state === 'pending') return 'Call pending'
+  if (state === 'needs_authority') return 'Approval required'
+  if (state === 'reconciliation_required') return 'Reconciliation required'
+  return 'Call refused'
+}
+
+function ExecuteContinuation({ projection }: Readonly<{
+  projection: Extract<OperationCardProjection, { kind: 'execute' }>
+}>) {
+  const continuation = projection.continuation
+  if (continuation === undefined) return null
+  if (continuation.href !== undefined) {
+    return (
+      <Button asChild variant="outline" size="sm">
+        <a href={continuation.href}>{continuation.label}</a>
+      </Button>
+    )
+  }
+  return continuation.command === undefined
+    ? null
+    : <AeCopyCommand compact label={continuation.label} code={continuation.command} />
+}
+
 const STATUS_VARIANT = {
   complete: 'success',
   working: 'info',
+  pending: 'info',
+  attention: 'warning',
   refused: 'warning',
   error: 'destructive',
 } as const
@@ -186,6 +249,10 @@ export function OperationCard({ projection }: { projection: OperationCardProject
       {projection.kind === 'choices' && projection.count !== undefined ? (
         <CardFooter>
           <ChoiceRemainder count={projection.count} shown={projection.choices.length} />
+        </CardFooter>
+      ) : projection.kind === 'execute' && projection.continuation !== undefined ? (
+        <CardFooter>
+          <ExecuteContinuation projection={projection} />
         </CardFooter>
       ) : null}
     </Card>

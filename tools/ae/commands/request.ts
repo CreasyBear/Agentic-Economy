@@ -115,11 +115,17 @@ async function listRequests(args: readonly string[], options: CliOptions): Promi
       kind: 'UNAVAILABLE', code: 'market-request-list-unavailable',
     })
   }
+  const originContinuation = options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+    ? []
+    : ['--base-url', options.baseUrl]
+  const outputContinuation = options.json ? ['--json'] : []
   const nextCommand = parsed.data.hasMore && parsed.data.nextCursor !== undefined
     ? continuationCommand([
         'ae', 'request', 'list',
         ...(options.limit === undefined ? [] : ['--limit', options.limit]),
         '--cursor', parsed.data.nextCursor,
+        ...originContinuation,
+        ...outputContinuation,
       ])
     : undefined
   if (options.json) {

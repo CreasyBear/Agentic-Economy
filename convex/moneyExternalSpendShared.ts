@@ -11,6 +11,7 @@ import {
 } from './moneyBudgetPersist'
 import {
   amountFromParts,
+  externalSpendExecutionContextForFacts,
   externalSpendIdentityDigest,
   externalSpendPaymentFactsValid,
   releaseCredentialBudget,
@@ -26,6 +27,22 @@ import {
 const externalSpendEnvironment = v.union(
   v.literal('sandbox'),
   v.literal('production'),
+)
+export const externalSpendExecutionContext = v.union(
+  v.object({
+    kind: v.literal('market'),
+    paymentProfile: v.union(
+      v.literal('base-usdc-exact'),
+      v.literal('base-sepolia-usdc-exact'),
+    ),
+  }),
+  v.object({
+    kind: v.literal('seller_onboarding_canary'),
+    paymentProfile: v.literal('base-sepolia-usdc-exact'),
+    canaryRef: identifier,
+    canaryCommitmentDigest: identifier,
+    fundingBudgetRef: identifier,
+  }),
 )
 export const externalSpendSettlementStatus = v.union(
   v.literal('settled'),
@@ -72,6 +89,7 @@ export const externalSpendPaymentFactsArgs = {
   paymentIdentifier: identifier,
   challengeDigest: identifier,
   amount: exactAmount,
+  executionContext: v.optional(externalSpendExecutionContext),
   custodyRef: v.optional(identifier),
   custodyGeneration: v.optional(v.number()),
   custodyDailyMaximum: v.optional(exactAmount),
@@ -91,6 +109,7 @@ const externalSpendReservationValue = v.object({
   budgetPolicyRef: identifier,
   budgetDayStart: identifier,
   budgetMonthStart: identifier,
+  executionContext: v.optional(externalSpendExecutionContext),
   custodyRef: v.optional(identifier),
   custodyGeneration: v.optional(v.number()),
   custodyDailyMaximum: v.optional(exactAmount),
@@ -142,6 +161,7 @@ type ExternalSpendCustodyRowMaterial =
   | Readonly<{
       kind: 'present'
       custodyRef: string
+      environment: 'sandbox' | 'production'
       custodyGeneration: number
       custodyDailyMaximum: NonNullable<ExternalSpendIdentity['custodyDailyMaximum']>
       custodyBudgetPolicyRef: string
@@ -161,7 +181,19 @@ export function externalSpendCustodyFromRow(
   ]
   const supplied = fields.filter((value) => value !== undefined).length
   if (supplied === 0) return { kind: 'none' }
-  if (supplied !== fields.length || row.environment !== 'production') {
+  const executionContext = externalSpendExecutionContextForFacts({
+    environment: row.environment,
+    ...(row.executionContext === undefined
+      ? {}
+      : { executionContext: row.executionContext }),
+  })
+  const custodyContextValid = executionContext?.kind === 'market'
+    ? row.environment === 'production'
+      && executionContext.paymentProfile === 'base-usdc-exact'
+    : executionContext?.kind === 'seller_onboarding_canary'
+      && row.environment === 'sandbox'
+      && executionContext.paymentProfile === 'base-sepolia-usdc-exact'
+  if (supplied !== fields.length || !custodyContextValid) {
     return { kind: 'invalid' }
   }
   const custodyDailyMaximum = amountFromParts(
@@ -186,6 +218,7 @@ export function externalSpendCustodyFromRow(
   return {
     kind: 'present',
     custodyRef: row.custodyRef,
+    environment: row.environment,
     custodyGeneration: row.custodyGeneration,
     custodyDailyMaximum,
     custodyBudgetPolicyRef: row.custodyBudgetPolicyRef,
@@ -215,6 +248,9 @@ function externalSpendIdentityFromRow(
     paymentIdentifier: row.paymentIdentifier,
     challengeDigest: row.challengeDigest,
     amount,
+    ...(row.executionContext === undefined
+      ? {}
+      : { executionContext: row.executionContext }),
     ...(custody.kind === 'present'
       ? {
           custodyRef: custody.custodyRef,
@@ -338,6 +374,7 @@ export async function transitionExternalSpendBudget(
     && custodyTarget !== undefined
     && !await transitionCustodyDailyBudgetInTransaction(ctx, {
       custodyRef: custody.custodyRef,
+      environment: custody.environment,
       budgetPolicyRef: custody.custodyBudgetPolicyRef,
       dayStart: custody.custodyBudgetDayStart,
       amount,

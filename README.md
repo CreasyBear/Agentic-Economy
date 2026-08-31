@@ -47,6 +47,15 @@ Historical planning ledgers, migration gates, parity notes, generated codebase
 maps, and diagrams have been removed from active project context. Git history
 records them but does not define the product.
 
+## x402 seller onboarding
+
+Use the [x402 seller onboarding runbook](./research/runbooks/x402-seller-onboarding.md)
+to take a hosted seller through an unpaid protocol probe, ownership proof,
+Operation staging, one explicitly authorized Base Sepolia canary, and
+reconciliation without duplicate payment. The runbook documents the reference
+seller, exact commands, terminal states, hosted-readiness requirements, and the
+evidence ceiling from the first live gauntlet.
+
 ## Run locally
 
 Use Node.js 22 and npm 11.5.1.
@@ -70,9 +79,17 @@ npm run test:release:source
 
 ## Machine quickstart
 
+Install the pinned CLI archive served by the Agentic Economy deployment, then
+verify the binary before running a live search. Replace the MCP agent placeholder
+with exactly one current harness: `codex`, `claude-code`, or `cursor`.
+
 ```sh
-npx @agentic-economy/cli search "weather forecast" --limit 5
-npx @agentic-economy/cli request create "translate a handwritten invoice"
-npx @agentic-economy/cli inspect <operationRef>
-npx @agentic-economy/cli call <operationRef> --input '{"city":"Perth"}'
+export AE_ORIGIN="https://<your-agentic-economy-deployment>"
+npm install --global "$AE_ORIGIN/downloads/agentic-economy-cli-0.1.0.tgz"
+ae --version
+ae search "weather forecast" --base-url "$AE_ORIGIN" --limit 5
+npx --yes add-mcp@2.3.0 "$AE_ORIGIN/mcp" --name agentic-economy --transport http --global --agent "<codex|claude-code|cursor>" --yes
+ae doctor --base-url "$AE_ORIGIN" --json
+ae inspect <operationRef> --base-url "$AE_ORIGIN"
+ae call <operationRef> --input '{"city":"Perth"}' --base-url "$AE_ORIGIN"
 ```

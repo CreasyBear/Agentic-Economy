@@ -43,11 +43,22 @@ export function OperatorRoutePending() {
 export function OperatorRouteError({ error: _error }: { error: unknown }) {
   const { pathname } = useLocation()
   const parentShell = useOperatorShellChrome()
+  const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
 
   const body = (
     <Alert variant="destructive">
-      <AlertTitle>Workspace unavailable</AlertTitle>
-      <AlertDescription>Refresh the page to try again. If the problem continues, return to your workspace home.</AlertDescription>
+      <AlertTitle>Couldn’t load this page</AlertTitle>
+      <AlertDescription>
+        <p>Try loading it again. If it still fails, check system status before repeating an Operation call.</p>
+        <div className="flex w-full flex-wrap gap-intra">
+          <Button type="button" className="min-h-touch" onClick={() => window.location.reload()}>
+            Try again
+          </Button>
+          <Button asChild variant="secondary" className="min-h-touch">
+            <a href="/status">Check system status</a>
+          </Button>
+        </div>
+      </AlertDescription>
     </Alert>
   )
 
@@ -55,9 +66,9 @@ export function OperatorRouteError({ error: _error }: { error: unknown }) {
 
   return (
     <AeOperatorShell
-      operatorRole={operatorRoleForPath(pathname) ?? 'owner'}
+      operatorRole={operatorRole}
       title="Couldn’t load this page"
-      description="Try again. Your account and access settings are unchanged."
+      description="Try again, then check system status if the page still does not load."
       currentPath={pathname}
     >
       {body}

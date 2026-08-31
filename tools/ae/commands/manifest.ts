@@ -68,25 +68,63 @@ export type CommandManifestEntry = Readonly<{
   summary: string
   args: string
   json: boolean
+  authentication?: 'buyer'
   guidance?: readonly string[]
   commands?: Readonly<Record<string, CommandManifestEntry>>
 }>
 
-export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
-  manifest: { summary: 'Read this machine-readable Operation terminal contract.', args: '', json: true },
+export const ROOT_COMMAND_GROUPS = [
+  { id: 'discover_compare', title: 'Discover and compare' },
+  { id: 'connect_account', title: 'Connect and account' },
+  { id: 'call_recover', title: 'Call and recover' },
+  { id: 'supply', title: 'Supply' },
+  { id: 'reference', title: 'Reference' },
+] as const
+
+export const ROOT_HELP_START = [
+  'ae search "<job>"',
+  'ae inspect <operation-ref>',
+  'ae connect',
+  'ae help call',
+] as const
+
+export type RootCommandGroupId = (typeof ROOT_COMMAND_GROUPS)[number]['id']
+type RootCommandManifestEntry = CommandManifestEntry & Readonly<{
+  group: RootCommandGroupId
+  rootOrder: number
+}>
+
+export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
+  manifest: { summary: 'Read this machine-readable Operation terminal contract.', args: '', json: true, group: 'reference', rootOrder: 1 },
+  config: {
+    summary: 'Inspect effective local CLI origin, paths, overrides, and redacted connection state without changing anything.',
+    args: '',
+    json: true,
+    group: 'reference',
+    rootOrder: 2,
+    guidance: [
+      'Works even when the stored connection document is malformed; reports the structural reason without file contents or credential values.',
+    ],
+  },
   search: {
     summary: 'Search current public Market Operations for a job, or omit the job to browse.',
-    args: '["<job>"] [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\']',
+    args: '["<job>"] [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\'] [--technical]',
     json: true,
+    group: 'discover_compare',
+    rootOrder: 1,
     guidance: [
       'Filters: networkId, location, effects, dataUse, availability, currency, and maximumPrice.',
       'Exact price example for at most USD 0.50: --filters \'{"currency":"USD","maximumPrice":{"currency":"USD","units":"50","exponent":2}}\'',
+      'JSON output keeps decision facts compact by default; pass --technical to include each Operation\'s navigation relations.',
     ],
   },
   request: {
     summary: 'Remember and revisit a private missing job after current Market Operations return no match.',
     args: '<create|list|status>',
     json: true,
+    group: 'discover_compare',
+    rootOrder: 5,
+    authentication: 'buyer',
     guidance: [
       'A request is private market memory for this exact credential profile, not a project, tender, supplier message, or callable Operation.',
       'Create refuses when a current canonical Operation already matches; search and inspect that Operation instead.',
@@ -97,13 +135,24 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
       status: { summary: 'Check whether current canonical Operations now match one private request.', args: '<request-ref>', json: true },
     },
   },
-  inspect: { summary: 'Read one exact current Market Operation before connecting or invoking.', args: '<operation-ref>', json: true },
-  compare: { summary: 'Compare one to four exact current Operation references.', args: '<operation-ref> [<operation-ref> ...]', json: true },
-  'inspect-plan': { summary: 'Inspect a bounded operation plan from one to four exact current Operation references.', args: '<operation-ref> [<operation-ref> ...]', json: true },
+  inspect: {
+    summary: 'Read one exact current Market Operation before connecting or invoking.',
+    args: '<operation-ref> [--technical]',
+    json: true,
+    group: 'discover_compare',
+    rootOrder: 2,
+    guidance: [
+      'JSON output includes the full Operation contract but omits duplicated navigation by default; pass --technical to include it.',
+    ],
+  },
+  compare: { summary: 'Compare two to four exact current Operation references.', args: '<operation-ref> <operation-ref> [<operation-ref> ...]', json: true, group: 'discover_compare', rootOrder: 3 },
+  'inspect-plan': { summary: 'Inspect a bounded operation plan from one to four exact current Operation references.', args: '<operation-ref> [<operation-ref> ...]', json: true, group: 'discover_compare', rootOrder: 4 },
   connect: {
     summary: 'Register a public device client or validate one separately stored AE credential profile.',
     args: '[--mcp] [--supplier]',
     json: true,
+    group: 'connect_account',
+    rootOrder: 1,
     guidance: [
       'Without --supplier, request buyer Operation access. With --supplier, request a separate owner-approved market_supply:manage credential.',
       'Pass --mcp to write the matching Streamable HTTP MCP connection after the credential is validated.',
@@ -115,6 +164,8 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     summary: 'Check this CLI connection across the Operation market loop without changing server or local state.',
     args: '[businessId] [--supplier]',
     json: true,
+    group: 'reference',
+    rootOrder: 3,
     guidance: [
       'Uses existing read-only surfaces only; it never connects, funds, retries, reconciles, or changes supplier state.',
       'Rechecks the five newest private market requests and points directly to the first current matching Operation without revealing the saved job phrase.',
@@ -126,18 +177,23 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     summary: 'Inspect current agent identity, exact buyer credit, credential activity, or local origin-bound connections.',
     args: '[status [market|supplier]|balance [currency]|activity [currency]|connections|disconnect [market|supplier]]',
     json: true,
+    group: 'connect_account',
+    rootOrder: 2,
+    authentication: 'buyer',
     commands: {
       status: { summary: 'Read one buyer or supplier credential profile’s principal, owner account, scopes, and authority mode.', args: '[market|supplier]', json: true },
       balance: { summary: 'Read exact buyer credit and the owner-browser funding continuation.', args: '[currency]', json: true },
       activity: { summary: 'List this credential profile’s bounded charge activity, newest first.', args: '[currency] [--limit <1-100>] [--cursor <cursor>]', json: true },
       connections: { summary: 'List locally stored origin-bound AE connections without revealing bearer material.', args: '', json: true },
-      disconnect: { summary: 'Remove one local credential profile, or all profiles for the selected origin; server-side revocation remains owner-controlled.', args: '[market|supplier]', json: true },
+      disconnect: { summary: 'Remove one local credential profile for the selected origin. Unqualified removes buyer/market; pass supplier to remove only supplier. Server-side revocation remains owner-controlled.', args: '[market|supplier]', json: true },
     },
   },
   supply: {
     summary: 'Inspect and manage owner-bound supplier Operations, provider connections, earnings, and recovery with an owner-issued supplier credential.',
     args: '<status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|retry-cleanup>',
     json: true,
+    group: 'supply',
+    rootOrder: 1,
     guidance: [
       'Requires a separately owner-approved credential with market_supply:manage; obtain it with ae connect --supplier.',
       'Use status before lifecycle writes and preserve the exact offering and publication revisions it returns.',
@@ -161,30 +217,51 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     summary: 'Continue to owner funding controls in the authenticated browser surface; this command never funds.',
     args: '',
     json: true,
+    group: 'connect_account',
+    rootOrder: 3,
     guidance: ['Open the returned /owner/credit#fund continuation as the owner. No agent credential is used.'],
   },
-  call: { summary: 'Call one capability: anonymous MCP for eligible free keyless reads, otherwise the connected AE gateway.', args: "<operation-ref> --input '<json>' [--wait]", json: true },
+  call: {
+    summary: 'Call one capability: anonymous MCP for eligible free keyless reads, otherwise the connected AE gateway.',
+    args: "<operation-ref> --input '<json>' [--wait]",
+    json: true,
+    group: 'call_recover',
+    rootOrder: 1,
+    authentication: 'buyer',
+    guidance: [
+      'Pass --input - to read one bounded JSON object from standard input; literal JSON remains supported.',
+    ],
+  },
   history: {
     summary: 'List this credential profile’s own invocation summaries, newest first.',
     args: '[--limit <1-100>] [--cursor <cursor>] [--state <state>]',
     json: true,
+    group: 'call_recover',
+    rootOrder: 2,
+    authentication: 'buyer',
     guidance: ['Use the returned invocationRef with status for one snapshot or wait for a bounded recorded outcome.'],
   },
-  status: { summary: 'Read one authenticated invocation status and evidence projection.', args: '<invocation-ref>', json: true },
+  status: { summary: 'Read one authenticated invocation status and evidence projection.', args: '<invocation-ref>', json: true, group: 'call_recover', rootOrder: 3, authentication: 'buyer' },
   wait: {
     summary: 'Wait boundedly for one recorded invocation to reach a durable outcome.',
     args: '<invocation-ref>',
     json: true,
+    group: 'call_recover',
+    rootOrder: 4,
+    authentication: 'buyer',
     guidance: [
       'Read-only: observes the existing invocation and never retries it, grants authority, or creates a replacement call.',
       'A timeout preserves the invocation identity and returns the exact wait command to continue later.',
     ],
   },
-  cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocation-ref> --idempotency-key <key>', json: true },
+  cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocation-ref> --idempotency-key <key>', json: true, group: 'call_recover', rootOrder: 5, authentication: 'buyer' },
   recover: {
     summary: 'Reconcile a genuinely uncertain invocation with canonical evidence after a real uncertain outcome; this is not a replay.',
     args: "<invocation-ref> '<evidence-json>' --idempotency-key <key>",
     json: true,
+    group: 'call_recover',
+    rootOrder: 6,
+    authentication: 'buyer',
     guidance: [
       'Inspect status first and use this only when the invocation outcome remains genuinely uncertain.',
       'Provide canonical evidence for the same invocation and stable idempotency key; recover reconciles the outcome and does not replay a known result.',
@@ -194,6 +271,8 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     summary: 'Continue to owner access revocation in the authenticated browser surface; this command never revokes.',
     args: '',
     json: true,
+    group: 'connect_account',
+    rootOrder: 4,
     guidance: ['Open the returned /agent-access#revoke continuation as the owner. No agent credential is used.'],
   },
 } as const
@@ -419,6 +498,8 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
       activity: 'ae account activity [currency] [--limit <1-100>] [--cursor <cursor>]',
       connections: 'ae account connections',
       disconnect: 'ae account disconnect',
+      disconnectDefaultProfile: 'market',
+      disconnectSupplier: 'ae account disconnect supplier',
     },
     supply: {
       connect: 'ae connect --supplier',

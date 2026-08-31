@@ -6,9 +6,17 @@ import {
 } from '@/modules/action-invocation/runtime'
 import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-invocation/runtime'
 import type { OperationInvokeReceipt } from '@/modules/capability-execution/operation-invoke-contracts'
-import { verifyExactEvmX402Settlement } from '@/modules/capability-supply/server'
+import {
+  verifyExactEvmX402AuthorizationCancellation,
+  verifyExactEvmX402AuthorizationTransaction,
+  verifyExactEvmX402Settlement,
+} from '@/modules/capability-supply/server'
 import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
-import { externalSpendIdentityMatchingReservationRef } from '@/modules/money/public'
+import {
+  exactAmountSchema,
+  externalSpendIdentityMatchingReservationRef,
+  type ExactAmount,
+} from '@/modules/money/public'
 import { Agent } from 'undici'
 import type { Infer } from 'convex/values'
 
@@ -24,6 +32,15 @@ import type { RecoveryWorkContext } from './loading'
 
 type X402Evidence = Infer<typeof x402PaymentReconciliationEvidenceValue>
 type RecoveryStatus = Exclude<Awaited<ReturnType<typeof readPublicInvocationStatus>>, { kind: 'refused' }>
+
+type FailedAuthorizationAttempt = Readonly<{
+  asset: string
+  paymentPayer?: string
+  paymentNonce?: string
+  paymentAuthorizationExpiresAt?: number
+}>
+
+type FailedAuthorizationReceipt = Awaited<ReturnType<typeof readX402EvmReceipt>>
 
 export type X402EvidencePreparation =
   | Readonly<{ kind: 'not_found' }>
@@ -52,15 +69,23 @@ export async function prepareX402RecoveryEvidence(
     undefined, undefined, submitted.paymentIdentifier, 'unknown', 'unknown',
   )
   const facts = x402EvidenceFacts(work, submitted)
-  if (facts === undefined || !validSubmittedEvidence(work, submitted, facts)) {
+  if (facts === undefined) {
+    recordX402RecoveryStage(submitted, 'payment_facts_unavailable')
+    return { kind: 'required', status, receipt: reconciliationReceipt }
+  }
+  if (!validSubmittedEvidence(work, submitted, facts)) {
+    recordX402RecoveryStage(submitted, 'submitted_evidence_invalid')
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
   if (!await verifySettlement(work, submitted)) {
+    recordX402RecoveryStage(submitted, 'settlement_verification_failed')
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
   if (!await persistX402Money(ctx, work, submitted, facts.externalIdentity, facts.observedAt)) {
+    recordX402RecoveryStage(submitted, 'money_reconciliation_failed')
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
+  recordX402RecoveryStage(submitted, 'prepared')
   const evidence = canonicalRecoveryEvidence(submitted)
   work.trustedReconciliationEvidenceDigest.value = canonicalDigest(evidence as StableHashValue)
   return {
@@ -72,7 +97,7 @@ export async function prepareX402RecoveryEvidence(
       evidence.digest,
       evidence.observedAt,
       submitted.settlementStatus === 'settled' ? submitted.transactionHash : undefined,
-      submitted.settlementStatus === 'settled' ? submitted.transactionHash : undefined,
+      submitted.transactionHash,
       submitted.paymentIdentifier,
       submitted.settlementStatus === 'settled' ? 'not_applicable' : 'released',
       'none',
@@ -80,12 +105,42 @@ export async function prepareX402RecoveryEvidence(
   }
 }
 
+function recordX402RecoveryStage(
+  submitted: X402Evidence,
+  stage:
+    | 'payment_facts_unavailable'
+    | 'submitted_evidence_invalid'
+    | 'settlement_verification_failed'
+    | 'money_reconciliation_failed'
+    | 'prepared',
+): void {
+  console.info('x402_payment_recovery', {
+    invocationRef: submitted.invocationRef,
+    attemptRef: submitted.attemptRef,
+    effectGeneration: submitted.effectGeneration,
+    evidenceRef: submitted.evidenceRef,
+    stage,
+  })
+}
+
 function x402EvidenceFacts(work: RecoveryWorkContext, submitted: X402Evidence) {
   const { recovered, operation, x402Attempt } = work
   const providerRef = operation.binding.authority.kind === 'provider_connection'
     ? operation.binding.authority.providerRef
     : undefined
-  if (x402Attempt === null || providerRef === undefined) return undefined
+  if (
+    x402Attempt === null
+    || providerRef === undefined
+    || x402Attempt.reservationRef === undefined
+  ) return undefined
+  const amount = exactAmountSchema.safeParse({
+    units: x402Attempt.amountUnits,
+    currency: x402Attempt.currency,
+    exponent: x402Attempt.exponent,
+  })
+  if (!amount.success) return undefined
+  const custody = persistedCustodyFacts(x402Attempt, amount.data)
+  if (custody === undefined) return undefined
   const paymentFacts = externalSpendPaymentFactsFromDispatch({
     invocationRef: recovered.invocationRef,
     principalId: recovered.principalId,
@@ -94,17 +149,66 @@ function x402EvidenceFacts(work: RecoveryWorkContext, submitted: X402Evidence) {
     grantGeneration: recovered.grantGeneration,
     environment: recovered.environment,
     operationRef: recovered.operationRef,
+    ...(recovered.sellerOnboardingCanary === undefined
+      ? {}
+      : { sellerOnboardingCanary: recovered.sellerOnboardingCanary }),
   }, {
-    attemptRef: submitted.attemptRef,
-    effectGeneration: submitted.effectGeneration,
+    attemptRef: x402Attempt.attemptRef,
+    effectGeneration: x402Attempt.effectGeneration,
     providerRef,
-    paymentIdentifier: submitted.paymentIdentifier,
-    challengeDigest: submitted.challengeDigest,
-    amount: submitted.amount,
+    paymentIdentifier: x402Attempt.paymentIdentifier,
+    challengeDigest: x402Attempt.challengeDigest,
+    amount: amount.data,
+    ...custody,
   })
-  const externalIdentity = externalSpendIdentityMatchingReservationRef(paymentFacts, submitted.reservationRef)
+  const externalIdentity = externalSpendIdentityMatchingReservationRef(
+    paymentFacts,
+    x402Attempt.reservationRef,
+  )
   const observedAt = Date.parse(submitted.observedAt)
   return externalIdentity === undefined ? undefined : { providerRef, externalIdentity, observedAt }
+}
+
+function persistedCustodyFacts(
+  attempt: NonNullable<RecoveryWorkContext['x402Attempt']>,
+  paymentAmount: ExactAmount,
+): Readonly<{
+  custodyRef?: string
+  custodyGeneration?: number
+  custodyDailyMaximum?: ExactAmount
+}> | undefined {
+  const fields = [
+    attempt.custodyBudgetRef,
+    attempt.custodyGeneration,
+    attempt.custodyDailyMaximumUnits,
+  ]
+  const supplied = fields.filter((value) => value !== undefined).length
+  if (supplied === 0) return {}
+  if (supplied !== fields.length) return undefined
+
+  const { custodyBudgetRef, custodyGeneration, custodyDailyMaximumUnits } = attempt
+  if (
+    typeof custodyBudgetRef !== 'string'
+    || custodyBudgetRef.trim().length === 0
+    || typeof custodyGeneration !== 'number'
+    || !Number.isSafeInteger(custodyGeneration)
+    || custodyGeneration <= 0
+    || typeof custodyDailyMaximumUnits !== 'string'
+  ) return undefined
+  const dailyMaximum = exactAmountSchema.safeParse({
+    currency: paymentAmount.currency,
+    units: custodyDailyMaximumUnits,
+    exponent: paymentAmount.exponent,
+  })
+  if (!dailyMaximum.success) return undefined
+
+  // The payment attempt's custodyRef identifies the authorization attempt.
+  // The managed external-spend reservation was minted from custodyBudgetRef.
+  return {
+    custodyRef: custodyBudgetRef,
+    custodyGeneration,
+    custodyDailyMaximum: dailyMaximum.data,
+  }
 }
 
 function validSubmittedEvidence(
@@ -115,12 +219,24 @@ function validSubmittedEvidence(
   const { recovered, operation, x402Attempt } = work
   if (operation.identity.adapterId !== 'x402-fetch:v2' || x402Attempt === null) return false
   return invocationEvidenceMatches(recovered, submitted)
+    && persistedAttemptEvidenceMatches(x402Attempt, submitted)
     && amountEvidenceMatches(x402Attempt, submitted)
     && facts.providerRef === submitted.providerRef
     && /^0x[0-9a-fA-F]{64}$/.test(submitted.transactionHash)
     && paymentResponseDigestMatches(x402Attempt.paymentResponseDigest, submitted.paymentResponseDigest)
     && Number.isFinite(facts.observedAt)
     && submittedDigestMatches(submitted)
+}
+
+function persistedAttemptEvidenceMatches(
+  attempt: NonNullable<RecoveryWorkContext['x402Attempt']>,
+  submitted: X402Evidence,
+): boolean {
+  return submitted.attemptRef === attempt.attemptRef
+    && submitted.effectGeneration === attempt.effectGeneration
+    && submitted.paymentIdentifier === attempt.paymentIdentifier
+    && submitted.challengeDigest === attempt.challengeDigest
+    && submitted.reservationRef === attempt.reservationRef
 }
 
 function invocationEvidenceMatches(
@@ -157,13 +273,19 @@ async function verifySettlement(work: RecoveryWorkContext, submitted: X402Eviden
   try {
     const receipt = await readX402EvmReceipt(
       attempt.network,
+      attempt.asset,
       submitted.transactionHash,
       dispatcher,
       work.recovered.environment,
       attempt.paymentPayer,
       attempt.paymentNonce,
     ).catch(() => undefined)
-    return settlementReceiptMatches(attempt, submitted, receipt)
+    return settlementReceiptMatches(
+      attempt,
+      submitted,
+      receipt,
+      work.recovered.environment,
+    )
   } finally {
     await dispatcher.close().catch(() => undefined)
   }
@@ -173,9 +295,11 @@ function settlementReceiptMatches(
   attempt: NonNullable<RecoveryWorkContext['x402Attempt']>,
   submitted: X402Evidence,
   receipt: Awaited<ReturnType<typeof readX402EvmReceipt>> | undefined,
+  aeEnvironment: RecoveryWorkContext['recovered']['environment'],
 ): boolean {
   if (attempt.paymentPayer === undefined || attempt.paymentNonce === undefined) return false
   const verification = {
+    aeEnvironment,
     response: {
       success: true,
       transaction: submitted.transactionHash,
@@ -196,16 +320,64 @@ function settlementReceiptMatches(
   if (submitted.settlementStatus === 'settled') {
     return verifyExactEvmX402Settlement({ ...verification, receipt })
   }
-  return failedSettlementVerified(verification, receipt)
+  return failedX402SettlementVerified(verification, attempt, receipt)
 }
 
-function failedSettlementVerified(
+export function failedX402SettlementVerified(
   verification: Omit<Parameters<typeof verifyExactEvmX402Settlement>[0], 'receipt'>,
-  receipt: Awaited<ReturnType<typeof readX402EvmReceipt>> | undefined,
+  attempt: FailedAuthorizationAttempt,
+  receipt: FailedAuthorizationReceipt,
 ): boolean {
-  if (receipt === undefined || receipt.confirmations < 12n || receipt.authorizationState !== false) return false
-  return receipt.status === 'reverted'
-    || !verifyExactEvmX402Settlement({ ...verification, receipt: { ...receipt, authorizationState: true } })
+  const disposition = failedX402SettlementAuthorizationDisposition(
+    attempt,
+    receipt,
+    verification.aeEnvironment,
+  )
+  if (disposition === 'cancelled') return true
+  return disposition === 'expired'
+    && receipt?.status === 'reverted'
+    && receipt.authorizationState === false
+    && verifyExactEvmX402AuthorizationTransaction({
+      ...verification,
+      ...(attempt.paymentAuthorizationExpiresAt === undefined
+        ? {}
+        : { paymentAuthorizationExpiresAt: attempt.paymentAuthorizationExpiresAt }),
+      receipt,
+    })
+}
+
+/**
+ * A reverted transaction leaves an EIP-3009 signature live. It is safe to
+ * issue a fresh authorization only at/after the exclusive validBefore bound,
+ * or when a confirmed token-contract cancellation consumed the exact nonce.
+ */
+export function failedX402SettlementAuthorizationDisposition(
+  attempt: FailedAuthorizationAttempt,
+  receipt: FailedAuthorizationReceipt,
+  aeEnvironment: RecoveryWorkContext['recovered']['environment'],
+): 'expired' | 'cancelled' | undefined {
+  if (receipt === undefined || receipt.confirmations < 12n) return undefined
+  if (verifyExactEvmX402AuthorizationCancellation({
+    aeEnvironment,
+    asset: attempt.asset,
+    payer: attempt.paymentPayer,
+    paymentNonce: attempt.paymentNonce,
+    receipt,
+  })) return 'cancelled'
+  const expiresAt = attempt.paymentAuthorizationExpiresAt
+  const authorizationExpired = [
+    receipt.status === 'reverted',
+    receipt.authorizationState === false,
+    typeof expiresAt === 'number',
+    typeof expiresAt === 'number' && Number.isSafeInteger(expiresAt),
+    typeof expiresAt === 'number' && expiresAt > 0,
+    typeof receipt.observedBlockTimestamp === 'bigint',
+    typeof expiresAt === 'number'
+      && receipt.observedBlockTimestamp * 1_000n >= BigInt(expiresAt),
+  ].every(Boolean)
+  return authorizationExpired
+    ? 'expired'
+    : undefined
 }
 
 async function persistX402Money(
@@ -215,6 +387,24 @@ async function persistX402Money(
   externalIdentity: NonNullable<ReturnType<typeof externalSpendIdentityMatchingReservationRef>>,
   observedAt: number,
 ): Promise<boolean> {
+  if (work.recovered.sellerOnboardingCanary !== undefined) {
+    const reconciled = await ctx.runMutation(
+      internal.capabilityOperationPreSubmissionRecovery.reconcilePostSubmissionX402Money,
+      {
+        ...externalIdentity,
+        inputDigest: submitted.inputDigest,
+        settlementStatus: submitted.settlementStatus,
+        paymentResponseDigest: submitted.paymentResponseDigest,
+        evidenceRef: submitted.evidenceRef,
+        evidenceDigest: submitted.digest,
+        transportObservationDigest: submitted.transportObservationDigest,
+        transportRequestDigest: submitted.requestDigest,
+        paymentObservationDigest: submitted.paymentObservationDigest,
+        observedAt,
+      },
+    )
+    return reconciled.kind === 'accepted' || reconciled.kind === 'replayed'
+  }
   const payment = await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, {
     dispatchRef: work.recovered.invocationRef,
     attemptRef: submitted.attemptRef,
@@ -247,6 +437,20 @@ async function persistX402Money(
       })
     : { kind: 'refused' as const }
   const brokered = await reconcileBrokeredMoney(ctx, work, submitted, payment.kind, external.kind)
+  if (
+    payment.kind !== 'settled'
+    || external.kind !== 'accepted'
+    || brokered.kind === 'reconciliation_required'
+  ) {
+    console.warn('x402_payment_recovery_money', {
+      invocationRef: submitted.invocationRef,
+      attemptRef: submitted.attemptRef,
+      effectGeneration: submitted.effectGeneration,
+      payment: payment.kind,
+      external: external.kind,
+      brokered: brokered.kind,
+    })
+  }
   return payment.kind === 'settled'
     && external.kind === 'accepted'
     && brokered.kind !== 'reconciliation_required'

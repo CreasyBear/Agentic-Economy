@@ -9,28 +9,31 @@ export const Route = createFileRoute('/SKILL.md')({
   server: {
     handlers: {
       GET: ({ request }) => handlePublicAgentSkillRequest(request),
-      POST: () => methodNotAllowed(['GET']),
-      PUT: () => methodNotAllowed(['GET']),
-      PATCH: () => methodNotAllowed(['GET']),
-      DELETE: () => methodNotAllowed(['GET']),
-      HEAD: () => methodNotAllowed(['GET']),
-      OPTIONS: () => methodNotAllowed(['GET']),
-      TRACE: () => methodNotAllowed(['GET']),
-      CONNECT: () => methodNotAllowed(['GET']),
+      POST: () => methodNotAllowed(['GET', 'HEAD']),
+      PUT: () => methodNotAllowed(['GET', 'HEAD']),
+      PATCH: () => methodNotAllowed(['GET', 'HEAD']),
+      DELETE: () => methodNotAllowed(['GET', 'HEAD']),
+      HEAD: ({ request }) => handlePublicAgentSkillRequest(request, true),
+      OPTIONS: () => methodNotAllowed(['GET', 'HEAD']),
+      TRACE: () => methodNotAllowed(['GET', 'HEAD']),
+      CONNECT: () => methodNotAllowed(['GET', 'HEAD']),
     },
   },
 })
 
-export function handlePublicAgentSkillRequest(request: Request): Response {
+export function handlePublicAgentSkillRequest(request: Request, head = false): Response {
   const { baseUrl } = resolveCanonicalBaseUrl(request)
   const body = buildPublicAgentSkillMarkdown({
     canonicalBaseUrl: baseUrl,
     routingBaseUrl: process.env.AE_ROUTING_PUBLIC_BASE_URL?.trim() || baseUrl,
   })
-  return discoveryTextResponse(body, 'text/markdown; charset=utf-8')
+  const response = discoveryTextResponse(body, 'text/markdown; charset=utf-8')
+  return head ? new Response(null, { status: response.status, headers: response.headers }) : response
 }
 
 /** Nitro's explicit route keeps `.md` out of the dev asset fallback. */
 export default function handlePublicAgentSkillNitroRequest(event: { req: Request }): Response {
-  return handlePublicAgentSkillRequest(event.req)
+  if (event.req.method === 'GET') return handlePublicAgentSkillRequest(event.req)
+  if (event.req.method === 'HEAD') return handlePublicAgentSkillRequest(event.req, true)
+  return methodNotAllowed(['GET', 'HEAD'])
 }

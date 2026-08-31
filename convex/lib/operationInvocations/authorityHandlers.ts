@@ -35,6 +35,7 @@ import {
   type OperationPrincipal,
   type ReconciledInvocationAuthority,
 } from './contracts'
+import { readExactSellerOnboardingCanaryPlatformGrantHandler } from '../../capabilitySupplyCanaryFunding'
 
 export const resolveInvocationAgentAuthorityRef = makeFunctionReference<
   'mutation',
@@ -99,12 +100,83 @@ export async function reconcileInvocationWorkloadAuthorityHandler(
   args: Readonly<{ invocationRef: string }>,
 ): Promise<Infer<typeof reconciledInvocationAuthorityResult>> {
   const now = Date.now()
-  const authority = await reconcilePersistedInvocationAuthority(ctx, args.invocationRef, now)
+  const sellerCanaryAuthority = await reconcilePersistedSellerCanaryAuthority(
+    ctx,
+    args.invocationRef,
+    now,
+  )
+  const authority = sellerCanaryAuthority === undefined
+    ? await reconcilePersistedInvocationAuthority(ctx, args.invocationRef, now)
+    : sellerCanaryAuthority
   if (authority === null) {
     await refuseInvocationBeforeEffectForInvalidAuthority(ctx, args.invocationRef, now)
     return { kind: 'refused' }
   }
   return { kind: 'authorized', authority }
+}
+
+function sellerCanaryDispatchAuthorityMatches(
+  row: Doc<'capabilityOperationInvocations'>,
+  canary: NonNullable<Doc<'capabilityOperationInvocations'>['sellerOnboardingCanary']>,
+): boolean {
+  return [
+    row.environment === 'sandbox',
+    canary.funding.grantRef === row.grantRef,
+    canary.funding.principalId === row.principalId,
+    canary.funding.ownerId === row.ownerId,
+    canary.funding.credentialId === row.credentialId,
+    canary.funding.applicationRef === row.applicationRef,
+    canary.funding.grantGeneration === row.grantGeneration,
+    canary.funding.policyDigest === row.policyDigest,
+  ].every(Boolean)
+}
+
+/**
+ * Seller canaries are platform-owned synthetic workloads, not external agent
+ * credentials. They therefore reconcile against the exact sealed platform
+ * grant/principal pair instead of the ordinary external identity/delegation
+ * chain. `undefined` means the invocation is not a seller canary and must use
+ * the generic authority path; `null` means a canary was present but stale.
+ */
+async function reconcilePersistedSellerCanaryAuthority(
+  ctx: MutationCtx,
+  invocationRef: string,
+  now: number,
+): Promise<ReconciledInvocationAuthority | null | undefined> {
+  const row = await ctx.db.query('capabilityOperationInvocations')
+    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+    .unique()
+  if (row === null || row.sellerOnboardingCanary === undefined) return undefined
+  const canary = row.sellerOnboardingCanary
+  if (!sellerCanaryDispatchAuthorityMatches(row, canary)) return null
+
+  const grant = await readExactSellerOnboardingCanaryPlatformGrantHandler(ctx, {
+    sellerOwnerId: canary.ownerId,
+    expected: {
+      kind: 'persisted_dispatch',
+      grantRef: row.grantRef,
+      principalId: row.principalId,
+      ownerId: row.ownerId,
+      credentialId: row.credentialId,
+      applicationRef: row.applicationRef,
+      environment: 'sandbox',
+      generation: row.grantGeneration,
+      policyDigest: row.policyDigest,
+      expiresAt: row.grantExpiresAt,
+    },
+    now,
+  })
+  return grant === null
+    ? null
+    : Object.freeze({
+        principalId: grant.principalId,
+        accountRef: grant.ownerId,
+        credentialId: grant.credentialId,
+        grantRef: grant.grantRef,
+        grantGeneration: grant.generation,
+        policyDigest: grant.policyDigest,
+        expiresAt: grant.expiresAt,
+      })
 }
 
 export async function canonicalAgentPrincipal(

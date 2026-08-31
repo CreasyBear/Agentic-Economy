@@ -17,6 +17,7 @@ const expectedCommands = [
   "call",
   "cancel",
   "compare",
+  "config",
   "connect",
   "doctor",
   "fund",
@@ -81,6 +82,7 @@ try {
   );
   let tarball;
   let digest;
+  let publicArtifactDigest;
 
   if (mode === "prepacked") {
     tarball = resolve(suppliedTarball);
@@ -132,6 +134,19 @@ try {
 
     tarball = join(temporary, filename);
     digest = createHash("sha256").update(await readFile(tarball)).digest("hex");
+
+    const publicArtifact = resolve(repositoryRoot, "public", "downloads", filename);
+    let publicArtifactBytes;
+    try {
+      publicArtifactBytes = await readFile(publicArtifact);
+    } catch {
+      throw new Error(`Public CLI artifact is missing: ${publicArtifact}. Run npm run pack:cli:public.`);
+    }
+    publicArtifactDigest = createHash("sha256").update(publicArtifactBytes).digest("hex");
+    assert(
+      publicArtifactDigest === digest,
+      `Public CLI artifact is stale: expected ${digest}, received ${publicArtifactDigest}. Run npm run pack:cli:public.`,
+    );
   }
 
   const consumer = join(temporary, "consumer");
@@ -202,6 +217,9 @@ try {
   process.stdout.write(`CLI_PACKAGE_MODE=${mode}\n`);
   process.stdout.write(`CLI_PACKAGE_FILES=${packageFiles.join(",")}\n`);
   process.stdout.write(`CLI_PACKAGE_SHA256=${digest}\n`);
+  if (publicArtifactDigest !== undefined) {
+    process.stdout.write(`CLI_PUBLIC_PACKAGE_SHA256=${publicArtifactDigest}\n`);
+  }
   process.stdout.write("CLI_PACKAGE_IMPORTS=BLOCKED\n");
   process.stdout.write("CLI_PACKAGE_PASS\n");
 } finally {

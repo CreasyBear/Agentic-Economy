@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type RefObject, type ReactNode } from 'rea
 import { Link } from '@tanstack/react-router'
 import { MenuIcon, XIcon } from 'lucide-react'
 
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { emitFunnelEventOnce } from '@/lib/observability/funnel-client'
 import {
   AeSiteButton,
@@ -76,8 +77,14 @@ function useHeaderElevated(sentinelRef: RefObject<HTMLDivElement | null>): boole
 
 export function AePublicShell({ children }: AePublicShellProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [commandOpen, setCommandOpen] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const elevated = useHeaderElevated(sentinelRef)
+
+  function handleCommandOpenChange(open: boolean) {
+    if (open) setMobileNavOpen(false)
+    setCommandOpen(open)
+  }
 
   return (
     <div className="relative flex min-h-dvh flex-col">
@@ -101,19 +108,23 @@ export function AePublicShell({ children }: AePublicShellProps) {
             <PublicBrandLink />
             <AeSitePrimaryNav />
             <div className="ms-auto flex items-center gap-intra">
+              <CommandPanelProvider open={commandOpen} onOpenChange={handleCommandOpenChange}>
+                <AeCommandPanel />
+              </CommandPanelProvider>
               <AeSiteButton asChild variant="outlined" className="hidden md:inline-flex">
                 <Link to="/sign-in/$" params={{ _splat: '' }}>Sign in</Link>
               </AeSiteButton>
               <AeSiteButton asChild>
-                <Link to="/sign-up/$" params={{ _splat: '' }}>Create account</Link>
+                <Link to="/for-providers">Publish</Link>
               </AeSiteButton>
-              <AeSiteIconButton
-                ariaLabel="Open public menu"
-                className="md:hidden"
-                onClick={() => setMobileNavOpen(true)}
-              >
-                <MenuIcon aria-hidden="true" />
-              </AeSiteIconButton>
+              <SheetTrigger asChild>
+                <AeSiteIconButton
+                  ariaLabel={mobileNavOpen ? 'Close public menu' : 'Open public menu'}
+                  className="md:hidden"
+                >
+                  <MenuIcon aria-hidden="true" />
+                </AeSiteIconButton>
+              </SheetTrigger>
             </div>
           </div>
           <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)] p-0" showCloseButton={false}>
@@ -132,7 +143,7 @@ export function AePublicShell({ children }: AePublicShellProps) {
                 <Link to="/sign-in/$" params={{ _splat: '' }} onClick={() => setMobileNavOpen(false)}>Sign in</Link>
               </AeSiteButton>
               <AeSiteButton asChild>
-                <Link to="/sign-up/$" params={{ _splat: '' }} onClick={() => setMobileNavOpen(false)}>Create account</Link>
+                <Link to="/for-providers" onClick={() => setMobileNavOpen(false)}>Publish</Link>
               </AeSiteButton>
             </div>
           </SheetContent>

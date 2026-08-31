@@ -47,6 +47,7 @@ function productionReadinessEnvironment(): Record<string, string> {
     AE_X402_CDP_EXPECTED_EVM_ADDRESS: '0x0000000000000000000000000000000000000001',
     AE_X402_CDP_ACCOUNT_POLICY_ID: '11111111-1111-4111-8111-111111111111',
     AE_X402_CDP_PROJECT_POLICY_ID: '22222222-2222-4222-8222-222222222222',
+    AE_X402_CDP_POLICY_RULES_DIGEST: `sha256:${'a'.repeat(64)}`,
     AE_X402_CDP_CREDENTIAL_GENERATION: '7',
     AE_X402_CUSTODY_ENABLED: 'true',
     AE_X402_CUSTODY_MAX_ATOMIC: '100000000',
@@ -116,6 +117,53 @@ describe('operational diagnostics routes', () => {
     expect(fetchImpl).toHaveBeenCalledOnce()
   })
 
+  it('projects public ready state without internal deployment inventory', async () => {
+    const response = await handleReadyRequest(
+      new Request('https://ae.example/api/ready'),
+      {
+        env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' },
+        fetch: vi.fn(async () => new Response(null, { status: 200 })),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const body = await response.json()
+    expect(body).toEqual({
+      status: 'ready',
+      checks: { config: 'ready', convex: 'ready' },
+    })
+    const serialized = JSON.stringify(body)
+    for (const internalName of ['diagnostics', 'CONVEX_URL', 'SENTRY_DSN', 'release-readback', 'source-authority']) {
+      expect(serialized).not.toContain(internalName)
+    }
+  })
+
+  it('projects ready and degraded HEAD responses without a body', async () => {
+    const request = (correlationId: string) => new Request('https://ae.example/api/ready', {
+      method: 'HEAD',
+      headers: { 'x-ae-request-id': correlationId },
+    })
+    const options = (status: number) => ({
+      env: { NODE_ENV: 'test', CONVEX_URL: 'https://convex.example' },
+      fetch: vi.fn(async () => new Response(null, { status })),
+    })
+
+    const ready = await handleReadyRequest(request('corr_ready_head'), options(200), true)
+    expect(ready.status).toBe(200)
+    expect(ready.headers.get('cache-control')).toBe('no-store')
+    expect(ready.headers.get('content-type')).toBe('application/json')
+    expect(ready.headers.get('x-ae-request-id')).toBe('corr_ready_head')
+    await expect(ready.text()).resolves.toBe('')
+
+    const degraded = await handleReadyRequest(request('corr_degraded_head'), options(503), true)
+    expect(degraded.status).toBe(503)
+    expect(degraded.headers.get('cache-control')).toBe('no-store')
+    expect(degraded.headers.get('content-type')).toBe('application/problem+json')
+    expect(degraded.headers.get('x-ae-request-id')).toBe('corr_degraded_head')
+    await expect(degraded.text()).resolves.toBe('')
+  })
+
   it('projects config diagnostics as names and booleans only', () => {
     const configuredSecret = 'openrouter-test-secret-value'
     const diagnostics = readNamesOnlyReadinessDiagnostics({
@@ -176,14 +224,25 @@ describe('operational diagnostics routes', () => {
     expect(routeResponse.status).toBe(503)
     expect(routeResponse.headers.get('content-type')).toBe('application/problem+json')
     expect(routeResponse.headers.get('x-ae-request-id')).toBe('corr_ready_1')
-    await expect(routeResponse.json()).resolves.toMatchObject({
+    expect(routeResponse.headers.get('cache-control')).toBe('no-store')
+    const body = await routeResponse.json()
+    expect(body).toEqual({
+      type: 'about:blank',
+      title: 'Unavailable',
+      status: 503,
+      detail: 'Required server readiness checks did not pass.',
       kind: 'UNAVAILABLE',
       code: 'server_not_ready',
+      retryable: true,
       checks: {
         config: 'ready',
         convex: { status: 'failed', code: 'convex_probe_failed' },
       },
     })
+    const serialized = JSON.stringify(body)
+    for (const internalName of ['diagnostics', 'CONVEX_URL', 'SENTRY_DSN', 'release-readback', 'source-authority']) {
+      expect(serialized).not.toContain(internalName)
+    }
   })
 
   it('dispatches a normalized client error without retaining secrets or URL query values', async () => {

@@ -21,7 +21,7 @@ export const Route = createFileRoute("/")({
   validateSearch: validateRootSearch,
   beforeLoad: ({ search }) => {
     if (search.q !== undefined) {
-      throw redirect({ to: "/t/new", search: { q: search.q } });
+      throw redirect({ to: "/market", search: { window: "30d", query: search.q } });
     }
   },
   loader: async () => {

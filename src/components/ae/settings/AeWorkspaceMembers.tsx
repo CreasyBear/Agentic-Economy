@@ -35,7 +35,7 @@ export function AeWorkspaceMembers({
         {unavailable ? (
           <AeEmptyState
             title="Agent callers are unavailable"
-            description="Try Keys in a moment. If this keeps happening, use Help & corrections."
+            description="Try Keys in a moment. If this keeps happening, open Help."
             role="alert"
             action={
               <Button asChild variant="secondary" className="min-h-touch">
@@ -62,7 +62,7 @@ export function AeWorkspaceMembers({
                 key={item.key.keyId}
                 title={item.key.name}
                 description={agentCallerDescription(item)}
-                href="/agent-access"
+                href={`/agent-access?caller=${encodeURIComponent(item.principalId)}`}
               />
             ))}
             <Button asChild variant="secondary" className="min-h-touch justify-self-start">

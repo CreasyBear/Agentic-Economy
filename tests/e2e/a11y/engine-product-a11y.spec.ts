@@ -26,9 +26,9 @@ test.describe('market product accessibility', () => {
     const primary = page.getByRole('navigation', {
       name: compact ? 'Public navigation' : 'Primary',
     })
-    await expect(primary.getByRole('link', { name: 'Ask' })).toBeVisible()
     await expect(primary.getByRole('link', { name: 'Discover' })).toBeVisible()
-    await expect(primary.getByRole('link', { name: 'Connections' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'For agents' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'For suppliers' })).toBeVisible()
     await expect(primary.getByRole('link', { name: 'Activity' })).toBeVisible()
   })
 

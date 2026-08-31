@@ -16,7 +16,13 @@ import {
   AeSiteSection,
   AeSiteSignoff,
 } from '@/components/ae/website'
-import { AGENT_PAGE, AGENT_SETUP_INSTRUCTION, BUSINESS_DOOR } from '@/content/brand-copy'
+import {
+  AGENT_PAGE,
+  AGENT_SETUP_INSTRUCTION,
+  AGENT_STARTER_INSTRUCTION,
+  BUSINESS_DOOR,
+} from '@/content/brand-copy'
+import { aeCliInstallCommand, aeMcpInstallCommand } from '@/lib/cli-distribution'
 import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
@@ -58,21 +64,27 @@ export function AeAgentDoorPage({ canonicalBaseUrl }: { canonicalBaseUrl: string
               </AeSiteButton>
             </div>
           </AeSiteHeroIntro>
-          <div className="order-1 md:order-2 md:mt-hero">
+          <div className="order-1 grid gap-section md:order-2 md:mt-hero">
             <AeAgentInstructionCard
               headingId="agent-setup"
               instruction={AGENT_SETUP_INSTRUCTION}
+            />
+            <AeAgentInstructionCard
+              headingId="agent-starter"
+              instruction={AGENT_STARTER_INSTRUCTION}
             />
           </div>
         </div>
       </AeSiteSection>
       <AeSiteSection labelledBy="agent-quickstart" scheme="surface">
-        <h2 id="agent-quickstart" className="sr-only">Four-step agent quickstart</h2>
+        <h2 id="agent-quickstart" className="sr-only">Six-step agent quickstart</h2>
         <div className="grid divide-y divide-border border-y border-border">
-          <AeAgentQuickstartStep number="01" title="Search" access="Public" command={`${CLI_ENTRYPOINT} search "weather forecast" --base-url "${canonicalBaseUrl}"`} body="Find live tools by the outcome you need." />
-          <AeAgentQuickstartStep number="02" title="Inspect" access="Public" command={`${CLI_ENTRYPOINT} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}"`} body="Read exact inputs, total price, readiness, and provider." />
-          <AeAgentQuickstartStep number="03" title="Call" access="Public when eligible" command={`${CLI_ENTRYPOINT} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait`} body="Eligible tools return the result immediately." />
-          <AeAgentQuickstartStep number="04" title="Connect if asked" access="Once" command={`npx @agentic-economy/cli connect --base-url "${canonicalBaseUrl}" --mcp`} body="Only if the selected tool cannot run anonymously." />
+          <AeAgentQuickstartStep number="01" title="Install" access="Once" command={`${aeCliInstallCommand(canonicalBaseUrl)} && ${CLI_ENTRYPOINT} --version`} body="Install the pinned CLI from this deployment and prove it is ready." />
+          <AeAgentQuickstartStep number="02" title="Search" access="Public" command={`${CLI_ENTRYPOINT} search "weather forecast" --base-url "${canonicalBaseUrl}"`} body="Find live tools by the outcome you need." />
+          <AeAgentQuickstartStep number="03" title="Add MCP" access="Once per harness" command={aeMcpInstallCommand(canonicalBaseUrl)} body={'Replace <agent> with codex, claude-code, or cursor, then restart that harness.'} />
+          <AeAgentQuickstartStep number="04" title="Inspect" access="Public" command={`${CLI_ENTRYPOINT} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}"`} body="Read exact inputs, total price, readiness, and provider." />
+          <AeAgentQuickstartStep number="05" title="Call" access="Public when eligible" command={`${CLI_ENTRYPOINT} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait`} body="Eligible tools return the result immediately." />
+          <AeAgentQuickstartStep number="06" title="Connect if asked" access="Once" command={`${CLI_ENTRYPOINT} connect --base-url "${canonicalBaseUrl}"`} body="Only if the selected tool cannot run anonymously." />
         </div>
       </AeSiteSection>
       <AeSiteCallout
@@ -178,7 +190,7 @@ function anonymousReads(canonicalBaseUrl: string) {
 function authenticatedCalls(canonicalBaseUrl: string) {
   return [
     {
-      command: `npx @agentic-economy/cli connect --base-url "${canonicalBaseUrl}" --mcp`,
+      command: `${CLI_ENTRYPOINT} connect --base-url "${canonicalBaseUrl}"`,
       route: `POST ${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization} · POST ${AGENT_ACCESS_OAUTH_PATHS.token}`,
       description: 'Obtain one owner-approved AE caller key through the OAuth device flow or validate the configured key against the gateway.',
     },

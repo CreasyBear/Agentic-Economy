@@ -47,6 +47,38 @@ type CatalogRow = {
  * demonstrates all four states through the real public read.
  */
 describe('dev-seeded public catalog decision facts', () => {
+  it('does not scan or mutate unrelated supplier businesses during catalog bootstrap', async () => {
+    const backend = convexTest(schema, modules)
+    await seedDevCatalogAuthority(backend)
+    const foreignBusinessId = await backend.run(async (ctx) => ctx.db.insert('businesses', {
+      owningAccountRef: 'acc_foreign_supplier',
+      slug: 'foreign-unpublished-supplier',
+      name: 'Foreign Unpublished Supplier',
+      normalizedName: 'foreign unpublished supplier',
+      category: 'External service',
+      businessContext: {
+        kind: 'programmable_provider',
+        website: 'https://supplier.example/',
+        providerIdentifier: 'foreign-unpublished-supplier',
+      },
+      publicStatus: 'unpublished',
+      trustTier: 'claimed',
+      sourceHash: 'sha256:foreign-unpublished-supplier',
+      createdAt: 1,
+      updatedAt: 1,
+    }))
+
+    await expect(backend.mutation(internal.devSeed.seedDevCatalog, {})).resolves.toMatchObject({
+      kind: 'seeded',
+      seededSlugs: [],
+    })
+    await expect(backend.run(async (ctx) => ctx.db.get(foreignBusinessId))).resolves.toMatchObject({
+      owningAccountRef: 'acc_foreign_supplier',
+      publicStatus: 'unpublished',
+      updatedAt: 1,
+    })
+  })
+
   it('publishes a catalog without retired seed rows', async () => {
     const backend = convexTest(schema, modules)
     await seedDevCatalogAuthority(backend)

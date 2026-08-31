@@ -1,4 +1,4 @@
-import { encodePaymentResponseHeader } from '@x402/core/http'
+import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
 import { validatePaymentRequired } from '@x402/core/schemas'
 import type { PaymentRequired } from '@x402/core/types'
 import { describe, expect, it, vi } from 'vitest'
@@ -127,6 +127,13 @@ describe('route transport durable identity binding', () => {
       validatePaymentRequired(challenge)
       const send = vi.fn<RouteTransportFetch>()
         .mockImplementationOnce(async (_target, init) => {
+          expect(init?.headers).not.toHaveProperty('Payment-Signature')
+          return new Response(null, {
+            status: 402,
+            headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge) },
+          })
+        })
+        .mockImplementationOnce(async (_target, init) => {
           expect(init?.headers?.['Payment-Signature']).toBe('signed-payment')
           return Response.json({ ok: true }, {
           headers: {
@@ -157,7 +164,8 @@ describe('route transport durable identity binding', () => {
         verifyX402Settlement: async () => true,
       }
       const observed = await invokePreparedRouteTransport(await prepare(invocation(operationKeyDigest, 'x402-fetch:v2')), runtime)
-      signedSendCounts.push(send.mock.calls.length)
+      signedSendCounts.push(send.mock.calls.filter(([, init]) =>
+        init?.headers?.['Payment-Signature'] === 'signed-payment').length)
       return observed
     }
 

@@ -7,6 +7,7 @@ import {
   decideExternalSpendReconciliation,
   decideExternalSpendReversal,
   externalSpendCustodyPolicyRefusal,
+  externalSpendExecutionContextForFacts,
   externalSpendFinalizationDigest,
   externalSpendIdentityDigest,
   externalSpendIdentityFromReservation,
@@ -18,6 +19,22 @@ import {
   type ExternalSpendPaymentFacts,
   type ExternalSpendReservation,
 } from '@/modules/money/internal/external-spend'
+
+const sandboxMarketContext = {
+  kind: 'market',
+  paymentProfile: 'base-sepolia-usdc-exact',
+} as const
+const productionMarketContext = {
+  kind: 'market',
+  paymentProfile: 'base-usdc-exact',
+} as const
+const canaryContext = {
+  kind: 'seller_onboarding_canary',
+  paymentProfile: 'base-sepolia-usdc-exact',
+  canaryRef: 'seller-canary:test',
+  canaryCommitmentDigest: `sha256:${'c'.repeat(64)}`,
+  fundingBudgetRef: 'budget:canary:test',
+} as const
 
 const facts: ExternalSpendPaymentFacts = {
   principalId: 'principal:test',
@@ -33,12 +50,21 @@ const facts: ExternalSpendPaymentFacts = {
   paymentIdentifier: 'payment:test',
   challengeDigest: 'sha256:challenge',
   amount: { currency: 'USD', units: '100', exponent: 2 },
+  executionContext: sandboxMarketContext,
 }
 const identity: ExternalSpendIdentity = mintExternalSpendIdentity(facts)
 const productionCustodyFacts: ExternalSpendPaymentFacts = {
   ...facts,
   environment: 'production',
+  executionContext: productionMarketContext,
   custodyRef: 'custody:wallet:primary',
+  custodyGeneration: 7,
+  custodyDailyMaximum: { currency: 'USD', units: '250', exponent: 2 },
+}
+const sandboxCanaryCustodyFacts: ExternalSpendPaymentFacts = {
+  ...facts,
+  executionContext: canaryContext,
+  custodyRef: 'custody:wallet:canary',
   custodyGeneration: 7,
   custodyDailyMaximum: { currency: 'USD', units: '250', exponent: 2 },
 }
@@ -64,6 +90,16 @@ function reservation(
 describe('external spend policy', () => {
   it('mints reservationRef from money idempotency material and rejects the retired x402 worker hash', () => {
     const minted = mintExternalSpendIdentity(facts)
+    const { executionContext: _executionContext, ...legacyFacts } = facts
+    const legacyIdempotencyDigest = canonicalDigest({
+      format: 'ae.money.external-spend-idempotency:v1',
+      ...legacyFacts,
+    } as StableHashValue)
+    const legacyIdentity: ExternalSpendIdentity = {
+      ...legacyFacts,
+      reservationRef: `external-spend:${legacyIdempotencyDigest}`,
+      idempotencyDigest: legacyIdempotencyDigest,
+    }
     const retiredDigest = canonicalDigest({
       format: 'ae.x402.external-spend-identity:v1',
       ...facts,
@@ -79,6 +115,7 @@ describe('external spend policy', () => {
     expect(minted.idempotencyDigest).not.toBe(retiredDigest)
     expect(externalSpendIdentityDigest(minted)).not.toBe(identityWithoutRef)
     expect(externalSpendIdentityMatchingReservationRef(facts, minted.reservationRef)).toEqual(minted)
+    expect(sameExternalSpendIdentity(minted, legacyIdentity)).toBe(true)
     expect(
       externalSpendIdentityMatchingReservationRef(facts, `external-spend:${retiredDigest}`),
     ).toBeUndefined()
@@ -95,6 +132,88 @@ describe('external spend policy', () => {
       custodyGeneration: productionCustodyFacts.custodyGeneration,
       custodyDailyMaximum: productionCustodyFacts.custodyDailyMaximum,
     })
+  })
+
+  it('accepts sandbox custody only for a complete Base Sepolia seller canary', () => {
+    expect(externalSpendPaymentFactsValid(sandboxCanaryCustodyFacts)).toBe(true)
+    expect(externalSpendCustodyPolicyRefusal(sandboxCanaryCustodyFacts)).toBeUndefined()
+    expect(mintExternalSpendIdentity(sandboxCanaryCustodyFacts)).toMatchObject({
+      executionContext: canaryContext,
+      custodyRef: sandboxCanaryCustodyFacts.custodyRef,
+    })
+  })
+
+  it.each([
+    ['production with the Sepolia market profile', {
+      ...productionCustodyFacts,
+      executionContext: sandboxMarketContext,
+    }],
+    ['sandbox market custody', {
+      ...sandboxCanaryCustodyFacts,
+      executionContext: sandboxMarketContext,
+    }],
+    ['production seller canary custody', {
+      ...sandboxCanaryCustodyFacts,
+      environment: 'production',
+    }],
+    ['canary with a mainnet profile', {
+      ...sandboxCanaryCustodyFacts,
+      executionContext: {
+        ...canaryContext,
+        paymentProfile: 'base-usdc-exact',
+      },
+    }],
+    ['canary missing its commitment digest', {
+      ...sandboxCanaryCustodyFacts,
+      executionContext: {
+        kind: 'seller_onboarding_canary',
+        paymentProfile: 'base-sepolia-usdc-exact',
+        canaryRef: canaryContext.canaryRef,
+        fundingBudgetRef: canaryContext.fundingBudgetRef,
+      },
+    }],
+    ['canary without managed custody', {
+      ...facts,
+      executionContext: canaryContext,
+    }],
+  ] as const)('rejects crossed or partial execution context: %s', (_label, input) => {
+    const invalid = input as ExternalSpendPaymentFacts
+    expect(externalSpendPaymentFactsValid(invalid)).toBe(false)
+    expect(externalSpendCustodyPolicyRefusal(invalid)).toBe(
+      'external_spend_custody_policy_invalid',
+    )
+  })
+
+  it('normalizes legacy market calls but seals canary material into separate identities', () => {
+    expect(externalSpendExecutionContextForFacts({
+      environment: 'sandbox',
+    })).toEqual(sandboxMarketContext)
+    expect(externalSpendExecutionContextForFacts({
+      environment: 'production',
+    })).toEqual(productionMarketContext)
+
+    const { executionContext: _executionContext, ...legacyFacts } = facts
+    const ordinary = mintExternalSpendIdentity(legacyFacts)
+    const canary = mintExternalSpendIdentity(sandboxCanaryCustodyFacts)
+    expect(ordinary.executionContext).toEqual(sandboxMarketContext)
+    expect(canary.idempotencyDigest).not.toBe(ordinary.idempotencyDigest)
+    expect(canary.reservationRef).not.toBe(ordinary.reservationRef)
+
+    for (const executionContext of [
+      { ...canaryContext, canaryRef: 'seller-canary:changed' },
+      {
+        ...canaryContext,
+        canaryCommitmentDigest: `sha256:${'d'.repeat(64)}`,
+      },
+      { ...canaryContext, fundingBudgetRef: 'budget:canary:changed' },
+    ] as const) {
+      const changed = mintExternalSpendIdentity({
+        ...sandboxCanaryCustodyFacts,
+        executionContext,
+      })
+      expect(changed.idempotencyDigest).not.toBe(canary.idempotencyDigest)
+      expect(sameExternalSpendIdentity(canary, changed)).toBe(false)
+    }
   })
 
   it.each([
@@ -230,6 +349,22 @@ describe('external spend policy', () => {
     })).toMatchObject({
       kind: 'transition',
       target: 'released',
+    })
+  })
+
+  it('reconciles a still-reserved effect when confirmed evidence arrives after the finalization write was lost', () => {
+    expect(decideExternalSpendReconciliation({
+      identity,
+      reservation: reservation('reserved'),
+      command: {
+        settlementStatus: 'settled',
+        paymentResponseDigest: 'sha256:payment',
+        evidenceRef: 'evidence:confirmed-chain-receipt',
+        evidenceDigest: 'sha256:confirmed-chain-receipt',
+      },
+    })).toMatchObject({
+      kind: 'transition',
+      target: 'settled',
     })
   })
 

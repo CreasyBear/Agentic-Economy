@@ -201,7 +201,14 @@ if (manifestResult.response?.status !== 200) {
   record(2, true, 'HTTP 200 with four canonical reads and one authenticated invoke endpoint')
 }
 
-const search = await post(OPERATION_PATHS[0], { query: '', limit: 20 })
+// Shape-only parity is a false positive: a catalogue full of inspect-only or
+// unavailable entries cannot complete the market loop. Use the public filter
+// an agent would use and require at least one callable Operation.
+const search = await post(OPERATION_PATHS[0], {
+  query: '',
+  limit: 20,
+  filters: { availability: ['routeable'] },
+})
 const searchKinds = ['ok', 'no_candidates', 'unavailable']
 const searchUnavailableReasons = ['query_invalid', 'source_unavailable', 'source_capacity_exceeded']
 let searchRefs = []
@@ -222,6 +229,7 @@ if (searchValid && search.data.kind === 'ok') {
     && search.data.pagination.limit <= 20
     && typeof search.data.pagination.hasMore === 'boolean'
     && (search.data.pagination.nextCursor === undefined || isNonEmptyString(search.data.pagination.nextCursor))
+    && searchRefs.length > 0
 } else if (searchValid && search.data.kind === 'no_candidates') {
   searchValid = typeof search.data.query === 'string'
     && isRecord(search.data.appliedFilters)
@@ -231,10 +239,11 @@ if (searchValid && search.data.kind === 'ok') {
 } else if (searchValid && search.data.kind === 'unavailable') {
   searchValid = searchUnavailableReasons.includes(search.data.reason)
 }
+searchValid = searchValid && searchRefs.length > 0
 if (search.response?.status !== 200) {
   record(3, false, requestFailure(search))
 } else if (!searchValid) {
-  record(3, false, 'search response is outside the compact registry-operations:v1 contract')
+  record(3, false, 'search returned no callable Operation or left the compact registry-operations:v1 contract')
 } else {
   record(3, true, `HTTP 200 ${search.data.kind}${searchRefs.length === 0 ? '' : ` with ${searchRefs.length} choice(s)`}`)
 }
@@ -271,11 +280,11 @@ if (detailValid && detail.data.kind === 'found') {
 } else if (detailValid && detail.data.kind === 'not_found') {
   detailValid = detail.data.operationRef === detailRef && validNavigation(detail.data.navigation)
 }
-if (detailRef === MISSING_OPERATION_REF) detailValid = detailValid && detail.data?.kind === 'not_found'
+detailValid = detailRef !== MISSING_OPERATION_REF && detail.data?.kind === 'found' && detailValid
 if (detail.response?.status !== 200) {
   record(4, false, requestFailure(detail))
 } else if (!detailValid) {
-  record(4, false, 'detail response is outside the full Operation descriptor contract')
+  record(4, false, 'no callable Operation produced a full exact Operation descriptor')
 } else {
   record(4, true, `HTTP 200 ${detail.data.kind} for the exact operationRef without provider fetches`)
 }
@@ -302,10 +311,11 @@ if (compareValid && compare.data.kind === 'ok') {
 } else if (compareValid && compare.data.kind === 'unavailable') {
   compareValid = compareReasons.includes(compare.data.reason)
 }
+compareValid = compare.data?.kind === 'ok' && compareValid
 if (compare.response?.status !== 200) {
   record(5, false, requestFailure(compare))
 } else if (!compareValid) {
-  record(5, false, 'compare response does not correspond to the requested operationRefs')
+  record(5, false, 'callable Operation comparison did not succeed for the requested operationRefs')
 } else {
   record(5, true, `HTTP 200 ${compare.data.kind} for ${requestedRefs.length} exact ref(s)`)
 }
@@ -340,6 +350,7 @@ if (inspectPlanValid && inspectPlan.data.kind === 'ok') {
   inspectPlanValid = inspectPlanReasons.includes(inspectPlan.data.reason)
     && (inspectPlan.data.operationRef === undefined || requestedRefs.includes(inspectPlan.data.operationRef))
 }
+inspectPlanValid = inspectPlan.data?.kind === 'ok' && inspectPlanValid
 const gateway = manifest?.operationGateway
 const manifestSafetyValid = gateway?.contract === 'operation.invoke:v1'
   && gateway.action === 'operation.invoke'

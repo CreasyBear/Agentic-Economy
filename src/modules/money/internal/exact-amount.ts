@@ -15,7 +15,7 @@ export const exactAmountSchema = z.strictObject({
   currency: currencySchema,
   units: z.string().regex(canonicalUnits),
   exponent: z.number().int().min(0).max(18),
-})
+}).meta({ id: 'ExactAmount' })
 
 export function readExactAmount(value: unknown): ExactAmount | undefined {
   try {

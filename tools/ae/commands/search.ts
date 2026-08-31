@@ -60,32 +60,81 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
       cursorProvided: parsedInput.data.cursor !== undefined,
     })
   }
-  const nextCommand = result.kind === 'ok' && result.pagination.hasMore && result.pagination.nextCursor !== undefined
+  const originContinuation = options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+    ? []
+    : ['--base-url', options.baseUrl]
+  const outputContinuation = options.json ? ['--json'] : []
+  const technicalContinuation = options.technical ? ['--technical'] : []
+  const filtersContinuation = options.filters === undefined
+    ? []
+    : ['--filters', JSON.stringify(parsedInput.data.filters)]
+  const nextPageCommand = result.kind === 'ok' && result.pagination.hasMore && result.pagination.nextCursor !== undefined
     ? continuationCommand([
         'ae', 'search', result.query,
         ...(options.limit === undefined ? [] : ['--limit', options.limit]),
-        ...(options.filters === undefined ? [] : [
-          '--filters',
-          typeof options.filters === 'string' ? JSON.stringify(parsedInput.data.filters) : JSON.stringify(options.filters),
-        ]),
+        ...filtersContinuation,
         '--cursor', result.pagination.nextCursor,
+        ...originContinuation,
+        ...outputContinuation,
+        ...technicalContinuation,
       ])
+    : undefined
+  const nextActionCommand = result.kind === 'ok' && result.items.length > 0
+    ? result.items.length === 1
+      ? continuationCommand([
+          'ae', 'inspect', result.items[0]?.operationRef,
+          ...originContinuation,
+          ...outputContinuation,
+          ...technicalContinuation,
+        ])
+      : continuationCommand([
+          'ae', 'compare', ...result.items.slice(0, 4).map(({ operationRef }) => operationRef),
+          ...originContinuation,
+          ...outputContinuation,
+          ...technicalContinuation,
+        ])
     : undefined
   const browseCommand = continuationCommand([
     'ae', 'search',
     ...(options.limit === undefined ? [] : ['--limit', options.limit]),
+    ...originContinuation,
+    ...outputContinuation,
+    ...technicalContinuation,
   ])
-  const requestCommand = result.kind === 'no_candidates' && result.query.length > 0
-    ? continuationCommand(['ae', 'request', 'create', result.query])
+  const hasSearchFilters = options.filters !== undefined
+  const requestCommand = result.kind === 'no_candidates' && result.query.length > 0 && !hasSearchFilters
+    ? continuationCommand([
+        'ae', 'request', 'create', result.query,
+        ...originContinuation,
+        ...outputContinuation,
+      ])
+    : undefined
+  const broadenSearchCommand = result.kind === 'no_candidates' && result.query.length > 0 && hasSearchFilters
+    ? continuationCommand([
+        'ae', 'search',
+        ...(options.limit === undefined ? [] : ['--limit', options.limit]),
+        ...filtersContinuation,
+        ...originContinuation,
+        ...outputContinuation,
+        ...technicalContinuation,
+      ])
     : undefined
   const nextHref = result.kind === 'no_candidates'
     ? new URL('/market', options.baseUrl).toString()
     : undefined
   if (options.json) {
+    const jsonResult = result.kind !== 'ok' || options.technical
+      ? result
+      : {
+          ...result,
+          items: result.items.map(({ navigation: _navigation, ...item }) => item),
+        }
     printJson({
-      ...result,
-      ...(nextCommand === undefined ? {} : { nextCommand }),
-      ...(requestCommand === undefined ? {} : { nextCommand: requestCommand }),
+      ...jsonResult,
+      ...(nextActionCommand === undefined && requestCommand === undefined && broadenSearchCommand === undefined
+        ? {}
+        : { nextCommand: requestCommand ?? broadenSearchCommand ?? nextActionCommand }),
+      ...(nextPageCommand === undefined ? {} : { nextPageCommand }),
       ...(result.kind === 'no_candidates' ? { browseCommand } : {}),
       ...(nextHref === undefined ? {} : { nextHref }),
     })
@@ -96,8 +145,11 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     ? `Current Market Operations (${outcome.durationMs}ms)`
     : `Market Operations for "${result.query}" (${outcome.durationMs}ms)`)
   if (result.kind === 'no_candidates') {
-    line('  No current Operations match this job.')
+    line(hasSearchFilters
+      ? '  No current Operations match these filters.'
+      : '  No current Operations match this job.')
     if (requestCommand !== undefined) line(`  Remember this missing job: ${requestCommand}`)
+    if (broadenSearchCommand !== undefined) line(`  Browse matching filters: ${broadenSearchCommand}`)
     line(`  Browse all: ${browseCommand}`)
     line(`  Browser: ${nextHref}`)
     return
@@ -116,11 +168,10 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     line(`     last verified: ${formatOperationVerification(operation)}`)
     line(`     inputs: ${formatOperationInputs(operation)}`)
   }
-  line(
-    result.pagination.hasMore
-      ? `  Next: ${nextCommand ?? 'ae search --cursor <cursor>'}`
-      : '  End of results.',
-  )
+  if (nextActionCommand !== undefined) line(`  Next: ${nextActionCommand}`)
+  line(result.pagination.hasMore
+    ? `  More results: ${nextPageCommand ?? 'ae search --cursor <cursor>'}`
+    : '  End of results.')
 }
 
 function parseSearchLimit(value: string | number): number {

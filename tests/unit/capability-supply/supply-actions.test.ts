@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   ownerPublicationImport: vi.fn(),
   ownerPublicationWithCatalogOrigin: vi.fn(),
   preparePublicationDraft: vi.fn(),
+  inspectX402SellerEndpoint: vi.fn(),
+  verifyMessage: vi.fn(),
 }))
 
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
@@ -34,6 +36,14 @@ vi.mock('@/modules/capability-supply/internal/publication', async (importOrigina
 vi.mock('@/modules/capability-supply/internal/schema-deref', () => ({
   dereferenceOpenApiSchema: vi.fn(),
 }))
+vi.mock('@/modules/capability-supply/internal/x402-seller-endpoint-inspector', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/capability-supply/internal/x402-seller-endpoint-inspector')>()),
+  inspectX402SellerEndpoint: mocks.inspectX402SellerEndpoint,
+}))
+vi.mock('viem', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('viem')>()),
+  verifyMessage: mocks.verifyMessage,
+}))
 
 import {
   createSupplyManagementService,
@@ -41,6 +51,10 @@ import {
   type SupplyWithdrawInput,
 } from '@/modules/capability-supply/supply-actions'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
+import {
+  x402SellerClaimDigest,
+  x402SellerClaimMessage,
+} from '@/modules/capability-supply/public'
 
 const principal: AgentAccessPrincipal = {
   principalId: 'principal:supply-actions',
@@ -95,6 +109,42 @@ const withdrawInput: SupplyWithdrawInput = {
   publicationRevision: 1,
   idempotencyKey: 'idempotency:withdraw-supply-actions',
 }
+const sellerEndpoint = 'https://provider.example/x402'
+const sellerPayTo = '0x1111111111111111111111111111111111111111'
+const sellerObservationDigest = `sha256:${'c'.repeat(64)}`
+const sellerClaimSignature = `0x${'ab'.repeat(65)}`
+const sellerObservation = {
+  kind: 'observed' as const,
+  endpoint: { url: sellerEndpoint },
+  payment: {
+    selection: { kind: 'selected' as const, alternativeId: 'alternative:base-mainnet' },
+    accepts: [{
+      alternativeId: 'alternative:base-mainnet',
+      payTo: sellerPayTo,
+    }],
+  },
+  discovery: { kind: 'admitted' as const },
+  digest: sellerObservationDigest,
+}
+const connectedProjection = {
+  connectionRef: 'connection:x402:one',
+  businessId: 'business:supply-actions',
+  providerRef: 'provider:x402:provider.example',
+  providerAccountRef: `x402:${sellerEndpoint}`,
+  adapterId: 'x402-fetch:v2',
+  grantedScopes: [],
+  grantedResources: [sellerEndpoint],
+  authorityGeneration: 1,
+  authorityDigest: `sha256:${'d'.repeat(64)}`,
+  lifecycle: 'active' as const,
+  available: true,
+  credentialConfigured: false,
+  observedAt: 10,
+  reasonCode: null,
+  evidenceRefs: [`x402-endpoint-inspection:${sellerObservationDigest}`],
+  createdAt: 10,
+  updatedAt: 10,
+}
 
 function setHappyPublishResponses() {
   const readback = {
@@ -141,6 +191,8 @@ beforeEach(() => {
   mocks.ownerPublicationImport.mockReset()
   mocks.ownerPublicationWithCatalogOrigin.mockReset()
   mocks.preparePublicationDraft.mockReset()
+  mocks.inspectX402SellerEndpoint.mockReset()
+  mocks.verifyMessage.mockReset()
   mocks.sourceWriteAdmissionFromRequest.mockImplementation(async ({ operationKey, correlationId }: { operationKey: string; correlationId: string }) => ({
     version: 'source-write:v2',
     operationKey,
@@ -524,6 +576,150 @@ describe('supply action runtime boundaries', () => {
       }),
     )
     expect(JSON.stringify(result)).not.toContain('credentialRef')
+  })
+
+  it('reinspects and verifies the exact seller claim before admitting an agent connection write', async () => {
+    const claimExpiresAt = Date.now() + 10 * 60_000
+    const claim = {
+      businessId: 'business:supply-actions',
+      endpointUrl: sellerEndpoint,
+      method: 'POST' as const,
+      observationDigest: sellerObservationDigest,
+      payTo: sellerPayTo,
+      expiresAt: claimExpiresAt,
+    }
+    mocks.inspectX402SellerEndpoint.mockResolvedValue(sellerObservation)
+    mocks.verifyMessage.mockResolvedValue(true)
+    mocks.callPublicSourceMutation.mockResolvedValue({
+      kind: 'applied',
+      connection: connectedProjection,
+      commandDigest: `sha256:${'e'.repeat(64)}`,
+    })
+    const service = createSupplyManagementService(
+      new Request('https://agent.example/api/v1/supply/connections/connect'),
+      '{}',
+    )
+
+    const result = await service.connectionConnect({
+      input: {
+        businessId: claim.businessId,
+        resourceUrl: sellerEndpoint,
+        method: claim.method,
+        environment: 'production',
+        observationDigest: claim.observationDigest,
+        payTo: claim.payTo,
+        claimExpiresAt,
+        claimSignature: sellerClaimSignature,
+        evidenceRefs: ['seller-submission:one'],
+        idempotencyKey: 'connect-command-one',
+      },
+      principal,
+      correlationId: 'transport-only-correlation',
+    })
+
+    expect(result).toMatchObject({ kind: 'applied', connection: { connectionRef: connectedProjection.connectionRef } })
+    expect(mocks.inspectX402SellerEndpoint).toHaveBeenCalledWith({
+      endpointUrl: sellerEndpoint,
+      method: 'POST',
+      aeEnvironment: 'production',
+    })
+    expect(mocks.verifyMessage).toHaveBeenCalledWith({
+      address: sellerPayTo,
+      message: x402SellerClaimMessage(claim),
+      signature: sellerClaimSignature,
+    })
+    const command = mocks.callPublicSourceMutation.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(mocks.callPublicSourceMutation.mock.calls[0]?.[0]).toEqual({
+      name: 'capabilityProviderConnectionAgents:connectX402',
+    })
+    expect(command).toMatchObject({
+      businessId: claim.businessId,
+      resourceUrl: sellerEndpoint,
+      method: claim.method,
+      observationDigest: claim.observationDigest,
+      payTo: claim.payTo,
+      claimExpiresAt,
+      claimDigest: x402SellerClaimDigest(claim),
+      claimSignature: sellerClaimSignature,
+      evidenceRefs: [
+        'seller-submission:one',
+        `x402-endpoint-inspection:${sellerObservationDigest}`,
+      ],
+      agentPrincipal: principal,
+    })
+    expect(command.commandId).toBe(command.operationKey)
+    expect(command.correlationId).toBe(command.operationKey)
+  })
+
+  it('refuses stale or unsigned agent seller claims before source-write admission', async () => {
+    mocks.inspectX402SellerEndpoint.mockResolvedValue(sellerObservation)
+    mocks.verifyMessage.mockResolvedValue(false)
+    const service = createSupplyManagementService(
+      new Request('https://agent.example/api/v1/supply/connections/connect'),
+      '{}',
+    )
+    const baseInput = {
+      businessId: 'business:supply-actions',
+      resourceUrl: sellerEndpoint,
+      method: 'POST' as const,
+      environment: 'production' as const,
+      observationDigest: sellerObservationDigest,
+      payTo: sellerPayTo,
+      claimExpiresAt: Date.now() + 10 * 60_000,
+      claimSignature: sellerClaimSignature,
+      evidenceRefs: [],
+      idempotencyKey: 'connect-command-refused',
+    }
+
+    await expect(service.connectionConnect({
+      input: { ...baseInput, observationDigest: `sha256:${'f'.repeat(64)}` },
+      principal,
+      correlationId: 'stale-observation',
+    })).resolves.toEqual({ kind: 'refused', reason: 'claim_invalid' })
+    expect(mocks.verifyMessage).not.toHaveBeenCalled()
+    expect(mocks.sourceWriteAdmissionFromRequest).not.toHaveBeenCalled()
+    expect(mocks.callPublicSourceMutation).not.toHaveBeenCalled()
+
+    await expect(service.connectionConnect({
+      input: baseInput,
+      principal,
+      correlationId: 'invalid-signature',
+    })).resolves.toEqual({ kind: 'refused', reason: 'claim_invalid' })
+    expect(mocks.verifyMessage).toHaveBeenCalledOnce()
+    expect(mocks.sourceWriteAdmissionFromRequest).not.toHaveBeenCalled()
+    expect(mocks.callPublicSourceMutation).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [{ kind: 'absent' as const }, 'inspection_bazaar_missing'],
+    [{ kind: 'refused' as const, reason: 'bazaar_discovery_invalid' as const }, 'inspection_bazaar_discovery_invalid'],
+  ])('refuses missing or invalid Bazaar admission before source-write admission', async (discovery, reason) => {
+    mocks.inspectX402SellerEndpoint.mockResolvedValue({ ...sellerObservation, discovery })
+    mocks.verifyMessage.mockResolvedValue(true)
+    const service = createSupplyManagementService(
+      new Request('https://agent.example/api/v1/supply/connections/connect'),
+      '{}',
+    )
+
+    await expect(service.connectionConnect({
+      input: {
+        businessId: 'business:supply-actions',
+        resourceUrl: sellerEndpoint,
+        method: 'POST',
+        environment: 'production',
+        observationDigest: sellerObservationDigest,
+        payTo: sellerPayTo,
+        claimExpiresAt: Date.now() + 10 * 60_000,
+        claimSignature: sellerClaimSignature,
+        evidenceRefs: [],
+        idempotencyKey: 'connect-bazaar-refused',
+      },
+      principal,
+      correlationId: 'bazaar-refused',
+    })).resolves.toEqual({ kind: 'refused', reason })
+    expect(mocks.verifyMessage).not.toHaveBeenCalled()
+    expect(mocks.sourceWriteAdmissionFromRequest).not.toHaveBeenCalled()
+    expect(mocks.callPublicSourceMutation).not.toHaveBeenCalled()
   })
 
   it('uses one durable command identity for connection writes and preserves typed stale-authority refusal', async () => {

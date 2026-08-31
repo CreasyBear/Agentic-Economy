@@ -40,6 +40,62 @@ export const operationInvokeAuthorityValue = v.object({
   acceptedBasis: acceptedAuthorityValue,
 })
 
+export const operationExecutionPurposeValue = v.union(
+  v.literal('market_call'),
+  v.literal('seller_onboarding_canary'),
+)
+
+export const sellerOnboardingCanaryExecutionEnvelopeValue = v.object({
+  executionPurpose: v.literal('seller_onboarding_canary'),
+  canaryRef: v.string(),
+  canaryCommitmentDigest: v.string(),
+  invocationRef: v.string(),
+  operationRef: v.string(),
+  ownerId: v.string(),
+  businessId: v.string(),
+  offeringRef: v.string(),
+  offeringRevision: v.number(),
+  offeringSourceHash: v.string(),
+  accessPathRef: v.string(),
+  accessPathSourceHash: v.string(),
+  publicationRef: v.string(),
+  publicationRevision: v.number(),
+  operationMaterialDigest: v.string(),
+  contractDigest: v.string(),
+  bindingDigest: v.string(),
+  priceDigest: v.string(),
+  sellerPayTo: v.string(),
+  sellerClaimDigest: v.string(),
+  readinessDigest: v.string(),
+  readinessObservedAt: v.number(),
+  readinessValidUntil: v.number(),
+  expectedOutputSchemaDigest: v.string(),
+  expectedOutputEvidenceDigest: v.string(),
+  expiresAt: v.number(),
+  inputDigest: v.string(),
+  idempotencyKey: v.string(),
+  funding: v.object({
+    kind: v.literal('ae_owned'),
+    principalId: v.string(),
+    ownerId: v.string(),
+    credentialId: v.string(),
+    applicationRef: v.string(),
+    grantRef: v.string(),
+    grantGeneration: v.number(),
+    policyDigest: v.string(),
+    budgetRef: v.string(),
+    maximumSpend: exactAmountValue,
+    requestedSpend: exactAmountValue,
+    ledgerEffects: v.literal('external_spend_only'),
+  }),
+  accountingPolicy: v.object({
+    recordBuyerUsage: v.literal(false),
+    accrueProviderEarnings: v.literal(false),
+    accruePlatformRake: v.literal(false),
+    recordQualifiedUse: v.literal(false),
+  }),
+})
+
 export const usageValue = v.object({
   usageRef: v.string(),
   observedAt: v.number(),
@@ -55,11 +111,9 @@ export const usageValue = v.object({
   transactionRef: v.optional(v.string()),
   durationMs: v.optional(v.number()),
 })
-export const operationInvokeReceiptValue = v.object({
+const operationInvokeReceiptFields = {
   receiptRef: v.string(),
   state: v.union(v.literal('settled'), v.literal('refunded'), v.literal('reconciliation_required')),
-  network: v.literal('eip155:8453'),
-  asset: v.literal('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
   providerQuotedAmount: exactAmountValue,
   agenticEconomyFee: exactAmountValue,
   totalBuyerAuthorization: exactAmountValue,
@@ -73,7 +127,19 @@ export const operationInvokeReceiptValue = v.object({
   externalSettlementRef: v.optional(v.string()),
   evidenceHash: v.string(),
   issuedAt: v.string(),
-})
+} as const
+export const operationInvokeReceiptValue = v.union(
+  v.object({
+    ...operationInvokeReceiptFields,
+    network: v.literal('eip155:8453'),
+    asset: v.literal('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
+  }),
+  v.object({
+    ...operationInvokeReceiptFields,
+    network: v.literal('eip155:84532'),
+    asset: v.literal('0x036CbD53842c5426634e7929541eC2318f3dCF7e'),
+  }),
+)
 const authorityRequestValue = v.object({
   kind: v.union(v.literal('approve_each'), v.literal('bounded_mandate')),
   operationRef: v.string(),
@@ -118,7 +184,10 @@ export const operationResultValue = v.union(
     operationRef: v.string(),
     output: jsonValue,
     evidenceHash: v.string(),
-    usage: usageValue,
+    // Seller-onboarding canaries are AE-funded external-spend proofs, not
+    // buyer market usage. The canary projector is the only completion path
+    // allowed to omit this field; ordinary completion still requires it.
+    usage: v.optional(usageValue),
     receipt: v.optional(operationInvokeReceiptValue),
   }),
   v.object({ kind: v.literal('pending'), invocationRef: v.string(), operationRef: v.string(), retryAfterMs: v.number() }),
@@ -184,6 +253,9 @@ export const capabilityOperationInvocationTables = {
     credentialId: v.string(),
     applicationRef: v.string(),
     operationRef: v.string(),
+    // Presence is the complete, server-built seller canary authority. Ordinary
+    // market calls have no canary field and cannot acquire one through invoke.
+    sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
     idempotencyKey: v.string(),
     environment: v.union(v.literal('sandbox'), v.literal('production')),
     grantRef: v.string(),
@@ -213,6 +285,15 @@ export const capabilityOperationInvocationTables = {
     createdAt: v.number(),
   })
     .index('by_invocationRef', ['invocationRef'])
+    .index('by_sellerOnboardingCanary_canaryRef', ['sellerOnboardingCanary.canaryRef'])
+    .index('by_sellerOnboardingCanary_target', [
+      'sellerOnboardingCanary.businessId',
+      'sellerOnboardingCanary.offeringRef',
+      'sellerOnboardingCanary.offeringRevision',
+      'sellerOnboardingCanary.offeringSourceHash',
+      'sellerOnboardingCanary.publicationRef',
+      'sellerOnboardingCanary.publicationRevision',
+    ])
     .index('by_credentialId_and_idempotencyKey', ['credentialId', 'idempotencyKey'])
     .index('by_credentialId_and_createdAt', ['credentialId', 'createdAt'])
     .index('by_credentialId_and_state', ['credentialId', 'state'])
@@ -220,6 +301,65 @@ export const capabilityOperationInvocationTables = {
     .index('by_principalId_and_invocationRef', ['principalId', 'invocationRef'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt'])
     .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt']),
+  // Append-only proof that a seller canary was re-armed only after either a
+  // durable pre-claim refusal with no canonical attempt, or an exact canonical
+  // safe-before-release attempt whose durable ledgers prove it ended unpaid.
+  sellerOnboardingCanaryRearmAudits: defineTable({
+    auditRef: v.string(),
+    canaryRef: v.string(),
+    invocationRef: v.string(),
+    priorWorkId: v.string(),
+    rearmedWorkId: v.string(),
+    refusalCode: v.union(
+      v.literal('grant_not_found'),
+      v.literal('grant_generation_stale'),
+      v.literal('operation_not_current'),
+      v.literal('provider_refused'),
+      v.literal('pre_release_failed'),
+      v.literal('payment_signature_unavailable'),
+    ),
+    priorResultDigest: v.string(),
+    // Optional for compatibility with audits written before structured refusal
+    // provenance was introduced. Every new rearm writes this object.
+    refusalProvenance: v.optional(v.union(
+      v.object({
+        phase: v.literal('pre_claim'),
+        source: v.union(
+          v.literal('known_preclaim_code'),
+          v.literal('legacy_exact_provider_approval'),
+        ),
+        nextAction: v.optional(v.string()),
+      }),
+      v.object({
+        phase: v.literal('safe_before_release'),
+        source: v.literal('canonical_retryable_attempt'),
+        nextAction: v.string(),
+        priorAttemptRef: v.string(),
+        priorAttemptNumber: v.number(),
+        priorEffectGeneration: v.number(),
+        controlDigest: v.string(),
+        attemptDigest: v.string(),
+      }),
+      v.object({
+        phase: v.literal('safe_before_release'),
+        source: v.literal('managed_x402_unsigned_refund'),
+        priorAttemptRef: v.string(),
+        priorAttemptNumber: v.number(),
+        priorEffectGeneration: v.number(),
+        controlDigest: v.string(),
+        attemptDigest: v.string(),
+        paymentAttemptDigest: v.string(),
+        reservationDigest: v.string(),
+        currentHistoryDigest: v.string(),
+      }),
+    )),
+    rearmedEnvelopeDigest: v.string(),
+    rearmedAuthorityDigest: v.string(),
+    rearmedAt: v.number(),
+  })
+    .index('by_auditRef', ['auditRef'])
+    .index('by_invocationRef', ['invocationRef'])
+    .index('by_canaryRef', ['canaryRef']),
   // Authority-provenance-only journal. It stores no provider or payment secret
   // material; every field either pins the admitted consequence snapshot or
   // prevents a duplicate/ambiguous external effect.

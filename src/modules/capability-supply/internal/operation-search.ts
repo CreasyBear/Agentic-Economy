@@ -66,34 +66,52 @@ function rankOperationSearchCandidates<T>(
   candidates: readonly OperationSearchTextCandidate<T>[],
 ): readonly RankedOperationSearchTextCandidate<T>[] {
   const tokens = searchTokens(query);
+  // An intentionally empty query is the catalogue-browse operation. A
+  // non-empty query whose only words are generic search verbs has no usable
+  // relevance signal and must not become the same browse operation by accident.
+  if (query.trim().length > 0 && tokens.length === 0) return [];
+  // Agent-authored tasks contain runtime constraints (cities, names, symbols)
+  // that should shape the eventual call, not exclude an otherwise obvious
+  // capability. Keep only tokens with evidence somewhere in the current
+  // catalogue, then continue to require those capability tokens to cohere on
+  // one candidate. This retains fail-closed behavior for mixed unsupported
+  // requests while avoiding a catalogue-wide alias or runtime-value registry.
+  const relevantTokens = tokens.filter((token) =>
+    candidates.some(({ searchText }) =>
+      searchableText(searchText).some(
+        (term) => searchTermMatchScore(term, token) > 0,
+      ),
+    ),
+  );
+  if (query.trim().length > 0 && relevantTokens.length === 0) return [];
   const exactMatches = candidates.filter(
     ({ searchText }) =>
-      tokens.every((token) =>
+      relevantTokens.every((token) =>
         searchableText(searchText).some(
-          (term) => term === token || term.startsWith(token),
+          (term) => searchTermMatchScore(term, token) > 0,
         ),
       ),
   );
   const matches =
-    tokens.length === 0 || exactMatches.length > 0
+    relevantTokens.length === 0 || exactMatches.length > 0
       ? exactMatches
       : candidates.filter(({ searchText }) => {
           const terms = searchableText(searchText);
-          const matchedTokens = tokens.filter((token) =>
-            terms.some((term) => term === token || term.startsWith(token)),
+          const matchedTokens = relevantTokens.filter((token) =>
+            terms.some((term) => searchTermMatchScore(term, token) > 0),
           ).length;
-          const currencyTokenCount = tokens.filter((token) =>
+          const currencyTokenCount = relevantTokens.filter((token) =>
             SEARCH_CURRENCY_CODES.has(token),
           ).length;
           const minimumMatches = currencyTokenCount >= 2
             ? 1
-            : Math.max(2, Math.ceil(tokens.length / 2));
+            : Math.max(2, Math.ceil(relevantTokens.length / 2));
           return matchedTokens >= minimumMatches;
         });
   return matches
     .map((candidate) => ({
       ...candidate,
-      score: scoreSearchText(candidate.searchText, tokens),
+      score: scoreSearchText(candidate.searchText, relevantTokens),
     }))
     .sort(
       (left, right) =>
@@ -155,10 +173,17 @@ const MAX_LIMIT = 20;
 const SEARCH_CURRENCY_CODES = new Set(
   Intl.supportedValuesOf("currency").map((currency) => currency.toLowerCase()),
 );
+const SEARCH_MONTHS = new Set([
+  "jan", "january", "feb", "february", "mar", "march", "apr", "april",
+  "may", "jun", "june", "jul", "july", "aug", "august", "sep",
+  "sept", "september", "oct", "october", "nov", "november", "dec",
+  "december",
+]);
 const SEARCH_STOP_WORDS = new Set([
   "a",
   "an",
   "and",
+  "api",
   "for",
   "from",
   "get",
@@ -167,11 +192,11 @@ const SEARCH_STOP_WORDS = new Set([
   "into",
   "is",
   "latest",
-  "lookup",
   "of",
   "on",
   "or",
   "please",
+  "provider",
   "search",
   "that",
   "the",
@@ -555,9 +580,15 @@ function matchesFactFilters(
   return filters.location === undefined || fact.businessSearchText.includes(filters.location);
 }
 function searchTokens(query: string): string[] {
-  return (query.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-    (token) => !SEARCH_STOP_WORDS.has(token),
+  const tokens = query.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  return tokens.filter((token, index) =>
+    !SEARCH_STOP_WORDS.has(token) &&
+    !isRuntimeConstraintToken(token, tokens[index - 1]),
   );
+}
+function isRuntimeConstraintToken(token: string, previous: string | undefined): boolean {
+  if (/^\d+$/.test(token) || SEARCH_MONTHS.has(token)) return true;
+  return token.length === 3 && (previous === "from" || previous === "to");
 }
 function searchableText(searchText: readonly string[]): string[] {
   return (
@@ -593,18 +624,51 @@ function scoreSearchText(
     (total, token) =>
       total +
       searchableText(searchText).reduce(
-        (best, term) =>
-          term === token
-            ? Math.max(best, 4)
-            : term.startsWith(token)
-              ? Math.max(best, 2)
-              : term.includes(token)
-                ? Math.max(best, 1)
-                : best,
+        (best, term) => Math.max(best, searchTermMatchScore(term, token)),
         0,
       ),
     0,
   );
+}
+function searchTermMatchScore(term: string, token: string): number {
+  if (term === token) return 4;
+  if (SEARCH_CURRENCY_CODES.has(token) && term.startsWith(token)) return 2;
+  if (
+    Math.min(term.length, token.length) >= 4
+    && (term.startsWith(token) || token.startsWith(term))
+  ) return 2;
+  if (token.length >= 5 && term.length >= 5 && oneTypoApart(term, token)) return 1;
+  return token.length >= 5 && term.includes(token) ? 1 : 0;
+}
+function oneTypoApart(left: string, right: string): boolean {
+  if (left.length > 32 || right.length > 32 || Math.abs(left.length - right.length) > 1) return false;
+  if (left.length === right.length) {
+    const mismatches: number[] = [];
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) mismatches.push(index);
+      if (mismatches.length > 2) return false;
+    }
+    if (mismatches.length === 1) return true;
+    const [firstMismatch, secondMismatch] = mismatches;
+    return mismatches.length === 2
+      && firstMismatch !== undefined
+      && secondMismatch !== undefined
+      && secondMismatch === firstMismatch + 1
+      && left[firstMismatch] === right[secondMismatch]
+      && left[secondMismatch] === right[firstMismatch];
+  }
+  const shorter = left.length < right.length ? left : right;
+  const longer = left.length < right.length ? right : left;
+  let skipped = false;
+  for (let shortIndex = 0, longIndex = 0; longIndex < longer.length; longIndex += 1) {
+    if (shorter[shortIndex] === longer[longIndex]) {
+      shortIndex += 1;
+      continue;
+    }
+    if (skipped) return false;
+    skipped = true;
+  }
+  return true;
 }
 function priceWithin(
   price: PublicCommercialTerms["price"],

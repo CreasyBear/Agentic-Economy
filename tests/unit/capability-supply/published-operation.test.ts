@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { encodePaymentResponseHeader } from '@x402/core/http'
+import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
 import { validatePaymentRequired } from '@x402/core/schemas'
+import type { PaymentRequired } from '@x402/core/types'
 
 import {
   buildDevelopmentPublishedOperationEvidence,
@@ -65,6 +66,19 @@ function providerRouteTransportBinding(
     authority,
     ...operation.transport,
   }
+}
+
+function freshX402Response(operation: PublishedOperation): Response {
+  const binding = providerRouteTransportBinding(operation)
+  const configuration = JSON.parse(binding.configJson) as { paymentRequiredJson?: string }
+  if (configuration.paymentRequiredJson === undefined) {
+    throw new Error('payment_required_json_missing')
+  }
+  const paymentRequired = JSON.parse(configuration.paymentRequiredJson) as PaymentRequired
+  return new Response(null, {
+    status: 402,
+    headers: { 'Payment-Required': encodePaymentRequiredHeader(paymentRequired) },
+  })
 }
 
 function currentProviderAuthority(operation: Readonly<{
@@ -183,12 +197,15 @@ describe('published operation materialization', () => {
 
   it('runs the admitted GET material rather than a hand-built binding', async () => {
     const packet = buildDevelopmentPublishedOperationEvidence()
-    const send = vi.fn(async (url: URL, init?: { method?: string; body?: string }) => {
+    const send = vi.fn(async (url: URL, init?: { method?: string; body?: string; headers?: Readonly<Record<string, string>> }) => {
       expect(url.href).toBe(
         'https://provider.example/x402/v3/cryptocurrency/quotes/latest?symbol=BTC&convert=USD',
       )
       expect(init?.method).toBe('GET')
       expect(init?.body).toBeUndefined()
+      if (!Object.hasOwn(init?.headers ?? {}, 'Payment-Signature')) {
+        return freshX402Response(packet.operation)
+      }
       return Response.json({
         data: {
           BTC: {
@@ -230,14 +247,14 @@ describe('published operation materialization', () => {
       markX402PaymentPossiblySubmitted: () => undefined,
       ...preparedX402Custody(async () => 'mock:payment-signature'),
     })).resolves.toMatchObject({ transport: 'x402', disposition: 'succeeded' })
-    expect(send).toHaveBeenCalledTimes(1)
+    expect(send).toHaveBeenCalledTimes(2)
   })
 
   it.each(['GET', 'POST'] as const)(
     'carries imported x402 %s through admission, materialization and runtime',
     async (method) => {
       const operation = await buildImportedOperation(method)
-      const send = vi.fn(async (url: URL, init?: { method?: string; body?: string }) => {
+      const send = vi.fn(async (url: URL, init?: { method?: string; body?: string; headers?: Readonly<Record<string, string>> }) => {
         expect(init?.method).toBe(method)
         if (method === 'GET') {
           expect(url.search).toBe('?symbol=BTC&convert=USD')
@@ -245,6 +262,9 @@ describe('published operation materialization', () => {
         } else {
           expect(url.search).toBe('')
           expect(JSON.parse(String(init?.body))).toEqual({ symbol: 'BTC', convert: 'USD' })
+        }
+        if (!Object.hasOwn(init?.headers ?? {}, 'Payment-Signature')) {
+          return freshX402Response(operation)
         }
         return Response.json({
           data: {

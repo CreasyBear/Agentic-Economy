@@ -80,6 +80,7 @@ export function AeRecordTable<TData>({
   const showFilter = !hideFilter && (data.length > 1 || globalFilter.length > 0)
   const rowCount = table.getRowModel().rows.length
   const showSkeleton = useFirstLoadPending(loading)
+  const hasActiveFilter = globalFilter.trim().length > 0
   const interactive = onRowClick !== undefined || getRowHref !== undefined
 
   return (
@@ -139,7 +140,19 @@ export function AeRecordTable<TData>({
             ) : rowCount === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={columns.length} className="h-24 text-muted-foreground">
-                  {emptyMessage}
+                  <div className="flex flex-wrap items-center gap-related">
+                    <span>{emptyMessage}</span>
+                    {hasActiveFilter ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setGlobalFilter('')}
+                      >
+                        Clear filter
+                      </Button>
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (

@@ -147,12 +147,17 @@ import { operationInvocationAttemptIdentityDigest, run } from '../../../convex/c
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import {
+  BASE_MAINNET_NETWORK,
+  BASE_MAINNET_USDC_ADDRESS,
+  BASE_SEPOLIA_NETWORK,
+  BASE_SEPOLIA_USDC_ADDRESS,
   capabilityBindingRegistrationHash,
   capabilityOfferingRegistrationHash,
+  connectionAuthoritySnapshotFromProviderConnection,
   createPublicOperationRef,
   materializeRuntimePublishedOperation,
 } from '@/modules/capability-supply/public'
-import { operationInvokeReceiptAsset } from '@/modules/capability-execution/operation-invoke-contracts'
+import { createX402ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   externalSpendIdentityDigest,
@@ -171,6 +176,10 @@ import type {
   X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import {
+  createSellerOnboardingCanaryCommitment,
+  sellerOnboardingCanaryExecutionEnvelope,
+} from '@/modules/capability-execution'
 
 export const invocationRef = 'operation-invocation:test-worker'
 export const grantRef = 'grant:test-worker'
@@ -189,6 +198,7 @@ type WorkerOptions = Readonly<{
   releaseFenceResult?: Readonly<{ kind: 'applied' }> | Readonly<{ kind: 'refused' }>
   finalGrant?: Readonly<Record<string, unknown>> | null
   signingBoundaryGrant?: Readonly<Record<string, unknown>> | null
+  signingBoundaryProviderAuthority?: 'invalid' | 'throw'
   observation?: RouteTransportObservation
   reconcileRefused?: boolean
   reconcileNone?: boolean
@@ -200,10 +210,14 @@ type WorkerOptions = Readonly<{
   consumeLeaseResult?: Readonly<{ kind: 'applied' }> | Readonly<{ kind: 'duplicate' }> | Readonly<{ kind: 'refused'; code: string }>
   currentOperation?: (operation: PublishedOperation) => PublishedOperation
   releaseCurrentOperation?: (operation: PublishedOperation) => PublishedOperation
+  authorizationCurrentOperation?: (operation: PublishedOperation) => PublishedOperation
   alreadyLeased?: boolean
   claimDispatchRefused?: boolean
   activeCharge?: Readonly<Record<string, unknown>>
   stalePrincipal?: boolean
+  paymentSigningClaim?: 'expired' | 'unexpired'
+  sellerCanary?: boolean
+  sellerPayTo?: string
 }>
 type PaymentState = {
   prepare: Record<string, unknown> | undefined
@@ -212,6 +226,7 @@ type PaymentState = {
   observe: Record<string, unknown> | undefined
   authorization: {
     claimed: boolean
+    paymentSigningClaimedAt?: number
     paymentUnsignedMaterialJson?: string
     paymentUnsignedMaterialDigest?: string
     paymentSigningIdempotencyKey?: string
@@ -221,6 +236,9 @@ type PaymentState = {
     paymentAuthorizationValidBefore?: string
     paymentAuthorizationExpiresAt?: number
     requestFingerprint?: string
+    authorizationFailureCode?: string
+    authorizationFailureDetail?: string
+    authorizationFailureObservedAt?: number
   }
 }
 type WorkerState = {
@@ -230,6 +248,7 @@ type WorkerState = {
   payment: PaymentState
   transportCalls: number
   events: string[]
+  queryCalls: string[]
   mutations: string[]
   mutationCalls: Array<{ path: string; args: Record<string, unknown> }>
   records: Record<string, unknown>[]
@@ -345,6 +364,48 @@ function sealCurrentOperation(operation: PublishedOperation): PublishedOperation
   }
 }
 
+function withCredentiallessX402Connection(
+  operation: PublishedOperation,
+  observedAt: number,
+): PublishedOperation {
+  const endpoint = new URL(operation.binding.endpointUrl).toString()
+  const host = new URL(endpoint).host.toLowerCase()
+  const connectionRef = 'connection:x402:test-worker'
+  const providerRef = `provider:x402:${host}`
+  const created = createX402ProviderConnection({
+    commandId: 'command:x402:test-worker',
+    connectionRef,
+    owningAccountRef: 'account:test-worker',
+    installedByPrincipalRef: 'principal:test-worker',
+    authorityGrantRef: 'grant:test-worker',
+    authorityGrantGeneration: 1,
+    businessId: operation.identity.businessId,
+    providerRef,
+    providerAccountRef: `x402:${endpoint}`,
+    resourceUrl: endpoint,
+    evidenceRefs: ['evidence:x402:test-worker'],
+  }, observedAt)
+  if (created.kind !== 'applied') throw new Error('credentialless_x402_worker_fixture_invalid')
+  const operationRef = createPublicOperationRef({
+    operationId: operation.operationId,
+    publicationRef: operation.identity.publicationRef,
+    publicationRevision: operation.identity.publicationRevision,
+    contractRef: operation.contract.ref,
+  })
+  const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
+    created.connection,
+    operationRef,
+  )
+  return {
+    ...operation,
+    binding: {
+      ...operation.binding,
+      authority: { kind: 'provider_connection', connectionRef, providerRef },
+    },
+    connectionAuthority,
+  }
+}
+
 export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Record<string, unknown>; state: WorkerState } {
   const now = Date.now()
   const environment = options.environment ?? 'sandbox'
@@ -354,18 +415,34 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     options.priceUnits,
     environment === 'production' && kind === 'x402',
   )
-  const operation = sealCurrentOperation(inRuntimeEnvironment(
-    kind === 'x402' && environment === 'production' && baseOperation.identity.payment.kind === 'x402'
+  const x402Profile = environment === 'production'
+    ? { network: BASE_MAINNET_NETWORK, asset: BASE_MAINNET_USDC_ADDRESS }
+    : { network: BASE_SEPOLIA_NETWORK, asset: BASE_SEPOLIA_USDC_ADDRESS }
+  const environmentOperation = inRuntimeEnvironment(
+    kind === 'x402' && baseOperation.identity.payment.kind === 'x402'
       ? {
           ...baseOperation,
           identity: {
             ...baseOperation.identity,
-            payment: { ...baseOperation.identity.payment, asset: operationInvokeReceiptAsset },
+            payment: {
+              ...baseOperation.identity.payment,
+              ...x402Profile,
+              ...(options.sellerPayTo === undefined
+                ? options.sellerCanary === true
+                  ? { payTo: '0x0000000000000000000000000000000000000002' }
+                  : {}
+                : { payTo: options.sellerPayTo }),
+            },
           },
         }
       : baseOperation,
     environment,
-  ))
+  )
+  const operation = sealCurrentOperation(
+    options.sellerCanary === true && kind === 'x402'
+      ? withCredentiallessX402Connection(environmentOperation, now)
+      : environmentOperation,
+  )
   const operationRef = createPublicOperationRef({
     operationId: operation.operationId,
     publicationRef: operation.identity.publicationRef,
@@ -390,7 +467,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     inputDigest,
     grantRef,
     grantGeneration: 1,
-    grantDigest: digest('g'),
+    grantDigest: digest('a'),
     reference: acceptedBasis.authorityRef,
     targetDigest: canonicalDigest(operation.identity as StableHashValue),
     consequence: descriptor.consequenceClass,
@@ -407,6 +484,9 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   const releaseCurrentOperation = sealCurrentOperation(
     options.releaseCurrentOperation?.(currentOperation) ?? currentOperation,
   )
+  const authorizationCurrentOperation = sealCurrentOperation(
+    options.authorizationCurrentOperation?.(releaseCurrentOperation) ?? releaseCurrentOperation,
+  )
   const inputJson = JSON.stringify(input)
   const dispatch: Record<string, unknown> = {
     invocationRef,
@@ -422,14 +502,84 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     requestDigest: digest('r'),
     grantRef,
     grantGeneration: 1,
+    policyDigest: digest('a'),
+    grantExpiresAt: now + 90_000,
     operationJson,
     inputJson,
     workId: 'work:test-worker',
     dispatchState: 'enqueued',
     authority,
   }
+  const sellerCanary = options.sellerCanary === true
+    ? sellerOnboardingCanaryExecutionEnvelope(createSellerOnboardingCanaryCommitment({
+        ownerId: 'seller-owner:test-worker',
+        businessId: operation.identity.businessId,
+        offeringRef: 'offering:test-worker',
+        offeringRevision: 1,
+        offeringSourceHash: digest('1'),
+        accessPathRef: 'access-path:test-worker',
+        accessPathSourceHash: digest('2'),
+        publicationRef: operation.identity.publicationRef,
+        publicationRevision: operation.identity.publicationRevision,
+        draftOperationRef: operationRef,
+        operationMaterialDigest: operation.materialDigest,
+        contractDigest: operation.identity.contractDigest,
+        bindingDigest: operation.identity.bindingDigest,
+        priceDigest: operation.priceDigest,
+        sellerPayTo: operation.identity.payment.kind === 'x402'
+          ? operation.identity.payment.payTo
+          : '0x0000000000000000000000000000000000000000',
+        sellerClaimDigest: digest('3'),
+        readinessDigest: digest('4'),
+        readinessObservedAt: operation.readiness.observedAt,
+        readinessValidUntil: operation.readiness.validUntil,
+        expectedOutputSchemaDigest: canonicalDigest(operation.contract.outputSchema as StableHashValue),
+        expectedOutputEvidenceDigest: canonicalDigest({
+          kind: 'seller_onboarding_canary_expected_output:v1',
+          operationMaterialDigest: operation.materialDigest,
+          contractDigest: operation.identity.contractDigest,
+          inputDigest,
+          outputSchema: operation.contract.outputSchema,
+          evidence: operation.contract.evidence,
+        } as StableHashValue),
+        inputDigest,
+        idempotencyKey: String(dispatch.idempotencyKey),
+        fundingBudgetRef: 'budget:test-worker',
+        fundingPrincipalId: String(dispatch.principalId),
+        fundingOwnerId: String(dispatch.ownerId),
+        fundingCredentialId: String(dispatch.credentialId),
+        fundingApplicationRef: String(dispatch.applicationRef),
+        fundingGrantRef: grantRef,
+        fundingGrantGeneration: 1,
+        fundingPolicyDigest: digest('a'),
+        requestedSpend: descriptor.price.kind === 'fixed'
+          ? descriptor.price.amount
+          : { currency: 'USD', units: '1', exponent: 2 },
+        maximumSpend: descriptor.price.kind === 'fixed'
+          ? descriptor.price.amount
+          : { currency: 'USD', units: '1', exponent: 2 },
+        expiresAt: now + 60_000,
+        now,
+      }))
+    : undefined
+  if (sellerCanary !== undefined) {
+    dispatch.sellerOnboardingCanary = sellerCanary
+    dispatch.invocationRef = sellerCanary.invocationRef
+    const canaryAuthorityMaterial = {
+      ...authorityMaterial,
+      invocationRef: sellerCanary.invocationRef,
+    }
+    dispatch.authority = {
+      ...canaryAuthorityMaterial,
+      decisionDigest: canonicalDigest({
+        format: 'operation-invoke-authority:v1',
+        ...canaryAuthorityMaterial,
+      } as StableHashValue),
+    }
+  }
+  const managedCustody = environment === 'production' || sellerCanary !== undefined
   const paymentIdentifier = operationInvocationAttemptIdentityDigest({
-    invocationRef,
+    invocationRef: String(dispatch.invocationRef),
     principalId: 'principal:test-worker',
     credentialId: 'credential:test-worker',
     applicationRef: 'application:test-worker',
@@ -460,11 +610,11 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     environment: dispatch.environment,
     lifecycle: 'active' as const,
     generation: 1,
-    policyDigest: digest('g'),
+    policyDigest: digest('a'),
     expiresAt: now + 90_000,
   }
   const connectionAuthority = operation.connectionAuthority
-  const providerAuthority = connectionAuthority === undefined ? undefined : {
+  const providerAuthority = connectionAuthority === undefined || sellerCanary !== undefined ? undefined : {
     providerRef: connectionAuthority.providerRef,
     providerAccountRef: 'account:mock-provider',
     adapterId: connectionAuthority.adapterId,
@@ -526,7 +676,16 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     read: undefined,
     mark: undefined,
     observe: undefined,
-    authorization: { claimed: false },
+    authorization: {
+      claimed: options.paymentSigningClaim !== undefined,
+      ...(options.paymentSigningClaim === undefined
+        ? {}
+        : {
+            paymentSigningClaimedAt: options.paymentSigningClaim === 'expired'
+              ? now - 120_000
+              : now,
+          }),
+    },
   }
   const state: WorkerState = {
     dispatch,
@@ -535,6 +694,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     payment,
     transportCalls: 0,
     events: [],
+    queryCalls: [],
     mutations: [],
     mutationCalls: [],
     records: [],
@@ -606,6 +766,18 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       ...(authorization.requestFingerprint === undefined
         ? {}
         : { requestFingerprint: authorization.requestFingerprint }),
+      ...(authorization.paymentSigningClaimedAt === undefined
+        ? {}
+        : { paymentSigningClaimedAt: authorization.paymentSigningClaimedAt }),
+      ...(authorization.authorizationFailureCode === undefined
+        ? {}
+        : { authorizationFailureCode: authorization.authorizationFailureCode }),
+      ...(authorization.authorizationFailureDetail === undefined
+        ? {}
+        : { authorizationFailureDetail: authorization.authorizationFailureDetail }),
+      ...(authorization.authorizationFailureObservedAt === undefined
+        ? {}
+        : { authorizationFailureObservedAt: authorization.authorizationFailureObservedAt }),
     }
   }
   const functionPath = (reference: unknown): string => typeof reference === 'string' ? reference : getFunctionName(reference as never)
@@ -687,19 +859,38 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       }
     }
     {
+      if (operation.identity.payment.kind !== 'x402') throw new Error('x402 operation payment missing')
+      const validateCredentiallessBoundary = async (): Promise<void> => {
+        if (sellerCanary === undefined) return
+        const validate = runtime.validateProviderConnectionAuthority
+        const current = operation.connectionAuthority
+        if (validate === undefined || current === undefined) {
+          throw new Error('credentialless_x402_authority_validator_missing')
+        }
+        const validation = await validate({
+          connectionRef: current.connectionRef,
+          providerRef: current.providerRef,
+          adapterId: current.adapterId,
+          authorityGeneration: current.authorityGeneration,
+          authorityDigest: current.authorityDigest,
+        })
+        if (validation.kind !== 'valid') throw new Error('credentialless_x402_authority_invalid')
+      }
+      await validateCredentiallessBoundary()
       const challenge = {
         x402Version: 2 as const,
         resource: { url: operation.binding.endpointUrl },
         accepts: [{
           scheme: 'exact',
-          network: 'eip155:8453' as const,
+          network: x402Profile.network,
           amount: '10000',
-          asset: '0xmock-usdc',
-          payTo: '0xmock-provider-recipient',
+          asset: x402Profile.asset,
+          payTo: operation.identity.payment.payTo,
           maxTimeoutSeconds: 60,
           extra: {},
         }],
       }
+      await validateCredentiallessBoundary()
       const paymentCredential = runtime.readX402PaymentCredentialRef === undefined
         ? undefined
         : await runtime.readX402PaymentCredentialRef()
@@ -715,7 +906,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         effectGeneration: 1,
       }
       const prepared = await runtime.prepareX402PaymentAuthorization(request)
-      if (environment === 'production') {
+      if (managedCustody) {
         expect(prepared).toMatchObject({
           custodyRef: 'custody:test-worker',
           custodyBudgetRef: 'custody:test-worker',
@@ -743,7 +934,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         }
       }
       const beforeX402PaymentAuthorizationRead = runtime.beforeX402PaymentAuthorizationRead
-      if (environment === 'production') {
+      if (managedCustody) {
         if (beforeX402PaymentAuthorizationRead === undefined) {
           throw new Error('x402 release fence callback missing')
         }
@@ -766,6 +957,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         }
       }
       expect(signed).toBe('signed:payment')
+      await validateCredentiallessBoundary()
       const event: X402PaymentAttemptEvent = {
         paymentIdentifier: request.paymentIdentifier,
         attemptRef,
@@ -818,7 +1010,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         response: {
           success: true,
           transaction: '0xworker-settled',
-          network: 'eip155:8453',
+          network: x402Profile.network,
           amount: '10000',
         },
         digest: digest('s'),
@@ -831,12 +1023,33 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   const chargeState: 'free_tier' | 'paid' = chargeAmount.units === '0' ? 'free_tier' : 'paid'
   let activeGrantReads = 0
   let currentOperationReads = 0
+  const sellerCanarySnapshot = (candidate: PublishedOperation) => ({
+    operationJson: JSON.stringify(candidate),
+    operationRef,
+    offeringRef: sellerCanary?.offeringRef ?? 'offering:test-worker',
+    offeringRevision: sellerCanary?.offeringRevision ?? 1,
+    offeringSourceHash: sellerCanary?.offeringSourceHash ?? digest('1'),
+    accessPathRef: sellerCanary?.accessPathRef ?? 'access-path:test-worker',
+    accessPathSourceHash: sellerCanary?.accessPathSourceHash ?? digest('2'),
+    publicationRef: operation.identity.publicationRef,
+    publicationRevision: operation.identity.publicationRevision,
+    sellerPayTo: operation.identity.payment.kind === 'x402'
+      ? operation.identity.payment.payTo
+      : '0x0000000000000000000000000000000000000000',
+    sellerClaimDigest: sellerCanary?.sellerClaimDigest ?? digest('3'),
+    readinessDigest: sellerCanary?.readinessDigest ?? digest('4'),
+    readinessObservedAt: candidate.readiness.observedAt,
+    readinessValidUntil: candidate.readiness.validUntil,
+  })
 
   const ctx = {
     runQuery: vi.fn(async (reference: unknown, args?: Record<string, unknown>) => {
-      switch (functionPath(reference)) {
+      const queryPath = functionPath(reference)
+      state.queryCalls.push(queryPath)
+      switch (queryPath) {
         case 'capabilityOperationInvocations:openDispatch': return dispatch
         case 'agentAccessPrincipals:getAgentPrincipal': return principal
+        case 'capabilitySupplyCanaryFunding:readExactSellerOnboardingCanaryPlatformGrant': return grant
         case 'agentAccessPolicy:readActiveGrant':
           activeGrantReads += 1
           if (activeGrantReads === 2) state.events.push('final-grant-revalidation')
@@ -850,8 +1063,29 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
               currentOperationReads === 1 ? currentOperation : releaseCurrentOperation,
             ),
           }
+        case 'capabilitySupplyCurrentOperation:readExactSellerCanaryOperationSnapshot':
+          currentOperationReads += 1
+          if (currentOperationReads === 2) state.events.push('current-publication-price-revalidation')
+          return sellerCanarySnapshot(
+            currentOperationReads === 1
+              ? currentOperation
+              : currentOperationReads < 3
+                ? releaseCurrentOperation
+                : authorizationCurrentOperation,
+          )
         case 'moneyLedger:readOperatorAccountVersion': return operatorAccountVersion
-        case 'capabilityOperationInvocations:readProviderLeaseAuthority': return providerAuthority
+        case 'capabilityOperationInvocations:readCurrentProviderConnectionAuthority':
+          return sellerCanary === undefined
+            ? { kind: 'credentialed' }
+            : { kind: 'credentialless_x402' }
+        case 'capabilityOperationInvocations:readProviderLeaseAuthority':
+          if (state.payment.prepare !== undefined) {
+            if (options.signingBoundaryProviderAuthority === 'throw') {
+              throw new Error('provider_authority_read_unavailable')
+            }
+            if (options.signingBoundaryProviderAuthority === 'invalid') return null
+          }
+          return providerAuthority
         case 'actionInvocationControl:readControl': return canonicalClaimed ? canonicalControl : undefined
         case 'actionInvocationControl:readAttempt': return canonicalClaimed ? canonicalAttempt : undefined
         case 'capabilityProviderConnections:resolveLeaseCredentialRef': return { kind: 'resolved', credentialRef: providerCredentialRef }
@@ -871,7 +1105,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
                   : 'possibly_submitted',
                 evidenceRefs: ['evidence:test-worker'],
               }
-        default: throw new Error(`unexpected_query:${functionPath(reference)}:${JSON.stringify(args)}`)
+        default: throw new Error(`unexpected_query:${queryPath}:${JSON.stringify(args)}`)
       }
     }),
     runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
@@ -1060,7 +1294,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
               requestFingerprint: authorization.requestFingerprint ?? requestFingerprint,
             }
           }
-          if (authorization.claimed
+          if (authorization.claimed && options.paymentSigningClaim !== 'expired'
             || authorization.paymentUnsignedMaterialJson !== undefined
             || authorization.paymentUnsignedMaterialDigest !== undefined
             || authorization.paymentSigningIdempotencyKey !== undefined
@@ -1072,6 +1306,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
             return { kind: 'pending' }
           }
           authorization.claimed = true
+          authorization.paymentSigningClaimedAt = Date.now()
           authorization.requestFingerprint = requestFingerprint
           return { kind: 'claimed' }
         }
@@ -1102,7 +1337,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           if (options.failPaymentObservation) throw new Error('payment_observation_unavailable')
           return null
         case 'moneyX402PaymentAttempts:recordX402PaymentSigningIntent':
-          if (environment === 'production') state.events.push('authorization-sign')
+          if (managedCustody) state.events.push('authorization-sign')
           if (typeof args.requestFingerprint === 'string'
             && state.payment.authorization.requestFingerprint !== undefined
             && args.requestFingerprint !== state.payment.authorization.requestFingerprint) {
@@ -1135,6 +1370,16 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           if (typeof args.requestFingerprint === 'string') {
             state.payment.authorization.requestFingerprint = args.requestFingerprint
           }
+          return null
+        case 'moneyX402PaymentAttempts:recordX402PaymentAuthorizationFailure':
+          state.payment.authorization.authorizationFailureCode = args.code as string
+          if (typeof args.detail === 'string') {
+            state.payment.authorization.authorizationFailureDetail = args.detail
+          } else {
+            delete state.payment.authorization.authorizationFailureDetail
+          }
+          state.payment.authorization.authorizationFailureObservedAt = Date.now()
+          state.events.push('authorization-failure-recorded')
           return null
         case 'qualifiedUse:recordQualifiedUse':
           state.qualifiedUse.push(args)
@@ -1202,15 +1447,16 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       observedAt: now,
     })
     const reservation = reserved as { reservation?: { reservationRef?: string } }
+    if (operation.identity.payment.kind !== 'x402') throw new Error('x402 operation payment missing')
     const challenge = {
       x402Version: 2,
       resource: { url: input.invocation.binding.endpointUrl },
       accepts: [{
         scheme: 'exact',
-        network: 'eip155:8453',
+        network: x402Profile.network,
         amount: '10000',
-        asset: '0xmock-usdc',
-        payTo: '0xmock-provider-recipient',
+        asset: x402Profile.asset,
+        payTo: operation.identity.payment.payTo,
         maxTimeoutSeconds: 60,
         extra: {},
       }],
@@ -1229,9 +1475,9 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         selectedRequirementJson: JSON.stringify(challenge.accepts[0]),
         providerEndpoint: input.invocation.binding.endpointUrl,
         scheme: 'exact',
-        network: 'eip155:8453',
-        asset: '0xmock-usdc',
-        payTo: '0xmock-provider-recipient',
+        network: x402Profile.network,
+        asset: x402Profile.asset,
+        payTo: operation.identity.payment.payTo,
         amountUnits: '1',
         currency: 'USD',
         exponent: 2,

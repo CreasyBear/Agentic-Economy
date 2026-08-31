@@ -81,7 +81,9 @@ export function chatAnonymousCountLine(count: number, limitReached: boolean): st
 
 export const chatToolStatus = {
   working: 'Working',
+  pending: 'Pending',
   complete: 'Complete',
+  attention: 'Needs attention',
   refused: 'Refused',
   error: "Couldn't run",
 } as const
@@ -108,4 +110,3 @@ export function chatShowingOperations(shown: number, total: number): string {
   if (shown === 0 || total <= shown) return chatMatchedOperations(total)
   return `Showing ${shown} of ${total}`
 }
-

@@ -9,6 +9,7 @@ import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/
 import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { buildSiteDiscoveryManifest, projectCompactSiteDiscoveryManifest } from '@/modules/discovery/public'
+import { handleSiteDiscoveryManifestRequest } from '@/routes/[.]well-known/ucp'
 
 /**
  * `/.well-known/ucp` is the only document a cold agent reads before it knows
@@ -69,7 +70,7 @@ describe('Site discovery manifest', () => {
     expect(new TextEncoder().encode(serialized).length).toBeLessThan(64 * 1024)
     expect(serialized).not.toContain('inputJsonSchema')
     expect(serialized).not.toContain('outputJsonSchema')
-    expect(compact.fullSchemas).toBe(`${origin}/api/discovery/schema`)
+    expect(compact.fullContract).toBe(`${origin}/.well-known/ucp?technical=1`)
     expect(compact.operationGateway.access.connected.cli).toContain('ae connect')
   })
 
@@ -105,20 +106,16 @@ describe('Site discovery manifest', () => {
       ])
     )
 
-    expect(pathsByKind.get('catalog_list')).toEqual(['/api/businesses'])
-    expect(pathsByKind.get('catalog_search')).toEqual(['/api/businesses/search?q='])
-    expect(pathsByKind.get('business_manifest')).toEqual(['/{slug}/ucp'])
+    expect(pathsByKind.get('catalog_list')).toBeUndefined()
+    expect(pathsByKind.get('catalog_search')).toBeUndefined()
+    expect(pathsByKind.get('business_manifest')).toBeUndefined()
     expect(pathsByKind.get('operation_read')).toEqual([
       '/api/v1/market-operations/search',
       '/api/v1/market-operations/detail',
       '/api/v1/market-operations/compare',
       '/api/v1/market-operations/inspect-plan',
     ])
-    expect(pathsByKind.get('discovery_artifact')).toEqual([
-      '/api/discovery/schema',
-      '/api/discovery/examples',
-    ])
-    expect(manifest.businessManifestUrlTemplate).toBe(`${origin}/{slug}/ucp`)
+    expect(pathsByKind.get('discovery_artifact')).toBeUndefined()
     expect(manifest).not.toHaveProperty('businessTools')
     expect(pathsByKind.get('site_entry_point')).toEqual(['/.well-known/ucp'])
     expect(JSON.stringify(manifest)).not.toMatch(/\/api\/answer|answer_turn|\/api\/chat\/anonymous/u)
@@ -232,11 +229,9 @@ describe('Site discovery manifest', () => {
     const templated = manifest.endpoints.filter((endpoint) => endpoint.templated).map((endpoint) => endpoint.path)
 
     expect([...templated].sort()).toEqual([
-      '/api/businesses/{slug}',
       '/api/v1/operations/{invocationRef}',
       '/api/v1/operations/{invocationRef}/cancel',
       '/api/v1/operations/{invocationRef}/reconcile',
-      '/{slug}/ucp',
     ])
   })
 
@@ -288,9 +283,31 @@ describe('Site discovery manifest', () => {
   })
 
   it('carries the listing boundary and claims no capability AE withholds', () => {
-    expect(manifest.boundary).toContain('Only independently callable Operations appear')
+    expect(manifest.boundary).toContain('The Operation catalogue is the canonical market')
     expect(manifest.unsupportedCapabilities.map((capability) => capability.label)).toContain(
       'Commercial or owner-action authority'
     )
+  })
+
+  it('serves compact, technical, and HEAD discovery from one contract', async () => {
+    const compact = await handleSiteDiscoveryManifestRequest(
+      new Request(`${origin}/.well-known/ucp`),
+    ).json() as Record<string, unknown>
+    const technical = await handleSiteDiscoveryManifestRequest(
+      new Request(`${origin}/.well-known/ucp?technical=1`),
+    ).json() as Record<string, unknown>
+    const head = handleSiteDiscoveryManifestRequest(
+      new Request(`${origin}/.well-known/ucp`, { method: 'HEAD' }),
+      true,
+    )
+
+    expect(compact).toHaveProperty(
+      'fullContract',
+      `${String(compact.origin)}/.well-known/ucp?technical=1`,
+    )
+    expect(compact).not.toHaveProperty('businessManifestUrlTemplate')
+    expect(technical).toHaveProperty('operationGateway.routes')
+    expect(head.status).toBe(200)
+    expect(await head.text()).toBe('')
   })
 })

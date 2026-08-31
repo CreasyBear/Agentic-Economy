@@ -25,12 +25,18 @@ export {
   reverseX402ExternalSpendForInvalidOutput,
   settleX402TransportObservation,
 } from './x402Settlement'
-export { createX402PaymentCallbacks, readX402Authorization } from './x402Authorization'
+export {
+  createX402PaymentCallbacks,
+  readX402Authorization,
+  replayManagedX402SigningForRecovery,
+} from './x402Authorization'
 export type { ExternalSpendSettlement, X402TransportObservationRecord } from './x402Settlement'
 export type { X402PaymentCallbacks } from './x402Authorization'
 
 /** The only production x402 credential locator. It identifies the CDP account name, not a secret. */
-export const BROKERED_X402_MANAGED_CUSTODY_REF = 'env:AE_X402_CDP_ACCOUNT_NAME' as const
+export const X402_MANAGED_CUSTODY_REF = 'env:AE_X402_CDP_ACCOUNT_NAME' as const
+/** @deprecated Use the rail-neutral managed custody reference. */
+export const BROKERED_X402_MANAGED_CUSTODY_REF = X402_MANAGED_CUSTODY_REF
 
 type ProviderRouteBinding = Extract<
   RouteTransportInvocation['binding'],
@@ -81,6 +87,38 @@ export function brokeredProviderAuthorityValidator(
   }
 }
 
+export function credentiallessX402ConnectionAuthorityValidator(
+  ctx: ActionCtx,
+  connectionAuthority: ConnectionAuthority,
+  resourceUrl: string,
+): ProviderConnectionAuthorityValidator {
+  return async (lookup) => {
+    if (
+      lookup.leaseRef !== undefined
+      || lookup.connectionRef !== connectionAuthority.connectionRef
+      || lookup.providerRef !== connectionAuthority.providerRef
+      || lookup.adapterId !== connectionAuthority.adapterId
+      || lookup.authorityGeneration !== connectionAuthority.authorityGeneration
+      || lookup.authorityDigest !== connectionAuthority.authorityDigest
+    ) return { kind: 'unavailable' as const, reason: 'lease_identity_mismatch' as const }
+    const current = await ctx.runQuery(
+      internal.capabilityOperationInvocations.readCurrentProviderConnectionAuthority,
+      {
+        connectionRef: connectionAuthority.connectionRef,
+        providerRef: connectionAuthority.providerRef,
+        adapterId: connectionAuthority.adapterId,
+        authorityGeneration: connectionAuthority.authorityGeneration,
+        authorityDigest: connectionAuthority.authorityDigest,
+        resourceUrl,
+        now: Date.now(),
+      },
+    )
+    return current?.kind === 'credentialless_x402'
+      ? { kind: 'valid' as const }
+      : { kind: 'unavailable' as const, reason: 'connection_not_found' as const }
+  }
+}
+
 export function createBrokeredX402PaymentCallbacks(
   ctx: ActionCtx,
   input: Readonly<{
@@ -92,12 +130,32 @@ export function createBrokeredX402PaymentCallbacks(
     operationKeyDigest: string
     dispatcher: Agent
     isGrantStillValid: () => Promise<boolean>
+    validateProviderAuthority?: ProviderConnectionAuthorityValidator
     onPaymentPossiblySubmitted: () => void
+  }>,
+): X402PaymentCallbacks {
+  return createManagedX402PaymentCallbacks(ctx, input)
+}
+
+export function createManagedX402PaymentCallbacks(
+  ctx: ActionCtx,
+  input: Readonly<{
+    dispatch: OpenDispatch
+    operation: PublishedOperation
+    connectionAuthority: ConnectionAuthority
+    durableAttemptRef: string
+    effectGeneration: number
+    operationKeyDigest: string
+    dispatcher: Agent
+    isGrantStillValid: () => Promise<boolean>
+    validateProviderAuthority?: ProviderConnectionAuthorityValidator
+    onPaymentPossiblySubmitted?: () => void
   }>,
 ): X402PaymentCallbacks {
   return createX402PaymentCallbacks(ctx, {
     ...input,
-    validateProviderAuthority: brokeredProviderAuthorityValidator(ctx, input.connectionAuthority),
+    validateProviderAuthority: input.validateProviderAuthority
+      ?? brokeredProviderAuthorityValidator(ctx, input.connectionAuthority),
     useCustodySigner: true,
   })
 }

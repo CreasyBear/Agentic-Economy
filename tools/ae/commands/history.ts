@@ -50,13 +50,24 @@ export async function runHistoryCommand(args: readonly string[], options: CliOpt
       code: 'history-result-invalid',
     })
   }
-  const nextCommand = result.data.nextCursor === undefined
+  const nextCursor = result.data.nextCursor
+  if (nextCursor !== undefined && /[\u0000-\u001f\u007f-\u009f]/u.test(nextCursor)) {
+    throw new CliFailure('The gateway returned an invalid invocation history cursor.', {
+      kind: 'UNAVAILABLE',
+      code: 'history-result-invalid',
+    })
+  }
+  const nextCommand = nextCursor === undefined
     ? undefined
     : continuationCommand([
         'ae', 'history',
         ...(options.limit === undefined ? [] : ['--limit', options.limit]),
         ...(options.state === undefined ? [] : ['--state', options.state]),
-        '--cursor', result.data.nextCursor,
+        '--cursor', nextCursor,
+        ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
+          ? []
+          : ['--base-url', options.baseUrl]),
+        ...(options.json ? ['--json'] : []),
       ])
   if (options.json) {
     printJson(nextCommand === undefined ? result.data : { ...result.data, nextCommand })

@@ -284,6 +284,35 @@ function custodyFacts(
   }
 }
 
+function canaryCustodyFacts(suffix: string): ExternalSpendPaymentFacts {
+  const grantRef = 'grant:canary-shared'
+  return {
+    ...baseFacts,
+    principalId: 'principal:canary-shared',
+    credentialId: 'credential:canary-shared',
+    grantRef,
+    environment: 'sandbox',
+    invocationRef: `invocation:canary-${suffix}`,
+    attemptRef: `attempt:canary-${suffix}`,
+    paymentIdentifier: `payment:canary-${suffix}`,
+    amount: { currency: 'USD', units: '1000', exponent: 6 },
+    executionContext: {
+      kind: 'seller_onboarding_canary',
+      paymentProfile: 'base-sepolia-usdc-exact',
+      canaryRef: `seller-canary:${suffix}`,
+      canaryCommitmentDigest: `sha256:${'c'.repeat(64)}`,
+      fundingBudgetRef: `budget:${grantRef}`,
+    },
+    custodyRef: 'custody:shared-wallet',
+    custodyGeneration: 1,
+    custodyDailyMaximum: {
+      currency: 'USD',
+      units: '50000',
+      exponent: 6,
+    },
+  }
+}
+
 async function budgetSnapshot(backend: Awaited<ReturnType<typeof seeded>>) {
   return await backend.run(async (ctx) => await ctx.db
     .query('moneyCredentialBudgetStates')
@@ -294,6 +323,7 @@ async function custodyBudget(
   backend: Awaited<ReturnType<typeof seeded>>,
   custodyRef = 'custody:shared-wallet',
   dayStart = '1970-01-01',
+  environment: 'sandbox' | 'production' = 'production',
 ) {
   const identity = `custody:${custodyRef}`
   return await backend.run(async (ctx) => await ctx.db
@@ -301,7 +331,7 @@ async function custodyBudget(
     .withIndex('by_principal_credential_env_generation_window', (query) => query
       .eq('principalId', identity)
       .eq('credentialId', identity)
-      .eq('environment', 'production')
+      .eq('environment', environment)
       .eq('generation', 1)
       .eq('windowKind', 'day')
       .eq('windowStart', dayStart))
@@ -812,6 +842,110 @@ describe('provider-direct external spend reservations', () => {
       reservedUnits: '500',
       version: 0,
     })
+  })
+
+  it('uses the official CDP development/Base Sepolia caps without aliasing production custody state', async () => {
+    // Grounded in cdp-sdk/examples/typescript/x402/clients/
+    // payForApiWithSpendControls.ts: environment=development, Base Sepolia,
+    // 10_000 atomic per payment and 50_000 atomic cumulative spend.
+    const facts = canaryCustodyFacts('official-spend-controls')
+    const backend = await seeded({
+      facts,
+      maximumSpendPerInvocation: { currency: 'USD', units: '10000', exponent: 6 },
+      maximumDailySpend: { currency: 'USD', units: '50000', exponent: 6 },
+      maximumMonthlySpend: { currency: 'USD', units: '50000', exponent: 6 },
+    })
+    await backend.run(async (ctx) => {
+      const identity = `custody:${facts.custodyRef}`
+      await ctx.db.insert('moneyCredentialBudgetStates', {
+        principalId: identity,
+        credentialId: identity,
+        budgetPolicyRef: `custody-daily:${facts.custodyRef}`,
+        environment: 'production',
+        generation: 1,
+        windowKind: 'day',
+        windowStart: '1970-01-01',
+        currency: 'USD',
+        exponent: 6,
+        settledUnits: '9000',
+        reservedUnits: '0',
+        reservedCount: 0,
+        version: 3,
+        updatedAt: 999,
+      })
+    })
+
+    const reserved = await backend.mutation(reserve, {
+      ...facts,
+      observedAt: 1_000,
+    })
+    const identity = acceptedIdentity(reserved)
+    expect(reserved).toMatchObject({
+      kind: 'accepted',
+      reservation: { executionContext: facts.executionContext },
+    })
+    expect(await custodyBudget(backend, facts.custodyRef, '1970-01-01', 'sandbox')).toMatchObject({
+      environment: 'sandbox',
+      settledUnits: '0',
+      reservedUnits: '1000',
+    })
+    expect(await custodyBudget(backend, facts.custodyRef)).toMatchObject({
+      environment: 'production',
+      settledUnits: '9000',
+      reservedUnits: '0',
+      version: 3,
+    })
+
+    await expect(backend.mutation(reserve, {
+      ...facts,
+      environment: 'production',
+      executionContext: {
+        kind: 'market',
+        paymentProfile: 'base-usdc-exact',
+      },
+      observedAt: 1_001,
+    })).resolves.toEqual({
+      kind: 'refused',
+      code: 'external_spend_identity_conflict',
+      retryable: false,
+    })
+
+    await expect(backend.mutation(finalize, {
+      ...identity,
+      submissionStatus: 'observed',
+      settlementStatus: 'settled',
+      paymentResponseDigest: 'payment-response:canary',
+      evidenceRefs: ['evidence:canary'],
+      observedAt: 1_002,
+    })).resolves.toMatchObject({ kind: 'accepted', status: 'settled' })
+    expect(await custodyBudget(backend, facts.custodyRef, '1970-01-01', 'sandbox')).toMatchObject({
+      settledUnits: '1000',
+      reservedUnits: '0',
+    })
+    expect(await custodyBudget(backend, facts.custodyRef)).toMatchObject({
+      settledUnits: '9000',
+      reservedUnits: '0',
+      version: 3,
+    })
+  })
+
+  it('refuses a canary whose committed funding budget does not match its grant budget', async () => {
+    const facts = canaryCustodyFacts('wrong-funding-budget')
+    const backend = await seeded({ facts })
+    const result = await backend.mutation(reserve, {
+      ...facts,
+      executionContext: {
+        ...facts.executionContext,
+        fundingBudgetRef: 'budget:wrong',
+      },
+      observedAt: 1_000,
+    })
+    expect(result).toEqual({
+      kind: 'refused',
+      code: 'external_spend_budget_refused',
+      retryable: false,
+    })
+    expect(await budgetSnapshot(backend)).toEqual([])
   })
 
   it('shares one fixed-generation custody row across reservations and credential rotation', async () => {

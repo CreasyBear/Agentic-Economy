@@ -10,6 +10,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(help.stderr).toBe('')
     const helpBody = JSON.parse(help.stdout) as {
       commands: Record<string, unknown>
+      groups: Array<{ id: string; title: string; commands: string[] }>
       auth: {
         authenticatedOperations: Record<string, string>
         cancelRequirements: string
@@ -18,6 +19,7 @@ describe('market-terminal CLI error contracts', () => {
     const commands = helpBody.commands
     expect(Object.keys(commands)).toEqual([
       'manifest',
+      'config',
       'search',
       'request',
       'inspect',
@@ -50,6 +52,25 @@ describe('market-terminal CLI error contracts', () => {
     expect(helpBody.auth.cancelRequirements).toContain('AE_API_KEY')
     expect(helpBody.auth.cancelRequirements).toContain('--idempotency-key')
     expect(helpBody.auth.cancelRequirements).toContain('body.idempotencyKey')
+    expect(helpBody.groups).toEqual([
+      {
+        id: 'discover_compare',
+        title: 'Discover and compare',
+        commands: ['search', 'inspect', 'compare', 'inspect-plan', 'request'],
+      },
+      {
+        id: 'connect_account',
+        title: 'Connect and account',
+        commands: ['connect', 'account', 'fund', 'revoke'],
+      },
+      {
+        id: 'call_recover',
+        title: 'Call and recover',
+        commands: ['call', 'history', 'status', 'wait', 'cancel', 'recover'],
+      },
+      { id: 'supply', title: 'Supply', commands: ['supply'] },
+      { id: 'reference', title: 'Reference', commands: ['manifest', 'config', 'doctor'] },
+    ])
     for (const legacy of ['feeds', 'run', 'study', 'reconcile', 'action', 'business', 'demand', 'advanced']) {
       expect(commands).not.toHaveProperty(legacy)
     }
@@ -57,15 +78,33 @@ describe('market-terminal CLI error contracts', () => {
     const textHelp = spawnCliSync(['help'])
     expect(textHelp.status).toBe(0)
     expect(textHelp.stderr).toBe('')
-    expect(textHelp.stdout).toContain('Authenticated Operation actions:')
-    expect(textHelp.stdout).toContain('call:')
-    expect(textHelp.stdout).toContain('status:')
-    expect(textHelp.stdout).toContain('wait:')
-    expect(textHelp.stdout).toContain('cancel:')
-    expect(textHelp.stdout).toContain('reconcile:')
-    expect(textHelp.stdout).toContain('AE_API_KEY')
-    expect(textHelp.stdout).toContain('--idempotency-key')
-    expect(textHelp.stdout).toContain('managed local Vite origin')
+    const groupHeadings = [
+      'DISCOVER AND COMPARE',
+      'CONNECT AND ACCOUNT',
+      'CALL AND RECOVER',
+      'SUPPLY',
+      'REFERENCE',
+    ]
+    for (const heading of groupHeadings) expect(textHelp.stdout).toContain(heading)
+    for (let index = 1; index < groupHeadings.length; index += 1) {
+      expect(textHelp.stdout.indexOf(groupHeadings[index - 1]!)).toBeLessThan(textHelp.stdout.indexOf(groupHeadings[index]!))
+    }
+    expect(textHelp.stdout).toContain('START HERE')
+    expect(textHelp.stdout).toContain('ae search "<job>"')
+    expect(textHelp.stdout).toContain('ae help call')
+    expect(textHelp.stdout).toContain('ae help <command>')
+    expect(textHelp.stdout).toContain('ae help --json')
+    expect(textHelp.stdout).toContain('UNIVERSAL FLAGS')
+    expect(textHelp.stdout).toContain('--base-url')
+    expect(textHelp.stdout).toContain('--json')
+    expect(textHelp.stdout).toContain('--help')
+    expect(textHelp.stdout).toContain('--version')
+    expect(textHelp.stdout).not.toContain('Authenticated Operation actions:')
+    expect(textHelp.stdout).not.toContain('AE_API_KEY')
+    expect(textHelp.stdout).not.toContain('--idempotency-key')
+    expect(textHelp.stdout).not.toContain('--cursor')
+    expect(textHelp.stdout).not.toContain('--filters')
+    expect(textHelp.stdout).not.toContain('ae search ["<job>"]')
     expect(textHelp.stdout).not.toContain('127.0.0.1:3024')
 
     const unknown = spawnCliSync(['feeds', '--json'])
@@ -181,6 +220,80 @@ describe('market-terminal CLI error contracts', () => {
     expect(parsed.positionals).toEqual(['operation:v1:first', 'operation:v1:second'])
   })
 
+  it('advertises and admits technical search output explicitly', () => {
+    const help = spawnCliSync(['help', 'search', '--json'])
+    expect(help.status).toBe(0)
+    expect(help.stderr).toBe('')
+    expect(JSON.parse(help.stdout)).toMatchObject({
+      command: 'search',
+      usage: expect.stringContaining('[--technical]'),
+      guidance: [
+        expect.any(String),
+        expect.any(String),
+        expect.stringContaining('include each Operation\'s navigation'),
+      ],
+      flags: {
+        '--technical': {
+          description: expect.stringContaining('JSON search results'),
+        },
+      },
+    })
+
+    const parsed = parseArgs(['search', 'reference lookup', '--technical', '--json'])
+    expect(parsed.options).toMatchObject({ technical: true, json: true })
+
+    const command = spawnCliSync([
+      'search',
+      'reference lookup',
+      '--technical',
+      '--json',
+      '--base-url',
+      'http://127.0.0.1:1',
+    ])
+    expect(command.status).toBe(1)
+    expect(command.stderr).toBe('')
+    expect(JSON.parse(command.stdout)).toMatchObject({
+      kind: 'UNAVAILABLE',
+      code: 'connection_refused',
+    })
+  }, 15_000)
+
+  it('advertises and admits technical inspect output explicitly', () => {
+    const operationRef = `operation:v1:${'a'.repeat(64)}`
+    const help = spawnCliSync(['help', 'inspect', '--json'])
+    expect(help.status).toBe(0)
+    expect(help.stderr).toBe('')
+    expect(JSON.parse(help.stdout)).toMatchObject({
+      command: 'inspect',
+      usage: 'ae inspect <operation-ref> [--technical]',
+      guidance: [expect.stringContaining('omits duplicated navigation')],
+      flags: {
+        '--technical': {
+          description: expect.stringContaining('inspect results'),
+        },
+      },
+    })
+
+    const parsed = parseArgs(['inspect', operationRef, '--technical', '--json'])
+    expect(parsed.options).toMatchObject({ technical: true, json: true })
+    expect(parsed.positionals).toEqual([operationRef])
+
+    const command = spawnCliSync([
+      'inspect',
+      operationRef,
+      '--technical',
+      '--json',
+      '--base-url',
+      'http://127.0.0.1:1',
+    ])
+    expect(command.status).toBe(1)
+    expect(command.stderr).toBe('')
+    expect(JSON.parse(command.stdout)).toMatchObject({
+      kind: 'UNAVAILABLE',
+      code: 'connection_refused',
+    })
+  }, 15_000)
+
   it('exposes account subcommand help and accepts the advertised technical manifest', () => {
     const accountHelp = spawnCliSync(['help', 'account', 'status', '--json'])
     expect(accountHelp.status).toBe(0)
@@ -197,6 +310,14 @@ describe('market-terminal CLI error contracts', () => {
       command: 'account balance',
       usage: 'ae account balance [currency]',
       summary: expect.stringContaining('credit'),
+    })
+    const disconnectHelp = spawnCliSync(['help', 'account', 'disconnect', '--json'])
+    expect(disconnectHelp.status).toBe(0)
+    expect(JSON.parse(disconnectHelp.stdout)).toMatchObject({
+      kind: 'HELP',
+      command: 'account disconnect',
+      usage: 'ae account disconnect [market|supplier]',
+      summary: expect.stringMatching(/Unqualified removes buyer\/market; pass supplier/u),
     })
     const supplyHelp = spawnCliSync(['help', 'supply', 'status', '--json'])
     expect(supplyHelp.status).toBe(0)
@@ -280,6 +401,39 @@ describe('market-terminal CLI error contracts', () => {
     expect(connectTextHelp.stdout).toContain('verification URI')
     expect(connectTextHelp.stdout).toContain('ae connect --supplier')
     expect(connectTextHelp.stderr).toBe('')
+  }, 30_000)
+
+  it('advertises bounded stdin input for call without broadening supplier input', () => {
+    const callHelp = spawnCliSync(['help', 'call', '--json'])
+    expect(callHelp.status).toBe(0)
+    expect(callHelp.stderr).toBe('')
+    expect(JSON.parse(callHelp.stdout)).toMatchObject({
+      command: 'call',
+      guidance: [expect.stringContaining('--input -')],
+      flags: {
+        '--input': {
+          description: expect.stringContaining('call alone accepts -'),
+        },
+      },
+    })
+
+    const supplyHelp = spawnCliSync(['help', 'supply', 'publish', '--json'])
+    expect(supplyHelp.status).toBe(0)
+    expect(JSON.parse(supplyHelp.stdout)).toMatchObject({
+      usage: "ae supply publish --input '<json>' [--idempotency-key <key>]",
+    })
+
+    const callText = spawnCliSync(['help', 'call'])
+    expect(callText.status).toBe(0)
+    expect(callText.stdout).toContain("Usage: ae call <operation-ref> --input '<json>' [--wait]")
+    expect(callText.stdout).toContain('Authentication:')
+    expect(callText.stdout).toContain('AE_API_KEY')
+    expect(callText.stdout).toContain('market_operations:invoke')
+    expect(callText.stdout).toContain('--input -')
+
+    const searchText = spawnCliSync(['help', 'search'])
+    expect(searchText.status).toBe(0)
+    expect(searchText.stdout).not.toContain('AE_API_KEY')
   }, 30_000)
 
   it('scopes valid command help, keeps text and JSON aligned, and rejects typo paths', () => {
@@ -394,5 +548,24 @@ describe('market-terminal CLI error contracts', () => {
       kind: 'INVALID_ARGUMENT',
       nextCommand: 'ae help recover',
     })
+  }, 30_000)
+
+  it('reports local version and provenance without contacting a server', () => {
+    const json = spawnCliSync(['--version', '--json'], {
+      env: { ...process.env, AE_SOURCE_REVISION: 'test-revision' },
+    })
+    expect(json.status).toBe(0)
+    expect(json.stderr).toBe('')
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      kind: 'VERSION',
+      version: '0.1.0',
+      buildRevision: 'test-revision',
+      runtime: process.version,
+    })
+
+    const human = spawnCliSync(['--version'])
+    expect(human.status).toBe(0)
+    expect(human.stderr).toBe('')
+    expect(human.stdout).toMatch(/^ae 0\.1\.0 \(.+\)\n$/u)
   }, 30_000)
 })

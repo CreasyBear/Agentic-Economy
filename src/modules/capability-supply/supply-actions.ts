@@ -22,6 +22,17 @@ import {
 } from './supply-funnel.functions'
 import { preparePublicationDraft, publicationMaterialContainsCredential, type PublishPreparedCapabilityCommandResult } from './internal/publication'
 import { dereferenceOpenApiSchema } from './internal/schema-deref'
+import { inspectX402SellerEndpoint } from './internal/x402-seller-endpoint-inspector'
+import {
+  validX402SellerClaimTime,
+  x402SellerClaimDigest,
+  x402SellerClaimMessage,
+} from './internal/x402-seller-claim'
+import {
+  canonicalEvmAddress,
+  evmAddressEquals,
+  verifyEip191Message,
+} from './internal/x402-evm-protocol'
 
 const publicationLifecycleSchema = z.strictObject({
   state: z.enum(['inactive', 'active', 'withdrawn', 'incompatible']),
@@ -56,7 +67,7 @@ export const SUPPLY_ACTION_ROUTE_CONTRACTS = Object.freeze({
   earnings: Object.freeze({ actionId: SUPPLY_ACTION_IDS.earnings, contractVersion: 'supply-earnings:v1', method: 'POST' as const, path: '/api/v1/supply/earnings', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionList: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionList, contractVersion: 'supply-connection-list:v1', method: 'POST' as const, path: '/api/v1/supply/connections/list', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionDetail: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionDetail, contractVersion: 'supply-connection-detail:v1', method: 'POST' as const, path: '/api/v1/supply/connections/detail', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
-  connectionConnect: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionConnect, contractVersion: 'supply-connection-connect:v1', method: 'POST' as const, path: '/api/v1/supply/connections/connect', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
+  connectionConnect: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionConnect, contractVersion: 'supply-connection-connect:v2', method: 'POST' as const, path: '/api/v1/supply/connections/connect', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionReconnect: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionReconnect, contractVersion: 'supply-connection-reconnect:v1', method: 'POST' as const, path: '/api/v1/supply/connections/reconnect', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionRevoke: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionRevoke, contractVersion: 'supply-connection-revoke:v1', method: 'POST' as const, path: '/api/v1/supply/connections/revoke', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionRetryCleanup: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionRetryCleanup, contractVersion: 'supply-connection-retry-cleanup:v1', method: 'POST' as const, path: '/api/v1/supply/connections/retry-cleanup', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
@@ -284,7 +295,13 @@ const connectionEvidenceSchema = z.array(z.string().trim().min(1)).max(64)
 const connectionIdempotencySchema = z.string().trim().min(8).max(200)
 export const supplyConnectionConnectInputSchema = z.strictObject({
   businessId: z.string().trim().min(1),
-  resourceUrl: z.string().url(),
+  resourceUrl: z.string().url().max(2_048),
+  method: z.enum(['GET', 'POST']),
+  environment: z.enum(['sandbox', 'production']),
+  observationDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+  payTo: z.string().regex(/^0x[0-9a-fA-F]{40}$/u),
+  claimExpiresAt: z.number().int().nonnegative(),
+  claimSignature: z.string().regex(/^0x[0-9a-fA-F]{130}$/u),
   evidenceRefs: connectionEvidenceSchema.default([]),
   idempotencyKey: connectionIdempotencySchema,
 })
@@ -315,6 +332,25 @@ const providerConnectionRefusalReasonSchema = z.enum([
   'invalid_digest',
   'invalid_transition',
   'command_identity_conflict',
+  'claim_invalid',
+  'inspection_target_invalid',
+  'inspection_target_not_public',
+  'inspection_request_invalid',
+  'inspection_request_failed',
+  'inspection_redirect_refused',
+  'inspection_payment_not_required',
+  'inspection_challenge_missing',
+  'inspection_challenge_too_large',
+  'inspection_challenge_malformed',
+  'inspection_challenge_conflict',
+  'inspection_challenge_resource_mismatch',
+  'inspection_unsupported',
+  'inspection_ambiguous',
+  'inspection_bazaar_missing',
+  'inspection_bazaar_discovery_invalid',
+  'inspection_schema_missing',
+  'inspection_selector_invalid',
+  'inspection_transport_unsupported',
   'source_unavailable',
 ])
 export const supplyConnectionCommandResultSchema = z.union([
@@ -326,6 +362,14 @@ export const supplyConnectionCommandResultSchema = z.union([
   z.strictObject({ kind: z.literal('refused'), reason: providerConnectionRefusalReasonSchema }),
 ])
 export type SupplyConnectionCommandResult = z.infer<typeof supplyConnectionCommandResultSchema>
+type SupplyConnectionRefusalReason = Extract<
+  SupplyConnectionCommandResult,
+  Readonly<{ kind: 'refused' }>
+>['reason']
+
+function connectionRefused(reason: SupplyConnectionRefusalReason): SupplyConnectionCommandResult {
+  return { kind: 'refused', reason }
+}
 
 export type SupplyManagementService = Readonly<{
   status(input: Readonly<{ input: SupplyStatusInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyStatusResult>
@@ -587,13 +631,76 @@ export function createSupplyManagementService(request: Request, bodyText: string
     const parsed = supplyConnectionCommandResultSchema.safeParse(result)
     return parsed.success ? parsed.data : { kind: 'refused', reason: 'source_unavailable' }
   }
-  const connectionConnect = async ({ input, principal }: { input: SupplyConnectionConnectInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyConnectionCommandResult> => (
-    await runConnectionCommand(SUPPLY_ACTION_IDS.connectionConnect, connectionConnectMutation, {
+  const connectionConnect = async ({ input, principal }: { input: SupplyConnectionConnectInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyConnectionCommandResult> => {
+    if (input.environment !== principal.environment || input.evidenceRefs.some((ref) => (
+      ref.startsWith('x402-payee-claim:') || ref.startsWith('x402-endpoint-inspection:')
+    ))) return connectionRefused('claim_invalid')
+
+    const inspection = await inspectX402SellerEndpoint({
+      endpointUrl: input.resourceUrl,
+      method: input.method,
+      aeEnvironment: input.environment,
+    })
+    if (inspection.kind === 'refused') {
+      return connectionRefused(`inspection_${inspection.reason}`)
+    }
+    if (inspection.payment.selection.kind !== 'selected') {
+      return connectionRefused(`inspection_${inspection.payment.selection.kind}`)
+    }
+    if (inspection.discovery.kind !== 'admitted') {
+      return connectionRefused(inspection.discovery.kind === 'absent'
+        ? 'inspection_bazaar_missing'
+        : `inspection_${inspection.discovery.reason}`)
+    }
+    const selectedAlternativeId = inspection.payment.selection.alternativeId
+    const selected = inspection.payment.accepts.find((candidate) => (
+      candidate.alternativeId === selectedAlternativeId
+    ))
+    const now = Date.now()
+    const payTo = selected === undefined
+      ? undefined
+      : canonicalEvmAddress(selected.payTo)
+    if (payTo === undefined
+      || !evmAddressEquals(payTo, input.payTo)
+      || inspection.digest !== input.observationDigest
+      || !validX402SellerClaimTime(input.claimExpiresAt, now)) {
+      return connectionRefused('claim_invalid')
+    }
+    const claim = {
       businessId: input.businessId,
-      resourceUrl: input.resourceUrl,
-      evidenceRefs: [...input.evidenceRefs],
+      endpointUrl: inspection.endpoint.url,
+      method: input.method,
+      observationDigest: inspection.digest,
+      payTo,
+      expiresAt: input.claimExpiresAt,
+    } as const
+    let claimVerified = false
+    try {
+      claimVerified = await verifyEip191Message({
+        address: claim.payTo,
+        message: x402SellerClaimMessage(claim),
+        signature: input.claimSignature,
+      })
+    } catch {
+      claimVerified = false
+    }
+    if (!claimVerified) return connectionRefused('claim_invalid')
+
+    return await runConnectionCommand(SUPPLY_ACTION_IDS.connectionConnect, connectionConnectMutation, {
+      businessId: input.businessId,
+      resourceUrl: inspection.endpoint.url,
+      method: input.method,
+      observationDigest: inspection.digest,
+      payTo: claim.payTo,
+      claimExpiresAt: input.claimExpiresAt,
+      claimDigest: x402SellerClaimDigest(claim),
+      claimSignature: input.claimSignature,
+      evidenceRefs: [
+        ...input.evidenceRefs,
+        `x402-endpoint-inspection:${inspection.digest}`,
+      ],
     }, input, principal)
-  )
+  }
   const connectionReconnect = async ({ input, principal }: { input: SupplyConnectionTransitionInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyConnectionCommandResult> => (
     await runConnectionCommand(SUPPLY_ACTION_IDS.connectionReconnect, connectionReconnectMutation, {
       connectionRef: input.connectionRef,
@@ -888,13 +995,19 @@ export const supplyConnectionDetailAction = defineAction<SupplyConnectionDetailI
 export const supplyConnectionConnectAction = defineAction<SupplyConnectionConnectInput, SupplyConnectionCommandResult>({
   id: SUPPLY_ACTION_IDS.connectionConnect,
   name: 'Connect supplier x402 endpoint',
-  summary: 'Create or replay one credentialless x402 provider connection for a published supplier business.',
+  summary: 'Reinspect and connect one credentialless x402 endpoint after its payee signs the exact observed seller claim.',
   boundaries: supplyBoundaries,
   schema: supplyConnectionConnectInputSchema,
   outputSchema: supplyConnectionCommandResultSchema,
   parameters: [
     { name: 'businessId', type: 'string', description: 'Owner business selected by the authenticated principal.', required: true },
     { name: 'resourceUrl', type: 'string', description: 'Public HTTPS x402 resource URL without a fragment.', required: true },
+    { name: 'method', type: 'enum', description: 'Exact unpaid request method used to inspect the endpoint.', required: true, enum: ['GET', 'POST'] },
+    { name: 'environment', type: 'enum', description: 'Payment environment, which must match the supplier agent credential.', required: true, enum: ['sandbox', 'production'] },
+    { name: 'observationDigest', type: 'string', description: 'Canonical digest from the exact live x402 inspection being claimed.', required: true },
+    { name: 'payTo', type: 'string', description: 'Exact EVM payee from the selected live x402 payment requirement.', required: true },
+    { name: 'claimExpiresAt', type: 'number', description: 'Short-lived seller-claim expiry timestamp.', required: true },
+    { name: 'claimSignature', type: 'string', description: 'EIP-191 signature by payTo over the exact AE seller-claim message.', required: true },
     { name: 'evidenceRefs', type: 'array', description: 'Durable non-secret evidence references.', required: true },
     { name: 'idempotencyKey', type: 'string', description: 'Stable replay/conflict command identity.', required: true },
   ],
@@ -902,7 +1015,7 @@ export const supplyConnectionConnectAction = defineAction<SupplyConnectionConnec
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'provider_system', dataClasses: ['operation_input'], spendExposure: 'none', approval: 'mandate_eligible' },
   surfaces: supplySurfaces,
   credentialAdmission: supplyCredentialAdmission,
-  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionConnect.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['businessId', 'resourceUrl', 'evidenceRefs', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['provider_connection_identity'], safeContinuations: ['supply.connection.detail', 'supply.publish'], invalidationConditions: ['business_changed', 'resource_url_changed', 'idempotency_key_changed'] },
+  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionConnect.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['businessId', 'resourceUrl', 'method', 'environment', 'observationDigest', 'payTo', 'claimExpiresAt', 'claimSignature', 'evidenceRefs', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['x402_endpoint_inspection', 'x402_payee_claim', 'provider_connection_identity'], safeContinuations: ['supply.connection.detail', 'supply.publish'], invalidationConditions: ['business_changed', 'resource_url_changed', 'payment_environment_changed', 'observation_changed', 'payee_changed', 'claim_expired', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')

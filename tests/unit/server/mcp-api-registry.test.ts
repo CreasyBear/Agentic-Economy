@@ -1,24 +1,29 @@
 import { postMcp, readMcpBody } from './mcp-api-harness'
 import { describe, expect, it, vi } from 'vitest'
 
-import { registryDetailAction, registrySearchAction } from '@/modules/registry/registry.actions'
+import {
+  registryOperationsDetailAction,
+  registryOperationsSearchAction,
+} from '@/modules/registry/operations.actions'
 
 describe('MCP host adapter registry', () => {
   it('calls the registered registry search action with MCP attribution', async () => {
-    const run = vi.spyOn(registrySearchAction, 'run').mockResolvedValue({
-      kind: 'ok',
-      schemaVersion: 'public-business-catalog-api:v2',
+    const run = vi.spyOn(registryOperationsSearchAction, 'run').mockResolvedValue({
+      kind: 'no_candidates',
+      schemaVersion: 'registry-operations:v1',
       query: 'plumbing',
-      items: [],
-      pagination: { limit: 10, total: 0, hasMore: false },
-    } as never)
+      appliedFilters: {},
+      matchedCount: 0,
+      ranking: [],
+      navigation: [],
+    })
 
     const response = await postMcp({
       jsonrpc: '2.0',
       id: 3,
       method: 'tools/call',
       params: {
-        name: 'ae_registry_search',
+        name: 'ae_registry_operations_search',
         arguments: { query: 'plumbing' },
       },
     })
@@ -31,18 +36,18 @@ describe('MCP host adapter registry', () => {
       context: expect.objectContaining({ caller: 'mcp' }),
     })
     expect((result.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({
-      kind: 'ok',
+      kind: 'no_candidates',
     })
   })
 
   it('returns an input validation error without invoking the detail action', async () => {
-    const run = vi.spyOn(registryDetailAction, 'run')
+    const run = vi.spyOn(registryOperationsDetailAction, 'run')
     const response = await postMcp({
       jsonrpc: '2.0',
       id: 4,
       method: 'tools/call',
       params: {
-        name: 'ae_registry_detail',
+        name: 'ae_registry_operations_detail',
         arguments: {},
       },
     })

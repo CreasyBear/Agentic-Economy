@@ -1,11 +1,25 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { parseArgs } from '../../../tools/ae/lib/args'
+import { isLoopbackCliBaseUrl, parseArgs } from '../../../tools/ae/lib/args'
 import { CliFailure, callJson, requireOk, type HttpOutcome } from '../../../tools/ae/lib/output'
 import { spawnCli, spawnCliSync } from './cli-errors-harness'
 
 describe('market-terminal CLI error contracts', () => {
   afterEach(() => vi.unstubAllGlobals())
+
+  it.each([
+    ['http://localhost:3024', true],
+    ['http://127.0.0.1:3024', true],
+    ['http://127.255.1.2:3024', true],
+    ['http://[::1]:3024', true],
+    ['https://127.example.invalid', false],
+    ['https://agentic-economy-phi.vercel.app', false],
+  ] as const)('classifies CLI origin %s as loopback=%s', (origin, expected) => {
+    expect(isLoopbackCliBaseUrl(origin)).toBe(expected)
+  })
 
   it('routes root call through the call runner before network access', async () => {
     const result = await spawnCli(['call', '--json'])
@@ -93,12 +107,14 @@ describe('market-terminal CLI error contracts', () => {
           kind: 'INVALID_ARGUMENT',
           code: 'invalid-arguments',
           exitCode: 1,
+          nextCommand: 'ae help',
         })
       }
     }
   }, 30_000)
 
-  it('keeps connection-refused diagnostics to the safe origin', () => {
+  it('keeps loopback connection-refused diagnostics local and redacted', () => {
+    const hostedDoctor = 'ae doctor --base-url https://agentic-economy-phi.vercel.app'
     for (const json of [false, true]) {
       const result = spawnCliSync([
         '--base-url',
@@ -117,10 +133,82 @@ describe('market-terminal CLI error contracts', () => {
           kind: 'UNAVAILABLE',
           code: 'connection_refused',
           message: 'Could not reach http://127.0.0.1:1.',
-          suggestion: 'Start the AE server, then retry the command.',
-          nextCommand: 'npm run dev',
+          suggestion: 'Local AE is not running; check the hosted AE service instead.',
+          nextCommand: hostedDoctor,
           exitCode: 1,
         })
+        expect(result.stdout).not.toContain('npm run')
+      } else {
+        expect(result.stdout).toBe('')
+        expect(result.stderr).toBe([
+          'Could not reach http://127.0.0.1:1.',
+          'Local AE is not running; check the hosted AE service instead.',
+          `Next: ${hostedDoctor}`,
+          '',
+        ].join('\n'))
+        expect(result.stderr).not.toContain('npm run')
+      }
+    }
+  }, 30_000)
+
+  it('keeps remote connection-refused diagnostics origin-aware, non-looping, and redacted', () => {
+    const origin = 'https://ae-unreachable.invalid'
+    const expectedNextCommand = `ae config --base-url ${origin} --json`
+    for (const json of [false, true]) {
+      const result = spawnCliSync([
+        '--base-url',
+        origin,
+        'search',
+        'TOPSECRET?private=query',
+        ...(json ? ['--json'] : []),
+      ])
+
+      expect(result.status).toBe(1)
+      expect(result.stdout).not.toContain('TOPSECRET')
+      expect(result.stderr).not.toContain('TOPSECRET')
+      expect(result.stdout).not.toContain('private=query')
+      expect(result.stderr).not.toContain('private=query')
+      if (json) {
+        expect(result.stderr).toBe('')
+        const envelope = JSON.parse(result.stdout) as { nextCommand: string }
+        expect(envelope).toMatchObject({
+          kind: 'UNAVAILABLE',
+          code: 'connection_refused',
+          message: `Could not reach ${origin}.`,
+          suggestion: 'Check network access and confirm the configured AE origin.',
+          nextCommand: expectedNextCommand,
+          exitCode: 1,
+        })
+        expect(result.stdout).not.toContain('npm run')
+
+        const [executable, ...continuationArgs] = envelope.nextCommand.split(' ')
+        expect(executable).toBe('ae')
+        const continuationEnv: NodeJS.ProcessEnv = {
+          ...process.env,
+          AE_CONFIG_DIR: join(tmpdir(), `ae-cli-origin-continuation-${process.pid}`),
+        }
+        delete continuationEnv.AE_API_KEY
+        delete continuationEnv.AE_API_KEY_ORIGIN
+        delete continuationEnv.AE_CLI_BASE_URL
+        delete continuationEnv.AE_CANONICAL_BASE_URL
+        const continuation = spawnCliSync(continuationArgs, { env: continuationEnv })
+        expect(continuation.status).toBe(0)
+        expect(continuation.stderr).toBe('')
+        expect(continuation.stdout).not.toContain('TOPSECRET')
+        expect(continuation.stdout).not.toContain('private=query')
+        expect(JSON.parse(continuation.stdout)).toMatchObject({
+          kind: 'config',
+          baseUrl: { origin, source: 'flag' },
+        })
+      } else {
+        expect(result.stdout).toBe('')
+        expect(result.stderr).toBe([
+          `Could not reach ${origin}.`,
+          'Check network access and confirm the configured AE origin.',
+          `Next: ${expectedNextCommand}`,
+          '',
+        ].join('\n'))
+        expect(result.stderr).not.toContain('npm run')
       }
     }
   }, 30_000)

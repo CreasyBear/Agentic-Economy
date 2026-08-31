@@ -92,7 +92,7 @@ describe('private market request CLI', () => {
 
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'available',
-      nextCommand: "ae request list --limit 5 --cursor 'opaque cursor'",
+      nextCommand: "ae request list --limit 5 --cursor 'opaque cursor' --json",
     })
   })
 

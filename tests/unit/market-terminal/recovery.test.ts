@@ -291,6 +291,59 @@ describe('CLI operation recovery projections', () => {
     expect(JSON.parse(output.read())).not.toHaveProperty('nextCommand')
   })
 
+  it('returns one safe reconciliation review command in machine output', async () => {
+    setApiKey('ae-test-caller-key')
+    const output = capture(process.stdout)
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'found',
+      invocationRef: 'invocation:one',
+      operationRef: 'operation:v1:test',
+      state: 'reconciliation_required',
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    try {
+      const { runStatusCommand } = await import('../../../tools/ae/commands/status')
+      await runStatusCommand(['invocation:one'], baseOptions)
+    } finally {
+      output.restore()
+    }
+
+    expect(JSON.parse(output.read())).toMatchObject({
+      state: 'reconciliation_required',
+      nextCommand: 'ae help recover --json',
+      warning: 'The external effect may have started. Reconcile before retrying.',
+    })
+  })
+
+  it('returns the funding command for insufficient credit in machine output', async () => {
+    setApiKey('ae-test-caller-key')
+    const output = capture(process.stdout)
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'found',
+      invocationRef: 'invocation:one',
+      operationRef: 'operation:v1:test',
+      state: 'terminal',
+      usage: {
+        usageRef: 'usage:credit',
+        observedAt: 100,
+        chargeState: 'insufficient_credit',
+        amount: { currency: 'USD', units: '100', exponent: 2 },
+        priceDigest: 'sha256:price',
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    try {
+      const { runStatusCommand } = await import('../../../tools/ae/commands/status')
+      await runStatusCommand(['invocation:one'], baseOptions)
+    } finally {
+      output.restore()
+    }
+
+    expect(JSON.parse(output.read())).toMatchObject({
+      nextCommand: 'ae account balance --json',
+    })
+  })
+
   it('uses top-level status usage to point insufficient credit at account funding', async () => {
     setApiKey('ae-test-caller-key')
     const output = capture(process.stdout)
@@ -444,6 +497,7 @@ describe('CLI operation recovery projections', () => {
     try {
       await runRecoverCommand(['invocation:one', JSON.stringify(evidence)], {
         ...baseOptions,
+        baseUrlSource: 'flag',
         idempotencyKey: 'recover:one',
       })
     } finally {
@@ -461,6 +515,7 @@ describe('CLI operation recovery projections', () => {
       kind: 'found',
       invocationRef: 'invocation:one',
       result: completed,
+      nextCommand: 'ae status invocation:one --base-url https://market.example --json',
     })
     expect(rendered).not.toContain('recover:one')
   })

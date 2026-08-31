@@ -31,6 +31,187 @@ const invalidPaidOutputObservation = {
 } satisfies RouteTransportObservation
 
 describe('capability operation invocation worker charge/x402', () => {
+  it('runs an exact sealed canary when only the live qualification digest is recomputed', async () => {
+    const worker = createWorker('x402', {
+      sellerCanary: true,
+      alreadyLeased: true,
+      currentOperation: (operation) => ({
+        ...operation,
+        readiness: {
+          ...operation.readiness,
+          qualificationDigest: digest('q'),
+        },
+      }),
+    })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'completed',
+      result: {
+        kind: 'completed',
+        receipt: {
+          state: 'settled',
+          settlementTransactionHash: '0xworker-settled',
+        },
+      },
+    })
+    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
+    expect(worker.state.transportCalls).toBe(1)
+  })
+
+  it('refuses a sealed canary when exact operation material drifts before claim', async () => {
+    const worker = createWorker('x402', {
+      sellerCanary: true,
+      currentOperation: (operation) => ({
+        ...operation,
+        identity: {
+          ...operation.identity,
+          contractDigest: digest('c'),
+        },
+      }),
+    })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused',
+      result: { kind: 'refused', code: 'operation_not_current' },
+    })
+    expect(worker.state.mutationCalls.filter(({ path }) => path === 'capabilityOperationInvocations:claimDispatch')).toHaveLength(0)
+    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
+    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
+    expect(worker.state.transportCalls).toBe(0)
+  })
+
+  it('runs the sealed sandbox seller canary through managed custody with only external-spend accounting', async () => {
+    const worker = createWorker('x402', { sellerCanary: true, alreadyLeased: true })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+
+    const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(paths).not.toContain('moneyLedger:authorizeInvocationCharge')
+    expect(paths).not.toContain('moneyLedger:reserveBrokeredInvocationCharge')
+    expect(paths).not.toContain('moneyLedger:finalizeBrokeredInvocationCharge')
+    expect(paths).not.toContain('qualifiedUse:recordQualifiedUse')
+    expect(paths).not.toContain('capabilityProviderConnections:issueLease')
+    expect(paths).not.toContain('capabilityProviderConnections:consumeLease')
+    expect(worker.state.queryCalls).not.toContain('capabilityOperationInvocations:readProviderLeaseAuthority')
+    expect(worker.state.queryCalls.filter((path) =>
+      path === 'capabilityOperationInvocations:readCurrentProviderConnectionAuthority')).toHaveLength(5)
+    expect(paths.filter((path) => path === 'moneyLedger:reserveExternalInvocationSpend')).toHaveLength(1)
+    expect(paths.filter((path) => path === 'moneyLedger:finalizeExternalInvocationSpend')).toHaveLength(1)
+    expect(worker.state.money).toBeUndefined()
+    expect(worker.state.qualifiedUse).toEqual([])
+    expect(mocks.invokeProviderConsequenceViaVercel).not.toHaveBeenCalled()
+    expect(mocks.invokePreparedRouteTransport).toHaveBeenCalledTimes(1)
+    expect(worker.state.events.indexOf('fence-callback'))
+      .toBeLessThan(worker.state.events.indexOf('authorization-read'))
+    expect(worker.state.mutationCalls.find(({ path }) => path === 'moneyLedger:reserveExternalInvocationSpend')?.args)
+      .toMatchObject({
+        environment: 'sandbox',
+        executionContext: {
+          kind: 'seller_onboarding_canary',
+          paymentProfile: 'base-sepolia-usdc-exact',
+          canaryRef: expect.any(String),
+          canaryCommitmentDigest: expect.any(String),
+          fundingBudgetRef: 'budget:test-worker',
+        },
+    })
+    const completed = worker.state.records.find((record) => record.state === 'completed')
+    expect(completed).toMatchObject({
+      state: 'completed',
+      evidenceHash: expect.any(String),
+      result: {
+        kind: 'completed',
+        receipt: {
+          state: 'settled',
+          network: 'eip155:84532',
+          asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+          providerQuotedAmount: { currency: 'USD', units: '1', exponent: 2 },
+          agenticEconomyFee: { currency: 'USD', units: '0', exponent: 2 },
+          totalBuyerAuthorization: { currency: 'USD', units: '0', exponent: 2 },
+          paymentIdentifier: expect.any(String),
+          settlementTransactionHash: '0xworker-settled',
+          externalSettlementRef: expect.any(String),
+          refundState: 'not_applicable',
+          lossState: 'none',
+        },
+      },
+    })
+    expect(completed).not.toHaveProperty('usage')
+    expect(completed?.result).not.toHaveProperty('usage')
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'none' })
+    expect(worker.state.transportCalls).toBe(1)
+    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops a sealed canary when the staged operation drifts at the authorization boundary', async () => {
+    const worker = createWorker('x402', {
+      sellerCanary: true,
+      alreadyLeased: true,
+      authorizationCurrentOperation: (operation) => ({
+        ...operation,
+        readiness: {
+          ...operation.readiness,
+          validUntil: operation.readiness.validUntil - 1,
+        },
+      }),
+    })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+
+    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
+    expect(mocks.guardedFetch).not.toHaveBeenCalled()
+    expect(worker.state.payment.mark).toBeUndefined()
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'reconciliation_required',
+      result: { kind: 'reconciliation_required' },
+    })
+  })
+
+  it('refuses a canary whose seller payee aliases the managed payer before signing or transport', async () => {
+    const worker = createWorker('x402', {
+      sellerCanary: true,
+      sellerPayTo: '0x0000000000000000000000000000000000000001',
+    })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+
+    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
+    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
+    expect(worker.state.transportCalls).toBe(0)
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused',
+      result: { kind: 'refused', code: 'provider_refused' },
+    })
+  })
+
+  it('keeps an ambiguous canary payment in reconciliation and never pays again on worker replay', async () => {
+    const worker = createWorker('x402', {
+      sellerCanary: true,
+      alreadyLeased: true,
+      observation: {
+        transport: 'x402',
+        disposition: 'unknown',
+        releaseStarted: true,
+        requestDigest: digest('u'),
+        paymentSubmissionStatus: 'possibly_submitted',
+        settlementEvidence: { kind: 'unknown', reason: 'network_timeout' },
+      },
+    })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
+    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
+    expect(worker.state.transportCalls).toBe(1)
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'none' })
+    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
+    expect(worker.state.transportCalls).toBe(1)
+  })
+
   it('completes provider-direct x402 with payment evidence and no AE money effects', async () => {
     const worker = createWorker('x402')
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
@@ -132,12 +313,44 @@ describe('capability operation invocation worker charge/x402', () => {
         requestFingerprintContext: {
           method: 'GET',
           operationRef: worker.state.dispatch.operationRef,
+          aeEnvironment: 'production',
         },
       }),
     )
     expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
     expect(mocks.credentialFromEnvironment).not.toHaveBeenCalled()
     expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({ state: 'completed' })
+  })
+  it('continues after atomically reclaiming an expired bare signing claim', async () => {
+    const worker = createWorker('x402', {
+      environment: 'production',
+      paymentSigningClaim: 'expired',
+    })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({ state: 'completed' })
+    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
+    expect(worker.state.mutationCalls.filter(({ path }) =>
+      path === 'moneyX402PaymentAttempts:recordX402PaymentSigningIntent')).toHaveLength(1)
+  })
+  it('leaves an unexpired signing claim pending without minting a second intent', async () => {
+    vi.useFakeTimers()
+    try {
+      const worker = createWorker('x402', {
+        environment: 'production',
+        paymentSigningClaim: 'unexpired',
+      })
+      const result = handler(worker.ctx, { invocationRef })
+      await vi.advanceTimersByTimeAsync(1_100)
+
+      await expect(result).resolves.toEqual({ kind: 'recorded' })
+      expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
+      expect(worker.state.mutationCalls.filter(({ path }) =>
+        path === 'moneyX402PaymentAttempts:recordX402PaymentSigningIntent')).toHaveLength(0)
+      expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
   it('refuses managed x402 without custody configuration before either persistence write', async () => {
     mocks.cdpX402CustodyConfigurationFromEnvironment.mockImplementationOnce(() => undefined as never)
@@ -183,11 +396,56 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(paths).not.toContain('moneyX402PaymentAttempts:claimX402PaymentAuthorization')
     expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentSigningIntent')
     expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentSignatureDigest')
+    expect(paths).toContain('moneyX402PaymentAttempts:recordX402PaymentAuthorizationFailure')
+    expect(paths.indexOf('moneyX402PaymentAttempts:recordX402PaymentAuthorizationFailure'))
+      .toBeLessThan(paths.indexOf('moneyLedger:finalizeExternalInvocationSpend'))
+    expect(worker.state.payment.authorization).toMatchObject({
+      authorizationFailureCode: 'grant_invalid',
+    })
     expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
     expect(worker.state.transportCalls).toBe(1)
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
       result: { kind: 'refused', code: 'payment_signature_unavailable' },
+    })
+  })
+
+  it.each([
+    ['invalid', 'connection_not_found'],
+    ['throw', 'authority_read_failed'],
+  ] as const)('records and releases a %s provider authority failure before signing', async (mode, detail) => {
+    const worker = createWorker('x402', {
+      environment: 'production',
+      signingBoundaryProviderAuthority: mode,
+    })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+
+    const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(paths.indexOf('moneyX402PaymentAttempts:recordX402PaymentAuthorizationFailure'))
+      .toBeLessThan(paths.indexOf('moneyLedger:finalizeExternalInvocationSpend'))
+    expect(paths).not.toContain('moneyX402PaymentAttempts:claimX402PaymentAuthorization')
+    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
+    expect(worker.state.payment.authorization).toMatchObject({
+      authorizationFailureCode: 'provider_authority_invalid',
+      authorizationFailureDetail: detail,
+    })
+  })
+
+  it('records a managed authorization that returns no header after the signing claim', async () => {
+    const worker = createWorker('x402', { environment: 'production' })
+    mocks.createCdpEvmX402PaymentSignature.mockImplementationOnce(async () => undefined as never)
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+
+    const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(paths).toContain('moneyX402PaymentAttempts:claimX402PaymentAuthorization')
+    expect(paths).toContain('moneyX402PaymentAttempts:recordX402PaymentAuthorizationFailure')
+    expect(paths.indexOf('moneyX402PaymentAttempts:recordX402PaymentAuthorizationFailure'))
+      .toBeLessThan(paths.indexOf('moneyLedger:finalizeExternalInvocationSpend'))
+    expect(worker.state.payment.authorization).toMatchObject({
+      claimed: true,
+      authorizationFailureCode: 'managed_authorization_unavailable',
     })
   })
   it('retains buyer and external reservations after a post-submit timeout', async () => {

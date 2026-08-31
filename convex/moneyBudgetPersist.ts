@@ -557,12 +557,13 @@ function custodyDayStart(observedAt: number): string | undefined {
 
 function custodyDailyBudgetIdentity(
   custodyRef: string,
+  environment: 'sandbox' | 'production',
   dayStart: string,
 ): Readonly<{
   principalId: string
   credentialId: string
   budgetPolicyRef: string
-  environment: 'production'
+  environment: 'sandbox' | 'production'
   generation: 1
   windowKind: 'day'
   windowStart: string
@@ -572,7 +573,7 @@ function custodyDailyBudgetIdentity(
     principalId: identity,
     credentialId: identity,
     budgetPolicyRef: `custody-daily:${custodyRef}`,
-    environment: 'production',
+    environment,
     generation: 1,
     windowKind: 'day',
     windowStart: dayStart,
@@ -674,6 +675,7 @@ export async function reserveCustodyDailyBudgetInTransaction(
   ctx: MutationCtx,
   args: Readonly<{
     custodyRef: string
+    environment: 'sandbox' | 'production'
     maximumDailySpend: ExactAmount
     amount: ExactAmount
     observedAt: number
@@ -691,7 +693,11 @@ export async function reserveCustodyDailyBudgetInTransaction(
   if (maximumDailySpend === undefined || amount === undefined) {
     return custodyDailyBudgetRefusal('external_spend_custody_policy_invalid')
   }
-  const identity = custodyDailyBudgetIdentity(args.custodyRef, dayStart)
+  const identity = custodyDailyBudgetIdentity(
+    args.custodyRef,
+    args.environment,
+    dayStart,
+  )
   const row = await readCustodyDailyBudgetState(ctx, identity)
   if (row !== null && !custodyDailyBudgetRowMatches(row, identity)) {
     return custodyDailyBudgetRefusal('external_spend_custody_policy_invalid')
@@ -755,6 +761,7 @@ export async function transitionCustodyDailyBudgetInTransaction(
   ctx: Pick<MutationCtx, 'db'>,
   args: Readonly<{
     custodyRef: string
+    environment: 'sandbox' | 'production'
     budgetPolicyRef: string
     dayStart: string
     amount: ExactAmount
@@ -771,7 +778,11 @@ export async function transitionCustodyDailyBudgetInTransaction(
   ) return false
   const amount = readExactAmount(args.amount)
   if (amount === undefined) return false
-  const identity = custodyDailyBudgetIdentity(args.custodyRef, args.dayStart)
+  const identity = custodyDailyBudgetIdentity(
+    args.custodyRef,
+    args.environment,
+    args.dayStart,
+  )
   if (args.budgetPolicyRef !== identity.budgetPolicyRef) return false
   const row = await readCustodyDailyBudgetState(ctx, identity)
   if (

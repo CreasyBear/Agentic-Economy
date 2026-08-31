@@ -7,6 +7,7 @@ import {
 
 type OperationContinuationInput = Readonly<{
   operationRef: string
+  searchQuery: string
   availabilityPosture: 'integrated' | 'routeable' | 'unavailable'
   requiresBuyerCredential: boolean
   hasBuyerCredential: boolean

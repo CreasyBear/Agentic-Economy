@@ -102,6 +102,10 @@ type LocalX402TestnetResult = Readonly<{
   paymentResponse: SettleResponse
   evidenceCeiling: string
 }>
+type DevelopmentX402WireFlow = Readonly<{
+  unpaidChallengeRequests: number
+  signedRetryRequests: number
+}>
 
 export type LocalX402CanaryResult =
   | Readonly<{
@@ -122,6 +126,10 @@ export type LocalX402CanaryResult =
         source: 'development-fake-facilitator'
         blockchainSettlement: false
         response: SettleResponse
+      }>
+      wireFlow: Readonly<{
+        officialClient: DevelopmentX402WireFlow
+        routeRuntime: DevelopmentX402WireFlow
       }>
       routeObservation: RouteTransportObservation
       authority: Readonly<{
@@ -193,20 +201,14 @@ export async function runDevelopmentX402LocalCanary(
   const requestUrl = `${localServer.baseUrl}${requestPath}`
   try {
     const client = createDevelopmentX402Client()
-    const challenge: PaymentRequired = {
-      x402Version: 2,
-      resource: { url: requestUrl, description: 'Development-only dynamic x402 quote operation.', mimeType: 'application/json', serviceName: 'development-local-x402-provider' },
-      accepts: [{
-        scheme: 'exact',
-        network: BASE_SEPOLIA_NETWORK,
-        amount: LOCAL_X402_PAYMENT_AMOUNT,
-        asset: BASE_SEPOLIA_USDC,
-        payTo: LOCAL_X402_PAY_TO,
-        maxTimeoutSeconds: 60,
-        extra: { name: 'USDC', version: '2' },
-      }],
-      extensions: { [PAYMENT_IDENTIFIER]: declarePaymentIdentifierExtension(true) },
+    const officialClientWireFlow = { unpaidChallengeRequests: 0, signedRetryRequests: 0 }
+    officialClientWireFlow.unpaidChallengeRequests += 1
+    const unpaidResponse = await fetch(requestUrl, { headers: { accept: 'application/json' } })
+    const unpaid = await client.processResponse(unpaidResponse)
+    if (unpaid.status !== 402 || unpaid.paymentStatus !== 'payment_required' || unpaid.header === undefined || !('accepts' in unpaid.header)) {
+      throw new Error('development_x402_payment_challenge_missing')
     }
+    const challenge = unpaid.header
     validatePaymentRequired(challenge)
     if (challenge.x402Version !== 2) throw new Error('development_x402_payment_version_unsupported')
     const requirement = challenge.accepts[0]
@@ -222,6 +224,7 @@ export async function runDevelopmentX402LocalCanary(
       throw new Error('development_x402_payment_identifier_missing')
     }
 
+    officialClientWireFlow.signedRetryRequests += 1
     const paidResponse = await fetch(requestUrl, {
       headers: {
         accept: 'application/json',
@@ -237,7 +240,8 @@ export async function runDevelopmentX402LocalCanary(
     if (settlementResponse.transaction !== `local-facilitator:${paymentIdentifier}`) {
       throw new Error('development_x402_fake_settlement_source_invalid')
     }
-    const routeObservation = await runDevelopmentX402RouteRuntimeCanary(localServer, input)
+    const routeRuntime = await runDevelopmentX402RouteRuntimeCanary(localServer, input)
+    const routeObservation = routeRuntime.observation
     if (
       routeObservation.disposition !== 'succeeded'
       || routeObservation.outputJson === undefined
@@ -257,6 +261,10 @@ export async function runDevelopmentX402LocalCanary(
         source: 'development-fake-facilitator',
         blockchainSettlement: false,
         response: settlementResponse,
+      },
+      wireFlow: {
+        officialClient: officialClientWireFlow,
+        routeRuntime: routeRuntime.wireFlow,
       },
       routeObservation,
       authority: {
@@ -279,14 +287,22 @@ export async function runDevelopmentX402LocalCanary(
 async function runDevelopmentX402RouteRuntimeCanary(
   server: Readonly<{ baseUrl: string; advertisedBaseUrl: string }>,
   input: LocalX402QuoteInput,
-): Promise<RouteTransportObservation> {
+): Promise<Readonly<{
+  observation: RouteTransportObservation
+  wireFlow: DevelopmentX402WireFlow
+}>> {
   const connectionRef = 'connection:development-x402-local'
   const providerRef = 'provider:development-x402-local'
   const adapterId = 'x402-fetch:v2'
   const authorityGeneration = 1
   const paymentRequired: PaymentRequired = {
     x402Version: 2,
-    resource: { url: `${server.advertisedBaseUrl}${LOCAL_X402_ROUTE_PREFIX}${input.symbol}?quote=${input.quote}` },
+    resource: {
+      url: `${server.advertisedBaseUrl}${LOCAL_X402_ROUTE_PREFIX}${input.symbol}?quote=${input.quote}`,
+      description: 'Development-only dynamic x402 quote operation.',
+      mimeType: 'application/json',
+      serviceName: 'development-local-x402-provider',
+    },
     accepts: [{
       scheme: 'exact',
       network: BASE_SEPOLIA_NETWORK,
@@ -330,6 +346,7 @@ async function runDevelopmentX402RouteRuntimeCanary(
     request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity
     credential: `0x${string}`
   }>>()
+  const wireFlow = { unpaidChallengeRequests: 0, signedRetryRequests: 0 }
   const resolveCredential = (reference: string): `0x${string}` | undefined =>
     reference === 'env:AE_X402_PAYMENT_PRIVATE_KEY' ? LOCAL_X402_PRIVATE_KEY : undefined
   const readAuthorization = async (prepared: Readonly<{ custodyRef: string }>): Promise<string | undefined> => {
@@ -344,7 +361,10 @@ async function runDevelopmentX402RouteRuntimeCanary(
     return client.encodePaymentSignatureHeader(payload)['PAYMENT-SIGNATURE']
   }
   const runtime: X402RouteTransportRuntime = {
-    send: createDevelopmentRouteTransportFetch(server.baseUrl),
+    send: createDevelopmentRouteTransportFetch(server.baseUrl, (signed) => {
+      if (signed) wireFlow.signedRetryRequests += 1
+      else wireFlow.unpaidChallengeRequests += 1
+    }),
     resolveCredential,
     readX402PaymentCredentialRef: () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
     x402PaymentSigningAvailable: (payment) =>
@@ -417,9 +437,10 @@ async function runDevelopmentX402RouteRuntimeCanary(
     invocation,
     runtime.x402PaymentSigningAvailable,
   )
-  return preparation.kind === 'refused'
+  const observation = preparation.kind === 'refused'
     ? preparation.observation
     : invokePreparedRouteTransport(preparation.prepared, runtime)
+  return { observation: await observation, wireFlow }
 }
 
 async function runDevelopmentX402TestnetCanary(environment: Environment): Promise<LocalX402CanaryRefusal | LocalX402TestnetResult> {
@@ -519,8 +540,15 @@ function withPaymentIdentifier(challenge: PaymentRequired, paymentIdentifier: st
   appendPaymentIdentifierToExtensions(extensions, paymentIdentifier)
   return { ...challenge, extensions }
 }
-function createDevelopmentRouteTransportFetch(localBaseUrl: string): RouteTransportFetch {
+function createDevelopmentRouteTransportFetch(
+  localBaseUrl: string,
+  observeRequest?: (signed: boolean) => void,
+): RouteTransportFetch {
   return async (input, init) => {
+    const signed = Object.entries(init?.headers ?? {}).some(
+      ([name, value]) => name.toLowerCase() === 'payment-signature' && value.length > 0,
+    )
+    observeRequest?.(signed)
     const target = new URL(localBaseUrl)
     target.pathname = input.pathname
     target.search = input.search

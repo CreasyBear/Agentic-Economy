@@ -251,7 +251,9 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
     supplier,
   }
 
-  if (!options.json) {
+  if (options.json) {
+    process.stderr.write(`Approve: ${details.verificationUri}\nUser code: ${details.userCode}\nWaiting for authorization…\n`)
+  } else {
     heading('Connect AE')
     table([
       ['verification', details.verificationUri],

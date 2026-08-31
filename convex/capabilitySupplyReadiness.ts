@@ -37,6 +37,7 @@ type ProbeRecordResult =
   | { kind: 'observed'; publicationRef: string; revision: number; lifecycle: PublicationLifecycle }
   | { kind: 'refused'; reason: 'revision_changed' | 'target_changed' }
 type ProbeArgs = { publicationRef: string; expectedRevision: number }
+type OwnerStagedProbeArgs = ProbeArgs & { businessId: Id<'businesses'> }
 type CapabilityProbeAuthority = Readonly<{
   publicationRef: string
   publicationRevision: number
@@ -160,13 +161,22 @@ const probeResultValue = v.union(
     lifecycle: publicationLifecycleValue,
   }),
 )
-export async function probeHandler(ctx: ActionCtx, args: ProbeArgs): Promise<ProbeResult> {
+export async function probeHandler(
+  ctx: ActionCtx,
+  args: ProbeArgs,
+  ownerStagedBusinessId?: Id<'businesses'>,
+): Promise<ProbeResult> {
     const scheduledFunctionId = await readScheduledFunctionId(ctx)
     logProbeStarted(scheduledFunctionId)
-    const result: ProbeTargetResult = await ctx.runQuery(
-      internal.capabilitySupply.readCapabilityProbeTarget,
-      { ...args, now: Date.now() },
-    )
+    const result: ProbeTargetResult = ownerStagedBusinessId === undefined
+      ? await ctx.runQuery(
+          internal.capabilitySupply.readCapabilityProbeTarget,
+          { ...args, now: Date.now() },
+        )
+      : await ctx.runQuery(
+          internal.capabilitySupply.readOwnerStagedCapabilityProbeTarget,
+          { ...args, businessId: ownerStagedBusinessId, now: Date.now() },
+        )
     if (result.kind !== 'available') {
       logProbeTerminal(scheduledFunctionId, {
         terminalKind: 'unavailable',
@@ -179,7 +189,7 @@ export async function probeHandler(ctx: ActionCtx, args: ProbeArgs): Promise<Pro
       }
     }
     const target: Target = result.target
-    const observation = await runCapabilityReadinessProbe(target, {
+    const probeObservation = await runCapabilityReadinessProbe(target, {
       resolveProviderConnectionCredential: async (authority) => {
         if (authority.kind !== 'provider_connection' || !('connectionAuthority' in target)) return undefined
         const expected = target.connectionAuthority
@@ -210,25 +220,31 @@ export async function probeHandler(ctx: ActionCtx, args: ProbeArgs): Promise<Pro
       validateTarget: async (url) => isPublicHttpTarget(url, defaultDnsResolver),
       send: sendGuardedHttpRequest,
     })
-    const recorded: ProbeRecordResult = await ctx.runMutation(
-      internal.capabilitySupply.recordCapabilityProbeResult,
-      {
+    const recordInput = {
         publicationRef: target.publicationRef,
         expectedRevision: target.revision,
-        targetDigest: observation.targetDigest,
-        requestDigest: observation.requestDigest,
-        ...(observation.responseStatus === undefined ? {} : { responseStatus: observation.responseStatus }),
-        ...(observation.responseContentType === undefined ? {} : { responseContentType: observation.responseContentType }),
-        ...(observation.responseDigest === undefined ? {} : { responseDigest: observation.responseDigest }),
-        outcome: observation.outcome,
-        credentialState: observation.credentialState,
-        healthState: observation.healthState,
-        observedAt: observation.observedAt,
-        validUntil: observation.validUntil,
-        evidenceRefs: [...observation.evidenceRefs],
+        targetDigest: probeObservation.targetDigest,
+        requestDigest: probeObservation.requestDigest,
+        ...(probeObservation.responseStatus === undefined ? {} : { responseStatus: probeObservation.responseStatus }),
+        ...(probeObservation.responseContentType === undefined ? {} : { responseContentType: probeObservation.responseContentType }),
+        ...(probeObservation.responseDigest === undefined ? {} : { responseDigest: probeObservation.responseDigest }),
+        outcome: probeObservation.outcome,
+        credentialState: probeObservation.credentialState,
+        healthState: probeObservation.healthState,
+        observedAt: probeObservation.observedAt,
+        validUntil: probeObservation.validUntil,
+        evidenceRefs: [...probeObservation.evidenceRefs],
         resourceAuthority: target.resourceAuthority,
-      },
-    )
+      }
+    const recorded: ProbeRecordResult = ownerStagedBusinessId === undefined
+      ? await ctx.runMutation(
+          internal.capabilitySupply.recordCapabilityProbeResult,
+          recordInput,
+        )
+      : await ctx.runMutation(
+          internal.capabilitySupply.recordOwnerStagedCapabilityProbeResult,
+          { ...recordInput, businessId: ownerStagedBusinessId },
+        )
     if (recorded.kind === 'observed') {
       logProbeTerminal(scheduledFunctionId, {
         terminalKind: 'observed',
@@ -263,6 +279,19 @@ export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = inter
   args: { publicationRef: v.string(), expectedRevision: v.number() },
   returns: probeResultValue,
   handler: probeHandler,
+})
+
+export const probeOwnerStaged: RegisteredAction<'internal', OwnerStagedProbeArgs, ProbeResult> = internalAction({
+  args: {
+    publicationRef: v.string(),
+    expectedRevision: v.number(),
+    businessId: v.id('businesses'),
+  },
+  returns: probeResultValue,
+  handler: async (ctx, args) => {
+    const { businessId, ...probeArgs } = args
+    return await probeHandler(ctx, probeArgs, businessId)
+  },
 })
 
 export const probeFromCron = internalAction({

@@ -48,4 +48,23 @@ describe('operation read failures', () => {
     expect(thrown.code).toBe('query_invalid')
     expect(thrown.message).toContain('cursor')
   })
+
+  it.each(['setup_required', 'operation_unavailable'] as const)(
+    'does not tell a buyer to retry or connect for supplier-owned %s state',
+    (reason) => {
+      let thrown: unknown
+      try {
+        throwOperationReadFailure({ reason, operationRef: `operation:v1:${'a'.repeat(64)}` })
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(CliFailure)
+      if (!(thrown instanceof CliFailure)) return
+      expect(thrown.code).toBe(reason)
+      expect(thrown.retryable).not.toBe(true)
+      expect(thrown.nextCommand).toBeUndefined()
+      expect(thrown.suggestion).toBeUndefined()
+    },
+  )
 })

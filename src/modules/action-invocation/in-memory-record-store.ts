@@ -87,7 +87,12 @@ export function exportControlSnapshot<Input, Result extends ActionResult>(
   return {
     format: 'action-invocation-control:development:v1',
     records: [...records.values()].map(({ view, sourceRef, authorityBinding }) => {
-      const { prepared: _prepared, observedResolution: _observedResolution, ...control } = view
+      const {
+        prepared: _prepared,
+        observedResolution: _observedResolution,
+        persistence: _persistence,
+        ...control
+      } = view as InMemoryView<Result>
       return {
         sourceRef,
         control,

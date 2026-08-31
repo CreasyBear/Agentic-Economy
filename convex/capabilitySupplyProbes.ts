@@ -1,6 +1,9 @@
 import { v, type Infer } from 'convex/values'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { connectionAuthoritySnapshotValue } from '@/modules/capability-supply/convex'
+import {
+  connectionAuthoritySnapshotValue,
+  X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+} from '@/modules/capability-supply/convex'
 import {
   readCapabilityProbeTarget as readCapabilityProbeTargetFromModule,
   recordCapabilityProbeResult as recordCapabilityProbeResultFromModule,
@@ -10,6 +13,7 @@ import {
 } from '@/modules/capability-supply/public'
 
 import { internal } from './_generated/api'
+import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import {
   parseWorkloadCronSnapshot,
@@ -65,6 +69,7 @@ type CapabilityProbeAuthorityReadArgs = Readonly<{
   publicationRef: string
   expectedRevision: number
   now: number
+  ownerStagedBusinessId?: Id<'businesses'>
 }>
 
 function withCapabilityProbeAuthorityDigest<T extends Omit<CapabilityProbeAuthority, 'authorityDigest'>>(
@@ -91,9 +96,17 @@ export async function readCurrentCapabilityProbeAuthority(
     .unique()
   if (publication === null || publication.disposition !== 'current') return null
   const business = await ctx.db.get(publication.businessId)
+  const exactOwnerStagedBusiness = args.ownerStagedBusinessId !== undefined
+    && publication.businessId === args.ownerStagedBusinessId
+    && publication.runtimeEnvironment === 'sandbox'
+    && publication.authorityMode === 'provider_owned'
+    && publication.sourceKind === 'x402'
+    && (publication.registrationEvidenceRefs ?? []).filter(
+      (ref) => ref === X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+    ).length === 1
   if (business === null
-    || business.publicStatus !== 'published'
-    || business.suppressedAt !== undefined) return null
+    || business.suppressedAt !== undefined
+    || (business.publicStatus !== 'published' && !exactOwnerStagedBusiness)) return null
   const account = await ctx.db
     .query('accounts')
     .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
@@ -274,6 +287,10 @@ export const readCapabilityProbeTargetArgs = {
   expectedRevision: v.number(),
   now: v.number(),
 } as const
+export const readOwnerStagedCapabilityProbeTargetArgs = {
+  ...readCapabilityProbeTargetArgs,
+  businessId: v.id('businesses'),
+} as const
 export const readCapabilityProbeTargetReturns = v.union(
   v.object({
     kind: v.literal('unavailable'),
@@ -300,6 +317,10 @@ export const recordCapabilityProbeResultArgs = {
   validUntil: v.number(),
   evidenceRefs: v.array(v.string()),
   resourceAuthority: capabilityProbeAuthorityValue,
+} as const
+export const recordOwnerStagedCapabilityProbeResultArgs = {
+  ...recordCapabilityProbeResultArgs,
+  businessId: v.id('businesses'),
 } as const
 export const recordCapabilityProbeResultReturns = v.union(
   v.object({
@@ -414,11 +435,29 @@ export async function observeCapabilityReadinessHandler(
 
 export async function readCapabilityProbeTargetHandler(
   ctx: QueryCtx,
-  args: { publicationRef: string; expectedRevision: number; now: number },
+  args: {
+    publicationRef: string
+    expectedRevision: number
+    now: number
+    ownerStagedBusinessId?: Id<'businesses'>
+  },
 ) {
+  const ownerStagedBusinessId = args.ownerStagedBusinessId
   const result = await readCapabilityProbeTargetFromModule(
     capabilitySupplyGraphPorts(ctx.db),
     args,
+    ownerStagedBusinessId === undefined
+      ? undefined
+      : {
+          allowUnpublishedBusiness: async (businessId) => (
+            await ownerStagedProbeBusinessIsAllowed(ctx, {
+              publicationRef: args.publicationRef,
+              expectedRevision: args.expectedRevision,
+              businessId: ownerStagedBusinessId,
+              candidateBusinessId: businessId,
+            })
+          ),
+        },
   )
   if (result.kind === 'unavailable') {
     return {
@@ -433,6 +472,9 @@ export async function readCapabilityProbeTargetHandler(
     publicationRef: args.publicationRef,
     expectedRevision: args.expectedRevision,
     now: args.now,
+    ...(args.ownerStagedBusinessId === undefined
+      ? {}
+      : { ownerStagedBusinessId: args.ownerStagedBusinessId }),
   })
   if (resourceAuthority === null) {
     return {
@@ -503,6 +545,34 @@ export async function readCapabilityProbeTargetHandler(
   }
 }
 
+export async function readOwnerStagedCapabilityProbeTargetHandler(
+  ctx: QueryCtx,
+  args: {
+    publicationRef: string
+    expectedRevision: number
+    now: number
+    businessId: Id<'businesses'>
+  },
+) {
+  if (!(await ownerStagedProbeBusinessIsAllowed(ctx, {
+    publicationRef: args.publicationRef,
+    expectedRevision: args.expectedRevision,
+    businessId: args.businessId,
+    candidateBusinessId: String(args.businessId),
+  }))) {
+    return {
+      kind: 'unavailable' as const,
+      reason: 'target_not_public' as const,
+      evidenceRefs: ['probe-target:target_not_public'],
+    }
+  }
+  const { businessId, ...targetArgs } = args
+  return await readCapabilityProbeTargetHandler(ctx, {
+    ...targetArgs,
+    ownerStagedBusinessId: businessId,
+  })
+}
+
 export async function recordCapabilityProbeResultHandler(
   ctx: MutationCtx,
   args: {
@@ -520,28 +590,103 @@ export async function recordCapabilityProbeResultHandler(
     validUntil: number
     evidenceRefs: string[]
     resourceAuthority: CapabilityProbeAuthority
+    ownerStagedBusinessId?: Id<'businesses'>
   },
 ) {
+  const ownerStagedBusinessId = args.ownerStagedBusinessId
   const currentAuthority = await readCurrentCapabilityProbeAuthority(ctx, {
     publicationRef: args.publicationRef,
     expectedRevision: args.expectedRevision,
     now: Date.now(),
+    ...(ownerStagedBusinessId === undefined
+      ? {}
+      : { ownerStagedBusinessId }),
   })
   if (currentAuthority === null
     || !capabilityProbeAuthorityMatches(args.resourceAuthority, currentAuthority)) {
     return { kind: 'refused' as const, reason: 'target_changed' as const }
   }
-  const { resourceAuthority: _resourceAuthority, ...observation } = args
+  const {
+    resourceAuthority: _resourceAuthority,
+    ownerStagedBusinessId: _ownerStagedBusinessId,
+    ...observation
+  } = args
   const result = await recordCapabilityProbeResultFromModule(
     capabilitySupplyGraphPorts(ctx.db),
     {
       ...observation,
       now: Date.now(),
     },
+    ownerStagedBusinessId === undefined
+      ? undefined
+      : {
+          allowUnpublishedBusiness: async (businessId) => (
+            await ownerStagedProbeBusinessIsAllowed(ctx, {
+              publicationRef: args.publicationRef,
+              expectedRevision: args.expectedRevision,
+              businessId: ownerStagedBusinessId,
+              candidateBusinessId: businessId,
+            })
+          ),
+        },
   )
   return result.kind === 'observed'
     ? { ...result, lifecycle: convexPublicationLifecycle(result.lifecycle) }
     : result
+}
+
+export async function recordOwnerStagedCapabilityProbeResultHandler(
+  ctx: MutationCtx,
+  args: Omit<Parameters<typeof recordCapabilityProbeResultHandler>[1], 'ownerStagedBusinessId'>
+    & Readonly<{ businessId: Id<'businesses'> }>,
+) {
+  if (!(await ownerStagedProbeBusinessIsAllowed(ctx, {
+    publicationRef: args.publicationRef,
+    expectedRevision: args.expectedRevision,
+    businessId: args.businessId,
+    candidateBusinessId: String(args.businessId),
+  }))) {
+    const refused: { kind: 'refused'; reason: 'target_changed' } = {
+      kind: 'refused',
+      reason: 'target_changed',
+    }
+    return refused
+  }
+  const { businessId, ...observation } = args
+  return await recordCapabilityProbeResultHandler(ctx, {
+    ...observation,
+    ownerStagedBusinessId: businessId,
+  })
+}
+
+async function ownerStagedProbeBusinessIsAllowed(
+  ctx: Pick<QueryCtx | MutationCtx, 'db'>,
+  args: Readonly<{
+    publicationRef: string
+    expectedRevision: number
+    businessId: Id<'businesses'>
+    candidateBusinessId: string
+  }>,
+): Promise<boolean> {
+  if (args.candidateBusinessId !== String(args.businessId)) return false
+  const publication = await ctx.db.query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', (query) => query
+      .eq('publicationRef', args.publicationRef)
+      .eq('revision', args.expectedRevision))
+    .unique()
+  if (publication === null
+    || publication.disposition !== 'current'
+    || publication.businessId !== args.businessId
+    || publication.runtimeEnvironment !== 'sandbox'
+    || publication.authorityMode !== 'provider_owned'
+    || publication.sourceKind !== 'x402'
+    || (publication.registrationEvidenceRefs ?? []).filter(
+      (ref) => ref === X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
+    ).length !== 1) return false
+  const business = await ctx.db.get(args.businessId)
+  return business !== null
+    && (business.publicStatus === 'unpublished' || business.publicStatus === 'published')
+    && business.suppressedAt === undefined
 }
 
 export async function scheduleDueCapabilityProbesHandler(

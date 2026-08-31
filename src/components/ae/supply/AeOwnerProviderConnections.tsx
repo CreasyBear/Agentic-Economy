@@ -3,6 +3,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -10,13 +11,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   connectOwnerX402Server,
+  inspectOwnerX402Server,
   reconnectOwnerProviderConnectionServer,
   retryOwnerProviderConnectionCleanupServer,
   revokeOwnerProviderConnectionServer,
   type OwnerProviderConnection,
 } from '@/modules/capability-supply/supply-funnel.functions'
+import { utf8ToHex } from '@/modules/capability-supply/public'
 import { providerConnectionTargetId } from './provider-connection-target'
 import { suggestContinuation } from '@/modules/market/suggested-continuation'
+import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 
 export function AeOwnerProviderConnections({
   businessId,
@@ -27,16 +31,33 @@ export function AeOwnerProviderConnections({
 }>) {
   const router = useRouter()
   const connectX402 = useServerFn(connectOwnerX402Server)
+  const inspectX402 = useServerFn(inspectOwnerX402Server)
   const reconnect = useServerFn(reconnectOwnerProviderConnectionServer)
   const revoke = useServerFn(revokeOwnerProviderConnectionServer)
   const retryCleanup = useServerFn(retryOwnerProviderConnectionCleanupServer)
   const [resourceUrl, setResourceUrl] = useState('')
+  const [method, setMethod] = useState<'GET' | 'POST'>('POST')
+  const [inspection, setInspection] = useState<Readonly<{
+    digest: string
+    payTo: string
+    amount: string
+    network: string
+    asset: string
+    claimMessage: string
+    claimExpiresAt: number
+  }>>()
+  const [claimSignature, setClaimSignature] = useState<string>()
   const [busy, setBusy] = useState<string>()
   const [notice, setNotice] = useState<{ kind: 'error' | 'status'; text: string }>()
   const [rebindOfferingRef, setRebindOfferingRef] = useState<string>()
   const [rebindConnectionRef, setRebindConnectionRef] = useState<string>()
   const [refreshedForRebind, setRefreshedForRebind] = useState<string>()
+  const [revokeTarget, setRevokeTarget] = useState<OwnerProviderConnection>()
+  const [revokePending, setRevokePending] = useState(false)
   const rebindLinkRef = useRef<HTMLAnchorElement>(null)
+  const resourceUrlInputRef = useRef<HTMLInputElement>(null)
+  const revokeTriggerRef = useRef<HTMLButtonElement>(null)
+  const revokeInFlightRef = useRef(false)
   const canConnect = businessId !== undefined && businessId.length > 0
   const missingConnectionContinuation = suggestContinuation({
     subject: 'connection',
@@ -52,7 +73,11 @@ export function AeOwnerProviderConnections({
       } catch {
         return
       }
-      if (targetId !== 'supplier-connections' && !targetId.startsWith('provider-connection-')) return
+      if (
+        targetId !== 'supplier-connections'
+        && targetId !== 'provider-x402-resource-url'
+        && !targetId.startsWith('provider-connection-')
+      ) return
       const target = document.getElementById(targetId)
       if (target === null) return
       target.scrollIntoView({ block: 'start' })
@@ -78,9 +103,14 @@ export function AeOwnerProviderConnections({
     setNotice({ kind: 'status', text: 'Supplier connections updated.' })
   }
 
+  function beginConnection() {
+    resourceUrlInputRef.current?.scrollIntoView({ block: 'center' })
+    resourceUrlInputRef.current?.focus({ preventScroll: true })
+  }
+
   async function submitConnection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!canConnect || businessId === undefined) return
+    if (!canConnect || businessId === undefined || inspection === undefined || claimSignature === undefined) return
     const commandId = crypto.randomUUID()
     setBusy('new')
     setNotice(undefined)
@@ -89,6 +119,10 @@ export function AeOwnerProviderConnections({
         data: {
           businessId,
           resourceUrl,
+          method,
+          environment: 'production',
+          claimExpiresAt: inspection.claimExpiresAt,
+          claimSignature,
           commandId,
         },
       })
@@ -97,9 +131,86 @@ export function AeOwnerProviderConnections({
         return
       }
       setResourceUrl('')
+      setInspection(undefined)
+      setClaimSignature(undefined)
       await refresh()
     } catch {
       setNotice({ kind: 'error', text: 'The supplier connection could not be saved. Try again.' })
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  async function inspectConnection() {
+    if (businessId === undefined) return
+    setBusy('inspect')
+    setNotice(undefined)
+    setInspection(undefined)
+    setClaimSignature(undefined)
+    try {
+      const result = await inspectX402({
+        data: { businessId, resourceUrl, method, environment: 'production' },
+      })
+      if (result.kind === 'refused') {
+        setNotice({ kind: 'error', text: result.action })
+        return
+      }
+      if (result.payment.selection.kind !== 'selected') {
+        setNotice({ kind: 'error', text: result.payment.selection.action })
+        return
+      }
+      const selectedAlternativeId = result.payment.selection.alternativeId
+      const selected = result.payment.accepts.find(
+        (candidate) => candidate.alternativeId === selectedAlternativeId,
+      )
+      if (selected === undefined) {
+        setNotice({ kind: 'error', text: 'The endpoint returned an inconsistent payment challenge.' })
+        return
+      }
+      if (!('claim' in result)) {
+        setNotice({ kind: 'error', text: 'AE could not prepare the payee ownership claim.' })
+        return
+      }
+      setInspection({
+        digest: result.digest,
+        payTo: selected.payTo,
+        amount: selected.amount,
+        network: selected.network,
+        asset: selected.asset,
+        claimMessage: result.claim.message,
+        claimExpiresAt: result.claim.expiresAt,
+      })
+      setNotice({ kind: 'status', text: 'Live x402 challenge found. Review the exact payment lane, then connect it.' })
+    } catch {
+      setNotice({ kind: 'error', text: 'AE could not inspect the endpoint. Check that it is publicly reachable and try again.' })
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  async function provePayeeControl() {
+    if (inspection === undefined) return
+    const ethereum = (window as Window & {
+      ethereum?: { request(input: Readonly<{ method: 'personal_sign'; params: readonly string[] }>): Promise<string> }
+    }).ethereum
+    if (ethereum === undefined) {
+      setNotice({ kind: 'error', text: 'Open this page in a browser with the wallet that controls the payee address.' })
+      return
+    }
+    setBusy('claim')
+    setNotice(undefined)
+    try {
+      const signature = await ethereum.request({
+        method: 'personal_sign',
+        params: [utf8ToHex(inspection.claimMessage), inspection.payTo],
+      })
+      if (typeof signature !== 'string' || !/^0x[0-9a-fA-F]{130}$/.test(signature)) {
+        throw new Error('invalid_signature')
+      }
+      setClaimSignature(signature)
+      setNotice({ kind: 'status', text: 'Payee control proved. AE will verify the live challenge again when you connect.' })
+    } catch {
+      setNotice({ kind: 'error', text: 'The payee ownership signature was not completed.' })
     } finally {
       setBusy(undefined)
     }
@@ -163,6 +274,28 @@ export function AeOwnerProviderConnections({
     }
   }
 
+  function requestRevoke(
+    connection: OwnerProviderConnection,
+    trigger: HTMLButtonElement,
+  ) {
+    revokeTriggerRef.current = trigger
+    setRevokeTarget(connection)
+  }
+
+  async function confirmRevoke() {
+    if (revokeTarget === undefined || revokeInFlightRef.current) return
+    const exactConnection = revokeTarget
+    revokeInFlightRef.current = true
+    setRevokePending(true)
+    try {
+      await updateConnection('revoke', exactConnection)
+      setRevokeTarget(undefined)
+    } finally {
+      revokeInFlightRef.current = false
+      setRevokePending(false)
+    }
+  }
+
   return (
     <div
       id="supplier-connections"
@@ -178,8 +311,8 @@ export function AeOwnerProviderConnections({
           title="No provider connection yet"
           description="Add the public HTTPS endpoint that returns the x402 payment challenge for your operation."
           action={(
-            <Button asChild className="min-h-touch">
-              <a href={missingConnectionContinuation.href}>{missingConnectionContinuation.label}</a>
+            <Button type="button" className="min-h-touch" onClick={beginConnection}>
+              {missingConnectionContinuation.label}
             </Button>
           )}
         />
@@ -195,7 +328,15 @@ export function AeOwnerProviderConnections({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="grid min-w-0 gap-1">
                   <p className="font-medium text-foreground">{providerConnectionStatus(connection)}</p>
-                  <p className="break-all text-sm text-muted-foreground">{connection.grantedResources[0] ?? connection.providerAccountRef}</p>
+                  <p className="break-all text-sm text-muted-foreground">{providerConnectionResource(connection)}</p>
+                  {connection.expiresAt === undefined ? null : (
+                    <time
+                      dateTime={timestampIso(connection.expiresAt)}
+                      className="text-sm text-muted-foreground"
+                    >
+                      Authority expires {formatRelativeTime(connection.expiresAt)} · {formatTimestamp(connection.expiresAt)}
+                    </time>
+                  )}
                   <AeCopyReference label="connection reference" value={connection.connectionRef} />
                 </div>
                 {(connection.lifecycle === 'active' || connection.lifecycle === 'reauthorization_required') ? (
@@ -213,7 +354,7 @@ export function AeOwnerProviderConnections({
                       variant="outline"
                       className="min-h-touch"
                       disabled={busy !== undefined}
-                      onClick={() => void updateConnection('revoke', connection)}
+                      onClick={(event) => requestRevoke(connection, event.currentTarget)}
                     >
                       Revoke
                     </Button>
@@ -259,11 +400,27 @@ export function AeOwnerProviderConnections({
           ))}
         </ul>
       )}
+      <AeConfirmDialog
+        open={revokeTarget !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setRevokeTarget(undefined)
+        }}
+        title="Revoke this provider connection?"
+        description={revokeTarget === undefined
+          ? ''
+          : `Revoke access to ${providerConnectionResource(revokeTarget)}. New calls through this connection will stop. Operations that use it need a replacement connection and re-admission before they can accept new calls.`}
+        confirmLabel="Revoke provider connection"
+        confirmVariant="destructive"
+        pending={revokePending}
+        onConfirm={confirmRevoke}
+        returnFocusRef={revokeTriggerRef}
+      />
       {canConnect ? (
         <form className="grid gap-3" onSubmit={submitConnection}>
           <div className="grid gap-1.5">
             <label htmlFor="provider-x402-resource-url" className="text-sm font-medium text-foreground">x402 resource URL</label>
             <Input
+              ref={resourceUrlInputRef}
               id="provider-x402-resource-url"
               name="resourceUrl"
               type="url"
@@ -272,23 +429,75 @@ export function AeOwnerProviderConnections({
               maxLength={2_048}
               placeholder="https://api.example.com/paid-operation"
               value={resourceUrl}
-              onChange={(event) => setResourceUrl(event.target.value)}
+              onChange={(event) => {
+                setResourceUrl(event.target.value)
+                setInspection(undefined)
+                setClaimSignature(undefined)
+              }}
               aria-describedby="provider-x402-resource-url-hint"
               required
             />
             <p id="provider-x402-resource-url-hint" className="text-sm text-muted-foreground">Use the exact public route that returns HTTP 402 when called without payment.</p>
           </div>
-          <Button type="submit" className="min-h-touch justify-self-start" disabled={busy !== undefined}>
-            {busy === 'new' ? 'Connecting…' : 'Connect supplier'}
-          </Button>
+          <div className="grid max-w-40 gap-1.5">
+            <label htmlFor="provider-x402-method" className="text-sm font-medium text-foreground">Request method</label>
+            <select
+              id="provider-x402-method"
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              value={method}
+              disabled={busy !== undefined}
+              onChange={(event) => {
+                setMethod(event.currentTarget.value === 'GET' ? 'GET' : 'POST')
+                setInspection(undefined)
+                setClaimSignature(undefined)
+              }}
+            >
+              <option value="POST">POST</option>
+              <option value="GET">GET</option>
+            </select>
+          </div>
+          {inspection === undefined ? null : (
+            <Alert>
+              <AlertTitle>Exact payment lane observed</AlertTitle>
+              <AlertDescription className="grid gap-1">
+                <span>Amount: {inspection.amount}</span>
+                <span>Network: {inspection.network}</span>
+                <span className="break-all">Asset: {inspection.asset}</span>
+                <span className="break-all">Payee: {inspection.payTo}</span>
+              </AlertDescription>
+            </Alert>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-touch"
+              disabled={busy !== undefined || resourceUrl.trim().length === 0}
+              onClick={() => void inspectConnection()}
+            >
+              {busy === 'inspect' ? 'Inspecting…' : 'Inspect endpoint'}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-touch"
+              disabled={busy !== undefined || inspection === undefined || claimSignature !== undefined}
+              onClick={() => void provePayeeControl()}
+            >
+              {claimSignature !== undefined ? 'Payee control proved' : busy === 'claim' ? 'Waiting for wallet…' : 'Prove payee control'}
+            </Button>
+            <Button type="submit" className="min-h-touch" disabled={busy !== undefined || inspection === undefined || claimSignature === undefined}>
+              {busy === 'new' ? 'Connecting…' : 'Connect verified endpoint'}
+            </Button>
+          </div>
         </form>
       ) : (
         <AeEmptyState
           title="Supplier identity is required to connect"
-          description="Review supplier setup, then return here to add an x402 endpoint."
+          description="Create an unpublished supplier workspace, then return here to inspect and claim the x402 endpoint."
           action={
             <Button asChild className="min-h-touch">
-              <Link to="/for-providers">Review supplier setup</Link>
+              <Link to="/owner/offerings">Create supplier workspace</Link>
             </Button>
           }
         />
@@ -302,6 +511,10 @@ export function AeOwnerProviderConnections({
       </AeSection>
     </div>
   )
+}
+
+function providerConnectionResource(connection: OwnerProviderConnection): string {
+  return connection.grantedResources[0] ?? connection.providerAccountRef
 }
 
 function providerConnectionStatus(connection: OwnerProviderConnection): string {
@@ -324,6 +537,10 @@ function providerConnectionStatus(connection: OwnerProviderConnection): string {
 }
 
 function connectionRefusalCopy(code: string): string {
+  if (code === 'claim_invalid' || code === 'invalid_identity') return 'The payee claim expired or no longer matches this supplier and endpoint. Inspect it and sign again.'
+  if (code === 'inspection_ambiguous') return 'The endpoint now exposes more than one supported payment lane. Make one Base USDC exact lane unambiguous, then inspect again.'
+  if (code === 'inspection_unsupported') return 'The endpoint no longer exposes AE’s supported Base USDC exact payment lane.'
+  if (code.startsWith('inspection_')) return 'The live x402 challenge changed or is no longer valid. Inspect the endpoint again.'
   if (code === 'connection_resource_conflict') return 'This x402 endpoint is already connected to another provider.'
   if (code === 'credential_resource_conflict') return 'This endpoint is already connected with a different authority method.'
   if (code === 'authentication_required' || code === 'authorization_denied') return 'Sign in as the provider owner and try again.'

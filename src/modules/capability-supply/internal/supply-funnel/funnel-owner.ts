@@ -10,6 +10,7 @@ import {
 } from "@/lib/server/convex-source";
 import { sourceWriteAdmissionFromContext } from "@/lib/server/source-write-admission";
 import { sourceWriteRequestFromAdmission } from "@/modules/security/source-write-admission";
+import { canonicalDigest } from "@/modules/common/canonical-digest";
 import {
   OWNER_SUPPLY_UNAVAILABLE_MESSAGE,
   type OwnerSupplyActionInput,
@@ -17,6 +18,8 @@ import {
   type OwnerSupplyFunnelReadback,
   type OwnerSupplyMaintenanceCommand,
   type OwnerSupplyMaintenanceSourceInput,
+  type OwnerSellerCanaryPromotionResult,
+  type OwnerSellerCanaryReadback,
   type SupplyFunnelStepCompletion,
 } from "./types";
 
@@ -29,9 +32,28 @@ const probeAction = sourceAction<
   SupplyFunnelStepCompletion
 >("capabilitySupplyOwnerSupply:runOwnerSupplyReadiness");
 const testAction = sourceAction<
-  OwnerSupplyActionInput,
+  OwnerSupplyActionInput & {
+    correlationId: string;
+    sourceWrite: Awaited<ReturnType<typeof sourceWriteAdmissionFromContext>>;
+    sourceWriteRequest: ReturnType<typeof sourceWriteRequestFromAdmission>;
+  },
   SupplyFunnelStepCompletion
 >("capabilitySupplyOwnerSupply:runOwnerSupplyTest");
+const ownerSellerCanaryStatusQuery = sourceQuery<
+  Omit<OwnerSupplyActionInput, "operationKey">,
+  Exclude<OwnerSellerCanaryReadback, { kind: "error"; code: "source_unavailable" }>
+>("capabilitySupplyOwnerCanary:readOwnerSellerOnboardingCanaryStatus");
+const promoteOwnerSellerCanaryMutation = sourceMutation<
+  Readonly<{
+    businessId: string;
+    canaryRef: string;
+    operationKey: string;
+    correlationId: string;
+    sourceWrite: Awaited<ReturnType<typeof sourceWriteAdmissionFromContext>>;
+    sourceWriteRequest: ReturnType<typeof sourceWriteRequestFromAdmission>;
+  }>,
+  Exclude<OwnerSellerCanaryPromotionResult, { kind: "refused"; code: "canary_target_mismatch" }>
+>("catalog:promoteX402SellerCanary");
 const withdrawMutation = sourceMutation<
   OwnerSupplyMaintenanceSourceInput,
   OwnerSupplyCommandResult
@@ -70,6 +92,12 @@ export const ownerSupplyMaintenanceInputSchema = z.strictObject({
   reasonCode: z.string().min(1).max(200),
   evidenceRefs: z.array(z.string().min(1)).max(64),
 });
+export const ownerSellerCanaryStatusInputSchema = ownerSupplyActionInputSchema.omit({
+  operationKey: true,
+});
+export const ownerSellerCanaryPromotionInputSchema = ownerSellerCanaryStatusInputSchema.extend({
+  canaryRef: z.string().min(1).max(200),
+});
 
 export async function readOwnerSupplyFunnel({
   data,
@@ -97,10 +125,91 @@ export async function runOwnerSupplyReadiness({
 
 export async function runOwnerSupplyTest({
   data,
+  context,
 }: {
   data: z.infer<typeof ownerSupplyActionInputSchema>;
+  context: unknown;
 }): Promise<SupplyFunnelStepCompletion> {
-  return callSourceAction(testAction, data);
+  const correlationId = `owner-supply-test:${data.businessId}:${data.offeringRef}`;
+  const command = { ...data, correlationId };
+  const sourceWrite = await sourceWriteAdmissionFromContext({
+    context,
+    command,
+    scope: "catalog_publish",
+    operationKey: data.operationKey,
+    correlationId,
+  });
+  return callSourceAction(testAction, {
+    ...command,
+    sourceWrite,
+    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+  });
+}
+
+export async function readOwnerSellerCanaryStatus({
+  data,
+}: {
+  data: z.infer<typeof ownerSellerCanaryStatusInputSchema>;
+}): Promise<OwnerSellerCanaryReadback> {
+  try {
+    return await callSourceQuery(ownerSellerCanaryStatusQuery, data);
+  } catch {
+    return {
+      kind: "error",
+      code: "source_unavailable",
+      reason: OWNER_SUPPLY_UNAVAILABLE_MESSAGE,
+    };
+  }
+}
+
+export async function promoteOwnerSellerCanary({
+  data,
+  context,
+}: {
+  data: z.infer<typeof ownerSellerCanaryPromotionInputSchema>;
+  context: unknown;
+}): Promise<OwnerSellerCanaryPromotionResult> {
+  const { canaryRef, ...target } = data;
+  const current = await readOwnerSellerCanaryStatus({ data: target });
+  if (
+    current.kind !== "available"
+    || current.canaryRef !== canaryRef
+    || current.offeringRef !== data.offeringRef
+    || current.offeringRevision !== data.offeringRevision
+    || current.publicationRef !== data.publicationRef
+    || current.publicationRevision !== data.publicationRevision
+  ) return { kind: "refused", code: "canary_target_mismatch" };
+
+  const identityDigest = canonicalDigest({
+    kind: "owner_x402_seller_canary_promotion:v1",
+    businessId: data.businessId,
+    offeringRef: data.offeringRef,
+    offeringRevision: data.offeringRevision,
+    offeringSourceHash: data.offeringSourceHash,
+    publicationRef: data.publicationRef,
+    publicationRevision: data.publicationRevision,
+    canaryRef,
+  });
+  const operationKey = `owner-supply:x402-promote:${identityDigest.slice("sha256:".length)}`;
+  const correlationId = `owner-supply:${data.businessId}:${data.offeringRef}`;
+  const command = {
+    businessId: data.businessId,
+    canaryRef,
+    operationKey,
+    correlationId,
+  };
+  const sourceWrite = await sourceWriteAdmissionFromContext({
+    context,
+    command,
+    scope: "catalog_publish",
+    operationKey,
+    correlationId,
+  });
+  return callSourceMutation(promoteOwnerSellerCanaryMutation, {
+    ...command,
+    sourceWrite,
+    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+  });
 }
 
 async function admitOwnerSupplyMaintenance(

@@ -122,6 +122,7 @@ function FoundBody({
   const requiresBuyerCredential = invokeNavigation !== undefined
   const continuation = continuationForOperationFacts({
     operationRef: operation.operationRef,
+    searchQuery: operation.summary,
     availabilityPosture,
     requiresBuyerCredential,
     hasBuyerCredential,
@@ -206,9 +207,7 @@ function PrimaryContinuation({
   const description = continuation.warning
     ?? (continuation.label === 'Connect agent'
       ? 'Connect an agent before making this protected call.'
-      : continuation.label === 'Inspect Operation'
-        ? 'This Operation can be inspected, but it is not currently callable.'
-        : 'This is the single safe next step from the current Operation state.')
+      : 'This is the single safe next step from the current Operation state.')
 
   return (
     <section

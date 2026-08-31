@@ -122,6 +122,7 @@ export const connectionAuthorityValidation = v.union(
 
 export const createArgs = {
   ...authorityFields,
+  authorityGrantRef: v.string(),
   commandId: v.string(),
   now: v.number(),
 } as const
@@ -307,6 +308,7 @@ export type ProviderConnectionLeaseRow = {
 
 export type AuthorityCommandArgs = {
   connectionRef: string
+  authorityGrantRef: string
   businessId: Id<'businesses'>
   providerRef: string
   providerAccountRef: string
@@ -323,7 +325,7 @@ export type AuthorityCommandArgs = {
   now: number
 }
 
-export type ReauthorizeCommandArgs = AuthorityCommandArgs & {
+export type ReauthorizeCommandArgs = Omit<AuthorityCommandArgs, 'authorityGrantRef'> & {
   expectedAuthorityGeneration: number
   expectedAuthorityDigest: string
 }

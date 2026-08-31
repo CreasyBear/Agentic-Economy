@@ -30,7 +30,7 @@ export {
   readCurrentCleanupResourceAuthority,
   resolveCanonicalBusinessOwner,
   resolveProviderConnectionProvenance,
-  resolveUniqueProviderConnectionGrant,
+  resolveExpectedProviderConnectionGrant,
   type CanonicalActor,
 } from './authority'
 export {
@@ -71,6 +71,7 @@ export async function createHandler(ctx: MutationCtx, args: AuthorityCommandArgs
       ...(args.credentialRef === null ? [] : [`secret:${args.credentialRef}`]),
     ],
     args.credentialRef,
+    args.authorityGrantRef,
   )
   if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   const result = createProviderConnection({
@@ -116,6 +117,7 @@ export async function reauthorizeHandler(ctx: MutationCtx, args: ReauthorizeComm
   const now = Date.now()
   const provenance = await resolveProviderConnectionProvenance(
     ctx, actor, 'refresh', [`connection:${current.connectionRef}`], args.credentialRef,
+    current.authorityGrantRef,
   )
   if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   const result = reauthorizeProviderConnection(current, {
@@ -160,6 +162,7 @@ export async function beginRevocationHandler(ctx: MutationCtx, args: BeginRevoca
   if (result.kind === 'refused') return result
   const provenance = await resolveProviderConnectionProvenance(
     ctx, actor, 'revoke', [`connection:${current.connectionRef}`], current.credentialRef,
+    current.authorityGrantRef,
   )
   if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   const rebound = withProviderConnectionAuthority(result.connection, provenance)

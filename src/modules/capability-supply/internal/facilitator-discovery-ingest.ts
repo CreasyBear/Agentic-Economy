@@ -186,6 +186,10 @@ export function decideFacilitatorDiscoveryItem(
       version: 1,
       name: offeringLabel,
       description: offeringSummary,
+      inputExamples: [{
+        label: "Provider example",
+        input: bazaar.inputExample,
+      }],
       customerAnnotations: [],
       dataUse: [],
       effects: [],

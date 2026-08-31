@@ -466,12 +466,14 @@ function x402RuntimeFactory(
         const authorization = readX402PaymentPayerAndNonce(paymentSignature)
         if (authorization === undefined) return false
         return verifyExactEvmX402Settlement({
+          aeEnvironment: 'production',
           response: response as X402SettlementResponse,
           requirement,
           payer: authorization.payer,
           paymentNonce: authorization.nonce,
           receipt: await readX402EvmReceipt(
             requirement.network,
+            requirement.asset,
             response.transaction,
             dispatcher,
             'production',

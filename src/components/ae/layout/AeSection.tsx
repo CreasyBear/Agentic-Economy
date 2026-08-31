@@ -18,7 +18,7 @@ export function AeSection({ title, description, children, id, className }: AeSec
   return (
     <section
       aria-labelledby={titleId}
-      className={cn('grid scroll-mt-6 gap-related', className)}
+      className={cn('grid scroll-mt-anchor gap-related', className)}
       {...(id === undefined ? {} : { id })}
     >
       <div className="grid gap-intra">

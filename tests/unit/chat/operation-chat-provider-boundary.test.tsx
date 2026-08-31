@@ -3,13 +3,14 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentType, ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const runtime = vi.hoisted(() => ({
   pathname: '/t/new',
   isAuthenticated: true,
+  constructClient: vi.fn(),
   materialize: vi.fn(async () => true),
 }))
 
@@ -24,7 +25,9 @@ vi.mock('convex/react-clerk', () => ({
 
 vi.mock('convex/react', () => ({
   ConvexReactClient: class ConvexReactClient {
-    constructor(readonly url: string) {}
+    constructor(readonly url: string) {
+      runtime.constructClient(url)
+    }
   },
   useConvexAuth: () => ({ isAuthenticated: runtime.isAuthenticated }),
   useMutation: () => runtime.materialize,
@@ -46,6 +49,25 @@ vi.mock('@/components/ae/layout/AeRouteProgressBar', () => ({ RouteProgressBar: 
 vi.mock('@/components/ae/feedback/AeObservabilityErrorBoundary', () => ({
   AeObservabilityErrorBoundary: ({ children }: { children: ReactNode }) => children,
 }))
+vi.mock('@/components/ae/layout/AePageState', () => ({
+  AePageState: ({
+    title,
+    description,
+    tone,
+    action,
+  }: {
+    title: string
+    description: string
+    tone: 'neutral' | 'warning' | 'danger'
+    action?: ReactNode
+  }) => (
+    <section role={tone === 'danger' ? 'alert' : 'status'} data-tone={tone}>
+      <h1>{title}</h1>
+      <p>{description}</p>
+      {action}
+    </section>
+  ),
+}))
 vi.mock('@/lib/observability/boot-client-observability', () => ({
   bootClientObservability: vi.fn(),
 }))
@@ -63,6 +85,7 @@ const source = readFileSync(
 beforeEach(() => {
   runtime.pathname = '/t/new'
   runtime.isAuthenticated = true
+  runtime.constructClient.mockReset()
   runtime.materialize.mockReset().mockResolvedValue(true)
   vi.stubEnv('VITE_CONVEX_URL', 'https://runtime-authority.convex.test')
 })
@@ -92,12 +115,32 @@ describe('operation chat provider boundary', () => {
     expect(source).toMatch(/const content = requiresChatProviders\(pathname\)[\s\S]*: isLocalE2EAuthBypassEnabled\(\)/u)
   })
 
-  it('constructs Convex lazily and renders an accessible missing-config state', () => {
-    expect(source).toContain("const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()")
-    expect(source).toContain('useState(() => new ConvexReactClient(convexUrl))')
-    expect(source).toContain('role="status"')
-    expect(source).toContain('Chat is unavailable')
-    expect(source).toContain('The chat service is not configured.')
+  it('renders a single catalogue continuation without constructing chat authority when configuration is missing', () => {
+    vi.stubEnv('VITE_CONVEX_URL', '   ')
+    const Root = (Route as unknown as {
+      options: { component: ComponentType }
+    }).options.component
+
+    render(<Root />, { container: document })
+
+    expect(screen.getAllByRole('heading', { level: 1, name: 'Chat is unavailable' })).toHaveLength(1)
+    const status = screen.getByRole('status')
+    expect(status.getAttribute('data-tone')).toBe('warning')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByText('Chat is not configured. The Operation catalogue remains available.')).not.toBeNull()
+
+    const browseLinks = screen.getAllByRole('link', { name: 'Browse Operations' })
+    expect(browseLinks).toHaveLength(1)
+    expect(browseLinks[0]?.tagName).toBe('A')
+    expect(browseLinks[0]?.getAttribute('href')).toBe('/market?window=30d#operations')
+    expect(browseLinks[0]?.classList.contains('min-h-touch')).toBe(true)
+
+    expect(screen.queryByRole('button', { name: /retry|try again/iu })).toBeNull()
+    expect(screen.queryByRole('link', { name: /retry|try again/iu })).toBeNull()
+    expect(screen.queryByRole('link', { name: /ask/iu })).toBeNull()
+    expect(document.querySelector('a[href="/t/new"]')).toBeNull()
+    expect(runtime.constructClient).not.toHaveBeenCalled()
+    expect(runtime.materialize).not.toHaveBeenCalled()
   })
 
   it('runs the real chat provider composition and materializes only authenticated authority', async () => {

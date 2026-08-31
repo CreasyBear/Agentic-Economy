@@ -74,7 +74,6 @@ export default defineConfig({
       routes: {
         "/SKILL.md": {
           handler: "./src/routes/SKILL[.]md.ts",
-          method: "GET",
         },
       },
       preset: "vercel",

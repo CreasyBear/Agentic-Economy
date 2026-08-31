@@ -42,6 +42,15 @@ import { createSupplyManagementService, type SupplyManagementService } from '@/m
 import { createAccountManagementService, type AccountManagementService } from '@/modules/agent-access/account.actions'
 import { createMarketDemandService, type MarketDemandService } from '@/modules/market-demand/market-demand.actions'
 const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
+const AE_MCP_INSTRUCTIONS = [
+  'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability.',
+  'Search with `ae_registry_operations_search` and a capability phrase.',
+  'If multiple supplier Operations match, compare their price, readiness, data use, and effects with `ae_registry_operations_compare`; choose one supplier, then inspect that exact Operation with `ae_registry_operations_detail`.',
+  'Use `ae_registry_operations_inspectPlan` only for a bounded multi-Operation composition, not to choose a supplier.',
+  'Authenticated clients may use `ae_operation_invoke` only when that tool is admitted and the returned access and authority conditions are satisfied.',
+  'If effects are uncertain, use `ae_operation_status` or `ae_operation_reconcile` before retrying.',
+  'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution.',
+].join(' ')
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
   authorityMode?: AgentAccessAuthorityMode
@@ -77,7 +86,10 @@ class ConciseMcpRequestError extends McpError {
 }
 class SafeMcpSdkServer extends Server {
   constructor() {
-    super({ name: 'agentic-economy', version: '1.0.0' })
+    super(
+      { name: 'agentic-economy', version: '1.0.0' },
+      { instructions: AE_MCP_INSTRUCTIONS },
+    )
   }
 
   override setRequestHandler<T extends AnyObjectSchema>(
@@ -140,9 +152,11 @@ function safeMcpFailureDetail(kind: ProblemKind): string {
 function mcpToolError(failure: McpToolFailure): {
   isError: true
   content: [{ type: 'text'; text: string }]
+  structuredContent: McpToolFailure
 } {
   return {
     isError: true,
+    structuredContent: failure,
     content: [{
       type: 'text',
       text: JSON.stringify(failure),
@@ -261,7 +275,10 @@ export function createAeMcpServer(
         && agentAuthorityModeAllows(access.authorityMode, requiredModeForAction(action)))
     ))
 
-  const server = new McpServer({ name: 'agentic-economy', version: '1.0.0' })
+  const server = new McpServer(
+    { name: 'agentic-economy', version: '1.0.0' },
+    { instructions: AE_MCP_INSTRUCTIONS },
+  )
   const sdkServer = new SafeMcpSdkServer()
   const serverWithSdk = server as { server: Server }
   serverWithSdk.server = sdkServer

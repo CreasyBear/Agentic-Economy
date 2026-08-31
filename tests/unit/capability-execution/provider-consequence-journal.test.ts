@@ -247,7 +247,7 @@ async function freshIssueAuthority(adapterId = 'http-json:v1') {
   const owner = await canonicalOwner(backend, fixture.businessId)
   const providerNamespace = `capability-provider/${adapterId}`
   const providerAccountRef = 'account:journal'
-  await grant(backend, owner, 'a', ['connection:install'], [
+  const installGrant = await grant(backend, owner, 'a', ['connection:install'], [
     `connection-provider:${providerNamespace}`,
     `connection-provider:${providerNamespace}:${providerAccountRef}`,
     `secret:${SECRET_REF}`,
@@ -255,6 +255,7 @@ async function freshIssueAuthority(adapterId = 'http-json:v1') {
   const installed = await backend.mutation(internal.capabilityProviderConnections.create, {
     commandId: 'command:install:journal',
     connectionRef: 'connection:journal',
+    authorityGrantRef: installGrant.grantRef,
     businessId: fixture.businessId,
     providerRef: 'provider:journal',
     providerAccountRef,
@@ -819,7 +820,7 @@ describe('provider consequence durable journal', () => {
         `secret:${SECRET_REF}`,
       ]
       const parent = await grant(backend, owner, 'e', ['*'], ['*'])
-      await childGrant(backend, owner, 'f', parent, ['connection:install'], resources)
+      const installGrant = await childGrant(backend, owner, 'f', parent, ['connection:install'], resources)
       await backend.run(async (ctx) => {
         const parentRow = await ctx.db.query('authorityDelegationGrants')
           .withIndex('by_grantRef', (query) => query.eq('grantRef', parent.grantRef))
@@ -833,6 +834,7 @@ describe('provider consequence durable journal', () => {
       await expect(backend.mutation(internal.capabilityProviderConnections.create, {
         commandId: `command:install:${failure}`,
         connectionRef: `connection:install:${failure}`,
+        authorityGrantRef: installGrant.grantRef,
         businessId: fixture.businessId,
         providerRef: 'provider:install-test',
         providerAccountRef,

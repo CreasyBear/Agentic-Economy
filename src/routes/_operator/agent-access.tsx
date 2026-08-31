@@ -19,8 +19,19 @@ import {
   type PendingOperationApproval,
 } from '@/modules/capability-execution/operation-approval.functions'
 
+export type AgentAccessSearch = Readonly<{ caller?: string }>
+
+const canonicalPrincipalIdPattern = /^prn_[0-9a-f]{32}$/u
+
+export function validateAgentAccessSearch(search: Record<string, unknown>): AgentAccessSearch {
+  if (typeof search.caller !== 'string') return {}
+  const caller = search.caller.trim()
+  return canonicalPrincipalIdPattern.test(caller) ? { caller } : {}
+}
+
 export const Route = createFileRoute('/_operator/agent-access')({
   ...operatorRouteOptions,
+  validateSearch: validateAgentAccessSearch,
   loader: () => readCanonicalBaseUrlServer(),
   head: () => ({ meta: [
     { title: 'Keys | Agentic Economy' },
@@ -36,6 +47,7 @@ function AgentAccessRoute() {
 
 function AgentAccessHome() {
   const canonicalBaseUrl = Route.useLoaderData()
+  const search = Route.useSearch()
   const location = useLocation()
   const navigate = useNavigate()
   const readConsole = useServerFn(readAgentAccessConsoleServer)
@@ -103,6 +115,12 @@ function AgentAccessHome() {
     }
   }, [location.hash, navigate])
 
+  useEffect(() => {
+    if (loading || error !== undefined || search.caller === undefined) return
+    if (items.some((item) => item.principalId === search.caller)) return
+    void navigate({ to: '/agent-access', search: {}, replace: true })
+  }, [error, items, loading, navigate, search.caller])
+
   async function revoke(keyId: string) {
     setRevoking(keyId)
     try {
@@ -167,7 +185,12 @@ function AgentAccessHome() {
       <AeAgentOperatorConsole
         items={items}
         loading={loading}
-        onRevoke={(keyId) => void revoke(keyId)}
+        {...(search.caller === undefined ? {} : { selectedPrincipalId: search.caller })}
+        getAgentHref={(principalId) => `/agent-access?caller=${encodeURIComponent(principalId)}`}
+        onClearSelectedPrincipal={() => {
+          void navigate({ to: '/agent-access', search: {}, replace: true })
+        }}
+        onRevoke={(keyId) => revoke(keyId)}
         {...(revoking === undefined ? {} : { revokingKeyId: revoking })}
         accessUnavailable={error !== undefined}
         approvals={approvals}

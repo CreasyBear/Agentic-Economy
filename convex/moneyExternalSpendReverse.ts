@@ -283,6 +283,7 @@ export async function reverseExternalInvocationSpendForInvalidOutputHandler(
     custody.kind === 'present'
     && !await transitionCustodyDailyBudgetInTransaction(ctx, {
       custodyRef: custody.custodyRef,
+      environment: custody.environment,
       budgetPolicyRef: custody.custodyBudgetPolicyRef,
       dayStart: custody.custodyBudgetDayStart,
       amount,

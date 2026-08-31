@@ -32,8 +32,6 @@ describe('MCP host adapter tools/list', () => {
       .filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
     const expectedToolNames = mcpActions.map(mcpToolName)
     expect(expectedToolNames).toEqual([
-      'ae_registry_search',
-      'ae_registry_detail',
       'ae_registry_operations_search',
       'ae_registry_operations_detail',
       'ae_registry_operations_compare',
@@ -71,17 +69,9 @@ describe('MCP host adapter tools/list', () => {
       expect(tool.outputSchema).toEqual(expectedOutputSchema)
     }
 
-    const detail = tools.find((tool) => tool.name === 'ae_registry_detail')
     const operations = tools.find((tool) => tool.name === 'ae_registry_operations_search')
     const compare = tools.find((tool) => tool.name === 'ae_registry_operations_compare')
     const inspectPlan = tools.find((tool) => tool.name === 'ae_registry_operations_inspectPlan')
-    const search = tools.find((tool) => tool.name === 'ae_registry_search')
-    expect(detail?.inputSchema).toEqual(expect.objectContaining({
-      properties: expect.objectContaining({ slug: expect.any(Object) }),
-    }))
-    expect(search?.inputSchema).toEqual(expect.objectContaining({
-      properties: expect.objectContaining({ query: expect.any(Object) }),
-    }))
     expect(operations?.inputSchema).toEqual(expect.objectContaining({
       properties: expect.objectContaining({ query: expect.any(Object) }),
     }))

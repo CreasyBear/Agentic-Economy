@@ -19,6 +19,7 @@ import {
   invocationSummaryPageValue,
   principalAndSourceArgs,
   principalValue,
+  currentProviderConnectionAuthorityValue,
   projectRecoveryArgs,
   providerLeaseAuthorityValue,
   reconciledInvocationAuthorityResult,
@@ -71,6 +72,7 @@ import {
 import {
   readOwnerRecoveryHandler,
   listAgentInvocationSummariesHandler,
+  readCurrentProviderConnectionAuthorityHandler,
   readProviderLeaseAuthorityHandler,
   readRecoveryHandler,
   readReplayHandler,
@@ -81,7 +83,13 @@ import {
   reconciliationEvidenceValue,
   recoveryResultValue,
   statusResultValue,
+  x402PaymentReconciliationEvidenceValue,
 } from '@/modules/capability-execution/convex'
+
+const operationReconciliationEvidenceValue = v.union(
+  reconciliationEvidenceValue,
+  x402PaymentReconciliationEvidenceValue,
+)
 export const resolveInvocationAgentAuthority = internalMutation({
   args: {
     principal: principalValue,
@@ -218,6 +226,20 @@ export const readProviderLeaseAuthority = internalQuery({
   handler: readProviderLeaseAuthorityHandler,
 })
 
+export const readCurrentProviderConnectionAuthority = internalQuery({
+  args: {
+    connectionRef: v.string(),
+    providerRef: v.string(),
+    adapterId: v.string(),
+    authorityGeneration: v.number(),
+    authorityDigest: v.string(),
+    resourceUrl: v.string(),
+    now: v.number(),
+  },
+  returns: currentProviderConnectionAuthorityValue,
+  handler: readCurrentProviderConnectionAuthorityHandler,
+})
+
 export const completeWork = internalMutation({
   args: workCompletionArgs,
   returns: v.null(),
@@ -266,7 +288,7 @@ export const cancelInvocation = action({
 })
 
 export const reconcileInvocation = action({
-  args: { ...principalAndSourceArgs, invocationRef: v.string(), idempotencyKey: v.string(), evidence: reconciliationEvidenceValue },
+  args: { ...principalAndSourceArgs, invocationRef: v.string(), idempotencyKey: v.string(), evidence: operationReconciliationEvidenceValue },
   returns: recoveryResultValue,
   handler: canonicalAgentReconcileHandler,
 })
@@ -284,7 +306,7 @@ export const cancelOwnerInvocation = action({
 })
 
 export const reconcileOwnerInvocation = action({
-  args: { invocationRef: v.string(), idempotencyKey: v.string(), evidence: reconciliationEvidenceValue },
+  args: { invocationRef: v.string(), idempotencyKey: v.string(), evidence: operationReconciliationEvidenceValue },
   returns: recoveryResultValue,
   handler: canonicalOwnerReconcileHandler,
 })

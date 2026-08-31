@@ -151,6 +151,13 @@ export async function reserveExternalInvocationSpendHandler(
       budgetReservation.retryable,
     )
   }
+  if (
+    identity.executionContext?.kind === 'seller_onboarding_canary'
+    && identity.executionContext.fundingBudgetRef
+      !== budgetReservation.budgetPolicyRef
+  ) {
+    return externalSpendRefusal('external_spend_budget_refused')
+  }
   const custodyFacts =
     identity.custodyRef !== undefined
     && identity.custodyGeneration !== undefined
@@ -165,6 +172,7 @@ export async function reserveExternalInvocationSpendHandler(
     ? undefined
     : await reserveCustodyDailyBudgetInTransaction(ctx, {
         custodyRef: custodyFacts.custodyRef,
+        environment: identity.environment,
         maximumDailySpend: custodyFacts.custodyDailyMaximum,
         amount: identity.amount,
         observedAt,
@@ -184,6 +192,9 @@ export async function reserveExternalInvocationSpendHandler(
     budgetPolicyRef: budgetReservation.budgetPolicyRef,
     budgetDayStart: budgetReservation.dayStart,
     budgetMonthStart: budgetReservation.monthStart,
+    ...(identity.executionContext === undefined
+      ? {}
+      : { executionContext: identity.executionContext }),
     ...(custodyFacts === undefined || custodyReservation === undefined
       ? {}
       : {

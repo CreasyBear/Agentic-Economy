@@ -109,6 +109,8 @@ function EarningsCurrencyCard({
       ? "not_started"
       : account.payout.accountState);
   const payoutState = account.payout.payoutState;
+  const isWaitingForMinimumPayout =
+    accountState === "ready" && payoutState === "held_threshold";
   const payoutRef = account.payout.payoutRef;
   const recoveryState = account.payout.recoveryState;
   const payoutCommandId = account.payout.payoutCommandId;
@@ -263,8 +265,18 @@ function EarningsCurrencyCard({
             label: "Payout state",
             value: verifiedPaidEvidence
               ? "Transferred to Stripe"
-              : payoutStateLabel(payoutState),
+              : isWaitingForMinimumPayout
+                ? "Waiting for minimum payout"
+                : payoutStateLabel(payoutState),
           },
+          ...(isWaitingForMinimumPayout
+            ? [
+                {
+                  label: "Threshold progress",
+                  value: `${formatCurrencyAmount(account.payout.providerNet)} of ${formatCurrencyAmount(account.payout.minimumPayout)}`,
+                },
+              ]
+            : []),
         ]}
       />
       {!hasPersistedPayout ? null : (
@@ -315,7 +327,9 @@ function EarningsCurrencyCard({
       )}
       <div className="grid gap-2">
         <p className="m-0 text-sm text-muted-foreground">
-          Payouts become available when your payout account and supplier configuration are ready.
+          {isWaitingForMinimumPayout
+            ? "Your payout account is ready. Payout begins when supplier earnings reach the minimum shown above."
+            : "Payouts become available when your payout account and supplier configuration are ready."}
         </p>
         <div className="flex flex-wrap gap-2">
           {accountState === "ready" ? null : stripeAccountId === undefined ? (

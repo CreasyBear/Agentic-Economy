@@ -78,6 +78,9 @@ export type ReadCapabilityProbeTargetResult =
 export async function readCapabilityProbeTarget(
   ports: CapabilityGraphPorts,
   args: Readonly<{ publicationRef: string; expectedRevision: number }>,
+  options?: Readonly<{
+    allowUnpublishedBusiness?: (businessId: string) => Promise<boolean>
+  }>,
 ): Promise<ReadCapabilityProbeTargetResult> {
   const publication = await ports.loadPublicationAtRevision(args.publicationRef, args.expectedRevision)
   if (publication === null) {
@@ -92,7 +95,10 @@ export async function readCapabilityProbeTarget(
     ports.loadPublishedBusiness(publication.businessId),
     ports.getActiveExactCapabilityContract(contractRefFromRow(publication)),
   ])
-  if (business === null) return unavailable('target_not_public')
+  if (
+    business === null
+    && !(await options?.allowUnpublishedBusiness?.(publication.businessId) ?? false)
+  ) return unavailable('target_not_public')
   if (
     offering === null
     || offering.status !== 'active'
