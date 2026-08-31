@@ -158,6 +158,39 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  authenticated-platform-proof:
+    if: github.event_name == 'workflow_dispatch'
+    name: Required exact-revision authenticated multi-agent lifecycle proof
+    needs: source-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      AE_AUTHENTICATED_E2E_BASE_URL: ${{ vars.AE_AUTHENTICATED_E2E_BASE_URL }}
+      AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
+      AE_E2E_OWNER_EMAIL: ${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}
+      CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1
+
+      - name: Frozen dependency install
+        run: npm ci
+
+      - name: Install the authenticated Chromium browser
+        run: npm exec -- playwright install --with-deps chromium
+
+      - name: Prove the authenticated two-agent lifecycle
+        run: npm run test:release:authenticated
+
   live-gateway-proof:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_live_gateway_spend == true
     name: Opt-in production-approved exact-revision paid gateway smoke

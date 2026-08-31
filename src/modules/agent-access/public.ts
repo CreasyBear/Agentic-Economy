@@ -15,3 +15,5 @@ export type {
 } from './agent-operator-view-model'
 export type { AgentConnectionTarget } from './oauth-state'
 export type { AgentLifecycleResult } from './agent-access'
+export { readAgentConsentDetails } from './consent-read-model'
+export type { AgentConsentDetails, AgentConsentTarget } from './consent-read-model'

@@ -19,6 +19,7 @@ export function canonicalAgentRecord(
     admissionLifecycle: 'active',
     authorityMode: current.key.authorityMode,
     scopes: current.key.scopes,
+    credentialHistoryTruncated: false,
     credentials: ordered.map((source, index) => ({
       credentialRef: `credential:${source.key.keyId}`,
       providerCredentialId: source.key.keyId,

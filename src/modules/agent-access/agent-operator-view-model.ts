@@ -64,9 +64,11 @@ export type AgentDetail = Readonly<{
   activity: readonly AgentActivityView[]
   usage?: AgentUsageSummary
   dataState: 'source' | 'empty' | 'partial' | 'unavailable'
+  credentialHistoryTruncated?: boolean
 }>
 
 export type AgentDirectoryProjection = Readonly<{
   items: readonly AgentDirectoryItem[]
   details: readonly AgentDetail[]
+  nextCursor?: string
 }>

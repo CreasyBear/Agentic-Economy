@@ -558,6 +558,20 @@ describe('issued agent binding', () => {
     const principalA = rows.find((row) => row.currentProviderCredentialId === agentA.credentialId)?.principalRef
     const principalB = rows.find((row) => row.currentProviderCredentialId === agentB.credentialId)?.principalRef
     if (principalA === undefined || principalB === undefined) throw new Error('agent principal missing')
+    const pagedPrincipals: string[] = []
+    let cursor: string | null = null
+    let done = false
+    for (let pageNumber = 0; pageNumber < 6 && !done; pageNumber += 1) {
+      const page: { page: Array<{ principalRef: string }>; continueCursor: string; isDone: boolean } = await owner.query(api.agentDirectory.listOwnedPage, {
+        now: NOW,
+        paginationOpts: { numItems: 1, cursor },
+      })
+      pagedPrincipals.push(...page.page.map(({ principalRef }) => principalRef))
+      cursor = page.continueCursor
+      done = page.isDone
+    }
+    expect(done).toBe(true)
+    expect(pagedPrincipals).toEqual(expect.arrayContaining([principalA, principalB]))
     const credentialA = rows.find((row) => row.principalRef === principalA)?.credentials[0]?.credentialRef
     if (credentialA === undefined) throw new Error('credential missing')
 
@@ -627,6 +641,10 @@ describe('issued agent binding', () => {
       ...providerCommand,
       serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', providerCommand),
     })).resolves.toEqual({ kind: 'completed' })
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessProviderRevocations')
+      .withIndex('by_principalRef_and_lifecycle', (query) => query
+        .eq('principalRef', principalA).eq('lifecycle', 'pending'))
+      .collect())).resolves.toHaveLength(1)
     await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ principalRef: principalA, status: 'attention' }),
       expect.objectContaining({ principalRef: principalB, status: 'connected' }),
@@ -636,6 +654,10 @@ describe('issued agent binding', () => {
       ...providerCompleted,
       serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', providerCompleted),
     })).resolves.toEqual({ kind: 'completed' })
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessProviderRevocations')
+      .withIndex('by_principalRef_and_lifecycle', (query) => query
+        .eq('principalRef', principalA).eq('lifecycle', 'pending'))
+      .collect())).resolves.toHaveLength(0)
     await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({
         principalRef: principalA,
@@ -702,5 +724,81 @@ describe('issued agent binding', () => {
     await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_principalId', (query) => query.eq('principalId', agent.principalRef))
       .unique())).resolves.toMatchObject({ lifecycle: 'active' })
+  })
+
+  it('bounds disconnect fan-out and resumes from durable provider cleanup state', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const input = bindingInput()
+    await owner.mutation(registerIssuedBinding, { ...input, serviceAuth: await assertion(input) })
+    const [agent] = await owner.query(api.agentDirectory.listOwned, { now: NOW })
+    if (agent === undefined) throw new Error('agent_missing')
+
+    await backend.run(async (ctx) => {
+      const sourceCredential = await ctx.db.query('credentials')
+        .withIndex('by_principalRef_and_lifecycle', (query) => query
+          .eq('principalRef', agent.principalRef).eq('lifecycle', 'active'))
+        .unique()
+      const sourceBinding = sourceCredential === null ? null : await ctx.db.query('externalIdentityBindings')
+        .withIndex('by_bindingRef', (query) => query.eq('bindingRef', sourceCredential.bindingRef))
+        .unique()
+      if (sourceCredential === null || sourceBinding === null) throw new Error('source_credential_missing')
+      for (let index = 2; index <= 30; index += 1) {
+        const bindingRef = `bnd_batch_${index}`
+        await ctx.db.insert('externalIdentityBindings', {
+          bindingRef,
+          principalRef: agent.principalRef,
+          providerNamespace: sourceBinding.providerNamespace,
+          providerIdentifier: `key_batch_${index}`,
+          providerState: { kind: 'known', value: 'active' },
+          lifecycle: 'active',
+          credentialGeneration: index,
+          bindIdempotencyRef: `batch-binding-${index}`,
+          revision: 1,
+          createdAt: NOW + index,
+          updatedAt: NOW + index,
+        })
+        await ctx.db.insert('credentials', {
+          credentialRef: `crd_batch_${index}`,
+          bindingRef,
+          principalRef: agent.principalRef,
+          type: sourceCredential.type,
+          lifecycle: 'active',
+          generation: index,
+          issueIdempotencyRef: `batch-credential-${index}`,
+          revision: 1,
+          issuedAt: NOW + index,
+          expiresAt: NOW + 600_000,
+          updatedAt: NOW + index,
+        })
+      }
+    })
+
+    const command = { principalRef: agent.principalRef, correlationRef: 'corr-bounded-disconnect' }
+    const serviceAuth = await operationAssertion('agentAccessPrincipals.disconnectAgentForServer', command)
+    const first = await owner.mutation(disconnectAgentLifecycle, { ...command, serviceAuth })
+    expect(first).toMatchObject({ kind: 'completed', hasMore: true })
+    const firstTargets = first.providerTargets as Array<{ credentialRef: string; providerCredentialId: string }>
+    expect(firstTargets).toHaveLength(25)
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessProviderRevocations')
+      .withIndex('by_principalRef_and_lifecycle', (query) => query
+        .eq('principalRef', agent.principalRef).eq('lifecycle', 'pending'))
+      .collect())).resolves.toHaveLength(25)
+    for (const target of firstTargets) {
+      const provider = { ...target, principalRef: agent.principalRef, correlationRef: command.correlationRef, outcome: 'revoked' as const }
+      await owner.mutation(recordProviderRevocation, {
+        ...provider,
+        serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', provider),
+      })
+    }
+
+    const second = await owner.mutation(disconnectAgentLifecycle, { ...command, serviceAuth })
+    expect(second).toMatchObject({ hasMore: false })
+    expect(second.providerTargets as unknown[]).toHaveLength(5)
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessProviderRevocations')
+      .withIndex('by_principalRef_and_lifecycle', (query) => query
+        .eq('principalRef', agent.principalRef).eq('lifecycle', 'pending'))
+      .collect())).resolves.toHaveLength(5)
   })
 })

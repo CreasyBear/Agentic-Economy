@@ -28,4 +28,17 @@ export const agentAccessPrincipalTables = {
     .index('by_ownerId_and_lastSeenAt', ['ownerId', 'lastSeenAt'])
     .index('by_ownerId_and_lifecycle', ['ownerId', 'lifecycle'])
     .index('by_credentialId_and_lifecycle', ['credentialId', 'lifecycle']),
+  agentAccessProviderRevocations: defineTable({
+    revocationRef: v.string(),
+    principalRef: v.string(),
+    credentialRef: v.string(),
+    providerCredentialId: v.string(),
+    lifecycle: v.union(v.literal('pending'), v.literal('completed')),
+    correlationRef: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_revocationRef', ['revocationRef'])
+    .index('by_credentialRef', ['credentialRef'])
+    .index('by_principalRef_and_lifecycle', ['principalRef', 'lifecycle']),
 } as const

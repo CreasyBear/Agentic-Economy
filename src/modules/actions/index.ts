@@ -57,13 +57,17 @@ import {
   marketRequestStatusAction,
 } from '@/modules/market-demand/market-demand.actions'
 
-const registeredActions: readonly AnyAction[] = [
-  registrySearchAction,
-  registryDetailAction,
+const operationMarketReadActions: readonly AnyAction[] = [
   registryOperationsSearchAction,
   registryOperationsDetailAction,
   registryOperationsCompareAction,
   registryOperationsInspectPlanAction,
+]
+
+const registeredActions: readonly AnyAction[] = [
+  registrySearchAction,
+  registryDetailAction,
+  ...operationMarketReadActions,
   agentAccountSelfAction,
   agentAccountBalanceAction,
   agentAccountActivityAction,
@@ -106,6 +110,11 @@ export function listMcpActions(): readonly AnyAction[] {
   return actions.filter((action) =>
     action.surfaces.includes('mcp') && action.id !== 'registry.search' && action.id !== 'registry.detail'
   )
+}
+
+/** True only for one of the registered public Operation catalogue reads. */
+export function isOperationMarketReadAction(action: AnyAction): boolean {
+  return operationMarketReadActions.some((candidate) => candidate === action)
 }
 
 /** Deterministic MCP tool name: one derivation, never a hand-maintained map. */

@@ -33,6 +33,7 @@ export type CanonicalAgentDirectoryRecord = Readonly<{
   admissionLifecycle: 'active' | 'revoked' | 'expired'
   authorityMode: AgentAccessKeyInventoryItem['authorityMode']
   scopes: readonly string[]
+  credentialHistoryTruncated: boolean
   credentials: readonly Readonly<{
     credentialRef: string
     providerCredentialId: string
@@ -43,13 +44,22 @@ export type CanonicalAgentDirectoryRecord = Readonly<{
     expiresAt: number
   }>[]
 }>
-const listOwnedAgentDirectoryQuery = sourceQuery<Readonly<{ now: number }>, readonly CanonicalAgentDirectoryRecord[]>(
-  'agentDirectory:listOwned',
+type CanonicalAgentDirectoryPage = Readonly<{
+  page: readonly CanonicalAgentDirectoryRecord[]
+  isDone: boolean
+  continueCursor: string
+}>
+const listOwnedAgentDirectoryQuery = sourceQuery<Readonly<{
+  now: number
+  paginationOpts: Readonly<{ numItems: number; cursor: string | null }>
+}>, CanonicalAgentDirectoryPage>(
+  'agentDirectory:listOwnedPage',
 )
 
 
 export async function loadAgentDirectoryReadback(
   operations: AgentAccessOperationActivityPort,
+  cursor: string | null = null,
 ): Promise<AgentDirectoryProjection> {
   const [keys, source] = await Promise.all([
     listAgentAccessKeysServer(),
@@ -57,10 +67,17 @@ export async function loadAgentDirectoryReadback(
   ])
   const [grants, canonicalAgents] = await Promise.all([
     source.query(listOwnerGrantReadbacksQuery, {}),
-    source.query(listOwnedAgentDirectoryQuery, { now: Date.now() }),
+    source.query(listOwnedAgentDirectoryQuery, {
+      now: Date.now(),
+      paginationOpts: { numItems: 25, cursor },
+    }),
   ])
   const sources = await readAgentCredentialSources(keys, createConvexMoneyQueryPort(), grants)
-  return await enrichAgentDirectoryActivity(projectAgentDirectory(sources, canonicalAgents), operations)
+  const projection = projectAgentDirectory(sources, canonicalAgents.page)
+  const enriched = await enrichAgentDirectoryActivity(projection, operations)
+  return canonicalAgents.isDone
+    ? enriched
+    : { ...enriched, nextCursor: canonicalAgents.continueCursor }
 }
 
 /**
@@ -170,6 +187,7 @@ function projectAgentDetail(
         : ordered.every(({ dataState }) => dataState === 'empty')
           ? 'empty'
           : 'source',
+    ...(canonical.credentialHistoryTruncated ? { credentialHistoryTruncated: true } : {}),
   }
 }
 

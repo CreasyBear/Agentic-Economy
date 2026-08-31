@@ -147,6 +147,7 @@ const lifecycleCommandResult = v.union(
     kind: v.union(v.literal('completed'), v.literal('replayed')),
     principalRef: v.string(),
     providerTargets: v.array(providerTarget),
+    hasMore: v.optional(v.boolean()),
     correlationRef: v.string(),
   }),
   v.object({ kind: v.literal('conflict'), code: v.string(), correlationRef: v.string() }),
@@ -735,9 +736,10 @@ async function predecessorMaterial(ctx: MutationCtx, successor: Doc<'credentials
 }
 
 async function predecessorCredentialBinding(ctx: MutationCtx, successor: Doc<'credentials'>) {
-  if (successor.predecessorCredentialRef === undefined) return null
+  const predecessorCredentialRef = successor.predecessorCredentialRef
+  if (predecessorCredentialRef === undefined) return null
   const credential = await ctx.db.query('credentials')
-    .withIndex('by_credentialRef', (query) => query.eq('credentialRef', successor.predecessorCredentialRef!)).unique()
+    .withIndex('by_credentialRef', (query) => query.eq('credentialRef', predecessorCredentialRef)).unique()
   if (credential === null) return null
   const binding = await ctx.db.query('externalIdentityBindings')
     .withIndex('by_bindingRef', (query) => query.eq('bindingRef', credential.bindingRef)).unique()
@@ -753,7 +755,9 @@ async function revokeReplacementMaterial(
   now: number,
   reason: string,
 ) {
-  if (credential.lifecycle !== 'revoked') await ctx.db.patch(credential._id, { lifecycle: 'revoked', revokedAt: now, updatedAt: now, revision: credential.revision + 1 })
+  if (credential.lifecycle !== 'revoked') await ctx.db.patch(credential._id, {
+    lifecycle: 'revoked', revokedAt: now, updatedAt: now, revision: credential.revision + 1,
+  })
   if (binding.lifecycle !== 'revoked') await ctx.db.patch(binding._id, {
     lifecycle: 'revoked', providerState: { kind: 'unknown', value: reason }, revokedAt: now, updatedAt: now, revision: binding.revision + 1,
   })
@@ -773,6 +777,13 @@ async function revokeReplacementMaterial(
       { now: () => now },
     ).revoke({ grantRef: delegationGrantRef(delegation.grantRef), expectedGeneration: delegation.generation, context: action })
   }
+  await ensureProviderRevocation(ctx, {
+    principalRef: credential.principalRef,
+    credentialRef: credential.credentialRef,
+    providerCredentialId: binding.providerIdentifier,
+    correlationRef: canonicalDigest({ format: 'agent-provider-revocation:v1', credentialRef: credential.credentialRef } as never),
+    now,
+  })
 }
 
 export const promoteCredentialReplacementForServer = mutation({
@@ -802,6 +813,50 @@ export const cancelCredentialReplacementForServer = mutation({
 })
 
 type LifecycleOwner = NonNullable<Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>>
+
+type ProviderRevocationCommand = Readonly<{
+  principalRef: string
+  credentialRef: string
+  providerCredentialId: string
+  correlationRef: string
+  now: number
+}>
+
+async function ensureProviderRevocation(
+  ctx: MutationCtx,
+  command: ProviderRevocationCommand,
+) {
+  const existing = await ctx.db.query('agentAccessProviderRevocations')
+    .withIndex('by_credentialRef', (query) => query.eq('credentialRef', command.credentialRef))
+    .unique()
+  if (existing !== null) {
+    if (existing.principalRef !== command.principalRef
+      || existing.providerCredentialId !== command.providerCredentialId) {
+      throw new Error('provider_revocation_identity_conflict')
+    }
+    if (existing.lifecycle === 'pending' && existing.correlationRef !== command.correlationRef) {
+      await ctx.db.patch(existing._id, {
+        correlationRef: command.correlationRef,
+        updatedAt: command.now,
+      })
+    }
+    return existing.lifecycle
+  }
+  await ctx.db.insert('agentAccessProviderRevocations', {
+    revocationRef: canonicalDigest({
+      format: 'agent-provider-revocation:v1',
+      credentialRef: command.credentialRef,
+    } as never),
+    principalRef: command.principalRef,
+    credentialRef: command.credentialRef,
+    providerCredentialId: command.providerCredentialId,
+    lifecycle: 'pending',
+    correlationRef: command.correlationRef,
+    createdAt: command.now,
+    updatedAt: command.now,
+  })
+  return 'pending' as const
+}
 
 async function requireLifecycleOwner(
   ctx: MutationCtx,
@@ -864,10 +919,10 @@ async function revokeCanonicalCredential(
   const [sandbox, production] = await Promise.all([
     ctx.db.query('agentAccessGrants')
       .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
-        .eq('credentialId', binding.providerIdentifier).eq('environment', 'sandbox').eq('lifecycle', 'active')).collect(),
+        .eq('credentialId', binding.providerIdentifier).eq('environment', 'sandbox').eq('lifecycle', 'active')).take(2),
     ctx.db.query('agentAccessGrants')
       .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
-        .eq('credentialId', binding.providerIdentifier).eq('environment', 'production').eq('lifecycle', 'active')).collect(),
+        .eq('credentialId', binding.providerIdentifier).eq('environment', 'production').eq('lifecycle', 'active')).take(2),
   ])
   await Promise.all([...sandbox, ...production].map(
     (grant) => revokeGrantLifecycle(ctx, grant, owner, correlationRef, now),
@@ -875,9 +930,12 @@ async function revokeCanonicalCredential(
   const changed = credential.lifecycle !== 'revoked' || binding.lifecycle !== 'revoked'
   const providerRevocationPending = binding.providerState.kind !== 'known'
     || binding.providerState.value !== 'revoked'
-  if (credential.lifecycle !== 'revoked') await ctx.db.patch(credential._id, {
-    lifecycle: 'revoked', revokedAt: now, updatedAt: now, revision: credential.revision + 1,
-  })
+  if (credential.lifecycle !== 'revoked') {
+    await ctx.db.patch(credential._id, {
+      lifecycle: 'revoked', revokedAt: credential.revokedAt ?? now, updatedAt: now,
+      revision: credential.revision + 1,
+    })
+  }
   if (binding.lifecycle !== 'revoked') await ctx.db.patch(binding._id, {
     lifecycle: 'revoked',
     providerState: providerRevocationPending
@@ -886,6 +944,13 @@ async function revokeCanonicalCredential(
     revokedAt: now,
     updatedAt: now,
     revision: binding.revision + 1,
+  })
+  if (providerRevocationPending) await ensureProviderRevocation(ctx, {
+    principalRef: credential.principalRef,
+    credentialRef: credential.credentialRef,
+    providerCredentialId: binding.providerIdentifier,
+    correlationRef,
+    now,
   })
   return { changed, providerCredentialId: binding.providerIdentifier, providerRevocationPending }
 }
@@ -908,7 +973,8 @@ async function promoteRemainingCredential(
 ) {
   const active = await ctx.db.query('credentials')
     .withIndex('by_principalRef_and_lifecycle', (query) => query.eq('principalRef', admission.principalId).eq('lifecycle', 'active'))
-    .collect()
+    .order('desc')
+    .take(100)
   const ordered = active.filter((credential) => credential.credentialRef !== revokedCredentialRef)
     .toSorted((left, right) => right.generation - left.generation)
   const hasSupplyAuthority = new Set(admission.scopes).has(MARKET_SUPPLY_MANAGE_SCOPE)
@@ -919,7 +985,7 @@ async function promoteRemainingCredential(
     const grants = await ctx.db.query('agentAccessGrants')
       .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
         .eq('credentialId', binding.providerIdentifier).eq('environment', admission.environment).eq('lifecycle', 'active'))
-      .collect()
+      .take(2)
     const grant = grants.find((candidate) => candidate.principalId === admission.principalId)
     if (grant === undefined) continue
     const scopes = hasSupplyAuthority
@@ -969,6 +1035,7 @@ export const revokeCredentialForServer = mutation({
       providerTargets: revoked.providerRevocationPending
         ? [{ credentialRef: credential.credentialRef, providerCredentialId: revoked.providerCredentialId }]
         : [],
+      hasMore: false,
       correlationRef: args.correlationRef,
     }
   },
@@ -989,8 +1056,37 @@ export const disconnectAgentForServer = mutation({
     if (admission === null || admission.ownerId !== owner.accountRef) {
       return { kind: 'conflict' as const, code: 'agent_not_found' as const, correlationRef: args.correlationRef }
     }
-    const credentials = await ctx.db.query('credentials')
-      .withIndex('by_principalRef_and_lifecycle', (query) => query.eq('principalRef', args.principalRef)).collect()
+    const [activeCredentials, staleCredentials, cleanupPendingRevocations] = await Promise.all([
+      ctx.db.query('credentials')
+        .withIndex('by_principalRef_and_lifecycle', (query) => query
+          .eq('principalRef', args.principalRef).eq('lifecycle', 'active'))
+        .order('desc')
+        .take(26),
+      ctx.db.query('credentials')
+        .withIndex('by_principalRef_and_lifecycle', (query) => query
+          .eq('principalRef', args.principalRef).eq('lifecycle', 'stale'))
+        .order('desc')
+        .take(26),
+      ctx.db.query('agentAccessProviderRevocations')
+        .withIndex('by_principalRef_and_lifecycle', (query) => query
+          .eq('principalRef', args.principalRef).eq('lifecycle', 'pending'))
+        .order('desc')
+        .take(26),
+    ])
+    const cleanupPendingCredentials = await Promise.all(cleanupPendingRevocations.map(async (revocation) => (
+      await ctx.db.query('credentials')
+        .withIndex('by_credentialRef', (query) => query.eq('credentialRef', revocation.credentialRef))
+        .unique()
+    )))
+    if (cleanupPendingCredentials.some((credential) => credential === null)) {
+      return { kind: 'conflict' as const, code: 'credential_not_found' as const, correlationRef: args.correlationRef }
+    }
+    const pendingCredentials = [...new Map(
+      [...activeCredentials, ...staleCredentials, ...cleanupPendingCredentials]
+        .flatMap((credential) => credential === null ? [] : [[credential.credentialRef, credential] as const]),
+    ).values()]
+    const hasMore = pendingCredentials.length > 25
+    const credentials = pendingCredentials.slice(0, 25)
     const bindings = await Promise.all(credentials.map(async (credential) => (
       await credentialProviderBinding(ctx, credential)
     )))
@@ -1014,6 +1110,7 @@ export const disconnectAgentForServer = mutation({
       kind: changed ? 'completed' as const : 'replayed' as const,
       principalRef: args.principalRef,
       providerTargets: targets,
+      hasMore,
       correlationRef: args.correlationRef,
     }
   },
@@ -1043,14 +1140,30 @@ export const recordProviderRevocationForServer = mutation({
     const binding = await ctx.db.query('externalIdentityBindings')
       .withIndex('by_bindingRef', (query) => query.eq('bindingRef', credential.bindingRef)).unique()
     if (binding === null || binding.providerIdentifier !== args.providerCredentialId || binding.lifecycle !== 'revoked') return { kind: 'conflict' as const }
+    const revocation = await ctx.db.query('agentAccessProviderRevocations')
+      .withIndex('by_credentialRef', (query) => query.eq('credentialRef', args.credentialRef))
+      .unique()
+    if (revocation === null
+      || revocation.principalRef !== args.principalRef
+      || revocation.providerCredentialId !== args.providerCredentialId) return { kind: 'conflict' as const }
     if (binding.providerState.kind === 'known' && binding.providerState.value === 'revoked') {
+      if (revocation.lifecycle === 'pending') {
+        await ctx.db.patch(revocation._id, { lifecycle: 'completed', updatedAt: Date.now() })
+      }
       return { kind: 'replayed' as const }
     }
     const nextState = args.outcome === 'revoked'
       ? { kind: 'known' as const, value: 'revoked' as const }
       : { kind: 'unknown' as const, value: `revocation_failed:${args.correlationRef}` }
-    if (JSON.stringify(binding.providerState) === JSON.stringify(nextState)) return { kind: 'replayed' as const }
-    await ctx.db.patch(binding._id, { providerState: nextState, updatedAt: Date.now(), revision: binding.revision + 1 })
+    if (JSON.stringify(binding.providerState) === JSON.stringify(nextState)
+      && (args.outcome !== 'revoked' || revocation.lifecycle === 'completed')) return { kind: 'replayed' as const }
+    const updatedAt = Date.now()
+    await Promise.all([
+      ctx.db.patch(binding._id, { providerState: nextState, updatedAt, revision: binding.revision + 1 }),
+      args.outcome === 'revoked'
+        ? ctx.db.patch(revocation._id, { lifecycle: 'completed', updatedAt })
+        : ctx.db.patch(revocation._id, { correlationRef: args.correlationRef, updatedAt }),
+    ])
     return { kind: 'completed' as const }
   },
 })

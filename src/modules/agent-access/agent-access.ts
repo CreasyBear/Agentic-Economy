@@ -150,6 +150,7 @@ export type AgentLifecycleCanonicalResult =
       kind: 'completed' | 'replayed'
       principalRef: string
       providerTargets: readonly AgentLifecycleProviderTarget[]
+      hasMore?: boolean
       correlationRef: string
     }>
   | Readonly<{ kind: 'conflict'; code: string; correlationRef: string }>
@@ -157,7 +158,7 @@ export type AgentLifecycleCanonicalResult =
 
 export type AgentLifecycleResult =
   | Readonly<{ kind: 'completed' | 'replayed'; principalRef: string; correlationRef: string }>
-  | Readonly<{ kind: 'partial'; principalRef: string; correlationRef: string; retryable: true }>
+  | Readonly<{ kind: 'partial'; code: 'provider_cleanup' | 'work_remaining'; principalRef: string; correlationRef: string; retryable: true }>
   | Readonly<{ kind: 'conflict'; code: string; correlationRef: string }>
   | Readonly<{ kind: 'refused'; code: 'authentication_required' | 'source_unavailable'; correlationRef: string }>
 

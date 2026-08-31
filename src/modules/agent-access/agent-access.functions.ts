@@ -494,7 +494,9 @@ async function completeAgentLifecycle(
     }
   }
   return partial
-    ? { kind: 'partial', principalRef: canonical.principalRef, correlationRef: canonical.correlationRef, retryable: true }
+    ? { kind: 'partial', code: 'provider_cleanup', principalRef: canonical.principalRef, correlationRef: canonical.correlationRef, retryable: true }
+    : canonical.hasMore === true
+      ? { kind: 'partial', code: 'work_remaining', principalRef: canonical.principalRef, correlationRef: canonical.correlationRef, retryable: true }
     : { kind: canonical.kind, principalRef: canonical.principalRef, correlationRef: canonical.correlationRef }
 }
 

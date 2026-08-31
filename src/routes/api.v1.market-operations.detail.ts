@@ -1,9 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
-import { kindForStatus } from '@/lib/errors'
-import { ConvexSourceError } from '@/lib/server/convex-source'
 import { methodNotAllowed } from '@/lib/server/method-guard'
+import { operationReadUnavailableResponse } from '@/lib/server/operation-read-problem'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
@@ -64,16 +63,9 @@ export async function handleMarketOperationDetailRequest(request: Request): Prom
         if (!result.success) return problem({ status: 503, kind: 'INTERNAL', code: 'operation_read_result_invalid' })
         return Response.json(result.data, { headers: { 'Cache-Control': 'no-store' } })
       })
-    } catch (error) {
-      response = operationMarketReadError(error)
+    } catch {
+      response = operationReadUnavailableResponse()
     }
     return withRequestCorrelationHeader(response, correlationId)
   })
-}
-
-function operationMarketReadError(error: unknown): Response {
-  if (error instanceof ConvexSourceError) {
-    return problem({ status: error.status, kind: kindForStatus(error.status), code: error.code })
-  }
-  return problem({ status: 503, kind: 'UNAVAILABLE', code: 'operation_read_unavailable' })
 }

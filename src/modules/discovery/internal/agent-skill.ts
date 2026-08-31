@@ -182,6 +182,7 @@ export function buildPublicAgentSkillMarkdown(options: {
     '## Problem responses and retry rules',
     '',
     '- Errors are `application/problem+json` with `type`, `title`, `status`, `kind`, `code`, and optional `retryable`.',
+    '- `operation_read_unavailable` means no catalogue read completed. It is retryable, never proof that an Operation is absent, and never permission to reuse stale terms.',
     '- If `retryable` is true, respect `Retry-After` when present and retry only the same material command identity.',
     '- A timeout, `outcome_unknown`, or `reconciliation_required` is not a terminal success and is not permission to create a new invocation; read status, then recover.',
     '- Do not retry authentication, validation, authority, or idempotency-conflict problems without changing the invalid input or authority state.',

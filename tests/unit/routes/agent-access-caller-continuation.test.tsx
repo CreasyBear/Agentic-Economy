@@ -70,6 +70,7 @@ vi.mock('@/lib/server/canonical-url.functions', () => ({
 
 vi.mock('@/lib/server/agent-access-console.functions', () => ({
   readAgentDirectoryServer: routeHarness.readDirectory,
+  readAgentDirectoryPageServer: routeHarness.readDirectory,
 }))
 
 vi.mock('@/modules/agent-access/agent-access.functions', () => ({

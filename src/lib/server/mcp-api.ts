@@ -20,6 +20,7 @@ import { problem } from '@/lib/server/problem'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { readBoundedRequestJson, readBoundedRequestText, type BoundedRequestTextResult } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
+import { OPERATION_READ_UNAVAILABLE_PROBLEM } from '@/modules/registry/public'
 import {
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
@@ -29,7 +30,7 @@ import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
 import { isRecord } from '@/modules/common/is-record'
-import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
+import { isOperationMarketReadAction, listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
 import {
   agentAuthorityModeAllows,
   agentAuthorityScopeForMode,
@@ -115,21 +116,26 @@ class SafeMcpSdkServer extends Server {
 
 type McpToolFailure = ProblemDetails
 
-function mcpToolFailure(error: unknown, correlationId?: string): McpToolFailure {
-  const failure = error instanceof ConvexSourceError
-    ? gatewayFailureToProblem({
-      code: error.code === 'missing_auth' ? 'authentication_required' : 'source_unavailable',
-      retryable: error.status >= 500 || error.status === 429,
-      kind: 'error',
-    })
-    : {
-      kind: 'INTERNAL' as const,
-      code: 'action_execution_failed',
-      retryable: false,
-    }
+function mcpToolFailure(action: AnyAction, error: unknown, correlationId?: string): McpToolFailure {
+  const operationReadFailure = isOperationMarketReadAction(action)
+  const failure = operationReadFailure
+    ? OPERATION_READ_UNAVAILABLE_PROBLEM
+    : error instanceof ConvexSourceError
+      ? gatewayFailureToProblem({
+        code: error.code === 'missing_auth' ? 'authentication_required' : 'source_unavailable',
+        retryable: error.status >= 500 || error.status === 429,
+        kind: 'error',
+      })
+      : {
+        kind: 'INTERNAL' as const,
+        code: 'action_execution_failed',
+        retryable: false,
+      }
   return buildProblem({
     ...failure,
-    detail: safeMcpFailureDetail(failure.kind),
+    detail: operationReadFailure
+      ? OPERATION_READ_UNAVAILABLE_PROBLEM.detail
+      : safeMcpFailureDetail(failure.kind),
     ...(correlationId === undefined ? {} : { extras: { correlationId } }),
   })
 }
@@ -330,7 +336,7 @@ export function createAeMcpServer(
           }
         } catch (error) {
           recordMcpGatewayTelemetry(action.id, data, undefined, access, startedAt)
-          return mcpToolError(mcpToolFailure(error, access.correlationId))
+          return mcpToolError(mcpToolFailure(action, error, access.correlationId))
         }
       },
     )

@@ -37,9 +37,12 @@ function storeFixture(): AgentAccessOAuthStore & { grants: Map<string, AgentAcce
       return null
     },
     async getGrantByRef(grantRef) { return grants.get(grantRef) ?? null },
-    async updateGrant(grantRef, expectedStatus, patch) {
+    async updateGrant(grantRef, expectedStatus, patch, expectedIssuanceStartedAt) {
       const current = grants.get(grantRef)
-      if (current === undefined || current.status !== expectedStatus) return null
+      if (current === undefined
+        || current.status !== expectedStatus
+        || (expectedIssuanceStartedAt !== undefined
+          && current.issuanceStartedAt !== expectedIssuanceStartedAt)) return null
       const updated = { ...current, ...patch }
       grants.set(grantRef, updated)
       return updated
@@ -81,7 +84,7 @@ const productionRequestedAccess = {
 type OAuthIssueInput = Parameters<NonNullable<OAuthApiOptions['issueKey']>>[0]
 
 describe('Customer Request OAuth HTTP adapter', () => {
-  it('issues bounded device state, slows polling, and delivers once after approval', async () => {
+  it('issues bounded device state, slows polling, and safely replays an interrupted delivery', async () => {
     const store = storeFixture()
     await store.insertClient({ clientId: 'client-local', clientName: 'Local assistant', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
     const options = { store, now: () => 1_000, issueKey: async () => ({ keyId: 'ak_local' }), getSecret: async () => ({ secret: 'secret-local' }) }
@@ -127,10 +130,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const replay = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code', client_id: 'client-local', device_code: body.device_code,
     }), options)
-    expect(await replay.json()).toEqual({
-      error: 'invalid_grant',
-      error_description: 'The authorization grant is invalid or expired.',
-    })
+    expect(await replay.json()).toMatchObject({ access_token: 'secret-local', token_type: 'Bearer' })
   })
 
   it('promotes an explicitly selected agent only after successor delivery and safely retries provider cleanup', async () => {
@@ -147,6 +147,8 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const revoked: string[] = []
     const recorded: string[] = []
     let revokeAttempt = 0
+    let recordAttempt = 0
+    let providerRevoked = false
     const options: OAuthApiOptions = {
       store,
       now: () => 1_000,
@@ -161,12 +163,16 @@ describe('Customer Request OAuth HTTP adapter', () => {
         promoted.push(value.principalRef)
         return { kind: promoted.length === 1 ? 'completed' : 'replayed', providerCredentialId: 'ak_predecessor' }
       },
+      getProviderCredential: async () => ({ revoked: providerRevoked }),
       revokeProviderCredential: async (credentialId) => {
         revokeAttempt += 1
         if (revokeAttempt === 1) throw new Error('provider temporarily unavailable')
+        providerRevoked = true
         revoked.push(credentialId)
       },
       recordProviderRevocation: async (input) => {
+        recordAttempt += 1
+        if (recordAttempt === 1) throw new Error('canonical record temporarily unavailable')
         recorded.push(`${input.principalRef}:${input.credentialRef}:${input.providerCredentialId}`)
         return { kind: 'completed' }
       },
@@ -192,10 +198,21 @@ describe('Customer Request OAuth HTTP adapter', () => {
       client_id: 'client-replacement',
       device_code: device.device_code,
     }), options)
-    expect(firstDelivery.status).toBe(400)
+    expect(firstDelivery.status).toBe(503)
+    await expect(firstDelivery.json()).resolves.toMatchObject({ error: 'server_error' })
     expect(store.grants.get(grant.grantRef)?.status).toBe('approved')
     expect(promoted).toEqual(['prn_agent_a'])
     expect(revoked).toEqual([])
+    expect(recorded).toEqual([])
+
+    const recordFailure = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: 'client-replacement',
+      device_code: device.device_code,
+    }), options)
+    expect(recordFailure.status).toBe(503)
+    await expect(recordFailure.json()).resolves.toMatchObject({ error: 'server_error' })
+    expect(revoked).toEqual(['ak_predecessor'])
     expect(recorded).toEqual([])
 
     const delivered = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
@@ -204,10 +221,46 @@ describe('Customer Request OAuth HTTP adapter', () => {
       device_code: device.device_code,
     }), options)
     await expect(delivered.json()).resolves.toMatchObject({ access_token: 'successor-secret-once' })
-    expect(promoted).toEqual(['prn_agent_a', 'prn_agent_a'])
+    expect(promoted).toEqual(['prn_agent_a', 'prn_agent_a', 'prn_agent_a'])
     expect(revoked).toEqual(['ak_predecessor'])
     expect(recorded).toEqual(['prn_agent_a:crd_predecessor:ak_predecessor'])
     expect(store.grants.get(grant.grantRef)?.status).toBe('consumed')
+  })
+
+  it('recovers a stale persisted issuance from ordinary device polling', async () => {
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-recovery', clientName: 'Recovery agent', redirectUris: [],
+      grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000,
+    })
+    await store.insertGrant({
+      grantRef: 'device:recovery', flow: 'device_code', clientId: 'client-recovery',
+      requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
+      requestedAccess: { environment: 'sandbox', expiresInSeconds: 600 },
+      deviceCodeHash: await hashOAuthValue('recover-device'), userCodeHash: await hashOAuthValue('RECOVER1'),
+      status: 'issuing', ownerId: 'owner-one', createdAt: 1_000, expiresAt: 601_000,
+      issuanceKey: 'oauth-device-recovery', issuanceStartedAt: 1_001,
+      connectionTarget: { kind: 'new_agent', displayName: 'Recovery agent' },
+      displayName: 'Recovery agent',
+    })
+    const issued: string[] = []
+    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: 'client-recovery',
+      device_code: 'recover-device',
+    }), {
+      store,
+      now: () => 31_001,
+      issueKey: async (input) => {
+        issued.push(input.idempotencyKey)
+        return { keyId: 'ak_recovered' }
+      },
+      getSecret: async () => ({ secret: 'recovered-secret' }),
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ access_token: 'recovered-secret' })
+    expect(issued).toEqual(['oauth-device-recovery'])
+    expect(store.grants.get('device:recovery')?.status).toBe('consumed')
   })
 
   it('cancels an unclaimed successor on expiry and leaves the predecessor current', async () => {
@@ -231,23 +284,45 @@ describe('Customer Request OAuth HTTP adapter', () => {
     })
     const cancelled: string[] = []
     const revoked: string[] = []
-    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
-      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-      client_id: 'client-expired-replacement',
-      device_code: 'expired-device-code',
-    }), {
+    const recorded: string[] = []
+    let providerRevoked = false
+    let recordAttempt = 0
+    const options: OAuthApiOptions = {
       store,
       now: () => 2_000,
       cancelReplacement: async (value) => {
         cancelled.push(value.principalRef)
-        return { kind: 'completed', providerCredentialId: 'ak_successor' }
+        return { kind: cancelled.length === 1 ? 'completed' : 'replayed', providerCredentialId: 'ak_successor' }
       },
-      revokeProviderCredential: async (credentialId) => { revoked.push(credentialId) },
-    })
-    expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toMatchObject({ error: 'expired_token' })
-    expect(cancelled).toEqual(['prn_agent_a'])
+      getProviderCredential: async () => ({ revoked: providerRevoked }),
+      revokeProviderCredential: async (credentialId) => {
+        providerRevoked = true
+        revoked.push(credentialId)
+      },
+      recordProviderRevocation: async (input) => {
+        recordAttempt += 1
+        if (recordAttempt === 1) throw new Error('canonical record temporarily unavailable')
+        recorded.push(`${input.principalRef}:${input.credentialRef}:${input.providerCredentialId}:${input.correlationRef}`)
+        return { kind: 'completed' }
+      },
+    }
+    const request = () => handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: 'client-expired-replacement',
+      device_code: 'expired-device-code',
+    }), options)
+    const retryable = await request()
+    expect(retryable.status).toBe(503)
+    await expect(retryable.json()).resolves.toMatchObject({ error: 'server_error' })
     expect(revoked).toEqual(['ak_successor'])
+    expect(recorded).toEqual([])
+
+    const completed = await request()
+    expect(completed.status).toBe(400)
+    await expect(completed.json()).resolves.toMatchObject({ error: 'expired_token' })
+    expect(cancelled).toEqual(['prn_agent_a', 'prn_agent_a'])
+    expect(revoked).toEqual(['ak_successor'])
+    expect(recorded).toEqual(['prn_agent_a:crd_successor:ak_successor:replacement-expired:grt_successor'])
     expect(store.grants.get('device:expired-replacement')?.status).toBe('expired')
   })
 
@@ -479,6 +554,59 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(consentHtml).not.toContain('secret')
     const sandboxGrant = [...store.grants.values()].find((grant) => grant.flow === 'authorization_code')
     expect(sandboxGrant?.requestedAccess).toEqual({ environment: 'sandbox', expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
+  })
+
+  it('pages replacement targets with an opaque cursor and marks enrichment failures', async () => {
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-paged-consent',
+      clientName: 'Paged CLI',
+      redirectUris: [],
+      grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'],
+      tokenEndpointAuthMethod: 'none',
+      createdAt: 1_000,
+    })
+    const device = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
+      client_id: 'client-paged-consent',
+      scope: 'market_operations:invoke customer_requests:approve_each',
+    }), { store, now: () => 1_000 })
+    const grant = await device.json() as { user_code: string }
+    const cursors: Array<string | null> = []
+    const listAgents: NonNullable<OAuthApiOptions['listAgents']> = async (cursor) => {
+      cursors.push(cursor)
+      return cursor === null
+        ? { items: [{ principalRef: 'prn_agent_a', displayName: 'Agent A' }], nextCursor: 'opaque+/cursor==' }
+        : { items: [{ principalRef: 'prn_agent_b', displayName: 'Agent B' }] }
+    }
+    const base = `http://localhost/oauth/authorize?user_code=${encodeURIComponent(grant.user_code)}`
+    const first = await handleOAuthAuthorizeGet(new Request(base), {
+      store,
+      now: () => 1_000,
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+      listAgents,
+    })
+    const firstHtml = await first.text()
+    expect(firstHtml).toContain('Agent%20A')
+    expect(firstHtml).toContain('data-agent-targets-next-cursor="opaque%2B%2Fcursor%3D%3D"')
+
+    const second = await handleOAuthAuthorizeGet(new Request(`${base}&agent_cursor=${encodeURIComponent('opaque+/cursor==')}`), {
+      store,
+      now: () => 1_000,
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+      listAgents,
+    })
+    expect(await second.text()).toContain('Agent%20B')
+    expect(cursors).toEqual([null, 'opaque+/cursor=='])
+
+    const unavailable = await handleOAuthAuthorizeGet(new Request(base), {
+      store,
+      now: () => 1_000,
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+      listAgents: async () => { throw new Error('directory unavailable') },
+    })
+    const unavailableHtml = await unavailable.text()
+    expect(unavailableHtml).toContain('data-agent-targets-unavailable="true"')
+    expect(unavailableHtml).toContain('data-agent-targets="%5B%5D"')
   })
 
   it('renders persisted production controls and the production zero default truthfully', async () => {
