@@ -174,7 +174,10 @@ export const getGrantByRef = query({
 })
 
 export const updateGrant = mutation({
-  args: { grantRef: v.string(), expectedStatus: status, patch: grantPatch, operationKey: v.string(), correlationId: v.string(), ...sourceWriteArgs },
+  args: {
+    grantRef: v.string(), expectedStatus: status, expectedIssuanceStartedAt: v.optional(v.number()),
+    patch: grantPatch, operationKey: v.string(), correlationId: v.string(), ...sourceWriteArgs,
+  },
   returns: v.union(grant, v.null()),
   handler: async (ctx, args) => {
     await requireOAuthSourceWrite(ctx, args)
@@ -182,7 +185,10 @@ export const updateGrant = mutation({
       .query('agentAccessOAuthGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', args.grantRef))
       .unique()
-    if (existing === null || existing.status !== args.expectedStatus) return null
+    if (existing === null
+      || existing.status !== args.expectedStatus
+      || (args.expectedIssuanceStartedAt !== undefined
+        && existing.issuanceStartedAt !== args.expectedIssuanceStartedAt)) return null
 
     await assertGrantHashesAvailable(ctx.db, args.patch, existing._id)
     const update = grantPatchDocument(args.patch)

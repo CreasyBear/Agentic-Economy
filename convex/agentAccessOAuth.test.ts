@@ -248,6 +248,52 @@ describe('Agent Access OAuth Convex persistence adapter', () => {
     })).resolves.toBeNull()
   })
 
+  it('reacquires an issuing lease only when its persisted start time still matches', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const issuingGrant = {
+      ...grant,
+      grantRef: 'device:convex-lease-cas',
+      status: 'issuing' as const,
+      issuanceKey: 'oauth-convex-lease-cas',
+      issuanceStartedAt: 2_000,
+      connectionTarget: { kind: 'new_agent' as const, displayName: 'Lease recovery agent' },
+    }
+    const insertCommand = {
+      grant: issuingGrant,
+      operationKey: 'oauth:test:lease-cas-insert',
+      correlationId: 'oauth:test:lease-cas-insert',
+    }
+    await backend.mutation(api.agentAccessOAuth.insertGrant, {
+      ...insertCommand,
+      ...(await sourceArgs(insertCommand)),
+    })
+
+    const reacquire = {
+      grantRef: issuingGrant.grantRef,
+      expectedStatus: 'issuing' as const,
+      expectedIssuanceStartedAt: 2_000,
+      patch: { status: 'issuing' as const, issuanceStartedAt: 3_000 },
+      operationKey: 'oauth:test:lease-cas-reacquire',
+      correlationId: 'oauth:test:lease-cas-reacquire',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.updateGrant, {
+      ...reacquire,
+      ...(await sourceArgs(reacquire)),
+    })).resolves.toMatchObject({ status: 'issuing', issuanceStartedAt: 3_000 })
+
+    const stale = {
+      ...reacquire,
+      patch: { status: 'issuing' as const, issuanceStartedAt: 4_000 },
+      operationKey: 'oauth:test:lease-cas-stale',
+      correlationId: 'oauth:test:lease-cas-stale',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.updateGrant, {
+      ...stale,
+      ...(await sourceArgs(stale)),
+    })).resolves.toBeNull()
+  })
+
   it('replays exact clients and rejects conflicting client material', async () => {
     process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
     const backend = convexTest(schema, modules)

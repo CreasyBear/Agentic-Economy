@@ -46,10 +46,16 @@ type GrantArgs = SourceWriteArgs & {
     ownerId?: string
     keyId?: string
     approvedAt?: number
+    issuanceKey?: string
+    issuanceStartedAt?: number
     consumedAt?: number
     nextPollAt?: number
     deliveryClaimToken?: string
+    deliveryCredentialHash?: string
+    deliveryReplayUntil?: number
     denialReason?: 'access_denied'
+    connectionTarget?: AgentAccessOAuthGrant['connectionTarget']
+    replacement?: AgentAccessOAuthGrant['replacement']
   }
 }
 
@@ -58,6 +64,7 @@ type GrantRefArgs = SourceWriteArgs & { grantRef: string }
 type GrantUpdateArgs = SourceWriteArgs & {
   grantRef: string
   expectedStatus: AgentAccessOAuthGrantStatus
+  expectedIssuanceStartedAt?: number
   patch: {
     status?: AgentAccessOAuthGrantStatus
     redirectUri?: string
@@ -72,11 +79,17 @@ type GrantUpdateArgs = SourceWriteArgs & {
     createdAt?: number
     expiresAt?: number
     approvedAt?: number
+    issuanceKey?: string
+    issuanceStartedAt?: number
     consumedAt?: number
     nextPollAt?: number
     deliveryClaimToken?: string
+    deliveryCredentialHash?: string
+    deliveryReplayUntil?: number
     displayName?: string
     denialReason?: 'access_denied'
+    connectionTarget?: AgentAccessOAuthGrant['connectionTarget']
+    replacement?: AgentAccessOAuthGrant['replacement']
   }
 }
 type ClientArgs = SourceWriteArgs & { client: {
@@ -138,11 +151,12 @@ export function createConvexAgentAccessOAuthStore(
       const command = { grantRef, operationKey, correlationId: operationKey }
       return await transport.query(getGrantByRef, { ...command, ...await sourceWriteFor(command) })
     },
-    updateGrant: async (grantRef, expectedStatus, patch) => {
+    updateGrant: async (grantRef, expectedStatus, patch, expectedIssuanceStartedAt) => {
       const operationKey = `oauth:grant:${grantRef}:update:${expectedStatus}:${patch.status ?? 'fields'}`
       const command = {
         grantRef,
         expectedStatus,
+        ...(expectedIssuanceStartedAt === undefined ? {} : { expectedIssuanceStartedAt }),
         patch: patchForConvex(patch),
         operationKey,
         correlationId: operationKey,
@@ -181,10 +195,16 @@ function grantForConvex(grant: AgentAccessOAuthGrant): GrantArgs['grant'] {
     ...(grant.ownerId === undefined ? {} : { ownerId: grant.ownerId }),
     ...(grant.keyId === undefined ? {} : { keyId: grant.keyId }),
     ...(grant.approvedAt === undefined ? {} : { approvedAt: grant.approvedAt }),
+    ...(grant.issuanceKey === undefined ? {} : { issuanceKey: grant.issuanceKey }),
+    ...(grant.issuanceStartedAt === undefined ? {} : { issuanceStartedAt: grant.issuanceStartedAt }),
     ...(grant.consumedAt === undefined ? {} : { consumedAt: grant.consumedAt }),
     ...(grant.nextPollAt === undefined ? {} : { nextPollAt: grant.nextPollAt }),
     ...(grant.deliveryClaimToken === undefined ? {} : { deliveryClaimToken: grant.deliveryClaimToken }),
+    ...(grant.deliveryCredentialHash === undefined ? {} : { deliveryCredentialHash: grant.deliveryCredentialHash }),
+    ...(grant.deliveryReplayUntil === undefined ? {} : { deliveryReplayUntil: grant.deliveryReplayUntil }),
     ...(grant.denialReason === undefined ? {} : { denialReason: grant.denialReason }),
+    ...(grant.connectionTarget === undefined ? {} : { connectionTarget: grant.connectionTarget }),
+    ...(grant.replacement === undefined ? {} : { replacement: grant.replacement }),
   }
 }
 
@@ -230,11 +250,17 @@ function patchForConvex(patch: Partial<AgentAccessOAuthGrant>): GrantUpdateArgs[
     ...(patch.createdAt === undefined ? {} : { createdAt: patch.createdAt }),
     ...(patch.expiresAt === undefined ? {} : { expiresAt: patch.expiresAt }),
     ...(patch.approvedAt === undefined ? {} : { approvedAt: patch.approvedAt }),
+    ...(patch.issuanceKey === undefined ? {} : { issuanceKey: patch.issuanceKey }),
+    ...(patch.issuanceStartedAt === undefined ? {} : { issuanceStartedAt: patch.issuanceStartedAt }),
     ...(patch.consumedAt === undefined ? {} : { consumedAt: patch.consumedAt }),
     ...(patch.nextPollAt === undefined ? {} : { nextPollAt: patch.nextPollAt }),
     ...(patch.deliveryClaimToken === undefined ? {} : { deliveryClaimToken: patch.deliveryClaimToken }),
+    ...(patch.deliveryCredentialHash === undefined ? {} : { deliveryCredentialHash: patch.deliveryCredentialHash }),
+    ...(patch.deliveryReplayUntil === undefined ? {} : { deliveryReplayUntil: patch.deliveryReplayUntil }),
     ...(patch.displayName === undefined ? {} : { displayName: patch.displayName }),
     ...(patch.denialReason === undefined ? {} : { denialReason: patch.denialReason }),
+    ...(patch.connectionTarget === undefined ? {} : { connectionTarget: patch.connectionTarget }),
+    ...(patch.replacement === undefined ? {} : { replacement: patch.replacement }),
   }
 }
 

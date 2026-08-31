@@ -23,7 +23,6 @@ export const AGENT_ACCESS_GRANT_TTL_SECONDS = 600
 export const AGENT_ACCESS_AUTHORIZATION_CODE_TTL_SECONDS = 60
 export const AGENT_ACCESS_POLL_INTERVAL_SECONDS = 5
 export const AGENT_ACCESS_ISSUANCE_LEASE_SECONDS = 30
-export const AGENT_ACCESS_DELIVERY_REPLAY_SECONDS = 30
 export const AGENT_ACCESS_OAUTH_PATHS = Object.freeze({
   authorizationServerMetadata: '/.well-known/oauth-authorization-server',
   protectedResourceMetadata: '/.well-known/oauth-protected-resource',
@@ -137,7 +136,12 @@ export type AgentAccessOAuthStore = Readonly<{
   insertGrant: (grant: AgentAccessOAuthGrant) => Promise<void>
   getGrantByHash: (kind: 'device' | 'user' | 'authorization', hash: string) => Promise<AgentAccessOAuthGrant | null>
   getGrantByRef: (grantRef: string) => Promise<AgentAccessOAuthGrant | null>
-  updateGrant: (grantRef: string, expectedStatus: AgentAccessOAuthGrantStatus, patch: Partial<AgentAccessOAuthGrant>) => Promise<AgentAccessOAuthGrant | null>
+  updateGrant: (
+    grantRef: string,
+    expectedStatus: AgentAccessOAuthGrantStatus,
+    patch: Partial<AgentAccessOAuthGrant>,
+    expectedIssuanceStartedAt?: number,
+  ) => Promise<AgentAccessOAuthGrant | null>
   insertClient: (client: AgentAccessOAuthClient) => Promise<void>
   getClient: (clientId: string) => Promise<AgentAccessOAuthClient | null>
 }>
@@ -385,19 +389,21 @@ export async function approveGrant(
     || (connectionTarget.kind === 'replace_credential' && connectionTarget.principalRef.trim().length === 0)) {
     return { kind: 'refused', reason: 'invalid_target' }
   }
-  if (resumableIssuance) {
-    const released = await store.updateGrant(valid.value.grantRef, 'issuing', { status: 'pending' })
-    if (released === null) return { kind: 'conflict', reason: 'concurrent_transition' }
+  const expectedIssuanceStartedAt = resumableIssuance
+    ? valid.value.issuanceStartedAt
+    : undefined
+  if (resumableIssuance && expectedIssuanceStartedAt === undefined) {
+    return { kind: 'conflict', reason: 'concurrent_transition' }
   }
   const issuanceKey = valid.value.issuanceKey ?? `oauth-${valid.value.grantRef.replaceAll(':', '-')}`
-  const reserved = await store.updateGrant(valid.value.grantRef, 'pending', {
+  const reserved = await store.updateGrant(valid.value.grantRef, resumableIssuance ? 'issuing' : 'pending', {
     status: 'issuing',
     ownerId: input.ownerId,
     connectionTarget,
     issuanceKey,
     issuanceStartedAt: input.now,
     requestedScopes: [...approvedScopes],
-  })
+  }, expectedIssuanceStartedAt)
   if (reserved === null) return { kind: 'conflict', reason: 'concurrent_transition' }
   let issued: Readonly<{ keyId: string; replacement?: AgentCredentialReplacement }>
   try {
@@ -407,13 +413,13 @@ export async function approveGrant(
       target: connectionTarget,
     })
   } catch (error) {
-    await store.updateGrant(valid.value.grantRef, 'issuing', { status: 'pending' })
+    await store.updateGrant(valid.value.grantRef, 'issuing', { status: 'pending' }, input.now)
     if (error instanceof AgentAccessOAuthIssueRefusal) return { kind: 'refused', reason: error.reason }
     console.error('[agent-access-oauth] issueKey failed', sanitizeTelemetryError(error))
     return { kind: 'refused', reason: 'issuance_unavailable' }
   }
   if (issued.keyId.trim().length === 0) {
-    await store.updateGrant(valid.value.grantRef, 'issuing', { status: 'pending' })
+    await store.updateGrant(valid.value.grantRef, 'issuing', { status: 'pending' }, input.now)
     return { kind: 'refused', reason: 'missing_key' }
   }
   const authorizationCode = valid.value.flow === 'authorization_code' ? createOpaqueOAuthValue() : undefined
@@ -427,7 +433,7 @@ export async function approveGrant(
     approvedAt: input.now,
     ...(authorizationCode === undefined ? {} : { authorizationCodeHash: await hashOAuthValue(authorizationCode) }),
   }
-  const updated = await store.updateGrant(valid.value.grantRef, 'issuing', patch)
+  const updated = await store.updateGrant(valid.value.grantRef, 'issuing', patch, input.now)
   if (updated === null) return { kind: 'conflict', reason: 'concurrent_transition' }
   return { kind: 'ok', value: { grant: updated, ...(authorizationCode === undefined ? {} : { authorizationCode }) } }
 }
@@ -520,7 +526,7 @@ export async function claimGrantDelivery(
     status: 'delivery_claimed',
     deliveryClaimToken: claimToken,
     deliveryCredentialHash: credentialHash,
-    deliveryReplayUntil: input.now + AGENT_ACCESS_DELIVERY_REPLAY_SECONDS * 1_000,
+    deliveryReplayUntil: grant.expiresAt,
   })
   if (claimed === null) return { kind: 'conflict', reason: 'delivery_claim_lost' }
   return { kind: 'ok', value: { grant: claimed, claimToken } }
