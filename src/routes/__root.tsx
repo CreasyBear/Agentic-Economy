@@ -78,15 +78,14 @@ function AeRequestFailedToasts() {
 
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const content = requiresChatProviders(pathname)
-    ? (
+  const chatProvidersRequired = requiresChatProviders(pathname)
+  const content = isLocalE2EAuthBypassEnabled() && !chatProvidersRequired
+    ? children
+    : (
         <ClerkProvider appearance={clerkAppearance}>
-          <ChatConvexProvider>{children}</ChatConvexProvider>
+          {chatProvidersRequired ? <ChatConvexProvider>{children}</ChatConvexProvider> : children}
         </ClerkProvider>
       )
-    : isLocalE2EAuthBypassEnabled() || !requiresClerkProvider(pathname)
-      ? children
-      : <ClerkProvider appearance={clerkAppearance}>{children}</ClerkProvider>
 
   return (
     <html lang="en">
@@ -152,8 +151,4 @@ function InteractiveAuthorityMaterializer({ children }: { children: ReactNode })
 
 export function requiresChatProviders(pathname: string): boolean {
   return pathname === '/t/new' || pathname.startsWith('/t/') || pathname.startsWith('/s/')
-}
-
-function requiresClerkProvider(pathname: string): boolean {
-  return pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/owner') || pathname.startsWith('/admin')
 }

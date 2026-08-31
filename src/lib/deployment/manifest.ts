@@ -233,6 +233,8 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   for (const group of requiredProduction) if (production) requireGroup(environment, group, add)
   for (const group of conditional) if (group.trigger?.some((name) => present(environment, name)) === true) requireGroup(environment, group, add)
   if (production) validateProductionClerkCredentials(environment, add)
+  if (production) validateProductionStripeCredentials(environment, add)
+  if (production) validateProductionBrowserSecurity(environment, add)
   if (production) validateSourceWriteAuthority(environment, add)
   for (const rule of fieldRules) validateField(environment, rule, production, add)
   validateX402Custody(environment, add)
@@ -349,6 +351,32 @@ function validateProductionClerkCredentials(
   const secretKey = present(environment, 'CLERK_SECRET_KEY')
   if (secretKey !== undefined && !/^sk_live_[A-Za-z0-9_-]+$/u.test(secretKey)) {
     add('malformed', 'clerk_secret_key_invalid', ['CLERK_SECRET_KEY'], 'clerk')
+  }
+}
+function validateProductionStripeCredentials(
+  environment: DeploymentEnvironmentInput,
+  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+): void {
+  const secretKey = present(environment, 'STRIPE_SECRET_KEY')
+  if (secretKey !== undefined && !/^sk_live_[A-Za-z0-9_-]+$/u.test(secretKey)) {
+    add('malformed', 'stripe_secret_key_invalid', ['STRIPE_SECRET_KEY'], 'stripe-money')
+  }
+  const publishableKey = present(environment, 'VITE_STRIPE_PUBLISHABLE_KEY')
+  if (publishableKey !== undefined && !/^pk_live_[A-Za-z0-9_-]+$/u.test(publishableKey)) {
+    add('malformed', 'stripe_publishable_key_invalid', ['VITE_STRIPE_PUBLISHABLE_KEY'], 'stripe-money')
+  }
+  const webhookSecret = present(environment, 'STRIPE_WEBHOOK_SECRET')
+  if (webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(webhookSecret)) {
+    add('malformed', 'stripe_webhook_secret_invalid', ['STRIPE_WEBHOOK_SECRET'], 'stripe-money')
+  }
+}
+function validateProductionBrowserSecurity(
+  environment: DeploymentEnvironmentInput,
+  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+): void {
+  const reportOnly = present(environment, 'AE_CSP_REPORT_ONLY')
+  if (reportOnly === 'true' || reportOnly === '1') {
+    add('forbidden', 'production_csp_must_enforce', ['AE_CSP_REPORT_ONLY'], 'browser-security')
   }
 }
 function validateX402RpcUrls(

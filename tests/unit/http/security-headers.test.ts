@@ -27,6 +27,14 @@ const requiredCspAllowances = [
   'https://*.convex.site',
   'wss://*.convex.cloud',
   'wss://*.convex.site',
+  'https://api.stripe.com',
+  'https://checkout.stripe.com',
+  'https://js.stripe.com',
+  'https://*.js.stripe.com',
+  'https://hooks.stripe.com',
+  'https://*.stripe.com',
+  'https://link.com',
+  'https://*.link.com',
 ] as const
 
 describe('security header middleware', () => {

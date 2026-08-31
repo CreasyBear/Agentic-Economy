@@ -12,10 +12,14 @@ const runtime = vi.hoisted(() => ({
   isAuthenticated: true,
   constructClient: vi.fn(),
   materialize: vi.fn(async () => true),
+  renderClerkProvider: vi.fn(),
 }))
 
 vi.mock('@clerk/tanstack-react-start', () => ({
-  ClerkProvider: ({ children }: { children: ReactNode }) => children,
+  ClerkProvider: ({ children }: { children: ReactNode }) => {
+    runtime.renderClerkProvider(runtime.pathname)
+    return children
+  },
   useAuth: () => ({ isLoaded: true, isSignedIn: runtime.isAuthenticated }),
 }))
 
@@ -104,6 +108,7 @@ beforeEach(() => {
   runtime.isAuthenticated = true
   runtime.constructClient.mockReset()
   runtime.materialize.mockReset().mockResolvedValue(true)
+  runtime.renderClerkProvider.mockReset()
   vi.stubEnv('VITE_CONVEX_URL', 'https://runtime-authority.convex.test')
 })
 
@@ -128,8 +133,28 @@ describe('operation chat provider boundary', () => {
     expect(source).toContain('<ConvexProviderWithClerk client={client} useAuth={useAuth}>')
   })
 
-  it('does not bypass chat providers in local E2E mode', () => {
-    expect(source).toMatch(/const content = requiresChatProviders\(pathname\)[\s\S]*: isLocalE2EAuthBypassEnabled\(\)/u)
+  it('mounts Clerk at the application root for authentication routes', () => {
+    runtime.pathname = '/sign-in'
+    const Root = (Route as unknown as {
+      options: { component: ComponentType }
+    }).options.component
+
+    render(<Root />, { container: document })
+
+    expect(runtime.renderClerkProvider).toHaveBeenCalledWith('/sign-in')
+    expect(runtime.constructClient).not.toHaveBeenCalled()
+  })
+
+  it('keeps public route transitions inside the same Clerk boundary', () => {
+    runtime.pathname = '/market'
+    const Root = (Route as unknown as {
+      options: { component: ComponentType }
+    }).options.component
+
+    render(<Root />, { container: document })
+
+    expect(runtime.renderClerkProvider).toHaveBeenCalledWith('/market')
+    expect(runtime.constructClient).not.toHaveBeenCalled()
   })
 
   it('renders a single catalogue continuation without constructing chat authority when configuration is missing', () => {

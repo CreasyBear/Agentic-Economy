@@ -145,6 +145,40 @@ describe('deployment manifest validator', () => {
     ]))
   })
 
+  it('rejects test or malformed Stripe credentials in production', () => {
+    const result = validateDeploymentManifest({
+      ...productionEnvironment(),
+      STRIPE_SECRET_KEY: 'sk_test_example',
+      STRIPE_WEBHOOK_SECRET: 'not-a-webhook-secret',
+      VITE_STRIPE_PUBLISHABLE_KEY: 'pk_test_example',
+    }, { nodeMajor: 22 })
+
+    expect(result.ok).toBe(false)
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'malformed', code: 'stripe_secret_key_invalid', names: ['STRIPE_SECRET_KEY'] }),
+      expect.objectContaining({ kind: 'malformed', code: 'stripe_webhook_secret_invalid', names: ['STRIPE_WEBHOOK_SECRET'] }),
+      expect.objectContaining({ kind: 'malformed', code: 'stripe_publishable_key_invalid', names: ['VITE_STRIPE_PUBLISHABLE_KEY'] }),
+    ]))
+  })
+
+  it('does not allow production CSP enforcement to be downgraded', () => {
+    const reportOnly = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_CSP_REPORT_ONLY: 'true',
+    }, { nodeMajor: 22 })
+
+    expect(reportOnly.findings).toContainEqual({
+      kind: 'forbidden',
+      code: 'production_csp_must_enforce',
+      names: ['AE_CSP_REPORT_ONLY'],
+      scope: 'browser-security',
+    })
+    expect(validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_CSP_REPORT_ONLY: 'false',
+    }, { nodeMajor: 22 }).findings).toEqual([])
+  })
+
   it('rejects unenumerated AE-owned credential and bypass keys', () => {
     const result = validateDeploymentManifest({
       ...productionEnvironment(),

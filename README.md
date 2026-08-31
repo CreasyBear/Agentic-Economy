@@ -49,7 +49,7 @@ records them but does not define the product.
 
 ## x402 seller onboarding
 
-Use the [x402 seller onboarding runbook](./research/runbooks/x402-seller-onboarding.md)
+Use the [x402 seller onboarding guide](./X402_SELLER_ONBOARDING.md)
 to take a hosted seller through an unpaid protocol probe, ownership proof,
 Operation staging, one explicitly authorized Base Sepolia canary, and
 reconciliation without duplicate payment. The runbook documents the reference
@@ -67,6 +67,25 @@ npm run dev:local
 
 Open `http://127.0.0.1:3024/market` for the catalogue or
 `http://127.0.0.1:3024/t/new` for chat.
+
+## Stripe production setup
+
+Use one Stripe live-mode account for credit purchases and supplier payouts.
+Set `STRIPE_SECRET_KEY`, `VITE_STRIPE_PUBLISHABLE_KEY`, and
+`STRIPE_WEBHOOK_SECRET`; production readiness rejects test-mode or malformed
+values. Register this event destination:
+
+```text
+https://<your-agentic-economy-deployment>/api/stripe/webhook
+```
+
+Subscribe it to `checkout.session.completed`,
+`checkout.session.async_payment_succeeded`,
+`checkout.session.async_payment_failed`, `checkout.session.expired`, and the
+account events emitted by your Connect setup: `account.updated` and the
+`v2.core.account.*` lifecycle and recipient-capability events. The endpoint
+verifies Stripe's signature over the raw body and applies events idempotently.
+Do not place secret or webhook keys in browser configuration.
 
 Useful checks:
 
