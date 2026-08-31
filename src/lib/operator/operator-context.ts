@@ -14,12 +14,14 @@ export type OperatorContextReadResult =
   | OperatorContext
   | Readonly<{ kind: 'denied'; reason: 'canonical_owner_required' }>
 
+export const OPERATOR_SURFACE_FORBIDDEN_MESSAGE = 'This account cannot open the requested workspace surface.'
+
 export class OperatorSurfaceForbiddenError extends Error {
   readonly code = 'operator_surface_forbidden' as const
   readonly surface: OperatorSurface
 
   constructor(surface: OperatorSurface) {
-    super('This account cannot open the requested workspace surface.')
+    super(OPERATOR_SURFACE_FORBIDDEN_MESSAGE)
     this.name = 'OperatorSurfaceForbiddenError'
     this.surface = surface
   }

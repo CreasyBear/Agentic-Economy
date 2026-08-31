@@ -52,6 +52,7 @@ export type AeOperatorShellProps = {
   mainContentId?: string
   breadcrumbs?: readonly OperatorBreadcrumbItem[]
   navBadges?: OperatorNavBadges
+  suppressSurfaceNavigation?: boolean
   children: ReactNode
 }
 
@@ -76,6 +77,7 @@ function NestedOperatorShell({
   mainContentId,
   breadcrumbs,
   navBadges,
+  suppressSurfaceNavigation,
   children,
 }: AeOperatorShellProps & { parentShell: OperatorShellChromeRegistration }) {
   const chrome = useMemo<OperatorShellChrome>(
@@ -89,8 +91,9 @@ function NestedOperatorShell({
       ...(mainContentId === undefined ? {} : { mainContentId }),
       ...(breadcrumbs === undefined ? {} : { breadcrumbs }),
       ...(navBadges === undefined ? {} : { navBadges }),
+      ...(suppressSurfaceNavigation === undefined ? {} : { suppressSurfaceNavigation }),
     }),
-    [operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, breadcrumbs, navBadges],
+    [operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, breadcrumbs, navBadges, suppressSurfaceNavigation],
   )
 
   useLayoutEffect(() => {
@@ -151,6 +154,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
     mainContentId,
     breadcrumbs: providedBreadcrumbs,
     navBadges,
+    suppressSurfaceNavigation,
   } = registeredChrome ?? props
   const { children } = props
   const { operatorContext } = props
@@ -213,6 +217,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
             {...(operatorContext === undefined ? {} : { operatorContext })}
             currentPath={currentPath}
             navBadges={navBadges ?? {}}
+            {...(suppressSurfaceNavigation === undefined ? {} : { suppressSurfaceNavigation })}
           />
           <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="bg-card">
             <header className="flex min-h-touch shrink-0 items-center gap-intra border-b border-border">
@@ -249,7 +254,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
               <div className="min-h-0 flex-1 pt-intra">{children}</div>
             </div>
           </SidebarInset>
-          {operatorRole === 'owner'
+          {operatorRole === 'owner' && suppressSurfaceNavigation !== true
             ? (
                 <AeOwnerMobileNavigation
                   {...(operatorContext === undefined ? {} : { operatorContext })}

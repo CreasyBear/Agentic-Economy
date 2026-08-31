@@ -42,6 +42,7 @@ type AeOperatorSidebarProps = {
   operatorContext?: OperatorContext
   currentPath: string
   navBadges?: OperatorNavBadges
+  suppressSurfaceNavigation?: boolean
 }
 
 const EMPTY_NAV_BADGES: OperatorNavBadges = {}
@@ -87,14 +88,16 @@ function LocalPreviewOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
 }
 
 
-export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, navBadges = EMPTY_NAV_BADGES }: AeOperatorSidebarProps) {
+export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, navBadges = EMPTY_NAV_BADGES, suppressSurfaceNavigation = false }: AeOperatorSidebarProps) {
   const { state, isMobile, open, openMobile, setOpenMobile } = useSidebar()
   const openCommand = useOpenOperatorCommand()
   const isCollapsed = !isMobile && state === 'collapsed'
   const expanded = isMobile ? openMobile : open
-  const navGroups = operatorContext === undefined
-    ? navGroupsForRole(operatorRole)
-    : navGroupsForContext(operatorContext, operatorRole)
+  const navGroups = suppressSurfaceNavigation
+    ? []
+    : operatorContext === undefined
+      ? navGroupsForRole(operatorRole)
+      : navGroupsForContext(operatorContext, operatorRole)
   const utilityItems = operatorUtilityItemsForRole(operatorRole)
   const localPreview = isLocalE2EAuthBypassEnabled()
   const closeMobileNavigation = () => {

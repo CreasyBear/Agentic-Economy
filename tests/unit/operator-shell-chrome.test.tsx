@@ -63,7 +63,10 @@ import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeOperatorRouteStates'
 import { AECON_MARK_SRC } from '@/content/brand-assets'
 import { ownerSettingsChrome } from '@/lib/operator/settings-navigation'
-import { OperatorSurfaceForbiddenError } from '@/lib/operator/operator-context'
+import {
+  OPERATOR_SURFACE_FORBIDDEN_MESSAGE,
+  OperatorSurfaceForbiddenError,
+} from '@/lib/operator/operator-context'
 import { Route as OperatorLayoutRoute } from '@/routes/_operator'
 import { Route as AgentAccessRoute } from '@/routes/_operator/agent-access'
 
@@ -223,14 +226,7 @@ describe('operator shell nested chrome', () => {
 
   it('keeps the shell and offers recovery when the signed-in account lacks the requested surface', async () => {
     renderAt(
-      <AeOperatorShell
-        operatorRole="admin"
-        title="Administration"
-        description="Loading administration."
-        currentPath="/admin/index-health"
-      >
-        <OperatorRouteError error={new OperatorSurfaceForbiddenError('admin')} />
-      </AeOperatorShell>,
+      <OperatorRouteError error={new OperatorSurfaceForbiddenError('admin')} />,
       '/admin/index-health',
     )
 
@@ -238,6 +234,18 @@ describe('operator shell nested chrome', () => {
     expect(screen.getByRole('link', { name: 'Return to market' }).getAttribute('href')).toBe('/market?window=30d')
     expect(screen.getByRole('link', { name: 'Get help' }).getAttribute('href')).toBe('/support')
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Catalog health' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()
+  })
+
+  it('recognizes a forbidden error after server serialization strips its custom fields', async () => {
+    renderAt(
+      <OperatorRouteError error={{ name: 'Error', message: OPERATOR_SURFACE_FORBIDDEN_MESSAGE }} />,
+      '/admin/index-health',
+    )
+
+    expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
+    expect(screen.queryByText('Couldn’t load this page')).toBeNull()
   })
 
   it('only reports active invoke-scoped buyer access to the shared command panel', async () => {

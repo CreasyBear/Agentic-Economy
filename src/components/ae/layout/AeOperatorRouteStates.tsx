@@ -8,7 +8,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { operatorRoleForPath, roleHomeHref } from '@/lib/operator/navigation'
-import { OperatorSurfaceForbiddenError } from '@/lib/operator/operator-context'
+import {
+  OPERATOR_SURFACE_FORBIDDEN_MESSAGE,
+  OperatorSurfaceForbiddenError,
+} from '@/lib/operator/operator-context'
 
 /**
  * Shared pendingComponent/errorComponent for every /owner, /admin, and
@@ -57,6 +60,7 @@ export function OperatorRouteError({ error }: { error: unknown }) {
         title="You don’t have access"
         description="This signed-in account cannot open the requested workspace."
         currentPath={pathname}
+        suppressSurfaceNavigation
       >
         <OperatorForbiddenBody />
       </AeOperatorShell>
@@ -134,6 +138,7 @@ function isOperatorSurfaceForbidden(error: unknown): boolean {
   if (error instanceof OperatorSurfaceForbiddenError) return true
   if (typeof error !== 'object' || error === null) return false
   return Reflect.get(error, 'code') === 'operator_surface_forbidden'
+    || Reflect.get(error, 'message') === OPERATOR_SURFACE_FORBIDDEN_MESSAGE
 }
 
 export function OperatorRouteNotFound() {
