@@ -1,11 +1,13 @@
 import { ArrowLeftIcon } from 'lucide-react'
 import { Link, useLocation } from '@tanstack/react-router'
+import { SignOutButton } from '@clerk/tanstack-react-start'
 
 import { AeOperatorShell, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { operatorRoleForPath, roleHomeHref } from '@/lib/operator/navigation'
+import { OperatorSurfaceForbiddenError } from '@/lib/operator/operator-context'
 
 /**
  * Shared pendingComponent/errorComponent for every /owner, /admin, and
@@ -40,10 +42,25 @@ export function OperatorRoutePending() {
   )
 }
 
-export function OperatorRouteError({ error: _error }: { error: unknown }) {
+export function OperatorRouteError({ error }: { error: unknown }) {
   const { pathname } = useLocation()
   const parentShell = useOperatorShellChrome()
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
+
+  if (isOperatorSurfaceForbidden(error)) {
+    const body = <OperatorForbiddenBody />
+    if (parentShell !== null) return body
+    return (
+      <AeOperatorShell
+        operatorRole={operatorRole}
+        title="You don’t have access"
+        description="This signed-in account cannot open the requested workspace."
+        currentPath={pathname}
+      >
+        {body}
+      </AeOperatorShell>
+    )
+  }
 
   const body = (
     <Alert variant="destructive">
@@ -74,6 +91,34 @@ export function OperatorRouteError({ error: _error }: { error: unknown }) {
       {body}
     </AeOperatorShell>
   )
+}
+
+function OperatorForbiddenBody() {
+  return (
+    <Alert>
+      <AlertTitle>You don’t have access to this workspace</AlertTitle>
+      <AlertDescription>
+        <p>Use the account that owns this workspace, or return to the public market.</p>
+        <div className="flex w-full flex-wrap gap-intra">
+          <Button asChild type="button" className="min-h-touch">
+            <Link to="/market" search={{ window: '30d' }}>Return to market</Link>
+          </Button>
+          <Button asChild variant="secondary" className="min-h-touch">
+            <Link to="/support">Get help</Link>
+          </Button>
+          <SignOutButton redirectUrl="/">
+            <Button type="button" variant="outline" className="min-h-touch">Sign out</Button>
+          </SignOutButton>
+        </div>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function isOperatorSurfaceForbidden(error: unknown): boolean {
+  if (error instanceof OperatorSurfaceForbiddenError) return true
+  if (typeof error !== 'object' || error === null) return false
+  return Reflect.get(error, 'code') === 'operator_surface_forbidden'
 }
 
 export function OperatorRouteNotFound() {

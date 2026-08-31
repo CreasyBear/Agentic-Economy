@@ -40,6 +40,7 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
     shellMocks.userButton(props)
     return <button type="button" aria-label="Account menu" />
   },
+  SignOutButton: ({ children }: { children: ReactElement }) => children,
 }))
 vi.mock('@/lib/client/local-e2e-auth', () => ({
   isLocalE2EAuthBypassEnabled: () => shellMocks.localPreview,
@@ -62,6 +63,7 @@ import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeOperatorRouteStates'
 import { AECON_MARK_SRC } from '@/content/brand-assets'
 import { ownerSettingsChrome } from '@/lib/operator/settings-navigation'
+import { OperatorSurfaceForbiddenError } from '@/lib/operator/operator-context'
 import { Route as OperatorLayoutRoute } from '@/routes/_operator'
 import { Route as AgentAccessRoute } from '@/routes/_operator/agent-access'
 
@@ -200,6 +202,25 @@ describe('operator shell nested chrome', () => {
     expect(screen.getByText('Couldn’t load this page')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Check system status' }).getAttribute('href')).toBe('/status')
+  })
+
+  it('keeps the shell and offers recovery when the signed-in account lacks the requested surface', async () => {
+    renderAt(
+      <AeOperatorShell
+        operatorRole="admin"
+        title="Administration"
+        description="Loading administration."
+        currentPath="/admin/index-health"
+      >
+        <OperatorRouteError error={new OperatorSurfaceForbiddenError('admin')} />
+      </AeOperatorShell>,
+      '/admin/index-health',
+    )
+
+    expect(await screen.findByText('You don’t have access to this workspace')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Return to market' }).getAttribute('href')).toBe('/market?window=30d')
+    expect(screen.getByRole('link', { name: 'Get help' }).getAttribute('href')).toBe('/support')
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
   })
 
   it('only reports active invoke-scoped buyer access to the shared command panel', async () => {

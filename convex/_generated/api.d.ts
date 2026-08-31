@@ -170,6 +170,7 @@ import type * as moneyX402PaymentAttemptsShared from "../moneyX402PaymentAttempt
 import type * as moneyX402PaymentAuthorization from "../moneyX402PaymentAuthorization.js";
 import type * as moneyX402PaymentObservation from "../moneyX402PaymentObservation.js";
 import type * as moneyX402PaymentRead from "../moneyX402PaymentRead.js";
+import type * as operatorContext from "../operatorContext.js";
 import type * as providerConsequenceHttp from "../providerConsequenceHttp.js";
 import type * as qualifiedUse from "../qualifiedUse.js";
 import type * as rateLimit from "../rateLimit.js";
@@ -355,6 +356,7 @@ declare const fullApi: ApiFromModules<{
   moneyX402PaymentAuthorization: typeof moneyX402PaymentAuthorization;
   moneyX402PaymentObservation: typeof moneyX402PaymentObservation;
   moneyX402PaymentRead: typeof moneyX402PaymentRead;
+  operatorContext: typeof operatorContext;
   providerConsequenceHttp: typeof providerConsequenceHttp;
   qualifiedUse: typeof qualifiedUse;
   rateLimit: typeof rateLimit;
