@@ -410,7 +410,7 @@ export function expectedX402Amount(
   return tokenAmount?.units === rescaled.units ? rescaled : undefined
 }
 
-function x402ResourceUrlBindsTarget(
+export function x402ResourceUrlBindsTarget(
   resourceUrl: string,
   target: URL,
   method: 'GET' | 'POST',

@@ -15,7 +15,7 @@ import { formatUtcTimestamp } from "@/lib/ui/format-time";
 
 const readinessVariants = {
   Routeable: "success",
-  Integrated: "warning",
+  SetupRequired: "warning",
   Unavailable: "outline",
 } as const;
 

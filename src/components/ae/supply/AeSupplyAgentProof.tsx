@@ -118,7 +118,7 @@ function OperationProofRow({ operation }: Readonly<{ operation: OperationCardVie
           <p className="text-sm text-muted-foreground">{operation.supplierName} · {operation.category.label}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          <Badge variant={operation.readiness === 'Routeable' ? 'success' : operation.readiness === 'Integrated' ? 'warning' : 'outline'}>
+          <Badge variant={operation.readiness === 'Routeable' ? 'success' : operation.readiness === 'SetupRequired' ? 'warning' : 'outline'}>
             {operation.readinessLabel}
           </Badge>
           <span className="text-sm tabular-nums text-muted-foreground">{operation.price}</span>

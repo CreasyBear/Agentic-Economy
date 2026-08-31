@@ -54,6 +54,8 @@ export type GraphPublicationRow = CapabilityPublicationLifecycleRow & Readonly<{
   contractDigest: string
   sourceKind: 'ae_envelope' | 'openapi_http' | 'mcp' | 'agent_plugin_mcp' | 'x402'
   sourceDigest: string
+  publisherRef?: string
+  authorityMode?: 'provider_owned' | 'observed_external' | 'ae_curated_external' | 'third_party_gateway'
   registrationEvidenceRefs: readonly string[]
   readinessEvidenceRefs: readonly string[]
 }>

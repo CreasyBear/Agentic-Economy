@@ -729,6 +729,23 @@ export type {
   BeginTopupResult,
 } from "./internal/topup";
 export {
+  FUNDING_QUOTE_CONTRACT_VERSION,
+  FUNDING_QUOTE_VALIDITY_MS,
+  FUNDING_CONSTRAINTS_PATH,
+  FUNDING_QUOTE_PATH,
+  FUNDING_PREFLIGHT_ROUTE_CONTRACTS,
+  fundingConstraintsSchema,
+  fundingQuoteInputSchema,
+  fundingQuoteSchema,
+  quoteFunding,
+  readFundingConstraints,
+} from "./internal/funding-quote";
+export type {
+  FundingConstraints,
+  FundingQuote,
+  FundingQuoteInput,
+} from "./internal/funding-quote";
+export {
   admitCredentialBudget,
   settleCredentialBudget,
   releaseCredentialBudget,

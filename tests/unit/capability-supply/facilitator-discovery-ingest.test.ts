@@ -66,6 +66,15 @@ const mainnetSyntheticPost = {
   })),
 };
 
+const baseSepoliaSyntheticPost = {
+  ...syntheticPost,
+  accepts: syntheticPost.accepts.map((accept) => ({
+    ...accept,
+    network: "eip155:84532",
+    asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  })),
+};
+
 describe("facilitator discovery ingest", () => {
   it("rejects unsupported Bazaar HTTP channels and non-JSON output", () => {
     const extension = isRecord(timezonePaymentRequired?.extensions)
@@ -179,16 +188,21 @@ describe("facilitator discovery ingest", () => {
     ).toBe(false);
   });
 
-  it("skips missing bazaar and MCP instead of falling back to AM parameters", async () => {
+  it("admits official Base Sepolia Bazaar HTTP while skipping missing Bazaar and MCP", async () => {
     expect(decideFacilitatorDiscoveryItem(noBazaarItem)).toEqual({
       kind: "skip",
       reason: "bazaar_missing",
     });
-    const mcpAndTestnet = await admitOfficialFacilitatorDiscoveryItems([mcpItem, syntheticPost]);
-    expect(mcpAndTestnet.admitted).toHaveLength(0);
+    const mcpAndTestnet = await admitOfficialFacilitatorDiscoveryItems([mcpItem, baseSepoliaSyntheticPost]);
+    expect(mcpAndTestnet.admitted).toHaveLength(1);
+    expect(JSON.parse(mcpAndTestnet.admitted[0]?.sourceImportJson ?? "{}")).toMatchObject({
+      resource: {
+        network: "eip155:84532",
+        asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      },
+    });
     expect(mcpAndTestnet.skipped.map((item) => item.reason)).toEqual([
       "transport_unsupported",
-      "chain_unsupported",
     ]);
   });
 

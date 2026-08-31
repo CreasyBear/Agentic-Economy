@@ -76,7 +76,7 @@ const catalogPrice = z.strictObject({
   currency: z.string().describe('Currency code for the decimal catalog price'),
 })
 export const publicOperationAvailabilitySchema = z.strictObject({
-  posture: z.enum(['integrated', 'routeable', 'unavailable']),
+  posture: z.enum(['setup_required', 'routeable', 'unavailable']),
   observedAt: z.number().optional(), validUntil: z.number().optional(),
   reason: z.enum(['setup_required', 'temporarily_unavailable', 'readiness_expired', 'publisher_withdrew', 'under_review', 'updated_terms_require_review', 'not_supported_by_ae']).optional(),
 })
@@ -94,6 +94,13 @@ const transport = z.strictObject({
   responseStatus: z.number().int().min(200).max(299).optional(),
   responseContentType: z.string().optional(),
   requestTimeoutMs: z.number().int().min(1),
+})
+export const publicOperationPaymentSchema = z.strictObject({
+  protocol: z.literal('x402'),
+  scheme: z.literal('exact'),
+  network: z.string(),
+  asset: z.string(),
+  currency: z.string(),
 })
 const priceEvidence = z.strictObject({
   priceDigest: z.string(),
@@ -116,14 +123,14 @@ const descriptor = z.strictObject({
   summary: z.string(),
   commercial: z.strictObject({ price: publicOperationPriceSchema, priceEvidence: priceEvidence.optional(), materialTerms: z.array(materialTerm), relationship }),
   dataUse: z.array(dataUse), effects: z.array(effect), evidence: z.array(evidence),
-  cancellation, recovery, authentication: publicOperationAuthenticationSchema, transport, provenance, availability: publicOperationAvailabilitySchema, navigation: z.array(publicOperationNavigationSchema),
+  cancellation, recovery, authentication: publicOperationAuthenticationSchema, payment: publicOperationPaymentSchema.optional(), transport, provenance, availability: publicOperationAvailabilitySchema, navigation: z.array(publicOperationNavigationSchema),
   parameters: z.array(publicOperationParameterSchema).optional(), catalogPrice: catalogPrice.optional(),
 })
 export const operationSearchFiltersSchema = z.strictObject({
   networkId: z.string().max(200).optional(), location: z.string().max(200).optional(),
   effects: z.array(z.enum(['data_release', 'financial_exposure', 'external_state_change'])).max(3).optional(),
   dataUse: z.array(z.enum(['public', 'personal', 'sensitive', 'credential'])).max(4).optional(),
-  availability: z.array(z.enum(['integrated', 'routeable', 'unavailable'])).max(3).optional(),
+  availability: z.array(z.enum(['setup_required', 'routeable', 'unavailable'])).max(3).optional(),
   currency: z.string().regex(/^[A-Z]{3}$/).optional(), maximumPrice: exactAmountSchema.optional(),
 })
 const comparisonValue = z.union([z.string(), publicOperationPriceSchema, z.array(effect), z.array(dataUse), publicOperationAvailabilitySchema, provenance, recovery])

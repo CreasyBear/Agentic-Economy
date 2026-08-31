@@ -1,27 +1,13 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
-import { AeSection } from '@/components/ae/layout/AeSection'
-import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
-import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { AeFactList } from '@/components/ae/data/AeFactList'
-import { AeOperationPrice } from '@/components/ae/market/AeOperationPrice'
+import { AeOperationInspector } from '@/components/ae/market/operation-detail'
+import { operationLabel } from '@/components/ae/market/operation-detail/operation-inspector-model'
 import { Button } from '@/components/ui/button'
-import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
-import type {
-  PublicOperationDescriptor,
-  PublicOperationParameter,
-  PublicOperationPrice,
-} from '@/modules/capability-supply/public'
-import { formatCurrencyAmount } from '@/modules/money/public'
 import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
-import {
-  continuationForOperationFacts,
-  type SuggestedContinuation,
-} from '@/modules/market/suggested-continuation'
+import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
 import {
   readPublicOperationDetailRouteServer,
   type PublicOperationDetailRouteResult,
@@ -93,26 +79,6 @@ function CurrentOperationDetail({
   operation: PublicOperationDescriptor
   hasBuyerCredential: boolean
 }>) {
-  const requiredParameters = operation.parameters?.filter(({ required }) => required) ?? []
-  const optionalParameters = operation.parameters?.filter(({ required }) => !required) ?? []
-  const inputExample = operation.contract.inputExamples?.[0]
-  const invokeInput = inputExample === undefined
-    ? '"$AE_INPUT_JSON"'
-    : `'${JSON.stringify(inputExample.input).replaceAll("'", "'\\''")}'`
-  const invokeNavigation = operation.navigation.find(({ relation }) => relation === 'invoke')
-  const continuation = continuationForOperationFacts({
-    operationRef: operation.operationRef,
-    searchQuery: operation.summary,
-    availabilityPosture: operation.availability.posture === 'routeable' && invokeNavigation === undefined
-      ? 'integrated'
-      : operation.availability.posture,
-    // The page copies the installed CLI command, which uses the authenticated
-    // brokered invoke rail even when the upstream provider itself is public.
-    requiresBuyerCredential: invokeNavigation !== undefined,
-    hasBuyerCredential,
-  })
-  const lastVerifiedAt = operation.availability.observedAt
-    ?? operation.commercial.priceEvidence?.observedAt
   return (
     <AePublicPage
       kind="tool"
@@ -124,223 +90,14 @@ function CurrentOperationDetail({
           <Link to="/market" search={{ window: '30d' }} hash="operations">Catalog</Link>
         </Button>
       }
-      meta={label(operation.availability.posture)}
+      meta={operationLabel(operation.availability.posture)}
     >
-      <article className="ae-rail grid gap-8 pb-page">
-        <header className="grid gap-4">
-          <p className="text-sm text-muted-foreground">{operation.business.name}</p>
-          <OperationDecision operation={operation} continuation={continuation} />
-          <AeFactList
-            className="sm:grid-cols-3"
-            facts={[
-              { label: 'Provider', value: <BusinessLink operation={operation} /> },
-              {
-                label: 'Last verified',
-                value: lastVerifiedAt === undefined
-                  ? 'Not published'
-                  : <time dateTime={timestampIso(lastVerifiedAt)}>{formatUtcTimestamp(lastVerifiedAt)} UTC</time>,
-              },
-              { label: 'Authentication', value: authenticationLabel(operation) },
-            ]}
-          />
-        </header>
-
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-          <div className="grid min-w-0 gap-6">
-            <AeSection id="parameters" title="Parameters" description="The fields your agent needs before it calls this Operation.">
-              {operation.parameters === undefined ? (
-                <p className="text-sm text-muted-foreground">No flat parameter list is published. <a href="#technical-contract" className="font-medium text-foreground underline underline-offset-4">Read the input JSON Schema</a> before calling.</p>
-              ) : (
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <ParameterList title="Required parameters" parameters={requiredParameters} empty="No required parameters." />
-                  <ParameterList title="Optional parameters" parameters={optionalParameters} empty="No optional parameters." />
-                </div>
-              )}
-            </AeSection>
-
-            <AeSection title="Example input" description="Published input only. Missing examples are never inferred.">
-              <Example
-                title="Example input"
-                value={inputExample?.input}
-                empty="No example input is published. Use the input schema below."
-              />
-              <a
-                href="#technical-contract"
-                className="inline-flex min-h-touch items-center justify-self-start text-sm font-medium text-foreground underline underline-offset-4"
-              >
-                Read the input and output schemas
-              </a>
-            </AeSection>
-
-            <AeSection id="price-and-terms" title="Price and terms" description="The exact buyer authorization and published commercial terms for this capability.">
-              <PriceBreakdown operation={operation} />
-              <dl className="grid gap-3 sm:grid-cols-2">
-                {operation.commercial.priceEvidence?.observedAt === undefined ? null : (
-                  <TimeFact label="Price observed" value={operation.commercial.priceEvidence.observedAt} />
-                )}
-                {operation.commercial.priceEvidence?.validUntil === undefined ? null : (
-                  <TimeFact label="Price valid until" value={operation.commercial.priceEvidence.validUntil} />
-                )}
-                <Fact label="Commercial relationship" value={`${label(operation.commercial.relationship.kind)} — ${operation.commercial.relationship.summary}`} />
-                <Fact label="Provider"><BusinessLink operation={operation} /></Fact>
-              </dl>
-              <TermList terms={operation.commercial.materialTerms} />
-            </AeSection>
-
-            <AeSection title="Readiness and reliability" description="Current readiness, named completion evidence, and recovery behavior. Publication alone is not usage evidence.">
-              <dl className="grid gap-3 sm:grid-cols-2">
-                <Fact label="Status" value={label(operation.availability.posture)} />
-                <TimeFact label="Readiness verified" value={operation.availability.observedAt} />
-                <TimeFact label="Readiness valid until" value={operation.availability.validUntil} />
-                <Fact label="Idempotency" value={label(operation.recovery.idempotency)} />
-                <Fact label="Recovery" value={label(operation.recovery.recovery)} />
-                <Fact label="Cancellation" value={label(operation.cancellation.kind)} />
-                <Fact label="Observed calls" value="Not available on this descriptor" />
-              </dl>
-              <ul className="m-0 grid list-none gap-3 p-0">
-                {operation.evidence.length === 0 ? <li className="text-sm text-muted-foreground">No output evidence pointers are declared.</li> : operation.evidence.map((evidence) => (
-                  <li key={evidence.evidenceId} className="rounded-card border border-border bg-card p-4 text-sm">
-                    <span className="font-medium text-foreground">{label(evidence.purpose)}</span>
-                    <span className="text-muted-foreground"> · {evidence.evidenceId} · {evidence.outputPointer}</span>
-                  </li>
-                ))}
-              </ul>
-            </AeSection>
-          </div>
-
-          <OperationAccessSidecard continuation={continuation} invokeInput={invokeInput} />
-        </div>
-
-        <details id="technical-contract" className="scroll-mt-anchor rounded-card border border-border bg-card">
-          <summary className="flex min-h-touch cursor-pointer items-center px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-            Technical contract, schemas, digests, and references
-          </summary>
-          <div className="grid gap-6 border-t border-border p-4 sm:p-5">
-            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Fact label="Operation reference"><Ref value={operation.operationRef} /></Fact>
-              <Fact label="Operation ID" value={operation.operationId} />
-              <Fact label="Capability" value={`${operation.contract.capabilityId} · version ${operation.contract.version}`} />
-              <Fact label="Publisher" value={label(operation.provenance.publisher)} />
-              <Fact label="Source kind" value={label(operation.provenance.sourceKind)} />
-              <Fact label="Transport" value={`${operation.transport.method}${operation.transport.pathTemplate === undefined ? '' : ` ${operation.transport.pathTemplate}`}`} />
-              <Fact label="Request timeout" value={`${operation.transport.requestTimeoutMs} ms`} />
-              <Fact label="Price digest" value={operation.commercial.priceEvidence?.priceDigest ?? 'Not published'} />
-              <Fact label="Price source" value={operation.commercial.priceEvidence?.sourceRef ?? 'Not published'} />
-              <Fact label="Price evidence" value={operation.commercial.priceEvidence?.evidenceRefs.join(', ') || 'Not published'} />
-            </dl>
-            <section className="grid gap-3">
-              <h3 className="text-sm font-semibold text-foreground">Data use</h3>
-              <ul className="m-0 grid list-none gap-2 p-0">
-                {operation.dataUse.length === 0 ? <li className="text-sm text-muted-foreground">No data-use effects are declared.</li> : operation.dataUse.map((effect) => (
-                  <li key={`${effect.effectId}:${effect.inputPointer}:${effect.phase}`} className="rounded-md border border-border p-3 text-sm">
-                    <span className="font-medium text-foreground">{label(effect.classification)} · {effect.inputPointer}</span>
-                    <span className="text-muted-foreground"> · {effect.effectId} · {label(effect.phase)} · {label(effect.recipient)} · {effect.purposes.join(', ')}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-            <section className="grid gap-3">
-              <h3 className="text-sm font-semibold text-foreground">Effects and authority</h3>
-              <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
-                {operation.effects.length === 0 ? <li className="text-sm text-muted-foreground">No consequential effects are declared.</li> : operation.effects.map((effect) => (
-                  <li key={`${effect.effectId}:${effect.class}:${effect.authority}:${effect.reversibility}`} className="rounded-md border border-border p-3 text-sm">
-                    <span className="font-medium text-foreground">{label(effect.class)}</span>
-                    <span className="text-muted-foreground"> · {effect.effectId} · {label(effect.authority)} · {label(effect.reversibility)}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-            <Schema title="Input JSON Schema" value={operation.contract.inputJsonSchema} />
-            <Schema title="Output JSON Schema" value={operation.contract.outputJsonSchema} />
-          </div>
-        </details>
-      </article>
+      <AeOperationInspector
+        operation={operation}
+        hasBuyerCredential={hasBuyerCredential}
+        variant="full"
+      />
     </AePublicPage>
-  )
-}
-
-function OperationAccessSidecard({
-  continuation,
-  invokeInput,
-}: Readonly<{
-  continuation: SuggestedContinuation
-  invokeInput: string
-}>) {
-  return (
-    <aside
-      className="grid gap-related border-t border-border pt-6 lg:sticky lg:top-20 lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0"
-      aria-labelledby="operation-continuation-title"
-    >
-      <div className="grid gap-1">
-        <h2 id="operation-continuation-title" className="text-lg font-semibold text-foreground">
-          What you can do next
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {continuationDescription(continuation)}
-        </p>
-      </div>
-      {continuation.kind === 'navigate' && continuation.href !== undefined ? (
-        <Button asChild className="min-h-touch w-full">
-          <a href={continuation.href}>{continuation.label}</a>
-        </Button>
-      ) : continuation.command !== undefined ? (
-        <AeCopyCommand
-          label={continuation.label}
-          code={continuation.label === 'Call Operation'
-            ? continuation.command.replace("'<json>'", invokeInput)
-            : continuation.command}
-        />
-      ) : null}
-    </aside>
-  )
-}
-
-function continuationDescription(continuation: SuggestedContinuation): string {
-  if (continuation.warning !== undefined) return continuation.warning
-  if (continuation.label === 'Connect agent') return 'Connect an agent before making this protected call.'
-  if (continuation.label === 'Call Operation') return 'Your agent access is ready. Copy the exact call command.'
-  return 'Browse the current catalogue for a callable alternative.'
-}
-
-/**
- * First-viewport buy decision. The sidecard owns the one contextual action;
- * this card stays factual so it cannot compete with that continuation.
- */
-function OperationDecision({
-  operation,
-  continuation,
-}: Readonly<{
-  operation: PublicOperationDescriptor
-  continuation: SuggestedContinuation
-}>) {
-  const ready = continuation.label === 'Call Operation'
-  const decisionLabel = ready
-    ? 'Ready to call'
-    : continuation.label === 'Connect agent'
-      ? 'Connection required'
-      : 'Setup required'
-  return (
-    <section
-      aria-labelledby="operation-decision-title"
-      className="grid gap-3 rounded-lg border bg-card p-4 sm:flex sm:items-end sm:justify-between sm:gap-4 sm:p-5"
-    >
-      <div className="grid gap-1">
-        <p
-          id="operation-decision-title"
-          className="text-sm font-medium text-muted-foreground"
-        >
-          {decisionLabel}
-        </p>
-        <AeOperationPrice price={totalPrice(operation)} size="lg" label="Total authorization" />
-        <p className="max-w-md text-xs leading-5 text-muted-foreground">
-          {ready
-            ? 'The maximum charged for one call. Read the contract before invoking.'
-            : continuation.label === 'Connect agent'
-              ? 'Connect an agent before attempting this protected call.'
-              : 'Read the full contract before requesting access.'}
-        </p>
-      </div>
-    </section>
   )
 }
 
@@ -360,7 +117,7 @@ function OperationUnavailable({ result }: Readonly<{ result: Exclude<PublicOpera
       : {
           tone: 'warning' as const,
           title: 'This Operation is not currently available',
-          description: `AE reports ${label(result.reason)} for this exact reference. No commercial facts or invocation steps are shown.`,
+          description: `AE reports ${operationLabel(result.reason)} for this exact reference. No commercial facts or invocation steps are shown.`,
         }
   return (
     <AePageState
@@ -384,114 +141,4 @@ function OperationDetailPending() {
 
 function OperationDetailError() {
   return <OperationUnavailable result={{ kind: 'source_unavailable', operationRef: 'Requested reference' }} />
-}
-
-function Fact({ label: factLabel, value, children }: Readonly<{ label: string; value?: string; children?: ReactNode }>) {
-  return <div className="grid min-w-0 gap-1"><dt className="text-xs font-medium text-muted-foreground">{factLabel}</dt><dd className="break-words text-sm text-foreground">{children ?? value}</dd></div>
-}
-
-function TimeFact({ label: factLabel, value }: Readonly<{ label: string; value: number | undefined }>) {
-  return value === undefined
-    ? <Fact label={factLabel} value="Not published" />
-    : <Fact label={factLabel}><time dateTime={timestampIso(value)}>{formatUtcTimestamp(value)} UTC</time></Fact>
-}
-
-function Ref({ value }: Readonly<{ value: string }>) {
-  return <AeCopyReference label="reference" value={value} />
-}
-
-function BusinessLink({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
-  return <span className="font-medium text-foreground">{operation.business.name}</span>
-}
-
-function ParameterList({ title, parameters, empty }: Readonly<{ title: string; parameters: readonly PublicOperationParameter[]; empty: string }>) {
-  return (
-    <div className="grid content-start gap-3">
-      <h3 className="font-semibold text-foreground">{title}</h3>
-      {parameters.length === 0 ? <p className="text-sm text-muted-foreground">{empty}</p> : (
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {parameters.map((parameter) => (
-            <li key={`${parameter.group}:${parameter.name}`} className="rounded-card border border-border bg-card p-4">
-              <p className="font-medium text-foreground"><code className="font-mono text-sm">{parameter.name}</code> <span className="text-sm font-normal text-muted-foreground">{parameter.type} · {parameter.group}</span></p>
-              {parameter.description === undefined ? null : <p className="mt-1 text-sm text-muted-foreground">{parameter.description}</p>}
-              {parameter.enumValues === undefined ? null : <p className="mt-1 text-xs text-muted-foreground">Allowed: {parameter.enumValues.join(', ')}</p>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-function TermList({ terms }: Readonly<{ terms: PublicOperationDescriptor['commercial']['materialTerms'] }>) {
-  if (terms.length === 0) return <p className="text-sm text-muted-foreground">No additional material terms are published.</p>
-  return <dl className="grid gap-3 sm:grid-cols-2">{terms.map((term) => <Fact key={`${term.label}:${term.value}`} label={term.label} value={term.value} />)}</dl>
-}
-
-function PriceBreakdown({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
-  const breakdown = operation.commercial.priceBreakdown
-  if (breakdown === undefined) {
-    return (
-      <div className="grid gap-1 rounded-lg border bg-muted/20 p-4">
-        <p className="text-xs font-medium text-muted-foreground">Total price</p>
-        <p className="font-mono text-lg font-semibold tabular-nums">{totalPrice(operation)}</p>
-        <p className="text-xs text-muted-foreground">No separate fee breakdown is published for this capability.</p>
-      </div>
-    )
-  }
-  return (
-    <section aria-labelledby="price-breakdown-heading" className="grid gap-3 rounded-lg border bg-muted/20 p-4">
-      <h3 id="price-breakdown-heading" className="font-semibold text-foreground">Exact price breakdown</h3>
-      <dl className="grid gap-3 sm:grid-cols-3">
-        <Fact label="Provider price" value={formatCurrencyAmount(breakdown.providerQuotedAmount)} />
-        <Fact label="Agentic Economy fee" value={formatCurrencyAmount(breakdown.agenticEconomyFee)} />
-        <Fact label="Total authorization" value={formatCurrencyAmount(breakdown.totalBuyerAuthorization)} />
-        <Fact label="Payment network" value={`Base (${breakdown.network})`} />
-        <Fact label="Payment asset" value={`USDC (${breakdown.asset})`} />
-      </dl>
-      <p className="text-xs text-muted-foreground">The total authorization is the maximum charged for this call.</p>
-    </section>
-  )
-}
-
-function Example({ title, value, empty }: Readonly<{ title: string; value?: unknown; empty: string }>) {
-  return (
-    <section className="grid min-w-0 content-start gap-2 rounded-lg border bg-card p-4">
-      <h3 className="font-semibold text-foreground">{title}</h3>
-      {value === undefined
-        ? <p className="text-sm leading-6 text-muted-foreground">{empty}</p>
-        : <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs text-foreground"><code>{JSON.stringify(value, null, 2)}</code></pre>}
-    </section>
-  )
-}
-
-function Schema({ title, value }: Readonly<{ title: string; value: Readonly<Record<string, unknown>> }>) {
-  return <section className="grid min-w-0 gap-2"><h3 className="font-semibold text-foreground">{title}</h3><pre className="max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs text-foreground"><code>{JSON.stringify(value, null, 2)}</code></pre></section>
-}
-
-function formatPrice(price: PublicOperationPrice): string {
-  if (price.kind === 'on_request') return 'On request'
-  if (price.kind === 'fixed') return formatCurrencyAmount(price.amount)
-  return `${formatCurrencyAmount(price.minimum)}–${formatCurrencyAmount(price.maximum)}`
-}
-
-function totalPrice(operation: PublicOperationDescriptor): string {
-  return operation.commercial.priceBreakdown === undefined
-    ? formatPrice(operation.commercial.price)
-    : formatCurrencyAmount(operation.commercial.priceBreakdown.totalBuyerAuthorization)
-}
-
-function authenticationLabel(operation: PublicOperationDescriptor): string {
-  const authentication = operation.authentication
-  if (authentication.kind === 'ae_api_key') return 'AE account invocation'
-  if (authentication.kind === 'platform_credential') {
-    return authentication.scheme === 'bearer'
-      ? 'AE-managed bearer credential'
-      : `AE-managed API key in ${authentication.in}: ${authentication.name}`
-  }
-  return authentication.kind === 'x402' ? 'x402 payment' : 'Unknown'
-}
-
-function label(value: string): string {
-  return value.replaceAll('_', ' ')
 }

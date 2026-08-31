@@ -334,8 +334,10 @@ export function externalSpendCustodyPolicyRefusal(
       : undefined
   }
   const custodyContextValid = executionContext?.kind === 'market'
-    ? input.environment === 'production'
-      && executionContext.paymentProfile === 'base-usdc-exact'
+    ? (input.environment === 'production'
+      && executionContext.paymentProfile === 'base-usdc-exact')
+      || (input.environment === 'sandbox'
+        && executionContext.paymentProfile === 'base-sepolia-usdc-exact')
     : executionContext?.kind === 'seller_onboarding_canary'
       && input.environment === 'sandbox'
       && executionContext.paymentProfile === 'base-sepolia-usdc-exact'

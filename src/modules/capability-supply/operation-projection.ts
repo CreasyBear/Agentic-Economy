@@ -30,6 +30,7 @@ export {
   operationSearchOutputSchema,
   publicOperationAuthenticationSchema,
   publicOperationParameterSchema,
+  publicOperationPaymentSchema,
 } from "./operation-schemas";
 
 export {
@@ -52,6 +53,7 @@ export type {
   PublicOperationParameter,
   PublicOperationCatalogPrice,
   PublicOperationAuthentication,
+  PublicOperationPayment,
   PublicOperationTransport,
   PublicOperationReadiness,
   CatalogOfferingOperationMapEntry,

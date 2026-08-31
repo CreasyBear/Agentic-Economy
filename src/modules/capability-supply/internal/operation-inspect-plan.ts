@@ -114,7 +114,7 @@ export async function inspectCapabilityOperationPlan(
   );
   // A plan may only be produced against ops that are genuinely routeable right now.
   // Keyed ops whose credential/readiness is absent and observed x402 ops project as
-  // 'integrated' (reason 'setup_required') but are NOT routeable; they must be
+  // 'setup_required' Operations are inspectable but NOT routeable; they must be
   // refused here rather than presented as a buildable plan (the commit/plan gate
   // already requires listRouteable, so this closes the registry preview surface too).
   const unavailableOperation = operations.find(

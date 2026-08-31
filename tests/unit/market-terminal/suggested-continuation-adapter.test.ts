@@ -49,7 +49,7 @@ describe('CLI suggested-continuation adapter', () => {
     expect(operationContinuationForCli({
       operationRef,
       searchQuery,
-      availabilityPosture: 'integrated',
+      availabilityPosture: 'setup_required',
       requiresBuyerCredential: true,
       hasBuyerCredential: true,
     })).toEqual(suggestContinuation({

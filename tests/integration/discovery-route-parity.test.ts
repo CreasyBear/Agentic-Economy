@@ -308,7 +308,7 @@ const MARKET_OPERATION_DETAIL_WIRE_DESCRIPTOR = {
   authentication: { kind: 'ae_api_key' },
   transport: { method: 'POST', requestTimeoutMs: 1_000 },
   provenance: { publisher: 'ae_curated_external', sourceKind: 'ae_envelope' },
-  availability: { posture: 'integrated' },
+  availability: { posture: 'setup_required' },
   navigation: [],
 } as const
 

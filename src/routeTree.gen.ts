@@ -94,6 +94,8 @@ import { Route as ApiV1MarketOperationsSearchRouteImport } from './routes/api.v1
 import { Route as ApiV1MarketOperationsInspectPlanRouteImport } from './routes/api.v1.market-operations.inspect-plan'
 import { Route as ApiV1MarketOperationsDetailRouteImport } from './routes/api.v1.market-operations.detail'
 import { Route as ApiV1MarketOperationsCompareRouteImport } from './routes/api.v1.market-operations.compare'
+import { Route as ApiV1FundingQuoteRouteImport } from './routes/api.v1.funding.quote'
+import { Route as ApiV1FundingConstraintsRouteImport } from './routes/api.v1.funding.constraints'
 import { Route as ApiV1AccountBalanceRouteImport } from './routes/api.v1.account.balance'
 import { Route as ApiV1AccountActivityRouteImport } from './routes/api.v1.account.activity'
 import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
@@ -555,6 +557,16 @@ const ApiV1MarketOperationsCompareRoute =
     path: '/api/v1/market-operations/compare',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1FundingQuoteRoute = ApiV1FundingQuoteRouteImport.update({
+  id: '/api/v1/funding/quote',
+  path: '/api/v1/funding/quote',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1FundingConstraintsRoute = ApiV1FundingConstraintsRouteImport.update({
+  id: '/api/v1/funding/constraints',
+  path: '/api/v1/funding/constraints',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1AccountBalanceRoute = ApiV1AccountBalanceRouteImport.update({
   id: '/balance',
   path: '/balance',
@@ -741,6 +753,8 @@ export interface FileRoutesByFullPath {
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
+  '/api/v1/funding/constraints': typeof ApiV1FundingConstraintsRoute
+  '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
@@ -845,6 +859,8 @@ export interface FileRoutesByTo {
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
+  '/api/v1/funding/constraints': typeof ApiV1FundingConstraintsRoute
+  '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
@@ -951,6 +967,8 @@ export interface FileRoutesById {
   '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
+  '/api/v1/funding/constraints': typeof ApiV1FundingConstraintsRoute
+  '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
@@ -1057,6 +1075,8 @@ export interface FileRouteTypes {
     | '/owner/supply/$offeringRef'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
+    | '/api/v1/funding/constraints'
+    | '/api/v1/funding/quote'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
@@ -1161,6 +1181,8 @@ export interface FileRouteTypes {
     | '/owner/supply/$offeringRef'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
+    | '/api/v1/funding/constraints'
+    | '/api/v1/funding/quote'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
@@ -1266,6 +1288,8 @@ export interface FileRouteTypes {
     | '/_operator/owner/supply/$offeringRef'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
+    | '/api/v1/funding/constraints'
+    | '/api/v1/funding/quote'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
@@ -1345,6 +1369,8 @@ export interface RootRouteChildren {
   ApiV1RegistryRoute: typeof ApiV1RegistryRoute
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1ServicesRoute: typeof ApiV1ServicesRouteWithChildren
+  ApiV1FundingConstraintsRoute: typeof ApiV1FundingConstraintsRoute
+  ApiV1FundingQuoteRoute: typeof ApiV1FundingQuoteRoute
   ApiV1MarketOperationsCompareRoute: typeof ApiV1MarketOperationsCompareRoute
   ApiV1MarketOperationsDetailRoute: typeof ApiV1MarketOperationsDetailRoute
   ApiV1MarketOperationsInspectPlanRoute: typeof ApiV1MarketOperationsInspectPlanRoute
@@ -1960,6 +1986,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1MarketOperationsCompareRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/funding/quote': {
+      id: '/api/v1/funding/quote'
+      path: '/api/v1/funding/quote'
+      fullPath: '/api/v1/funding/quote'
+      preLoaderRoute: typeof ApiV1FundingQuoteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/funding/constraints': {
+      id: '/api/v1/funding/constraints'
+      path: '/api/v1/funding/constraints'
+      fullPath: '/api/v1/funding/constraints'
+      preLoaderRoute: typeof ApiV1FundingConstraintsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/account/balance': {
       id: '/api/v1/account/balance'
       path: '/balance'
@@ -2359,6 +2399,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1RegistryRoute: ApiV1RegistryRoute,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1ServicesRoute: ApiV1ServicesRouteWithChildren,
+  ApiV1FundingConstraintsRoute: ApiV1FundingConstraintsRoute,
+  ApiV1FundingQuoteRoute: ApiV1FundingQuoteRoute,
   ApiV1MarketOperationsCompareRoute: ApiV1MarketOperationsCompareRoute,
   ApiV1MarketOperationsDetailRoute: ApiV1MarketOperationsDetailRoute,
   ApiV1MarketOperationsInspectPlanRoute: ApiV1MarketOperationsInspectPlanRoute,

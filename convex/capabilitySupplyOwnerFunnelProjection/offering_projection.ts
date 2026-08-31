@@ -32,14 +32,20 @@ export function ownerSupplyPricing(
     if (parsed.kind !== 'valid' || publication.priceDigest === undefined) {
       return undefined
     }
-    const config =
-      parsed.config.freeTier === undefined
-        ? {
-            version: parsed.config.version,
-            unit: parsed.config.unit,
-            paidAmount: parsed.config.paidAmount,
-          }
-        : { ...parsed.config, freeTier: parsed.config.freeTier }
+    const config = {
+      version: parsed.config.version,
+      unit: parsed.config.unit,
+      paidAmount: parsed.config.paidAmount,
+      ...(parsed.config.providerAmount === undefined
+        ? {}
+        : { providerAmount: parsed.config.providerAmount }),
+      ...(parsed.config.platformFee === undefined
+        ? {}
+        : { platformFee: parsed.config.platformFee }),
+      ...(parsed.config.freeTier === undefined
+        ? {}
+        : { freeTier: parsed.config.freeTier }),
+    }
     return { config, priceDigest: publication.priceDigest }
   } catch {
     return undefined

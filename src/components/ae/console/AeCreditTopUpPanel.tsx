@@ -11,7 +11,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
-import { isMoneyRefusal, parseDecimalExactAmount, type CreditPaymentSession, type MoneyRefusal } from '@/modules/money/public'
+import {
+  calculateCreditTopupFinancials,
+  formatExactAmount,
+  isMoneyRefusal,
+  parseDecimalExactAmount,
+  productionCreditTopupConfig,
+  type CreditPaymentSession,
+  type MoneyRefusal,
+} from '@/modules/money/public'
 import type { CreditTopupBeginInput, CreditTopupOutcomeUnknownResult, CreditTopupReadInput, CreditTopupStartResult } from '@/modules/money/server'
 export type CreditTopupTarget = Readonly<{
   principalId: string
@@ -51,6 +59,17 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
   const idempotencyKey = useRef<string | undefined>(undefined)
   const recoveryAttempted = useRef(false)
   const targetPrincipalId = target?.principalId
+  const preview = useMemo(() => {
+    if (target === undefined) return undefined
+    const amount = parseDecimalExactAmount(target.currency, amountText, target.exponent)
+    if (amount === undefined) return undefined
+    return calculateCreditTopupFinancials({
+      amount,
+      accountCurrency: target.currency,
+      accountExponent: target.exponent,
+      config: productionCreditTopupConfig(),
+    })
+  }, [amountText, target])
 
   const stripePromise = useMemo(() => {
     const key = (publishableKey ?? import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)?.trim()
@@ -209,6 +228,16 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
               aria-describedby="credit-topup-amount-help"
             />
             <p id="credit-topup-amount-help" className="text-xs text-muted-foreground">The configured minimum and maximum are enforced by the authenticated server.</p>
+            {preview === undefined ? null : (
+              <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm" aria-label="Funding quote">
+                <dt className="text-muted-foreground">Credit amount</dt>
+                <dd className="font-mono">{preview.amount.currency} {formatExactAmount(preview.amount)}</dd>
+                <dt className="text-muted-foreground">Processing fee</dt>
+                <dd className="font-mono">{preview.processingFee.currency} {formatExactAmount(preview.processingFee)}</dd>
+                <dt className="font-medium">Total payment</dt>
+                <dd className="font-mono font-medium">{preview.chargeAmount.currency} {formatExactAmount(preview.chargeAmount)}</dd>
+              </dl>
+            )}
           </div>
         ) : null}
       <div className="flex flex-wrap gap-2">

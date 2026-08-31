@@ -132,6 +132,13 @@ export type PublicOperationTransport = Readonly<{
   responseContentType?: string;
   requestTimeoutMs: number;
 }>;
+export type PublicOperationPayment = Readonly<{
+  protocol: "x402";
+  scheme: "exact";
+  network: string;
+  asset: string;
+  currency: string;
+}>;
 export type PublicOperationReadiness = Readonly<{
   observedAt?: number;
   validUntil?: number;
@@ -161,7 +168,7 @@ export type CatalogOfferingOperationMapEntry = Readonly<{
   payment?: X402CatalogPayment;
 }>;
 export type PublicOperationAvailability = Readonly<{
-  posture: "integrated" | "routeable" | "unavailable";
+  posture: "setup_required" | "routeable" | "unavailable";
   observedAt?: number;
   validUntil?: number;
   reason?: PublicCapabilityUnavailableReason;
@@ -235,6 +242,7 @@ export type PublicOperationDescriptor = Readonly<{
   cancellation: PublicCancellationPolicy;
   recovery: PublicRecoveryPolicy;
   authentication: PublicOperationAuthentication;
+  payment?: PublicOperationPayment;
   transport: PublicOperationTransport;
   provenance: Readonly<{
     publisher:
@@ -277,6 +285,7 @@ export type CapabilityOperationSourceRecord = Readonly<{
   }>;
   cancellation: PublicCancellationPolicy;
   authentication: PublicOperationAuthentication;
+  payment?: PublicOperationPayment;
   transport: PublicOperationTransport;
   parameterMappings?: readonly PublicOperationParameterMapping[];
   provenance: Readonly<{

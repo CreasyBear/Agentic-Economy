@@ -22,6 +22,10 @@ import { offeringIntegrityIsValid } from '../offering/integrity'
 import { publicationLifecycle } from '../publication/lifecycle'
 import { parseAdmittedTransportCatalogMetadata } from '../transport-adapters'
 import { x402SellerCanaryAdmissionIsSatisfied } from '../x402-seller-onboarding/admission'
+import {
+  FACILITATOR_DISCOVERY_EVIDENCE_REF,
+  FACILITATOR_DISCOVERY_PUBLISHER_REF,
+} from '../facilitator-discovery-ingest'
 
 import {
   exactCurrentCatalogOperationIsRouteable,
@@ -99,9 +103,12 @@ export async function qualifySuppliedCandidate(
   const reasons: SuppliedCandidateQualificationReason[] = []
   const publicationCurrent = publication.disposition === 'current'
   if (!publicationCurrent) reasons.push('publication_not_current')
-  const sellerCanaryAdmissionCurrent = x402SellerCanaryAdmissionIsSatisfied(
-    publication.registrationEvidenceRefs,
-  )
+  const facilitatorAdmissionCurrent = publication.authorityMode === 'observed_external'
+    && publication.publisherRef === FACILITATOR_DISCOVERY_PUBLISHER_REF
+    && publication.sourceKind === 'x402'
+    && publication.registrationEvidenceRefs.includes(FACILITATOR_DISCOVERY_EVIDENCE_REF)
+  const sellerCanaryAdmissionCurrent = facilitatorAdmissionCurrent
+    || x402SellerCanaryAdmissionIsSatisfied(publication.registrationEvidenceRefs)
   if (!sellerCanaryAdmissionCurrent) reasons.push('seller_canary_admission_required')
   if (
     publication.networkId !== candidate.networkId
@@ -176,9 +183,12 @@ export async function qualifySuppliedCandidate(
     if (!offeringCurrent) reasons.push('offering_ineligible_or_unpublished')
 
     const origin = offering.origin
-    if (origin?.kind !== 'catalog_offering') {
+    if (origin?.kind !== 'catalog_offering' && !facilitatorAdmissionCurrent) {
       reasons.push('catalog_origin_missing')
-    } else {
+    } else if (facilitatorAdmissionCurrent) {
+      catalogOperationCurrent = publication.operationRef === expectedOperationRef
+        && bindingMethod !== undefined
+    } else if (origin?.kind === 'catalog_offering') {
       originCurrent = ports.catalogOriginIsCurrent !== undefined
         && await ports.catalogOriginIsCurrent(origin, candidate.businessId)
       if (!originCurrent) reasons.push('catalog_origin_stale')
@@ -304,6 +314,7 @@ export async function qualifySuppliedCandidate(
       origin: offering.origin,
       originCurrent,
       accessPath: catalogAccessPath,
+      catalogOperationCurrent,
       publicationOperationRef: publication.operationRef,
       expectedOperationRef,
       endpointUrl: binding.endpointUrl,

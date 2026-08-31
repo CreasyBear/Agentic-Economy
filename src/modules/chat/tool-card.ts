@@ -205,7 +205,7 @@ function readAuthentication(value: unknown): PublicOperationAuthentication | und
 
 function readPosture(value: unknown): PublicOperationAvailability['posture'] | undefined {
   if (!isRecord(value) || typeof value.posture !== 'string') return undefined
-  if (value.posture === 'routeable' || value.posture === 'integrated' || value.posture === 'unavailable') {
+  if (value.posture === 'routeable' || value.posture === 'setup_required' || value.posture === 'unavailable') {
     return value.posture
   }
   return undefined

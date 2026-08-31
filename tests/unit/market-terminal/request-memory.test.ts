@@ -113,7 +113,7 @@ describe('private market request CLI', () => {
         supplier: { name: 'Reference Services', slug: 'reference' },
         price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
         authentication: { kind: 'ae_api_key' },
-        availability: { posture: 'integrated' },
+        availability: { posture: 'setup_required' },
         navigation: [],
       }],
     })))

@@ -197,8 +197,9 @@ export async function readCapabilityProbeTarget(
 
   let expectedPaymentJson: string | undefined
   if (binding.adapterId === 'x402-fetch:v2') {
-    const paidAmount = publication.pricingConfig?.paidAmount
-    if (x402Configuration === undefined || paidAmount === undefined) {
+    const routePaymentAmount = publication.pricingConfig?.providerAmount
+      ?? publication.pricingConfig?.paidAmount
+    if (x402Configuration === undefined || routePaymentAmount === undefined) {
       return unavailable('binding_invalid')
     }
     expectedPaymentJson = JSON.stringify({
@@ -209,7 +210,7 @@ export async function readCapabilityProbeTarget(
       currency: x402Configuration.currency,
       routeAmountExponent: x402Configuration.routeAmountExponent,
       assetAmountExponent: x402Configuration.assetAmountExponent,
-      paidAmount,
+      paidAmount: routePaymentAmount,
     })
   }
 

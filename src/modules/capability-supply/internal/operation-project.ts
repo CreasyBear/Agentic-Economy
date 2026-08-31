@@ -146,6 +146,7 @@ export function projectCapabilityOperation(
     cancellation: record.cancellation,
     recovery: record.contract.lifecycle,
     authentication: record.authentication,
+    ...(record.payment === undefined ? {} : { payment: record.payment }),
     transport: record.transport,
     provenance: record.provenance,
     availability,
@@ -314,7 +315,7 @@ function projectAvailability(
       ? ("readiness_expired" as const)
       : (record.unavailableReason ?? "setup_required");
   return {
-    posture: record.integrated ? "integrated" : "unavailable",
+    posture: record.integrated ? "setup_required" : "unavailable",
     ...(observedAt === undefined ? {} : { observedAt }),
     ...(validUntil === undefined ? {} : { validUntil }),
     reason,

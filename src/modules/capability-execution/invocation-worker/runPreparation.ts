@@ -10,6 +10,7 @@ import {
 } from '@/modules/action-invocation/runtime'
 import {
   cdpX402CustodyConfigurationFromEnvironment,
+  economicRailForInvocation,
   paymentLaneAdmission,
   signRouteTransportCall,
   validSellerCanaryPayee,
@@ -380,11 +381,22 @@ export async function prepareInvocationRun(
   const executionContext = sellerCanary === undefined
     ? undefined
     : sellerCanaryExecutionContext(sellerCanary)
-  const economicRail: EconomicRail = sellerCanary !== undefined
-    ? 'managed_testnet_canary'
-    : isX402
-    ? dispatch.environment === 'production' ? 'brokered_x402' : 'provider_direct_x402'
-    : 'ae_internal'
+  const economicRail: EconomicRail = economicRailForInvocation({
+    isX402,
+    sellerOnboardingCanary: sellerCanary !== undefined,
+  })
+  if (
+    economicRail === 'brokered_x402'
+    && cdpX402CustodyConfigurationFromEnvironment() === undefined
+  ) {
+    return await refuseBeforeClaim(
+      ctx,
+      dispatch,
+      'provider_refused',
+      false,
+      'Managed x402 payment custody is unavailable.',
+    )
+  }
   const laneAdmission = paymentLaneAdmission({
     rail: economicRail,
     environment: dispatch.environment,

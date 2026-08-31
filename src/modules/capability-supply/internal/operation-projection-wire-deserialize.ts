@@ -73,6 +73,7 @@ export function deserializeOperationDescriptor(
     cancellation: operation.cancellation,
     recovery: operation.recovery,
     authentication: operation.authentication,
+    ...(operation.payment === undefined ? {} : { payment: operation.payment }),
     transport: operation.transport,
     provenance: operation.provenance,
     availability: operation.availability,

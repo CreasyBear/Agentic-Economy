@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { CURRENT_OPERATION_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
+import { AeOperationInspector } from '@/components/ae/market/operation-detail'
 import {
   PublicOperationRegistrySchemaVersion,
   projectCapabilityOperation as projectCapabilityOperationWithNavigation,
@@ -165,6 +166,24 @@ function renderWithRouter(
   )
 }
 
+function renderInspectorWithRouter(variant: 'compact' | 'full') {
+  const rootRoute = createRootRoute()
+  const routeTree = rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: '/' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/operations/$operationRef' }),
+  ])
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+  return render(
+    <RouterContextProvider router={router}>
+      <AeOperationInspector
+        operation={operation}
+        hasBuyerCredential
+        variant={variant}
+      />
+    </RouterContextProvider>,
+  )
+}
+
 afterEach(() => {
   cleanup()
   readDetailMock.mockReset()
@@ -173,6 +192,49 @@ afterEach(() => {
 })
 
 describe('/operations/$operationRef', () => {
+  it('keeps compact and full inspectors on the same decision, facts, and continuation', () => {
+    renderInspectorWithRouter('compact')
+
+    const compact = document.querySelector('[data-operation-inspector="compact"]')
+    if (!(compact instanceof HTMLElement)) throw new Error('compact_inspector_missing')
+    const compactView = within(compact)
+    const compactDecision = compactView.getByRole('region', { name: 'Ready to call' })
+    expect(within(compactDecision).getByRole('button', { name: 'Copy Call Operation' })).toBeTruthy()
+    expect(compactView.queryByRole('region', { name: 'What you can do next' })).toBeNull()
+    for (const fact of ['USD 1.25', 'API key connection', 'Ready now', 'Per accepted extraction']) {
+      expect(compactView.getAllByText(fact).length).toBeGreaterThan(0)
+    }
+
+    fireEvent.click(compactView.getByRole('button', {
+      name: 'Inputs, terms, risks, and evidence',
+    }))
+    expect(compactView.getAllByText('documentUrl').length).toBeGreaterThan(0)
+    expect(compactView.getByText('reconcile required')).toBeTruthy()
+    expect(compactView.getByText(/evidence:line-items/)).toBeTruthy()
+    expect(compactView.getAllByText(/release:invoice/).length).toBeGreaterThan(0)
+    expect(compactView.getByText(/complete schemas, provenance, transport/)).toBeTruthy()
+    expect(compactView.getByRole('button', { name: 'Actions' }).getAttribute('aria-expanded'))
+      .toBe('false')
+    expect(compactView.queryByRole('button', { name: 'Copy Inspect command' })).toBeNull()
+    expect(compactView.getByRole('link', { name: /Open full Operation details/ })).toBeTruthy()
+
+    cleanup()
+    renderInspectorWithRouter('full')
+
+    const full = document.querySelector('[data-operation-inspector="full"]')
+    if (!(full instanceof HTMLElement)) throw new Error('full_inspector_missing')
+    const fullView = within(full)
+    expect(fullView.getByRole('region', { name: 'Ready to call' })).toBeTruthy()
+    expect(fullView.getByRole('complementary', { name: 'What you can do next' })).toBeTruthy()
+    expect(fullView.getByRole('button', { name: 'Copy Call Operation' })).toBeTruthy()
+    for (const fact of ['USD 1.25', 'API key connection', 'Ready now', 'Per accepted extraction']) {
+      expect(fullView.getAllByText(fact).length).toBeGreaterThan(0)
+    }
+    expect(fullView.getAllByText('documentUrl').length).toBeGreaterThan(0)
+    expect(fullView.getByText('reconcile required')).toBeTruthy()
+    expect(fullView.getByText(/evidence:line-items/)).toBeTruthy()
+  })
+
   it('projects canonical keyed facts and carries the exact reference through authenticated invoke', () => {
     renderWithRouter(
       { kind: 'found', schemaVersion: PublicOperationRegistrySchemaVersion, operation },
@@ -253,17 +315,17 @@ describe('/operations/$operationRef', () => {
     expect(screen.queryByRole('button', { name: 'Copy Call Operation' })).toBeNull()
   })
 
-  it('keeps an integrated setup-required descriptor inspectable without implying it can be invoked', () => {
-    const integratedOperation = {
+  it('keeps a setup-required descriptor inspectable without implying it can be invoked', () => {
+    const setupRequiredOperation = {
       ...operation,
       availability: {
         ...operation.availability,
-        posture: 'integrated' as const,
+        posture: 'setup_required' as const,
         reason: 'setup_required' as const,
       },
     }
 
-    renderWithRouter({ kind: 'found', schemaVersion: PublicOperationRegistrySchemaVersion, operation: integratedOperation })
+    renderWithRouter({ kind: 'found', schemaVersion: PublicOperationRegistrySchemaVersion, operation: setupRequiredOperation })
 
     expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByText('Technical contract, schemas, digests, and references'))

@@ -20,7 +20,6 @@ import {
   parseFacilitatorDiscoverySourceImport,
 } from '@/modules/capability-supply/convex'
 import { isRecord } from '@/modules/common/is-record'
-import { generateAccountRef } from '@/modules/principal-account/account/public'
 
 import type { Id } from './_generated/dataModel'
 import { internalMutation, type MutationCtx } from './_generated/server'
@@ -37,6 +36,7 @@ import {
   reconcileWorkloadCronSnapshot,
   workloadCronSnapshotValue,
 } from './workloadCron'
+import { SYSTEM_WORKLOAD_ACCOUNT_REF } from './lib/workloadCron/context'
 const SOURCE_EVIDENCE = 'source:facilitator-discovery'
 const BUSINESS_SOURCE_KIND = 'facilitator-discovery-business:v1'
 const MAX_RECONCILE_ITEMS = 100
@@ -263,6 +263,8 @@ async function reconcileDraft(
 ): Promise<'published' | 'skipped'> {
   const sourceImport = parseFacilitatorDiscoverySourceImport(draft.sourceImportJson)
   if (sourceImport === undefined) return 'skipped'
+  const runtimeEnvironment = facilitatorRuntimeEnvironment(sourceImport)
+  if (runtimeEnvironment === undefined) return 'skipped'
   const route = routeIdentity(sourceImport)
   if (route === undefined) return 'skipped'
   const pricingConfig: PricingConfig = {
@@ -334,7 +336,7 @@ async function reconcileDraft(
   if (current === undefined) {
     const result = await publishFacilitatorDiscoveryCapability(ctx, {
       businessId: String(business.businessId),
-      runtimeEnvironment: 'production',
+      runtimeEnvironment,
       prepared: prepared.prepared,
       publicationMetadata: {
         sourceRevision: prepared.prepared.sourceRevision,
@@ -365,6 +367,15 @@ async function reconcileDraft(
     ...context,
   }, pricingConfig, sourceRevision)
   return result.kind === 'refreshed' ? 'published' : 'skipped'
+}
+
+function facilitatorRuntimeEnvironment(
+  sourceImport: Readonly<{ resource: unknown }>,
+): 'sandbox' | 'production' | undefined {
+  const resource = isRecord(sourceImport.resource) ? sourceImport.resource : undefined
+  if (resource?.network === 'eip155:8453') return 'production'
+  if (resource?.network === 'eip155:84532') return 'sandbox'
+  return undefined
 }
 
 function routeIdentity(
@@ -402,7 +413,7 @@ async function ensureProviderBusiness(
   }
   const sourceHash = canonicalDigest({ kind: BUSINESS_SOURCE_KIND, host })
   const businessId = await ctx.db.insert('businesses', {
-    owningAccountRef: generateAccountRef(),
+    owningAccountRef: SYSTEM_WORKLOAD_ACCOUNT_REF,
     slug: businessSlug,
     name: `x402 ${host}`,
     normalizedName: `x402 ${host}`.toLowerCase(),

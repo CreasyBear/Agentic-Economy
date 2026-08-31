@@ -18,6 +18,7 @@ export type CurrentCatalogOperationInput = Readonly<{
 }>
 
 export type RouteabilityQualityInput = CurrentCatalogOperationInput & Readonly<{
+  catalogOperationCurrent: boolean
   businessCurrent: boolean
   publicationCurrent: boolean
   sellerCanaryAdmissionCurrent?: boolean
@@ -62,5 +63,5 @@ export function routeabilityQualityGate(input: RouteabilityQualityInput): boolea
     && input.bindingCurrent
     && input.pricingCurrent
     && input.lifecycleActive
-    && exactCurrentCatalogOperationIsRouteable(input)
+    && input.catalogOperationCurrent
 }

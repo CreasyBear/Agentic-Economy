@@ -60,6 +60,13 @@ export function formatOperationAuthentication(
   return operation.authentication.kind.replace(/_/gu, ' ')
 }
 
+export function formatOperationPaymentNetwork(operation: OperationIdentity): string {
+  if (!('payment' in operation) || operation.payment === undefined) return 'not applicable'
+  if (operation.payment.network === 'eip155:84532') return 'Base Sepolia (eip155:84532)'
+  if (operation.payment.network === 'eip155:8453') return 'Base (eip155:8453)'
+  return operation.payment.network
+}
+
 export function formatOperationInputs(
   operation: OperationIdentity,
 ): string {

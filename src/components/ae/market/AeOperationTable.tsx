@@ -14,7 +14,7 @@ import type { OperationCardViewModel } from "@/modules/market/operation-view-mod
 
 const readinessVariants = {
   Routeable: "success",
-  Integrated: "warning",
+  SetupRequired: "warning",
   Unavailable: "outline",
 } as const;
 
@@ -166,6 +166,7 @@ function operationFacts(operation: OperationCardViewModel): readonly AeFact[] {
     { label: "Readiness", value: operation.readinessLabel },
     { label: "Call", value: operation.callLabel },
     { label: "Authentication", value: operation.authentication },
+    ...(operation.paymentNetwork === undefined ? [] : [{ label: "Payment network", value: operation.paymentNetwork }]),
     { label: "Rating", value: operation.rating.display },
     { label: "Calls", value: operation.popularity.display },
     { label: "Latency", value: operation.latency.display, mono: true },

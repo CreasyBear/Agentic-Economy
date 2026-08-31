@@ -24,9 +24,21 @@ export const FACILITATOR_DISCOVERY_NETWORK = "eip155:8453" as const;
 export const FACILITATOR_DISCOVERY_ASSET =
   "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 export const FACILITATOR_DISCOVERY_ASSET_EXPONENT = 6 as const;
+export const FACILITATOR_DISCOVERY_PAYMENT_PROFILES = Object.freeze([
+  Object.freeze({
+    network: FACILITATOR_DISCOVERY_NETWORK,
+    asset: FACILITATOR_DISCOVERY_ASSET,
+    assetExponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
+  }),
+  Object.freeze({
+    network: "eip155:84532" as const,
+    asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const,
+    assetExponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
+  }),
+]);
 export const FACILITATOR_DISCOVERY_MAX_ACCEPTS = 20 as const;
 
-const DISCOVERY_EVIDENCE_REF = "source:facilitator-discovery";
+export const FACILITATOR_DISCOVERY_EVIDENCE_REF = "source:facilitator-discovery";
 const MAX_ATOMIC_DIGITS = 78;
 const FEE_BPS = 1_000n;
 const BPS_DENOMINATOR = 10_000n;
@@ -152,13 +164,13 @@ export function decideFacilitatorDiscoveryItem(
 
   const accept = firstSupportedAccept(paymentRequired.accepts);
   if (accept.kind === "refused") return { kind: "skip", reason: accept.reason };
-  const price = priceBreakdown(accept.amount);
+  const price = priceBreakdown(accept.amount, accept.assetExponent);
   if (price === undefined) return { kind: "skip", reason: "amount_invalid" };
   const identity = normalizedHttpIdentity(endpoint, bazaar.method);
   const providerPrice: ExactAmount = {
     currency: "USD",
     units: accept.amount,
-    exponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
+    exponent: accept.assetExponent,
   };
   const capabilityId = capabilityIdFromIdentity(identity);
   const offeringLabel = discoveryOfferingLabel(resource, capabilityId);
@@ -171,11 +183,11 @@ export function decideFacilitatorDiscoveryItem(
       price: providerPrice,
       method: bazaar.method,
       scheme: "exact",
-      network: FACILITATOR_DISCOVERY_NETWORK,
-      asset: FACILITATOR_DISCOVERY_ASSET,
+      network: accept.network,
+      asset: accept.asset,
       payTo: accept.payTo,
-      routeAmountExponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
-      assetAmountExponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
+      routeAmountExponent: accept.assetExponent,
+      assetAmountExponent: accept.assetExponent,
       paymentRequired,
       inputSchema: bazaar.inputSchema,
       outputSchema: bazaar.outputSchema,
@@ -211,11 +223,11 @@ export function decideFacilitatorDiscoveryItem(
             influencesEligibility: false,
             influencesInclusion: false,
             influencesOrder: false,
-            evidenceRefs: [DISCOVERY_EVIDENCE_REF],
+            evidenceRefs: [FACILITATOR_DISCOVERY_EVIDENCE_REF],
           },
         },
         searchTerms: [...searchTermsForOffering(resource, capabilityId)],
-        registrationEvidenceRefs: [DISCOVERY_EVIDENCE_REF],
+        registrationEvidenceRefs: [FACILITATOR_DISCOVERY_EVIDENCE_REF],
       },
       bindingId: `binding:facilitator-discovery:${capabilityId}`,
       authority: {
@@ -223,10 +235,10 @@ export function decideFacilitatorDiscoveryItem(
         connectionRef: "connection:facilitator-discovery",
         providerRef: "provider:facilitator-discovery",
       },
-      registrationEvidenceRefs: [DISCOVERY_EVIDENCE_REF],
+      registrationEvidenceRefs: [FACILITATOR_DISCOVERY_EVIDENCE_REF],
       requestTimeoutMs: 10_000,
     },
-    evidenceRefs: [DISCOVERY_EVIDENCE_REF],
+    evidenceRefs: [FACILITATOR_DISCOVERY_EVIDENCE_REF],
   };
   return { kind: "admit", import: sourceImport, identity, price };
 }
@@ -281,7 +293,14 @@ function discoveryResourceRecord(
 }
 
 type AcceptResult =
-  | Readonly<{ kind: "valid"; amount: string; payTo: string }>
+  | Readonly<{
+      kind: "valid";
+      amount: string;
+      payTo: string;
+      network: (typeof FACILITATOR_DISCOVERY_PAYMENT_PROFILES)[number]["network"];
+      asset: (typeof FACILITATOR_DISCOVERY_PAYMENT_PROFILES)[number]["asset"];
+      assetExponent: 6;
+    }>
   | Readonly<{ kind: "refused"; reason: FacilitatorDiscoverySkipReason }>;
 
 function firstSupportedAccept(value: unknown): AcceptResult {
@@ -295,13 +314,16 @@ function firstSupportedAccept(value: unknown): AcceptResult {
   for (const candidate of value) {
     if (!isRecord(candidate) || candidate.scheme !== "exact") continue;
     sawExact = true;
-    if (candidate.network !== FACILITATOR_DISCOVERY_NETWORK) {
+    const profile = FACILITATOR_DISCOVERY_PAYMENT_PROFILES.find(
+      ({ network }) => network === candidate.network,
+    );
+    if (profile === undefined) {
       sawChain = true;
       continue;
     }
     if (
       typeof candidate.asset !== "string" ||
-      candidate.asset.toLowerCase() !== FACILITATOR_DISCOVERY_ASSET.toLowerCase()
+      candidate.asset.toLowerCase() !== profile.asset.toLowerCase()
     ) {
       sawAsset = true;
       continue;
@@ -315,7 +337,14 @@ function firstSupportedAccept(value: unknown): AcceptResult {
       continue;
     }
     if (typeof candidate.payTo !== "string" || candidate.payTo.trim().length === 0) continue;
-    return { kind: "valid", amount: candidate.amount, payTo: candidate.payTo };
+    return {
+      kind: "valid",
+      amount: candidate.amount,
+      payTo: candidate.payTo,
+      network: profile.network,
+      asset: profile.asset,
+      assetExponent: profile.assetExponent,
+    };
   }
   if (!sawExact) return { kind: "refused", reason: "scheme_unsupported" };
   if (sawChain) return { kind: "refused", reason: "chain_unsupported" };
@@ -324,14 +353,14 @@ function firstSupportedAccept(value: unknown): AcceptResult {
   return { kind: "refused", reason: "payment_terms_invalid" };
 }
 
-function priceBreakdown(amount: string): FacilitatorDiscoveryPriceBreakdown | undefined {
+function priceBreakdown(amount: string, exponent: number): FacilitatorDiscoveryPriceBreakdown | undefined {
   if (!/^[1-9][0-9]*$/.test(amount) || amount.length > MAX_ATOMIC_DIGITS) return undefined;
   try {
     const providerUnits = BigInt(amount);
     const feeUnits = (providerUnits * FEE_BPS + BPS_DENOMINATOR - 1n) / BPS_DENOMINATOR;
-    const provider = exactAtomicAmount(providerUnits);
-    const platformFee = exactAtomicAmount(feeUnits);
-    const total = exactAtomicAmount(providerUnits + feeUnits);
+    const provider = exactAtomicAmount(providerUnits, exponent);
+    const platformFee = exactAtomicAmount(feeUnits, exponent);
+    const total = exactAtomicAmount(providerUnits + feeUnits, exponent);
     return provider === undefined || platformFee === undefined || total === undefined
       ? undefined
       : { provider, platformFee, total, feeBps: 1_000 };
@@ -340,11 +369,11 @@ function priceBreakdown(amount: string): FacilitatorDiscoveryPriceBreakdown | un
   }
 }
 
-function exactAtomicAmount(units: bigint): ExactAmount | undefined {
+function exactAtomicAmount(units: bigint, exponent: number): ExactAmount | undefined {
   const value = units.toString();
   return value.length > MAX_ATOMIC_DIGITS
     ? undefined
-    : { currency: "USD", units: value, exponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT };
+    : { currency: "USD", units: value, exponent };
 }
 
 export function admittedFacilitatorDiscoveryDraft(

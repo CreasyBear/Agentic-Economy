@@ -22,6 +22,7 @@ import type {
   PublicOperationNavigationRelation,
   PublicOperationOfferingRef,
   PublicOperationParameter,
+  PublicOperationPayment,
   PublicOperationPrice,
   PublicOperationRegistrySchemaVersion,
   PublicOperationTransport,
@@ -65,6 +66,7 @@ export type OperationSurfaceWireDescriptor = {
   cancellation: DeepWritable<PublicCancellationPolicy>;
   recovery: DeepWritable<PublicRecoveryPolicy>;
   authentication: DeepWritable<PublicOperationAuthentication>;
+  payment?: DeepWritable<PublicOperationPayment>;
   transport: DeepWritable<PublicOperationTransport>;
   provenance: DeepWritable<PublicOperationDescriptor["provenance"]>;
   availability: DeepWritable<PublicOperationAvailability>;

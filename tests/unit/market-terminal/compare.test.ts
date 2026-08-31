@@ -70,7 +70,7 @@ const operation = {
   authentication: { kind: 'ae_api_key' },
   transport: { method: 'GET', pathTemplate: '/lookup', responseStatus: 200, responseContentType: 'application/json', requestTimeoutMs: 5_000 },
   provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
-  availability: { posture: 'integrated', observedAt: 1_000, validUntil: 10_000 },
+  availability: { posture: 'setup_required', observedAt: 1_000, validUntil: 10_000 },
   navigation: [],
 } as const
 

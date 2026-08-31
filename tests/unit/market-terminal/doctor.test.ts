@@ -290,7 +290,7 @@ describe('ae doctor', () => {
               operationRef, capabilityId: 'document.translate', title: 'Document translation',
               summary: 'Translate one document.', supplier: { name: 'Reference Services', slug: 'reference' },
               price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
-              authentication: { kind: 'ae_api_key' }, availability: { posture: 'integrated' }, navigation: [],
+              authentication: { kind: 'ae_api_key' }, availability: { posture: 'setup_required' }, navigation: [],
             }],
           })
           return
@@ -921,7 +921,7 @@ function currentOperation(operationRef: string) {
       responseContentType: 'application/json', requestTimeoutMs: 5_000,
     },
     provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
-    availability: { posture: 'integrated' }, navigation: [],
+    availability: { posture: 'setup_required' }, navigation: [],
   }
 }
 

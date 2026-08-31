@@ -227,6 +227,8 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): GraphPublicationR
     contractDigest: doc.contractDigest,
     sourceKind: doc.sourceKind,
     sourceDigest: doc.sourceDigest,
+    publisherRef: doc.publisherRef,
+    authorityMode: doc.authorityMode,
     disposition: doc.disposition,
     credentialState: doc.credentialState,
     healthState: doc.healthState,

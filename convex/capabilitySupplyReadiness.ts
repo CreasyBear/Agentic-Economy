@@ -57,6 +57,12 @@ type CapabilityProbeAuthority = Readonly<{
       grantPolicyDigest: string
       authorityExpiresAt: number
     }>
+  | Readonly<{
+      mode: 'system_workload'
+      workloadPrincipalRevision: number
+      membershipRef: string
+      membershipRevision: number
+    }>
 )
 type ProbeTargetBase = Extract<ReadCapabilityProbeTargetResult, { kind: 'available' }>['target']
 type WithResourceAuthority<T> = T extends unknown

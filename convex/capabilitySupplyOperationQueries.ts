@@ -26,6 +26,7 @@ import {
   exactAmount,
   operationRecord,
   publicAuthentication,
+  publicPayment,
   publicPrice,
   publicPriceBreakdown,
 } from './capabilitySupplyOperationShared'
@@ -60,7 +61,7 @@ const publicRecovery = v.object({
   recovery: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
 })
 const publicAvailability = v.object({
-  posture: v.union(v.literal('integrated'), v.literal('routeable'), v.literal('unavailable')),
+  posture: v.union(v.literal('setup_required'), v.literal('routeable'), v.literal('unavailable')),
   observedAt: v.optional(v.number()),
   validUntil: v.optional(v.number()),
   reason: v.optional(v.union(
@@ -161,6 +162,7 @@ const publicDescriptor = v.object({
   cancellation: publicCancellation,
   recovery: publicRecovery,
   authentication: publicAuthentication,
+  payment: v.optional(publicPayment),
   transport: publicTransport,
   provenance: v.object({
     publisher: v.union(
@@ -216,7 +218,7 @@ const publicSearchFilters = v.object({
   location: v.optional(v.string()),
   effects: v.optional(v.array(v.union(v.literal('data_release'), v.literal('financial_exposure'), v.literal('external_state_change')))),
   dataUse: v.optional(v.array(v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')))),
-  availability: v.optional(v.array(v.union(v.literal('integrated'), v.literal('routeable'), v.literal('unavailable')))),
+  availability: v.optional(v.array(v.union(v.literal('setup_required'), v.literal('routeable'), v.literal('unavailable')))),
   currency: v.optional(v.string()),
   maximumPrice: v.optional(exactAmount),
 })

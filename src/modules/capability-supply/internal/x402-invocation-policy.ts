@@ -27,15 +27,23 @@ export type PaymentLaneAdmission =
   | Readonly<{
       kind: 'refused'
       lane: EconomicRail
-      code: 'payment_lane_execution_context_invalid'
-    }>
+    code: 'payment_lane_execution_context_invalid'
+  }>
+
+export function economicRailForInvocation(input: Readonly<{
+  isX402: boolean
+  sellerOnboardingCanary: boolean
+}>): EconomicRail {
+  if (input.sellerOnboardingCanary) return 'managed_testnet_canary'
+  return input.isX402 ? 'brokered_x402' : 'ae_internal'
+}
 
 /**
- * V1 brokers every paid call so AE can validate the output before value moves, take its rake on
+ * V1 brokers every market call so AE can validate the output before value moves, take its rake on
  * settlement, and answer for the charge when the buyer disputes it. A provider-direct rail settles
- * between buyer and provider outside AE's ledger and forfeits all three, so production admits only
- * the brokered lane. Non-production keeps the direct rail open because the host-parity and
- * provider-conformance scenarios are our only executable proof that the x402 machinery still works.
+ * between buyer and provider outside AE's ledger and forfeits all three, so the Operation worker
+ * always selects the brokered lane. Non-production keeps the lower-level direct rail admitted for
+ * host-parity and provider-conformance tests; it is not a public Operation execution lane.
  * The one managed non-production exception is an explicit seller-onboarding
  * canary on AE sandbox, which maps to CDP's `environment: "development"` and
  * the Base Sepolia profile used by its maintained x402 spend-control example.

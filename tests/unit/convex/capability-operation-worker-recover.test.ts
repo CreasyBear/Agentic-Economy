@@ -1183,15 +1183,23 @@ describe('capability operation invocation worker recover', () => {
     expect(worker.state.reconciliations).toHaveLength(0)
   })
 
-  it('keeps provider-direct x402 reconciliation required when payment evidence persistence fails', async () => {
+  it('keeps brokered x402 reconciliation required when payment evidence persistence fails', async () => {
     const worker = createWorker('x402', { failPaymentObservation: true })
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.money).toBeUndefined()
-    expect(worker.state.unknownCharges).toHaveLength(0)
+    expect(worker.state.money).toMatchObject({
+      amount: { currency: 'USD', units: '2', exponent: 2 },
+    })
+    expect(worker.state.unknownCharges).toContainEqual(expect.objectContaining({
+      transactionRef: `operation-money:${invocationRef}:${attemptRef}:1`,
+      principalId: 'principal:test-worker',
+    }))
     expect(worker.state.reconciliations).toHaveLength(0)
-    expect(worker.state.mutationCalls.map(({ path }) => path)).toContain('moneyLedger:reserveExternalInvocationSpend')
-    expect(worker.state.mutationCalls.map(({ path }) => path)).not.toContain('moneyLedger:finalizeExternalInvocationSpend')
+    const brokeredPaths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(brokeredPaths).toContain('moneyLedger:reserveBrokeredInvocationCharge')
+    expect(brokeredPaths).toContain('moneyLedger:reserveExternalInvocationSpend')
+    expect(brokeredPaths).toContain('moneyLedger:markBrokeredInvocationChargeOutcomeUnknown')
+    expect(brokeredPaths).not.toContain('moneyLedger:finalizeExternalInvocationSpend')
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'reconciliation_required',
       dispatchState: 'reconciliation_required',

@@ -170,14 +170,17 @@ describe('capability readiness probe', () => {
     expect(result.evidenceRefs).toContain('probe:x402_payment_required_invalid')
   })
 
-  it('matches a GET x402 PaymentRequired resource URL that includes the probe query', async () => {
+  it('accepts a route-bound GET x402 resource while probing mapped query input', async () => {
     const paymentRequired = validatePaymentRequired(timezoneX402PaymentRequiredPin.paymentRequired)
     if (paymentRequired.x402Version !== 2) throw new Error('pin missing v2')
     const accepted = timezoneX402PaymentRequiredPin.paymentRequired.accepts[0]
     if (accepted === undefined) throw new Error('pin missing accepts')
     const challenge = encodeX402PaymentRequiredHeader({
       x402Version: 2,
-      resource: { url: timezoneX402PaymentRequiredPin.paymentRequired.resource.url },
+      resource: {
+        url: new URL(timezoneX402PaymentRequiredPin.paymentRequired.resource.url).origin
+          + new URL(timezoneX402PaymentRequiredPin.paymentRequired.resource.url).pathname,
+      },
       accepts: [{
         scheme: 'exact',
         network: colonSeparatedNetwork(accepted.network),

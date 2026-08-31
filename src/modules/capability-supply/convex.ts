@@ -29,6 +29,7 @@ export {
 } from './internal/x402-evm-protocol'
 export {
   FACILITATOR_DISCOVERY_PUBLISHER_REF,
+  FACILITATOR_DISCOVERY_EVIDENCE_REF,
   FACILITATOR_DISCOVERY_MAX_PAGE_SIZE,
   admittedFacilitatorDiscoveryDraft,
   decideFacilitatorDiscoveryItem,

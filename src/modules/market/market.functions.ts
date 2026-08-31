@@ -9,7 +9,7 @@ import {
 const inputSchema = z.object({
   window: marketWindowSchema,
   query: z.string().max(200).optional(),
-  availability: z.enum(["routeable", "integrated", "unavailable"]).optional(),
+  availability: z.enum(["routeable", "setup_required", "unavailable"]).optional(),
   cursor: z.string().max(2_000).optional(),
 });
 

@@ -33,7 +33,7 @@ import {
 
 const READINESS_VARIANT = {
   'Ready now': 'success',
-  'Integration available': 'warning',
+  'Setup required': 'warning',
   Unavailable: 'outline',
 } as const
 
@@ -47,7 +47,7 @@ function choiceInitial(title: string): string {
 
 function readinessVariant(readiness: string | undefined): 'success' | 'warning' | 'outline' | undefined {
   if (readiness === 'Ready now') return READINESS_VARIANT['Ready now']
-  if (readiness === 'Integration available') return READINESS_VARIANT['Integration available']
+  if (readiness === 'Setup required') return READINESS_VARIANT['Setup required']
   if (readiness === 'Unavailable') return READINESS_VARIANT.Unavailable
   return undefined
 }

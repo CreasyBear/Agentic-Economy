@@ -2,6 +2,7 @@ import { v, type Infer } from 'convex/values'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   connectionAuthoritySnapshotValue,
+  FACILITATOR_DISCOVERY_PUBLISHER_REF,
   X402_SELLER_CANARY_ADMISSION_REQUIRED_REF,
 } from '@/modules/capability-supply/convex'
 import {
@@ -19,6 +20,10 @@ import {
   parseWorkloadCronSnapshot,
   reconcileWorkloadCronSnapshot,
 } from './workloadCron'
+import {
+  SYSTEM_WORKLOAD_ACCOUNT_REF,
+  SYSTEM_WORKLOAD_PRINCIPAL_REF,
+} from './lib/workloadCron/context'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import {
   convexPublicationLifecycle,
@@ -60,6 +65,14 @@ export const capabilityProbeAuthorityValue = v.union(
     grantGeneration: v.number(),
     grantPolicyDigest: v.string(),
     authorityExpiresAt: v.number(),
+    authorityDigest: v.string(),
+  }),
+  v.object({
+    ...capabilityProbeAuthorityBaseFields,
+    mode: v.literal('system_workload'),
+    workloadPrincipalRevision: v.number(),
+    membershipRef: v.string(),
+    membershipRevision: v.number(),
     authorityDigest: v.string(),
   }),
 )
@@ -107,6 +120,59 @@ export async function readCurrentCapabilityProbeAuthority(
   if (business === null
     || business.suppressedAt !== undefined
     || (business.publicStatus !== 'published' && !exactOwnerStagedBusiness)) return null
+
+  if (
+    publication.publisherRef === FACILITATOR_DISCOVERY_PUBLISHER_REF
+    && publication.authorityMode === 'observed_external'
+    && publication.sourceKind === 'x402'
+  ) {
+    const [workloadPrincipal, workloadAccount, memberships] = await Promise.all([
+      ctx.db.query('principals')
+        .withIndex('by_principalRef', (query) => query.eq('principalRef', SYSTEM_WORKLOAD_PRINCIPAL_REF))
+        .unique(),
+      ctx.db.query('accounts')
+        .withIndex('by_accountRef', (query) => query.eq('accountRef', SYSTEM_WORKLOAD_ACCOUNT_REF))
+        .unique(),
+      ctx.db.query('memberships')
+        .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
+          .eq('accountRef', SYSTEM_WORKLOAD_ACCOUNT_REF)
+          .eq('memberPrincipalRef', SYSTEM_WORKLOAD_PRINCIPAL_REF)
+          .eq('lifecycle', 'active'))
+        .take(2),
+    ])
+    if (
+      workloadPrincipal === null
+      || workloadPrincipal.kind !== 'workload'
+      || workloadPrincipal.lifecycle !== 'active'
+      || workloadAccount === null
+      || workloadAccount.lifecycle !== 'active'
+      || memberships.length !== 1
+    ) return null
+    const ownership = await ctx.db.query('accountOwnerships')
+      .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', workloadAccount.currentOwnershipRef))
+      .unique()
+    const membership = memberships[0]
+    if (
+      ownership === null
+      || ownership.lifecycle !== 'active'
+      || ownership.accountRef !== workloadAccount.accountRef
+      || membership === undefined
+    ) return null
+    return withCapabilityProbeAuthorityDigest({
+      publicationRef: publication.publicationRef,
+      publicationRevision: publication.revision,
+      businessId: publication.businessId,
+      publisherPrincipalRef: publication.publisherRef,
+      ownerPrincipalRef: ownership.ownerPrincipalRef,
+      owningAccountRef: workloadAccount.accountRef,
+      ownershipRef: ownership.ownershipRef,
+      accountRevision: workloadAccount.revision,
+      mode: 'system_workload' as const,
+      workloadPrincipalRevision: workloadPrincipal.revision,
+      membershipRef: membership.membershipRef,
+      membershipRevision: membership.revision,
+    })
+  }
   const account = await ctx.db
     .query('accounts')
     .withIndex('by_accountRef', (query) => query.eq('accountRef', business.owningAccountRef))
@@ -202,13 +268,19 @@ export function capabilityProbeAuthorityMatches(
     || pinned.ownershipRef !== current.ownershipRef
     || pinned.accountRevision !== current.accountRevision
     || pinned.mode !== current.mode) return false
-  return pinned.mode === 'human_owner' && current.mode === 'human_owner'
-    ? pinned.publisherPrincipalRevision === current.publisherPrincipalRevision
-    : pinned.mode === 'agent_grant' && current.mode === 'agent_grant'
-      && pinned.grantRef === current.grantRef
+  if (pinned.mode === 'human_owner' && current.mode === 'human_owner') {
+    return pinned.publisherPrincipalRevision === current.publisherPrincipalRevision
+  }
+  if (pinned.mode === 'agent_grant' && current.mode === 'agent_grant') {
+    return pinned.grantRef === current.grantRef
       && pinned.grantGeneration === current.grantGeneration
       && pinned.grantPolicyDigest === current.grantPolicyDigest
       && pinned.authorityExpiresAt === current.authorityExpiresAt
+  }
+  return pinned.mode === 'system_workload' && current.mode === 'system_workload'
+    && pinned.workloadPrincipalRevision === current.workloadPrincipalRevision
+    && pinned.membershipRef === current.membershipRef
+    && pinned.membershipRevision === current.membershipRevision
 }
 
 const capabilityProbeTargetFields = {

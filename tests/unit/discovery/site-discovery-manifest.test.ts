@@ -10,6 +10,7 @@ import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canoni
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { buildSiteDiscoveryManifest, projectCompactSiteDiscoveryManifest } from '@/modules/discovery/public'
 import { handleSiteDiscoveryManifestRequest } from '@/routes/[.]well-known/ucp'
+import { FUNDING_QUOTE_CONTRACT_VERSION } from '@/modules/money/public'
 
 /**
  * `/.well-known/ucp` is the only document a cold agent reads before it knows
@@ -115,6 +116,10 @@ describe('Site discovery manifest', () => {
       '/api/v1/market-operations/compare',
       '/api/v1/market-operations/inspect-plan',
     ])
+    expect(pathsByKind.get('funding_preflight')).toEqual([
+      '/api/v1/funding/constraints',
+      '/api/v1/funding/quote',
+    ])
     expect(pathsByKind.get('discovery_artifact')).toBeUndefined()
     expect(manifest).not.toHaveProperty('businessTools')
     expect(pathsByKind.get('site_entry_point')).toEqual(['/.well-known/ucp'])
@@ -184,6 +189,37 @@ describe('Site discovery manifest', () => {
     ])
     expect(operationReads.every((endpoint) => endpoint.method === 'POST' && endpoint.authentication === 'none')).toBe(true)
     expect(operationReads.every((endpoint) => endpoint.inputJsonSchema !== undefined)).toBe(true)
+  })
+
+  it('advertises exact anonymous funding preflight before any payment authority', () => {
+    const funding = manifest.endpoints.filter((endpoint) => endpoint.kind === 'funding_preflight')
+
+    expect(funding).toHaveLength(2)
+    expect(funding.map((endpoint) => ({
+      path: endpoint.path,
+      method: endpoint.method,
+      authentication: endpoint.authentication,
+      contractVersion: endpoint.contractVersion,
+    }))).toEqual([
+      {
+        path: '/api/v1/funding/constraints',
+        method: 'GET',
+        authentication: 'none',
+        contractVersion: FUNDING_QUOTE_CONTRACT_VERSION,
+      },
+      {
+        path: '/api/v1/funding/quote',
+        method: 'POST',
+        authentication: 'none',
+        contractVersion: FUNDING_QUOTE_CONTRACT_VERSION,
+      },
+    ])
+    expect(funding[0]?.outputJsonSchema).toBeDefined()
+    expect(funding[1]).toMatchObject({
+      requiredHeaders: { 'Content-Type': 'required' },
+      inputJsonSchema: expect.any(Object),
+      outputJsonSchema: expect.any(Object),
+    })
   })
   it('projects every operation route and schema from the canonical contract', () => {
     const expected = [

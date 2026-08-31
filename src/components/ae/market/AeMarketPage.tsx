@@ -1,10 +1,14 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { SearchIcon } from "lucide-react";
-import { Suspense, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useMemo, type ReactNode } from "react";
 
 import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
 import { AePageHeader } from "@/components/ae/layout/AePageHeader";
 import { AeCapabilityTile } from "@/components/ae/market/AeCapabilityTile";
+import {
+  AeMarketToolbar,
+  type AeMarketToolbarSearch,
+} from "@/components/ae/market/AeMarketToolbar";
 import { AeOperationTable } from "@/components/ae/market/AeOperationTable";
 import { AeSiteButton } from "@/components/ae/website/AeSiteButton";
 import { Button } from "@/components/ui/button";
@@ -27,13 +31,7 @@ import {
 } from "@/modules/market/operation-view-model";
 import type { MarketRouteProjection } from "@/modules/market/server";
 
-type MarketPageSearch = Readonly<{
-  window: MarketWindow;
-  query?: string;
-  availability?: "routeable" | "integrated" | "unavailable";
-  cursor?: string;
-  capability?: string;
-}>;
+type MarketPageSearch = AeMarketToolbarSearch;
 
 const CATALOG_DESCRIPTION =
   "Inspect price, access, and readiness without an account. Only available Operations can be called.";
@@ -46,7 +44,8 @@ export function AeMarketPage({
   search: MarketPageSearch;
 }) {
   const { window, catalog } = projection;
-  const [categoryId, setCategoryId] = useState<MarketCategoryId | "all">("all");
+  const navigate = useNavigate();
+  const categoryId = search.category ?? "all";
   const operations = useMemo(
     () => catalog.kind === "ok" ? catalog.items : [],
     [catalog],
@@ -81,6 +80,20 @@ export function AeMarketPage({
         (catalog.pagination.hasMore || matchedCount > shownCount)
       ? `${shownCount.toLocaleString()} of ${matchedCount.toLocaleString()}`
       : `${shownCount.toLocaleString()} shown`;
+
+  const handleCategoryChange = (value: MarketCategoryId | "all") => {
+    void navigate({
+      to: "/market",
+      search: {
+        window,
+        ...(search.query === undefined ? {} : { query: search.query }),
+        ...(search.availability === undefined
+          ? {}
+          : { availability: search.availability }),
+        ...(value === "all" ? {} : { category: value }),
+      },
+    });
+  };
 
   const catalogLink = (
     <Button asChild variant="ghost" className="min-h-touch">
@@ -141,7 +154,7 @@ export function AeMarketPage({
         window={window}
         search={search}
         pagination={catalog.kind === "ok" ? catalog.pagination : { limit: 12, hasMore: false }}
-        onCategoryChange={setCategoryId}
+        onCategoryChange={handleCategoryChange}
       />
     );
   }
@@ -156,6 +169,7 @@ export function AeMarketPage({
         meta={status}
       />
       <div className="ae-rail grid gap-section pb-page">
+        <AeMarketToolbar search={search} />
         {body}
       </div>
     </div>
@@ -214,7 +228,10 @@ function CatalogTabs({
       className="gap-section"
       value={categoryId}
       onValueChange={(value) => {
-        if (value === "all" || shelves.some((shelf) => shelf.category.id === value)) {
+        if (
+          value === "all" ||
+          marketCategories.some((category) => category.id === value)
+        ) {
           onCategoryChange(value as MarketCategoryId | "all");
         }
       }}
@@ -222,25 +239,30 @@ function CatalogTabs({
       <TabsList
         variant="line"
         aria-label="Catalog categories"
-        className="h-auto min-h-touch w-full flex-wrap justify-start border-b border-border"
+        className="h-auto min-h-touch w-full flex-nowrap justify-start overflow-x-auto border-b border-border"
       >
-        <TabsTrigger value="all" className="min-h-touch flex-none">
+        <TabsTrigger
+          value="all"
+          aria-label={`All, ${capabilityGroupCountLabel(total)} shown on this page`}
+          className="min-h-touch flex-none"
+        >
           All {total}
         </TabsTrigger>
         {marketCategories.map((category) => {
           const shelf = shelves.find((item) => item.category.id === category.id);
-          if (shelf === undefined) return null;
+          const count = shelf?.capabilities.length ?? 0;
           const CategoryIcon = resolveOperationCategoryIcon(category.id);
           return (
             <TabsTrigger
               key={category.id}
               value={category.id}
+              aria-label={`${category.label}, ${capabilityGroupCountLabel(count)} shown on this page`}
               className="min-h-touch flex-none"
             >
               <Suspense fallback={null}>
                 <CategoryIcon className="size-4" />
               </Suspense>
-              {category.label} {shelf.capabilities.length}
+              {category.label} {count}
             </TabsTrigger>
           );
         })}
@@ -250,15 +272,24 @@ function CatalogTabs({
           <CategoryShelf key={shelf.category.id} shelf={shelf} window={window} />
         ))}
       </TabsContent>
-      {shelves.map((shelf) => (
-        <TabsContent
-          key={shelf.category.id}
-          value={shelf.category.id}
-          className="grid gap-section"
-        >
-          <CategoryShelf shelf={shelf} window={window} />
-        </TabsContent>
-      ))}
+      {marketCategories.map((category) => {
+        const shelf = shelves.find((item) => item.category.id === category.id);
+        return (
+          <TabsContent
+            key={category.id}
+            value={category.id}
+            className="grid gap-section"
+          >
+            {shelf === undefined ? (
+              <p className="py-related text-sm text-muted-foreground">
+                No capability groups in {category.label} on this loaded page.
+              </p>
+            ) : (
+              <CategoryShelf shelf={shelf} window={window} />
+            )}
+          </TabsContent>
+        );
+      })}
     </Tabs>
     <CatalogPagination pagination={pagination} window={window} search={search} />
     </div>
@@ -365,6 +396,9 @@ function CatalogPagination({
                 ...(search.availability === undefined
                   ? {}
                   : { availability: search.availability }),
+                ...(search.category === undefined
+                  ? {}
+                  : { category: search.category }),
                 cursor: pagination.nextCursor,
               }}
             >
@@ -375,4 +409,8 @@ function CatalogPagination({
       </PaginationContent>
     </Pagination>
   );
+}
+
+function capabilityGroupCountLabel(count: number) {
+  return `${count.toLocaleString()} capability ${count === 1 ? "group" : "groups"}`;
 }

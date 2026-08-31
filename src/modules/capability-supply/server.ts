@@ -72,6 +72,7 @@ export type { X402EvmReceipt } from './internal/x402-settlement-verifier'
 export { readGuardedX402EvmReceipt } from './internal/x402-evm-receipt-reader'
 export {
   chargeSettlementOutcome,
+  economicRailForInvocation,
   paymentLaneAdmission,
   paymentObservationDigest,
   transportObservationDigest,

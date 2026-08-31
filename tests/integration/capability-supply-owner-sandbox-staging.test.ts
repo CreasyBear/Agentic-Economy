@@ -384,7 +384,7 @@ describe('owner Base Sepolia staging publication', () => {
         kind: 'ok',
         items: [{
           operationRef: staged.operationRef,
-          availability: { posture: 'integrated' },
+          availability: { posture: 'setup_required' },
         }],
       })
     }
@@ -395,7 +395,7 @@ describe('owner Base Sepolia staging publication', () => {
     else expect(publicDetail).toMatchObject({
       kind: 'found',
       operation: {
-        availability: { posture: 'integrated' },
+        availability: { posture: 'setup_required' },
       },
     })
 

@@ -18,7 +18,7 @@ import {
   type MarketRatingProjection,
 } from "./listing-evidence";
 
-type OperationReadiness = "Routeable" | "Integrated" | "Unavailable";
+type OperationReadiness = "Routeable" | "SetupRequired" | "Unavailable";
 
 export type OperationCardViewModel = Readonly<{
   operationRef: string;
@@ -32,6 +32,7 @@ export type OperationCardViewModel = Readonly<{
   category: MarketCategory;
   price: string;
   authentication: string;
+  paymentNetwork?: string;
   lastVerifiedAt?: number;
   callLabel: string;
   readiness: OperationReadiness;
@@ -57,13 +58,13 @@ export type CategoryShelfViewModel = Readonly<{
 
 const readinessLabels = {
   Routeable: "Ready now",
-  Integrated: "Integration available",
+  SetupRequired: "Setup required",
   Unavailable: "Unavailable",
 } satisfies Record<OperationReadiness, string>;
 
 const readinessFacts = {
   Routeable: "Ready to run through Agentic Economy",
-  Integrated: "Connected, but not currently ready to run",
+  SetupRequired: "Not callable until setup is completed",
   Unavailable: "Not currently available",
 } satisfies Record<OperationReadiness, string>;
 
@@ -77,8 +78,8 @@ export function toOperationCardViewModel(
   const readiness: OperationReadiness =
     operation.availability.posture === "routeable"
       ? "Routeable"
-      : operation.availability.posture === "integrated"
-        ? "Integrated"
+      : operation.availability.posture === "setup_required"
+        ? "SetupRequired"
         : "Unavailable";
   const lastVerifiedAt = operation.availability.observedAt ?? operation.commercial.priceEvidence?.observedAt;
   const summary = catalogJobSummary(
@@ -102,6 +103,7 @@ export function toOperationCardViewModel(
     category: evidence.category,
     price: operationPrice(operation),
     authentication: formatOperationAuthentication(operation.authentication),
+    ...(operation.payment === undefined ? {} : { paymentNetwork: formatPaymentNetwork(operation.payment.network) }),
     ...(lastVerifiedAt === undefined ? {} : { lastVerifiedAt }),
     callLabel: operationCallLabel(readiness),
     readiness,
@@ -194,7 +196,7 @@ export function formatOperationReadiness(
   posture: PublicOperationAvailability["posture"],
 ): string {
   if (posture === "routeable") return readinessLabels.Routeable;
-  if (posture === "integrated") return readinessLabels.Integrated;
+  if (posture === "setup_required") return readinessLabels.SetupRequired;
   return readinessLabels.Unavailable;
 }
 
@@ -220,8 +222,14 @@ function operationPrice(operation: PublicOperationDescriptor): string {
 
 function operationCallLabel(readiness: OperationReadiness): string {
   if (readiness === "Routeable") return "Use capability";
-  if (readiness === "Integrated") return "Setup required";
+  if (readiness === "SetupRequired") return "Setup required";
   return "Not available";
+}
+
+export function formatPaymentNetwork(network: string): string {
+  if (network === "eip155:84532") return "Base Sepolia (eip155:84532)";
+  if (network === "eip155:8453") return "Base (eip155:8453)";
+  return network;
 }
 
 const HTTP_CAPABILITY_PREFIX =

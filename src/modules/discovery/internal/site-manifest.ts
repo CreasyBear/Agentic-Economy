@@ -1,4 +1,5 @@
 import { MCP_HTTP_ENDPOINT_PATH, MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
+import { convertSchemaToJsonSchema } from '@tanstack/ai'
 import { schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
@@ -37,6 +38,7 @@ import type { DeveloperDiscoveryUnsupportedCapability } from '../developer-disco
 import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
 import { describeActionForAgent, findAction } from '@/modules/actions'
 import { SiteDiscoveryManifestSchemaVersion } from '../site-manifest-version'
+import { FUNDING_PREFLIGHT_ROUTE_CONTRACTS } from '@/modules/money/public'
 
 const AGENT_HTTP_AUTHENTICATION = 'clerk_api_key' as const
 export const SITE_DISCOVERY_SUMMARY_LINES = Object.freeze([
@@ -60,6 +62,7 @@ export const SiteDiscoveryEndpointKindValues = [
   'operation_status',
   'operation_cancel',
   'operation_reconcile',
+  'funding_preflight',
   'privacy_request',
 ] as const
 export type SiteDiscoveryEndpointKind = (typeof SiteDiscoveryEndpointKindValues)[number]
@@ -376,11 +379,13 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
     ...humanSurfaceLabels,
     ...Object.fromEntries(operationRoutes.map((route) => [route.path, `Operation ${route.actionId}`])),
     ...Object.fromEntries(OPERATION_MARKET_ACTION_ENTRIES.map((entry) => [entry.pathTemplate, `Operation ${entry.relation}`])),
+    ...Object.fromEntries(FUNDING_PREFLIGHT_ROUTE_CONTRACTS.map((route) => [route.path, route.label])),
   }
   const paths: readonly string[] = [
     ...operationRoutes.map((route) => route.path),
     ...DiscoveryPublicSurfacePaths,
     PublicAgentSkillPath,
+    ...FUNDING_PREFLIGHT_ROUTE_CONTRACTS.map((route) => route.path),
   ]
 
   const seen = new Set<string>()
@@ -403,6 +408,16 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
         ...(operationDescriptor.inputJsonSchema === undefined ? {} : { inputJsonSchema: operationDescriptor.inputJsonSchema }),
         ...(operationDescriptor.outputJsonSchema === undefined ? {} : { outputJsonSchema: operationDescriptor.outputJsonSchema }),
       }
+    const fundingRoute = FUNDING_PREFLIGHT_ROUTE_CONTRACTS.find((route) => route.path === path)
+    const fundingMetadata = fundingRoute === undefined
+      ? undefined
+      : {
+        contractVersion: fundingRoute.contractVersion,
+        ...('inputSchema' in fundingRoute
+          ? { inputJsonSchema: convertSchemaToJsonSchema(fundingRoute.inputSchema) }
+          : {}),
+        outputJsonSchema: convertSchemaToJsonSchema(fundingRoute.outputSchema),
+      }
     endpoints.push({
       kind: kindFor(path, operationRoutes),
       label: labels[path] ?? path,
@@ -415,6 +430,7 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
       ...(access.requiredScope === undefined ? {} : { requiredScope: access.requiredScope }),
       ...(access.requiredHeaders === undefined ? {} : { requiredHeaders: access.requiredHeaders }),
       ...(operationMetadata === undefined ? {} : operationMetadata),
+      ...(fundingMetadata === undefined ? {} : fundingMetadata),
     })
   }
 
@@ -422,6 +438,7 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
 }
 
 function kindFor(path: string, operationRoutes: readonly SiteDiscoveryOperationRouteSummary[]): SiteDiscoveryEndpointKind {
+  if (FUNDING_PREFLIGHT_ROUTE_CONTRACTS.some((route) => route.path === path)) return 'funding_preflight'
   if (OPERATION_MARKET_ACTION_ENTRIES.some((entry) => entry.pathTemplate === path)) return 'operation_read'
   const operationRoute = operationRoutes.find((route) => route.path === path)
   if (operationRoute?.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId) return 'operation_invoke'
@@ -443,6 +460,16 @@ function accessFor(path: string, operationRoutes: readonly SiteDiscoveryOperatio
   requiredScope?: string
   requiredHeaders?: Readonly<Record<string, string>>
 }> {
+  const fundingRoute = FUNDING_PREFLIGHT_ROUTE_CONTRACTS.find((route) => route.path === path)
+  if (fundingRoute !== undefined) {
+    return {
+      method: fundingRoute.method,
+      authentication: 'none',
+      ...(fundingRoute.method === 'POST'
+        ? { requiredHeaders: { 'Content-Type': 'required' } }
+        : {}),
+    }
+  }
   const marketOperation = OPERATION_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
   if (marketOperation !== undefined) {
     return { method: marketOperation.method, authentication: marketOperation.authentication }

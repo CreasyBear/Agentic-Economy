@@ -413,7 +413,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     kind,
     now + 120_000,
     options.priceUnits,
-    environment === 'production' && kind === 'x402',
+    kind === 'x402',
   )
   const x402Profile = environment === 'production'
     ? { network: BASE_MAINNET_NETWORK, asset: BASE_MAINNET_USDC_ADDRESS }
@@ -577,7 +577,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       } as StableHashValue),
     }
   }
-  const managedCustody = environment === 'production' || sellerCanary !== undefined
+  const managedCustody = kind === 'x402'
   const paymentIdentifier = operationInvocationAttemptIdentityDigest({
     invocationRef: String(dispatch.invocationRef),
     principalId: 'principal:test-worker',

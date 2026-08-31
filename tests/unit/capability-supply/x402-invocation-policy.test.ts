@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { paymentLaneAdmission } from '@/modules/capability-supply/server'
+import {
+  economicRailForInvocation,
+  paymentLaneAdmission,
+} from '@/modules/capability-supply/server'
 
 const environments = ['sandbox', 'development', 'production'] as const
 const sandboxMarketContext = {
@@ -16,6 +19,21 @@ const canaryContext = {
 } as const
 
 describe('payment lane admission', () => {
+  it('selects one brokered market rail in sandbox and production', () => {
+    expect(economicRailForInvocation({
+      isX402: true,
+      sellerOnboardingCanary: false,
+    })).toBe('brokered_x402')
+    expect(economicRailForInvocation({
+      isX402: false,
+      sellerOnboardingCanary: false,
+    })).toBe('ae_internal')
+    expect(economicRailForInvocation({
+      isX402: true,
+      sellerOnboardingCanary: true,
+    })).toBe('managed_testnet_canary')
+  })
+
   it('admits the AE-brokered rail in every environment', () => {
     for (const environment of environments) {
       expect(paymentLaneAdmission({ rail: 'ae_internal', environment })).toEqual({

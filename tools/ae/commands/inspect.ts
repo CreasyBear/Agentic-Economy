@@ -16,6 +16,7 @@ import {
   formatOperationAuthentication,
   formatOperationAvailability,
   formatOperationInputs,
+  formatOperationPaymentNetwork,
   formatOperationTotalPrice,
   formatOperationVerification,
   operationLabel,
@@ -71,7 +72,7 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
     operationRef: operation.operationRef,
     searchQuery: operation.summary,
     availabilityPosture: operation.availability.posture === 'routeable' && !callable
-      ? 'integrated'
+      ? 'setup_required'
       : operation.availability.posture,
     requiresBuyerCredential,
     hasBuyerCredential,
@@ -133,6 +134,7 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
   line(`  availability: ${formatOperationAvailability(operation.availability)}`)
   line(`  total price: ${formatOperationTotalPrice(operation)}`)
   line(`  authentication: ${formatOperationAuthentication(operation)}`)
+  line(`  payment network: ${formatOperationPaymentNetwork(operation)}`)
   line(`  last verified: ${formatOperationVerification(operation)}`)
   line(`  inputs: ${formatOperationInputs(operation)}`)
   line(

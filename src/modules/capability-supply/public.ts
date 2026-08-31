@@ -264,6 +264,7 @@ export type {
   PublicOperationOfferingRef,
   PublicOperationParameter,
   PublicOperationParameterMapping,
+  PublicOperationPayment,
   PublicOperationPrice,
   PublicOperationPriceEvidence,
   PublicOperationReadiness,

@@ -11,7 +11,7 @@ type CommandContinuation = SuggestedContinuation & Readonly<{ command: string }>
 export type OperationContinuationFacts = Readonly<{
   operationRef: string
   searchQuery: string
-  availabilityPosture: 'integrated' | 'routeable' | 'unavailable'
+  availabilityPosture: 'setup_required' | 'routeable' | 'unavailable'
   requiresBuyerCredential: boolean
   hasBuyerCredential: boolean
 }>
@@ -90,7 +90,7 @@ export function suggestContinuation(state: ContinuationState): SuggestedContinua
 export function continuationForOperationFacts(
   input: OperationContinuationFacts,
 ): SuggestedContinuation {
-  const state = input.availabilityPosture === 'integrated'
+  const state = input.availabilityPosture === 'setup_required'
     ? 'inspect_only'
     : input.availabilityPosture === 'unavailable'
       ? 'unavailable'

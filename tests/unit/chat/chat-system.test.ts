@@ -379,7 +379,7 @@ describe('transcript projector', () => {
               business: { name: 'Nimbus' },
               commercial: { price: { kind: 'fixed', amount: { currency: 'USD', units: '75', exponent: 2 } } },
               authentication: { kind: 'x402' },
-              availability: { posture: 'integrated' },
+              availability: { posture: 'setup_required' },
             },
           ],
           facts: [
@@ -415,7 +415,7 @@ describe('transcript projector', () => {
               field: 'availability',
               values: [
                 { operationRef: skyRef, value: { posture: 'routeable' }, source: 'readiness' },
-                { operationRef: rainRef, value: { posture: 'integrated' }, source: 'readiness' },
+                { operationRef: rainRef, value: { posture: 'setup_required' }, source: 'readiness' },
               ],
             },
             {
@@ -439,7 +439,7 @@ describe('transcript projector', () => {
       { label: 'Price', value: 'Weather finder: USD 0.50; Rain lookup: USD 0.75' },
       { label: 'Effects', value: 'Weather finder: Data release; Rain lookup: Data release, Financial exposure' },
       { label: 'Data use', value: 'Weather finder: Public; Rain lookup: Personal' },
-      { label: 'Readiness', value: 'Weather finder: Ready now; Rain lookup: Integration available' },
+      { label: 'Readiness', value: 'Weather finder: Ready now; Rain lookup: Setup required' },
     ])
     expect(JSON.stringify(turns)).not.toContain('SECRET_SUMMARY')
     expect(JSON.stringify(turns)).not.toContain('provider_owned')

@@ -1,15 +1,21 @@
 'use client'
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 
-import { SearchIcon } from 'lucide-react'
-
-import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import {
   formatOperationAuthentication,
   formatOperationPrice,
   formatOperationReadiness,
+  formatPaymentNetwork,
 } from '@/modules/market/operation-view-model'
 
 import {
@@ -26,8 +32,16 @@ type SearchState =
   | Readonly<{ kind: 'failed'; message: string }>
   | Readonly<{ kind: 'done'; result: OperationChoiceSearchResult; query: string }>
 
+type PendingSelectionIntent = Readonly<{
+  query: string
+  edge: 'start' | 'end'
+  offset: number
+  activate: boolean
+}>
+
 /** Production debounce for catalog keystrokes. */
 export const OPERATIONS_SEARCH_DEBOUNCE_MS = 200
+const NO_MOUNTED_CHOICE_VALUE = '__ae_no_mounted_choice__'
 
 type OperationsSearchPageProps = Readonly<{
   isActive?: boolean
@@ -53,16 +67,13 @@ export function OperationsSearchPage({
 }: OperationsSearchPageProps) {
   const trimmedQuery = query.trim()
   const [state, setState] = useState<SearchState>({ kind: 'idle' })
+  const [searchAttempt, setSearchAttempt] = useState(0)
   const recentOperationRefs = useRecentOperationRefs()
-  const [selectedId, setSelectedId] = useState(0)
-  const selectedIdRef = useRef(0)
-  const pendingActivationRef = useRef(false)
-  const pendingQueryRef = useRef<string | null>(null)
+  const [selectedValue, setSelectedValue] = useState('')
+  const selectedValueRef = useRef('')
+  const pendingSelectionIntentRef = useRef<PendingSelectionIntent | null>(null)
   const latestLiveQueryRef = useRef(trimmedQuery)
   const inputRef = useRef<HTMLInputElement>(null)
-  const listboxRef = useRef<HTMLUListElement>(null)
-  const generatedListboxId = useId()
-  const listboxId = `ae-command-panel-results${generatedListboxId}`
   const items = state.kind === 'done' && state.query === trimmedQuery && state.result.kind === 'ok'
     ? state.result.items
     : []
@@ -74,6 +85,10 @@ export function OperationsSearchPage({
     || state.kind === 'loading'
     || (state.kind === 'done' && state.query !== trimmedQuery)
   )
+  const choiceValues = choices.map((choice) => (
+    choice.kind === 'recent' ? choice.operationRef : choice.item.operationRef
+  ))
+  const choiceValuesKey = choiceValues.join('\u001f')
 
   useEffect(() => {
     const trimmed = query.trim()
@@ -110,7 +125,7 @@ export function OperationsSearchPage({
       current = false
       clearTimeout(timer)
     }
-  }, [query, searchOperations])
+  }, [query, searchAttempt, searchOperations])
 
   useEffect(() => {
     // Input events reset synchronously. An older rendered query may commit its
@@ -119,43 +134,42 @@ export function OperationsSearchPage({
     // clear boundary and must always reset.
     if (trimmedQuery !== '' && trimmedQuery !== latestLiveQueryRef.current) return
     latestLiveQueryRef.current = trimmedQuery
-    if (pendingQueryRef.current === trimmedQuery) return
-    pendingQueryRef.current = null
-    pendingActivationRef.current = false
-    selectedIdRef.current = 0
-    setSelectedId(0)
+    if (pendingSelectionIntentRef.current?.query === trimmedQuery) return
+    pendingSelectionIntentRef.current = null
   }, [trimmedQuery])
 
   useEffect(() => {
     if (!isActive) {
-      pendingQueryRef.current = null
-      pendingActivationRef.current = false
+      pendingSelectionIntentRef.current = null
       return
     }
     if (state.kind === 'failed') {
-      if (pendingQueryRef.current === trimmedQuery) {
-        pendingQueryRef.current = null
-        pendingActivationRef.current = false
+      if (pendingSelectionIntentRef.current?.query === trimmedQuery) {
+        pendingSelectionIntentRef.current = null
       }
       return
     }
     if (state.kind !== 'done' || state.query !== trimmedQuery) return
     if (state.result.kind !== 'ok' || state.result.items.length === 0) {
-      if (pendingQueryRef.current === trimmedQuery) {
-        pendingQueryRef.current = null
-        pendingActivationRef.current = false
+      if (pendingSelectionIntentRef.current?.query === trimmedQuery) {
+        pendingSelectionIntentRef.current = null
       }
       return
     }
 
-    const nextId = Math.min(state.result.items.length - 1, selectedIdRef.current)
-    selectId(nextId)
-    const activate = pendingQueryRef.current === trimmedQuery && pendingActivationRef.current
-    pendingQueryRef.current = null
-    pendingActivationRef.current = false
-    if (!activate) return
-    const selected = state.result.items[nextId]
-    if (selected !== undefined) onSelectOperation(selected.operationRef)
+    const intent = pendingSelectionIntentRef.current
+    if (intent?.query !== trimmedQuery) return
+    const lastIndex = state.result.items.length - 1
+    const nextIndex = intent.edge === 'start'
+      ? Math.min(lastIndex, intent.offset)
+      : Math.max(0, lastIndex - intent.offset)
+    const selected = state.result.items[nextIndex]
+    pendingSelectionIntentRef.current = null
+    if (selected === undefined) return
+    selectedValueRef.current = selected.operationRef
+    setSelectedValue(selected.operationRef)
+    if (!intent.activate) return
+    onSelectOperation(selected.operationRef)
   }, [isActive, onSelectOperation, state, trimmedQuery])
 
   useEffect(() => {
@@ -163,41 +177,55 @@ export function OperationsSearchPage({
   }, [isActive])
 
   useEffect(() => {
-    const listbox = listboxRef.current
-    if (listbox === null) return
-    const activeOption = listbox.querySelector('[aria-selected="true"]')
-    if (
-      activeOption instanceof HTMLElement &&
-      typeof activeOption.scrollIntoView === 'function'
-    ) {
-      activeOption.scrollIntoView({ block: 'nearest' })
-    }
-  }, [selectedId])
+    const nextChoiceValues = choiceValuesKey === '' ? [] : choiceValuesKey.split('\u001f')
+    setSelectedValue(() => {
+      // Changing the controlled value while no options are mounted keeps
+      // cmdk's internal store from auto-selecting the first row of a later
+      // authoritative replacement before AE can reconnect a surviving value.
+      if (nextChoiceValues.length === 0) return NO_MOUNTED_CHOICE_VALUE
+      const nextValue = nextChoiceValues.includes(selectedValueRef.current)
+        ? selectedValueRef.current
+        : (nextChoiceValues[0] ?? '')
+      selectedValueRef.current = nextValue
+      return nextValue
+    })
+  }, [choiceValuesKey])
 
-  function moveSelection(delta: number, choiceCount: number): void {
-    const nextId = Math.max(0, selectedIdRef.current + delta)
-    selectId(choiceCount === 0 ? nextId : Math.min(choiceCount - 1, nextId))
-  }
-  function selectId(nextId: number): void {
-    selectedIdRef.current = nextId
-    setSelectedId(nextId)
-  }
   function consumeNavigationKey(event: ReactKeyboardEvent<HTMLDivElement>): void {
     event.preventDefault()
     event.stopPropagation()
   }
-  function preparePendingIntent(liveQuery: string): void {
-    if (pendingQueryRef.current === liveQuery) return
-    pendingQueryRef.current = liveQuery
-    pendingActivationRef.current = false
-    selectId(0)
+  function preparePendingIntent(liveQuery: string): PendingSelectionIntent {
+    const currentIntent = pendingSelectionIntentRef.current
+    if (currentIntent?.query === liveQuery) return currentIntent
+    const nextIntent: PendingSelectionIntent = {
+      query: liveQuery,
+      edge: 'start',
+      offset: 0,
+      activate: false,
+    }
+    pendingSelectionIntentRef.current = nextIntent
+    return nextIntent
+  }
+  function updatePendingIntent(
+    liveQuery: string,
+    update: (intent: PendingSelectionIntent) => PendingSelectionIntent,
+  ): void {
+    pendingSelectionIntentRef.current = update(preparePendingIntent(liveQuery))
   }
   function handleQueryInputChange(nextQuery: string): void {
     latestLiveQueryRef.current = nextQuery.trim()
-    pendingQueryRef.current = null
-    pendingActivationRef.current = false
-    selectId(0)
+    pendingSelectionIntentRef.current = null
     onQueryChange(nextQuery)
+  }
+  function handleSelectedValueChange(nextValue: string): void {
+    // cmdk briefly reports an empty value while the prior server result set is
+    // unmounted, then proposes the first item while mounting its replacement.
+    // Retain a surviving real selection across that replacement; once the new
+    // collection has settled, pointer and keyboard changes flow through cmdk.
+    if (!choiceValues.includes(nextValue)) return
+    selectedValueRef.current = nextValue
+    setSelectedValue(nextValue)
   }
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
     const liveQuery = inputRef.current?.value.trim() ?? trimmedQuery
@@ -209,45 +237,47 @@ export function OperationsSearchPage({
     )
     switch (event.key) {
       case 'ArrowDown': {
-        if (liveChoices.length === 0 && !awaitingLiveChoices) return
+        if (liveChoices.length > 0 || !awaitingLiveChoices) return
         consumeNavigationKey(event)
-        if (liveChoices.length === 0) preparePendingIntent(liveQuery)
-        moveSelection(1, liveChoices.length)
+        updatePendingIntent(liveQuery, (intent) => ({
+          ...intent,
+          offset: intent.edge === 'start' ? intent.offset + 1 : 0,
+        }))
         break
       }
       case 'ArrowUp': {
-        if (liveChoices.length === 0 && !awaitingLiveChoices) return
+        if (liveChoices.length > 0 || !awaitingLiveChoices) return
         consumeNavigationKey(event)
-        if (liveChoices.length === 0) preparePendingIntent(liveQuery)
-        moveSelection(-1, liveChoices.length)
+        updatePendingIntent(liveQuery, (intent) => ({
+          ...intent,
+          offset: intent.edge === 'start' ? Math.max(0, intent.offset - 1) : intent.offset + 1,
+        }))
         break
       }
       case 'Home': {
-        if (liveChoices.length === 0 && !awaitingLiveChoices) return
+        if (liveChoices.length > 0 || !awaitingLiveChoices) return
         consumeNavigationKey(event)
-        if (liveChoices.length === 0) preparePendingIntent(liveQuery)
-        selectId(0)
+        updatePendingIntent(liveQuery, (intent) => ({
+          ...intent,
+          edge: 'start',
+          offset: 0,
+        }))
         break
       }
-      case 'End':
-        if (liveChoices.length === 0) return
+      case 'End': {
+        if (liveChoices.length > 0 || !awaitingLiveChoices) return
         consumeNavigationKey(event)
-        selectId(liveChoices.length - 1)
+        updatePendingIntent(liveQuery, (intent) => ({
+          ...intent,
+          edge: 'end',
+          offset: 0,
+        }))
         break
+      }
       case 'Enter': {
-        if (liveChoices.length === 0) {
-          if (!awaitingLiveChoices) return
-          consumeNavigationKey(event)
-          preparePendingIntent(liveQuery)
-          pendingActivationRef.current = true
-          return
-        }
+        if (liveChoices.length > 0 || !awaitingLiveChoices) return
         consumeNavigationKey(event)
-        pendingQueryRef.current = null
-        pendingActivationRef.current = false
-        const selected = liveChoices[selectedIdRef.current]
-        if (selected?.kind === 'recent') onSelectOperation(selected.operationRef)
-        if (selected?.kind === 'result') onSelectOperation(selected.item.operationRef)
+        updatePendingIntent(liveQuery, (intent) => ({ ...intent, activate: true }))
         break
       }
       default:
@@ -255,110 +285,115 @@ export function OperationsSearchPage({
     }
   }
 
+  const statusMessage = getStatusMessage(state, trimmedQuery, choices.length)
+  const groupHeading = trimmedQuery === ''
+    ? `Recently inspected · ${recentOperationRefs.length}`
+    : state.kind === 'done' && state.query === trimmedQuery && state.result.kind === 'ok'
+      ? `${state.result.matchedCount} matched · showing ${state.result.items.length}`
+      : 'Matching operations'
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col outline-none" onKeyDown={handleKeyDown}>
-      <div className="border-b border-border p-intra">
-        <div className="relative">
-          <SearchIcon
-            aria-hidden="true"
-            className="pointer-events-none absolute start-intra top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            ref={inputRef}
-            type="text"
-            role="combobox"
-            aria-expanded={choices.length > 0}
-            aria-controls={choices.length > 0 ? listboxId : undefined}
-            aria-activedescendant={choices.length > 0 ? optionId(listboxId, selectedId) : undefined}
-            aria-label="Search operations"
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            placeholder="Search operations…"
-            className="ps-10"
-            value={query}
-            onChange={(event) => handleQueryInputChange(event.target.value)}
-          />
-        </div>
+    <Command
+      label="Search operations"
+      shouldFilter={false}
+      value={selectedValue}
+      onValueChange={handleSelectedValueChange}
+      onKeyDown={handleKeyDown}
+      className="min-h-0 flex-1"
+    >
+      <CommandInput
+        ref={inputRef}
+        disabled={!isActive}
+        aria-label="Search operations"
+        placeholder="Search operations…"
+        value={query}
+        onValueChange={handleQueryInputChange}
+      />
+      <div role="status" className="sr-only">
+        {statusMessage}
       </div>
-      <div aria-live="polite" className="min-h-0 flex-1 overflow-y-auto">
-        {renderBody(state, query, recentOperationRefs.length, handleQueryInputChange)}
+      <CommandList
+        label={trimmedQuery === '' ? 'Recently inspected operations' : 'Matching operations'}
+        aria-busy={isAwaitingChoices}
+        className="min-h-0 max-h-none flex-1 overscroll-contain"
+      >
         {choices.length > 0 ? (
-          <ul
-            id={listboxId}
-            ref={listboxRef}
-            role="listbox"
-            aria-label={query.trim() === '' ? 'Recently inspected operations' : 'Matching operations'}
-            className="py-intra"
-          >
-            {choices.map((choice, index) => {
+          <CommandGroup heading={groupHeading}>
+            {choices.map((choice) => {
               const operationRef = choice.kind === 'recent' ? choice.operationRef : choice.item.operationRef
               return (
-                <li key={operationRef}>
-                  <button
-                    type="button"
-                    role="option"
-                    id={optionId(listboxId, index)}
-                    aria-selected={index === selectedId}
-                    tabIndex={-1}
-                    onClick={() => {
-                      pendingQueryRef.current = null
-                      pendingActivationRef.current = false
-                      onSelectOperation(operationRef)
-                    }}
-                    onMouseMove={() => selectId(index)}
-                    className={cn(
-                      'flex w-full items-center gap-intra px-gutter py-intra text-start transition-colors hover:bg-muted focus-visible:bg-muted',
-                      index === selectedId && 'bg-muted',
-                    )}
-                  >
-                    {choice.kind === 'recent' ? (
+                <CommandItem
+                  key={operationRef}
+                  value={operationRef}
+                  disabled={!isActive}
+                  onSelect={(selectedOperationRef) => {
+                    pendingSelectionIntentRef.current = null
+                    onSelectOperation(selectedOperationRef)
+                  }}
+                  className="min-h-touch gap-intra px-gutter py-intra"
+                >
+                  {choice.kind === 'recent' ? (
+                    <span className="grid min-w-0 flex-1 gap-0.5">
+                      <span className="text-sm font-medium text-foreground">Inspect recent Operation</span>
+                      <span dir="ltr" className="truncate font-mono text-xs text-muted-foreground">
+                        {choice.operationRef}
+                      </span>
+                    </span>
+                  ) : (
+                    <>
                       <span className="grid min-w-0 flex-1 gap-0.5">
-                        <span className="text-sm font-medium text-foreground">Inspect recent Operation</span>
-                        <span dir="ltr" className="truncate font-mono text-xs text-muted-foreground">
-                          {choice.operationRef}
+                        <span className="truncate text-sm font-medium text-foreground">{choice.item.title}</span>
+                        <span className="truncate font-mono text-xs text-muted-foreground">
+                          {choice.item.supplier.name} · {choice.item.capabilityId}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {formatOperationReadiness(choice.item.availability.posture)} · {formatOperationAuthentication(choice.item.authentication)}
+                          {choice.item.payment === undefined
+                            ? null
+                            : ` · ${formatPaymentNetwork(choice.item.payment.network)}`}
                         </span>
                       </span>
-                    ) : (
-                      <>
-                        <span className="grid min-w-0 flex-1 gap-0.5">
-                          <span className="truncate text-sm font-medium text-foreground">{choice.item.title}</span>
-                          <span className="truncate font-mono text-xs text-muted-foreground">
-                            {choice.item.supplier.name} · {choice.item.capabilityId}
-                          </span>
-                          <span className="truncate text-xs text-muted-foreground">
-                            {formatOperationReadiness(choice.item.availability.posture)} · {formatOperationAuthentication(choice.item.authentication)}
-                          </span>
-                        </span>
-                        <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                          {formatOperationPrice(choice.item.price)}
-                        </span>
-                      </>
-                    )}
-                  </button>
-                </li>
+                      <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                        {formatOperationPrice(choice.item.price)}
+                      </span>
+                    </>
+                  )}
+                </CommandItem>
               )
             })}
-          </ul>
-        ) : null}
-      </div>
-    </div>
+          </CommandGroup>
+        ) : (
+          <CommandEmpty>
+            <EmptySearchState
+              state={state}
+              query={query}
+              recentCount={recentOperationRefs.length}
+              onQueryChange={handleQueryInputChange}
+              onRetry={() => setSearchAttempt((attempt) => attempt + 1)}
+            />
+          </CommandEmpty>
+        )}
+      </CommandList>
+    </Command>
   )
 }
 
-function optionId(listboxId: string, index: number): string {
-  return `${listboxId}-option-${index}`
-}
-
-function renderBody(
-  state: SearchState,
-  query: string,
-  recentCount: number,
-  onQueryChange: (query: string) => void,
-): ReactNode {
+function EmptySearchState({
+  state,
+  query,
+  recentCount,
+  onQueryChange,
+  onRetry,
+}: Readonly<{
+  state: SearchState
+  query: string
+  recentCount: number
+  onQueryChange: (query: string) => void
+  onRetry: () => void
+}>): ReactNode {
   if (state.kind === 'idle') {
     return (
-      <p role="status" className="px-gutter py-section text-sm text-muted-foreground">
+      <p className="px-gutter py-section text-sm text-muted-foreground">
         {recentCount > 0
           ? `Recently inspected · ${recentCount}`
           : 'Search the operation catalog by job, provider, or capability.'}
@@ -367,61 +402,85 @@ function renderBody(
   }
   if (state.kind === 'loading') {
     return (
-      <p role="status" className="px-gutter py-section text-sm text-muted-foreground">
+      <p className="px-gutter py-section text-sm text-muted-foreground">
         Searching…
       </p>
     )
   }
   if (state.kind === 'failed') {
     return (
-      <p role="alert" className="px-gutter py-section text-sm text-foreground">
-        {state.message}
-      </p>
+      <SearchRecovery
+        message={state.message}
+        onRetry={onRetry}
+        onClear={() => onQueryChange('')}
+        isError
+      />
     )
   }
   if (state.result.kind === 'unavailable') {
     return (
       <SearchRecovery
         message="This search could not run. Try different wording or browse the current catalogue."
+        onRetry={onRetry}
         onClear={() => onQueryChange('')}
       />
     )
   }
   if (state.result.kind !== 'ok') {
     return (
-      <SearchRecovery message={`No Operations matched “${query}”.`} onClear={() => onQueryChange('')} />
+      <SearchRecovery
+        message={`No Operations matched “${query}”.`}
+        onRetry={onRetry}
+        onClear={() => onQueryChange('')}
+      />
     )
   }
   if (state.result.items.length === 0) {
     return (
-      <SearchRecovery message={`No Operations matched “${query}”.`} onClear={() => onQueryChange('')} />
+      <SearchRecovery
+        message={`No Operations matched “${query}”.`}
+        onRetry={onRetry}
+        onClear={() => onQueryChange('')}
+      />
     )
   }
-  return (
-    <p className="border-b border-border px-gutter py-intra text-xs text-muted-foreground">
-      {state.result.matchedCount} matched · showing {state.result.items.length}
-    </p>
-  )
+  return null
 }
 
-function SearchRecovery({ message, onClear }: Readonly<{ message: string; onClear: () => void }>) {
+function getStatusMessage(state: SearchState, query: string, choiceCount: number): string {
+  if (state.kind === 'loading') return 'Searching Operations…'
+  if (state.kind === 'failed') return 'Operation search failed. Recovery options are available.'
+  if (query === '') return choiceCount > 0 ? `${choiceCount} recently inspected Operations.` : ''
+  if (state.kind !== 'done' || state.query !== query) return ''
+  if (state.result.kind !== 'ok') return 'No matching Operations.'
+  return `${state.result.matchedCount} Operations matched. Showing ${state.result.items.length}.`
+}
+
+function SearchRecovery({
+  message,
+  onRetry,
+  onClear,
+  isError = false,
+}: Readonly<{ message: string; onRetry: () => void; onClear: () => void; isError?: boolean }>) {
   return (
     <div className="grid gap-intra px-gutter py-section">
-      <p role="status" className="text-sm text-muted-foreground">{message}</p>
+      <p role={isError ? 'alert' : undefined} className="text-sm text-muted-foreground">{message}</p>
       <div className="flex flex-wrap gap-intra">
-        <button
+        <Button type="button" size="sm" className="min-h-touch" onClick={onRetry}>
+          Try again
+        </Button>
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={onClear}
-          className="min-h-touch rounded-md border border-border px-intra text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-h-touch"
         >
           Clear search
-        </button>
-        <a
-          href="/market?window=30d#operations"
-          className="inline-flex min-h-touch items-center rounded-md bg-primary px-intra text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          Browse current Operations
-        </a>
+        </Button>
+        <Button asChild variant="secondary" size="sm" className="min-h-touch">
+          <a href="/market?window=30d#operations">Browse current Operations</a>
+        </Button>
       </div>
     </div>
   )

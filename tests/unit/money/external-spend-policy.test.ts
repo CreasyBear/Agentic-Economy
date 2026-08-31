@@ -68,6 +68,10 @@ const sandboxCanaryCustodyFacts: ExternalSpendPaymentFacts = {
   custodyGeneration: 7,
   custodyDailyMaximum: { currency: 'USD', units: '250', exponent: 2 },
 }
+const sandboxMarketCustodyFacts: ExternalSpendPaymentFacts = {
+  ...sandboxCanaryCustodyFacts,
+  executionContext: sandboxMarketContext,
+}
 
 function reservation(
   state: ExternalSpendReservation['state'],
@@ -134,7 +138,13 @@ describe('external spend policy', () => {
     })
   })
 
-  it('accepts sandbox custody only for a complete Base Sepolia seller canary', () => {
+  it('accepts managed Base Sepolia custody for sandbox market calls and seller canaries', () => {
+    expect(externalSpendPaymentFactsValid(sandboxMarketCustodyFacts)).toBe(true)
+    expect(externalSpendCustodyPolicyRefusal(sandboxMarketCustodyFacts)).toBeUndefined()
+    expect(mintExternalSpendIdentity(sandboxMarketCustodyFacts)).toMatchObject({
+      executionContext: sandboxMarketContext,
+      custodyRef: sandboxMarketCustodyFacts.custodyRef,
+    })
     expect(externalSpendPaymentFactsValid(sandboxCanaryCustodyFacts)).toBe(true)
     expect(externalSpendCustodyPolicyRefusal(sandboxCanaryCustodyFacts)).toBeUndefined()
     expect(mintExternalSpendIdentity(sandboxCanaryCustodyFacts)).toMatchObject({
@@ -146,10 +156,6 @@ describe('external spend policy', () => {
   it.each([
     ['production with the Sepolia market profile', {
       ...productionCustodyFacts,
-      executionContext: sandboxMarketContext,
-    }],
-    ['sandbox market custody', {
-      ...sandboxCanaryCustodyFacts,
       executionContext: sandboxMarketContext,
     }],
     ['production seller canary custody', {

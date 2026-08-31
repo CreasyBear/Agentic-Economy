@@ -11,6 +11,7 @@ import {
   formatOperationAuthentication,
   formatOperationAvailability,
   formatOperationInputs,
+  formatOperationPaymentNetwork,
   formatOperationTotalPrice,
   formatOperationVerification,
   operationLabel,
@@ -166,6 +167,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
       + `${formatOperationAuthentication(operation)}`,
     )
     line(`     last verified: ${formatOperationVerification(operation)}`)
+    line(`     payment network: ${formatOperationPaymentNetwork(operation)}`)
     line(`     inputs: ${formatOperationInputs(operation)}`)
   }
   if (nextActionCommand !== undefined) line(`  Next: ${nextActionCommand}`)

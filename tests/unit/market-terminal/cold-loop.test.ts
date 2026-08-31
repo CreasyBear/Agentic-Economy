@@ -56,7 +56,7 @@ function operationDescriptor(operationRef: string, summary = 'Current reference 
     authentication: { kind: 'ae_api_key' },
     transport: { method: 'GET', pathTemplate: '/lookup', responseStatus: 200, responseContentType: 'application/json', requestTimeoutMs: 5_000 },
     provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
-    availability: { posture: 'integrated' },
+    availability: { posture: 'setup_required' },
     navigation: [],
   }
 }

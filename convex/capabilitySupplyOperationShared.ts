@@ -48,6 +48,13 @@ export const publicAuthentication = v.union(
   v.object({ kind: v.literal('x402') }),
   v.object({ kind: v.literal('unknown') }),
 )
+export const publicPayment = v.object({
+  protocol: v.literal('x402'),
+  scheme: v.literal('exact'),
+  network: v.string(),
+  asset: v.string(),
+  currency: v.string(),
+})
 
 export const CURRENT_OPERATION_PROJECTION_DROP_REASONS = [
   'identity_drift',
@@ -178,6 +185,9 @@ export async function operationRecordProjection(
         evidenceRefs: [...(pricingSource?.evidenceRefs ?? publication.registrationEvidenceRefs)],
       }
   const parameterMappings = publicOperationParameterMappingsFor(binding.adapter.adapterId, bindingRow.configJson)
+  const payment = bindingRow.admission === 'admitted' && bindingRow.conformance === 'conformant'
+    ? parseAdmittedX402CatalogPayment(binding.adapter.adapterId, bindingRow.configJson)
+    : undefined
   return { kind: 'projected', record: {
     operationId,
     publicationRef: publication.publicationRef,
@@ -201,6 +211,15 @@ export async function operationRecordProjection(
     },
     cancellation: { kind: binding.cancellation.kind },
     authentication: publicAuthenticationFor(binding.authority, publication.sourceKind, binding.adapter.adapterId, bindingRow.configJson),
+    ...(payment === undefined ? {} : {
+      payment: {
+        protocol: 'x402',
+        scheme: 'exact',
+        network: payment.network,
+        asset: payment.asset,
+        currency: payment.currency,
+      },
+    }),
     transport,
     ...(parameterMappings === undefined ? {} : { parameterMappings }),
     provenance: { publisher: authorityMode, sourceKind: publication.sourceKind },

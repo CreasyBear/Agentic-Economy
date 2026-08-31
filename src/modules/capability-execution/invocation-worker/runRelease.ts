@@ -136,7 +136,7 @@ export async function releaseInvocationRun(
     isX402
       ? connectionAuthority !== undefined && economicRail !== 'brokered_x402' && !isManagedCanary
         ? providerConsequenceX402PaymentCustodyAvailable
-        : dispatch.environment === 'production' || isManagedCanary
+        : economicRail === 'brokered_x402' || isManagedCanary
         ? () => true
         : () => x402PaymentCredentialRefFromEnvironment() !== undefined
       : undefined,

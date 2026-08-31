@@ -19,7 +19,7 @@ describe('shared suggested continuation projection', () => {
     ['routeable', false, false, 'Call Operation'],
     ['routeable', true, false, 'Connect agent'],
     ['routeable', true, true, 'Call Operation'],
-    ['integrated', true, false, 'Find callable alternatives'],
+    ['setup_required', true, false, 'Find callable alternatives'],
     ['unavailable', true, false, 'Find callable alternatives'],
   ] as const)(
     'adapts %s Operation facts without mistaking authentication for availability',
@@ -128,7 +128,7 @@ describe('shared suggested continuation projection', () => {
     const continuation = continuationForOperationFacts({
       operationRef: OPERATION_REF,
       searchQuery: `  Find supplier's\ncurrent invoice extractor ${'with evidence '.repeat(30)}`,
-      availabilityPosture: 'integrated',
+      availabilityPosture: 'setup_required',
       requiresBuyerCredential: true,
       hasBuyerCredential: true,
     })

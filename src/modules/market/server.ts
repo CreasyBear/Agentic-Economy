@@ -83,7 +83,7 @@ export type MarketRouteProjection = Readonly<{
 
 export type MarketCatalogQuery = Readonly<{
   query?: string;
-  availability?: "routeable" | "integrated" | "unavailable";
+  availability?: "routeable" | "setup_required" | "unavailable";
   cursor?: string;
 }>;
 

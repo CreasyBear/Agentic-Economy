@@ -42,6 +42,8 @@ export const pricingConfigValue = v.object({
   version: v.literal('pricing:v2'),
   unit: v.literal('call'),
   paidAmount: exactAmount,
+  providerAmount: v.optional(exactAmount),
+  platformFee: v.optional(exactAmount),
   freeTier: v.optional(
     v.object({
       maxCalls: v.number(),

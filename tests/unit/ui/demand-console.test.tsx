@@ -197,6 +197,10 @@ describe('assistant access components', () => {
     )
 
     fireEvent.change(screen.getByLabelText(/credit amount/i), { target: { value: '10.00' } })
+    const quote = screen.getByLabelText('Funding quote')
+    expect(quote.textContent).toContain('Credit amountUSD 10.00')
+    expect(quote.textContent).toContain('Processing feeUSD 0.50')
+    expect(quote.textContent).toContain('Total paymentUSD 10.50')
     fireEvent.click(screen.getByRole('button', { name: /add credit/i }))
 
     expect(await screen.findByTestId('payment-element')).toBeTruthy()

@@ -11,6 +11,7 @@ import {
 import { useState } from 'react'
 import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import '../../setup/resize-observer'
 import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
@@ -84,20 +85,26 @@ describe('recent public Operations', () => {
 })
 
 describe('operator command panel', () => {
-  it('opens with cmd+k or ctrl+k and closes again with truthful aria-expanded', async () => {
+  it('opens as a centered modal with cmd+k or ctrl+k and closes again with truthful aria-expanded', async () => {
     renderPanel()
 
     const trigger = screen.getByRole('button', { name: 'Search' })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
 
     fireEvent.keyDown(window, { key: 'k', metaKey: true })
-    expect(await screen.findByRole('dialog')).toBeTruthy()
+    const dialog = await screen.findByRole('dialog', { name: 'Command console' })
+    expect(dialog.getAttribute('data-slot')).toBe('dialog-content')
+    expect(dialog.className).toContain('sm:max-w-3xl')
+    expect(dialog.querySelector('[data-slot="command"]')).toBeTruthy()
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeTruthy()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
 
     fireEvent.keyDown(window, { key: 'K', ctrlKey: true })
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).toBeNull()
       expect(trigger.getAttribute('aria-expanded')).toBe('false')
+      expect(document.activeElement).toBe(trigger)
     })
   })
 
@@ -115,7 +122,25 @@ describe('operator command panel', () => {
     })
   })
 
-  it('provides touch-visible Close at the root and Back on inspection', async () => {
+  it('lets the dialog primitive dismiss an outside press and restore its trigger', async () => {
+    renderPanel()
+
+    const trigger = screen.getByRole('button', { name: 'Search' })
+    fireEvent.click(trigger)
+    expect(await screen.findByRole('dialog', { name: 'Command console' })).toBeTruthy()
+
+    const overlay = document.querySelector('[data-slot="dialog-overlay"]')
+    if (!(overlay instanceof HTMLElement)) throw new Error('dialog_overlay_missing')
+    fireEvent.pointerDown(overlay)
+    fireEvent.click(overlay)
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(document.activeElement).toBe(trigger)
+    })
+  })
+
+  it('provides a compact root Close and touch-visible Back on inspection', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
     const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
       kind: 'found',
@@ -124,7 +149,7 @@ describe('operator command panel', () => {
     }))
 
     renderPanel({ openImmediately: true, readDetail })
-    expect(screen.getByRole('button', { name: 'Close' }).className).toContain('min-h-touch')
+    expect(screen.getByRole('button', { name: 'Close' }).getAttribute('data-slot')).toBe('dialog-close')
 
     const input = screen.getByRole('combobox', { name: 'Search operations' })
     fireEvent.change(input, { target: { value: 'weather' } })
@@ -132,10 +157,15 @@ describe('operator command panel', () => {
 
     const back = await screen.findByRole('button', { name: 'Back' })
     expect(back.className).toContain('min-h-touch')
+    expect(screen.getByRole('button', { name: 'Close' }).className).toContain('min-h-touch')
+    const inactiveItems = Array.from(document.querySelectorAll('[data-slot="command-item"]'))
+    expect(inactiveItems.length).toBeGreaterThan(0)
+    expect(inactiveItems.every((item) => item.getAttribute('aria-disabled') === 'true')).toBe(true)
     fireEvent.click(back)
     const restoredInput = await screen.findByRole('combobox', { name: 'Search operations' })
     expect((restoredInput as HTMLInputElement).value).toBe('weather')
     expect(screen.getByRole('option', { name: /Weather forecast/ })).toBeTruthy()
+    expect(restoredInput.hasAttribute('disabled')).toBe(false)
     await waitFor(() => expect(document.activeElement).toBe(restoredInput))
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
@@ -163,6 +193,7 @@ describe('operator command panel', () => {
     renderPanel({ readDetail })
     fireEvent.keyDown(window, { key: 'k', metaKey: true })
     const input = await screen.findByRole('combobox', { name: 'Search operations' })
+    expect(input.getAttribute('data-slot')).toBe('command-input')
     fireEvent.change(input, { target: { value: 'weather forecast' } })
 
     await waitFor(() => {
@@ -174,11 +205,14 @@ describe('operator command panel', () => {
     })
 
     const option = await screen.findByRole('option', { name: /Weather forecast/ })
+    expect(option.getAttribute('data-slot')).toBe('command-item')
+    expect(option.closest('[data-slot="command-group"]')).toBeTruthy()
     expect(option.getAttribute('aria-selected')).toBe('true')
     expect(option.textContent).toContain('Price on request')
     expect(option.textContent).toContain('Ready now')
     expect(option.textContent).toContain('AE account invocation')
     const listbox = screen.getByRole('listbox', { name: 'Matching operations' })
+    expect(listbox.getAttribute('data-slot')).toBe('command-list')
     expect(input.getAttribute('aria-controls')).toBe(listbox.getAttribute('id'))
     expect(screen.getByText(/1 matched · showing 1/)).toBeTruthy()
 
@@ -214,14 +248,93 @@ describe('operator command panel', () => {
     const options = await screen.findAllByRole('option')
     expect(options).toHaveLength(2)
 
-    act(() => {
-      fireEvent.keyDown(input, { key: 'ArrowDown' })
-      fireEvent.keyDown(input, { key: 'Enter' })
-    })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(readDetail).toHaveBeenCalledTimes(1)
     expect(readDetail).toHaveBeenCalledWith(SECOND_TEST_OPERATION_REF)
-    expect(await screen.findByRole('button', { name: 'Copy Operation reference' })).toBeTruthy()
+    expect(await screen.findByRole('link', { name: 'Open full Operation details' })).toBeTruthy()
+  })
+
+  it('delegates mounted-choice Home, End, pointer selection, and activation to cmdk', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(twoOperationSearchPayload())))
+    const readDetail = vi.fn(async (operationRef: string): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(operationRef),
+    }))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = screen.getByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+    const [first, second] = await screen.findAllByRole('option')
+    if (first === undefined || second === undefined) throw new Error('two_options_required')
+
+    fireEvent.keyDown(input, { key: 'End' })
+    await waitFor(() => expect(second.getAttribute('aria-selected')).toBe('true'))
+    fireEvent.keyDown(input, { key: 'Home' })
+    await waitFor(() => expect(first.getAttribute('aria-selected')).toBe('true'))
+
+    fireEvent.pointerMove(second)
+    await waitFor(() => expect(second.getAttribute('aria-selected')).toBe('true'))
+    fireEvent.click(second)
+
+    expect(readDetail).toHaveBeenCalledTimes(1)
+    expect(readDetail).toHaveBeenCalledWith(SECOND_TEST_OPERATION_REF)
+  })
+
+  it('keeps a selected Operation when an authoritative refresh still contains it', async () => {
+    const fetchSearch = vi.fn(async () => jsonResponse(twoOperationSearchPayload()))
+    vi.stubGlobal('fetch', fetchSearch)
+
+    renderPanel({ openImmediately: true })
+    const input = screen.getByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+    const options = await screen.findAllByRole('option')
+    const second = options[1]
+    if (second === undefined) throw new Error('second_option_required')
+    fireEvent.pointerMove(second)
+    await waitFor(() => expect(second.getAttribute('aria-selected')).toBe('true'))
+
+    fireEvent.change(input, { target: { value: 'weather forecast' } })
+    await waitFor(() => expect(fetchSearch).toHaveBeenCalledTimes(2))
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /Currency exchange rate/ }).getAttribute('aria-selected'),
+      ).toBe('true')
+    })
+  })
+
+  it('ignores an older search response that resolves after the current query', async () => {
+    let resolveFirst: ((response: Response) => void) | undefined
+    let resolveSecond: ((response: Response) => void) | undefined
+    const firstResponse = new Promise<Response>((resolve) => {
+      resolveFirst = resolve
+    })
+    const secondResponse = new Promise<Response>((resolve) => {
+      resolveSecond = resolve
+    })
+    const fetchSearch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { query: string }
+      return await (body.query === 'first' ? firstResponse : secondResponse)
+    })
+    vi.stubGlobal('fetch', fetchSearch)
+
+    renderPanel({ openImmediately: true })
+    const input = screen.getByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'first' } })
+    await waitFor(() => expect(fetchSearch).toHaveBeenCalledTimes(1))
+    fireEvent.change(input, { target: { value: 'second' } })
+    await waitFor(() => expect(fetchSearch).toHaveBeenCalledTimes(2))
+
+    if (resolveSecond === undefined) throw new Error('second_search_not_started')
+    resolveSecond(jsonResponse({ ...twoOperationSearchPayload(), query: 'second' }))
+    expect(await screen.findByRole('option', { name: /Currency exchange rate/ })).toBeTruthy()
+
+    if (resolveFirst === undefined) throw new Error('first_search_not_started')
+    resolveFirst(jsonResponse({ ...operationSearchPayload(), query: 'first' }))
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(2))
+    expect(screen.getByRole('option', { name: /Currency exchange rate/ })).toBeTruthy()
   })
 
   it('preserves ArrowDown and Enter until deferred search results can open the second Operation', async () => {
@@ -245,6 +358,7 @@ describe('operator command panel', () => {
 
     expect(readDetail).not.toHaveBeenCalled()
     await waitFor(() => expect(fetchSearch).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(resolveSearch).toBeTypeOf('function'))
     if (resolveSearch === undefined) throw new Error('deferred_search_not_started')
     resolveSearch(jsonResponse(twoOperationSearchPayload()))
 
@@ -252,7 +366,32 @@ describe('operator command panel', () => {
       expect(readDetail).toHaveBeenCalledTimes(1)
       expect(readDetail).toHaveBeenCalledWith(SECOND_TEST_OPERATION_REF)
     })
-    expect(await screen.findByRole('button', { name: 'Copy Operation reference' })).toBeTruthy()
+    expect(await screen.findByRole('link', { name: 'Open full Operation details' })).toBeTruthy()
+  })
+
+  it('preserves End and Enter until deferred server results can open the last Operation', async () => {
+    let resolveSearch: ((response: Response) => void) | undefined
+    const deferredSearch = new Promise<Response>((resolve) => {
+      resolveSearch = resolve
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => await deferredSearch))
+    const readDetail = vi.fn(async (operationRef: string): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(operationRef),
+    }))
+
+    renderPanel({ openImmediately: true, readDetail })
+    const input = screen.getByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+    fireEvent.keyDown(input, { key: 'End' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(screen.getByRole('listbox', { name: 'Matching operations' }).getAttribute('aria-busy')).toBe('true')
+    if (resolveSearch === undefined) throw new Error('deferred_search_not_started')
+    resolveSearch(jsonResponse(twoOperationSearchPayload()))
+
+    await waitFor(() => expect(readDetail).toHaveBeenCalledWith(SECOND_TEST_OPERATION_REF))
   })
 
   it('uses the live input query when change, ArrowDown, and Enter precede the React commit', async () => {
@@ -352,11 +491,12 @@ describe('operator command panel', () => {
     expect(screen.getByRole('button', { name: 'Copy Call Operation' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Connect agent' })).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy Operation reference' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Actions' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy Operation reference' }))
     expect(writeText).toHaveBeenLastCalledWith(TEST_OPERATION_REF)
     fireEvent.click(screen.getByRole('button', { name: 'Copy Inspect command' }))
     expect(writeText).toHaveBeenLastCalledWith(`ae inspect '${TEST_OPERATION_REF}'`)
-    fireEvent.click(screen.getByRole('button', { name: 'Copy Call command' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Call Operation' }))
     expect(writeText).toHaveBeenLastCalledWith(
       `ae call '${TEST_OPERATION_REF}' --input '{"from":"USD","to":"EUR","note":"today'\\''s rate"}' --wait`,
     )
@@ -397,7 +537,7 @@ describe('operator command panel', () => {
     const input = await screen.findByRole('combobox', { name: 'Search operations' })
     fireEvent.change(input, { target: { value: 'weather forecast' } })
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
-    await screen.findByRole('button', { name: 'Copy Operation reference' })
+    await screen.findByRole('link', { name: 'Open full Operation details' })
 
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' })
     fireEvent.change(await screen.findByRole('combobox', { name: 'Search operations' }), {
@@ -487,7 +627,7 @@ describe('operator command panel', () => {
     fireEvent.change(input, { target: { value: 'weather' } })
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
-    expect(await screen.findByText('Integration available')).toBeTruthy()
+    expect(await screen.findByText('Setup required')).toBeTruthy()
     expect(screen.queryByText('Ready now')).toBeNull()
     expect(screen.getByRole('link', { name: 'Find callable alternatives' })).toBeTruthy()
   })
@@ -535,16 +675,22 @@ describe('operator command panel', () => {
   })
 
   it('surfaces honest failure copy when the catalog cannot answer', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response('{}', { status: 503 })),
-    )
+    const fetchSearch = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(new Response('{}', { status: 503 }))
+      .mockResolvedValueOnce(jsonResponse(operationSearchPayload()))
+    vi.stubGlobal('fetch', fetchSearch)
 
     renderPanel({ openImmediately: true })
     const input = await screen.findByRole('combobox', { name: 'Search operations' })
     fireEvent.change(input, { target: { value: 'weather' } })
 
     expect(await screen.findByText(/temporarily unavailable/)).toBeTruthy()
+    const retry = screen.getByRole('button', { name: 'Try again' })
+    expect(retry.getAttribute('data-slot')).toBe('button')
+    fireEvent.click(retry)
+    expect(await screen.findByRole('option', { name: /Weather forecast/ })).toBeTruthy()
+    expect(fetchSearch).toHaveBeenCalledTimes(2)
   })
 
   it('turns a no-match result into clear and browse continuations', async () => {
@@ -569,7 +715,9 @@ describe('operator command panel', () => {
     expect(readDetail).not.toHaveBeenCalled()
     const browse = screen.getByRole('link', { name: 'Browse current Operations' })
     expect(browse.getAttribute('href')).toBe('/market?window=30d#operations')
-    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    const clear = screen.getByRole('button', { name: 'Clear search' })
+    expect(clear.getAttribute('data-slot')).toBe('button')
+    fireEvent.click(clear)
     expect((input as HTMLInputElement).value).toBe('')
   })
 

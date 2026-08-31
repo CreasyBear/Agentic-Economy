@@ -129,6 +129,7 @@ export function serializeOperationDescriptor(
       recovery: operation.recovery.recovery,
     },
     authentication: operation.authentication,
+    ...(operation.payment === undefined ? {} : { payment: { ...operation.payment } }),
     transport: operation.transport,
     provenance: {
       publisher: operation.provenance.publisher,
@@ -560,7 +561,7 @@ function isPublicAvailability(
 ): value is PublicOperationAvailability {
   if (
     !isRecord(value) ||
-    (value.posture !== "integrated" &&
+    (value.posture !== "setup_required" &&
       value.posture !== "routeable" &&
       value.posture !== "unavailable")
   )

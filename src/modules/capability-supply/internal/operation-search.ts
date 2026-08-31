@@ -568,7 +568,7 @@ function matchesFactFilters(
     && fact.readiness.validUntil !== undefined
     && fact.readiness.validUntil > now
     ? "routeable"
-    : fact.integrated ? "integrated" : "unavailable";
+    : fact.integrated ? "setup_required" : "unavailable";
   if (filters.availability !== undefined && !filters.availability.includes(availability)) return false;
   if (filters.currency !== undefined) {
     const currency = fact.price.kind === "on_request"
