@@ -211,9 +211,27 @@ export function AeAgentOperatorConsole({
             countLabel="keys"
             filterPlaceholder="Filter keys…"
             hideFilter={items.length <= 1}
+            getRowId={(item) => item.principalId}
             {...(getAgentHref === undefined
-              ? { onRowClick: setLocalSelected }
-              : { getRowHref: (item: AgentOperatorKeyReadback) => getAgentHref(item.principalId) })}
+              ? {
+                  rowAction: {
+                    kind: 'button' as const,
+                    label: 'View',
+                    onOpen: setLocalSelected,
+                    getAccessibleLabel: (item: AgentOperatorKeyReadback) =>
+                      `View ${item.key.name}`,
+                  },
+                }
+              : {
+                  rowAction: {
+                    kind: 'link' as const,
+                    label: 'Open',
+                    getHref: (item: AgentOperatorKeyReadback) =>
+                      getAgentHref(item.principalId),
+                    getAccessibleLabel: (item: AgentOperatorKeyReadback) =>
+                      `Open ${item.key.name}`,
+                  },
+                })}
           />
         )}
       </AeSection>

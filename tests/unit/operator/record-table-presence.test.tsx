@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef, RowSelectionState } from '@tanstack/react-table'
+import { useState } from 'react'
 
 import {
   AeOperatorSortableHeader,
@@ -161,3 +162,127 @@ describe('AeRecordTable filtered-empty recovery', () => {
     expect(screen.getByRole('columnheader').getAttribute('aria-sort')).toBe('ascending')
   })
 })
+
+describe('AeRecordTable interaction composition', () => {
+  it('keeps static tables semantic without checkboxes or focusable rows', () => {
+    const { container } = render(
+      <AeRecordTable columns={columns} data={rows} caption="Operations" hideFilter />,
+    )
+
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(container.querySelector('tbody tr[tabindex]')).toBeNull()
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(3)
+    expect(container.querySelector('[data-slot="table-container"]')).not.toBeNull()
+  })
+
+  it('lets Radix rove one native row action through Arrow and Home/End keys', async () => {
+    const opened: string[] = []
+    const { container } = render(
+      <AeRecordTable
+        columns={columns}
+        data={rows}
+        caption="Operations"
+        hideFilter
+        getRowId={(row) => row.id}
+        rowAction={{
+          kind: 'button',
+          label: 'View',
+          onOpen: (row) => opened.push(row.id),
+          getAccessibleLabel: (row) => `View ${row.name}`,
+        }}
+      />,
+    )
+
+    const actions = screen.getAllByRole('button', { name: /^View / })
+    expect(actions.map((action) => action.getAttribute('tabindex'))).toEqual(['0', '-1'])
+    expect(container.querySelector('tbody tr[tabindex]')).toBeNull()
+
+    actions[0]?.focus()
+    fireEvent.keyDown(actions[0]!, { key: 'ArrowDown', code: 'ArrowDown' })
+    await waitFor(() => expect(document.activeElement).toBe(actions[1]))
+    fireEvent.keyDown(actions[1]!, { key: 'Home', code: 'Home' })
+    await waitFor(() => expect(document.activeElement).toBe(actions[0]))
+    fireEvent.keyDown(actions[0]!, { key: 'End', code: 'End' })
+    await waitFor(() => expect(document.activeElement).toBe(actions[1]))
+    fireEvent.keyDown(actions[1]!, { key: 'ArrowDown', code: 'ArrowDown' })
+    await waitFor(() => expect(document.activeElement).toBe(actions[1]))
+
+    fireEvent.click(actions[1]!)
+    expect(opened).toEqual(['row-2'])
+    expect(actions[1]?.closest('tr')?.className).toContain('has-[:focus-visible]')
+  })
+
+  it('composes controlled selected, mixed, all, and clear states with stable IDs', () => {
+    render(<SelectableRecordTable />)
+
+    const first = screen.getByRole('checkbox', { name: 'Select weather.lookup' })
+
+    fireEvent.click(first)
+    expect(screen.getByRole('checkbox', { name: 'Select weather.lookup' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('checkbox', { name: 'Select weather.lookup' }).closest('tr')?.getAttribute('data-state')).toBe('selected')
+    const selectAll = screen.getByRole('checkbox', { name: 'Select all Operations' })
+    expect(selectAll.getAttribute('aria-checked')).toBe('mixed')
+    expect(selectAll.querySelector('.lucide-minus')).not.toBeNull()
+    expect(screen.getByRole('status').textContent).toBe('1 of 2 selected')
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select fx.convert' }))
+    expect(screen.getByRole('checkbox', { name: 'Select all Operations' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('status').textContent).toBe('2 of 2 selected')
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all Operations' }))
+    expect(screen.getByRole('checkbox', { name: 'Select weather.lookup' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('checkbox', { name: 'Select fx.convert' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('status').textContent).toBe('0 of 2 selected')
+  })
+
+  it('keeps external selected IDs while bulk selection changes visible selectable rows', () => {
+    render(<SelectableRecordTable initialSelection={{ external: true }} disableSecond />)
+
+    const selectAll = screen.getByRole('checkbox', { name: 'Select all Operations' })
+    expect(screen.getByRole('checkbox', { name: 'Select fx.convert' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(selectAll)
+
+    expect(screen.getByTestId('selection-state').textContent).toBe(
+      JSON.stringify({ external: true, 'row-1': true }),
+    )
+    expect(screen.getByRole('status').textContent).toBe('1 of 1 selected')
+  })
+
+  it('can defer the live selection announcement to a shared cross-table surface', () => {
+    render(<SelectableRecordTable showStatus={false} />)
+
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+})
+
+function SelectableRecordTable({
+  initialSelection = {},
+  disableSecond = false,
+  showStatus,
+}: {
+  initialSelection?: RowSelectionState
+  disableSecond?: boolean
+  showStatus?: boolean
+}) {
+  const [selection, setSelection] = useState<RowSelectionState>(initialSelection)
+  return (
+    <>
+      <AeRecordTable
+        columns={columns}
+        data={rows}
+        caption="Operations"
+        hideFilter
+        getRowId={(row) => row.id}
+        selection={{
+          state: selection,
+          onChange: setSelection,
+          getRowLabel: (row) => row.name,
+          ...(disableSecond ? { canSelectRow: (row: Row) => row.id !== 'row-2' } : {}),
+          ...(showStatus === undefined ? {} : { showStatus }),
+        }}
+      />
+      <div data-testid="selection-state">{JSON.stringify(selection)}</div>
+    </>
+  )
+}

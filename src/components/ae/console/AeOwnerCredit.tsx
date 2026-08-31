@@ -169,7 +169,14 @@ export function AeOwnerCredit({
             countLabel="charges"
             filterPlaceholder="Filter charges…"
             hideFilter={activity.length <= 1}
-            onRowClick={setSelected}
+            getRowId={(item) => item.entry.activityRef}
+            rowAction={{
+              kind: 'button',
+              label: 'View',
+              onOpen: setSelected,
+              getAccessibleLabel: (item) =>
+                `View ${item.entry.operation?.label ?? activityLabel(item.entry)}`,
+            }}
           />
         ) : activity.length === 0 ? (
           <AeEmptyState

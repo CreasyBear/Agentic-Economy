@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import '../../setup/jsdom-platform'
 
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
@@ -12,6 +13,9 @@ const routerNavigate = vi.hoisted(() => vi.fn())
 
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ navigate: routerNavigate }),
+  Link: ({ to, children, ...props }: { to: string; children: ReactNode }) => (
+    <a href={to} {...props}>{children}</a>
+  ),
 }))
 
 const PRINCIPAL_ID = `prn_${'a'.repeat(32)}`
@@ -206,7 +210,7 @@ describe('assistant access owner continuation anchors', () => {
     expect(document.body.textContent).not.toContain(KEY_ID_CANARY)
   })
 
-  it('uses the maintained link-row keyboard path for route-backed selection', () => {
+  it('uses one native link action for route-backed selection', () => {
     render(
       <AeAgentOperatorConsole
         {...consoleProps()}
@@ -217,11 +221,10 @@ describe('assistant access owner continuation anchors', () => {
 
     const row = screen.getByText('Route assistant').closest('tr')
     if (row === null) throw new Error('caller_row_missing')
-    expect(row.getAttribute('data-href')).toBe(`/agent-access?caller=${PRINCIPAL_ID}`)
-    fireEvent.keyDown(row, { key: 'Enter' })
-    expect(routerNavigate).toHaveBeenCalledWith({
-      to: `/agent-access?caller=${PRINCIPAL_ID}`,
-    })
+    expect(row.getAttribute('tabindex')).toBeNull()
+    const open = within(row).getByRole('link', { name: 'Open Route assistant' })
+    expect(open.getAttribute('href')).toBe(`/agent-access?caller=${PRINCIPAL_ID}`)
+    expect(within(row).getAllByRole('link')).toHaveLength(1)
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 })

@@ -237,7 +237,13 @@ function SupplyOfferingsTable({ offerings }: { offerings: readonly OwnerSupplyOf
       caption="Operations"
       countLabel="Operations"
       filterPlaceholder="Filter Operations…"
-      getRowHref={(item) => `/owner/supply/${encodeURIComponent(item.offeringRef)}`}
+      getRowId={(item) => item.offeringRef}
+      rowAction={{
+        kind: 'link',
+        label: 'Open',
+        getHref: (item) => `/owner/supply/${encodeURIComponent(item.offeringRef)}`,
+        getAccessibleLabel: (item) => `Open ${item.name}`,
+      }}
     />
   )
 }

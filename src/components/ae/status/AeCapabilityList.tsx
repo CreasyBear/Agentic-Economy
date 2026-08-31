@@ -64,7 +64,13 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
       countLabel="Operations"
       filterPlaceholder="Filter Operations…"
       hideFilter={catalog.offerings.length <= 1}
-      getRowHref={(item) => `/owner/offerings/${encodeURIComponent(item.offeringRef)}`}
+      getRowId={(item) => item.offeringRef}
+      rowAction={{
+        kind: 'link',
+        label: 'Open',
+        getHref: (item) => `/owner/offerings/${encodeURIComponent(item.offeringRef)}`,
+        getAccessibleLabel: (item) => `Open ${item.name}`,
+      }}
     />
   )
 }

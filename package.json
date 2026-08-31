@@ -77,6 +77,7 @@
     "@noble/curves": "1.9.1",
     "@noble/hashes": "1.8.0",
     "@openrouter/ai-sdk-provider": "^3.0.0",
+    "@radix-ui/react-roving-focus": "1.1.19",
     "@sentry/node": "^10.63.0",
     "@sentry/react": "^10.63.0",
     "@shadcn/react": "^0.3.0",

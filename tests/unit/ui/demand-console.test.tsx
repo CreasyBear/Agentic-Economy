@@ -120,7 +120,7 @@ describe('owner credit target', () => {
       loading={false}
     />)
 
-    fireEvent.click(screen.getByText('Call declined for insufficient credit'))
+    fireEvent.click(screen.getByRole('button', { name: 'View Call declined for insufficient credit' }))
     const continuation = screen.getByRole('link', { name: 'Add credit' })
     expect(continuation.getAttribute('href')).toBe('/owner/credit#fund')
   })
@@ -287,7 +287,7 @@ describe('assistant access components', () => {
     expect(screen.getByText('Outcome uncertain')).toBeTruthy()
     expect(screen.getByText(/USD 5\.005/u)).toBeTruthy()
     expect(screen.getByText('Browse only')).toBeTruthy()
-    fireEvent.click(screen.getByText('UI assistant'))
+    fireEvent.click(screen.getByRole('button', { name: 'View UI assistant' }))
     expect(screen.getByText('Development')).toBeTruthy()
     expect(screen.getByText('30/min · 300/hour')).toBeTruthy()
     expect(screen.getByText('USD 25.00')).toBeTruthy()

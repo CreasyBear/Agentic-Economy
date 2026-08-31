@@ -176,6 +176,19 @@ describe("market page", () => {
     expect(screen.getByText("API key connection")).toBeTruthy();
     expect(screen.getByText("Use capability")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Catalog" })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Filter rows…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Sort by / })).toBeNull();
+    expect(
+      screen.getAllByRole("link", { name: "Use Company registry search" }),
+    ).toHaveLength(1);
+    expect(
+      within(screen.getByRole("table")).getAllByRole("row").slice(1).map(
+        (row) => row.textContent,
+      ),
+    ).toEqual([
+      expect.stringContaining("Company registry search"),
+      expect.stringContaining("Company data lookup"),
+    ]);
   });
 
   it("submits search as a native GET while preserving only compatible filters", () => {

@@ -98,7 +98,14 @@ function ActivityRoute() {
             caption="Calls"
             countLabel="calls"
             filterPlaceholder="Filter calls…"
-            onRowClick={setSelected}
+            getRowId={(item) => item.invocationRef}
+            rowAction={{
+              kind: 'button',
+              label: 'View',
+              onOpen: setSelected,
+              getAccessibleLabel: (item) =>
+                `View ${item.operation?.label ?? taskLabel(item.operationKey)}`,
+            }}
           />
           <AeRecordSheet
             open={selected !== undefined}

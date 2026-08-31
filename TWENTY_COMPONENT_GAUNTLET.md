@@ -20,7 +20,7 @@ An item advances only after source/behavior and screenshot critics pick AE as at
 | 2 | C02 | Command modal shell | command-menu container; side-panel router/top bar/history/hotkeys; dialog manager | `AeCommandPanel`; provider/stack/hotkeys; shadcn dialog/command | shadcn `Dialog` owns modal mechanics; AE owns Operation page stack | Centered desktop modal; small-screen fallback; layered Escape; focus restore; persistent stack; reduced-motion-safe transitions | **PASS** |
 | 3 | C03 | Selectable list and grouped results | selectable list/item; side-panel list/group; focus hooks | command Operation search/results | shadcn `Command`/`CommandItem`; one AE adapter only for uncovered async intent | Arrow/Home/End/Enter/hover/active-descendant/loading/empty behavior | **PASS** |
 | 4 | C04 | Market toolbar/filter/sort/chips | view bar; filter/sort dropdowns; chip | market catalog controls | shadcn `InputGroup`, `Select`, `Badge`, `Button`; no generic menu or false sort control | URL-backed search/filter/category state, truthful chips/counts, clear-all, complete keyboard path, canonical server ranking preserved | **PASS** |
-| 5 | C05 | Record table focus/selection/opening | table focus/selection hooks and rows | market and operator tables | extend shadcn `Table`; no second table primitive | Composable focus/selection, consistent opening, correct bulk states and semantics | PENDING |
+| 5 | C05 | Record table focus/selection/opening | table focus/selection hooks and rows | market and operator tables | shadcn `Table` + `Checkbox`, TanStack Table state, Radix roving focus; no second table primitive | Composable focus/selection, consistent opening, correct bulk states and semantics | **PASS** |
 | 6 | C06 | Compare tray | multi-record selection and bottom action surfaces | market compare selection | shadcn `Card`, `Button`, `Badge`, `Separator` | Persistent count, remove/clear/max behavior, keyboard access, compact responsive layout | PENDING |
 | 7 | V01 | Market search and comparison | composed Twenty index/search view | AE market | consume C01–C06 | One URL-recoverable search→compare workflow | PENDING |
 | 8 | V02 | Operation detail | composed record-show view | AE Operation route | consume C01–C06 | Evidence hierarchy and one safe continuation without duplicate presentation | PENDING |
@@ -142,6 +142,34 @@ Evidence:
 - Round 1 source/behavior verdict: **TWENTY**. Gap: category was local-only while capability was mislabeled as a filter.
 - Round 3 source/behavior verdict: **AE**. Round 3 screenshot verdict: **AE**.
 - C04 final verdict: **PASS**.
+
+## C05 — Record table focus, selection, and opening
+
+### Literal module map
+
+| Concern | Twenty source | AE result |
+| --- | --- | --- |
+| Table composition | `RecordTable.tsx`, `RecordTableContent.tsx`, `RecordTableRow.tsx`, `RecordTableTr.tsx`, `RecordTableRowDiv.tsx`, `RecordTableRowCells.tsx` | one semantic `AeRecordTable` built on the installed shadcn `Table`; all eight market/operator consumers use it |
+| Focus movement | `useFocusedRecordTableRow`, `useRecordTableMoveFocusedRow`, `useRecordTableRowFocusHotkeys`, `RecordTableRowArrowKeysEffect` | Radix `RovingFocusGroup` owns Arrow/Home/End focus among explicit native row actions; table rows are never focusable or clickable |
+| Row opening | record-row focus and click effects | exactly one shadcn `Button` or `Button asChild` TanStack `Link` per actionable row; native activation and link modifiers are retained |
+| Selection | `RecordTableCellCheckbox.tsx`, `RecordTableHeaderCheckboxColumn.tsx`, selection hooks/selectors | optional controlled TanStack row selection rendered with shadcn `Checkbox`; stable `getRowId` is required whenever selection is enabled |
+| Bulk state | Twenty header checkbox and selected-row atoms | TanStack `getIsAllPageRowsSelected`, `getIsSomePageRowsSelected`, and `toggleAllPageRowsSelected`; outside-page IDs are preserved and disabled rows are respected |
+| Mixed-state visual | Twenty visible partial-selection state | shadcn Checkbox composition keeps Radix ARIA/state ownership and renders a Lucide minus for `indeterminate` |
+| Market ordering | Twenty tables may own full-dataset sorts/filters | AE market table intentionally has no page-local filter or sort because the server owns global ranking and opaque cursors |
+
+Evidence:
+
+- Deleted the former focusable/clickable `<tr>` implementation, manual Enter/Space handlers, imperative router navigation, and `window.open` modifier emulation.
+- Static tables remain plain semantic tables. Interactive tables opt into one explicit row-action column; selection remains separately optional and controlled.
+- Selection scope is the current rendered page/model, never unloaded cursor pages. The status states the selectable visible count.
+- Checks: 59/59 affected tests; focused table tests; UI-contract gate; focused lint; repository typecheck; raw-mechanics scan; diff check.
+- Official component evidence: `src/components/ui/checkbox.tsx` was installed from the current shadcn registry, with only the required visible indeterminate-state composition added.
+- Twenty screenshots: `output/gauntlet/c05/twenty-record-table-reference.png` and `twenty-selection-reference.png`.
+- AE desktop screenshots: `output/gauntlet/c05/ae-record-table-desktop-round1.png`, `ae-record-table-desktop-crop-round1.png`, and `ae-record-table-desktop-focus-round1.png`, 1920×972.
+- AE mobile screenshots: `output/gauntlet/c05/ae-record-table-mobile-round1.png`, `ae-record-table-mobile-crop-round1.png`, and `ae-record-table-mobile-focus-round1.png`, 390×844.
+- Round 1 critic requested TanStack-owned bulk derivation, a stable-ID selection contract, and a visible mixed glyph. All three were corrected and re-tested.
+- Final source/behavior verdict: **AE**. Final screenshot verdict: **AE**.
+- C05 final verdict: **PASS**.
 
 ## Screenshot protocol
 

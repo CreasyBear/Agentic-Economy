@@ -197,7 +197,13 @@ export function AeOwnerOfferingsList({
           caption="Operations"
           countLabel="Operations"
           filterPlaceholder="Filter Operations…"
-          getRowHref={(item) => `/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}`}
+          getRowId={(item) => item.offering.offeringRef}
+          rowAction={{
+            kind: 'link',
+            label: 'Open',
+            getHref: (item) => `/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}`,
+            getAccessibleLabel: (item) => `Open ${item.offering.name}`,
+          }}
         />
       )}
     </div>
