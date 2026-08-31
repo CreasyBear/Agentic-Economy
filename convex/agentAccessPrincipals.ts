@@ -851,7 +851,7 @@ async function revokeCanonicalCredential(
   owner: LifecycleOwner,
   correlationRef: string,
   now: number,
-): Promise<{ changed: boolean; providerCredentialId: string } | null> {
+): Promise<{ changed: boolean; providerCredentialId: string; providerRevocationPending: boolean } | null> {
   const binding = await ctx.db.query('externalIdentityBindings')
     .withIndex('by_bindingRef', (query) => query.eq('bindingRef', credential.bindingRef)).unique()
   if (binding === null || binding.principalRef !== credential.principalRef || binding.providerNamespace !== 'clerk/api-key') return null
@@ -867,17 +867,21 @@ async function revokeCanonicalCredential(
     (grant) => revokeGrantLifecycle(ctx, grant, owner, correlationRef, now),
   ))
   const changed = credential.lifecycle !== 'revoked' || binding.lifecycle !== 'revoked'
+  const providerRevocationPending = binding.providerState.kind !== 'known'
+    || binding.providerState.value !== 'revoked'
   if (credential.lifecycle !== 'revoked') await ctx.db.patch(credential._id, {
     lifecycle: 'revoked', revokedAt: now, updatedAt: now, revision: credential.revision + 1,
   })
   if (binding.lifecycle !== 'revoked') await ctx.db.patch(binding._id, {
     lifecycle: 'revoked',
-    providerState: { kind: 'unknown', value: `revocation_pending:${correlationRef}` },
+    providerState: providerRevocationPending
+      ? { kind: 'unknown', value: `revocation_pending:${correlationRef}` }
+      : binding.providerState,
     revokedAt: now,
     updatedAt: now,
     revision: binding.revision + 1,
   })
-  return { changed, providerCredentialId: binding.providerIdentifier }
+  return { changed, providerCredentialId: binding.providerIdentifier, providerRevocationPending }
 }
 
 async function promoteRemainingCredential(
@@ -946,7 +950,9 @@ export const revokeCredentialForServer = mutation({
     return {
       kind: revoked.changed ? 'completed' as const : 'replayed' as const,
       principalRef: credential.principalRef,
-      providerTargets: [{ credentialRef: credential.credentialRef, providerCredentialId: revoked.providerCredentialId }],
+      providerTargets: revoked.providerRevocationPending
+        ? [{ credentialRef: credential.credentialRef, providerCredentialId: revoked.providerCredentialId }]
+        : [],
       correlationRef: args.correlationRef,
     }
   },
@@ -978,7 +984,7 @@ export const disconnectAgentForServer = mutation({
     ))
     const changed = admission.lifecycle !== 'revoked'
       || revokedCredentials.some(({ revoked }) => revoked?.changed === true)
-    const targets = revokedCredentials.flatMap(({ credential, revoked }) => revoked === null
+    const targets = revokedCredentials.flatMap(({ credential, revoked }) => revoked === null || !revoked.providerRevocationPending
       ? []
       : [{ credentialRef: credential.credentialRef, providerCredentialId: revoked.providerCredentialId }])
     if (admission.lifecycle !== 'revoked') await ctx.db.patch(admission._id, { lifecycle: 'revoked', lastSeenAt: now })
@@ -1015,6 +1021,9 @@ export const recordProviderRevocationForServer = mutation({
     const binding = await ctx.db.query('externalIdentityBindings')
       .withIndex('by_bindingRef', (query) => query.eq('bindingRef', credential.bindingRef)).unique()
     if (binding === null || binding.providerIdentifier !== args.providerCredentialId || binding.lifecycle !== 'revoked') return { kind: 'conflict' as const }
+    if (binding.providerState.kind === 'known' && binding.providerState.value === 'revoked') {
+      return { kind: 'replayed' as const }
+    }
     const nextState = args.outcome === 'revoked'
       ? { kind: 'known' as const, value: 'revoked' as const }
       : { kind: 'unknown' as const, value: `revocation_failed:${args.correlationRef}` }

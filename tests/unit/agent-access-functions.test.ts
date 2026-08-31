@@ -217,4 +217,27 @@ describe('owner agent-access issuance policy', () => {
       .resolves.toEqual({ kind: 'completed', principalRef: 'prn_agent_a', correlationRef: 'corr-disconnect-a' })
     expect(clerkApi.revoke).not.toHaveBeenCalled()
   })
+
+  it('does not call Clerk again when canonical replay has no pending provider work', async () => {
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }) => {
+      if (reference.name === 'agentAccessPrincipals:revokeCredentialForServer') {
+        return {
+          kind: 'replayed',
+          principalRef: 'prn_agent_a',
+          providerTargets: [],
+          correlationRef: 'corr-agent-a-replay',
+        }
+      }
+      throw new Error(`unexpected mutation ${reference.name}`)
+    })
+
+    await expect(revokeAgentCredentialServer({ data: { credentialRef: 'crd_agent_a' } }))
+      .resolves.toEqual({
+        kind: 'replayed',
+        principalRef: 'prn_agent_a',
+        correlationRef: 'corr-agent-a-replay',
+      })
+    expect(clerkApi.get).not.toHaveBeenCalled()
+    expect(clerkApi.revoke).not.toHaveBeenCalled()
+  })
 })

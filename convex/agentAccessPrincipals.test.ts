@@ -584,6 +584,15 @@ describe('issued agent binding', () => {
         credentials: expect.arrayContaining([expect.objectContaining({ credentialRef: credentialA, lifecycle: 'revoked' })]),
       }),
     ]))
+    await expect(owner.mutation(revokeCredentialLifecycle, { ...revokeCommand, serviceAuth: revokeAuth }))
+      .resolves.toMatchObject({ kind: 'replayed', providerTargets: [] })
+    await expect(owner.mutation(recordProviderRevocation, {
+      ...providerCommand,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.recordProviderRevocationForServer', providerCommand),
+    })).resolves.toEqual({ kind: 'replayed' })
+    await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ principalRef: principalA, status: 'disconnected' }),
+    ]))
 
     const disconnectCommand = { principalRef: principalB, correlationRef: 'corr-disconnect-b' }
     const disconnectAuth = await operationAssertion('agentAccessPrincipals.disconnectAgentForServer', disconnectCommand)
