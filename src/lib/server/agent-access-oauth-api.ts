@@ -488,9 +488,20 @@ async function cancelExpiredReplacement(grant: AgentAccessOAuthGrant, options: O
     } else {
       await clerkClient().apiKeys.revoke({ apiKeyId: cancelled.providerCredentialId, revocationReason: reason })
     }
+    const recorded = await (options.recordProviderRevocation ?? recordAgentProviderRevocation)({
+      principalRef: replacement.principalRef,
+      credentialRef: replacement.successorCredentialRef,
+      providerCredentialId: cancelled.providerCredentialId,
+      correlationRef: `replacement-expired:${replacement.successorGrantRef}`,
+      outcome: 'revoked',
+    })
+    if (recorded.kind !== 'completed' && recorded.kind !== 'replayed') {
+      throw new Error('expired_replacement_provider_revocation_record_failed')
+    }
   } catch {
     // The canonical successor is already revoked. A repeated expired-token
-    // request safely retries provider cleanup without reviving it.
+    // request safely retries provider cleanup and outbox completion without
+    // reviving it.
   }
 }
 
@@ -545,8 +556,13 @@ async function deliverClaimedGrant(
       expires_in: claimed.value.grant.requestedAccess.expiresInSeconds,
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch {
-    await resetGrantDelivery(requireStore(options), { grantRef: claimed.value.grant.grantRef, claimToken: claimed.value.claimToken })
-    return oauthError('invalid_grant', 400)
+    try {
+      await resetGrantDelivery(requireStore(options), { grantRef: claimed.value.grant.grantRef, claimToken: claimed.value.claimToken })
+    } catch {
+      // A retryable server response is still safer than converting a transient
+      // store failure into a terminal OAuth grant error.
+    }
+    return oauthError('server_error', 503)
   }
 }
 

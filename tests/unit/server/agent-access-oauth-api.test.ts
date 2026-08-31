@@ -192,7 +192,8 @@ describe('Customer Request OAuth HTTP adapter', () => {
       client_id: 'client-replacement',
       device_code: device.device_code,
     }), options)
-    expect(firstDelivery.status).toBe(400)
+    expect(firstDelivery.status).toBe(503)
+    await expect(firstDelivery.json()).resolves.toMatchObject({ error: 'server_error' })
     expect(store.grants.get(grant.grantRef)?.status).toBe('approved')
     expect(promoted).toEqual(['prn_agent_a'])
     expect(revoked).toEqual([])
@@ -267,6 +268,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     })
     const cancelled: string[] = []
     const revoked: string[] = []
+    const recorded: string[] = []
     const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
       client_id: 'client-expired-replacement',
@@ -279,11 +281,16 @@ describe('Customer Request OAuth HTTP adapter', () => {
         return { kind: 'completed', providerCredentialId: 'ak_successor' }
       },
       revokeProviderCredential: async (credentialId) => { revoked.push(credentialId) },
+      recordProviderRevocation: async (input) => {
+        recorded.push(`${input.principalRef}:${input.credentialRef}:${input.providerCredentialId}:${input.correlationRef}`)
+        return { kind: 'completed' }
+      },
     })
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({ error: 'expired_token' })
     expect(cancelled).toEqual(['prn_agent_a'])
     expect(revoked).toEqual(['ak_successor'])
+    expect(recorded).toEqual(['prn_agent_a:crd_successor:ak_successor:replacement-expired:grt_successor'])
     expect(store.grants.get('device:expired-replacement')?.status).toBe('expired')
   })
 
