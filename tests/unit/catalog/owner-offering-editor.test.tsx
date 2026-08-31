@@ -4,13 +4,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import {
-  AeOwnerOfferingEditor,
-} from '@/components/ae/offerings/AeOwnerOfferings'
+import { AeOwnerOfferingEditor } from '@/components/ae/offerings/AeOwnerOfferings'
 import {
   OWNER_OFFERING_DRAFT_STORAGE_KEY,
+  clearStoredOfferingDraft,
   emptyOwnerOfferingEditorValue,
   readStoredOfferingDraft,
+  writeStoredOfferingDraft,
 } from '@/components/ae/offerings/AeOwnerOfferings.exports'
 import type { OwnerOfferingEditorValue, OwnerOfferingSaveResult } from '@/components/ae/offerings/AeOwnerOfferings'
 
@@ -27,6 +27,25 @@ function saved(value: OwnerOfferingEditorValue): OwnerOfferingSaveResult {
 }
 
 describe('owner offering editor is draft-first', () => {
+  it('reports denied browser draft storage without crashing the editor helpers', () => {
+    const availableStorage = window.sessionStorage
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      value: {
+        getItem: () => { throw new DOMException('denied', 'SecurityError') },
+        setItem: () => { throw new DOMException('denied', 'SecurityError') },
+        removeItem: () => { throw new DOMException('denied', 'SecurityError') },
+      },
+    })
+    try {
+      expect(writeStoredOfferingDraft('business-denied', emptyOwnerOfferingEditorValue)).toEqual({ kind: 'unavailable' })
+      expect(readStoredOfferingDraft('business-denied')).toBeUndefined()
+      expect(clearStoredOfferingDraft('business-denied')).toEqual({ kind: 'unavailable' })
+    } finally {
+      Object.defineProperty(window, 'sessionStorage', { configurable: true, value: availableStorage })
+    }
+  })
+
   it('saves a draft that has no name, category, or summary', async () => {
     const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
@@ -72,6 +91,67 @@ describe('owner offering editor is draft-first', () => {
     fireEvent.change(screen.getAllByLabelText(/Coverage/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
     fireEvent.click(screen.getByRole('button', { name: /Save draft/i }))
     await waitFor(() => expect(readStoredOfferingDraft('business-1')).toBeUndefined())
+  })
+
+  it('ignores a browser draft from an older saved revision', () => {
+    writeStoredOfferingDraft('business-stale', {
+      ...emptyOwnerOfferingEditorValue,
+      name: 'Stale browser name',
+      expectedRevision: 1,
+    })
+
+    render(
+      <AeOwnerOfferingEditor
+        initialValue={{ ...emptyOwnerOfferingEditorValue, name: 'Current account name', expectedRevision: 2 }}
+        onSave={async (value) => saved(value)}
+        draftKey="business-stale"
+      />,
+    )
+
+    expect(screen.getByDisplayValue('Current account name')).toBeTruthy()
+    expect(screen.queryByDisplayValue('Stale browser name')).toBeNull()
+  })
+
+  it('keeps a successful account save authoritative when browser draft removal is denied', async () => {
+    const availableStorage = window.sessionStorage
+    const stored = new Map<string, string>()
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => stored.get(key) ?? null,
+        setItem: (key: string, value: string) => { stored.set(key, value) },
+        removeItem: () => { throw new DOMException('denied', 'SecurityError') },
+        clear: () => stored.clear(),
+      },
+    })
+    try {
+      const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved({
+        ...value,
+        expectedRevision: (value.expectedRevision ?? 0) + 1,
+      }))
+      const first = render(
+        <AeOwnerOfferingEditor
+          initialValue={{ ...emptyOwnerOfferingEditorValue, expectedRevision: 1 }}
+          onSave={onSave}
+          draftKey="business-remove-denied"
+        />,
+      )
+      fireEvent.change(screen.getAllByLabelText(/Coverage/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+
+      expect(await screen.findByText('Operation saved; browser draft not cleared')).toBeTruthy()
+      first.unmount()
+      render(
+        <AeOwnerOfferingEditor
+          initialValue={{ ...emptyOwnerOfferingEditorValue, serviceAreaSummary: 'Adelaide', expectedRevision: 2 }}
+          onSave={onSave}
+          draftKey="business-remove-denied"
+        />,
+      )
+      expect(screen.getByDisplayValue('Adelaide')).toBeTruthy()
+    } finally {
+      Object.defineProperty(window, 'sessionStorage', { configurable: true, value: availableStorage })
+    }
   })
 
   it('keeps access-path draft identity through edits and omits it from saves', async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -8,6 +9,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import { isRecord } from '@/modules/common/is-record'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import type { ProviderConnectionOwnerProjection } from '@/modules/capability-supply/provider-connection'
 import type {
   CapabilityContractMetadata,
@@ -101,6 +103,7 @@ export function AeSupplyEndpointConfigStep({
   const [documentPreflightPending, setDocumentPreflightPending] = useState(false)
   const [errors, setErrors] = useState<EndpointErrors>({})
   const [announcement, setAnnouncement] = useState<string>()
+  const [unexpectedError, setUnexpectedError] = useState<string>()
   const [pending, setPending] = useState(false)
   const documentPreflightRequestRef = useRef(0)
   const submitRequestRef = useRef(0)
@@ -118,6 +121,7 @@ export function AeSupplyEndpointConfigStep({
     setPending(false)
     setErrors({})
     setAnnouncement(undefined)
+    setUnexpectedError(undefined)
   }, [initialDocumentPreflight, initialValue])
 
   useEffect(() => () => {
@@ -133,6 +137,7 @@ export function AeSupplyEndpointConfigStep({
       setDocumentPreflightPending(false)
     }
     setErrors({})
+    setUnexpectedError(undefined)
   }
 
   function changeSourceKind(next: SupplySourceKind) {
@@ -150,6 +155,7 @@ export function AeSupplyEndpointConfigStep({
     setResourceUrl('')
     setErrors({})
     setAnnouncement(undefined)
+    setUnexpectedError(undefined)
     setDocumentPreflight(undefined)
   }
 
@@ -176,6 +182,7 @@ export function AeSupplyEndpointConfigStep({
     documentPreflightRequestRef.current = requestId
     setDocumentPreflightPending(true)
     setErrors({})
+    setUnexpectedError(undefined)
     try {
       const result = await onPreflightDocument(document)
       if (documentPreflightRequestRef.current !== requestId) return
@@ -189,6 +196,11 @@ export function AeSupplyEndpointConfigStep({
       }
       setDocumentPreflight(result)
       setAnnouncement(`AE inspected ${result.outcomes.length} operation${result.outcomes.length === 1 ? '' : 's'}. Select one executable GET or POST operation to continue.`)
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      const message = 'AE could not inspect this document. Your source details remain on this page.'
+      setUnexpectedError(message)
+      setAnnouncement(message)
     } finally {
       if (documentPreflightRequestRef.current === requestId) {
         setDocumentPreflightPending(false)
@@ -227,6 +239,7 @@ export function AeSupplyEndpointConfigStep({
     const requestId = submitRequestRef.current + 1
     submitRequestRef.current = requestId
     setPending(true)
+    setUnexpectedError(undefined)
     try {
       const publicationImport = toCapabilityPublicationImport(checked.value)
       const saved = onSaveDraft === undefined ? undefined : await onSaveDraft(publicationImport)
@@ -248,6 +261,11 @@ export function AeSupplyEndpointConfigStep({
       }
       setAnnouncement('AE accepted the source structure. No publication state was written.')
       await onSubmit(publicationImport, preflight.prepared)
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      const message = 'AE could not confirm this source action. Your source details remain on this page.'
+      setUnexpectedError(message)
+      setAnnouncement(message)
     } finally {
       if (submitRequestRef.current === requestId) setPending(false)
     }
@@ -258,6 +276,12 @@ export function AeSupplyEndpointConfigStep({
       title="Connect the Operation"
       description="Choose the interface this Operation exposes. AE validates the source before publication changes."
     >
+      {unexpectedError === undefined ? null : (
+        <Alert variant="destructive" role="alert">
+          <AlertTitle>Source action unavailable</AlertTitle>
+          <AlertDescription>{unexpectedError}</AlertDescription>
+        </Alert>
+      )}
       <FieldGroup className="gap-4">
           <Field {...(formDisabled ? { 'data-disabled': true } : {})}>
             <FieldLabel htmlFor="supply-source-kind">Connection type</FieldLabel>

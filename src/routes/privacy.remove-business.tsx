@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent, type RefObject } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { CopyXIcon, FileWarningIcon, StoreIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/lib/ui/toast'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { z } from 'zod'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
@@ -82,6 +83,7 @@ function RemoveBusinessRoute() {
   const [error, setError] = useState<string | undefined>()
   const [receipt, setReceipt] = useState<string | undefined>()
   const [pending, setPending] = useState(false)
+  const [outcomeUnknown, setOutcomeUnknown] = useState(false)
   const contactInvalid = error?.includes('contact') === true
   const evidenceInvalid = error?.includes('Evidence') === true
   const contactEmailRef = useRef<HTMLInputElement>(null)
@@ -96,6 +98,7 @@ function RemoveBusinessRoute() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (outcomeUnknown) return
     setError(undefined)
     setReceipt(undefined)
 
@@ -130,8 +133,16 @@ function RemoveBusinessRoute() {
         return
       }
 
+      if (result.retryable) {
+        setOutcomeUnknown(true)
+        setError('The request outcome could not be confirmed. Contact support before submitting another request.')
+        return
+      }
       setError(result.reason)
-      toast.error(result.reason)
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setOutcomeUnknown(true)
+      setError('The request outcome could not be confirmed. Contact support before submitting another request.')
     } finally {
       setPending(false)
     }
@@ -166,7 +177,10 @@ function RemoveBusinessRoute() {
           {error === undefined ? null : (
             <Alert variant="destructive">
               <AlertTitle>Request needs attention</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>
+                {error}
+                {outcomeUnknown ? <> <Link to="/support" className="underline underline-offset-4">Open support</Link> with the supplier slug and your contact email.</> : null}
+              </AlertDescription>
             </Alert>
           )}
           {receipt === undefined ? null : (
@@ -258,9 +272,9 @@ function RemoveBusinessRoute() {
               ) : null}
             </Field>
           </FieldGroup>
-          <Button type="submit" disabled={pending} className="min-h-touch justify-self-start">
+          <Button type="submit" disabled={pending || outcomeUnknown} className="min-h-touch justify-self-start">
             {pending ? <Spinner /> : null}
-            Send request
+            {outcomeUnknown ? 'Outcome not confirmed' : 'Send request'}
           </Button>
         </form>
         )}

@@ -318,4 +318,22 @@ describe("current supply funnel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
     await waitFor(() => expect(preflight).toHaveBeenCalledOnce());
   });
+
+  it("keeps entered source details and owns an unexpected preflight rejection", async () => {
+    render(
+      <AeSupplyEndpointConfigStep
+        initialValue={sourceValue}
+        onPreflight={async () => {
+          throw new Error("private transport detail");
+        }}
+        onSubmit={async () => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Your source details remain on this page"));
+    expect(screen.getByDisplayValue(sourceValue.sourceRevision)).toBeTruthy();
+    expect(document.body.textContent).not.toContain("private transport detail");
+  });
 });

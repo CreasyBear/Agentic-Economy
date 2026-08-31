@@ -1,8 +1,9 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeDegradedState } from '@/components/ae/feedback/AeDegradedState'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
 import {
@@ -14,10 +15,19 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
 import { formatExactAmount } from '@/modules/money/public'
 import type { AgentActivityView } from '@/modules/agent-access/agent-operator-view-model'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { captureRouteException } from '@/lib/observability/capture-route-exception'
 
 export const Route = createFileRoute('/_operator/activity')({
   ...operatorRouteOptions,
-  loader: () => readAgentDirectoryServer(),
+  loader: async (): Promise<ActivityLoaderResult> => {
+    try {
+      return { kind: 'available', directory: await readAgentDirectoryServer() }
+    } catch (cause) {
+      captureRouteException(cause, { 'ae.surface': 'operator_activity_loader' })
+      return { kind: 'unavailable' }
+    }
+  },
   head: () => ({ meta: [
     { title: 'Calls | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
@@ -26,7 +36,48 @@ export const Route = createFileRoute('/_operator/activity')({
 })
 
 function ActivityRoute() {
-  const directory = Route.useLoaderData()
+  const result = Route.useLoaderData()
+  const router = useRouter()
+  const [retryPending, setRetryPending] = useState(false)
+  if (result.kind === 'unavailable') {
+    return (
+      <AeOperatorShell
+        operatorRole="owner"
+        title="Calls"
+        description="Your agent’s calls in task language, with the amount, outcome, and durable receipt together."
+        currentPath="/activity"
+      >
+        <AeDegradedState
+          title="Calls are temporarily unavailable"
+          description="No call outcome is being inferred. Try loading the authoritative activity again."
+          action={(
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-touch"
+              disabled={retryPending}
+              aria-busy={retryPending || undefined}
+              onClick={() => {
+                if (retryPending) return
+                setRetryPending(true)
+                void router.invalidate()
+                  .catch((cause) => captureClientExceptionOnClient(cause))
+                  .finally(() => setRetryPending(false))
+              }}
+            >
+              {retryPending ? 'Trying again…' : 'Try again'}
+            </Button>
+          )}
+        />
+      </AeOperatorShell>
+    )
+  }
+  return <ActivityAvailable directory={result.directory} />
+}
+
+function ActivityAvailable({
+  directory,
+}: Readonly<{ directory: Extract<ActivityLoaderResult, { kind: 'available' }>['directory'] }>) {
   const activity = directory.details
     .flatMap((readback) => readback.activity)
     .toSorted((left, right) => right.observedAt - left.observedAt)
@@ -134,6 +185,10 @@ function ActivityRoute() {
     </AeOperatorShell>
   )
 }
+
+export type ActivityLoaderResult =
+  | Readonly<{ kind: 'available'; directory: Awaited<ReturnType<typeof readAgentDirectoryServer>> }>
+  | Readonly<{ kind: 'unavailable' }>
 
 function activityFacts(item: AgentActivityView) {
   return [

@@ -209,6 +209,21 @@ describe('owner workspace settings surfaces', () => {
     expect(onRename.mock.calls[1]?.[0].requestKey).not.toBe(firstRequestKey)
   })
 
+  it('owns an unexpected rename rejection without losing the entered name', async () => {
+    const onRename = vi.fn(async () => {
+      throw new Error('private upstream detail')
+    })
+    render(<AeWorkspaceGeneral result={{ kind: 'available', readback: buildPublicOwnerStatusReadback(catalog) }} onRename={onRename} />)
+
+    const input = screen.getByRole('textbox', { name: 'Public supplier name' })
+    fireEvent.change(input, { target: { value: 'Name still here' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save public name' }))
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('existing public name is unchanged'))
+    expect(screen.getByDisplayValue('Name still here')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('private upstream detail')
+  })
+
   it('sends an unpublished workspace to supplier setup', () => {
     render(<AeWorkspaceGeneral result={{ kind: 'not_found', reason: 'no_such_business' }} />)
 

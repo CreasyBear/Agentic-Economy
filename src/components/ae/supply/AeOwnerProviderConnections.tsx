@@ -21,13 +21,16 @@ import { utf8ToHex } from '@/modules/capability-supply/public'
 import { providerConnectionTargetId } from './provider-connection-target'
 import { suggestContinuation } from '@/modules/market/suggested-continuation'
 import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 export function AeOwnerProviderConnections({
   businessId,
   connections,
+  readOnly = false,
 }: Readonly<{
   businessId?: string
   connections: readonly OwnerProviderConnection[]
+  readOnly?: boolean
 }>) {
   const router = useRouter()
   const connectX402 = useServerFn(connectOwnerX402Server)
@@ -48,6 +51,7 @@ export function AeOwnerProviderConnections({
   }>>()
   const [claimSignature, setClaimSignature] = useState<string>()
   const [busy, setBusy] = useState<string>()
+  const [refreshRequired, setRefreshRequired] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'error' | 'status'; text: string }>()
   const [rebindOfferingRef, setRebindOfferingRef] = useState<string>()
   const [rebindConnectionRef, setRebindConnectionRef] = useState<string>()
@@ -58,7 +62,8 @@ export function AeOwnerProviderConnections({
   const resourceUrlInputRef = useRef<HTMLInputElement>(null)
   const revokeTriggerRef = useRef<HTMLButtonElement>(null)
   const revokeInFlightRef = useRef(false)
-  const canConnect = businessId !== undefined && businessId.length > 0
+  const commandIdsRef = useRef(new Map<string, string>())
+  const canConnect = !readOnly && businessId !== undefined && businessId.length > 0
   const missingConnectionContinuation = suggestContinuation({
     subject: 'connection',
     state: 'missing',
@@ -98,20 +103,42 @@ export function AeOwnerProviderConnections({
     rebindLinkRef.current?.focus()
   }, [refreshedForRebind])
 
-  async function refresh() {
-    await router.invalidate()
-    setNotice({ kind: 'status', text: 'Supplier connections updated.' })
+  function commandIdFor(actionKey: string): string {
+    const current = commandIdsRef.current.get(actionKey)
+    if (current !== undefined) return current
+    const commandId = crypto.randomUUID()
+    commandIdsRef.current.set(actionKey, commandId)
+    return commandId
+  }
+
+  async function refresh(): Promise<boolean> {
+    try {
+      await router.invalidate()
+      setRefreshRequired(false)
+      setNotice({ kind: 'status', text: 'Supplier connections updated.' })
+      return true
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setRefreshRequired(true)
+      setNotice({
+        kind: 'error',
+        text: 'The change was accepted, but current connections could not be reloaded. Reload before starting another action.',
+      })
+      return false
+    }
   }
 
   function beginConnection() {
+    if (readOnly) return
     resourceUrlInputRef.current?.scrollIntoView({ block: 'center' })
     resourceUrlInputRef.current?.focus({ preventScroll: true })
   }
 
   async function submitConnection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!canConnect || businessId === undefined || inspection === undefined || claimSignature === undefined) return
-    const commandId = crypto.randomUUID()
+    if (readOnly || !canConnect || businessId === undefined || inspection === undefined || claimSignature === undefined) return
+    const commandKey = ['connect', businessId, method, resourceUrl, inspection.digest, claimSignature].join(':')
+    const commandId = commandIdFor(commandKey)
     setBusy('new')
     setNotice(undefined)
     try {
@@ -127,15 +154,27 @@ export function AeOwnerProviderConnections({
         },
       })
       if (result.kind === 'refused') {
+        if (result.code === 'source_unavailable') {
+          setRefreshRequired(true)
+          setNotice({ kind: 'error', text: 'The supplier connection outcome was not confirmed. Reload current connections before repeating it.' })
+          return
+        }
+        commandIdsRef.current.delete(commandKey)
         setNotice({ kind: 'error', text: connectionRefusalCopy(result.code) })
         return
       }
+      commandIdsRef.current.delete(commandKey)
       setResourceUrl('')
       setInspection(undefined)
       setClaimSignature(undefined)
       await refresh()
-    } catch {
-      setNotice({ kind: 'error', text: 'The supplier connection could not be saved. Try again.' })
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setRefreshRequired(true)
+      setNotice({
+        kind: 'error',
+        text: 'The supplier connection outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
+      })
     } finally {
       setBusy(undefined)
     }
@@ -181,7 +220,8 @@ export function AeOwnerProviderConnections({
         claimExpiresAt: result.claim.expiresAt,
       })
       setNotice({ kind: 'status', text: 'Live x402 challenge found. Review the exact payment lane, then connect it.' })
-    } catch {
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setNotice({ kind: 'error', text: 'AE could not inspect the endpoint. Check that it is publicly reachable and try again.' })
     } finally {
       setBusy(undefined)
@@ -220,7 +260,14 @@ export function AeOwnerProviderConnections({
     action: 'reconnect' | 'revoke',
     connection: OwnerProviderConnection,
   ) {
-    const commandId = crypto.randomUUID()
+    if (readOnly) return
+    const commandKey = [
+      action,
+      connection.connectionRef,
+      String(connection.authorityGeneration),
+      connection.authorityDigest,
+    ].join(':')
+    const commandId = commandIdFor(commandKey)
     setBusy(connection.connectionRef)
     setNotice(undefined)
     const data = {
@@ -234,41 +281,67 @@ export function AeOwnerProviderConnections({
         ? await reconnect({ data })
         : await revoke({ data })
       if (result.kind === 'refused') {
+        if (result.code === 'source_unavailable') {
+          setRefreshRequired(true)
+          setNotice({ kind: 'error', text: 'The supplier connection outcome was not confirmed. Reload current connections before repeating it.' })
+          return
+        }
+        commandIdsRef.current.delete(commandKey)
         setNotice({ kind: 'error', text: connectionRefusalCopy(result.code) })
         return
       }
-      await refresh()
-      if (action === 'reconnect' && rebindOfferingRef !== undefined) {
+      commandIdsRef.current.delete(commandKey)
+      const refreshed = await refresh()
+      if (refreshed && action === 'reconnect' && rebindOfferingRef !== undefined) {
         setRefreshedForRebind(connection.connectionRef)
         setNotice({
           kind: 'status',
           text: 'Authority refreshed. Re-admit the exact Operation so its binding uses the new generation and digest.',
         })
       }
-    } catch {
-      setNotice({ kind: 'error', text: 'The supplier connection could not be updated. Try again.' })
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setRefreshRequired(true)
+      setNotice({
+        kind: 'error',
+        text: 'The supplier connection outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
+      })
     } finally {
       setBusy(undefined)
     }
   }
 
   async function retryConnectionCleanup(connection: OwnerProviderConnection) {
+    if (readOnly) return
+    const commandKey = `cleanup:${connection.connectionRef}`
     setBusy(connection.connectionRef)
     setNotice(undefined)
     try {
       const result = await retryCleanup({
         data: {
           connectionRef: connection.connectionRef,
-          commandId: crypto.randomUUID(),
+          commandId: commandIdFor(commandKey),
         },
       })
       if (result.kind === 'refused') {
+        if (result.code === 'source_unavailable') {
+          setRefreshRequired(true)
+          setNotice({ kind: 'error', text: 'The cleanup outcome was not confirmed. Reload current connections before repeating it.' })
+          return
+        }
+        commandIdsRef.current.delete(commandKey)
         setNotice({ kind: 'error', text: connectionRefusalCopy(result.code) })
         return
       }
+      commandIdsRef.current.delete(commandKey)
       await refresh()
-    } catch {
-      setNotice({ kind: 'error', text: 'Provider cleanup could not be restarted. Try again.' })
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setRefreshRequired(true)
+      setNotice({
+        kind: 'error',
+        text: 'The cleanup outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
+      })
     } finally {
       setBusy(undefined)
     }
@@ -310,7 +383,7 @@ export function AeOwnerProviderConnections({
         <AeEmptyState
           title="No provider connection yet"
           description="Add the public HTTPS endpoint that returns the x402 payment challenge for your operation."
-          action={(
+          action={readOnly ? undefined : (
             <Button type="button" className="min-h-touch" onClick={beginConnection}>
               {missingConnectionContinuation.label}
             </Button>
@@ -344,7 +417,7 @@ export function AeOwnerProviderConnections({
                     <Button
                       variant="secondary"
                       className="min-h-touch"
-                      disabled={busy !== undefined}
+                      disabled={readOnly || busy !== undefined || refreshRequired}
                       onClick={() => void updateConnection('reconnect', connection)}
                     >
                       {connection.lifecycle === 'active' ? 'Refresh authority' : 'Reconnect'}
@@ -353,7 +426,7 @@ export function AeOwnerProviderConnections({
                       type="button"
                       variant="outline"
                       className="min-h-touch"
-                      disabled={busy !== undefined}
+                      disabled={readOnly || busy !== undefined || refreshRequired}
                       onClick={(event) => requestRevoke(connection, event.currentTarget)}
                     >
                       Revoke
@@ -364,7 +437,7 @@ export function AeOwnerProviderConnections({
                     type="button"
                     variant="secondary"
                     className="min-h-touch"
-                    disabled={busy !== undefined}
+                    disabled={readOnly || busy !== undefined || refreshRequired}
                     onClick={() => void retryConnectionCleanup(connection)}
                   >
                     Retry cleanup
@@ -486,12 +559,12 @@ export function AeOwnerProviderConnections({
             >
               {claimSignature !== undefined ? 'Payee control proved' : busy === 'claim' ? 'Waiting for wallet…' : 'Prove payee control'}
             </Button>
-            <Button type="submit" className="min-h-touch" disabled={busy !== undefined || inspection === undefined || claimSignature === undefined}>
+            <Button type="submit" className="min-h-touch" disabled={busy !== undefined || refreshRequired || inspection === undefined || claimSignature === undefined}>
               {busy === 'new' ? 'Connecting…' : 'Connect verified endpoint'}
             </Button>
           </div>
         </form>
-      ) : (
+      ) : readOnly ? null : (
         <AeEmptyState
           title="Supplier identity is required to connect"
           description="Create an unpublished supplier workspace, then return here to inspect and claim the x402 endpoint."
@@ -508,6 +581,17 @@ export function AeOwnerProviderConnections({
       >
         {notice?.text ?? ''}
       </p>
+      {refreshRequired ? (
+        <Button
+          type="button"
+          variant="secondary"
+          className="min-h-touch justify-self-start"
+          disabled={busy !== undefined}
+          onClick={() => void refresh()}
+        >
+          Reload current connections
+        </Button>
+      ) : null}
       </AeSection>
     </div>
   )

@@ -12,8 +12,6 @@ import { AePageState } from '@/components/ae/layout/AePageState'
 import { Button } from '@/components/ui/button'
 import { SITE_THEME_COLOR_HEX } from '@/components/ui/theme-meta'
 
-import { REQUEST_FAILED_TOAST_EVENT, type RequestFailedToastDetail } from '@/lib/http/toast-error-funnel'
-import { toast } from '@/lib/ui/toast'
 import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { bootClientObservability } from '@/lib/observability/boot-client-observability'
 import appCss from '../styles/globals.css?url'
@@ -63,19 +61,6 @@ function RootComponent() {
   )
 }
 
-function AeRequestFailedToasts() {
-  useEffect(() => {
-    function onRequestFailed(event: Event) {
-      const message = (event as CustomEvent<RequestFailedToastDetail>).detail?.message
-      if (typeof message === 'string' && message.length > 0) toast.error(message)
-    }
-    window.addEventListener(REQUEST_FAILED_TOAST_EVENT, onRequestFailed)
-    return () => window.removeEventListener(REQUEST_FAILED_TOAST_EVENT, onRequestFailed)
-  }, [])
-
-  return null
-}
-
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const chatProvidersRequired = requiresChatProviders(pathname)
@@ -96,7 +81,6 @@ function RootDocument({ children }: { children: ReactNode }) {
         <RouteProgressBar />
         <AeObservabilityBoot />
         <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
-        <AeRequestFailedToasts />
         <Toaster
           ref={(node) => {
             node?.setAttribute('aria-live', 'off')

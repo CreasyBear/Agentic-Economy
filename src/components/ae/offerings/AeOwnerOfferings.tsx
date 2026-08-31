@@ -1,5 +1,6 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
+import { Link, useBlocker } from '@tanstack/react-router'
 import {
   BotIcon,
   CheckCircle2Icon,
@@ -9,6 +10,7 @@ import {
 } from 'lucide-react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import {
   AeOperatorSortableHeader,
@@ -24,6 +26,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Textarea } from '@/components/ui/textarea'
 
 import { cn } from '@/lib/utils'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import {
   OfferingPriceKindValues,
   OfferingPriceTaxTreatmentValues,
@@ -108,6 +111,22 @@ export type OwnerOfferingSaveResult =
       message: string
       retry?: Readonly<{ offeringRef: string; currentRevision: number; completedSteps: readonly string[] }>
     }>
+
+type OwnerOfferingEditorSafetyState = Readonly<{
+  dirty: boolean
+  pending: boolean
+  draftStorage: 'stored' | 'unavailable'
+  saveOutcome: 'idle' | 'saved' | 'failed'
+}>
+
+type OwnerOfferingEditorProps = Readonly<{
+  initialValue: OwnerOfferingEditorValue
+  onSave: (value: OwnerOfferingEditorValue) => Promise<OwnerOfferingSaveResult>
+  seed?: Readonly<{ label: string; value: Partial<OwnerOfferingEditorValue> }>
+  draftKey?: string
+  backAction?: ReactNode
+  onSafetyStateChange?: (state: OwnerOfferingEditorSafetyState) => void
+}>
 
 export function AeOwnerOfferingsList({
   offerings,
@@ -215,21 +234,22 @@ export function AeOwnerOfferingEditor({
   onSave,
   seed,
   draftKey,
-}: {
-  initialValue: OwnerOfferingEditorValue
-  onSave: (value: OwnerOfferingEditorValue) => Promise<OwnerOfferingSaveResult>
-  seed?: Readonly<{ label: string; value: Partial<OwnerOfferingEditorValue> }>
-  draftKey?: string
-}) {
+  backAction,
+  onSafetyStateChange,
+}: OwnerOfferingEditorProps) {
   const [restoredDraft] = useState<OwnerOfferingEditorValue | undefined>(() => {
     if (draftKey === undefined) return undefined
     const stored = readStoredOfferingDraft(draftKey)
-    return stored === undefined ? undefined : { ...stored, price: normalizeOfferingPrice(stored.price) }
+    return stored === undefined || stored.expectedRevision !== initialValue.expectedRevision
+      ? undefined
+      : { ...stored, price: normalizeOfferingPrice(stored.price) }
   })
   const [value, setValue] = useState(() => ensureOwnerAccessPathDraftIdentity(restoredDraft ?? initialValue))
   const [pending, setPending] = useState(false)
   const [result, setResult] = useState<OwnerOfferingSaveResult | undefined>()
   const [dirty, setDirty] = useState(false)
+  const [draftStorage, setDraftStorage] = useState<'stored' | 'unavailable'>(restoredDraft === undefined ? 'unavailable' : 'stored')
+  const [draftCleanupUnavailable, setDraftCleanupUnavailable] = useState(false)
   const [priceDraft, setPriceDraft] = useState(() => toOwnerPriceDraft((restoredDraft ?? initialValue).price))
   const firstFieldRef = useRef<HTMLInputElement>(null)
   const categoryFieldRef = useRef<HTMLInputElement>(null)
@@ -241,19 +261,23 @@ export function AeOwnerOfferingEditor({
   const invalidMessage = result?.kind === 'invalid' ? result.message : undefined
 
   useEffect(() => {
-    if (!dirty) return
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty])
+    if (draftKey === undefined || !dirty) return
+    setDraftStorage(writeStoredOfferingDraft(draftKey, value).kind)
+  }, [draftKey, dirty, value])
 
   useEffect(() => {
-    if (draftKey === undefined || !dirty) return
-    writeStoredOfferingDraft(draftKey, value)
-  }, [draftKey, dirty, value])
+    onSafetyStateChange?.({
+      dirty,
+      pending,
+      draftStorage,
+      saveOutcome: result === undefined ? 'idle' : result.kind === 'saved' ? 'saved' : 'failed',
+    })
+  }, [dirty, draftStorage, onSafetyStateChange, pending, result])
 
   function update(patch: Partial<OwnerOfferingEditorValue>) {
     setDirty(true)
+    setDraftStorage('unavailable')
+    setDraftCleanupUnavailable(false)
     setResult(undefined)
     setValue((current) => ({ ...current, ...patch }))
   }
@@ -294,12 +318,21 @@ export function AeOwnerOfferingEditor({
       const next = await onSave(stripOwnerAccessPathDraftIdentity(value))
       setResult(next)
       if (next.kind === 'saved') {
+        const cleanup = draftKey === undefined
+          ? { kind: 'stored' as const }
+          : clearStoredOfferingDraft(draftKey)
         setValue(next.value)
         setDirty(false)
-        if (draftKey !== undefined) clearStoredOfferingDraft(draftKey)
+        setDraftCleanupUnavailable(cleanup.kind === 'unavailable')
       } else if (next.kind === 'revision_conflict') {
         firstFieldRef.current?.focus()
       }
+    } catch (error) {
+      captureClientExceptionOnClient(error)
+      setResult({
+        kind: 'refused',
+        message: 'The Operation save could not be confirmed. Your changes remain on this page.',
+      })
     } finally {
       setPending(false)
     }
@@ -313,6 +346,12 @@ export function AeOwnerOfferingEditor({
           <AlertDescription>{result.message}</AlertDescription>
         </Alert>
       )}
+      {draftCleanupUnavailable ? (
+        <Alert role="status">
+          <AlertTitle>Operation saved; browser draft not cleared</AlertTitle>
+          <AlertDescription>The supplier account has the saved Operation. AE will ignore this browser draft when its revision no longer matches.</AlertDescription>
+        </Alert>
+      ) : null}
       <span id={liveRegionId} className="sr-only" role="status" aria-live="polite">
         {pending ? 'Saving Operation' : result?.message ?? ''}
       </span>
@@ -417,13 +456,92 @@ export function AeOwnerOfferingEditor({
 
       <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-card py-4 sm:flex-row sm:justify-end">
         <Button asChild variant="secondary" className="min-h-touch">
-          <a href="/owner/offerings">Back to Operations</a>
+          {backAction ?? <a href="/owner/offerings">Back to Operations</a>}
         </Button>
         <Button type="submit" variant="default" disabled={pending || !dirty} aria-busy={pending} className="min-h-touch">
           {retryingPartialSave ? 'Retry save' : value.status === 'published' ? 'Publish Operation' : 'Save draft'}
         </Button>
       </div>
     </form>
+  )
+}
+
+export function AeOwnerOfferingEditorWithNavigationSafety(props: OwnerOfferingEditorProps) {
+  const [safetyState, setSafetyState] = useState<OwnerOfferingEditorSafetyState>({
+    dirty: false,
+    pending: false,
+    draftStorage: 'unavailable',
+    saveOutcome: 'idle',
+  })
+  const [navigationDialogDismissed, setNavigationDialogDismissed] = useState(false)
+  const navigationTriggerRef = useRef<HTMLElement | null>(null)
+  const shouldBlockNavigation = useCallback(() => {
+    if (!safetyState.dirty) return false
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      navigationTriggerRef.current = document.activeElement
+    }
+    return true
+  }, [safetyState.dirty])
+  const blocker = useBlocker({
+    shouldBlockFn: shouldBlockNavigation,
+    enableBeforeUnload: shouldBlockNavigation,
+    withResolver: true,
+  })
+  const navigationBlockedDuringSave = useRef(false)
+
+  useEffect(() => {
+    if (blocker.status === 'idle') {
+      navigationBlockedDuringSave.current = false
+      setNavigationDialogDismissed(false)
+      return
+    }
+    if (safetyState.pending) navigationBlockedDuringSave.current = true
+  }, [blocker.status, safetyState.pending])
+
+  useEffect(() => {
+    if (
+      blocker.status !== 'blocked'
+      || !navigationBlockedDuringSave.current
+      || safetyState.pending
+    ) return
+    navigationBlockedDuringSave.current = false
+    setNavigationDialogDismissed(false)
+    if (safetyState.saveOutcome === 'saved') blocker.proceed()
+    else blocker.reset()
+  }, [blocker, safetyState.pending, safetyState.saveOutcome])
+
+  return (
+    <>
+      <AeOwnerOfferingEditor
+        {...props}
+        backAction={<Link to="/owner/offerings">Back to Operations</Link>}
+        onSafetyStateChange={setSafetyState}
+      />
+      <AeConfirmDialog
+        open={blocker.status === 'blocked' && !navigationDialogDismissed}
+        onOpenChange={(open) => {
+          if (open || blocker.status !== 'blocked') return
+          if (safetyState.pending) {
+            setNavigationDialogDismissed(true)
+            return
+          }
+          blocker.reset()
+        }}
+        title={safetyState.pending ? 'Finishing the Operation save' : 'Leave Operation editor?'}
+        description={safetyState.pending
+          ? 'AE is confirming whether your Operation was saved. Stay on this page until the outcome is known.'
+          : safetyState.draftStorage === 'stored'
+            ? 'A draft remains in this browser, but it is not saved to your supplier account.'
+            : 'These changes exist only on this page and will be lost if you leave.'}
+        confirmLabel="Leave anyway"
+        cancelLabel={safetyState.pending ? 'Keep waiting' : 'Continue editing'}
+        showConfirm={!safetyState.pending}
+        returnFocusRef={navigationTriggerRef}
+        onConfirm={() => {
+          if (blocker.status === 'blocked') blocker.proceed()
+        }}
+      />
+    </>
   )
 }
 

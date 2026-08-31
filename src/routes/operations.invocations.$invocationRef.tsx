@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { AlertTriangleIcon, CheckCircle2Icon, CircleIcon, Clock3Icon } from 'lucide-react'
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
@@ -46,6 +46,7 @@ import type {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { continuationForInvocationStatus } from '@/modules/market/suggested-continuation'
 import { formatCurrencyAmount } from '@/modules/money/public'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 export type InvocationStatusPageResult = OperationInvokeStatusResult | Readonly<{
   kind: 'source_unavailable'
@@ -96,6 +97,12 @@ function InvocationStatusRoute() {
   const cancel = useServerFn(cancelOwnerInvocationServer)
   const reconcile = useServerFn(reconcileOwnerInvocationServer)
   const router = useRouter()
+  const cancelIdempotencyKeyRef = useRef<string | undefined>(undefined)
+  const reconciliationAttemptRef = useRef<Readonly<{
+    identity: string
+    idempotencyKey: string
+    observedAt: string
+  }> | undefined>(undefined)
   useEffect(() => {
     setResult(loadedResult)
   }, [loadedResult])
@@ -108,7 +115,8 @@ function InvocationStatusRoute() {
       const refreshed = await readStatus({ data: { invocationRef: result.invocationRef } })
       setResult(refreshed)
       setFeedback(refreshFeedback(refreshed))
-    } catch {
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setFeedback({ kind: 'error', message: 'The current status source is unavailable. The displayed state has not changed.' })
     } finally {
       setRefreshPending(false)
@@ -119,17 +127,25 @@ function InvocationStatusRoute() {
     if (refreshPending || cancelPending || reconcilePending || result.kind !== 'found' || !(result.state === 'authorized' || result.state === 'retryable' || result.state === 'leased')) return
     setCancelPending(true)
     setFeedback(undefined)
+    cancelIdempotencyKeyRef.current ??= crypto.randomUUID()
     try {
       const recovery = await cancel({
         data: {
           invocationRef: result.invocationRef,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: cancelIdempotencyKeyRef.current,
         },
       })
+      cancelIdempotencyKeyRef.current = undefined
       setResult(statusFromRecovery(recovery))
       setFeedback(cancelFeedback(recovery))
-      await router.invalidate()
-    } catch {
+      try {
+        await router.invalidate()
+      } catch (cause) {
+        captureClientExceptionOnClient(cause)
+        setFeedback({ kind: 'error', message: 'The cancellation result was received, but current status could not be reloaded. The displayed result is retained.' })
+      }
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setFeedback({ kind: 'error', message: 'The cancellation source is unavailable. No new invocation state is claimed.' })
     } finally {
       setCancelPending(false)
@@ -155,6 +171,23 @@ function InvocationStatusRoute() {
     setReconcilePending(true)
     setFeedback(undefined)
     try {
+      const attemptIdentity = canonicalDigest({
+        invocationRef: result.invocationRef,
+        attemptRef: result.attemptRef,
+        effectGeneration: result.effectGeneration,
+        operationRef: result.operationRef,
+        resolution: input.resolution,
+        source,
+        evidenceRef,
+      })
+      if (reconciliationAttemptRef.current?.identity !== attemptIdentity) {
+        reconciliationAttemptRef.current = {
+          identity: attemptIdentity,
+          idempotencyKey: crypto.randomUUID(),
+          observedAt: new Date().toISOString(),
+        }
+      }
+      const attempt = reconciliationAttemptRef.current
       const material = {
         kind: 'action_invocation_reconciliation' as const,
         version: 1 as const,
@@ -165,19 +198,26 @@ function InvocationStatusRoute() {
         effectGeneration: result.effectGeneration,
         operationRef: result.operationRef,
         resolution: input.resolution,
-        observedAt: new Date().toISOString(),
+        observedAt: attempt.observedAt,
       }
       const recovery = await reconcile({
         data: {
           invocationRef: result.invocationRef,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: attempt.idempotencyKey,
           evidence: { ...material, digest: canonicalDigest(material) },
         },
       })
+      reconciliationAttemptRef.current = undefined
       setResult(statusFromRecovery(recovery))
       setFeedback(reconcileFeedback(recovery))
-      await router.invalidate()
-    } catch {
+      try {
+        await router.invalidate()
+      } catch (cause) {
+        captureClientExceptionOnClient(cause)
+        setFeedback({ kind: 'error', message: 'The reconciliation result was received, but current status could not be reloaded. The displayed result is retained.' })
+      }
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setFeedback({ kind: 'error', message: 'The reconciliation source is unavailable. No new invocation state is claimed.' })
     } finally {
       setReconcilePending(false)

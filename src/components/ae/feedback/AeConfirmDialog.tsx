@@ -18,6 +18,7 @@ type AeConfirmDialogProps = {
   confirmLabel: string;
   cancelLabel?: string;
   confirmVariant?: "default" | "destructive";
+  showConfirm?: boolean;
   pending?: boolean;
   onConfirm: () => void | Promise<void>;
   returnFocusRef?: RefObject<HTMLElement | null>;
@@ -31,6 +32,7 @@ export function AeConfirmDialog({
   confirmLabel,
   cancelLabel = "Cancel",
   confirmVariant = "default",
+  showConfirm = true,
   pending = false,
   onConfirm,
   returnFocusRef,
@@ -75,17 +77,19 @@ export function AeConfirmDialog({
           <AlertDialogCancel type="button" disabled={pending}>
             {cancelLabel}
           </AlertDialogCancel>
-          <AlertDialogAction
-            type="button"
-            variant={confirmVariant}
-            disabled={pending}
-            onClick={(event) => {
-              event.preventDefault();
-              void handleConfirm();
-            }}
-          >
-            {pending ? "Working…" : confirmLabel}
-          </AlertDialogAction>
+          {showConfirm ? (
+            <AlertDialogAction
+              type="button"
+              variant={confirmVariant}
+              disabled={pending}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirm();
+              }}
+            >
+              {pending ? "Working…" : confirmLabel}
+            </AlertDialogAction>
+          ) : null}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

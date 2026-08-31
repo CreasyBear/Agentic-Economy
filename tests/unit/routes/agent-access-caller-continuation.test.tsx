@@ -39,6 +39,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 vi.mock('@tanstack/react-start', () => ({
+  createClientOnlyFn: (fn: (...args: never[]) => unknown) => fn,
   useServerFn: (reference: unknown) => routeHarness.serverFns.get(reference) ?? (async () => undefined),
 }))
 

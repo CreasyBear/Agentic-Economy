@@ -4,7 +4,7 @@ import { useRef } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { AeOwnerOfferingEditor } from '@/components/ae/offerings/AeOwnerOfferings'
+import { AeOwnerOfferingEditorWithNavigationSafety } from '@/components/ae/offerings/AeOwnerOfferings'
 import { emptyOwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings.exports'
 import type { OwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings'
 import { readOwnerOfferingSupplyServer, saveOwnerOfferingServer } from '@/components/ae/offerings/owner-offering.functions'
@@ -30,7 +30,7 @@ function NewOwnerOfferingRoute() {
   return (
     <AeOperatorShell operatorRole="owner" title="Add Operation" description="Describe one tool, its price, and how an agent can call it." currentPath="/owner/offerings" breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add' }]}>
       {result.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Operation editor unavailable</AlertTitle><AlertDescription>Supplier access is required before an Operation can be saved.</AlertDescription></Alert> : (
-        <AeOwnerOfferingEditor
+        <AeOwnerOfferingEditorWithNavigationSafety
           initialValue={emptyOwnerOfferingEditorValue}
           draftKey={result.businessId}
           {...(seed === undefined ? {} : { seed })}

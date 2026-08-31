@@ -1,11 +1,13 @@
 import { ArrowLeftIcon } from 'lucide-react'
-import { Link, useLocation } from '@tanstack/react-router'
+import { Link, useLocation, useRouter } from '@tanstack/react-router'
 import { SignOutButton } from '@clerk/tanstack-react-start'
+import { useState } from 'react'
 
 import { AeOperatorShell, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorShell'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { Skeleton } from '@/components/ui/skeleton'
 import { operatorRoleForPath, roleHomeHref } from '@/lib/operator/navigation'
 import {
@@ -48,6 +50,8 @@ export function OperatorRoutePending() {
 
 export function OperatorRouteError({ error }: { error: unknown }) {
   const { pathname } = useLocation()
+  const router = useRouter()
+  const [retryPending, setRetryPending] = useState(false)
   const parentShell = useOperatorShellChrome()
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
   const correlationRef = operatorErrorCorrelationRef(error)
@@ -76,8 +80,20 @@ export function OperatorRouteError({ error }: { error: unknown }) {
           ? null
           : <AeCopyReference label="support reference" value={correlationRef} />}
         <div className="flex w-full flex-wrap gap-intra">
-          <Button type="button" className="min-h-touch" onClick={() => window.location.reload()}>
-            Try again
+          <Button
+            type="button"
+            className="min-h-touch"
+            disabled={retryPending}
+            aria-busy={retryPending || undefined}
+            onClick={() => {
+              if (retryPending) return
+              setRetryPending(true)
+              void router.invalidate()
+                .catch((cause) => captureClientExceptionOnClient(cause))
+                .finally(() => setRetryPending(false))
+            }}
+          >
+            {retryPending ? 'Trying again…' : 'Try again'}
           </Button>
           <Button asChild variant="secondary" className="min-h-touch">
             <Link to="/status">Check system status</Link>

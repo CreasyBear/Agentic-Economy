@@ -6,6 +6,7 @@ import { Link } from '@tanstack/react-router'
 import { AeOperationInspector } from '@/components/ae/market/operation-detail'
 import { Button } from '@/components/ui/button'
 import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 import {
   useBuyerCredentialPresenceReader,
@@ -37,14 +38,18 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
       try {
         const [result, hasBuyerCredential] = await Promise.all([
           readDetail(operationRef),
-          readBuyerCredentialPresence().catch(() => false),
+          readBuyerCredentialPresence().catch((cause) => {
+            captureClientExceptionOnClient(cause)
+            return false
+          }),
         ])
         if (!current) return
         if (result.kind === 'found') {
           rememberRecentOperationRef(result.operation.operationRef)
           setState({ kind: 'found', operation: result.operation, hasBuyerCredential })
         } else setState({ kind: 'unavailable', operationRef })
-      } catch {
+      } catch (cause) {
+        captureClientExceptionOnClient(cause)
         if (current) setState({ kind: 'unavailable', operationRef })
       }
     })()

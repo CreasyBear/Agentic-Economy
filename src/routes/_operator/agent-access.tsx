@@ -11,6 +11,7 @@ import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
 import { disconnectAgentServer, revokeAgentCredentialServer } from '@/modules/agent-access/agent-access.functions'
 import type { AgentLifecycleResult } from '@/modules/agent-access/agent-access'
@@ -89,7 +90,8 @@ function AgentAccessHome() {
     try {
       setDirectory(await readDirectory())
       setDirectoryError(undefined)
-    } catch {
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setDirectoryError('Agent access and balance are temporarily unavailable.')
     } finally {
       setLoading(false)
@@ -100,7 +102,8 @@ function AgentAccessHome() {
     try {
       setApprovals(await readApprovals())
       setApprovalsError(undefined)
-    } catch {
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setApprovalsError('Waiting approvals are temporarily unavailable.')
     } finally {
       setApprovalsLoading(false)
@@ -175,7 +178,8 @@ function AgentAccessHome() {
         ? await revokeCredential({ data: { credentialRef: command.ref } })
         : await disconnectAgent({ data: { principalRef: command.ref } })
       await finishLifecycle(result, command)
-    } catch {
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setLifecycleIssue({
         title: command.kind === 'credential' ? 'Credential revocation unavailable' : 'Agent disconnection unavailable',
         message: 'The access service did not confirm the change. Retry the same request before taking another action.',
@@ -211,8 +215,9 @@ function AgentAccessHome() {
           ? `${operationRef} approved once.`
           : `${operationRef} declined.`)
       await loadApprovals()
-    } catch {
-      setApprovalsError('Your decision could not be saved. Try the action again.')
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setApprovalsError('Your decision could not be confirmed. Refresh the waiting approvals before deciding again.')
     } finally {
       setApprovalDecision(undefined)
     }

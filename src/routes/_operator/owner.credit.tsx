@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { beginCreditTopupServer, readCreditPaymentServer } from '@/modules/money/server'
@@ -44,7 +45,8 @@ function OwnerCreditRoute() {
     try {
       setDirectory(await readDirectory())
       setError(undefined)
-    } catch {
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setError('Credit balance is temporarily unavailable.')
     } finally {
       setLoading(false)

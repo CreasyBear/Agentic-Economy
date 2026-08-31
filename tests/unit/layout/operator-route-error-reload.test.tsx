@@ -1,15 +1,19 @@
 /**
  * @vitest-environment jsdom
  */
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import type { ReactNode } from 'react'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const routeStateMocks = vi.hoisted(() => ({
+  invalidate: vi.fn(async () => undefined),
   parentShell: null as null | { nested: true },
   pathname: '/owner/settings/connections',
+}))
+const diagnostics = vi.hoisted(() => ({ capture: vi.fn() }))
+
+vi.mock('@/lib/observability/capture-client-exception', () => ({
+  captureClientExceptionOnClient: diagnostics.capture,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -17,6 +21,7 @@ vi.mock('@tanstack/react-router', () => ({
     <a href={to} className={className}>{children}</a>
   ),
   useLocation: () => ({ pathname: routeStateMocks.pathname }),
+  useRouter: () => ({ invalidate: routeStateMocks.invalidate }),
 }))
 
 vi.mock('@/components/ae/layout/AeOperatorShell', () => ({
@@ -43,9 +48,12 @@ afterEach(() => {
   cleanup()
   routeStateMocks.parentShell = null
   routeStateMocks.pathname = '/owner/settings/connections'
+  routeStateMocks.invalidate.mockReset()
+  routeStateMocks.invalidate.mockResolvedValue(undefined)
+  diagnostics.capture.mockReset()
 })
 
-describe('OperatorRouteError reload recovery', () => {
+describe('OperatorRouteError router recovery', () => {
   it('offers retry and system-status recovery without leaking error details', () => {
     render(<OperatorRouteError error={new Error('private upstream credential')} />)
 
@@ -77,12 +85,33 @@ describe('OperatorRouteError reload recovery', () => {
     expect(screen.getByRole('alert')).toBeTruthy()
   })
 
-  it('wires the button directly to reloading the exact current page', () => {
-    const source = readFileSync(
-      resolve(process.cwd(), 'src/components/ae/layout/AeOperatorRouteStates.tsx'),
-      'utf8',
-    )
+  it('retries through router invalidation without allowing duplicate attempts', async () => {
+    let finishRetry: (() => void) | undefined
+    routeStateMocks.invalidate.mockImplementation(() => new Promise<undefined>((resolve) => {
+      finishRetry = () => resolve(undefined)
+    }))
+    render(<OperatorRouteError error={new Error('private upstream credential')} />)
 
-    expect(source.match(/onClick=\{\(\) => window\.location\.reload\(\)\}/g)).toHaveLength(1)
+    const retry = screen.getByRole('button', { name: 'Try again' })
+    fireEvent.click(retry)
+    fireEvent.click(retry)
+
+    expect(routeStateMocks.invalidate).toHaveBeenCalledTimes(1)
+    expect(retry).toHaveProperty('disabled', true)
+    expect(retry.textContent).toBe('Trying again…')
+
+    finishRetry?.()
+    await waitFor(() => expect(retry).toHaveProperty('disabled', false))
+  })
+
+  it('contains a rejected invalidation and restores the retry control', async () => {
+    routeStateMocks.invalidate.mockRejectedValueOnce(new Error('invalidation failed'))
+    render(<OperatorRouteError error={new Error('route failed')} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Try again' })).toHaveProperty('disabled', false))
+    expect(routeStateMocks.invalidate).toHaveBeenCalledTimes(1)
+    expect(diagnostics.capture).toHaveBeenCalledWith(expect.any(Error))
   })
 })

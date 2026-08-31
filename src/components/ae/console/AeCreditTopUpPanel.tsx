@@ -21,6 +21,7 @@ import {
   type MoneyRefusal,
 } from '@/modules/money/public'
 import type { CreditTopupBeginInput, CreditTopupOutcomeUnknownResult, CreditTopupReadInput, CreditTopupStartResult } from '@/modules/money/server'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 export type CreditTopupTarget = Readonly<{
   principalId: string
   currency: string
@@ -98,7 +99,8 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
       } catch {
         setErrorMessage('Payment was read back, but the canonical credit balance is temporarily unavailable.')
       }
-    } catch {
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setPaymentStatus('outcome_unknown')
       setErrorMessage('Payment status is still being checked. Your credit balance has not been updated by this browser return.')
     } finally {
@@ -160,7 +162,8 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
       setSession(result.session)
       setRecovery(locator)
       persistRecovery(target.principalId, locator)
-    } catch {
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
       setErrorMessage('Adding credit could not be started. No payment was confirmed; try again.')
     } finally {
       setPending(false)

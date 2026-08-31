@@ -353,4 +353,33 @@ describe('owner supply route in-memory admission', () => {
     expect(admitPayload.data).not.toHaveProperty('sourceDraftRevision')
     expect(admitPayload.data).not.toHaveProperty('sourceDigest')
   })
+
+  it('reuses the same readiness operation key after an unconfirmed attempt', async () => {
+    const readiness = vi.fn()
+      .mockResolvedValueOnce({ step: 'readiness', state: 'blocked', refusal: 'source_unavailable' })
+      .mockResolvedValueOnce({ kind: 'ready' })
+    routeMocks.loaderData = loadedData()
+    routeMocks.serverFnResults.set(routeMocks.readinessRef, readiness)
+
+    const Component = OwnerSupplyDetailRoute.options.component
+    if (Component === undefined) throw new Error('route_component_missing')
+    render(createElement(Component))
+    const runReadiness = routeMocks.funnelProps?.callbacks.runReadiness
+    if (runReadiness === undefined) throw new Error('readiness_callback_missing')
+    const context = {
+      businessId: 'business:owner',
+      offeringRef: 'catalog-offering:owner',
+      offeringRevision: 1,
+      offeringSourceHash: `sha256:${'c'.repeat(64)}`,
+      publicationRef: 'publication:owner',
+      publicationRevision: 1,
+    }
+
+    await runReadiness(context as never)
+    await runReadiness(context as never)
+
+    const keys = readiness.mock.calls.map((call) => call[0]?.data?.operationKey)
+    expect(keys).toHaveLength(2)
+    expect(keys[1]).toBe(keys[0])
+  })
 })

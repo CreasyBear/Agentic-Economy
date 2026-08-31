@@ -13,6 +13,7 @@ import {
   readOwnerOfferingSupplyServer,
 } from '@/components/ae/offerings/owner-offering.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 export const Route = createFileRoute('/_operator/owner/offerings')({
   ...operatorRouteOptions,
@@ -29,6 +30,7 @@ function OwnerOfferingsRoute() {
   const [providerWebsite, setProviderWebsite] = useState('')
   const [identityPending, setIdentityPending] = useState(false)
   const [identityError, setIdentityError] = useState<string>()
+  const [identityOutcomeUnknown, setIdentityOutcomeUnknown] = useState(false)
   const result = Route.useLoaderData()
   if (location.pathname !== '/owner/offerings') return <Outlet />
 
@@ -91,7 +93,7 @@ function OwnerOfferingsRoute() {
           <Button
             type="button"
             className="min-h-touch justify-self-start"
-            disabled={identityPending}
+            disabled={identityPending || identityOutcomeUnknown}
             aria-busy={identityPending || undefined}
             onClick={() => {
               void (async () => {
@@ -119,18 +121,47 @@ function OwnerOfferingsRoute() {
                     },
                   })
                   if (created.kind === 'refused') {
+                    if (created.code === 'source_unavailable') {
+                      setIdentityOutcomeUnknown(true)
+                      setIdentityError('The supplier workspace outcome could not be confirmed. Reload supplier status before submitting again; your details remain on this page.')
+                      return
+                    }
                     setIdentityError(supplierIdentityError(created.code))
                     return
                   }
                   await router.invalidate()
+                } catch (cause) {
+                  captureClientExceptionOnClient(cause)
+                  setIdentityOutcomeUnknown(true)
+                  setIdentityError('The supplier workspace outcome could not be confirmed. Reload supplier status before submitting again; your details remain on this page.')
                 } finally {
                   setIdentityPending(false)
                 }
               })()
             }}
           >
-            {identityPending ? 'Creating supplier…' : 'Create supplier workspace'}
+            {identityPending ? 'Creating supplier…' : identityOutcomeUnknown ? 'Outcome not confirmed' : 'Create supplier workspace'}
           </Button>
+          {identityOutcomeUnknown ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-touch justify-self-start"
+              disabled={identityPending}
+              onClick={() => {
+                setIdentityPending(true)
+                void router.invalidate()
+                  .then(() => setIdentityOutcomeUnknown(false))
+                  .catch((cause) => {
+                    captureClientExceptionOnClient(cause)
+                    setIdentityError('Supplier status is still unavailable. No new workspace state is claimed.')
+                  })
+                  .finally(() => setIdentityPending(false))
+              }}
+            >
+              Reload supplier status
+            </Button>
+          ) : null}
         </div>
       ) : result.offerings.some((item) => item.revision === undefined) ? (
         <div className="grid gap-4">

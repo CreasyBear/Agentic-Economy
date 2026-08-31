@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import type { RenameSupplierDisplayNameResult } from '@/lib/server/owner-workspace.functions'
 import type { PublicOwnerStatusRouteReadbackResult } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 export function AeWorkspaceGeneral({
   result,
@@ -159,6 +160,10 @@ function SupplierNameEditor({
                 setName(result.name)
                 requestKeyRef.current = crypto.randomUUID()
               }
+            })
+            .catch((cause) => {
+              captureClientExceptionOnClient(cause)
+              setFeedback({ kind: 'refused', code: 'source_unavailable' })
             })
             .finally(() => setPending(false))
         }}

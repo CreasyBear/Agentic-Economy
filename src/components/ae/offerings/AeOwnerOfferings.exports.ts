@@ -4,11 +4,13 @@ import type { OwnerOfferingEditorValue, OwnerOfferingSummary } from './AeOwnerOf
 
 export const OWNER_OFFERING_DRAFT_STORAGE_KEY = 'ae.ownerOfferingDraft.v1'
 
+export type OwnerOfferingDraftStorageResult = Readonly<{ kind: 'stored' | 'unavailable' }>
+
 export function readStoredOfferingDraft(businessId: string): OwnerOfferingEditorValue | undefined {
   if (typeof window === 'undefined') return undefined
-  const raw = window.sessionStorage.getItem(`${OWNER_OFFERING_DRAFT_STORAGE_KEY}:${businessId}`)
-  if (raw === null) return undefined
   try {
+    const raw = window.sessionStorage.getItem(`${OWNER_OFFERING_DRAFT_STORAGE_KEY}:${businessId}`)
+    if (raw === null) return undefined
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed !== 'object' || parsed === null) return undefined
     return { ...emptyOwnerOfferingEditorValue, ...parsed }
@@ -17,14 +19,24 @@ export function readStoredOfferingDraft(businessId: string): OwnerOfferingEditor
   }
 }
 
-export function writeStoredOfferingDraft(businessId: string, value: OwnerOfferingEditorValue): void {
-  if (typeof window === 'undefined') return
-  window.sessionStorage.setItem(`${OWNER_OFFERING_DRAFT_STORAGE_KEY}:${businessId}`, JSON.stringify(value))
+export function writeStoredOfferingDraft(businessId: string, value: OwnerOfferingEditorValue): OwnerOfferingDraftStorageResult {
+  if (typeof window === 'undefined') return { kind: 'unavailable' }
+  try {
+    window.sessionStorage.setItem(`${OWNER_OFFERING_DRAFT_STORAGE_KEY}:${businessId}`, JSON.stringify(value))
+    return { kind: 'stored' }
+  } catch {
+    return { kind: 'unavailable' }
+  }
 }
 
-export function clearStoredOfferingDraft(businessId: string): void {
-  if (typeof window === 'undefined') return
-  window.sessionStorage.removeItem(`${OWNER_OFFERING_DRAFT_STORAGE_KEY}:${businessId}`)
+export function clearStoredOfferingDraft(businessId: string): OwnerOfferingDraftStorageResult {
+  if (typeof window === 'undefined') return { kind: 'unavailable' }
+  try {
+    window.sessionStorage.removeItem(`${OWNER_OFFERING_DRAFT_STORAGE_KEY}:${businessId}`)
+    return { kind: 'stored' }
+  } catch {
+    return { kind: 'unavailable' }
+  }
 }
 
 /**

@@ -145,4 +145,39 @@ describe("current supply funnel", () => {
       screen.getByText(/Setup or test calls do not create earnings/i),
     ).toBeDefined();
   });
+
+  it("requires authoritative reload after a completed action cannot refresh", async () => {
+    const runReadiness = vi.fn(async () => ({
+      step: "readiness" as const,
+      state: "completed" as const,
+    }));
+    const onReload = vi.fn()
+      .mockRejectedValueOnce(new Error("reload unavailable"))
+      .mockResolvedValueOnce(undefined);
+    const callbacks: SupplyFunnelCallbacks = {
+      saveOffering: async (value) => ({ kind: "saved", value, message: "Saved." }),
+      preflight: async () => ({ kind: "prepared", prepared: preparedPublication }),
+      admit: async () => ({ step: "admission", state: "completed" }),
+      runReadiness,
+      runTest: async () => ({ step: "test", state: "completed" }),
+      onReload,
+    };
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={offeringAt("readiness")}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        callbacks={callbacks}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Check readiness" }));
+    expect(await screen.findByRole("button", { name: "Reload setup" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Check readiness" })).toBeNull();
+    expect(runReadiness).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reload setup" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Check readiness" })).toBeDefined());
+    expect(runReadiness).toHaveBeenCalledOnce();
+  });
 });

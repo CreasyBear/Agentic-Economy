@@ -3,7 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { AeOwnerOfferingEditor, type OwnerOfferingEditorValue, type OwnerOfferingSaveResult } from '@/components/ae/offerings/AeOwnerOfferings'
+import { AeOwnerOfferingEditor, AeOwnerOfferingEditorWithNavigationSafety, type OwnerOfferingEditorValue, type OwnerOfferingSaveResult } from '@/components/ae/offerings/AeOwnerOfferings'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeOwnerOperationFacts } from './AeSupplyPublisherHome'
 import type {
@@ -28,6 +28,7 @@ import {
 } from './AeSupplyEndpointConfigStep'
 import { parseX402FetchTransportConfiguration } from '@/modules/capability-supply/public'
 import { formatExactAmount, rescaleExactAmount } from '@/modules/money/public'
+import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 const steps: readonly SupplyFunnelStep[] = ['describe', 'admission', 'readiness', 'test']
 const emptyAuthorityOptions: readonly SupplyAuthorityOption[] = []
@@ -86,6 +87,7 @@ export function AeSupplyFunnel({
   canary = { kind: 'not_found' },
   authorityOptions = emptyAuthorityOptions,
   callbacks,
+  protectEditorNavigation = false,
 }: Readonly<{
   businessId: string
   offering: OwnerSupplyOfferingReadback
@@ -95,9 +97,12 @@ export function AeSupplyFunnel({
   canary?: OwnerSellerCanaryReadback
   authorityOptions?: readonly SupplyAuthorityOption[]
   callbacks: SupplyFunnelCallbacks
+  protectEditorNavigation?: boolean
 }>) {
   const [feedback, setFeedback] = useState<Feedback>()
   const [confirmTest, setConfirmTest] = useState(false)
+  const [reloadRequired, setReloadRequired] = useState(false)
+  const [reloadPending, setReloadPending] = useState(false)
   const actionContext = contextForOffering(businessId, offering)
   const currentStep = offering.currentStep
   const isX402Test = offering.publication?.source.kind === 'x402'
@@ -110,6 +115,14 @@ export function AeSupplyFunnel({
     || offering.actionableReason === 'credential_rejected'
     || offering.actionableReason === 'credential_unavailable'
   const authorityNeedsRebind = offering.actionableReason === 'authority_stale'
+  const OfferingEditor = protectEditorNavigation
+    ? AeOwnerOfferingEditorWithNavigationSafety
+    : AeOwnerOfferingEditor
+
+  function showUnexpected(cause: unknown, message = 'AE could not confirm this setup action. Reload the authoritative setup before changing or repeating it.') {
+    captureClientExceptionOnClient(cause)
+    setFeedback({ message, variant: 'destructive' })
+  }
 
   useEffect(() => {
     const targetId = window.location.hash === '#incompatibility'
@@ -126,9 +139,24 @@ export function AeSupplyFunnel({
     target.focus({ preventScroll: true })
   }, [authorityNeedsRebind])
 
-  async function reload() {
+  async function reload(): Promise<boolean> {
     setConfirmTest(false)
-    await callbacks.onReload?.()
+    setReloadPending(true)
+    try {
+      await callbacks.onReload?.()
+      setReloadRequired(false)
+      return true
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setReloadRequired(true)
+      setFeedback({
+        message: 'AE received the action result, but current setup could not be reloaded. Reload setup before another action.',
+        variant: 'destructive',
+      })
+      return false
+    } finally {
+      setReloadPending(false)
+    }
   }
 
   async function showCompletion(result: SupplyFunnelStepCompletion) {
@@ -157,6 +185,24 @@ export function AeSupplyFunnel({
           <AlertDescription>{feedback.message}</AlertDescription>
         </Alert>
       )}
+      {reloadRequired ? (
+        <Alert variant="destructive">
+          <AlertTitle>Current setup needs to reload</AlertTitle>
+          <AlertDescription className="grid gap-3">
+            The last action returned, but this page could not load its authoritative result. No further setup action is available until reload succeeds.
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-touch justify-self-start"
+              disabled={reloadPending}
+              aria-busy={reloadPending || undefined}
+              onClick={() => void reload()}
+            >
+              {reloadPending ? 'Reloading setup…' : 'Reload setup'}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <SupplyTruthCard offering={offering} />
       {credentialNeedsReplacement ? (
         <div
@@ -197,9 +243,9 @@ export function AeSupplyFunnel({
           )
         })}
       </ol>
-      {currentStep === 'describe' ? (
+      {currentStep === 'describe' && !reloadRequired ? (
         <div id="description" className="scroll-mt-6">
-          <AeOwnerOfferingEditor
+          <OfferingEditor
             initialValue={initialOffering}
             onSave={async (value) => {
               const result = await callbacks.saveOffering(value)
@@ -213,7 +259,7 @@ export function AeSupplyFunnel({
           />
         </div>
       ) : null}
-      {currentStep === 'admission' || incompatible || credentialNeedsReplacement || authorityNeedsRebind ? (
+      {!reloadRequired && (currentStep === 'admission' || incompatible || credentialNeedsReplacement || authorityNeedsRebind) ? (
         <div
           id="provider"
           tabIndex={authorityNeedsRebind ? -1 : undefined}
@@ -232,13 +278,14 @@ export function AeSupplyFunnel({
           />
         </div>
       ) : null}
-      {currentStep === 'readiness' && !incompatible && !credentialNeedsReplacement && !authorityNeedsRebind ? (
+      {currentStep === 'readiness' && !reloadRequired && !incompatible && !credentialNeedsReplacement && !authorityNeedsRebind ? (
         <ActionStep
           title="3 · CHECK READINESS"
           heading="Check that the admitted operation works"
           detail="AE will record a bounded readiness observation for the exact admitted endpoint and contract."
           actionLabel="Check readiness"
           disabled={actionContext === undefined}
+          onError={showUnexpected}
           onAction={async () => {
             if (actionContext === undefined) {
               setFeedback({ message: refusalMessage('publication_missing'), variant: 'destructive' })
@@ -248,7 +295,7 @@ export function AeSupplyFunnel({
           }}
         />
       ) : null}
-      {currentStep === 'test' && !incompatible && !credentialNeedsReplacement && !authorityNeedsRebind && !(isX402Test && hasCanaryStatus) ? (
+      {currentStep === 'test' && !reloadRequired && !incompatible && !credentialNeedsReplacement && !authorityNeedsRebind && !(isX402Test && hasCanaryStatus) ? (
         <ActionStep
           title="4 · RUN A TEST"
           heading={isX402Test ? 'Run one paid seller canary' : 'Run a real test'}
@@ -267,6 +314,7 @@ export function AeSupplyFunnel({
               ? 'Send the test'
               : 'Review and confirm the test'}
           disabled={actionContext === undefined || (isX402Test && x402Canary === undefined)}
+          onError={showUnexpected}
           onAction={async () => {
             if (!confirmTest) {
               setConfirmTest(true)
@@ -280,7 +328,7 @@ export function AeSupplyFunnel({
           }}
         />
       ) : null}
-      {isX402Test && hasCanaryStatus ? (
+      {isX402Test && hasCanaryStatus && !reloadRequired ? (
         <SellerCanaryStatus
           canary={canary}
           {...(actionContext === undefined ? {} : { context: actionContext })}
@@ -289,9 +337,10 @@ export function AeSupplyFunnel({
           {...(callbacks.promoteCanary === undefined ? {} : { promote: callbacks.promoteCanary })}
           onReload={reload}
           onFeedback={setFeedback}
+          onError={showUnexpected}
         />
       ) : null}
-      {actionContext === undefined ? null : (
+      {actionContext === undefined || reloadRequired ? null : (
         <MaintenanceActions
           offering={offering}
           context={actionContext}
@@ -299,6 +348,7 @@ export function AeSupplyFunnel({
           {...(callbacks.withdraw === undefined ? {} : { withdraw: callbacks.withdraw })}
           {...(callbacks.republish === undefined ? {} : { republish: callbacks.republish })}
           onResult={showMaintenance}
+          onError={showUnexpected}
         />
       )}
     </div>
@@ -313,14 +363,16 @@ function SellerCanaryStatus({
   promote,
   onReload,
   onFeedback,
+  onError,
 }: Readonly<{
   canary: Exclude<OwnerSellerCanaryReadback, { kind: 'not_found' }>
   context?: SupplyFunnelActionContext
   payment?: X402CanaryDisclosure
   retry: RunCanaryCallback
   promote?: PromoteCanaryCallback
-  onReload: () => Promise<void>
+  onReload: () => Promise<unknown>
   onFeedback: (feedback: Feedback) => void
+  onError: (cause: unknown, message?: string) => void
 }>) {
   const [retryOpen, setRetryOpen] = useState(false)
   const [retryPending, setRetryPending] = useState(false)
@@ -372,6 +424,8 @@ function SellerCanaryStatus({
       })
       setRetryOpen(false)
       await onReload()
+    } catch (cause) {
+      onError(cause, 'AE could not confirm the canary retry. Reload the retained canary status before trying again.')
     } finally {
       retryInFlight.current = false
       setRetryPending(false)
@@ -392,6 +446,8 @@ function SellerCanaryStatus({
       })
       setPromotionOpen(false)
       await onReload()
+    } catch (cause) {
+      onError(cause, 'AE could not confirm promotion. Reload the retained canary status before taking another action.')
     } finally {
       setPromotionPending(false)
     }
@@ -628,6 +684,7 @@ function MaintenanceActions({
   withdraw,
   republish,
   onResult,
+  onError,
 }: Readonly<{
   offering: OwnerSupplyOfferingReadback
   context: SupplyFunnelActionContext
@@ -635,6 +692,7 @@ function MaintenanceActions({
   withdraw?: MaintenanceCallback
   republish?: MaintenanceCallback
   onResult: (result: OwnerSupplyCommandResult) => Promise<void>
+  onError: (cause: unknown, message?: string) => void
 }>) {
   const publicationState = offering.publication?.state
   const [withdrawOpen, setWithdrawOpen] = useState(false)
@@ -647,6 +705,8 @@ function MaintenanceActions({
     try {
       await onResult(await withdraw(context))
       setWithdrawOpen(false)
+    } catch (cause) {
+      onError(cause)
     } finally {
       withdrawInFlight.current = false
       setWithdrawPending(false)
@@ -655,7 +715,7 @@ function MaintenanceActions({
   return (
     <AeSection id={publicationState === 'withdrawn' ? 'publication-maintenance' : 'readiness'} title="Publication maintenance" description="Each action rechecks the current Operation and publication revision before it changes anything.">
       <div className="flex flex-wrap gap-3">
-        {publicationState === 'current' && recheck !== undefined ? <MaintenanceButton label="Recheck readiness" callback={recheck} context={context} onResult={onResult} /> : null}
+        {publicationState === 'current' && recheck !== undefined ? <MaintenanceButton label="Recheck readiness" callback={recheck} context={context} onResult={onResult} onError={onError} /> : null}
         {publicationState === 'current' && withdraw !== undefined ? (
           <>
             <Button type="button" variant="secondary" disabled={withdrawPending} onClick={() => setWithdrawOpen(true)} className="min-h-touch">
@@ -673,19 +733,21 @@ function MaintenanceActions({
             />
           </>
         ) : null}
-        {publicationState === 'withdrawn' && republish !== undefined ? <MaintenanceButton label="Republish" callback={republish} context={context} onResult={onResult} /> : null}
+        {publicationState === 'withdrawn' && republish !== undefined ? <MaintenanceButton label="Republish" callback={republish} context={context} onResult={onResult} onError={onError} /> : null}
       </div>
     </AeSection>
   )
 }
 
-function MaintenanceButton({ label, callback, context, onResult, variant = 'default' }: Readonly<{ label: string; callback?: MaintenanceCallback; context: SupplyFunnelActionContext; onResult: (result: OwnerSupplyCommandResult) => Promise<void>; variant?: 'default' | 'secondary' }>) {
+function MaintenanceButton({ label, callback, context, onResult, onError, variant = 'default' }: Readonly<{ label: string; callback?: MaintenanceCallback; context: SupplyFunnelActionContext; onResult: (result: OwnerSupplyCommandResult) => Promise<void>; onError: (cause: unknown, message?: string) => void; variant?: 'default' | 'secondary' }>) {
   const [pending, setPending] = useState(false)
   async function run() {
     if (callback === undefined) return
     setPending(true)
     try {
       await onResult(await callback(context))
+    } catch (cause) {
+      onError(cause)
     } finally {
       setPending(false)
     }
@@ -693,12 +755,14 @@ function MaintenanceButton({ label, callback, context, onResult, variant = 'defa
   return <Button type="button" variant={variant} disabled={pending || callback === undefined} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-touch">{pending ? 'Working' : label}</Button>
 }
 
-function ActionStep({ heading, detail, actionLabel, onAction, disabled = false }: Readonly<{ title: string; heading: string; detail: string; actionLabel: string; onAction: () => Promise<void>; disabled?: boolean }>) {
+function ActionStep({ heading, detail, actionLabel, onAction, onError, disabled = false }: Readonly<{ title: string; heading: string; detail: string; actionLabel: string; onAction: () => Promise<void>; onError: (cause: unknown, message?: string) => void; disabled?: boolean }>) {
   const [pending, setPending] = useState(false)
   async function run() {
     setPending(true)
     try {
       await onAction()
+    } catch (cause) {
+      onError(cause)
     } finally {
       setPending(false)
     }

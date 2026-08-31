@@ -380,6 +380,35 @@ describe("current supply funnel", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("reuses a provider command reference after an unconfirmed update", async () => {
+    connectionServerMocks.reconnect.mockReset();
+    connectionServerMocks.reconnect
+      .mockResolvedValueOnce({ kind: "refused", code: "source_unavailable" })
+      .mockResolvedValueOnce({
+        kind: "applied",
+        connection: { ...activeConnection, authorityGeneration: 2 },
+        commandDigest: "sha256:command",
+      });
+    renderWithRouter(
+      <AeOwnerProviderConnections
+        businessId="business-1"
+        connections={[activeConnection]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh authority" }));
+    expect(await screen.findByText(/outcome was not confirmed/i)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Reload current connections" }));
+    await waitFor(() => expect(screen.getByRole<HTMLButtonElement>("button", { name: "Refresh authority" }).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh authority" }));
+    await waitFor(() => expect(connectionServerMocks.reconnect).toHaveBeenCalledTimes(2));
+
+    const commandIds = connectionServerMocks.reconnect.mock.calls.map(
+      (call) => call[0]?.data?.commandId,
+    );
+    expect(commandIds[1]).toBe(commandIds[0]);
+  });
+
   it("requires a live supported x402 challenge before connecting", async () => {
     connectionServerMocks.inspect.mockResolvedValue({
       kind: "observed",

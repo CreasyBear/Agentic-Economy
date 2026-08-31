@@ -99,6 +99,7 @@ function OwnerSupplyDetailRoute() {
   const result = Route.useLoaderData();
   const router = useRouter();
   const requestKey = useRef<string | undefined>(undefined);
+  const operationKeys = useRef(new Map<string, string>());
   const preflightDocument = useServerFn(preflightOwnerOpenApiDocumentServer);
   const preflight = useServerFn(preflightOwnerCapabilityServer);
   const admit = useServerFn(admitOwnerCapabilityServer);
@@ -179,6 +180,20 @@ function OwnerSupplyDetailRoute() {
     durableOffering.sourceMaterial,
   );
   const context = ownerSupplyActionContext(businessId, durableOffering);
+  async function withRetainedOperationKey<T>(
+    actionKey: string,
+    prefix: string,
+    run: (operationKey: string) => Promise<T>,
+  ): Promise<T> {
+    let operationKey = operationKeys.current.get(actionKey);
+    if (operationKey === undefined) {
+      operationKey = `${prefix}:${crypto.randomUUID()}`;
+      operationKeys.current.set(actionKey, operationKey);
+    }
+    const result = await run(operationKey);
+    if (!isSourceUnavailableResult(result)) operationKeys.current.delete(actionKey);
+    return result;
+  }
   const maintenance =
     (
       serverFn: (input: {
@@ -187,15 +202,19 @@ function OwnerSupplyDetailRoute() {
       reasonCode: string,
     ) =>
     async (actionContext: SupplyFunnelActionContext) =>
-      serverFn({
-        data: {
-          ...actionContext,
-          operationKey: `owner-supply:${reasonCode}:${crypto.randomUUID()}`,
-          correlationId: `owner-supply:${businessId}:${currentOfferingRef}`,
-          reasonCode,
-          evidenceRefs: ["owner-supply:funnel"],
-        },
-      });
+      withRetainedOperationKey(
+        `${reasonCode}:${canonicalDigest(actionContext)}`,
+        `owner-supply:${reasonCode}`,
+        (operationKey) => serverFn({
+          data: {
+            ...actionContext,
+            operationKey,
+            correlationId: `owner-supply:${businessId}:${currentOfferingRef}`,
+            reasonCode,
+            evidenceRefs: ["owner-supply:funnel"],
+          },
+        }),
+      );
   return (
     <AeOperatorShell
       operatorRole="owner"
@@ -204,6 +223,7 @@ function OwnerSupplyDetailRoute() {
       currentPath="/owner/supply"
     >
       <AeSupplyFunnel
+        protectEditorNavigation
         businessId={businessId}
         offering={durableOffering}
         initialOffering={initialOffering}
@@ -250,19 +270,23 @@ function OwnerSupplyDetailRoute() {
             return { kind: "prepared", prepared: checked.prepared };
           },
           admit: async (publicationSource) => {
-            const admission = await admit({
-              data: {
-                businessId,
-                offeringRef: currentOfferingRef,
-                offeringRevision,
-                offeringSourceHash: durableOffering.sourceHash,
-                source: publicationSource,
-                operationKey: `owner-supply:admission:${crypto.randomUUID()}`,
-                correlationId: `owner-supply:${businessId}:${currentOfferingRef}`,
-                reasonCode: "owner_supply_admission",
-                evidenceRefs: ["owner-supply:funnel"],
-              },
-            });
+            const admission = await withRetainedOperationKey(
+              `admission:${canonicalDigest(publicationSource)}`,
+              "owner-supply:admission",
+              (operationKey) => admit({
+                data: {
+                  businessId,
+                  offeringRef: currentOfferingRef,
+                  offeringRevision,
+                  offeringSourceHash: durableOffering.sourceHash,
+                  source: publicationSource,
+                  operationKey,
+                  correlationId: `owner-supply:${businessId}:${currentOfferingRef}`,
+                  reasonCode: "owner_supply_admission",
+                  evidenceRefs: ["owner-supply:funnel"],
+                },
+              }),
+            );
             return ownerAdmissionCompletion(
               admission,
               currentOfferingRef,
@@ -270,22 +294,26 @@ function OwnerSupplyDetailRoute() {
             );
           },
           runReadiness: async (actionContext) =>
-            readiness({
-              data: {
-                ...actionContext,
-                operationKey: `owner-supply:readiness:${crypto.randomUUID()}`,
-              },
-            }),
-          runTest: async (actionContext) =>
-            test({
-              data: {
-                ...actionContext,
-                operationKey: ownerSupplyTestOperationKey(
-                  actionContext,
-                  durableOffering.source?.kind === "x402",
-                ),
-              },
-            }),
+            withRetainedOperationKey(
+              `readiness:${canonicalDigest(actionContext)}`,
+              "owner-supply:readiness",
+              (operationKey) => readiness({ data: { ...actionContext, operationKey } }),
+            ),
+          runTest: async (actionContext) => {
+            if (durableOffering.source?.kind === "x402") {
+              return test({
+                data: {
+                  ...actionContext,
+                  operationKey: ownerSupplyTestOperationKey(actionContext, true),
+                },
+              });
+            }
+            return withRetainedOperationKey(
+              `test:${canonicalDigest(actionContext)}`,
+              "owner-supply:test",
+              (operationKey) => test({ data: { ...actionContext, operationKey } }),
+            );
+          },
           promoteCanary: async (actionContext, canaryRef) =>
             promoteCanary({
               data: {
@@ -305,6 +333,14 @@ function OwnerSupplyDetailRoute() {
       />
     </AeOperatorShell>
   );
+}
+
+function isSourceUnavailableResult(result: unknown): boolean {
+  if (typeof result !== "object" || result === null) return false;
+  const record = result as Readonly<Record<string, unknown>>;
+  return record["reason"] === "source_unavailable"
+    || record["code"] === "source_unavailable"
+    || record["refusal"] === "source_unavailable";
 }
 
 export function ownerSupplyTestOperationKey(

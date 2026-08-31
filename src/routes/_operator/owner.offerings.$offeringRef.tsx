@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { AeOwnerOfferingEditor, type OwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings'
+import { AeOwnerOfferingEditorWithNavigationSafety, type OwnerOfferingEditorValue } from '@/components/ae/offerings/AeOwnerOfferings'
 import { readOwnerOfferingSupplyServer, saveOwnerOfferingServer } from '@/components/ae/offerings/owner-offering.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
@@ -33,7 +33,7 @@ function OwnerOfferingDetailRoute() {
         : initialValue === undefined ? <Alert><AlertTitle>Operation unavailable</AlertTitle><AlertDescription><p>This Operation was not found for the current supplier, or its current revision needs repair.</p><Button asChild variant="secondary"><Link to="/owner/offerings">Back to Operations</Link></Button></AlertDescription></Alert>
         : source?.status === 'retired' ? <Alert><AlertTitle>This Operation is retired</AlertTitle><AlertDescription>Its history remains available, but retired Operations cannot be edited.</AlertDescription></Alert>
         : businessId === undefined ? <Alert variant="destructive"><AlertTitle>Operation did not load</AlertTitle><AlertDescription>The current supplier could not be resolved.</AlertDescription></Alert>
-        : <AeOwnerOfferingEditor initialValue={initialValue} onSave={(value) => {
+        : <AeOwnerOfferingEditorWithNavigationSafety initialValue={initialValue} onSave={(value) => {
           requestKeyRef.current ??= crypto.randomUUID()
           return save({ data: { businessId, requestKey: requestKeyRef.current, value } }).then((saved) => {
             if (saved.kind === 'saved') {

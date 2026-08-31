@@ -322,6 +322,82 @@ describe('/operations/invocations/$invocationRef', () => {
     expect(screen.queryByText('Terminal')).toBeNull()
   })
 
+  it('reuses the cancellation key after an unconfirmed transport outcome', async () => {
+    cancelMock
+      .mockRejectedValueOnce(new Error('transport unavailable'))
+      .mockResolvedValueOnce({ kind: 'found', invocationRef, operationRef, state: 'cancelled' })
+    renderRouteComponent({ kind: 'found', invocationRef, operationRef, state: 'retryable' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel invocation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    expect(await screen.findByText('The cancellation source is unavailable. No new invocation state is claimed.')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel invocation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
+    await waitFor(() => expect(cancelMock).toHaveBeenCalledTimes(2))
+
+    const keys = cancelMock.mock.calls.map((call) => call[0]?.data?.idempotencyKey)
+    expect(keys[1]).toBe(keys[0])
+  })
+
+  it('reuses the exact reconciliation attempt after an unconfirmed transport outcome', async () => {
+    reconcileMock
+      .mockRejectedValueOnce(new Error('transport unavailable'))
+      .mockResolvedValueOnce({ kind: 'found', invocationRef, operationRef, state: 'terminal' })
+    renderRouteComponent({
+      kind: 'found',
+      invocationRef,
+      operationRef,
+      state: 'reconciliation_required',
+      attemptRef: 'attempt:uncertain',
+      effectGeneration: 2,
+    })
+
+    fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
+    fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    expect(await screen.findByText('The reconciliation source is unavailable. No new invocation state is claimed.')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
+
+    const first = reconcileMock.mock.calls[0]?.[0]?.data
+    const second = reconcileMock.mock.calls[1]?.[0]?.data
+    expect(second.idempotencyKey).toBe(first.idempotencyKey)
+    expect(second.evidence.observedAt).toBe(first.evidence.observedAt)
+    expect(second.evidence.digest).toBe(first.evidence.digest)
+    expect(second.evidence).toEqual(first.evidence)
+  })
+
+  it('uses a new reconciliation attempt when the evidence changes', async () => {
+    reconcileMock
+      .mockRejectedValueOnce(new Error('transport unavailable'))
+      .mockResolvedValueOnce({ kind: 'found', invocationRef, operationRef, state: 'terminal' })
+    renderRouteComponent({
+      kind: 'found',
+      invocationRef,
+      operationRef,
+      state: 'reconciliation_required',
+      attemptRef: 'attempt:uncertain',
+      effectGeneration: 2,
+    })
+
+    fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
+    fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    expect(await screen.findByText('The reconciliation source is unavailable. No new invocation state is claimed.')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation' }))
+    await waitFor(() => expect(reconcileMock).toHaveBeenCalledTimes(2))
+
+    const first = reconcileMock.mock.calls[0]?.[0]?.data
+    const second = reconcileMock.mock.calls[1]?.[0]?.data
+    expect(second.idempotencyKey).not.toBe(first.idempotencyKey)
+    expect(second.evidence.evidenceRef).toBe('evt_456')
+    expect(second.evidence.digest).not.toBe(first.evidence.digest)
+  })
+
   it('shows sign-in only for the auth-shaped opaque refusal', () => {
     renderWithRouter({
       kind: 'refused',
