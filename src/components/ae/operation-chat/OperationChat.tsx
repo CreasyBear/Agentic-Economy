@@ -14,7 +14,9 @@ import { OperationHistory } from './OperationHistory'
 import {
   anonymousRequestSize,
   clearAnonymousChatHandoff,
+  fetchAnonymousChat,
   friendlyChatError,
+  projectChatFailure,
   projectAnonymousTranscript,
   readAnonymousChatHandoff,
   rememberAnonymousChatHandoff,
@@ -75,12 +77,15 @@ export function OperationChat({
   const [anonymousMessages, setAnonymousMessages] = useState<TranscriptMessage[]>(initialHandoff.messages)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [errorReference, setErrorReference] = useState<string | undefined>()
+  const [browseMarketOnError, setBrowseMarketOnError] = useState(false)
   const [status, setStatus] = useState<ChatStatus>('')
   const [historySearch, setHistorySearch] = useState('')
   const [sharePath, setSharePath] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const abortRef = useRef<AbortController | null>(null)
+  const operationInFlightRef = useRef(false)
   const mountedRef = useRef(false)
   const handoffStoredRef = useRef(false)
   const initialSubmitPendingRef = useRef(initialPrompt.trim().length > 0)
@@ -114,6 +119,7 @@ export function OperationChat({
 
   const transport = useMemo(() => new DefaultChatTransport<UIMessage>({
     api: '/api/chat/anonymous',
+    fetch: fetchAnonymousChat,
     prepareSendMessagesRequest: ({ messages }) => ({
       body: {
         messages: projectAnonymousTranscript(messages.map((message) => ({
@@ -215,8 +221,12 @@ export function OperationChat({
       setError('Messages can be at most 2,000 characters.')
       return
     }
+    if (operationInFlightRef.current) return
+    operationInFlightRef.current = true
     setBusy(true)
     setError('')
+    setErrorReference(undefined)
+    setBrowseMarketOnError(false)
     setStatus(isAuthenticated ? 'Sending message…' : 'Getting a response…')
     try {
       if (isAuthenticated) {
@@ -245,10 +255,14 @@ export function OperationChat({
       } else if (String(caught).includes('anonymous_size_limit')) {
         setError('This browser conversation is full. Sign in or start a new chat.')
       } else {
-        setError(friendlyChatError(caught))
+        const failure = projectChatFailure(caught)
+        setError(failure.message)
+        setErrorReference(failure.reference)
+        setBrowseMarketOnError(failure.browseMarket)
       }
       setStatus('')
     } finally {
+      operationInFlightRef.current = false
       setBusy(false)
     }
   }
@@ -264,8 +278,12 @@ export function OperationChat({
   }, [authLoading])
 
   async function mutateWithError(work: () => Promise<void>, success: ChatStatus): Promise<boolean> {
+    if (operationInFlightRef.current) return false
+    operationInFlightRef.current = true
     setBusy(true)
     setError('')
+    setErrorReference(undefined)
+    setBrowseMarketOnError(false)
     try {
       await work()
       setStatus(success)
@@ -274,6 +292,7 @@ export function OperationChat({
       setError(friendlyChatError(caught))
       return false
     } finally {
+      operationInFlightRef.current = false
       setBusy(false)
     }
   }
@@ -283,6 +302,8 @@ export function OperationChat({
     setAnonymousMessages([])
     setPrompt('')
     setError('')
+    setErrorReference(undefined)
+    setBrowseMarketOnError(false)
     setStatus('New chat ready.')
     setSharePath(null)
     setCopied(false)
@@ -293,12 +314,18 @@ export function OperationChat({
     if (sharePath === null) return
     if (navigator.clipboard === undefined) {
       setError('Copy failed. Select the link and copy it manually.')
+      setErrorReference(undefined)
+      setBrowseMarketOnError(false)
       return
     }
     void navigator.clipboard.writeText(sharePath).then(() => {
       setCopied(true)
       setStatus('Share link copied.')
-    }).catch(() => setError('Copy failed. Select the link and copy it manually.'))
+    }).catch(() => {
+      setError('Copy failed. Select the link and copy it manually.')
+      setErrorReference(undefined)
+      setBrowseMarketOnError(false)
+    })
   }
 
   const historyPanel = (idPrefix: string) => (
@@ -354,10 +381,19 @@ export function OperationChat({
           busy={busy}
           disabled={busy || authLoading || anonymousMessageLimitReached}
           error={error}
+          {...errorReference === undefined ? {} : { errorReference }}
+          browseMarketOnError={browseMarketOnError}
           status={status}
           {...isAuthenticated ? {} : { anonymousMessageCount: anonymousMessages.length }}
           anonymousMessageLimitReached={anonymousMessageLimitReached}
-          onPromptChange={(value) => setPrompt(boundPrompt(value))}
+          onPromptChange={(value) => {
+            setPrompt(boundPrompt(value))
+            if (error.length > 0) {
+              setError('')
+              setErrorReference(undefined)
+              setBrowseMarketOnError(false)
+            }
+          }}
           onSubmit={() => void submit()}
         />
       }

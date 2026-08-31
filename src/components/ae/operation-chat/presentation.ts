@@ -26,6 +26,54 @@ export type ChatStatus =
   | 'Share link revoked.'
   | 'New chat ready.'
   | 'Share link copied.'
+
+export type ChatFailurePresentation = Readonly<{
+  message: string
+  reference?: string
+  browseMarket: boolean
+}>
+
+class AnonymousChatResponseError extends Error {
+  constructor(
+    readonly code: string | undefined,
+    readonly reference: string | undefined,
+  ) {
+    super(code ?? 'chat_unavailable')
+    this.name = 'AnonymousChatResponseError'
+  }
+}
+
+function boundedRequestReference(value: string | null): string | undefined {
+  const trimmed = value?.trim()
+  if (trimmed === undefined || trimmed.length === 0 || /[^\u0020-\u007e]/u.test(trimmed)) {
+    return undefined
+  }
+  return Array.from(trimmed).slice(0, 200).join('')
+}
+
+/**
+ * Keeps the anonymous HTTP failure code and correlation reference available to
+ * the UI instead of letting the AI SDK flatten them into an opaque Error.
+ */
+export async function fetchAnonymousChat(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const response = await globalThis.fetch(input, init)
+  if (response.ok) return response
+
+  let code: string | undefined
+  try {
+    const body = await response.clone().json() as unknown
+    if (isRecord(body) && typeof body.code === 'string') code = body.code
+  } catch {
+    // The status and request reference still provide a truthful recovery path.
+  }
+  throw new AnonymousChatResponseError(
+    code,
+    boundedRequestReference(response.headers.get('x-ae-request-id')),
+  )
+}
 export type TranscriptMessage = Readonly<{
   id: string
   role: 'user' | 'assistant'
@@ -125,9 +173,34 @@ export function clearAnonymousChatHandoff(threadId: string): void {
   anonymousHandoffs.delete(threadId)
 }
 
-export function friendlyChatError(error: unknown): string {
+export function projectChatFailure(error: unknown): ChatFailurePresentation {
+  if (error instanceof AnonymousChatResponseError) {
+    if (error.code === 'rate_limited') {
+      return {
+        message: 'You’ve reached the chat limit. Try again later.',
+        ...(error.reference === undefined ? {} : { reference: error.reference }),
+        browseMarket: true,
+      }
+    }
+    return {
+      message: 'Chat is unavailable right now. Your message was not added.',
+      ...(error.reference === undefined ? {} : { reference: error.reference }),
+      browseMarket: true,
+    }
+  }
   const message = error instanceof Error ? error.message : String(error)
-  if (message.includes('rate_limited')) return 'You’ve reached the chat limit. Try again later.'
-  if (message.includes('thread_busy')) return 'This conversation is already responding. Wait a moment and try again.'
-  return 'Chat is temporarily unavailable. Try again shortly.'
+  if (message.includes('rate_limited')) {
+    return { message: 'You’ve reached the chat limit. Try again later.', browseMarket: false }
+  }
+  if (message.includes('thread_busy')) {
+    return {
+      message: 'This conversation is already responding. Wait a moment and try again.',
+      browseMarket: false,
+    }
+  }
+  return { message: 'Chat is temporarily unavailable. Try again shortly.', browseMarket: false }
+}
+
+export function friendlyChatError(error: unknown): string {
+  return projectChatFailure(error).message
 }

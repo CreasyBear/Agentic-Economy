@@ -31,6 +31,11 @@ export const chatComposer = {
   sendingAria: 'Sending message',
 } as const
 
+export const chatRecovery = {
+  reference: 'Support reference',
+  browse: 'Browse Operations',
+} as const
+
 export const chatHandoffNotice = 'Signed in — messages from here are saved.'
 
 export const chatShared = {

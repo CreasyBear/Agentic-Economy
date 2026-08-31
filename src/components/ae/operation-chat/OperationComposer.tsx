@@ -1,5 +1,6 @@
 import { SendIcon } from 'lucide-react'
 
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Button } from '@/components/ui/button'
 import {
   Field,
@@ -10,7 +11,7 @@ import {
 } from '@/components/ui/field'
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from '@/components/ui/input-group'
 import { Spinner } from '@/components/ui/spinner'
-import { chatAnonymousCountLine, chatComposer } from '@/lib/public/chat-ia'
+import { chatAnonymousCountLine, chatComposer, chatRecovery } from '@/lib/public/chat-ia'
 import type { ChatStatus } from './presentation'
 
 export function OperationComposer({
@@ -18,6 +19,8 @@ export function OperationComposer({
   busy,
   disabled,
   error,
+  errorReference,
+  browseMarketOnError,
   status,
   anonymousMessageCount,
   anonymousMessageLimitReached,
@@ -28,6 +31,8 @@ export function OperationComposer({
   busy: boolean
   disabled: boolean
   error: string
+  errorReference?: string
+  browseMarketOnError: boolean
   status: ChatStatus
   anonymousMessageCount?: number
   anonymousMessageLimitReached: boolean
@@ -81,7 +86,22 @@ export function OperationComposer({
           <div className="flex items-start justify-between gap-related">
             <div className="min-w-0 flex-1">
               {invalid
-                ? <FieldError id="operation-chat-error">{error}</FieldError>
+                ? (
+                    <FieldError id="operation-chat-error" className="grid gap-intra">
+                      <p>{error}</p>
+                      {errorReference === undefined ? null : (
+                        <p className="flex flex-wrap items-center gap-intra text-muted-foreground">
+                          <span>{chatRecovery.reference}</span>
+                          <AeCopyReference label="chat support reference" value={errorReference} />
+                        </p>
+                      )}
+                      {browseMarketOnError ? (
+                        <Button asChild type="button" variant="outline" size="sm" className="min-h-touch w-fit">
+                          <a href="/market?window=30d#operations">{chatRecovery.browse}</a>
+                        </Button>
+                      ) : null}
+                    </FieldError>
+                  )
                 : <div id="operation-chat-error" role="alert" />}
               {anonymousMessageCount === undefined || invalid ? null : (
                 <FieldDescription>

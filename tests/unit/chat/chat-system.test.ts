@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { chatSuggestions, chatEmpty } from '@/lib/public/chat-ia'
 import {
   CHAT_TOOL_IDS,
   clearAnonymousChatHandoff,
+  fetchAnonymousChat,
+  projectChatFailure,
   projectTranscriptTurns,
   readAnonymousChatHandoff,
   rememberAnonymousChatHandoff,
@@ -12,12 +14,62 @@ import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 
 const operationRef = `operation:v1:${'a'.repeat(64)}`
 
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
 describe('chat IA', () => {
   it('keeps empty-path suggestions inside the five-tool market loop', () => {
     expect(chatEmpty.title).toContain('catalog')
     const serialized = JSON.stringify(chatSuggestions)
     expect(serialized).toMatch(/search|compare|inspect|call/i)
     expect(serialized).not.toMatch(/write a poem|plan my week|remember this/i)
+  })
+})
+
+describe('anonymous chat recovery', () => {
+  it('retains the HTTPS failure reference and offers a safe catalogue continuation', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      type: 'about:blank',
+      status: 503,
+      code: 'chat_proxy_unavailable',
+    }, {
+      status: 503,
+      headers: { 'x-ae-request-id': 'chat-request-7' },
+    })))
+
+    let caught: unknown
+    try {
+      await fetchAnonymousChat('/api/chat/anonymous', { method: 'POST' })
+    } catch (error) {
+      caught = error
+    }
+
+    expect(projectChatFailure(caught)).toEqual({
+      message: 'Chat is unavailable right now. Your message was not added.',
+      reference: 'chat-request-7',
+      browseMarket: true,
+    })
+  })
+
+  it('keeps rate limiting distinct from service unavailability', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ code: 'rate_limited' }, {
+      status: 429,
+      headers: { 'x-ae-request-id': 'chat-rate-2' },
+    })))
+
+    let caught: unknown
+    try {
+      await fetchAnonymousChat('/api/chat/anonymous')
+    } catch (error) {
+      caught = error
+    }
+
+    expect(projectChatFailure(caught)).toEqual({
+      message: 'You’ve reached the chat limit. Try again later.',
+      reference: 'chat-rate-2',
+      browseMarket: true,
+    })
   })
 })
 

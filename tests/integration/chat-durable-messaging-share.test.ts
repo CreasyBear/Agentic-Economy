@@ -194,6 +194,35 @@ describe.sequential('durable operation chat messaging and shares', () => {
     expect(activeStreams).toEqual([])
   })
 
+  it('records a safe recovery message when durable generation is unavailable', async () => {
+    const previousApiKey = process.env.OPENROUTER_API_KEY
+    delete process.env.OPENROUTER_API_KEY
+    const backend = convexTestWithMarketComponents()
+    const { owner } = await publishedBusinessOwner(backend, 'chat-unavailable-owner')
+    try {
+      const sent = await owner.mutation(api.chatMessages.sendMessage, {
+        prompt: 'Find a current weather Operation',
+      })
+      await drainExpectedUnavailableGenerations(backend)
+
+      const messages = await owner.query(api.chatMessages.listMessages, {
+        threadId: sent.threadId,
+        paginationOpts: { cursor: null, numItems: 20 },
+      })
+      expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
+      const recovery = messages.page.find((message) => message.role === 'assistant')?.text ?? ''
+      expect(recovery).toMatch(/before a final response was recorded/i)
+      expect(recovery).toMatch(/call card or receipt/i)
+      expect(recovery).not.toContain('agent_unavailable')
+      await expect(owner.query(api.chatThreads.getThread, {
+        threadId: sent.threadId,
+        now: Date.now(),
+      })).resolves.toMatchObject({ busy: false })
+    } finally {
+      restoreEnvironment('OPENROUTER_API_KEY', previousApiKey)
+    }
+  })
+
   it('enforces thirty durable submissions per identity each hour', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-rate-owner')
@@ -229,6 +258,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
     const sent = await owner.mutation(api.chatMessages.sendMessage, {
       prompt: 'Compare current weather operations',
     })
+    await drainExpectedUnavailableGenerations(backend)
 
     const first = await owner.mutation(api.chatShares.issueShare, { threadId: sent.threadId })
     const reused = await owner.mutation(api.chatShares.issueShare, { threadId: sent.threadId })
@@ -245,11 +275,18 @@ describe.sequential('durable operation chat messaging and shares', () => {
       paginationOpts: { cursor: null, numItems: 20 },
     })
     expect(shared.title).toBe('Compare current weather operations')
-    expect(shared.page).toHaveLength(1)
+    expect(shared.page).toHaveLength(2)
     expect(shared.page[0]).toEqual({
       id: sent.promptMessageId,
       role: 'user',
       parts: [{ type: 'text', text: 'Compare current weather operations' }],
+    })
+    expect(shared.page[1]).toMatchObject({
+      role: 'assistant',
+      parts: [{
+        type: 'text',
+        text: expect.stringMatching(/before a final response was recorded/i),
+      }],
     })
     expect(shared).not.toHaveProperty('streams')
 
