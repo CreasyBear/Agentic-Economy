@@ -669,4 +669,38 @@ describe('issued agent binding', () => {
       membership: await ctx.db.query('memberships').withIndex('by_memberPrincipalRef_and_lifecycle', (query) => query.eq('memberPrincipalRef', principalB).eq('lifecycle', 'active')).unique(),
     }))).resolves.toMatchObject({ principal: { lifecycle: 'active' }, membership: { lifecycle: 'active' } })
   })
+
+  it('refuses disconnection before changing state when a provider binding is missing', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const input = bindingInput()
+    await owner.mutation(registerIssuedBinding, { ...input, serviceAuth: await assertion(input) })
+    const directory = await owner.query(api.agentDirectory.listOwned, { now: NOW })
+    const agent = directory[0]
+    if (agent === undefined) throw new Error('agent_missing')
+
+    await backend.run(async (ctx) => {
+      const binding = await ctx.db.query('externalIdentityBindings')
+        .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+          .eq('providerNamespace', 'clerk/api-key')
+          .eq('providerIdentifier', input.credentialId))
+        .unique()
+      if (binding === null) throw new Error('binding_missing')
+      await ctx.db.delete(binding._id)
+    })
+
+    const command = { principalRef: agent.principalRef, correlationRef: 'corr-disconnect-invalid-binding' }
+    await expect(owner.mutation(disconnectAgentLifecycle, {
+      ...command,
+      serviceAuth: await operationAssertion('agentAccessPrincipals.disconnectAgentForServer', command),
+    })).resolves.toEqual({
+      kind: 'conflict',
+      code: 'credential_binding_invalid',
+      correlationRef: command.correlationRef,
+    })
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_principalId', (query) => query.eq('principalId', agent.principalRef))
+      .unique())).resolves.toMatchObject({ lifecycle: 'active' })
+  })
 })

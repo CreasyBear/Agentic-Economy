@@ -859,9 +859,8 @@ async function revokeCanonicalCredential(
   correlationRef: string,
   now: number,
 ): Promise<{ changed: boolean; providerCredentialId: string; providerRevocationPending: boolean } | null> {
-  const binding = await ctx.db.query('externalIdentityBindings')
-    .withIndex('by_bindingRef', (query) => query.eq('bindingRef', credential.bindingRef)).unique()
-  if (binding === null || binding.principalRef !== credential.principalRef || binding.providerNamespace !== 'clerk/api-key') return null
+  const binding = await credentialProviderBinding(ctx, credential)
+  if (binding === null) return null
   const [sandbox, production] = await Promise.all([
     ctx.db.query('agentAccessGrants')
       .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
@@ -889,6 +888,16 @@ async function revokeCanonicalCredential(
     revision: binding.revision + 1,
   })
   return { changed, providerCredentialId: binding.providerIdentifier, providerRevocationPending }
+}
+
+async function credentialProviderBinding(ctx: MutationCtx, credential: Doc<'credentials'>) {
+  const binding = await ctx.db.query('externalIdentityBindings')
+    .withIndex('by_bindingRef', (query) => query.eq('bindingRef', credential.bindingRef)).unique()
+  return binding === null
+    || binding.principalRef !== credential.principalRef
+    || binding.providerNamespace !== 'clerk/api-key'
+    ? null
+    : binding
 }
 
 async function promoteRemainingCredential(
@@ -982,6 +991,12 @@ export const disconnectAgentForServer = mutation({
     }
     const credentials = await ctx.db.query('credentials')
       .withIndex('by_principalRef_and_lifecycle', (query) => query.eq('principalRef', args.principalRef)).collect()
+    const bindings = await Promise.all(credentials.map(async (credential) => (
+      await credentialProviderBinding(ctx, credential)
+    )))
+    if (bindings.some((binding) => binding === null)) {
+      return { kind: 'conflict' as const, code: 'credential_binding_invalid' as const, correlationRef: args.correlationRef }
+    }
     const now = Date.now()
     const revokedCredentials = await Promise.all(credentials.map(
       async (credential) => ({
