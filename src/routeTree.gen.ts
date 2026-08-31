@@ -101,7 +101,6 @@ import { Route as ApiV1AccountActivityRouteImport } from './routes/api.v1.accoun
 import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
 import { Route as OperatorOwnerSettingsWorkspaceRouteImport } from './routes/_operator/owner.settings.workspace'
 import { Route as OperatorOwnerSettingsPayoutsRouteImport } from './routes/_operator/owner.settings.payouts'
-import { Route as OperatorOwnerSettingsMembersRouteImport } from './routes/_operator/owner.settings.members'
 import { Route as OperatorOwnerSettingsDevelopersRouteImport } from './routes/_operator/owner.settings.developers'
 import { Route as OperatorOwnerSettingsConnectionsRouteImport } from './routes/_operator/owner.settings.connections'
 import { Route as OperatorOwnerOfferingsNewRouteImport } from './routes/_operator/owner.offerings.new'
@@ -595,12 +594,6 @@ const OperatorOwnerSettingsPayoutsRoute =
     path: '/payouts',
     getParentRoute: () => OperatorOwnerSettingsRoute,
   } as any)
-const OperatorOwnerSettingsMembersRoute =
-  OperatorOwnerSettingsMembersRouteImport.update({
-    id: '/members',
-    path: '/members',
-    getParentRoute: () => OperatorOwnerSettingsRoute,
-  } as any)
 const OperatorOwnerSettingsDevelopersRoute =
   OperatorOwnerSettingsDevelopersRouteImport.update({
     id: '/developers',
@@ -747,7 +740,6 @@ export interface FileRoutesByFullPath {
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
   '/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
-  '/owner/settings/members': typeof OperatorOwnerSettingsMembersRoute
   '/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
   '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
@@ -853,7 +845,6 @@ export interface FileRoutesByTo {
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
   '/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
-  '/owner/settings/members': typeof OperatorOwnerSettingsMembersRoute
   '/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
   '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
@@ -961,7 +952,6 @@ export interface FileRoutesById {
   '/_operator/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/_operator/owner/settings/connections': typeof OperatorOwnerSettingsConnectionsRoute
   '/_operator/owner/settings/developers': typeof OperatorOwnerSettingsDevelopersRoute
-  '/_operator/owner/settings/members': typeof OperatorOwnerSettingsMembersRoute
   '/_operator/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
   '/_operator/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
@@ -1069,7 +1059,6 @@ export interface FileRouteTypes {
     | '/owner/offerings/new'
     | '/owner/settings/connections'
     | '/owner/settings/developers'
-    | '/owner/settings/members'
     | '/owner/settings/payouts'
     | '/owner/settings/workspace'
     | '/owner/supply/$offeringRef'
@@ -1175,7 +1164,6 @@ export interface FileRouteTypes {
     | '/owner/offerings/new'
     | '/owner/settings/connections'
     | '/owner/settings/developers'
-    | '/owner/settings/members'
     | '/owner/settings/payouts'
     | '/owner/settings/workspace'
     | '/owner/supply/$offeringRef'
@@ -1282,7 +1270,6 @@ export interface FileRouteTypes {
     | '/_operator/owner/offerings/new'
     | '/_operator/owner/settings/connections'
     | '/_operator/owner/settings/developers'
-    | '/_operator/owner/settings/members'
     | '/_operator/owner/settings/payouts'
     | '/_operator/owner/settings/workspace'
     | '/_operator/owner/supply/$offeringRef'
@@ -2035,13 +2022,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerSettingsPayoutsRouteImport
       parentRoute: typeof OperatorOwnerSettingsRoute
     }
-    '/_operator/owner/settings/members': {
-      id: '/_operator/owner/settings/members'
-      path: '/members'
-      fullPath: '/owner/settings/members'
-      preLoaderRoute: typeof OperatorOwnerSettingsMembersRouteImport
-      parentRoute: typeof OperatorOwnerSettingsRoute
-    }
     '/_operator/owner/settings/developers': {
       id: '/_operator/owner/settings/developers'
       path: '/developers'
@@ -2170,7 +2150,6 @@ const OperatorOwnerOfferingsRouteWithChildren =
 interface OperatorOwnerSettingsRouteChildren {
   OperatorOwnerSettingsConnectionsRoute: typeof OperatorOwnerSettingsConnectionsRoute
   OperatorOwnerSettingsDevelopersRoute: typeof OperatorOwnerSettingsDevelopersRoute
-  OperatorOwnerSettingsMembersRoute: typeof OperatorOwnerSettingsMembersRoute
   OperatorOwnerSettingsPayoutsRoute: typeof OperatorOwnerSettingsPayoutsRoute
   OperatorOwnerSettingsWorkspaceRoute: typeof OperatorOwnerSettingsWorkspaceRoute
 }
@@ -2178,7 +2157,6 @@ interface OperatorOwnerSettingsRouteChildren {
 const OperatorOwnerSettingsRouteChildren: OperatorOwnerSettingsRouteChildren = {
   OperatorOwnerSettingsConnectionsRoute: OperatorOwnerSettingsConnectionsRoute,
   OperatorOwnerSettingsDevelopersRoute: OperatorOwnerSettingsDevelopersRoute,
-  OperatorOwnerSettingsMembersRoute: OperatorOwnerSettingsMembersRoute,
   OperatorOwnerSettingsPayoutsRoute: OperatorOwnerSettingsPayoutsRoute,
   OperatorOwnerSettingsWorkspaceRoute: OperatorOwnerSettingsWorkspaceRoute,
 }
