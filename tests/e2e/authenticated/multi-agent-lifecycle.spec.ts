@@ -62,6 +62,13 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     await page.getByRole('button', { name: 'Disconnect agent' }).click()
     await page.getByRole('button', { name: 'Disconnect agent' }).last().click()
     await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
+    await expect(page.getByText('Generation 1')).toBeVisible()
+    await expect(page.getByText('Revoked', { exact: true })).toBeVisible()
+    const disconnected = await page.request.get('/api/v1/account', {
+      headers: { Authorization: `Bearer ${agentB.secret}` },
+    })
+    expect(disconnected.status()).toBe(401)
   })
 })
 
