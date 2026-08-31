@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
@@ -37,18 +38,36 @@ function canSelectAuthority(value: PublicAuthorityMode, ceiling: string | undefi
   return ceiling === 'bounded_mandate'
 }
 
-function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientName?: string; mode?: string; accessProfile?: 'market' | 'supplier' }> {
+type AgentTargetOption = Readonly<{ principalRef: string; displayName: string }>
+
+function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientName?: string; mode?: string; accessProfile?: 'market' | 'supplier'; agentTargets: readonly AgentTargetOption[] }> {
   const document = new DOMParser().parseFromString(html, 'text/html')
   const consent = document.querySelector<HTMLElement>('[data-ae-consent]')
   const grantRef = consent?.dataset.grantRef
   const clientName = consent?.dataset.clientName
   const mode = consent?.dataset.authorityMode
   const accessProfile = consent?.dataset.accessProfile
+  let agentTargets: readonly AgentTargetOption[] = []
+  try {
+    const parsed: unknown = JSON.parse(decodeURIComponent(consent?.dataset.agentTargets ?? '%5B%5D'))
+    if (Array.isArray(parsed)) {
+      agentTargets = parsed.flatMap((value) => (
+        typeof value === 'object' && value !== null
+          && 'principalRef' in value && typeof value.principalRef === 'string'
+          && 'displayName' in value && typeof value.displayName === 'string'
+          ? [{ principalRef: value.principalRef, displayName: value.displayName }]
+          : []
+      ))
+    }
+  } catch {
+    agentTargets = []
+  }
   return {
     ...(grantRef === undefined || grantRef.length === 0 ? {} : { grantRef }),
     ...(clientName === undefined || clientName.length === 0 ? {} : { clientName }),
     ...(mode === undefined || mode.length === 0 ? {} : { mode }),
     ...(accessProfile === 'market' || accessProfile === 'supplier' ? { accessProfile } : {}),
+    agentTargets,
   }
 }
 
@@ -73,6 +92,9 @@ function AgentAccessAuthorizeRoute() {
   const [accessProfile, setAccessProfile] = useState<'market' | 'supplier'>('market')
   const [selectedMode, setSelectedMode] = useState<PublicAuthorityMode>('approve_each')
   const [grantRef, setGrantRef] = useState<string>()
+  const [connectionTarget, setConnectionTarget] = useState<'new_agent' | 'replace_credential'>('new_agent')
+  const [agentTargets, setAgentTargets] = useState<readonly AgentTargetOption[]>([])
+  const [replacementPrincipalRef, setReplacementPrincipalRef] = useState<string>()
 
   useEffect(() => {
     if (userCode === undefined) {
@@ -81,6 +103,9 @@ function AgentAccessAuthorizeRoute() {
       setMode(undefined)
       setAccessProfile('market')
       setGrantRef(undefined)
+      setAgentTargets([])
+      setConnectionTarget('new_agent')
+      setReplacementPrincipalRef(undefined)
       return
     }
 
@@ -101,6 +126,9 @@ function AgentAccessAuthorizeRoute() {
         setClientName(details.clientName)
         setMode(details.mode)
         setAccessProfile(details.accessProfile ?? 'market')
+        setAgentTargets(details.agentTargets)
+        setConnectionTarget('new_agent')
+        setReplacementPrincipalRef(undefined)
         setSelectedMode(
           details.mode === 'inspect_only'
             ? 'inspect_only'
@@ -127,7 +155,15 @@ function AgentAccessAuthorizeRoute() {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_ref: grantRef, decision, authority_mode: selectedMode }).toString(),
+        body: new URLSearchParams({
+          grant_ref: grantRef,
+          decision,
+          authority_mode: selectedMode,
+          connection_target: connectionTarget,
+          ...(connectionTarget === 'replace_credential' && replacementPrincipalRef !== undefined
+            ? { principal_ref: replacementPrincipalRef }
+            : {}),
+        }).toString(),
       })
       setStatus(response.ok ? (decision === 'approve' ? 'approved' : 'denied') : 'error')
     } catch {
@@ -154,6 +190,35 @@ function AgentAccessAuthorizeRoute() {
                 ? 'This separate credential can inspect and manage your supplier Operations.'
                 : 'How much may this agent do without asking you?'}
             >
+              <fieldset className="grid gap-3" disabled={pending}>
+                <legend className="text-sm font-medium text-foreground">Connection</legend>
+                <RadioGroup
+                  value={connectionTarget}
+                  onValueChange={(value) => setConnectionTarget(value as 'new_agent' | 'replace_credential')}
+                  className="grid gap-2 sm:grid-cols-2"
+                >
+                  <Label htmlFor="connection-new" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                    <RadioGroupItem id="connection-new" value="new_agent" className="mt-1" />
+                    <span><span className="block font-medium">New agent</span><span className="text-sm font-normal text-muted-foreground">Create an independent agent identity.</span></span>
+                  </Label>
+                  <Label htmlFor="connection-replace" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                    <RadioGroupItem id="connection-replace" value="replace_credential" disabled={agentTargets.length === 0} className="mt-1" />
+                    <span><span className="block font-medium">Replace credential</span><span className="text-sm font-normal text-muted-foreground">Keep one agent and rotate only its secret.</span></span>
+                  </Label>
+                </RadioGroup>
+                {connectionTarget === 'replace_credential' ? (
+                  <div className="grid gap-2">
+                    <Label htmlFor="replacement-agent">Agent</Label>
+                    <Select value={replacementPrincipalRef ?? ''} onValueChange={setReplacementPrincipalRef}>
+                      <SelectTrigger id="replacement-agent"><SelectValue placeholder="Choose an agent" /></SelectTrigger>
+                      <SelectContent>
+                        {agentTargets.map((agent) => <SelectItem key={agent.principalRef} value={agent.principalRef}>{agent.displayName}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-muted-foreground">The agent identity, activity, and credit history stay attached. Its current credential remains usable until the new one is delivered.</p>
+                  </div>
+                ) : null}
+              </fieldset>
               {accessProfile === 'supplier' ? (
                 <Alert>
                   <AlertTitle>Supplier management</AlertTitle>
@@ -195,13 +260,13 @@ function AgentAccessAuthorizeRoute() {
               <AeFactList
                 facts={[
                   { label: 'Application', value: `${clientName ?? 'Your agent'} · Development · Standard rate limits` },
-                  { label: 'Expiry', value: 'Access expires in seven days. You can revoke it at any time from Keys.' },
+                  { label: 'Expiry', value: 'Access expires in seven days. You can revoke it at any time from Agents.' },
                 ]}
               />
-              <p id="consent-expiry" className="sr-only">Access expires in seven days. You can revoke it at any time from Keys.</p>
+              <p id="consent-expiry" className="sr-only">Access expires in seven days. You can revoke it at any time from Agents.</p>
             </AeSection>
             <div className="flex flex-wrap gap-3">
-              <Button aria-describedby="consent-expiry" variant="default" onClick={() => void decide('approve')} disabled={pending}>{pending ? 'Approving…' : 'Approve access'}</Button>
+              <Button aria-describedby="consent-expiry" variant="default" onClick={() => void decide('approve')} disabled={pending || (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined)}>{pending ? 'Approving…' : 'Approve access'}</Button>
               <Button aria-describedby="consent-expiry" variant="secondary" onClick={() => void decide('deny')} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
             </div>
           </>

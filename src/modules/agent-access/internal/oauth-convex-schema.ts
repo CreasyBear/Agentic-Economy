@@ -16,6 +16,18 @@ const requestedAccess = v.object({
   maximumCallsPerHour: v.optional(v.number()),
   expiresInSeconds: v.number(),
 })
+const connectionTarget = v.union(
+  v.object({ kind: v.literal('new_agent'), displayName: v.string() }),
+  v.object({ kind: v.literal('replace_credential'), principalRef: v.string() }),
+)
+const replacement = v.object({
+  principalRef: v.string(),
+  generation: v.number(),
+  successorCredentialRef: v.string(),
+  predecessorCredentialRef: v.string(),
+  predecessorKeyId: v.string(),
+  successorGrantRef: v.string(),
+})
 
 export const agentAccessOAuthTables = {
   agentAccessOAuthGrants: defineTable({
@@ -32,6 +44,7 @@ export const agentAccessOAuthTables = {
     authorizationCodeHash: v.optional(v.string()),
     status: v.union(
       v.literal('pending'),
+      v.literal('issuing'),
       v.literal('approved'),
       v.literal('denied'),
       v.literal('delivery_claimed'),
@@ -43,11 +56,14 @@ export const agentAccessOAuthTables = {
     createdAt: v.number(),
     expiresAt: v.number(),
     approvedAt: v.optional(v.number()),
+    issuanceStartedAt: v.optional(v.number()),
     consumedAt: v.optional(v.number()),
     nextPollAt: v.optional(v.number()),
     deliveryClaimToken: v.optional(v.string()),
     displayName: v.string(),
     denialReason: v.optional(v.literal('access_denied')),
+    connectionTarget: v.optional(connectionTarget),
+    replacement: v.optional(replacement),
   })
     .index('by_grantRef', ['grantRef'])
     .index('by_deviceCodeHash', ['deviceCodeHash'])

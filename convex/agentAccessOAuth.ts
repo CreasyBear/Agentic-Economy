@@ -13,10 +13,10 @@ import { requireSourceRead, requireSourceWrite, sourceWriteArgs, type SourceWrit
 const OAUTH_SOURCE_WRITE_SCOPE = 'agent_identity' as const
 const flow = v.union(v.literal('device_code'), v.literal('authorization_code'))
 const status = v.union(
-  v.literal('pending'), v.literal('approved'), v.literal('denied'),
+  v.literal('pending'), v.literal('issuing'), v.literal('approved'), v.literal('denied'),
   v.literal('delivery_claimed'), v.literal('consumed'), v.literal('expired'),
 )
-const OAUTH_GRANT_STATUSES = ['pending', 'approved', 'denied', 'delivery_claimed', 'consumed', 'expired'] as const
+const OAUTH_GRANT_STATUSES = ['pending', 'issuing', 'approved', 'denied', 'delivery_claimed', 'consumed', 'expired'] as const
 const requestedAccessAmount = v.object({
   currency: v.string(),
   units: v.string(),
@@ -32,21 +32,31 @@ const requestedAccess = v.object({
   maximumCallsPerHour: v.optional(v.number()),
   expiresInSeconds: v.number(),
 })
+const connectionTarget = v.union(
+  v.object({ kind: v.literal('new_agent'), displayName: v.string() }),
+  v.object({ kind: v.literal('replace_credential'), principalRef: v.string() }),
+)
+const replacement = v.object({
+  principalRef: v.string(), generation: v.number(), successorCredentialRef: v.string(),
+  predecessorCredentialRef: v.string(), predecessorKeyId: v.string(), successorGrantRef: v.string(),
+})
 const grant = v.object({
   grantRef: v.string(), flow, clientId: v.string(), redirectUri: v.optional(v.string()),
   requestedScopes: v.array(v.string()), requestedAccess, codeChallenge: v.optional(v.string()), codeChallengeMethod: v.optional(v.literal('S256')),
   deviceCodeHash: v.optional(v.string()), userCodeHash: v.optional(v.string()), authorizationCodeHash: v.optional(v.string()),
   status, ownerId: v.optional(v.string()), keyId: v.optional(v.string()), createdAt: v.number(), expiresAt: v.number(),
-  approvedAt: v.optional(v.number()), consumedAt: v.optional(v.number()), nextPollAt: v.optional(v.number()),
+  approvedAt: v.optional(v.number()), issuanceStartedAt: v.optional(v.number()), consumedAt: v.optional(v.number()), nextPollAt: v.optional(v.number()),
   deliveryClaimToken: v.optional(v.string()), displayName: v.string(), denialReason: v.optional(v.literal('access_denied')),
+  connectionTarget: v.optional(connectionTarget), replacement: v.optional(replacement),
 })
 const grantPatch = v.object({
   status: v.optional(status), redirectUri: v.optional(v.string()), requestedScopes: v.optional(v.array(v.string())),
   codeChallenge: v.optional(v.string()), codeChallengeMethod: v.optional(v.literal('S256')),
   deviceCodeHash: v.optional(v.string()), userCodeHash: v.optional(v.string()), authorizationCodeHash: v.optional(v.string()),
   ownerId: v.optional(v.string()), keyId: v.optional(v.string()), createdAt: v.optional(v.number()), expiresAt: v.optional(v.number()),
-  approvedAt: v.optional(v.number()), consumedAt: v.optional(v.number()), nextPollAt: v.optional(v.number()),
+  approvedAt: v.optional(v.number()), issuanceStartedAt: v.optional(v.number()), consumedAt: v.optional(v.number()), nextPollAt: v.optional(v.number()),
   deliveryClaimToken: v.optional(v.string()), displayName: v.optional(v.string()), denialReason: v.optional(v.literal('access_denied')),
+  connectionTarget: v.optional(connectionTarget), replacement: v.optional(replacement),
 })
 const client = v.object({
   clientId: v.string(), clientName: v.string(), redirectUris: v.array(v.string()),
@@ -278,6 +288,9 @@ function sameGrantMaterial(left: OAuthGrantMaterial, right: OAuthGrantMaterial):
     && left.deliveryClaimToken === right.deliveryClaimToken
     && left.displayName === right.displayName
     && left.denialReason === right.denialReason
+    && JSON.stringify(left.connectionTarget) === JSON.stringify(right.connectionTarget)
+    && JSON.stringify(left.replacement) === JSON.stringify(right.replacement)
+    && left.issuanceStartedAt === right.issuanceStartedAt
 }
 
 function sameClientMaterial(left: OAuthClientMaterial, right: OAuthClientMaterial): boolean {

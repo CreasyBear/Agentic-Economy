@@ -99,6 +99,7 @@ describe('/agent-access/authorize consent loading', () => {
     const request = fetchMock.mock.calls[1]?.[1]
     expect(String(request?.body)).toContain('decision=approve')
     expect(String(request?.body)).toContain('authority_mode=bounded_mandate')
+    expect(String(request?.body)).toContain('connection_target=new_agent')
     expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
   })
 
@@ -116,13 +117,44 @@ describe('/agent-access/authorize consent loading', () => {
 
     expect(await screen.findByText('Supplier management')).toBeTruthy()
     expect(screen.getByText(/cannot spend buyer credit/)).toBeTruthy()
-    expect(screen.queryByRole('radio')).toBeNull()
+    expect(screen.queryByRole('radio', { name: /Browse only/ })).toBeNull()
+    expect(screen.getByRole('radio', { name: /New agent/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     const request = fetchMock.mock.calls[1]?.[1]
     expect(String(request?.body)).toContain('authority_mode=bounded_mandate')
     expect(await screen.findByText(/separate supplier key/)).toBeTruthy()
+  })
+
+  it('requires an explicit existing agent before credential replacement can be approved', async () => {
+    vi.spyOn(AgentAccessAuthorizeRoute, 'useSearch').mockReturnValue({ user_code: 'REPL-ACE' })
+    const targets = encodeURIComponent(JSON.stringify([
+      { principalRef: 'prn_agent_a', displayName: 'Research agent' },
+      { principalRef: 'prn_agent_b', displayName: 'Shipping agent' },
+    ]))
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(
+        `<main data-ae-consent data-grant-ref="grant-replace" data-client-name="Agent CLI" data-authority-mode="approve_each" data-agent-targets="${targets}"></main>`,
+        { status: 200 },
+      ))
+      .mockResolvedValueOnce(new Response('Approved', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderComponent()
+
+    const replace = await screen.findByRole('radio', { name: /Replace credential/ })
+    fireEvent.click(replace)
+    expect(screen.getByRole('button', { name: 'Approve access' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(screen.getByRole('combobox', { name: 'Agent' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Research agent' }))
+    expect(screen.getByRole('button', { name: 'Approve access' }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    const request = fetchMock.mock.calls[1]?.[1]
+    expect(String(request?.body)).toContain('connection_target=replace_credential')
+    expect(String(request?.body)).toContain('principal_ref=prn_agent_a')
   })
 })
 

@@ -267,12 +267,106 @@ describe('Customer Request OAuth state machine', () => {
   it('allows only one concurrent approval through CAS', async () => {
     const store = storeFixture()
     const started = await deviceGrant(store)
+    let issueCount = 0
     const results = await Promise.all([
-      approveGrant(store, { grantRef: started.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey: async () => { await Promise.resolve(); return { keyId: 'key-one' } } }),
-      approveGrant(store, { grantRef: started.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey: async () => { await Promise.resolve(); return { keyId: 'key-two' } } }),
+      approveGrant(store, { grantRef: started.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey: async () => { issueCount += 1; await Promise.resolve(); return { keyId: 'key-one' } } }),
+      approveGrant(store, { grantRef: started.grant.grantRef, ownerId: 'owner-one', now: 1_001, issueKey: async () => { issueCount += 1; await Promise.resolve(); return { keyId: 'key-two' } } }),
     ])
     expect(results.filter((result) => result.kind === 'ok')).toHaveLength(1)
     expect(results.filter((result) => result.kind === 'conflict')).toHaveLength(1)
+    expect(issueCount).toBe(1)
     expect(store.grants.get(started.grant.grantRef)?.status).toBe('approved')
+  })
+
+  it('resumes an abandoned issuance lease with the original explicit target', async () => {
+    const store = storeFixture()
+    const started = await deviceGrant(store)
+    await store.updateGrant(started.grant.grantRef, 'pending', {
+      status: 'issuing',
+      ownerId: 'owner-one',
+      issuanceStartedAt: 1_001,
+      connectionTarget: { kind: 'replace_credential', principalRef: 'prn_agent_a' },
+    })
+    const resumed = await approveGrant(store, {
+      grantRef: started.grant.grantRef,
+      ownerId: 'owner-one',
+      now: 31_001,
+      issueKey: async ({ target }) => {
+        expect(target).toEqual({ kind: 'replace_credential', principalRef: 'prn_agent_a' })
+        return { keyId: 'key-resumed' }
+      },
+    })
+    expect(resumed.kind).toBe('ok')
+    expect(store.grants.get(started.grant.grantRef)?.status).toBe('approved')
+  })
+
+  it('defaults approval to a new durable agent and persists the explicit target', async () => {
+    const store = storeFixture()
+    const started = await deviceGrant(store)
+    const targets: unknown[] = []
+    const approved = await approveGrant(store, {
+      grantRef: started.grant.grantRef,
+      ownerId: 'owner-one',
+      now: 1_001,
+      issueKey: async ({ target }) => {
+        targets.push(target)
+        return { keyId: 'key-new' }
+      },
+    })
+    expect(targets).toEqual([{ kind: 'new_agent', displayName: 'Device assistant' }])
+    if (approved.kind !== 'ok') throw new Error('approval failed')
+    expect(approved.value.grant.connectionTarget).toEqual({ kind: 'new_agent', displayName: 'Device assistant' })
+  })
+
+  it('binds replacement to an explicit principal and carries canonical successor material', async () => {
+    const store = storeFixture()
+    const started = await deviceGrant(store)
+    const approved = await approveGrant(store, {
+      grantRef: started.grant.grantRef,
+      ownerId: 'owner-one',
+      now: 1_001,
+      connectionTarget: { kind: 'replace_credential', principalRef: 'prn_agent_a' },
+      issueKey: async ({ target }) => {
+        expect(target).toEqual({ kind: 'replace_credential', principalRef: 'prn_agent_a' })
+        return {
+          keyId: 'key-successor',
+          replacement: {
+            principalRef: 'prn_agent_a',
+            generation: 2,
+            successorCredentialRef: 'crd_successor',
+            predecessorCredentialRef: 'crd_predecessor',
+            predecessorKeyId: 'key-predecessor',
+            successorGrantRef: 'grt_successor',
+          },
+        }
+      },
+    })
+    if (approved.kind !== 'ok') throw new Error('approval failed')
+    expect(approved.value.grant.connectionTarget).toEqual({ kind: 'replace_credential', principalRef: 'prn_agent_a' })
+    expect(approved.value.grant.replacement).toEqual({
+      principalRef: 'prn_agent_a',
+      generation: 2,
+      successorCredentialRef: 'crd_successor',
+      predecessorCredentialRef: 'crd_predecessor',
+      predecessorKeyId: 'key-predecessor',
+      successorGrantRef: 'grt_successor',
+    })
+  })
+
+  it('refuses a replacement without a concrete principal before issuing a key', async () => {
+    const store = storeFixture()
+    const started = await deviceGrant(store)
+    let issued = false
+    await expect(approveGrant(store, {
+      grantRef: started.grant.grantRef,
+      ownerId: 'owner-one',
+      now: 1_001,
+      connectionTarget: { kind: 'replace_credential', principalRef: '   ' },
+      issueKey: async () => {
+        issued = true
+        return { keyId: 'should-not-exist' }
+      },
+    })).resolves.toEqual({ kind: 'refused', reason: 'invalid_target' })
+    expect(issued).toBe(false)
   })
 })

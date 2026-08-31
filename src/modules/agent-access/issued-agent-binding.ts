@@ -53,3 +53,33 @@ export function issuedAgentCanonicalRefs(input: Readonly<{
     delegationUuid: `${delegationHex.slice(0, 8)}-${delegationHex.slice(8, 12)}-${delegationHex.slice(12, 16)}-${delegationHex.slice(16, 20)}-${delegationHex.slice(20)}`,
   }
 }
+
+export function replacementAgentCanonicalRefs(input: Readonly<{
+  principalRef: string
+  credentialId: string
+  generation: number
+  grantRef: string
+}>): Readonly<{
+  bindingRef: string
+  credentialRef: string
+  delegationUuid: string
+}> {
+  const bindingHex = canonicalUuidHex({
+    format: 'replacement-agent-binding:v1',
+    principalRef: input.principalRef,
+    credentialId: input.credentialId,
+    generation: String(input.generation),
+  })
+  const credentialHex = canonicalUuidHex({
+    format: 'replacement-agent-credential:v1',
+    principalRef: input.principalRef,
+    credentialId: input.credentialId,
+    generation: String(input.generation),
+  })
+  const delegationHex = input.grantRef.slice('grt_'.length)
+  return {
+    bindingRef: `eib_${bindingHex}`,
+    credentialRef: `crd_${credentialHex}`,
+    delegationUuid: `${delegationHex.slice(0, 8)}-${delegationHex.slice(8, 12)}-${delegationHex.slice(12, 16)}-${delegationHex.slice(16, 20)}-${delegationHex.slice(20)}`,
+  }
+}

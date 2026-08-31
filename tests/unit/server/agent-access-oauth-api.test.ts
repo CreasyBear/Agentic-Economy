@@ -133,6 +133,117 @@ describe('Customer Request OAuth HTTP adapter', () => {
     })
   })
 
+  it('promotes an explicitly selected agent only after successor delivery and safely retries provider cleanup', async () => {
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-replacement', clientName: 'Replacement CLI', redirectUris: ['http://localhost/callback'],
+      grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000,
+    })
+    const replacement = {
+      principalRef: 'prn_agent_a', generation: 2, successorCredentialRef: 'crd_successor',
+      predecessorCredentialRef: 'crd_predecessor', predecessorKeyId: 'ak_predecessor', successorGrantRef: 'grt_successor',
+    } as const
+    const promoted: string[] = []
+    const revoked: string[] = []
+    let revokeAttempt = 0
+    const options: OAuthApiOptions = {
+      store,
+      now: () => 1_000,
+      canonicalBaseUrl: 'http://localhost',
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+      issueKey: async (input) => {
+        expect(input.target).toEqual({ kind: 'replace_credential', principalRef: 'prn_agent_a' })
+        return { keyId: 'ak_successor', replacement }
+      },
+      getSecret: async () => ({ secret: 'successor-secret-once' }),
+      promoteReplacement: async (value) => {
+        promoted.push(value.principalRef)
+        return { kind: promoted.length === 1 ? 'completed' : 'replayed', providerCredentialId: 'ak_predecessor' }
+      },
+      revokeProviderCredential: async (credentialId) => {
+        revokeAttempt += 1
+        if (revokeAttempt === 1) throw new Error('provider temporarily unavailable')
+        revoked.push(credentialId)
+      },
+    }
+    const issued = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
+      client_id: 'client-replacement', scope: 'market_operations:invoke customer_requests:approve_each',
+    }), options)
+    const device = await issued.json() as { device_code: string }
+    const grant = [...store.grants.values()][0]
+    if (grant === undefined) throw new Error('replacement grant missing')
+    const approved = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', {
+      grant_ref: grant.grantRef,
+      decision: 'approve',
+      authority_mode: 'approve_each',
+      connection_target: 'replace_credential',
+      principal_ref: 'prn_agent_a',
+    }), options)
+    expect(approved.status).toBe(200)
+    expect(store.grants.get(grant.grantRef)?.replacement).toEqual(replacement)
+
+    const firstDelivery = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: 'client-replacement',
+      device_code: device.device_code,
+    }), options)
+    expect(firstDelivery.status).toBe(400)
+    expect(store.grants.get(grant.grantRef)?.status).toBe('approved')
+    expect(promoted).toEqual(['prn_agent_a'])
+    expect(revoked).toEqual([])
+
+    const delivered = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: 'client-replacement',
+      device_code: device.device_code,
+    }), options)
+    await expect(delivered.json()).resolves.toMatchObject({ access_token: 'successor-secret-once' })
+    expect(promoted).toEqual(['prn_agent_a', 'prn_agent_a'])
+    expect(revoked).toEqual(['ak_predecessor'])
+    expect(store.grants.get(grant.grantRef)?.status).toBe('consumed')
+  })
+
+  it('cancels an unclaimed successor on expiry and leaves the predecessor current', async () => {
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-expired-replacement', clientName: 'Expired replacement', redirectUris: ['http://localhost/callback'],
+      grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000,
+    })
+    const replacement = {
+      principalRef: 'prn_agent_a', generation: 2, successorCredentialRef: 'crd_successor',
+      predecessorCredentialRef: 'crd_predecessor', predecessorKeyId: 'ak_predecessor', successorGrantRef: 'grt_successor',
+    } as const
+    await store.insertGrant({
+      grantRef: 'device:expired-replacement', flow: 'device_code', clientId: 'client-expired-replacement',
+      requestedScopes: ['market_operations:invoke', 'customer_requests:approve_each'],
+      requestedAccess: { environment: 'sandbox', expiresInSeconds: 600 },
+      deviceCodeHash: await hashOAuthValue('expired-device-code'), userCodeHash: 'expired-user-code',
+      status: 'approved', ownerId: 'user_local', keyId: 'ak_successor', createdAt: 1_000, expiresAt: 2_000,
+      nextPollAt: 1_000, displayName: 'Expired replacement',
+      connectionTarget: { kind: 'replace_credential', principalRef: 'prn_agent_a' }, replacement,
+    })
+    const cancelled: string[] = []
+    const revoked: string[] = []
+    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: 'client-expired-replacement',
+      device_code: 'expired-device-code',
+    }), {
+      store,
+      now: () => 2_000,
+      cancelReplacement: async (value) => {
+        cancelled.push(value.principalRef)
+        return { kind: 'completed', providerCredentialId: 'ak_successor' }
+      },
+      revokeProviderCredential: async (credentialId) => { revoked.push(credentialId) },
+    })
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({ error: 'expired_token' })
+    expect(cancelled).toEqual(['prn_agent_a'])
+    expect(revoked).toEqual(['ak_successor'])
+    expect(store.grants.get('device:expired-replacement')?.status).toBe('expired')
+  })
+
   it('persists the same requested access through device and authorization-code grants', async () => {
     const store = storeFixture()
     await store.insertClient({ clientId: 'client-details-device', clientName: 'Details device', redirectUris: ['http://localhost/callback'], grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })

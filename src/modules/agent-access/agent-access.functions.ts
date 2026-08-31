@@ -27,6 +27,10 @@ import {
   type AgentAccessPrincipalRegistrationResult,
   type AgentAccessGrantRegistrationResult,
   type IssuedAgentBindingRegistration,
+  type AgentCredentialReplacementRegistration,
+  type AgentCredentialReplacementRegistrationResult,
+  type AgentCredentialReplacementTransition,
+  type AgentCredentialReplacementTransitionResult,
 } from './agent-access'
 import {
   agentAccessPolicySchema,
@@ -201,6 +205,17 @@ type RegisterIssuedAgentBindingArgs = IssuedAgentBindingRegistration & Readonly<
 const registerIssuedAgentBindingMutation = sourceMutation<RegisterIssuedAgentBindingArgs, AgentAccessGrantRegistrationResult>(
   'agentAccessPrincipals:registerIssuedAgentBindingForServer',
 )
+type PrepareReplacementArgs = AgentCredentialReplacementRegistration & Readonly<{ serviceAuth: ConvexServerFunctionAssertion }>
+const prepareCredentialReplacementMutation = sourceMutation<PrepareReplacementArgs, AgentCredentialReplacementRegistrationResult>(
+  'agentAccessPrincipals:prepareCredentialReplacementForServer',
+)
+type TransitionReplacementArgs = AgentCredentialReplacementTransition & Readonly<{ serviceAuth: ConvexServerFunctionAssertion }>
+const promoteCredentialReplacementMutation = sourceMutation<TransitionReplacementArgs, AgentCredentialReplacementTransitionResult>(
+  'agentAccessPrincipals:promoteCredentialReplacementForServer',
+)
+const cancelCredentialReplacementMutation = sourceMutation<TransitionReplacementArgs, AgentCredentialReplacementTransitionResult>(
+  'agentAccessPrincipals:cancelCredentialReplacementForServer',
+)
 const listOwnerGrantReadbacksQuery = sourceQuery<{ requireAuthority: true }, readonly unknown[]>(
   'agentAccessPolicy:listOwnerGrantReadbacks',
 )
@@ -288,6 +303,53 @@ export async function registerIssuedAgentBinding(
   } catch {
     return { kind: 'unavailable' }
   }
+}
+
+async function callReplacementMutation(
+  operation: string,
+  reference: typeof prepareCredentialReplacementMutation | typeof promoteCredentialReplacementMutation,
+  command: AgentCredentialReplacementRegistration | AgentCredentialReplacementTransition,
+): Promise<AgentCredentialReplacementRegistrationResult | AgentCredentialReplacementTransitionResult> {
+  try {
+    const serviceAuth = await createConvexServerFunctionAssertion({
+      operation,
+      scope: MARKET_OPERATIONS_INVOKE_SCOPE,
+      command,
+    })
+    return await callSourceMutation(reference as never, { ...command, serviceAuth } as never) as AgentCredentialReplacementRegistrationResult | AgentCredentialReplacementTransitionResult
+  } catch {
+    return { kind: 'unavailable' }
+  }
+}
+
+export async function prepareAgentCredentialReplacement(
+  input: AgentCredentialReplacementRegistration,
+): Promise<AgentCredentialReplacementRegistrationResult> {
+  return await callReplacementMutation(
+    'agentAccessPrincipals.prepareCredentialReplacementForServer',
+    prepareCredentialReplacementMutation,
+    { ...input, scopes: [...input.scopes] },
+  ) as AgentCredentialReplacementRegistrationResult
+}
+
+export async function promoteAgentCredentialReplacement(
+  input: AgentCredentialReplacementTransition,
+): Promise<AgentCredentialReplacementTransitionResult> {
+  return await callReplacementMutation(
+    'agentAccessPrincipals.promoteCredentialReplacementForServer',
+    promoteCredentialReplacementMutation,
+    input,
+  ) as AgentCredentialReplacementTransitionResult
+}
+
+export async function cancelAgentCredentialReplacement(
+  input: AgentCredentialReplacementTransition,
+): Promise<AgentCredentialReplacementTransitionResult> {
+  return await callReplacementMutation(
+    'agentAccessPrincipals.cancelCredentialReplacementForServer',
+    cancelCredentialReplacementMutation,
+    input,
+  ) as AgentCredentialReplacementTransitionResult
 }
 
 export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })

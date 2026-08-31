@@ -214,7 +214,15 @@ export function accessProfileForGrant(grant: Pick<AgentAccessOAuthGrant, 'reques
     : 'market'
 }
 
-export function consentHtml(input: Readonly<{ grantRef: string; clientName: string; mode: AgentAccessAuthorityMode; requestedScopes: readonly string[]; state: string; requestedAccess: AgentAccessOAuthRequestedAccess }>): string {
+export function consentHtml(input: Readonly<{
+  grantRef: string
+  clientName: string
+  mode: AgentAccessAuthorityMode
+  requestedScopes: readonly string[]
+  state: string
+  requestedAccess: AgentAccessOAuthRequestedAccess
+  agentTargets?: readonly Readonly<{ principalRef: string; displayName: string }>[]
+}>): string {
   const escapedName = escapeHtml(input.clientName)
   const escapedGrantRef = escapeHtml(input.grantRef)
   const escapedState = escapeHtml(input.state)
@@ -224,7 +232,8 @@ export function consentHtml(input: Readonly<{ grantRef: string; clientName: stri
   const environment = escapeHtml(input.requestedAccess.environment)
   const authorityMode = escapeHtml(input.mode)
   const expiry = String(input.requestedAccess.expiresInSeconds)
-  return `<main data-ae-consent data-grant-ref="${escapedGrantRef}" data-client-name="${escapedName}" data-authority-mode="${authorityMode}" data-access-profile="${profile}" data-environment="${environment}" data-expires-in-seconds="${expiry}"><h1>Connect ${escapedName} to Agentic Economy</h1><p>This agent may ${permission.allowed}.</p><p>${permission.approval}</p><p data-ae-access>Environment: ${environment}. Access expires in ${expiry} seconds. Authority mode: ${authorityMode}. ${consentAccessSummary(input.requestedAccess)}</p><p>You can revoke it at any time from the Access &amp; usage workspace.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${authorityMode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
+  const targets = escapeHtml(encodeURIComponent(JSON.stringify(input.agentTargets ?? [])))
+  return `<main data-ae-consent data-grant-ref="${escapedGrantRef}" data-client-name="${escapedName}" data-authority-mode="${authorityMode}" data-access-profile="${profile}" data-environment="${environment}" data-expires-in-seconds="${expiry}" data-agent-targets="${targets}"><h1>Connect ${escapedName} to Agentic Economy</h1><p>This agent may ${permission.allowed}.</p><p>${permission.approval}</p><p data-ae-access>Environment: ${environment}. Access expires in ${expiry} seconds. Authority mode: ${authorityMode}. ${consentAccessSummary(input.requestedAccess)}</p><p>You can revoke it at any time from the Access &amp; usage workspace.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${authorityMode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
 }
 
 export function consentPermissionCopy(mode: AgentAccessAuthorityMode, profile: 'market' | 'supplier' = 'market'): Readonly<{ allowed: string; approval: string }> {

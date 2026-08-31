@@ -4,7 +4,11 @@ import { convexTest } from 'convex-test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '../src/modules/agent-access/service-auth-envelope'
-import type { IssuedAgentBindingRegistration } from '../src/modules/agent-access/agent-access'
+import type {
+  AgentCredentialReplacementRegistration,
+  AgentCredentialReplacementTransition,
+  IssuedAgentBindingRegistration,
+} from '../src/modules/agent-access/agent-access'
 import { issuedAgentCanonicalRefs, issuedAgentGrantRef } from '../src/modules/agent-access/issued-agent-binding'
 import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
 import schema from './schema'
@@ -29,6 +33,15 @@ type RegisterArgs = IssuedAgentBindingRegistration & Readonly<{
 type RegisterResult = Readonly<Record<string, unknown>>
 const registerIssuedBinding = makeFunctionReference<'mutation', RegisterArgs, RegisterResult>(
   'agentAccessPrincipals:registerIssuedAgentBindingForServer',
+)
+const prepareReplacement = makeFunctionReference<'mutation', AgentCredentialReplacementRegistration & { serviceAuth: CustomerRequestServiceAssertion }, RegisterResult>(
+  'agentAccessPrincipals:prepareCredentialReplacementForServer',
+)
+const promoteReplacement = makeFunctionReference<'mutation', AgentCredentialReplacementTransition & { serviceAuth: CustomerRequestServiceAssertion }, RegisterResult>(
+  'agentAccessPrincipals:promoteCredentialReplacementForServer',
+)
+const cancelReplacement = makeFunctionReference<'mutation', AgentCredentialReplacementTransition & { serviceAuth: CustomerRequestServiceAssertion }, RegisterResult>(
+  'agentAccessPrincipals:cancelCredentialReplacementForServer',
 )
 
 function bindingInput(subject = 'user_owner'): IssuedAgentBindingRegistration {
@@ -57,6 +70,19 @@ async function assertion(input: IssuedAgentBindingRegistration): Promise<Custome
       principalId: 'ae:server-function',
       ownerId: 'ae:server-function',
       credentialId: 'ae:server-function',
+      scopes: ['market_operations:invoke'],
+    },
+    issuedAt: NOW,
+  })
+}
+
+async function operationAssertion(operation: string, command: Record<string, unknown>): Promise<CustomerRequestServiceAssertion> {
+  return await createCustomerRequestServiceAssertion({
+    key: SERVICE_KEY,
+    operation,
+    command: toStableHashValue(command),
+    principal: {
+      principalId: 'ae:server-function', ownerId: 'ae:server-function', credentialId: 'ae:server-function',
       scopes: ['market_operations:invoke'],
     },
     issuedAt: NOW,
@@ -187,6 +213,91 @@ describe('issued agent binding', () => {
     ])
     expect(canonicalAgentDelegationScopes(['market_operations:invoke'])).toEqual([
       'market_operations:invoke',
+    ])
+  })
+
+  it('stages, promotes, replays, and cancels credential replacements without replacing the agent', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const first = bindingInput()
+    await owner.mutation(registerIssuedBinding, { ...first, serviceAuth: await assertion(first) })
+    const access = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_credentialId', (query) => query.eq('credentialId', first.credentialId)).unique())
+    if (access === null) throw new Error('agent_access_missing')
+    const replacement: AgentCredentialReplacementRegistration = {
+      principalRef: access.principalId,
+      issuanceKey: 'replacement-device-12345678',
+      grantRef: issuedAgentGrantRef('user_owner', 'replacement-device-12345678'),
+      credentialId: 'key_replacement_2',
+      applicationRef: first.applicationRef,
+      environment: first.environment,
+      scopes: first.scopes,
+      authorityMode: first.authorityMode,
+      policy: first.policy,
+      createdAt: NOW,
+      expiresAt: NOW + 600_000,
+    }
+    const prepared = await owner.mutation(prepareReplacement, {
+      ...replacement,
+      serviceAuth: await operationAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...replacement, scopes: [...replacement.scopes] },
+      ),
+    })
+    expect(prepared).toMatchObject({
+      kind: 'recorded', principalRef: access.principalId, generation: 2,
+      predecessorKeyId: first.credentialId,
+    })
+    const transition = {
+      principalRef: access.principalId,
+      successorCredentialRef: String(prepared.successorCredentialRef),
+      successorGrantRef: replacement.grantRef,
+    }
+    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual([
+      expect.objectContaining({ principalRef: access.principalId, currentProviderCredentialId: first.credentialId }),
+    ])
+    const promoteAuth = await operationAssertion('agentAccessPrincipals.promoteCredentialReplacementForServer', transition)
+    await expect(owner.mutation(promoteReplacement, { ...transition, serviceAuth: promoteAuth }))
+      .resolves.toEqual({ kind: 'completed', providerCredentialId: first.credentialId })
+    await expect(owner.mutation(promoteReplacement, { ...transition, serviceAuth: promoteAuth }))
+      .resolves.toEqual({ kind: 'replayed', providerCredentialId: first.credentialId })
+    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual([
+      expect.objectContaining({
+        principalRef: access.principalId,
+        currentProviderCredentialId: replacement.credentialId,
+        credentials: expect.arrayContaining([
+          expect.objectContaining({ generation: 1, lifecycle: 'revoked' }),
+          expect.objectContaining({ generation: 2, lifecycle: 'active' }),
+        ]),
+      }),
+    ])
+
+    const cancelledInput: AgentCredentialReplacementRegistration = {
+      ...replacement,
+      issuanceKey: 'replacement-device-87654321',
+      grantRef: issuedAgentGrantRef('user_owner', 'replacement-device-87654321'),
+      credentialId: 'key_replacement_3',
+    }
+    const cancelledPrepared = await owner.mutation(prepareReplacement, {
+      ...cancelledInput,
+      serviceAuth: await operationAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...cancelledInput, scopes: [...cancelledInput.scopes] },
+      ),
+    })
+    const cancel = {
+      principalRef: access.principalId,
+      successorCredentialRef: String(cancelledPrepared.successorCredentialRef),
+      successorGrantRef: cancelledInput.grantRef,
+    }
+    const cancelAuth = await operationAssertion('agentAccessPrincipals.cancelCredentialReplacementForServer', cancel)
+    await expect(owner.mutation(cancelReplacement, { ...cancel, serviceAuth: cancelAuth }))
+      .resolves.toEqual({ kind: 'completed', providerCredentialId: cancelledInput.credentialId })
+    await expect(owner.mutation(cancelReplacement, { ...cancel, serviceAuth: cancelAuth }))
+      .resolves.toEqual({ kind: 'replayed', providerCredentialId: cancelledInput.credentialId })
+    await expect(owner.query(api.agentDirectory.listOwned, {})).resolves.toEqual([
+      expect.objectContaining({ principalRef: access.principalId, currentProviderCredentialId: replacement.credentialId }),
     ])
   })
 

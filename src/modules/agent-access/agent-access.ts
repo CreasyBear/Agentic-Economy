@@ -118,6 +118,44 @@ export type IssuedAgentBindingRegistration = Readonly<{
   expiresAt: number
 }>
 
+export type AgentCredentialReplacementRegistration = Readonly<{
+  principalRef: string
+  issuanceKey: string
+  grantRef: string
+  credentialId: string
+  applicationRef: string
+  environment: AgentAccessEnvironment
+  scopes: readonly string[]
+  authorityMode: AgentAccessAuthorityMode
+  policy: AgentAccessPolicy
+  createdAt: number
+  expiresAt: number
+}>
+
+export type AgentCredentialReplacementRegistrationResult =
+  | Readonly<{
+      kind: 'recorded' | 'replayed'
+      principalRef: string
+      generation: number
+      successorCredentialRef: string
+      predecessorCredentialRef: string
+      predecessorKeyId: string
+      successorGrantRef: string
+    }>
+  | Readonly<{ kind: 'conflict' | 'unavailable' }>
+  | Readonly<{ kind: 'refused'; code: 'authentication_required' }>
+
+export type AgentCredentialReplacementTransition = Readonly<{
+  principalRef: string
+  successorCredentialRef: string
+  successorGrantRef: string
+}>
+
+export type AgentCredentialReplacementTransitionResult =
+  | Readonly<{ kind: 'completed' | 'replayed'; providerCredentialId: string }>
+  | Readonly<{ kind: 'conflict' | 'unavailable' }>
+  | Readonly<{ kind: 'refused'; code: 'authentication_required' }>
+
 export type AgentAccessPrincipalRegistrationResult = Readonly<{ kind: 'recorded' | 'conflict' | 'unavailable' }>
 
 export type AgentAccessPrincipalRegistration = Readonly<{
