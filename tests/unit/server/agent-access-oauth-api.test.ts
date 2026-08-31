@@ -147,6 +147,8 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const revoked: string[] = []
     const recorded: string[] = []
     let revokeAttempt = 0
+    let recordAttempt = 0
+    let providerRevoked = false
     const options: OAuthApiOptions = {
       store,
       now: () => 1_000,
@@ -161,12 +163,16 @@ describe('Customer Request OAuth HTTP adapter', () => {
         promoted.push(value.principalRef)
         return { kind: promoted.length === 1 ? 'completed' : 'replayed', providerCredentialId: 'ak_predecessor' }
       },
+      getProviderCredential: async () => ({ revoked: providerRevoked }),
       revokeProviderCredential: async (credentialId) => {
         revokeAttempt += 1
         if (revokeAttempt === 1) throw new Error('provider temporarily unavailable')
+        providerRevoked = true
         revoked.push(credentialId)
       },
       recordProviderRevocation: async (input) => {
+        recordAttempt += 1
+        if (recordAttempt === 1) throw new Error('canonical record temporarily unavailable')
         recorded.push(`${input.principalRef}:${input.credentialRef}:${input.providerCredentialId}`)
         return { kind: 'completed' }
       },
@@ -199,13 +205,23 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(revoked).toEqual([])
     expect(recorded).toEqual([])
 
+    const recordFailure = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: 'client-replacement',
+      device_code: device.device_code,
+    }), options)
+    expect(recordFailure.status).toBe(503)
+    await expect(recordFailure.json()).resolves.toMatchObject({ error: 'server_error' })
+    expect(revoked).toEqual(['ak_predecessor'])
+    expect(recorded).toEqual([])
+
     const delivered = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
       client_id: 'client-replacement',
       device_code: device.device_code,
     }), options)
     await expect(delivered.json()).resolves.toMatchObject({ access_token: 'successor-secret-once' })
-    expect(promoted).toEqual(['prn_agent_a', 'prn_agent_a'])
+    expect(promoted).toEqual(['prn_agent_a', 'prn_agent_a', 'prn_agent_a'])
     expect(revoked).toEqual(['ak_predecessor'])
     expect(recorded).toEqual(['prn_agent_a:crd_predecessor:ak_predecessor'])
     expect(store.grants.get(grant.grantRef)?.status).toBe('consumed')
@@ -269,26 +285,42 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const cancelled: string[] = []
     const revoked: string[] = []
     const recorded: string[] = []
-    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
-      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-      client_id: 'client-expired-replacement',
-      device_code: 'expired-device-code',
-    }), {
+    let providerRevoked = false
+    let recordAttempt = 0
+    const options: OAuthApiOptions = {
       store,
       now: () => 2_000,
       cancelReplacement: async (value) => {
         cancelled.push(value.principalRef)
-        return { kind: 'completed', providerCredentialId: 'ak_successor' }
+        return { kind: cancelled.length === 1 ? 'completed' : 'replayed', providerCredentialId: 'ak_successor' }
       },
-      revokeProviderCredential: async (credentialId) => { revoked.push(credentialId) },
+      getProviderCredential: async () => ({ revoked: providerRevoked }),
+      revokeProviderCredential: async (credentialId) => {
+        providerRevoked = true
+        revoked.push(credentialId)
+      },
       recordProviderRevocation: async (input) => {
+        recordAttempt += 1
+        if (recordAttempt === 1) throw new Error('canonical record temporarily unavailable')
         recorded.push(`${input.principalRef}:${input.credentialRef}:${input.providerCredentialId}:${input.correlationRef}`)
         return { kind: 'completed' }
       },
-    })
-    expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toMatchObject({ error: 'expired_token' })
-    expect(cancelled).toEqual(['prn_agent_a'])
+    }
+    const request = () => handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: 'client-expired-replacement',
+      device_code: 'expired-device-code',
+    }), options)
+    const retryable = await request()
+    expect(retryable.status).toBe(503)
+    await expect(retryable.json()).resolves.toMatchObject({ error: 'server_error' })
+    expect(revoked).toEqual(['ak_successor'])
+    expect(recorded).toEqual([])
+
+    const completed = await request()
+    expect(completed.status).toBe(400)
+    await expect(completed.json()).resolves.toMatchObject({ error: 'expired_token' })
+    expect(cancelled).toEqual(['prn_agent_a', 'prn_agent_a'])
     expect(revoked).toEqual(['ak_successor'])
     expect(recorded).toEqual(['prn_agent_a:crd_successor:ak_successor:replacement-expired:grt_successor'])
     expect(store.grants.get('device:expired-replacement')?.status).toBe('expired')

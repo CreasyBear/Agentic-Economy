@@ -89,6 +89,7 @@ type OAuthApiOptions = Readonly<{
   getSecret?: (keyId: string) => Promise<{ secret: string }>
   promoteReplacement?: (replacement: AgentCredentialReplacement) => Promise<Readonly<{ kind: 'completed' | 'replayed'; providerCredentialId: string } | { kind: 'conflict' | 'unavailable' }>>
   cancelReplacement?: (replacement: AgentCredentialReplacement) => Promise<Readonly<{ kind: 'completed' | 'replayed'; providerCredentialId: string } | { kind: 'conflict' | 'unavailable' }>>
+  getProviderCredential?: (credentialId: string) => Promise<Readonly<{ revoked: boolean }>>
   revokeProviderCredential?: (credentialId: string, reason: string) => Promise<void>
   recordProviderRevocation?: (input: Readonly<{
     principalRef: string
@@ -443,7 +444,9 @@ async function pollDeviceGrantRequest(form: URLSearchParams, request: Request, o
   if (result.kind !== 'ready') {
     if (result.kind === 'refused' && result.reason === 'expired_token') {
       const expired = await requireStore(options).getGrantByHash('device', await hashOAuthValue(deviceCode))
-      if (expired !== null) await cancelExpiredReplacement(expired, options)
+      if (expired !== null && !await cancelExpiredReplacement(expired, options)) {
+        return oauthError('server_error', 503)
+      }
     }
     return oauthTransitionError(result)
   }
@@ -465,13 +468,15 @@ async function exchangeAuthorizationCode(form: URLSearchParams, request: Request
   })
   if (claimed.kind === 'refused' && claimed.reason === 'expired_token') {
     const expired = await requireStore(options).getGrantByHash('authorization', await hashOAuthValue(code))
-    if (expired !== null) await cancelExpiredReplacement(expired, options)
+    if (expired !== null && !await cancelExpiredReplacement(expired, options)) {
+      return oauthError('server_error', 503)
+    }
   }
   return await deliverClaimedGrant(claimed, options)
 }
 
-async function cancelExpiredReplacement(grant: AgentAccessOAuthGrant, options: OAuthApiOptions): Promise<void> {
-  if (grant.replacement === undefined || isLocalE2EAuthBypassEnabled()) return
+async function cancelExpiredReplacement(grant: AgentAccessOAuthGrant, options: OAuthApiOptions): Promise<boolean> {
+  if (grant.replacement === undefined || isLocalE2EAuthBypassEnabled()) return true
   const replacement = grant.replacement
   const cancelled = options.cancelReplacement === undefined
     ? await cancelAgentCredentialReplacement({
@@ -480,14 +485,10 @@ async function cancelExpiredReplacement(grant: AgentAccessOAuthGrant, options: O
         successorGrantRef: replacement.successorGrantRef,
       })
     : await options.cancelReplacement(replacement)
-  if (cancelled.kind !== 'completed' && cancelled.kind !== 'replayed') return
+  if (cancelled.kind !== 'completed' && cancelled.kind !== 'replayed') return false
   try {
     const reason = 'Replacement delivery expired before the credential was claimed.'
-    if (options.revokeProviderCredential !== undefined) {
-      await options.revokeProviderCredential(cancelled.providerCredentialId, reason)
-    } else {
-      await clerkClient().apiKeys.revoke({ apiKeyId: cancelled.providerCredentialId, revocationReason: reason })
-    }
+    await revokeProviderCredentialIfCurrent(cancelled.providerCredentialId, reason, options)
     const recorded = await (options.recordProviderRevocation ?? recordAgentProviderRevocation)({
       principalRef: replacement.principalRef,
       credentialRef: replacement.successorCredentialRef,
@@ -498,10 +499,13 @@ async function cancelExpiredReplacement(grant: AgentAccessOAuthGrant, options: O
     if (recorded.kind !== 'completed' && recorded.kind !== 'replayed') {
       throw new Error('expired_replacement_provider_revocation_record_failed')
     }
+    return true
   } catch {
     // The canonical successor is already revoked. A repeated expired-token
     // request safely retries provider cleanup and outbox completion without
-    // reviving it.
+    // reviving it. The token endpoint returns a retryable server error until
+    // both provider cleanup and outbox completion converge.
+    return false
   }
 }
 
@@ -527,11 +531,7 @@ async function deliverClaimedGrant(
         : await options.promoteReplacement(replacement)
       if (promoted.kind !== 'completed' && promoted.kind !== 'replayed') throw new Error('replacement_promotion_failed')
       const reason = 'Replaced by a newer Agentic Economy credential.'
-      if (options.revokeProviderCredential !== undefined) {
-        await options.revokeProviderCredential(promoted.providerCredentialId, reason)
-      } else {
-        await clerkClient().apiKeys.revoke({ apiKeyId: promoted.providerCredentialId, revocationReason: reason })
-      }
+      await revokeProviderCredentialIfCurrent(promoted.providerCredentialId, reason, options)
       const recorded = await (options.recordProviderRevocation ?? recordAgentProviderRevocation)({
         principalRef: replacement.principalRef,
         credentialRef: replacement.predecessorCredentialRef,
@@ -564,6 +564,22 @@ async function deliverClaimedGrant(
     }
     return oauthError('server_error', 503)
   }
+}
+
+async function revokeProviderCredentialIfCurrent(
+  providerCredentialId: string,
+  reason: string,
+  options: OAuthApiOptions,
+): Promise<void> {
+  const provider = options.getProviderCredential === undefined
+    ? await clerkClient().apiKeys.get(providerCredentialId)
+    : await options.getProviderCredential(providerCredentialId)
+  if (provider.revoked) return
+  if (options.revokeProviderCredential !== undefined) {
+    await options.revokeProviderCredential(providerCredentialId, reason)
+    return
+  }
+  await clerkClient().apiKeys.revoke({ apiKeyId: providerCredentialId, revocationReason: reason })
 }
 
 /**
