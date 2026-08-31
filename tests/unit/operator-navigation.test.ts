@@ -7,6 +7,7 @@ import {
   formatOperatorNavBadge,
   isOperatorPathActive,
   listOperatorCommandDestinations,
+  navGroupsForContext,
   navGroupsForRole,
   operatorUtilityItemsForRole,
   resolveOperatorNavItem,
@@ -94,12 +95,26 @@ describe('operator navigation', () => {
     expect(labels).toEqual([
       'Operations',
       'Calls',
-      'Keys',
+      'Agents',
       'Credit',
       'Supplier',
       'Publish',
       'Settings',
     ])
+  })
+
+  it('projects destinations only for surfaces authorized by operator context', () => {
+    const ownerContext = {
+      kind: 'authorized' as const,
+      userId: 'user_owner',
+      principalRef: 'prn_owner',
+      accountRef: 'acc_owner',
+      allowedSurfaces: ['owner', 'developer'] as const,
+    }
+
+    expect(navGroupsForContext(ownerContext, 'owner').flatMap((group) => group.items).length).toBeGreaterThan(0)
+    expect(navGroupsForContext(ownerContext, 'developer').flatMap((group) => group.items).length).toBeGreaterThan(0)
+    expect(navGroupsForContext(ownerContext, 'admin')).toEqual([])
   })
 
   /** Admin carries the most surfaces, so it is the role where an untiered item

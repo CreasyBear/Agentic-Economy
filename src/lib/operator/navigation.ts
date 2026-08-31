@@ -14,6 +14,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import type { OperatorContext } from '@/lib/operator/operator-context'
 
 export type OperatorRole = 'owner' | 'admin' | 'developer'
 
@@ -55,7 +56,7 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
     items: [
       { href: '/owner/offerings', label: 'Operations', icon: Boxes, tier: 'core', mobilePrimary: true },
       { href: '/activity', label: 'Calls', icon: Activity, tier: 'core', mobilePrimary: true },
-      { href: '/agent-access', label: 'Keys', icon: KeyRound, tier: 'core' },
+      { href: '/agent-access', label: 'Agents', icon: KeyRound, tier: 'core' },
       { href: '/owner/credit', label: 'Credit', icon: Wallet, tier: 'core' },
       { href: '/owner/status', label: 'Supplier', icon: Building2, tier: 'core' },
     ],
@@ -145,6 +146,14 @@ export function navGroupsForRole(
   return coreGroups
 }
 
+export function navGroupsForContext(
+  context: Pick<OperatorContext, 'allowedSurfaces'>,
+  surface: OperatorRole,
+  options: { advanced?: boolean } = {},
+): readonly OperatorNavGroup[] {
+  return context.allowedSurfaces.includes(surface) ? navGroupsForRole(surface, options) : []
+}
+
 function baseNavGroupsForRole(role: OperatorRole): readonly OperatorNavGroup[] {
   switch (role) {
     case 'owner':
@@ -176,6 +185,14 @@ export function listOperatorCommandDestinations(role: OperatorRole): readonly Op
   ]
 }
 
+export function listOperatorCommandDestinationsForContext(
+  context: Pick<OperatorContext, 'allowedSurfaces'>,
+  surface: OperatorRole,
+): readonly OperatorNavGroup[] {
+  if (!context.allowedSurfaces.includes(surface)) return []
+  return listOperatorCommandDestinations(surface)
+}
+
 export function operatorUtilityItemsForRole(_role: OperatorRole): readonly OperatorUtilityItem[] {
   return operatorUtilityItems
 }
@@ -184,6 +201,13 @@ export function mobileNavItemsForRole(role: OperatorRole): readonly OperatorNavI
   return baseNavGroupsForRole(role)
     .flatMap((group) => group.items)
     .filter((item) => item.mobilePrimary === true)
+}
+
+export function mobileNavItemsForContext(
+  context: Pick<OperatorContext, 'allowedSurfaces'>,
+  surface: OperatorRole,
+): readonly OperatorNavItem[] {
+  return context.allowedSurfaces.includes(surface) ? mobileNavItemsForRole(surface) : []
 }
 
 export function formatOperatorNavBadge(value: OperatorNavBadgeValue): string | undefined {

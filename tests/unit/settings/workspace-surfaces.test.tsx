@@ -36,13 +36,8 @@ vi.mock('@tanstack/react-router', async () => {
 import { OwnerSettingsNav } from '@/components/ae/settings/OwnerSettingsNav'
 import { AeWorkspaceDevelopers } from '@/components/ae/settings/AeWorkspaceDevelopers'
 import { AeWorkspaceGeneral } from '@/components/ae/settings/AeWorkspaceGeneral'
-import { AeWorkspaceMembers } from '@/components/ae/settings/AeWorkspaceMembers'
 import { buildPublicOwnerStatusReadback } from '@/modules/catalog/public'
-import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
-
-const CALLER_PRINCIPAL_ID = `prn_${'1'.repeat(32)}`
-const CALLER_KEY_CANARY = 'key_secret_canary_do_not_render'
 
 const catalog: PublicBusinessCatalogApiV2Dto = {
   schemaVersion: 'public-business-catalog-api:v2',
@@ -60,46 +55,13 @@ const catalog: PublicBusinessCatalogApiV2Dto = {
   accessSummary: { humanRequest: false, externalOperation: true, aeSupportedAction: true },
 }
 
-const caller: AgentOperatorKeyReadback = {
-  key: {
-    keyId: CALLER_KEY_CANARY,
-    name: 'UI assistant',
-    applicationRef: 'agentic-economy',
-    environment: 'sandbox',
-    authorityMode: 'inspect_only',
-    scopes: ['market_operations:invoke'],
-    revoked: false,
-    expired: false,
-  },
-  grant: {
-    principalId: CALLER_PRINCIPAL_ID,
-    credentialId: CALLER_KEY_CANARY,
-    applicationRef: 'agentic-economy',
-    environment: 'sandbox',
-    authorityMode: 'inspect_only',
-    lifecycle: 'active',
-    expiresAt: 604_800_000,
-    budget: {
-      maximumSpendPerInvocation: { currency: 'USD', units: '500', exponent: 2 },
-      maximumDailySpend: { currency: 'USD', units: '2500', exponent: 2 },
-      maximumMonthlySpend: { currency: 'USD', units: '10000', exponent: 2 },
-      maximumConcurrentInvocations: 2,
-    },
-    rate: { maximumCallsPerMinute: 30, maximumCallsPerHour: 300 },
-  },
-  principalId: CALLER_PRINCIPAL_ID,
-  activity: [],
-  dataState: 'source',
-}
-
 const tabOffsets = new Map([
   ['Profile', 0],
-  ['General', 76],
-  ['Members', 150],
-  ['Connections', 230],
-  ['Credit', 344],
-  ['Payouts', 410],
-  ['Keys & APIs', 494],
+  ['Account', 76],
+  ['Connections', 150],
+  ['Credit', 264],
+  ['Payouts', 330],
+  ['Developer Setup', 414],
 ])
 
 let tabRowWidth = 390
@@ -113,7 +75,7 @@ beforeEach(() => {
     return tabOffsets.get(this.textContent ?? '') ?? 0
   })
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
-    return this.textContent === 'Connections' ? 110 : this.textContent === 'Keys & APIs' ? 100 : 72
+    return this.textContent === 'Connections' ? 110 : this.textContent === 'Developer Setup' ? 120 : 72
   })
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
     return this.dataset.slot === 'tabs-list' ? tabRowWidth : 0
@@ -146,11 +108,11 @@ describe('owner workspace settings surfaces', () => {
     expect(nav.textContent).toMatch(/User/)
     expect(nav.textContent).toMatch(/Workspace/)
     expect(nav.textContent).toMatch(/Developers/)
-    expect(screen.getByRole('tab', { name: 'General' }).getAttribute('href')).toBe('/owner/settings/workspace')
-    expect(screen.getByRole('tab', { name: 'Members' }).getAttribute('href')).toBe('/owner/settings/members')
+    expect(screen.getByRole('tab', { name: 'Account' }).getAttribute('href')).toBe('/owner/settings/workspace')
+    expect(screen.queryByRole('tab', { name: 'Members' })).toBeNull()
     expect(screen.getByRole('tab', { name: 'Connections' }).getAttribute('href')).toBe('/owner/settings/connections')
     expect(screen.getByRole('tab', { name: 'Payouts' }).getAttribute('href')).toBe('/owner/settings/payouts')
-    expect(screen.getByRole('tab', { name: 'General' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('tab', { name: 'Account' }).getAttribute('aria-current')).toBe('page')
     expect(nav.textContent).not.toMatch(/People|Companies|Opportunities/i)
   })
 
@@ -159,16 +121,16 @@ describe('owner workspace settings surfaces', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Settings' })
     const row = nav.querySelector<HTMLElement>('[data-slot="tabs-list"]')
-    const currentTab = screen.getByRole('tab', { name: 'Keys & APIs' })
+    const currentTab = screen.getByRole('tab', { name: 'Developer Setup' })
 
     expect(row).not.toBeNull()
-    expect(row?.scrollLeft).toBe(204)
+    expect(row?.scrollLeft).toBe(144)
     expect(currentTab.getAttribute('aria-current')).toBe('page')
     expect(currentTab.offsetLeft).toBeGreaterThanOrEqual(row?.scrollLeft ?? 0)
     expect(currentTab.offsetLeft + currentTab.offsetWidth).toBeLessThanOrEqual(
       (row?.scrollLeft ?? 0) + (row?.clientWidth ?? 0),
     )
-    expect(screen.getAllByRole('tab')).toHaveLength(7)
+    expect(screen.getAllByRole('tab')).toHaveLength(6)
     expect(screen.getByRole('tab', { name: 'Connections' }).getAttribute('href')).toBe('/owner/settings/connections')
     expect(nav.className).toMatch(/min-w-0.*max-w-full.*overflow-hidden/)
     expect(row?.className).toMatch(/min-w-0.*max-w-full.*overflow-x-auto.*overflow-y-hidden/)
@@ -185,13 +147,13 @@ describe('owner workspace settings surfaces', () => {
     expect(row?.scrollLeft).toBe(0)
 
     rerender(<OwnerSettingsNav current="developers" />)
-    expect(row?.scrollLeft).toBe(204)
+    expect(row?.scrollLeft).toBe(144)
 
     tabRowWidth = 280
     resizeCurrentTabRow?.()
 
-    expect(row?.scrollLeft).toBe(314)
-    expect(screen.getByRole('tab', { name: 'Keys & APIs' }).getAttribute('aria-current')).toBe('page')
+    expect(row?.scrollLeft).toBe(254)
+    expect(screen.getByRole('tab', { name: 'Developer Setup' }).getAttribute('aria-current')).toBe('page')
   })
 
   it('shows supplier identity from the current catalog read', () => {
@@ -254,30 +216,10 @@ describe('owner workspace settings surfaces', () => {
     expect(screen.getByRole('link', { name: 'Review supplier setup' }).getAttribute('href')).toBe('/for-providers')
   })
 
-  it('lists the signed-in owner and agent callers without inventing a team roster', () => {
-    render(<AeWorkspaceMembers items={[caller]} />)
-
-    expect(screen.getByRole('heading', { name: 'Human operators' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: /Owner/ }).getAttribute('href')).toBe('/owner/settings')
-    const callerLink = screen.getByRole('link', { name: /UI assistant/ })
-    expect(callerLink.getAttribute('href')).toBe(`/agent-access?caller=${CALLER_PRINCIPAL_ID}`)
-    expect(callerLink.textContent).toContain(CALLER_PRINCIPAL_ID)
-    expect(document.body.textContent).not.toContain(CALLER_KEY_CANARY)
-    expect(screen.getByRole('link', { name: 'Manage on Keys' }).getAttribute('href')).toBe('/agent-access')
-    expect(screen.queryByText(/Invite/i)).toBeNull()
-  })
-
-  it('keeps the Keys empty copy when no agent caller exists', () => {
-    render(<AeWorkspaceMembers items={[]} />)
-
-    expect(screen.getByRole('heading', { name: 'No agent is connected yet' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Keys' }).getAttribute('href')).toBe('/agent-access')
-  })
-
-  it('keeps Keys & APIs on real machine-file destinations', () => {
+  it('keeps Developer Setup on real machine-file destinations', () => {
     render(<AeWorkspaceDevelopers />)
 
-    expect(screen.getByRole('link', { name: /Keys/ }).getAttribute('href')).toBe('/agent-access')
+    expect(screen.getByRole('link', { name: /Agents/ }).getAttribute('href')).toBe('/agent-access')
     expect(screen.getByRole('link', { name: /llms\.txt/ }).getAttribute('href')).toBe('/llms.txt')
     expect(screen.getByRole('link', { name: /SKILL\.md/ }).getAttribute('href')).toBe('/SKILL.md')
   })

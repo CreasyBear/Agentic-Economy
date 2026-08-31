@@ -3,13 +3,13 @@ import { AeSection, AeSettingsRow } from '@/components/ae/layout/AeSection'
 export function AeWorkspaceDevelopers() {
   return (
     <AeSection
-      title="Keys and machine files"
-      description="Caller keys, agent setup, and the public files agents read before they call."
+      title="Developer setup"
+      description="Agent access, setup instructions, and the public files agents read before they call."
     >
       <div className="grid gap-intra">
         <AeSettingsRow
-          title="Keys"
-          description="Issue, budget, and revoke agent callers."
+          title="Agents"
+          description="Connect, budget, and disconnect agent callers."
           href="/agent-access"
         />
         <AeSettingsRow

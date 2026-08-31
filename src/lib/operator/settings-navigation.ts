@@ -3,7 +3,6 @@ import type { OperatorRole } from '@/lib/operator/navigation'
 export type OwnerSettingsNavCurrent =
   | 'profile'
   | 'workspace'
-  | 'members'
   | 'connections'
   | 'credit'
   | 'payouts'
@@ -54,12 +53,11 @@ const OWNER_SETTINGS_NAV_GROUP_LABELS = {
  */
 export const ownerSettingsNavRegistry: readonly OwnerSettingsNavRegistryEntry[] = [
   { id: 'profile', label: 'Profile', href: '/owner/settings', group: 'user', order: 10, testid: 'settings-tab-profile' },
-  { id: 'workspace', label: 'General', href: '/owner/settings/workspace', group: 'workspace', order: 20, testid: 'settings-tab-workspace' },
-  { id: 'members', label: 'Members', href: '/owner/settings/members', group: 'workspace', order: 30, testid: 'settings-tab-members' },
-  { id: 'connections', label: 'Connections', href: '/owner/settings/connections', group: 'workspace', order: 40, testid: 'settings-tab-connections' },
-  { id: 'credit', label: 'Credit', href: '/owner/credit', group: 'workspace', order: 50, testid: 'settings-tab-credit' },
-  { id: 'payouts', label: 'Payouts', href: '/owner/settings/payouts', group: 'workspace', order: 60, testid: 'settings-tab-payouts' },
-  { id: 'developers', label: 'Keys & APIs', href: '/owner/settings/developers', group: 'developers', order: 70, testid: 'settings-tab-developers' },
+  { id: 'workspace', label: 'Account', href: '/owner/settings/workspace', group: 'workspace', order: 20, testid: 'settings-tab-workspace' },
+  { id: 'connections', label: 'Connections', href: '/owner/settings/connections', group: 'workspace', order: 30, testid: 'settings-tab-connections' },
+  { id: 'credit', label: 'Credit', href: '/owner/credit', group: 'workspace', order: 40, testid: 'settings-tab-credit' },
+  { id: 'payouts', label: 'Payouts', href: '/owner/settings/payouts', group: 'workspace', order: 50, testid: 'settings-tab-payouts' },
+  { id: 'developers', label: 'Developer Setup', href: '/owner/settings/developers', group: 'developers', order: 60, testid: 'settings-tab-developers' },
 ]
 
 export const ownerSettingsNavGroups: readonly OwnerSettingsNavGroup[] = (
@@ -92,5 +90,5 @@ export function settingsNavAppliesToRole(role: OperatorRole): boolean {
 
 export const ownerSettingsChrome = {
   title: 'Settings',
-  description: 'Account, workspace, callers, and connections.',
+  description: 'Profile, account, providers, money, and developer setup.',
 } as const

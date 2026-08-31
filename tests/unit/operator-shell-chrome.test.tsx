@@ -118,7 +118,7 @@ describe('operator shell nested chrome', () => {
     expect(screen.getAllByRole('navigation', { name: 'Operator navigation' })).toHaveLength(1)
     expect(screen.queryByRole('navigation', { name: 'Public navigation' })).toBeNull()
 
-    const recovery = screen.getByRole('link', { name: 'Back to Keys' })
+    const recovery = screen.getByRole('link', { name: 'Back to Agents' })
     expect(recovery.getAttribute('href')).toBe('/agent-access')
   })
 
@@ -304,7 +304,7 @@ describe('owner mobile navigation', () => {
 
     expect(within(sidebarNav).getByRole('link', { name: 'Operations' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Calls' })).toBeTruthy()
-    expect(within(sidebarNav).getByRole('link', { name: 'Keys' })).toBeTruthy()
+    expect(within(sidebarNav).getByRole('link', { name: 'Agents' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Credit' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Supplier' })).toBeTruthy()
     expect(within(sidebarNav).getByRole('link', { name: 'Publish' })).toBeTruthy()

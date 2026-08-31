@@ -1,13 +1,21 @@
 import { Link } from '@tanstack/react-router'
 
-import { isOperatorPathActive, mobileNavItemsForRole } from '@/lib/operator/navigation'
+import {
+  isOperatorPathActive,
+  mobileNavItemsForContext,
+  mobileNavItemsForRole,
+} from '@/lib/operator/navigation'
+import type { OperatorContext } from '@/lib/operator/operator-context'
 
 type AeOwnerMobileNavigationProps = {
+  operatorContext?: OperatorContext
   currentPath: string
 }
 
-export function AeOwnerMobileNavigation({ currentPath }: AeOwnerMobileNavigationProps) {
-  const items = mobileNavItemsForRole('owner')
+export function AeOwnerMobileNavigation({ operatorContext, currentPath }: AeOwnerMobileNavigationProps) {
+  const items = operatorContext === undefined
+    ? mobileNavItemsForRole('owner')
+    : mobileNavItemsForContext(operatorContext, 'owner')
 
   return (
     <nav

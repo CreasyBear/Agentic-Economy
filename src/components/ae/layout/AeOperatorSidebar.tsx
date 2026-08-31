@@ -27,6 +27,7 @@ import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import {
   formatOperatorNavBadge,
   isOperatorPathActive,
+  navGroupsForContext,
   navGroupsForRole,
   operatorUtilityItemsForRole,
   roleHomeHref,
@@ -34,9 +35,11 @@ import {
   type OperatorNavBadges,
   type OperatorRole,
 } from '@/lib/operator/navigation'
+import type { OperatorContext } from '@/lib/operator/operator-context'
 
 type AeOperatorSidebarProps = {
   operatorRole: OperatorRole
+  operatorContext?: OperatorContext
   currentPath: string
   navBadges?: OperatorNavBadges
 }
@@ -84,12 +87,14 @@ function LocalPreviewOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
 }
 
 
-export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY_NAV_BADGES }: AeOperatorSidebarProps) {
+export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, navBadges = EMPTY_NAV_BADGES }: AeOperatorSidebarProps) {
   const { state, isMobile, open, openMobile } = useSidebar()
   const openCommand = useOpenOperatorCommand()
   const isCollapsed = !isMobile && state === 'collapsed'
   const expanded = isMobile ? openMobile : open
-  const navGroups = navGroupsForRole(operatorRole)
+  const navGroups = operatorContext === undefined
+    ? navGroupsForRole(operatorRole)
+    : navGroupsForContext(operatorContext, operatorRole)
   const utilityItems = operatorUtilityItemsForRole(operatorRole)
   const localPreview = isLocalE2EAuthBypassEnabled()
 

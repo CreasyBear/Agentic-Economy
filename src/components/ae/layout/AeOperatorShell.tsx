@@ -23,10 +23,11 @@ import {
   type OperatorNavBadges,
   type OperatorRole,
 } from '@/lib/operator/navigation'
+import type { OperatorContext } from '@/lib/operator/operator-context'
 import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 
-type OperatorShellChrome = Omit<AeOperatorShellProps, 'children'>
+type OperatorShellChrome = Omit<AeOperatorShellProps, 'children' | 'operatorContext'>
 
 type OperatorShellChromeRegistration = {
   setChrome: (chrome: OperatorShellChrome) => void
@@ -42,6 +43,7 @@ export function useOperatorShellChrome(): OperatorShellChromeRegistration | null
 
 export type AeOperatorShellProps = {
   operatorRole: OperatorRole
+  operatorContext?: OperatorContext
   title: string
   description: string
   actions?: ReactNode
@@ -151,6 +153,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
     navBadges,
   } = registeredChrome ?? props
   const { children } = props
+  const { operatorContext } = props
   const resolvedMainContentId = mainContentId ?? 'operator-main-content'
   const [commandOpen, setCommandOpen] = useState(false)
   const readAgentKeys = useServerFn(listAgentAccessKeysServer)
@@ -205,7 +208,12 @@ function RootOperatorShell(props: AeOperatorShellProps) {
           >
             Skip to content
           </a>
-          <AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} navBadges={navBadges ?? {}} />
+          <AeOperatorSidebar
+            operatorRole={operatorRole}
+            {...(operatorContext === undefined ? {} : { operatorContext })}
+            currentPath={currentPath}
+            navBadges={navBadges ?? {}}
+          />
           <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="bg-card">
             <header className="flex min-h-touch shrink-0 items-center gap-intra border-b border-border">
               <div className="flex min-w-0 items-center gap-intra px-gutter">
@@ -241,7 +249,14 @@ function RootOperatorShell(props: AeOperatorShellProps) {
               <div className="min-h-0 flex-1 pt-intra">{children}</div>
             </div>
           </SidebarInset>
-          {operatorRole === 'owner' ? <AeOwnerMobileNavigation currentPath={currentPath} /> : null}
+          {operatorRole === 'owner'
+            ? (
+                <AeOwnerMobileNavigation
+                  {...(operatorContext === undefined ? {} : { operatorContext })}
+                  currentPath={currentPath}
+                />
+              )
+            : null}
         </SidebarProvider>
       </OperatorShellChromeContext.Provider>
     </OperatorCommandOpenContext.Provider>

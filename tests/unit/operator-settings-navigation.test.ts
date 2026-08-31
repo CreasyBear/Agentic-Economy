@@ -64,7 +64,6 @@ describe('owner settings navigation registry', () => {
     expect(ownerSettingsNavGroups.flatMap((group) => group.items.map((item) => item.id))).toEqual([
       'profile',
       'workspace',
-      'members',
       'connections',
       'credit',
       'payouts',
@@ -82,9 +81,9 @@ describe('owner settings navigation registry', () => {
     const known = new Set(['/owner/settings'])
     const fixture = [
       { id: 'profile' as const, label: 'Profile', href: '/owner/settings', group: 'user' as const, order: 1, testid: 'settings-tab-profile' },
-      { id: 'members' as const, label: 'Members', href: '/owner/settings/ghost', group: 'workspace' as const, order: 2, testid: 'settings-tab-members' },
+      { id: 'connections' as const, label: 'Connections', href: '/owner/settings/ghost', group: 'workspace' as const, order: 2, testid: 'settings-tab-connections' },
     ]
-    expect(unmatchedHrefs(fixture, known)).toEqual([{ id: 'members', href: '/owner/settings/ghost' }])
+    expect(unmatchedHrefs(fixture, known)).toEqual([{ id: 'connections', href: '/owner/settings/ghost' }])
     expect(unmatchedHrefs(fixture.slice(0, 1), known)).toEqual([])
   })
 })
@@ -98,8 +97,17 @@ describe('owner settings navigation', () => {
   })
 
   it('does not turn settings into a CRM directory', () => {
-    const labels = ownerSettingsNavItems().map((item) => item.label).join(' ')
+    const nav = ownerSettingsNavItems()
+    const labels = nav.map((item) => item.label).join(' ')
     expect(labels).not.toMatch(/People|Companies|Opportunities|Pipeline|CRM/i)
+    expect(nav.map((item) => item.label)).toEqual([
+      'Profile',
+      'Account',
+      'Connections',
+      'Credit',
+      'Payouts',
+      'Developer Setup',
+    ])
     expect(settingsNavAppliesToRole('owner')).toBe(true)
     expect(settingsNavAppliesToRole('admin')).toBe(false)
     expect(ownerSettingsPathForCurrent('credit')).toBe('/owner/credit')
@@ -110,6 +118,6 @@ describe('owner settings navigation', () => {
 
   it('keeps one Settings title across every settings tab', () => {
     expect(ownerSettingsChrome.title).toBe('Settings')
-    expect(ownerSettingsChrome.description).toBe('Account, workspace, callers, and connections.')
+    expect(ownerSettingsChrome.description).toBe('Profile, account, providers, money, and developer setup.')
   })
 })
