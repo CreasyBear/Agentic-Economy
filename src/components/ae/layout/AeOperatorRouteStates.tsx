@@ -1,5 +1,5 @@
 import { ArrowLeftIcon } from 'lucide-react'
-import { useLocation } from '@tanstack/react-router'
+import { Link, useLocation } from '@tanstack/react-router'
 
 import { AeOperatorShell, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -55,7 +55,7 @@ export function OperatorRouteError({ error: _error }: { error: unknown }) {
             Try again
           </Button>
           <Button asChild variant="secondary" className="min-h-touch">
-            <a href="/status">Check system status</a>
+            <Link to="/status">Check system status</Link>
           </Button>
         </div>
       </AlertDescription>
@@ -91,10 +91,10 @@ export function OperatorRouteNotFound() {
       currentPath={pathname}
     >
       <Button asChild variant="secondary" className="min-h-touch w-fit">
-        <a href={recoveryHref}>
+        <Link to={recoveryHref}>
           <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
           {recoveryLabel}
-        </a>
+        </Link>
       </Button>
     </AeOperatorShell>
   )

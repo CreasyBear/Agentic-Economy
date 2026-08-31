@@ -13,6 +13,9 @@ const routeStateMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, className, to }: { children: ReactNode; className?: string; to: string }) => (
+    <a href={to} className={className}>{children}</a>
+  ),
   useLocation: () => ({ pathname: routeStateMocks.pathname }),
 }))
 
