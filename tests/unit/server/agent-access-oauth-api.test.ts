@@ -37,9 +37,12 @@ function storeFixture(): AgentAccessOAuthStore & { grants: Map<string, AgentAcce
       return null
     },
     async getGrantByRef(grantRef) { return grants.get(grantRef) ?? null },
-    async updateGrant(grantRef, expectedStatus, patch) {
+    async updateGrant(grantRef, expectedStatus, patch, expectedIssuanceStartedAt) {
       const current = grants.get(grantRef)
-      if (current === undefined || current.status !== expectedStatus) return null
+      if (current === undefined
+        || current.status !== expectedStatus
+        || (expectedIssuanceStartedAt !== undefined
+          && current.issuanceStartedAt !== expectedIssuanceStartedAt)) return null
       const updated = { ...current, ...patch }
       grants.set(grantRef, updated)
       return updated
@@ -512,6 +515,59 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(consentHtml).not.toContain('secret')
     const sandboxGrant = [...store.grants.values()].find((grant) => grant.flow === 'authorization_code')
     expect(sandboxGrant?.requestedAccess).toEqual({ environment: 'sandbox', expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
+  })
+
+  it('pages replacement targets with an opaque cursor and marks enrichment failures', async () => {
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-paged-consent',
+      clientName: 'Paged CLI',
+      redirectUris: [],
+      grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'],
+      tokenEndpointAuthMethod: 'none',
+      createdAt: 1_000,
+    })
+    const device = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
+      client_id: 'client-paged-consent',
+      scope: 'market_operations:invoke customer_requests:approve_each',
+    }), { store, now: () => 1_000 })
+    const grant = await device.json() as { user_code: string }
+    const cursors: Array<string | null> = []
+    const listAgents: NonNullable<OAuthApiOptions['listAgents']> = async (cursor) => {
+      cursors.push(cursor)
+      return cursor === null
+        ? { items: [{ principalRef: 'prn_agent_a', displayName: 'Agent A' }], nextCursor: 'opaque+/cursor==' }
+        : { items: [{ principalRef: 'prn_agent_b', displayName: 'Agent B' }] }
+    }
+    const base = `http://localhost/oauth/authorize?user_code=${encodeURIComponent(grant.user_code)}`
+    const first = await handleOAuthAuthorizeGet(new Request(base), {
+      store,
+      now: () => 1_000,
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+      listAgents,
+    })
+    const firstHtml = await first.text()
+    expect(firstHtml).toContain('Agent%20A')
+    expect(firstHtml).toContain('data-agent-targets-next-cursor="opaque%2B%2Fcursor%3D%3D"')
+
+    const second = await handleOAuthAuthorizeGet(new Request(`${base}&agent_cursor=${encodeURIComponent('opaque+/cursor==')}`), {
+      store,
+      now: () => 1_000,
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+      listAgents,
+    })
+    expect(await second.text()).toContain('Agent%20B')
+    expect(cursors).toEqual([null, 'opaque+/cursor=='])
+
+    const unavailable = await handleOAuthAuthorizeGet(new Request(base), {
+      store,
+      now: () => 1_000,
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+      listAgents: async () => { throw new Error('directory unavailable') },
+    })
+    const unavailableHtml = await unavailable.text()
+    expect(unavailableHtml).toContain('data-agent-targets-unavailable="true"')
+    expect(unavailableHtml).toContain('data-agent-targets="%5B%5D"')
   })
 
   it('renders persisted production controls and the production zero default truthfully', async () => {

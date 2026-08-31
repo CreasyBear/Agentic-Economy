@@ -156,6 +156,47 @@ describe('/agent-access/authorize consent loading', () => {
     expect(String(request?.body)).toContain('connection_target=replace_credential')
     expect(String(request?.body)).toContain('principal_ref=prn_agent_a')
   })
+
+  it('retains loaded choices when the next replacement-target page fails and retries it', async () => {
+    vi.spyOn(AgentAccessAuthorizeRoute, 'useSearch').mockReturnValue({ user_code: 'PAGE-CODE' })
+    const firstTargets = encodeURIComponent(JSON.stringify([
+      { principalRef: 'prn_agent_a', displayName: 'Research agent' },
+    ]))
+    const secondTargets = encodeURIComponent(JSON.stringify([
+      { principalRef: 'prn_agent_b', displayName: 'Shipping agent' },
+    ]))
+    const cursor = encodeURIComponent('opaque+/cursor==')
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(
+        `<main data-ae-consent data-grant-ref="grant-paged" data-client-name="Agent CLI" data-authority-mode="approve_each" data-agent-targets="${firstTargets}" data-agent-targets-next-cursor="${cursor}" data-agent-targets-unavailable="false"></main>`,
+        { status: 200 },
+      ))
+      .mockResolvedValueOnce(new Response(
+        '<main data-ae-consent data-grant-ref="grant-paged" data-client-name="Agent CLI" data-authority-mode="approve_each" data-agent-targets="%5B%5D" data-agent-targets-unavailable="true"></main>',
+        { status: 200 },
+      ))
+      .mockResolvedValueOnce(new Response(
+        `<main data-ae-consent data-grant-ref="grant-paged" data-client-name="Agent CLI" data-authority-mode="approve_each" data-agent-targets="${secondTargets}" data-agent-targets-unavailable="false"></main>`,
+        { status: 200 },
+      ))
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderComponent()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more agents' }))
+    expect(await screen.findByText('More agents could not be loaded. The choices already shown are still available.')).toBeTruthy()
+    expect(screen.getByRole('radio', { name: /Replace credential/ }).hasAttribute('disabled')).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry agent list' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('/oauth/authorize?user_code=PAGE-CODE&agent_cursor=opaque%2B%2Fcursor%3D%3D')
+    expect(fetchMock.mock.calls[2]?.[0]).toBe('/oauth/authorize?user_code=PAGE-CODE&agent_cursor=opaque%2B%2Fcursor%3D%3D')
+    fireEvent.click(screen.getByRole('radio', { name: /Replace credential/ }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Agent' }))
+    expect(await screen.findByRole('option', { name: 'Research agent' })).toBeTruthy()
+    expect(await screen.findByRole('option', { name: 'Shipping agent' })).toBeTruthy()
+    expect(screen.queryByText('Agent list needs refreshing')).toBeNull()
+  })
 })
 
 function renderComponent() {

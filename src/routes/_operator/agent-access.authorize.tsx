@@ -40,7 +40,17 @@ function canSelectAuthority(value: PublicAuthorityMode, ceiling: string | undefi
 
 type AgentTargetOption = Readonly<{ principalRef: string; displayName: string }>
 
-function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientName?: string; mode?: string; accessProfile?: 'market' | 'supplier'; agentTargets: readonly AgentTargetOption[] }> {
+type ConsentDetails = Readonly<{
+  grantRef?: string
+  clientName?: string
+  mode?: string
+  accessProfile?: 'market' | 'supplier'
+  agentTargets: readonly AgentTargetOption[]
+  agentTargetsNextCursor?: string
+  agentTargetsUnavailable: boolean
+}>
+
+function readConsentDetails(html: string): ConsentDetails {
   const document = new DOMParser().parseFromString(html, 'text/html')
   const consent = document.querySelector<HTMLElement>('[data-ae-consent]')
   const grantRef = consent?.dataset.grantRef
@@ -48,6 +58,8 @@ function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientN
   const mode = consent?.dataset.authorityMode
   const accessProfile = consent?.dataset.accessProfile
   let agentTargets: readonly AgentTargetOption[] = []
+  let agentTargetsNextCursor: string | undefined
+  let agentTargetsUnavailable = consent?.dataset.agentTargetsUnavailable === 'true'
   try {
     const parsed: unknown = JSON.parse(decodeURIComponent(consent?.dataset.agentTargets ?? '%5B%5D'))
     if (Array.isArray(parsed)) {
@@ -59,8 +71,14 @@ function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientN
           : []
       ))
     }
+    const encodedCursor = consent?.dataset.agentTargetsNextCursor
+    if (encodedCursor !== undefined && encodedCursor.length > 0) {
+      agentTargetsNextCursor = decodeURIComponent(encodedCursor)
+    }
   } catch {
     agentTargets = []
+    agentTargetsNextCursor = undefined
+    agentTargetsUnavailable = true
   }
   return {
     ...(grantRef === undefined || grantRef.length === 0 ? {} : { grantRef }),
@@ -68,6 +86,8 @@ function readConsentDetails(html: string): Readonly<{ grantRef?: string; clientN
     ...(mode === undefined || mode.length === 0 ? {} : { mode }),
     ...(accessProfile === 'market' || accessProfile === 'supplier' ? { accessProfile } : {}),
     agentTargets,
+    ...(agentTargetsNextCursor === undefined ? {} : { agentTargetsNextCursor }),
+    agentTargetsUnavailable,
   }
 }
 
@@ -94,6 +114,9 @@ function AgentAccessAuthorizeRoute() {
   const [grantRef, setGrantRef] = useState<string>()
   const [connectionTarget, setConnectionTarget] = useState<'new_agent' | 'replace_credential'>('new_agent')
   const [agentTargets, setAgentTargets] = useState<readonly AgentTargetOption[]>([])
+  const [agentTargetsNextCursor, setAgentTargetsNextCursor] = useState<string>()
+  const [agentTargetsLoading, setAgentTargetsLoading] = useState(false)
+  const [agentTargetsError, setAgentTargetsError] = useState<string>()
   const [replacementPrincipalRef, setReplacementPrincipalRef] = useState<string>()
 
   useEffect(() => {
@@ -104,6 +127,9 @@ function AgentAccessAuthorizeRoute() {
       setAccessProfile('market')
       setGrantRef(undefined)
       setAgentTargets([])
+      setAgentTargetsNextCursor(undefined)
+      setAgentTargetsError(undefined)
+      setAgentTargetsLoading(false)
       setConnectionTarget('new_agent')
       setReplacementPrincipalRef(undefined)
       return
@@ -127,6 +153,10 @@ function AgentAccessAuthorizeRoute() {
         setMode(details.mode)
         setAccessProfile(details.accessProfile ?? 'market')
         setAgentTargets(details.agentTargets)
+        setAgentTargetsNextCursor(details.agentTargetsNextCursor)
+        setAgentTargetsError(details.agentTargetsUnavailable
+          ? 'Existing agents could not be loaded. Retry before replacing a credential.'
+          : undefined)
         setConnectionTarget('new_agent')
         setReplacementPrincipalRef(undefined)
         setSelectedMode(
@@ -146,6 +176,34 @@ function AgentAccessAuthorizeRoute() {
       })
     return () => controller.abort()
   }, [userCode])
+
+  async function loadAgentTargets() {
+    if (userCode === undefined || agentTargetsLoading) return
+    setAgentTargetsLoading(true)
+    try {
+      const query = new URLSearchParams({ user_code: userCode })
+      if (agentTargetsNextCursor !== undefined) query.set('agent_cursor', agentTargetsNextCursor)
+      const response = await fetch(`/oauth/authorize?${query.toString()}`, { credentials: 'same-origin' })
+      if (!response.ok) throw new Error('agent_targets_unavailable')
+      const details = readConsentDetails(await response.text())
+      if (details.grantRef !== grantRef || details.agentTargetsUnavailable) {
+        throw new Error('agent_targets_unavailable')
+      }
+      setAgentTargets((current) => {
+        const targets = new Map(current.map((target) => [target.principalRef, target]))
+        for (const target of details.agentTargets) targets.set(target.principalRef, target)
+        return [...targets.values()]
+      })
+      setAgentTargetsNextCursor(details.agentTargetsNextCursor)
+      setAgentTargetsError(undefined)
+    } catch {
+      setAgentTargetsError(agentTargets.length === 0
+        ? 'Existing agents could not be loaded. Retry before replacing a credential.'
+        : 'More agents could not be loaded. The choices already shown are still available.')
+    } finally {
+      setAgentTargetsLoading(false)
+    }
+  }
 
   async function decide(decision: 'approve' | 'deny') {
     if (grantRef === undefined) return
@@ -217,6 +275,29 @@ function AgentAccessAuthorizeRoute() {
                     </Select>
                     <p className="text-sm text-muted-foreground">The agent identity, activity, and credit history stay attached. Its current credential remains usable until the new one is delivered.</p>
                   </div>
+                ) : null}
+                {agentTargetsError !== undefined || agentTargetsNextCursor !== undefined ? (
+                  <Alert>
+                    <AlertTitle>{agentTargetsError === undefined ? 'More agents are available' : 'Agent list needs refreshing'}</AlertTitle>
+                    <AlertDescription className="grid gap-2">
+                      {agentTargetsError === undefined
+                        ? 'Load the next page if the agent you want is not shown.'
+                        : agentTargetsError}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-fit"
+                        disabled={agentTargetsLoading}
+                        onClick={() => void loadAgentTargets()}
+                      >
+                        {agentTargetsLoading
+                          ? 'Loading agents…'
+                          : agentTargetsError === undefined
+                            ? 'Load more agents'
+                            : 'Retry agent list'}
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
                 ) : null}
               </fieldset>
               {accessProfile === 'supplier' ? (

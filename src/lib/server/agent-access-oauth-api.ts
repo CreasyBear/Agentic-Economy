@@ -99,7 +99,16 @@ type OAuthApiOptions = Readonly<{
   }>) => Promise<Readonly<{ kind: 'completed' | 'replayed' | 'conflict' } | { kind: 'refused'; code: 'authentication_required' }>>
   rateLimit?: RateLimitAdmission
   devicePollRateLimit?: RateLimitAdmission
-  listAgents?: () => Promise<readonly Readonly<{ principalRef: string; displayName: string }>[]>
+  listAgents?: (cursor: string | null) => Promise<Readonly<{
+    items: readonly Readonly<{ principalRef: string; displayName: string }>[]
+    nextCursor?: string
+  }>>
+}>
+
+type ConsentAgentTargets = Readonly<{
+  items: readonly Readonly<{ principalRef: string; displayName: string }>[]
+  nextCursor?: string
+  unavailable?: true
 }>
 
 export type { OAuthApiOptions }
@@ -237,6 +246,8 @@ export async function handleOAuthRegisterPost(request: Request, options: OAuthAp
 
 export async function handleOAuthAuthorizeGet(request: Request, options: OAuthApiOptions = {}): Promise<Response> {
   const url = new URL(request.url)
+  const agentCursor = readAgentCursor(url)
+  if (agentCursor === undefined) return oauthError('invalid_request', 400)
   const userCode = url.searchParams.get('user_code')
   if (userCode !== null) {
     const limited = await oauthAdmissionResponse(request, options, `user_code:${userCode}`)
@@ -252,9 +263,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
     if (result.kind !== 'ok') return oauthTransitionError(result)
     const mode = modeForGrant(result.value)
     if (mode === undefined) return oauthError('invalid_scope', 400)
-    return new Response(consentHtml({ grantRef: result.value.grantRef, clientName: result.value.displayName, mode, requestedScopes: result.value.requestedScopes, state: '', requestedAccess: result.value.requestedAccess, agentTargets: await consentAgentTargets(options) }), {
-      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
-    })
+    return await consentResponse(result.value, mode, '', options, agentCursor)
   }
   const clientId = url.searchParams.get('client_id')
   const redirectUri = url.searchParams.get('redirect_uri')
@@ -297,7 +306,28 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   if (result.kind !== 'ok') return oauthTransitionError(result)
   const mode = modeForGrant(result.value.grant)
   if (mode === undefined) return oauthError('invalid_scope', 400)
-  return new Response(consentHtml({ grantRef: result.value.grant.grantRef, clientName: result.value.grant.displayName, mode, requestedScopes: result.value.grant.requestedScopes, state, requestedAccess: result.value.grant.requestedAccess, agentTargets: await consentAgentTargets(options) }), {
+  return await consentResponse(result.value.grant, mode, state, options, agentCursor)
+}
+
+async function consentResponse(
+  grant: AgentAccessOAuthGrant,
+  mode: AgentAccessAuthorityMode,
+  state: string,
+  options: OAuthApiOptions,
+  cursor: string | null,
+): Promise<Response> {
+  const targets = await consentAgentTargets(options, cursor)
+  return new Response(consentHtml({
+    grantRef: grant.grantRef,
+    clientName: grant.displayName,
+    mode,
+    requestedScopes: grant.requestedScopes,
+    state,
+    requestedAccess: grant.requestedAccess,
+    agentTargets: targets.items,
+    ...(targets.nextCursor === undefined ? {} : { agentTargetsNextCursor: targets.nextCursor }),
+    ...(targets.unavailable === true ? { agentTargetsUnavailable: true } : {}),
+  }), {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
   })
 }
@@ -739,18 +769,26 @@ function parseConnectionTarget(form: URLSearchParams): AgentConnectionTarget | u
   return { kind: 'replace_credential', principalRef: form.get('principal_ref') ?? '' }
 }
 
-async function consentAgentTargets(options: OAuthApiOptions): Promise<readonly Readonly<{ principalRef: string; displayName: string }>[]> {
-  if (options.listAgents !== undefined) return await options.listAgents()
-  if (options.store !== undefined) return []
+async function consentAgentTargets(options: OAuthApiOptions, cursor: string | null): Promise<ConsentAgentTargets> {
   try {
+    if (options.listAgents !== undefined) return await options.listAgents(cursor)
     const directory = await loadAgentDirectoryReadback({
       compare: readCapabilityOperationCompare,
       isOperationRef: isPublicOperationRef,
-    })
-    return directory.items.map(({ principalRef, displayName }) => ({ principalRef, displayName }))
+    }, cursor)
+    return {
+      items: directory.items.map(({ principalRef, displayName }) => ({ principalRef, displayName })),
+      ...(directory.nextCursor === undefined ? {} : { nextCursor: directory.nextCursor }),
+    }
   } catch {
-    return []
+    return { items: [], unavailable: true }
   }
+}
+
+function readAgentCursor(url: URL): string | null | undefined {
+  const value = url.searchParams.get('agent_cursor')
+  if (value === null || value.length === 0) return null
+  return value.length <= 2_048 ? value : undefined
 }
 
 function deriveOAuthGrantPolicy(requestedAccess: AgentAccessOAuthRequestedAccess): AgentAccessPolicy {
