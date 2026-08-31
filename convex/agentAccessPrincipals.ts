@@ -547,6 +547,13 @@ export const prepareCredentialReplacementForServer = mutation({
       generation,
       grantRef: input.grantRef,
     })
+    const pendingSuccessors = await ctx.db.query('credentials')
+      .withIndex('by_predecessorCredentialRef', (query) => query.eq('predecessorCredentialRef', predecessor.credentialRef))
+      .take(2)
+    if (pendingSuccessors.some((candidate) => (
+      candidate.lifecycle === 'active'
+      && candidate.credentialRef !== refs.credentialRef
+    ))) return { kind: 'conflict' as const }
     const [existingBinding, existingCredential] = await Promise.all([
       ctx.db.query('externalIdentityBindings')
         .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query

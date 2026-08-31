@@ -327,6 +327,62 @@ describe('issued agent binding', () => {
     ])
   })
 
+  it('admits only one pending successor for a credential generation', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const first = bindingInput()
+    await owner.mutation(registerIssuedBinding, { ...first, serviceAuth: await assertion(first) })
+    const access = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_credentialId', (query) => query.eq('credentialId', first.credentialId)).unique())
+    if (access === null) throw new Error('agent_access_missing')
+
+    const replacement = (issuanceKey: string, credentialId: string): AgentCredentialReplacementRegistration => ({
+      principalRef: access.principalId,
+      issuanceKey,
+      grantRef: issuedAgentGrantRef('user_owner', issuanceKey),
+      credentialId,
+      applicationRef: first.applicationRef,
+      environment: first.environment,
+      scopes: first.scopes,
+      authorityMode: first.authorityMode,
+      policy: first.policy,
+      createdAt: NOW,
+      expiresAt: NOW + 600_000,
+    })
+    const firstSuccessor = replacement('replacement-race-first-12345678', 'key_replacement_race_first')
+    const secondSuccessor = replacement('replacement-race-second-12345678', 'key_replacement_race_second')
+
+    await expect(owner.mutation(prepareReplacement, {
+      ...firstSuccessor,
+      serviceAuth: await operationAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...firstSuccessor, scopes: [...firstSuccessor.scopes] },
+      ),
+    })).resolves.toMatchObject({ kind: 'recorded', generation: 2 })
+    await expect(owner.mutation(prepareReplacement, {
+      ...secondSuccessor,
+      serviceAuth: await operationAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...secondSuccessor, scopes: [...secondSuccessor.scopes] },
+      ),
+    })).resolves.toEqual({ kind: 'conflict' })
+
+    const successors = await backend.run(async (ctx) => {
+      const credentials = await ctx.db.query('credentials')
+        .withIndex('by_principalRef_and_lifecycle', (query) => query
+          .eq('principalRef', access.principalId)
+          .eq('lifecycle', 'active'))
+        .collect()
+      const predecessor = credentials.find(({ generation }) => generation === 1)
+      if (predecessor === undefined) return []
+      return await ctx.db.query('credentials')
+        .withIndex('by_predecessorCredentialRef', (query) => query.eq('predecessorCredentialRef', predecessor.credentialRef))
+        .collect()
+    })
+    expect(successors.filter(({ lifecycle }) => lifecycle === 'active')).toHaveLength(1)
+  })
+
   it('proves the authenticated two-agent lifecycle from connection through retained history', async () => {
     const backend = convexTest(schema, modules)
     const owner = backend.withIdentity(identity('user_owner'))
