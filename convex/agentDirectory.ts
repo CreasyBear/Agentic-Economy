@@ -78,7 +78,9 @@ export const listOwned = query({
           credentialRef: credential.credentialRef,
           providerCredentialId,
           generation: credential.generation,
-          lifecycle: credential.lifecycle,
+          lifecycle: credential.lifecycle === 'active' && credential.expiresAt <= args.now
+            ? 'stale' as const
+            : credential.lifecycle,
           ...(credential.predecessorCredentialRef === undefined
             ? {}
             : { predecessorCredentialRef: credential.predecessorCredentialRef }),

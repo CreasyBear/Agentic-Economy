@@ -224,7 +224,10 @@ describe('issued agent binding', () => {
     await expect(owner.query(api.agentDirectory.listOwned, { now: input.expiresAt - 1 }))
       .resolves.toEqual([expect.objectContaining({ status: 'connected' })])
     await expect(owner.query(api.agentDirectory.listOwned, { now: input.expiresAt }))
-      .resolves.toEqual([expect.objectContaining({ status: 'expired' })])
+      .resolves.toEqual([expect.objectContaining({
+        status: 'expired',
+        credentials: [expect.objectContaining({ lifecycle: 'stale' })],
+      })])
   })
 
   it('keeps the public supplier scope exact while granting only its canonical connection verbs', () => {
