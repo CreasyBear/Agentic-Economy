@@ -22,7 +22,12 @@ export const Route = createFileRoute('/_operator/agent-access/authorize')({
     const response = await readAgentAccessConsentServer({ data: { userCode: deps.userCode } })
     if (response.status < 200 || response.status >= 300) throw new Error('authorization_unavailable')
     const details = readAgentConsentDetails(response.html)
-    if (details.grantRef === undefined || details.clientName === undefined || details.mode === undefined) {
+    if (details.grantRef === undefined
+      || details.clientName === undefined
+      || details.mode === undefined
+      || details.environment === undefined
+      || details.expiresInSeconds === undefined
+      || details.accessSummary === undefined) {
       throw new Error('authorization_details_missing')
     }
     return {
@@ -33,6 +38,9 @@ export const Route = createFileRoute('/_operator/agent-access/authorize')({
         grantRef: details.grantRef,
         clientName: details.clientName,
         mode: details.mode,
+        environment: details.environment,
+        expiresInSeconds: details.expiresInSeconds,
+        accessSummary: details.accessSummary,
       },
     }
   },

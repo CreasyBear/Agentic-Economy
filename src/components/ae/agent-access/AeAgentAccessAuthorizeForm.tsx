@@ -19,7 +19,7 @@ type PublicAuthorityMode = 'inspect_only' | 'approve_each' | 'bounded_mandate'
 const authorityOptions = [
   { value: 'inspect_only', label: 'Browse only', description: 'Discover, compare, and run free read-only operations.' },
   { value: 'approve_each', label: 'Ask each time', description: 'Paid or consequential work comes back to you first.' },
-  { value: 'bounded_mandate', label: 'Work within limits', description: 'Paid calls up to $1 each, $5 a day, $20 a month.' },
+  { value: 'bounded_mandate', label: 'Work within limits', description: 'Paid work stays within the exact limits shown below.' },
 ] as const
 
 function canSelectAuthority(value: PublicAuthorityMode, ceiling: string): boolean {
@@ -102,10 +102,17 @@ function consentFormReducer(state: ConsentFormState, action: ConsentFormAction):
 
 export function AeAgentAccessAuthorizeForm({ userCode, details }: Readonly<{
   userCode: string
-  details: AgentConsentDetails & Readonly<{ grantRef: string; clientName: string; mode: string }>
+  details: AgentConsentDetails & Readonly<{
+    grantRef: string
+    clientName: string
+    mode: string
+    environment: 'sandbox' | 'production'
+    expiresInSeconds: number
+    accessSummary: string
+  }>
 }>) {
   const [state, dispatch] = useReducer(consentFormReducer, details, initialConsentFormState)
-  const { grantRef, clientName, mode } = details
+  const { grantRef, clientName, mode, environment, expiresInSeconds, accessSummary } = details
   const accessProfile = details.accessProfile ?? 'market'
   const {
     status, pending, selectedMode, connectionTarget, agentTargets, agentTargetsNextCursor,
@@ -229,10 +236,11 @@ export function AeAgentAccessAuthorizeForm({ userCode, details }: Readonly<{
                 </RadioGroup>
               </fieldset>}
               <AeFactList facts={[
-                { label: 'Application', value: `${clientName} · Development · Standard rate limits` },
-                { label: 'Expiry', value: 'Access expires in seven days. You can revoke it at any time from Agents.' },
+                { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
+                { label: 'Approved limits', value: accessSummary },
+                { label: 'Expiry', value: `Access expires ${formatConsentDuration(expiresInSeconds)} after issue. You can revoke it at any time from Agents.` },
               ]} />
-              <p id="consent-expiry" className="sr-only">Access expires in seven days. You can revoke it at any time from Agents.</p>
+              <p id="consent-expiry" className="sr-only">Access expires {formatConsentDuration(expiresInSeconds)} after issue. You can revoke it at any time from Agents.</p>
             </AeSection>
             <div className="flex flex-wrap gap-3">
               <Button aria-describedby="consent-expiry" onClick={() => void decide('approve')} disabled={pending || (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined)}>{pending ? 'Approving…' : 'Approve access'}</Button>
@@ -249,4 +257,11 @@ export function AeAgentAccessAuthorizeForm({ userCode, details }: Readonly<{
       </AeSettingsStack>
     </AeOperatorShell>
   )
+}
+
+function formatConsentDuration(seconds: number): string {
+  if (seconds % 86_400 === 0) return `in ${seconds / 86_400} ${seconds === 86_400 ? 'day' : 'days'}`
+  if (seconds % 3_600 === 0) return `in ${seconds / 3_600} ${seconds === 3_600 ? 'hour' : 'hours'}`
+  if (seconds % 60 === 0) return `in ${seconds / 60} ${seconds === 60 ? 'minute' : 'minutes'}`
+  return `in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}`
 }

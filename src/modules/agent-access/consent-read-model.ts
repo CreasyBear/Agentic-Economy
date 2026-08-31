@@ -8,6 +8,9 @@ export type AgentConsentDetails = Readonly<{
   clientName?: string
   mode?: string
   accessProfile?: 'market' | 'supplier'
+  environment?: 'sandbox' | 'production'
+  expiresInSeconds?: number
+  accessSummary?: string
   agentTargets: readonly AgentConsentTarget[]
   agentTargetsNextCursor?: string
   agentTargetsUnavailable: boolean
@@ -20,6 +23,12 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
   const clientName = consent?.dataset.clientName
   const mode = consent?.dataset.authorityMode
   const accessProfile = consent?.dataset.accessProfile
+  const environment = consent?.dataset.environment
+  const expiresInSecondsValue = Number(consent?.dataset.expiresInSeconds)
+  const expiresInSeconds = Number.isSafeInteger(expiresInSecondsValue) && expiresInSecondsValue > 0
+    ? expiresInSecondsValue
+    : undefined
+  const accessSummary = consent?.dataset.accessSummary
   let agentTargets: readonly AgentConsentTarget[] = []
   let agentTargetsNextCursor: string | undefined
   let agentTargetsUnavailable = consent?.dataset.agentTargetsUnavailable === 'true'
@@ -48,6 +57,9 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
     ...(clientName === undefined || clientName.length === 0 ? {} : { clientName }),
     ...(mode === undefined || mode.length === 0 ? {} : { mode }),
     ...(accessProfile === 'market' || accessProfile === 'supplier' ? { accessProfile } : {}),
+    ...(environment === 'sandbox' || environment === 'production' ? { environment } : {}),
+    ...(expiresInSeconds === undefined ? {} : { expiresInSeconds }),
+    ...(accessSummary === undefined || accessSummary.length === 0 ? {} : { accessSummary }),
     agentTargets,
     ...(agentTargetsNextCursor === undefined ? {} : { agentTargetsNextCursor }),
     agentTargetsUnavailable,

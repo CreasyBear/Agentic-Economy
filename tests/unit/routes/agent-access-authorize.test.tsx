@@ -53,7 +53,7 @@ describe('/agent-access/authorize consent loading', () => {
   it('loads and validates initial consent through the route loader', async () => {
     serverMocks.readConsent.mockResolvedValue({
       status: 200,
-      html: '<main data-ae-consent data-grant-ref="grant-loader" data-client-name="Loader agent" data-authority-mode="inspect_only"></main>',
+      html: '<main data-ae-consent data-grant-ref="grant-loader" data-client-name="Loader agent" data-authority-mode="inspect_only" data-environment="production" data-expires-in-seconds="7200" data-access-summary="Maximum daily spend: USD 5.00."></main>',
     })
     const loader = AgentAccessAuthorizeRoute.options.loader
     if (typeof loader !== 'function') throw new Error('authorize_loader_missing')
@@ -65,7 +65,11 @@ describe('/agent-access/authorize consent loading', () => {
     expect(loaded).toMatchObject({
       kind: 'ready',
       userCode: 'LOAD-CODE',
-      details: { grantRef: 'grant-loader', clientName: 'Loader agent', mode: 'inspect_only' },
+      details: {
+        grantRef: 'grant-loader', clientName: 'Loader agent', mode: 'inspect_only',
+        environment: 'production', expiresInSeconds: 7_200,
+        accessSummary: 'Maximum daily spend: USD 5.00.',
+      },
     })
     expect(serverMocks.readConsent).toHaveBeenCalledWith({ data: { userCode: 'LOAD-CODE' } })
   })
@@ -93,7 +97,11 @@ describe('/agent-access/authorize consent loading', () => {
   })
 
   it('asks one authority question, defaults to the requested ceiling, and submits the owner choice', async () => {
-    mockConsent({ userCode: 'GOOD-CODE', grantRef: 'grant-1', clientName: 'Test assistant', mode: 'bounded_mandate' })
+    mockConsent({
+      userCode: 'GOOD-CODE', grantRef: 'grant-1', clientName: 'Test assistant', mode: 'bounded_mandate',
+      environment: 'production', expiresInSeconds: 7_200,
+      accessSummary: 'Maximum daily spend: USD 5.00. Maximum calls per hour: 42.',
+    })
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response('Approved', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
@@ -101,6 +109,10 @@ describe('/agent-access/authorize consent loading', () => {
     renderComponent()
 
     expect(await screen.findByText('How much may this agent do without asking you?')).toBeTruthy()
+    expect(screen.getByText('Test assistant · Production')).toBeTruthy()
+    expect(screen.getByText('Maximum daily spend: USD 5.00. Maximum calls per hour: 42.')).toBeTruthy()
+    expect(screen.getAllByText(/Access expires in 2 hours after issue/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/\$1 each/)).toBeNull()
     expect(screen.getByRole('radio', { name: /Work within limits/ }).getAttribute('data-state')).toBe('checked')
     fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
 
@@ -207,6 +219,9 @@ function mockConsent(input: Readonly<{
   accessProfile?: 'market' | 'supplier'
   agentTargets?: readonly Readonly<{ principalRef: string; displayName: string }>[]
   agentTargetsNextCursor?: string
+  environment?: 'sandbox' | 'production'
+  expiresInSeconds?: number
+  accessSummary?: string
 }>) {
   vi.spyOn(AgentAccessAuthorizeRoute, 'useLoaderData').mockReturnValue({
     kind: 'ready',
@@ -215,6 +230,9 @@ function mockConsent(input: Readonly<{
       grantRef: input.grantRef,
       clientName: input.clientName,
       mode: input.mode,
+      environment: input.environment ?? 'sandbox',
+      expiresInSeconds: input.expiresInSeconds ?? 604_800,
+      accessSummary: input.accessSummary ?? 'No additional spend or rate controls were supplied.',
       ...(input.accessProfile === undefined ? {} : { accessProfile: input.accessProfile }),
       agentTargets: input.agentTargets ?? [],
       ...(input.agentTargetsNextCursor === undefined ? {} : { agentTargetsNextCursor: input.agentTargetsNextCursor }),
