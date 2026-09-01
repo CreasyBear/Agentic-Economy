@@ -13,8 +13,8 @@ import {
 } from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
-import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import { currentRequestCorrelationId } from '@/lib/server/request-correlation'
+import { clerkUserProviderIdentifier } from '@/modules/principal-account/external-identity/public'
 
 import {
   issueAgentAccessKey,
@@ -147,25 +147,6 @@ function issueScopes(input: IssueInput): readonly string[] | undefined {
 const owner = async (): Promise<{ userId: string } | undefined> => {
   const identity = await auth()
   return identity.isAuthenticated && identity.userId !== null ? { userId: identity.userId } : undefined
-}
-
-function convexTokenIdentifierFor(userId: string): string | undefined {
-  const issuer = readTrimmedEnv(process.env, 'CLERK_JWT_ISSUER_DOMAIN')
-  if (issuer === undefined || typeof userId !== 'string' || userId.trim().length === 0) return undefined
-  try {
-    const parsed = new URL(issuer)
-    if (
-      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
-      || parsed.username.length > 0
-      || parsed.password.length > 0
-      || parsed.search.length > 0
-      || parsed.hash.length > 0
-    ) return undefined
-    const canonicalIssuer = trimTrailingSlashes(parsed.href)
-    return canonicalIssuer.length === 0 ? undefined : `${canonicalIssuer}|${userId}`
-  } catch {
-    return undefined
-  }
 }
 
 type ClerkApiKeyLike = Readonly<{
@@ -394,7 +375,10 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
     if (principal === undefined) {
       return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
     }
-    const tokenIdentifier = convexTokenIdentifierFor(principal.userId)
+    const tokenIdentifier = clerkUserProviderIdentifier(
+      readTrimmedEnv(process.env, 'CLERK_JWT_ISSUER_DOMAIN'),
+      principal.userId,
+    )
     if (tokenIdentifier === undefined) {
       return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
     }

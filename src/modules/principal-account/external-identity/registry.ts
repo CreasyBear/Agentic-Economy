@@ -10,6 +10,31 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
 const PROVIDER_NAMESPACE_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?)*$/u
 const OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@/+\-=]{0,499}$/u
 const IDEMPOTENCY_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
+const CLERK_USER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/u
+
+export const CLERK_USER_PROVIDER_NAMESPACE = 'clerk/user' as const
+
+/** Build the exact provider identifier Convex receives from Clerk JWTs. */
+export function clerkUserProviderIdentifier(
+  issuer: string | undefined,
+  userId: string,
+): string | undefined {
+  if (issuer === undefined || !CLERK_USER_ID_PATTERN.test(userId)) return undefined
+  try {
+    const parsed = new URL(issuer)
+    if (
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
+      || parsed.username.length > 0
+      || parsed.password.length > 0
+      || parsed.search.length > 0
+      || parsed.hash.length > 0
+    ) return undefined
+    const canonicalIssuer = parsed.href.replace(/\/+$/u, '')
+    return canonicalIssuer.length === 0 ? undefined : `${canonicalIssuer}|${userId}`
+  } catch {
+    return undefined
+  }
+}
 
 declare const externalIdentityBindingRefBrand: unique symbol
 declare const credentialRefBrand: unique symbol

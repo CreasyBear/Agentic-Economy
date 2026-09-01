@@ -1,11 +1,13 @@
 export {
   CREDENTIAL_LIFECYCLES,
   CREDENTIAL_TYPES,
+  CLERK_USER_PROVIDER_NAMESPACE,
   EXTERNAL_IDENTITY_BINDING_LIFECYCLES,
   KNOWN_EXTERNAL_PROVIDER_STATES,
   ExternalIdentityRegistry,
   ExternalIdentityRegistryError,
   credentialRef,
+  clerkUserProviderIdentifier,
   externalIdentityBindingRef,
   externalProviderState,
   generateCredentialRef,

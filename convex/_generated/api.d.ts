@@ -181,6 +181,7 @@ import type * as registry from "../registry.js";
 import type * as secretLifecycleHttp from "../secretLifecycleHttp.js";
 import type * as secretLifecycleOperations from "../secretLifecycleOperations.js";
 import type * as security from "../security.js";
+import type * as securityAccountHistory from "../securityAccountHistory.js";
 import type * as securityAdminMembership from "../securityAdminMembership.js";
 import type * as securityAdminReadbacks from "../securityAdminReadbacks.js";
 import type * as securityRemovalDisputes from "../securityRemovalDisputes.js";
@@ -369,6 +370,7 @@ declare const fullApi: ApiFromModules<{
   secretLifecycleHttp: typeof secretLifecycleHttp;
   secretLifecycleOperations: typeof secretLifecycleOperations;
   security: typeof security;
+  securityAccountHistory: typeof securityAccountHistory;
   securityAdminMembership: typeof securityAdminMembership;
   securityAdminReadbacks: typeof securityAdminReadbacks;
   securityRemovalDisputes: typeof securityRemovalDisputes;

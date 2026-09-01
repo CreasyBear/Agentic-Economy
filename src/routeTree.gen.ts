@@ -66,6 +66,7 @@ import { Route as ApiInternalSecretLifecycleRouteImport } from './routes/api.int
 import { Route as ApiInternalProviderConsequenceRouteImport } from './routes/api.internal.provider-consequence'
 import { Route as ApiDiscoverySchemaRouteImport } from './routes/api.discovery.schema'
 import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery.examples'
+import { Route as ApiClerkWebhookRouteImport } from './routes/api.clerk.webhook'
 import { Route as ApiChatAnonymousRouteImport } from './routes/api.chat.anonymous'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
@@ -406,6 +407,11 @@ const ApiDiscoveryExamplesRoute = ApiDiscoveryExamplesRouteImport.update({
   path: '/api/discovery/examples',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiClerkWebhookRoute = ApiClerkWebhookRouteImport.update({
+  id: '/api/clerk/webhook',
+  path: '/api/clerk/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiChatAnonymousRoute = ApiChatAnonymousRouteImport.update({
   id: '/api/chat/anonymous',
   path: '/api/chat/anonymous',
@@ -722,6 +728,7 @@ export interface FileRoutesByFullPath {
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
+  '/api/clerk/webhook': typeof ApiClerkWebhookRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
@@ -827,6 +834,7 @@ export interface FileRoutesByTo {
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
+  '/api/clerk/webhook': typeof ApiClerkWebhookRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
@@ -934,6 +942,7 @@ export interface FileRoutesById {
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
+  '/api/clerk/webhook': typeof ApiClerkWebhookRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
@@ -1041,6 +1050,7 @@ export interface FileRouteTypes {
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
+    | '/api/clerk/webhook'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
     | '/api/internal/provider-consequence'
@@ -1146,6 +1156,7 @@ export interface FileRouteTypes {
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
+    | '/api/clerk/webhook'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
     | '/api/internal/provider-consequence'
@@ -1252,6 +1263,7 @@ export interface FileRouteTypes {
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
+    | '/api/clerk/webhook'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
     | '/api/internal/provider-consequence'
@@ -1343,6 +1355,7 @@ export interface RootRouteChildren {
   TThreadIdRoute: typeof TThreadIdRoute
   TNewRoute: typeof TNewRoute
   ApiChatAnonymousRoute: typeof ApiChatAnonymousRoute
+  ApiClerkWebhookRoute: typeof ApiClerkWebhookRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
   ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
   ApiInternalProviderConsequenceRoute: typeof ApiInternalProviderConsequenceRoute
@@ -1775,6 +1788,13 @@ declare module '@tanstack/react-router' {
       path: '/api/discovery/examples'
       fullPath: '/api/discovery/examples'
       preLoaderRoute: typeof ApiDiscoveryExamplesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/clerk/webhook': {
+      id: '/api/clerk/webhook'
+      path: '/api/clerk/webhook'
+      fullPath: '/api/clerk/webhook'
+      preLoaderRoute: typeof ApiClerkWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat/anonymous': {
@@ -2364,6 +2384,7 @@ const rootRouteChildren: RootRouteChildren = {
   TThreadIdRoute: TThreadIdRoute,
   TNewRoute: TNewRoute,
   ApiChatAnonymousRoute: ApiChatAnonymousRoute,
+  ApiClerkWebhookRoute: ApiClerkWebhookRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
   ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,
   ApiInternalProviderConsequenceRoute: ApiInternalProviderConsequenceRoute,

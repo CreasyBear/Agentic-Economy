@@ -161,3 +161,58 @@ Status: accepted after independent critique, focused gates, and live Clerk proof
     Clerk flow produced one Agent with one connected credential generation;
     issuing and completed refreshes remain read-only and never replay secret
     delivery or offer a second consequential submit.
+
+## PR3 — Account-isolated owner security history
+
+Status: accepted after three independent critique passes and an isolated staged-tree build.
+
+### Firsthand references checked
+
+- Clerk's maintained `verifyWebhook()` documentation and the installed
+  `@clerk/backend` implementation: the original `Request` is the verification
+  input, verification throws on invalid Svix headers or signature, and the
+  delivery identifier remains an HTTP header rather than event payload data.
+- Installed Clerk event types: `session.created`, `session.ended`,
+  `session.revoked`, and coarse `user.updated` are the only Package 3 events
+  admitted here. `session.removed` and unsupported events are verified then
+  ignored rather than reclassified.
+- Existing Convex Account/time audit index, native pagination contract,
+  `createPackage3AuditEvent()`, `persistAuditEvent()`, canonical Clerk identity
+  bindings, and server-function assertion boundary.
+
+### Decisions closed by firsthand proof and critique
+
+- The webhook verifies the exact original request before reading the delivery
+  identifier. Only hashed, bounded identifiers and configured event facts
+  cross into Convex; provider payloads, email, IP, user-agent, factor, and
+  session detail do not.
+- Clerk subjects resolve through one active external identity binding, one
+  active human Principal, and the Account's current ownership. Unknown,
+  inactive, foreign, or ambiguous identities create no Account event.
+- Session target identity is stable across create, end, and revoke. Lifecycle
+  state belongs in the event type and outcome, not in the target digest.
+- Unified history begins at the explicit Package 3 activation timestamp. It
+  admits only the closed Package 3 event families and requires stored source
+  and outcome facts; legacy rows remain in their domain views and no source,
+  time, actor, or outcome is synthesized.
+- The settings projection uses native Account-index pagination and returns only
+  the safe table contract. Observed and recorded time remain distinct, and a
+  missing observation time is stated explicitly.
+
+### Gauntlet iterations
+
+1. Webhook/history slice 1: **rejected**. It reconstructed the request passed
+   to Clerk, varied the session target digest by lifecycle event, and projected
+   legacy rows using invented source/time values. The correction passes the
+   untouched request, hashes a stable session target, and stops synthesizing
+   provider evidence.
+2. Webhook/history slice 2: **rejected**. Source-tagged legacy rows could still
+   enter unified history and missing outcomes were labeled `recorded`. The
+   correction adds an explicit activation boundary, restricts the query to
+   closed Package 3 event families, and requires stored source and outcome.
+3. PR3 closure: **accepted**. Selective staging preserves the concurrent
+   Package 2 information-architecture work. The focused gate passes 19 tests;
+   the isolated staged tree passes typecheck and production build; Convex code
+   generation passes under the supported Node runtime. The full worktree
+   import gate remains blocked only by four unrelated, unstaged Package 2
+   private imports.
