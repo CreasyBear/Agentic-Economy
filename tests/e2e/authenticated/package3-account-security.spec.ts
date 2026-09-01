@@ -33,9 +33,9 @@ test.describe('Package 3 Account security recovery', () => {
     await expect(page.getByRole('link', { name: /Rotate or disconnect Agents/u }))
       .toHaveAttribute('href', '/agent-access')
     await expect(page.getByRole('link', { name: /supplier connections/u }))
-      .toHaveAttribute('href', '/owner/settings/connections')
+      .toHaveAttribute('href', '/owner/offerings#supplier-connections')
     await expect(page.getByRole('link', { name: /Review payout authority/u }))
-      .toHaveAttribute('href', '/owner/settings/payouts')
+      .toHaveAttribute('href', '/owner/offerings#earnings')
     await expect(page.getByRole('link', { name: /Retain evidence and contact support/u }))
       .toHaveAttribute('href', '/support')
 
@@ -43,12 +43,12 @@ test.describe('Package 3 Account security recovery', () => {
     await expect(page).toHaveURL(/\/agent-access(?:[/?#]|$)/u)
     await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible()
 
-    await page.goto('/owner/settings/connections', { waitUntil: 'networkidle' })
-    await expect(page).toHaveURL(/\/owner\/settings\/connections$/u)
+    await page.goto('/owner/offerings#supplier-connections', { waitUntil: 'networkidle' })
+    await expect(page).toHaveURL(/\/owner\/offerings#supplier-connections$/u)
     await expect(page.locator('#supplier-connections')).toBeVisible()
 
-    await page.goto('/owner/settings/payouts', { waitUntil: 'networkidle' })
-    await expect(page).toHaveURL(/\/owner\/settings\/payouts$/u)
+    await page.goto('/owner/offerings#earnings', { waitUntil: 'networkidle' })
+    await expect(page).toHaveURL(/\/owner\/offerings#earnings$/u)
     await expect(page.getByRole('heading', { name: 'Earnings and payouts' })).toBeVisible()
   })
 })
