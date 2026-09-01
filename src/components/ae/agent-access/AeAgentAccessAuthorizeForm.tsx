@@ -145,6 +145,13 @@ type AgentAccessAuthorizeFormProps = Readonly<{
 
 type SubmitApproval = (body: string) => Promise<ConsentActionResult>
 
+const submitLocalApproval: SubmitApproval = async (body) => await fetch('/oauth/authorize', {
+  method: 'POST',
+  credentials: 'same-origin',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body,
+}).then(async (response) => await response.json() as ConsentActionResult)
+
 export function AeAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
   return isLocalE2EAuthBypassEnabled()
     ? <LocalAgentAccessAuthorizeForm {...props} />
@@ -162,13 +169,7 @@ function ClerkAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
 }
 
 function LocalAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
-  const submitApproval: SubmitApproval = async (body) => await fetch('/oauth/authorize', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  }).then(async (response) => await response.json() as ConsentActionResult)
-  return <AgentAccessAuthorizeForm {...props} submitApproval={submitApproval} />
+  return <AgentAccessAuthorizeForm {...props} submitApproval={submitLocalApproval} />
 }
 
 function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval }: AgentAccessAuthorizeFormProps & Readonly<{
