@@ -1,39 +1,46 @@
-import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router'
+import { Navigate, createFileRoute, Outlet, redirect, useLocation } from '@tanstack/react-router'
 
-import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { AeSupplyPublisherHome } from '@/components/ae/supply/AeSupplyPublisherHome'
-import { readOwnerOfferingSupplyServer } from '@/components/ae/offerings/owner-offering.functions'
-import { readOwnerConnectReadinessServer } from '@/modules/money/money.functions'
-import { readOwnerProviderConnectionsServer, readOwnerProviderEarningsServer, readOwnerSupplyFunnelServer } from '@/modules/capability-supply/supply-funnel.functions'
+import {
+  parseOwnerOperationsCompatibilitySearch,
+  parseSupplyCompatibilityIntent,
+  parseSupplyCompatibilityIntentFromUrl,
+} from '@/lib/operator/supply-compatibility'
 
 export const Route = createFileRoute('/_operator/owner/supply')({
-  loader: async () => {
-    const offerings = await readOwnerOfferingSupplyServer()
-    if (offerings.kind !== 'available') {
-      const [earnings, connect] = await Promise.all([
-        readOwnerProviderEarningsServer(),
-        readOwnerConnectReadinessServer(),
-      ])
-      return { supply: offerings, earnings, connect, connections: [] }
+  validateSearch: parseOwnerOperationsCompatibilitySearch,
+  beforeLoad: ({ location }) => {
+    if (location.pathname !== '/owner/supply') return
+    // Fragments are not present in the HTTP request. Let the hydrated router
+    // classify fragment-only entrances so it can preserve #earnings while
+    // clearing every unsupported fragment.
+    if (location.searchStr === '') return
+    const intent = parseSupplyCompatibilityIntentFromUrl(location.searchStr, location.hash)
+    if (intent.hash === undefined && Object.keys(intent.search).length === 0) {
+      // An explicit trailing fragment prevents browsers from inheriting a
+      // rejected source fragment across the HTTP redirect.
+      throw redirect({ href: '/owner/offerings#', replace: true })
     }
-    const [supply, earnings, connect, connections] = await Promise.all([
-      readOwnerSupplyFunnelServer({ data: { businessId: offerings.businessId } }),
-      readOwnerProviderEarningsServer(),
-      readOwnerConnectReadinessServer(),
-      readOwnerProviderConnectionsServer(),
-    ])
-    return { supply, earnings, connect, connections }
+    throw redirect({
+      to: '/owner/offerings',
+      search: intent.search,
+      ...(intent.hash === undefined ? {} : { hash: intent.hash }),
+      replace: true,
+    })
   },
-  head: () => ({ meta: [{ title: 'Publish Operations | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
-  component: OwnerSupplyHomeRoute,
+  head: () => ({ meta: [{ title: 'Operations | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  component: SupplyCompatibilityRoute,
 })
 
-function OwnerSupplyHomeRoute() {
+function SupplyCompatibilityRoute() {
   const location = useLocation()
-  return location.pathname !== '/owner/supply' ? <Outlet /> : <OwnerSupplyHome />
-}
-
-function OwnerSupplyHome() {
-  const { supply, earnings, connect, connections } = Route.useLoaderData()
-  return <AeOperatorShell operatorRole="owner" title="Publish Operations" description="Connect a tool, set its price, test the route, and publish it." currentPath="/owner/supply"><AeSupplyPublisherHome readback={supply} earnings={earnings} connect={connect} connections={connections} /></AeOperatorShell>
+  if (location.pathname !== '/owner/supply') return <Outlet />
+  const intent = parseSupplyCompatibilityIntent({}, location.hash)
+  return (
+    <Navigate
+      to="/owner/offerings"
+      search={intent.search}
+      {...(intent.hash === undefined ? {} : { hash: intent.hash })}
+      replace
+    />
+  )
 }

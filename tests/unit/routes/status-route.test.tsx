@@ -117,7 +117,7 @@ describe('/status', () => {
     expect(screen.getAllByText('Operational')).toHaveLength(3)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Some systems are degraded.')
     expect(screen.getByRole('heading', { level: 2, name: 'Check existing calls before retrying' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Activity' }).getAttribute('href')).toBe('/activity')
+    expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
     expect(screen.getByRole('link', { name: 'Get help' }).getAttribute('href')).toBe('/support')
 
     expect(screen.getByText('Request reference').textContent).toBe('Request reference')
@@ -182,7 +182,7 @@ describe('/status', () => {
     expect(screen.getAllByText('Operational')).toHaveLength(3)
     expect(screen.getByText('Degraded')).toBeTruthy()
     expect(screen.getByText('request:invalid-ready-contract')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open Activity' }).getAttribute('href')).toBe('/activity')
+    expect(screen.getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
   })
 
   it('announces multiple degraded systems in probe order with plural copy', async () => {

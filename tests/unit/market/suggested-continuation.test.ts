@@ -100,7 +100,7 @@ describe('shared suggested continuation projection', () => {
       {
         label: 'Connect provider',
         kind: 'navigate',
-        href: '/owner/settings/connections#provider-x402-resource-url',
+        href: '/owner/offerings#supplier-connections',
       },
     ],
     [

@@ -1,9 +1,9 @@
 import { Link } from '@tanstack/react-router'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { AeSection, AeSettingsRow } from '@/components/ae/layout/AeSection'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
@@ -15,11 +15,30 @@ import { captureClientExceptionOnClient } from '@/lib/observability/capture-clie
 
 export function AeWorkspaceGeneral({
   result,
+  identity,
   onRename,
 }: Readonly<{
   result: PublicOwnerStatusRouteReadbackResult<PublicBusinessCatalogApiV2Dto>
+  identity?: Readonly<{ businessId: string; name: string; slug: string; publicStatus: 'unpublished' | 'published' | 'suppressed' }>
   onRename?: (input: Readonly<{ businessId: string; name: string; requestKey: string }>) => Promise<RenameSupplierDisplayNameResult>
 }>) {
+  if (result.kind !== 'available' && identity !== undefined) {
+    return (
+      <AeSection
+        title="Supplier identity"
+        description="The supplier identity that owns these Operations. Publication status is read separately."
+      >
+        <AeFactList facts={[
+          ...(onRename === undefined ? [{ label: 'Name', value: identity.name }] : []),
+          { label: 'Public path', value: `/${identity.slug}`, mono: true },
+          { label: 'Visibility', value: identity.publicStatus },
+        ]} />
+        {onRename === undefined ? null : (
+          <SupplierNameEditor businessId={identity.businessId} currentName={identity.name} onRename={onRename} />
+        )}
+      </AeSection>
+    )
+  }
   if (result.kind === 'not_found') {
     return (
       <AeEmptyState
@@ -38,12 +57,12 @@ export function AeWorkspaceGeneral({
   if (result.kind === 'unavailable') {
     return (
       <AeEmptyState
-        title="Workspace identity is unavailable"
+        title="Supplier identity is unavailable"
         description="Try again in a moment. If this keeps happening, open Help."
         role="alert"
         action={
           <Button asChild variant="secondary" className="min-h-touch">
-            <Link to="/owner/settings/workspace">Try again</Link>
+            <Link to="/owner/offerings" hash="supplier-identity">Try again</Link>
           </Button>
         }
       />
@@ -65,7 +84,6 @@ export function AeWorkspaceGeneral({
           facts={[
             ...(onRename === undefined ? [{ label: 'Name', value: catalog.name }] : []),
             { label: 'Public path', value: `/${catalog.slug}`, mono: true },
-            { label: 'Supplier record', value: catalog.businessId, mono: true },
             { label: 'Category', value: location },
             { label: 'Disposition', value: catalog.disposition },
             { label: 'Trust', value: catalog.trustTier },
@@ -74,33 +92,6 @@ export function AeWorkspaceGeneral({
         {onRename === undefined ? null : (
           <SupplierNameEditor businessId={catalog.businessId} currentName={catalog.name} onRename={onRename} />
         )}
-      </AeSection>
-      <AeSection
-        title="Workspace records"
-        description="Open the surfaces that maintain this supplier's Operations and listing."
-      >
-        <div className="grid gap-intra">
-          <AeSettingsRow
-            title="Supplier listing"
-            description="The public page agents find."
-            href="/owner/status"
-          />
-          <AeSettingsRow
-            title="Operations"
-            description="Operations this workspace lists."
-            href="/owner/offerings"
-          />
-          <AeSettingsRow
-            title="Publish"
-            description="Connect a source, set price, and keep the route live."
-            href="/owner/supply"
-          />
-          <AeSettingsRow
-            title="Setup"
-            description="Publication setup for this supplier."
-            href="/for-providers"
-          />
-        </div>
       </AeSection>
     </>
   )
@@ -118,8 +109,12 @@ function SupplierNameEditor({
   const [name, setName] = useState(currentName)
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<RenameSupplierDisplayNameResult>()
-  const requestKeyRef = useRef(crypto.randomUUID())
-  useEffect(() => setName(currentName), [currentName])
+  const requestKeyRef = useRef<string | null>(null)
+  const [previousCurrentName, setPreviousCurrentName] = useState(currentName)
+  if (currentName !== previousCurrentName) {
+    setPreviousCurrentName(currentName)
+    setName(currentName)
+  }
   const normalized = normalizeDisplayName(name)
   const invalid = normalized.length === 0 || normalized.length > 160
   const unchanged = normalized === currentName
@@ -153,7 +148,7 @@ function SupplierNameEditor({
         onClick={() => {
           setPending(true)
           setFeedback(undefined)
-          void onRename({ businessId, name, requestKey: requestKeyRef.current })
+          void onRename({ businessId, name, requestKey: requestKeyRef.current ?? crypto.randomUUID() })
             .then((result) => {
               setFeedback(result)
               if (result.kind === 'updated') {

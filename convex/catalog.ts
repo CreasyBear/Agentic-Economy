@@ -16,8 +16,10 @@ import {
 } from './catalogOfferingMutations'
 import {
   catalogOwnerSupplyResult,
+  currentOwnerSupplierIdentityResult,
   externalAccessPathArg,
   getCurrentOwnerOfferingSupplyHandler,
+  getCurrentOwnerSupplierIdentityHandler,
   getCurrentOwnerPublicCatalogHandler,
   getPublicBusinessCatalogBySlugHandler,
   humanAccessPathArg,
@@ -223,6 +225,13 @@ export const getCurrentOwnerOfferingSupply = queryGeneric({
   args: {},
   returns: catalogOwnerSupplyResult,
   handler: getCurrentOwnerOfferingSupplyHandler,
+})
+
+/** Minimal authenticated owner scope for Operations side-surface reads. */
+export const getCurrentOwnerSupplierIdentity = queryGeneric({
+  args: {},
+  returns: currentOwnerSupplierIdentityResult,
+  handler: getCurrentOwnerSupplierIdentityHandler,
 })
 
 export type {

@@ -4,7 +4,7 @@ import { offeringAt, priceDigest, sourceHash } from "./supply-funnel-harness";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { AeOwnerOperationFacts } from "@/components/ae/supply/AeSupplyPublisherHome";
+import { AeOwnerOperationFacts } from "@/components/ae/supply/AeOwnerOperationFacts";
 
 describe("owner operation control facts", () => {
   it("shows canonical operation, source, binding, pricing, readiness, and live readback", () => {

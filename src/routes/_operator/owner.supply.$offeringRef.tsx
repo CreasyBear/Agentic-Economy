@@ -97,6 +97,7 @@ export const Route = createFileRoute("/_operator/owner/supply/$offeringRef")({
   component: OwnerSupplyDetailRoute,
 });
 function OwnerSupplyDetailRoute() {
+  const { offeringRef } = Route.useParams();
   const result = Route.useLoaderData();
   const router = useRouter();
   const requestKey = useRef<string | undefined>(undefined);
@@ -120,7 +121,7 @@ function OwnerSupplyDetailRoute() {
         operatorRole="owner"
         title="Prepare Operation"
         description="We could not load this Operation completely."
-        currentPath="/owner/supply"
+        currentPath={`/owner/supply/${encodeURIComponent(offeringRef)}`}
       >
         <div className="grid gap-3">
           <Alert>
@@ -135,7 +136,7 @@ function OwnerSupplyDetailRoute() {
             variant="secondary"
             className="min-h-touch justify-self-start"
           >
-            <Link to="/owner/supply">Return to Operations</Link>
+            <Link to="/owner/offerings">Return to Operations</Link>
           </Button>
         </div>
       </AeOperatorShell>
@@ -154,7 +155,7 @@ function OwnerSupplyDetailRoute() {
         operatorRole="owner"
         title="Prepare Operation"
         description="We could not load this Operation. Return to Operations and try again."
-        currentPath="/owner/supply"
+        currentPath={`/owner/supply/${encodeURIComponent(offeringRef)}`}
       >
         <div className="grid gap-3">
           <Alert>
@@ -169,7 +170,7 @@ function OwnerSupplyDetailRoute() {
             variant="secondary"
             className="min-h-touch justify-self-start"
           >
-            <Link to="/owner/supply">Return to Operations</Link>
+            <Link to="/owner/offerings">Return to Operations</Link>
           </Button>
         </div>
       </AeOperatorShell>
@@ -223,7 +224,7 @@ function OwnerSupplyDetailRoute() {
       operatorRole="owner"
       title={durableOffering.name}
       description="Describe the Operation, connect its API, check readiness, and run a contract test."
-      currentPath="/owner/supply"
+      currentPath={`/owner/supply/${encodeURIComponent(offeringRef)}`}
     >
       <AeSupplyFunnel
         protectEditorNavigation

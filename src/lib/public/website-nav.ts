@@ -29,7 +29,7 @@ export const publicPrimaryNavItems: readonly PublicFooterRouteLink[] = [
   { label: 'Discover', to: '/market', search: { window: '30d' } },
   { label: 'For agents', to: '/for-agents' },
   { label: 'For suppliers', to: '/for-providers' },
-  { label: 'Activity', to: '/activity' },
+  { label: 'Calls', to: '/activity' },
 ]
 
 export function isPublicPrimaryNavActive(pathname: string, item: PublicFooterRouteLink): boolean {

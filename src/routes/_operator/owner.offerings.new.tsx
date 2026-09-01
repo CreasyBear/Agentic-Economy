@@ -28,7 +28,7 @@ function NewOwnerOfferingRoute() {
   const seed = result.kind === 'available' ? readSeed(result) : undefined
 
   return (
-    <AeOperatorShell operatorRole="owner" title="Add Operation" description="Describe one tool, its price, and how an agent can call it." currentPath="/owner/offerings" breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add' }]}>
+    <AeOperatorShell operatorRole="owner" title="Add Operation" description="Describe one tool, its price, and how an agent can call it." currentPath="/owner/offerings/new" breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add' }]}>
       {result.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Operation editor unavailable</AlertTitle><AlertDescription>Supplier access is required before an Operation can be saved.</AlertDescription></Alert> : (
         <AeOwnerOfferingEditorWithNavigationSafety
           initialValue={emptyOwnerOfferingEditorValue}

@@ -33,7 +33,11 @@ const routeMocks = vi.hoisted(() => ({
 vi.mock('@tanstack/react-router', () => ({
   Link: () => null,
   createFileRoute: () => (options: Record<string, unknown>) => {
-    const route = { ...options, useLoaderData: () => routeMocks.loaderData }
+    const route = {
+      ...options,
+      useLoaderData: () => routeMocks.loaderData,
+      useParams: () => ({ offeringRef: 'offering:one' }),
+    }
     return { ...route, options: route }
   },
   useRouter: () => ({ invalidate: routeMocks.invalidate }),
@@ -41,6 +45,9 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@tanstack/react-start', () => ({
   useServerFn: (reference: unknown) =>
     routeMocks.serverFnResults.get(reference) ?? (async () => undefined),
+}))
+vi.mock('@clerk/tanstack-react-start', () => ({
+  useReverification: (callback: unknown) => callback,
 }))
 vi.mock('@/components/ae/layout/AeOperatorShell', () => ({
   AeOperatorShell: ({ children }: { children?: ReactNode }) => children ?? null,

@@ -29,7 +29,7 @@ test.describe('market product accessibility', () => {
     await expect(primary.getByRole('link', { name: 'Discover' })).toBeVisible()
     await expect(primary.getByRole('link', { name: 'For agents' })).toBeVisible()
     await expect(primary.getByRole('link', { name: 'For suppliers' })).toBeVisible()
-    await expect(primary.getByRole('link', { name: 'Activity' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'Calls' })).toBeVisible()
   })
 
   test('browse Operations continues into the market catalog', async ({ page }) => {
@@ -54,7 +54,7 @@ test.describe('market product accessibility', () => {
     await gotoSettled(page, '/')
     const footer = page.getByRole('contentinfo')
     await expect(footer.getByRole('link', { name: 'About' })).toBeVisible()
-    await expect(footer.getByRole('link', { name: 'Activity' })).toBeVisible()
+    await expect(footer.getByRole('link', { name: 'Calls' })).toBeVisible()
     await footer.getByRole('link', { name: 'About' }).click()
     await page.waitForURL('**/about', { timeout: 15_000 })
     await expect(page.getByRole('heading', { level: 1, name: 'Who this market is for.' })).toBeVisible()
@@ -63,13 +63,13 @@ test.describe('market product accessibility', () => {
     const compact = (page.viewportSize()?.width ?? 1280) < 768
     if (compact) {
       // The preceding keyboard-navigation test exercises the drawer itself.
-      // Here the footer's Activity link proves the route remains in public
+      // Here the footer's Calls link proves the route remains in public
       // chrome, while the menu trigger proves compact navigation is retained.
       await expect(page.getByRole('button', { name: 'Open public menu' })).toBeVisible()
       return
     }
     const primary = page.getByRole('navigation', { name: 'Primary' })
-    await expect(primary.getByRole('link', { name: 'Activity' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'Calls' })).toBeVisible()
   })
 })
 

@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import {
   RouterContextProvider,
@@ -25,7 +25,7 @@ afterEach(cleanup)
 
 describe('Offering market surfaces', () => {
   it('teaches the owner the first useful action without requiring a contact route', () => {
-    render(<AeOwnerOfferingsList offerings={[]} />)
+    renderAt(<AeOwnerOfferingsList offerings={[]} />, '/owner/offerings')
     expect(screen.getByRole('heading', { name: 'No Operations yet' })).toBeTruthy()
     expect(screen.getByText('Describe one exact tool, then add its price and access route.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Add Operation' }).getAttribute('href')).toBe('/owner/offerings/new')
@@ -38,8 +38,29 @@ describe('Offering market surfaces', () => {
       '/owner/offerings',
     )
     expect(screen.getByText('Your public page is still updating')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Try publishing again' })).toBeTruthy()
-    expect(screen.getByText('Blockchain data query')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Refresh public status' })).toBeTruthy()
+    expect(screen.getAllByText('Blockchain data query')).not.toHaveLength(0)
+  })
+
+  it('orders compact Operations rows as name, lifecycle, blocker, and a full-width action', () => {
+    const offering = {
+      ...toOwnerOfferingSummary(projectionFixture()),
+      lifecycleLabel: 'Published',
+      availability: 'available' as const,
+      blocker: 'Reconnect the provider',
+      continuation: { label: 'Manage connection', href: '/owner/offerings#supplier-connections' },
+    }
+
+    renderAt(<AeOwnerOfferingsList offerings={[offering]} />, '/owner/offerings')
+
+    const compactList = screen.getByTestId('owner-operations-compact-list')
+    const row = within(compactList).getByRole('listitem')
+    expect(Array.from(row.children).map((child) => child.textContent)).toEqual([
+      'Blockchain data queryPublished / Available',
+      'Reconnect the provider',
+      'Manage connection',
+    ])
+    expect(within(row).getByRole('link', { name: 'Manage connection for Blockchain data query' }).className).toContain('w-full')
   })
   it('uses progressive disclosure for request fields and blocks duplicate saves', async () => {
     let resolveSave: ((value: unknown) => void) | undefined

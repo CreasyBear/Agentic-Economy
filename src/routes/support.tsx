@@ -76,11 +76,11 @@ function SupportRoute() {
               <div className="grid gap-intra">
                 <h3 className="font-medium text-foreground">Payment being verified / Reconciliation required</h3>
                 <p className="text-sm text-muted-foreground">
-                  Inspect the exact receipt in Activity. Do not retry the call.
+                  Inspect the exact receipt in Calls. Do not retry the call.
                 </p>
               </div>
               <Button asChild variant="outline" className="min-h-touch">
-                <Link to="/activity">Open Activity</Link>
+                <Link to="/activity">Open Calls</Link>
               </Button>
             </li>
           </ul>
@@ -106,7 +106,7 @@ function SupportRoute() {
             description="Resume the existing Operation. Its status page shows the next unfinished setup or readiness action."
           >
             <Button asChild className="min-h-touch">
-              <Link to="/owner/supply">Continue supplier setup</Link>
+              <Link to="/owner/offerings">Continue supplier setup</Link>
             </Button>
             <Button asChild variant="outline" className="mt-related min-h-touch">
               <Link to="/for-providers">Review supplier requirements</Link>

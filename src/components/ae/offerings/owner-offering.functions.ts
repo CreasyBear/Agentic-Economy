@@ -152,14 +152,16 @@ const withdrawPathMutation = sourceMutation<SourceWriteArgs & { accessPathRef: s
 
 type OfferingFacts = Readonly<{ name: string; category: string; summary: string; serviceAreaSummary?: string; availabilitySummary?: string; pricingSummary?: string; price?: OfferingPrice }>
 
-export const readOwnerOfferingSupplyServer = createServerFn().handler(async (): Promise<OwnerOfferingSupplyReadResult> => {
+export async function readOwnerOfferingSupplyThroughSource(): Promise<OwnerOfferingSupplyReadResult> {
   try {
     return await callSourceQuery(readSupplyQuery, {})
   } catch (error) {
     console.error('[owner-offerings] supply source read failed', sanitizeTelemetryError(error))
     return { kind: 'error', code: 'source_unavailable', reason: 'The Operation source did not answer. Try again.' }
   }
-})
+}
+
+export const readOwnerOfferingSupplyServer = createServerFn().handler(readOwnerOfferingSupplyThroughSource)
 
 export const ensureSupplierBusinessServer = createServerFn({ method: 'POST' })
   .validator((data) => z.strictObject({

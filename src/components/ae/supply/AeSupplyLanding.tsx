@@ -77,7 +77,7 @@ export function AeSupplyLanding({
             </div>
           </AeSiteHeadingPair>
           <AeSiteButton asChild>
-            <Link to="/owner/supply">Create or continue an Operation</Link>
+            <Link to="/owner/offerings">Create or continue an Operation</Link>
           </AeSiteButton>
         </AeSiteHeroIntro>
       </AeSiteSection>
@@ -143,7 +143,7 @@ export function AeSupplyLanding({
             You control the listing and the route. Agents see your published facts before choosing. Setup and test calls do not create settled earnings or payouts.
           </AeSiteBody>
           <Link
-            to="/owner/supply"
+            to="/owner/offerings"
             className="inline-flex min-h-touch items-center justify-self-start text-sm font-medium underline underline-offset-4"
           >
             Manage Operations

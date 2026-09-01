@@ -5,12 +5,8 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeAccountSecurityHistory } from '@/components/ae/settings/AeAccountSecurityHistory'
 import { AeCompromiseRecoveryChecklist } from '@/components/ae/settings/AeCompromiseRecoveryChecklist'
 import { AeSiteAuthPanel, AeSiteAuthSubmit } from '@/components/ae/website'
-import { OwnerSettingsNav } from '@/components/ae/settings/OwnerSettingsNav'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import type { AccountSecurityHistoryResult } from '@/modules/security/account-security'
-
-export type { OwnerSettingsNavCurrent } from '@/lib/operator/settings-navigation'
-export { OwnerSettingsNav }
 
 export function AccountSettingsSection({
   history,

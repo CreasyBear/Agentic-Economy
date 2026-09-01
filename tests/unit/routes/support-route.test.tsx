@@ -63,10 +63,10 @@ describe('/support', () => {
     expect(codes).toEqual(['ae connect --base-url "$ORIGIN"'])
     expect(within(troubleshooting).getByRole('link', { name: 'Add credit' }).getAttribute('href')).toBe('/owner/credit#fund')
     expect(within(troubleshooting).getByRole('link', { name: 'Choose another Operation' }).getAttribute('href')).toBe('/market?window=30d#operations')
-    expect(within(troubleshooting).getByRole('link', { name: 'Open Activity' }).getAttribute('href')).toBe('/activity')
+    expect(within(troubleshooting).getByRole('link', { name: 'Open Calls' }).getAttribute('href')).toBe('/activity')
 
     expect(within(troubleshooting).getByText('Choose another current Operation. Retrying will not restore supplier readiness.')).toBeTruthy()
-    expect(within(troubleshooting).getByText('Inspect the exact receipt in Activity. Do not retry the call.')).toBeTruthy()
+    expect(within(troubleshooting).getByText('Inspect the exact receipt in Calls. Do not retry the call.')).toBeTruthy()
     expect(troubleshooting.textContent).not.toContain('Retry the call.')
     expect(troubleshooting.textContent).not.toContain('Try again')
   })
@@ -81,7 +81,7 @@ describe('/support', () => {
       'https://github.com/CreasyBear/Agentic-Economy/issues/new/choose',
     )
     expect(screen.getByRole('link', { name: 'Review agent setup' }).getAttribute('href')).toBe('/for-agents')
-    expect(screen.getByRole('link', { name: 'Continue supplier setup' }).getAttribute('href')).toBe('/owner/supply')
+    expect(screen.getByRole('link', { name: 'Continue supplier setup' }).getAttribute('href')).toBe('/owner/offerings')
     expect(screen.getByRole('link', { name: 'Review supplier requirements' }).getAttribute('href')).toBe('/for-providers')
     expect(screen.getByRole('link', { name: 'Request a listing correction' }).getAttribute('href')).toBe('/privacy/remove-business')
     expect(screen.getByText(/Never include keys, wallet material, raw inputs, or private results/)).toBeTruthy()

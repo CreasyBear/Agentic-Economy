@@ -80,7 +80,7 @@ export function suggestContinuation(state: ContinuationState): SuggestedContinua
       : {
           label: 'Connect provider',
           kind: 'navigate',
-          href: '/owner/settings/connections#provider-x402-resource-url',
+          href: '/owner/offerings#supplier-connections',
         }
   }
   return { label: 'Add credit', kind: 'navigate', command: 'ae account balance', href: '/owner/credit#fund' }

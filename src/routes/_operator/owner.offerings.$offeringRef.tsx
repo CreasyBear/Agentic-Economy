@@ -28,7 +28,7 @@ function OwnerOfferingDetailRoute() {
   const businessId = result.kind === 'available' ? result.businessId : undefined
   const initialValue = source === undefined || source.revision === undefined ? undefined : toEditorValue(source)
   return (
-    <AeOperatorShell operatorRole="owner" title={source?.revision?.name ?? 'Operation'} description="Keep its public facts, price, and access route current." currentPath="/owner/offerings" breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: source?.revision?.name ?? 'Operation' }]}>
+    <AeOperatorShell operatorRole="owner" title={source?.revision?.name ?? 'Operation'} description="Keep its public facts, price, and access route current." currentPath={`/owner/offerings/${encodeURIComponent(offeringRef)}`} breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: source?.revision?.name ?? 'Operation' }]}>
       {result.kind === 'error' ? <Alert variant="destructive"><AlertTitle>Operation did not load</AlertTitle><AlertDescription>{result.reason ?? 'Retry this page.'}</AlertDescription></Alert>
         : initialValue === undefined ? <Alert><AlertTitle>Operation unavailable</AlertTitle><AlertDescription><p>This Operation was not found for the current supplier, or its current revision needs repair.</p><Button asChild variant="secondary"><Link to="/owner/offerings">Back to Operations</Link></Button></AlertDescription></Alert>
         : source?.status === 'retired' ? <Alert><AlertTitle>This Operation is retired</AlertTitle><AlertDescription>Its history remains available, but retired Operations cannot be edited.</AlertDescription></Alert>

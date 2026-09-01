@@ -17,7 +17,7 @@ describe("supply landing", () => {
       screen
         .getByRole("link", { name: "Create or continue an Operation" })
         .getAttribute("href"),
-    ).toBe("/owner/supply");
+    ).toBe("/owner/offerings");
     expect(screen.getByRole("heading", { name: "Know what AE will ask for." })).toBeDefined();
     expect(screen.getByText(/one callable job an agent can search/i)).toBeDefined();
     expect(screen.getByText(/OpenAPI 3\.1 GET or POST/i)).toBeDefined();

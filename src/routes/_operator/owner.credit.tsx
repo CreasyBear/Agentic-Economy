@@ -4,7 +4,6 @@ import { useServerFn } from '@tanstack/react-start'
 
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
 import type { CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
-import { OwnerSettingsNav } from '@/components/ae/settings/OwnerSettingsSections'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -71,10 +70,9 @@ function OwnerCreditRoute() {
       currentPath="/owner/credit"
       actions={
         <Button asChild variant="secondary">
-          <Link to="/agent-access">Open Keys</Link>
+          <Link to="/agent-access">Open Agents</Link>
         </Button>
       }
-      secondaryBar={<OwnerSettingsNav current="credit" />}
     >
       <AeSettingsStack>
         {localE2E ? (

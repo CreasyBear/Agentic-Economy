@@ -6,7 +6,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeOwnerOfferingEditor, AeOwnerOfferingEditorWithNavigationSafety, type OwnerOfferingEditorValue, type OwnerOfferingSaveResult } from '@/components/ae/offerings/AeOwnerOfferings'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
-import { AeOwnerOperationFacts } from './AeSupplyPublisherHome'
+import { AeOwnerOperationFacts } from './AeOwnerOperationFacts'
 import type {
   OwnerSupplyCommandResult,
   OwnerSellerCanaryPromotionResult,

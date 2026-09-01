@@ -5,6 +5,7 @@ export {
 export {
   createOwnerConnectAccountServer,
   createOwnerOnboardingLinkServer,
+  readOwnerConnectReadinessThroughSource,
   readOwnerConnectReadinessServer,
 } from './internal/payout-connect-http'
 export type { OwnerConnectReadinessReadback } from './internal/payout-connect-http'

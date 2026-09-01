@@ -74,8 +74,13 @@ export type {
   SupplyLiquiditySummary,
 } from "./internal/supply-funnel/types";
 
-export { filterOwnerSupplyAuthorityOptions } from "./internal/supply-funnel/connections";
+export {
+  filterOwnerSupplyAuthorityOptions,
+  readOwnerProviderConnections,
+  readOwnerProviderEarnings,
+} from "./internal/supply-funnel/connections";
 export { checkOwnerX402, connectOwnerX402, inspectOwnerX402 } from "./internal/supply-funnel/connections";
+export { readOwnerSupplyFunnel } from "./internal/supply-funnel/funnel-owner";
 export { loadSupplyLandingReadback } from "./internal/supply-funnel/landing";
 export { ownerPublicationImport } from "./internal/supply-funnel/publication-import";
 export { ownerPublicationWithCatalogOrigin } from "./internal/supply-funnel/publication-admit";

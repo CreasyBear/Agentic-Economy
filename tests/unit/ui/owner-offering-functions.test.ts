@@ -4,6 +4,7 @@ import type * as SourceWriteAdmissionModule from '@/lib/server/source-write-admi
 import type * as TanstackReactStartModule from '@tanstack/react-start'
 
 const sourceMocks = vi.hoisted(() => ({
+  callSourceQuery: vi.fn(),
   callSourceMutation: vi.fn(),
   sourceWriteAdmissionFromContext: vi.fn(),
 }))
@@ -17,6 +18,7 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
 }))
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof ConvexSourceModule>()),
+  callSourceQuery: sourceMocks.callSourceQuery,
   callSourceMutation: sourceMocks.callSourceMutation,
 }))
 vi.mock('@/lib/server/source-write-admission', async (importOriginal) => ({
@@ -24,7 +26,10 @@ vi.mock('@/lib/server/source-write-admission', async (importOriginal) => ({
   sourceWriteAdmissionFromContext: sourceMocks.sourceWriteAdmissionFromContext,
 }))
 
-import { saveOwnerOfferingServer } from '@/components/ae/offerings/owner-offering.functions'
+import {
+  readOwnerOfferingSupplyThroughSource,
+  saveOwnerOfferingServer,
+} from '@/components/ae/offerings/owner-offering.functions'
 
 const value = {
   offeringRef: 'offering:request-a',
@@ -69,6 +74,28 @@ beforeEach(() => {
 })
 
 describe('owner offering replay fencing', () => {
+  it('preserves the broad editor readback while Operations uses narrow summaries', async () => {
+    const readback = {
+      kind: 'available' as const,
+      businessId: 'business:owner',
+      business: { name: 'Owner', slug: 'owner', publicStatus: 'published' },
+      offerings: [{
+        offeringRef: value.offeringRef,
+        businessId: 'business:owner',
+        currentRevision: 1,
+        status: 'published' as const,
+        createdAt: 1,
+        updatedAt: 2,
+        revision: { name: value.name },
+        accessPaths: value.accessPaths,
+      }],
+      projection: { status: 'current' as const, observedAt: 3 },
+    }
+    sourceMocks.callSourceQuery.mockResolvedValue(readback)
+
+    await expect(readOwnerOfferingSupplyThroughSource()).resolves.toBe(readback)
+  })
+
   it('does not advance status or access paths when details replay is fenced by a newer revision', async () => {
     sourceMocks.callSourceMutation.mockResolvedValueOnce({
       kind: 'error',

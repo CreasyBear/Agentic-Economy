@@ -1,20 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-
-import { AeWorkspaceDevelopers } from '@/components/ae/settings/AeWorkspaceDevelopers'
-import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_operator/owner/settings/developers')({
-  ...operatorRouteOptions,
-  head: () => ({
-    meta: [
-      { title: 'Keys and APIs | Agentic Economy' },
-      { name: 'description', content: 'Caller keys, agent setup, and machine-readable files.' },
-      { name: 'robots', content: 'noindex' },
-    ],
-  }),
-  component: OwnerSettingsDevelopersRoute,
+  beforeLoad: () => {
+    throw redirect({ to: '/for-agents', replace: true })
+  },
 })
-
-function OwnerSettingsDevelopersRoute() {
-  return <AeWorkspaceDevelopers />
-}

@@ -261,9 +261,9 @@ function recoveryGuidance(checks: readonly StatusCheck[]): Readonly<{
   return callSafetyAffected
     ? {
         title: 'Check existing calls before retrying',
-        description: 'Do not repeat an uncertain Operation call. Open Activity to inspect its current status or receipt.',
+        description: 'Do not repeat an uncertain Operation call. Open Calls to inspect its current status or receipt.',
         href: '/activity',
-        label: 'Open Activity',
+        label: 'Open Calls',
       }
     : {
         title: 'Retry after the affected system recovers',

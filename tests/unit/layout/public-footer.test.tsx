@@ -29,7 +29,7 @@ describe('public website footer', () => {
         column.links.map((link) => link.label),
       ]),
     ).toEqual([
-      ['Market', ['Discover', 'For agents', 'For suppliers', 'Activity', 'About']],
+      ['Market', ['Discover', 'For agents', 'For suppliers', 'Calls', 'About']],
       ['Help', ['Get help', 'System status']],
       ['Legal', ['Privacy', 'Terms', 'Remove a listing']],
       ['Machines', ['llms.txt', 'SKILL.md', '.well-known/ucp']],
@@ -65,7 +65,7 @@ describe('public website footer', () => {
     render(<AeSiteFooter />)
     const footer = screen.getByRole('contentinfo')
     expect(within(footer).getByRole('link', { name: 'About' }).getAttribute('href')).toBe('/about')
-    expect(within(footer).getByRole('link', { name: 'Activity' }).getAttribute('href')).toBe('/activity')
+    expect(within(footer).getByRole('link', { name: 'Calls' }).getAttribute('href')).toBe('/activity')
     expect(within(footer).getByText(publicFooterCopyright(new Date().getFullYear()))).toBeTruthy()
     expect(within(footer).getByText('AECON')).toBeTruthy()
     expect(footer.querySelector(`img[src="${AECON_MARK_SRC}"]`)).toBeTruthy()
@@ -79,7 +79,7 @@ describe('public primary navigation', () => {
       'Discover',
       'For agents',
       'For suppliers',
-      'Activity',
+      'Calls',
     ])
     expect(publicPrimaryNavItems.map((item) => item.to)).toEqual([
       '/market',
