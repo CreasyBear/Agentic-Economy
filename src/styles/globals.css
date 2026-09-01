@@ -1,5 +1,5 @@
 /*
- * Agentic Economy product system.
+ * Agentic Economy product system. DESIGN.md is the visual authority.
  *
  * Compact capability-market structure. This file owns the semantic bridge
  * used by shadcn and product components; surfaces do not invent
@@ -7,10 +7,11 @@
  */
 @layer reset, theme, base, clerk, components, utilities;
 
-@import "@fontsource-variable/inter";
-@import "@fontsource/dm-mono";
-@import "@fontsource/geist-pixel";
-@import "./base.css";
+@import "@fontsource-variable/host-grotesk";
+@import "@fontsource-variable/azeret-mono";
+@import "@fontsource/aleo/300.css";
+@import "@fontsource/aleo";
+@import "./base.css" layer(base);
 @import "tw-animate-css";
 
 @import "tailwindcss/theme.css" layer(theme);
@@ -70,19 +71,15 @@
   --color-sidebar-ring: var(--sidebar-ring);
 
   --font-sans: var(--ae-font-sans);
-  --font-heading: var(--ae-font-sans);
   --font-display: var(--ae-font-display);
   --font-mono: var(--ae-font-mono);
 
-  --radius-2xl: 1rem;
-  --radius-3xl: 1.25rem;
-  --radius-4xl: 1.5rem;
-  --radius-card: 0.9375rem;
-  --radius-nav: 0.875rem;
+  --radius-card: 0.125rem;
+  --radius-nav: 0.125rem;
   --shadow-soft: var(--shadow-low);
   --shadow-float: var(--shadow-med);
+  --shadow-overlay: var(--ae-shadow-overlay);
   --shadow-market-row-hover: var(--shadow-inset-market-row);
-  --shadow-market-cell-hover: var(--shadow-inset-market-cell);
   --duration-fast: var(--motion-duration-fast);
   --duration-base: var(--motion-duration-base);
   --duration-slow: var(--motion-duration-slow);
@@ -116,33 +113,36 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
   --font-family-body:
-    "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
-  --font-family-display: "Geist Pixel", "DM Mono", monospace;
-  --font-family-code: "DM Mono", "SFMono-Regular", Menlo, monospace;
+    "Host Grotesk Variable", "Host Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-family-display: "Aleo", Georgia, "Times New Roman", serif;
+  --font-family-code:
+    "Azeret Mono Variable", "Azeret Mono", ui-monospace, "SFMono-Regular", Menlo,
+    monospace;
   --ae-font-sans: var(--font-family-body);
   --ae-font-mono: var(--font-family-code);
   --ae-font-display: var(--font-family-display);
 
-  /* Measured donor neutrals, expressed in OKLCH. */
-  --ae-bg: oklch(0.9663 0.004 106.47);
-  --ae-fg: oklch(0.2178 0 0);
-  --ae-muted-fg: oklch(0.493 0 0);
-  --ae-surface: oklch(1 0 0);
-  --ae-surface-sunken: oklch(0.9546 0.0027 106.45);
+  /* Twenty-website grammar (owner rebase 2026-09-01): neutral field behind
+     white data surfaces; near-black ink; hairlines black-10/20. */
+  --ae-bg: #f4f4f4;
+  --ae-fg: #1c1c1c;
+  --ae-muted-fg: rgba(28, 28, 28, 0.6);
+  --ae-surface: #ffffff;
+  --ae-surface-sunken: #f4f4f4;
   --ae-surface-raised: var(--ae-surface);
   /* Canvas vs work-well. Theme the well independently of page chrome. */
   --ae-container: var(--ae-surface);
-  --ae-border: oklch(0.215 0.004 106 / 0.12);
-  --ae-border-strong: oklch(0.215 0.004 106 / 0.22);
+  --ae-border: rgba(28, 28, 28, 0.1);
+  --ae-border-strong: rgba(28, 28, 28, 0.2);
 
   /* Ink is the action colour. Blue is reserved for links/focus/information. */
   --ae-primary: var(--ae-fg);
-  --ae-primary-fg: oklch(0.985 0.002 106);
-  --ae-brand: oklch(0.5553 0.1056 232.01);
-  --ae-brand-strong: oklch(0.455 0.1056 232.01);
-  --ae-brand-muted: oklch(0.94 0.024 232.01);
-  --ae-on-brand: var(--ae-primary-fg);
-  --ae-ring: var(--ae-fg);
+  --ae-primary-fg: #ffffff;
+  --ae-brand: #4a38f5;
+  --ae-brand-strong: #3b2bd8;
+  --ae-brand-muted: rgba(74, 56, 245, 0.12);
+  --ae-on-brand: #ffffff;
+  --ae-ring: var(--ae-brand);
 
   --ae-success: oklch(0.5423 0.1222 157.98);
   --ae-success-foreground: oklch(0.32 0.085 150);
@@ -156,8 +156,8 @@
   --ae-danger-ring: oklch(0.53 0.18 28 / 0.32);
   --ae-danger-subtle: oklch(0.95 0.03 28);
   --ae-info: var(--ae-brand);
-  --ae-info-foreground: oklch(0.34 0.085 232);
-  --ae-info-ring: oklch(0.585 0.105 232 / 0.32);
+  --ae-info-foreground: #2f22c9;
+  --ae-info-ring: rgba(74, 56, 245, 0.32);
   --ae-info-subtle: var(--ae-brand-muted);
 
   --background: var(--ae-bg);
@@ -180,9 +180,9 @@
   --border: var(--ae-border);
   --input: var(--ae-border-strong);
   --ring: var(--ae-ring);
-  --radius: 0.625rem;
+  --radius: 0.125rem;
 
-  /* Public layout (DESIGN.md). px so the 14px root does not shrink the rail. */
+  /* Public layout. Pixel values keep the rail independent of the root type size. */
   --ae-nav: 1160px;
   --ae-rail: 1080px;
   --ae-gutter: 16px;
@@ -210,28 +210,25 @@
   --sidebar-border: var(--ae-border);
   --sidebar-ring: var(--ae-ring);
 
-  --motion-duration-fast: 100ms;
-  --motion-duration-base: 160ms;
-  --motion-duration-slow: 220ms;
-  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-duration-fast: 150ms;
+  --motion-duration-base: 220ms;
+  --motion-duration-slow: 300ms;
+  --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
   --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --ae-duration-fast: var(--motion-duration-fast);
   --ae-duration-state: var(--motion-duration-base);
   --ae-duration-route: var(--motion-duration-slow);
   --ae-ease-out: var(--motion-ease-emphasized);
   --ae-ease-state: var(--motion-ease-standard);
-  --ae-focus-ring: 0 0 0 2px var(--ae-bg), 0 0 0 4px var(--ae-fg);
-  --ae-overlay-scrim: oklch(0.215 0.004 106 / 0.16);
-  --shadow-low: 0 1px 2px oklch(0 0 0 / 0.08);
-  --shadow-med:
-    0 1px 2px -1px oklch(0 0 0 / 0.04), 0 4px 6px -1px oklch(0 0 0 / 0.06);
-  --shadow-high:
-    0 1px 2px -1px oklch(0 0 0 / 0.04), 0 4px 6px -1px oklch(0 0 0 / 0.06),
-    0 8px 16px oklch(0 0 0 / 0.04);
+  --ae-focus-ring: 0 0 0 2px var(--ae-brand);
+  --ae-overlay-scrim: rgba(28, 28, 28, 0.16);
+  --shadow-low: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
+  --shadow-med: 0 12px 32px rgba(0, 0, 0, 0.08);
+  --shadow-high: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --ae-shadow-overlay: 0 12px 32px -16px rgba(0, 0, 0, 0.18);
   --shadow-inset-hover: inset 0 0 0 1px var(--ae-border-strong);
   --shadow-inset-selected: inset 0 0 0 2px var(--ae-brand);
   --shadow-inset-market-row: inset 0 0 0 1px var(--ae-brand);
-  --shadow-inset-market-cell: inset 0 0 0 1px var(--ae-brand);
 }
 
 @utility duration-fast {
@@ -297,9 +294,24 @@
 @layer base {
   :where(h1, h2, h3, h4) {
     font-family: var(--ae-font-sans);
-    font-weight: 500;
-    letter-spacing: -0.015em;
+    font-optical-sizing: auto;
+    font-weight: 600;
+    line-height: 1.15;
     text-wrap: balance;
+  }
+
+  :where(h1, h2) {
+    letter-spacing: -0.025em;
+  }
+
+  :where(h3, h4) {
+    letter-spacing: -0.015em;
+  }
+
+  .font-display {
+    font-family: var(--ae-font-display);
+    font-weight: 300;
+    font-synthesis-weight: none;
   }
 
   ::selection {

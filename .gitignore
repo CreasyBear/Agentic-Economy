@@ -57,3 +57,6 @@ eval/parity/results.tsv
 
 # Superdesign local drafts
 .superdesign/tmp/
+
+# Brand direction preview scratch (rebrand iteration); never commit
+/.brand-preview/
