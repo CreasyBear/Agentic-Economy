@@ -1,4 +1,5 @@
 import { convexTest } from 'convex-test'
+import { RateLimiter } from '@convex-dev/rate-limiter'
 import rateLimiterTest from '@convex-dev/rate-limiter/test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { privateKeyToAccount } from 'viem/accounts'
@@ -59,7 +60,10 @@ async function connectionCommand(
 }
 
 describe('owner x402 connection onboarding', () => {
-  afterEach(() => vi.useRealTimers())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
 
   it('issues one endpoint-scoped owner grant and refreshes the same connection', async () => {
     const backend = connectionBackend()
@@ -215,6 +219,31 @@ describe('owner x402 connection onboarding', () => {
       api.capabilityProviderConnections.connectX402Owner,
       await withSourceWrite('catalog_publish', withoutProofMaterial),
     )).resolves.toEqual({ kind: 'refused', code: 'reauthentication_required' })
+
+    const stored = await backend.run(async (ctx) => ({
+      connections: await ctx.db.query('capabilityProviderConnections').collect(),
+      grants: await ctx.db.query('authorityDelegationGrants').collect(),
+      proofs: await ctx.db.query('consequenceProofUses').collect(),
+      audits: await ctx.db.query('auditEvents').collect(),
+    }))
+    expect(stored).toMatchObject({ connections: [], grants: [], proofs: [], audits: [] })
+  })
+
+  it('fails closed with a correlation reference when rate-limit storage is unavailable', async () => {
+    const backend = connectionBackend()
+    const fixture = await createPublishedBusinessOwner(backend, 'owner-x402-rate-storage-outage')
+    vi.spyOn(RateLimiter.prototype, 'limit')
+      .mockRejectedValue(new Error('rate-limit component unavailable'))
+    const command = await connectionCommand(fixture.businessId, 'owner-x402-rate-storage-outage')
+
+    await expect(fixture.owner.mutation(
+      api.capabilityProviderConnections.connectX402Owner,
+      command,
+    )).resolves.toEqual({
+      kind: 'refused',
+      code: 'security_control_unavailable',
+      correlationRef: 'owner-x402-rate-storage-outage',
+    })
 
     const stored = await backend.run(async (ctx) => ({
       connections: await ctx.db.query('capabilityProviderConnections').collect(),

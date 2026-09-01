@@ -49,8 +49,17 @@ import {
 } from './lib/consequenceProof'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 
-function refusedPayout(code: string, retryable: boolean): PayoutTransferResult {
-  return { kind: 'refused', code, retryable }
+function refusedPayout(
+  code: string,
+  retryable: boolean,
+  correlationRef?: string,
+): PayoutTransferResult {
+  return {
+    kind: 'refused',
+    code,
+    retryable,
+    ...(correlationRef === undefined ? {} : { correlationRef }),
+  }
 }
 
 export type BeginPayoutTransferArgs = BillingSourceWriteArgs & {
@@ -447,7 +456,11 @@ export async function beginPayoutTransferReservation(
       now: args.observedAt,
     })
     if (consequence.kind === 'refused')
-      return refusedPayout(consequence.code, consequence.code === 'rate_limited')
+      return refusedPayout(
+        consequence.code,
+        consequence.code === 'rate_limited' || consequence.code === 'security_control_unavailable',
+        consequence.correlationRef,
+      )
     const identity = payoutReservationIdentity({
       payoutRef: args.payoutRef,
       payoutCommandId: args.commandId,

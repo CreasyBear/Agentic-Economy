@@ -24,6 +24,7 @@ vi.mock('@tanstack/react-router', async () => {
 })
 
 import { AeAccountSecurityHistory } from '@/components/ae/settings/AeAccountSecurityHistory'
+import { AeCompromiseRecoveryChecklist } from '@/components/ae/settings/AeCompromiseRecoveryChecklist'
 import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecurityHistory'
 import type { AccountSecurityHistoryResult } from '@/modules/security/account-security'
 
@@ -33,6 +34,26 @@ afterEach(() => {
 })
 
 describe('account security history', () => {
+  it('keeps compromise recovery as independent source checks without claiming containment', () => {
+    render(<AeCompromiseRecoveryChecklist />)
+
+    expect(screen.getByRole('heading', { name: 'If you suspect compromise' })).toBeTruthy()
+    expect(screen.getByText('This page does not mark the Account contained')).toBeTruthy()
+    expect(screen.getByText(/Resetting MFA alone does not revoke existing sessions/u)).toBeTruthy()
+    expect(screen.getAllByText('Review at source')).toHaveLength(5)
+    expect(screen.getByRole('link', { name: /Review and revoke Clerk sessions/u }).getAttribute('href'))
+      .toBe('#clerk-account-security')
+    expect(screen.getByRole('link', { name: /Rotate or disconnect Agents/u }).getAttribute('href'))
+      .toBe('/agent-access')
+    expect(screen.getByRole('link', { name: /supplier connections/u }).getAttribute('href'))
+      .toBe('/owner/settings/connections')
+    expect(screen.getByRole('link', { name: /Review payout authority/u }).getAttribute('href'))
+      .toBe('/owner/settings/payouts')
+    expect(screen.getByRole('link', { name: /Retain evidence and contact support/u }).getAttribute('href'))
+      .toBe('/support')
+    expect(document.body.textContent).not.toContain('Contained')
+  })
+
   it('shows source time separately from recorded time and exposes only durable references', () => {
     render(<AeAccountSecurityHistory initialResult={available()} />)
 
@@ -44,6 +65,26 @@ describe('account security history', () => {
     expect(document.body.textContent).not.toContain('owner@example.test')
     expect(document.body.textContent).not.toContain('192.0.2.1')
     expect(document.body.textContent).not.toContain('session_raw_1')
+  })
+
+  it('distinguishes AE, Clerk, and provider observations without exposing provider payloads', () => {
+    const first = available().page.items[0]!
+    render(<AeAccountSecurityHistory initialResult={{
+      kind: 'available',
+      page: {
+        items: [
+          { ...first, eventRef: 'audit:ae', correlationRef: 'reference:ae', sourceSystem: 'ae_recorded' },
+          { ...first, eventRef: 'audit:clerk', correlationRef: 'reference:clerk', sourceSystem: 'clerk_observed' },
+          { ...first, eventRef: 'audit:provider', correlationRef: 'reference:provider', sourceSystem: 'provider_observed' },
+        ],
+        continueCursor: '',
+        isDone: true,
+      },
+    }} />)
+
+    expect(screen.getByText('AE recorded')).toBeTruthy()
+    expect(screen.getByText('Clerk observed')).toBeTruthy()
+    expect(screen.getByText('Provider observed')).toBeTruthy()
   })
 
   it('truthfully keeps the vendor controls available when history cannot load', async () => {

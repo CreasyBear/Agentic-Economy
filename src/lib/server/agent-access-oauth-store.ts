@@ -118,6 +118,7 @@ export type AgentAccessConsentReservationResult =
   | Readonly<{ kind: 'refused'; code: 'authentication_required' | 'reauthentication_required' | 'proof_stale' | 'proof_replayed' | 'command_changed' }>
   | Readonly<{ kind: 'conflict'; code: 'stale_grant' | 'stale_target' | 'invalid_state' | 'authority_mismatch' }>
   | Readonly<{ kind: 'rate_limited'; retryAfter: number }>
+  | Readonly<{ kind: 'unavailable'; code: 'security_control_unavailable'; correlationRef: string }>
 
 type ReserveConsentCommand = Readonly<{
   grantRef: string

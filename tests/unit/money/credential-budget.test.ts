@@ -1,7 +1,11 @@
 import { RateLimiter } from '@convex-dev/rate-limiter'
 import { describe, expect, it, vi } from 'vitest'
 
-import { assertAgentAccessRateAdmission } from '../../../convex/lib/rateLimit'
+import {
+  admitAuthorityCredentialChangeRate,
+  admitPayoutTransferRate,
+  assertAgentAccessRateAdmission,
+} from '../../../convex/lib/rateLimit'
 import {
   admitCredentialBudget,
   credentialBudgetDayWindowStart,
@@ -117,6 +121,19 @@ describe('credential budget admission', () => {
       expect(limit).toHaveBeenCalledTimes(2)
       expect(limit.mock.calls[0]?.[2]).toMatchObject({ key: 'agent-access:app-1:credential-1' })
       expect(limit.mock.calls[1]?.[2]).toMatchObject({ key: 'agent-access:app-1:credential-1' })
+    } finally {
+      limit.mockRestore()
+    }
+  })
+
+  it('fails consequential admission closed when rate-limit storage is unavailable', async () => {
+    const limit = vi.spyOn(RateLimiter.prototype, 'limit')
+      .mockRejectedValue(new Error('rate-limit component unavailable'))
+    try {
+      await expect(admitAuthorityCredentialChangeRate({} as never, 'account:1'))
+        .resolves.toEqual({ kind: 'unavailable' })
+      await expect(admitPayoutTransferRate({} as never, 'account:1'))
+        .resolves.toEqual({ kind: 'unavailable' })
     } finally {
       limit.mockRestore()
     }

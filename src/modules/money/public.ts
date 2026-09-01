@@ -81,6 +81,7 @@ export type MoneyRefusalCode =
   | "proof_replayed"
   | "command_changed"
   | "rate_limited"
+  | "security_control_unavailable"
   | "budget_policy_missing"
   | "budget_generation_stale"
   | "budget_invocation_limit_exceeded"
@@ -276,6 +277,7 @@ export type MoneyRefusal = Readonly<{
   kind: "refused";
   code: MoneyRefusalCode;
   retryable: boolean;
+  correlationRef?: string;
   nextAction?: "credit_topup_required";
   requiredAmount?: ExactAmount;
   availableAmount?: ExactAmount;

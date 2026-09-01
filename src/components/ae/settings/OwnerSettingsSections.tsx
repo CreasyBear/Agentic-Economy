@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeAccountSecurityHistory } from '@/components/ae/settings/AeAccountSecurityHistory'
+import { AeCompromiseRecoveryChecklist } from '@/components/ae/settings/AeCompromiseRecoveryChecklist'
 import { AeSiteAuthPanel, AeSiteAuthSubmit } from '@/components/ae/website'
 import { OwnerSettingsNav } from '@/components/ae/settings/OwnerSettingsNav'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
@@ -19,6 +20,7 @@ export function AccountSettingsSection({
   return (
     <>
       <AeSection
+        id="clerk-account-security"
         title="Profile"
         description="Name, email, security, and active sessions for this owner."
       >
@@ -44,6 +46,7 @@ export function AccountSettingsSection({
           </div>
         )}
       </AeSection>
+      <AeCompromiseRecoveryChecklist />
       <AeAccountSecurityHistory initialResult={history} />
     </>
   )

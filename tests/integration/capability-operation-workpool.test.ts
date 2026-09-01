@@ -101,32 +101,45 @@ async function seedKeylessLookup(
   const { businessId, owner } = await publishedBusinessOwner(backend, suffix)
   await seedCatalogOffering(backend, businessId, suffix, '/lookup', 'GET')
   const source = capabilityPublicationInput(businessId, suffix)
-  const published = await owner.mutation(
-    api.capabilitySupply.publishPreparedCapability,
-    await preparedPublicationArgs(backend, {
-      ...source,
-      offering: {
-        ...source.offering,
-        presentation: {
-          ...source.offering.presentation,
-          price: {
-            kind: 'fixed',
-            amount: { currency: 'USD', units: '0', exponent: 2 },
-          },
+  const prepared = await preparedPublicationArgs(backend, {
+    ...source,
+    offering: {
+      ...source.offering,
+      presentation: {
+        ...source.offering.presentation,
+        price: {
+          kind: 'fixed',
+          amount: { currency: 'USD', units: '0', exponent: 2 },
         },
       },
-      binding: {
-        ...source.binding,
-        endpointUrl: `https://${suffix}.example.test/lookup`,
-        authority: { kind: 'public_upstream' },
-        adapter: {
-          adapterId: 'http-json:v1',
-          config: {
-            method: 'GET',
-            query: [{ inputPointer: '/request', parameter: 'request' }],
-            requestTimeoutMs: 5_000,
-          },
+    },
+    binding: {
+      ...source.binding,
+      endpointUrl: `https://${suffix}.example.test/lookup`,
+      authority: { kind: 'public_upstream' },
+      adapter: {
+        adapterId: 'http-json:v1',
+        config: {
+          method: 'GET',
+          query: [{ inputPointer: '/request', parameter: 'request' }],
+          requestTimeoutMs: 5_000,
         },
+      },
+    },
+  })
+  const {
+    sourceWrite: _sourceWrite,
+    sourceWriteRequest: _sourceWriteRequest,
+    ...preparedWithoutAdmission
+  } = prepared
+  const published = await owner.mutation(
+    api.capabilitySupply.publishPreparedCapability,
+    await withSourceWrite('catalog_publish', {
+      ...preparedWithoutAdmission,
+      proof: {
+        reverificationId: `reverify:workpool-publication:${suffix}`,
+        firstFactorAgeMinutes: 0,
+        secondFactorAgeMinutes: 0,
       },
     }),
   )

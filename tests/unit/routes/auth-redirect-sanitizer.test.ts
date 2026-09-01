@@ -29,7 +29,9 @@ const validDeepLink = '/owner/settings/connections?tab=credentials#provider-x402
 const redirectCases = [
   [validDeepLink, validDeepLink, `${origin}${validDeepLink}`],
   ['https://evil.example/owner/settings', undefined, undefined],
+  ['https://owner:secret@evil.example/owner/settings', undefined, undefined],
   ['//evil.example/owner/settings', undefined, undefined],
+  ['//owner:secret@evil.example/owner/settings', undefined, undefined],
   ['/\\evil', undefined, undefined],
   ['/\\/evil', undefined, undefined],
   ['/objects\\..\\evil', undefined, undefined],

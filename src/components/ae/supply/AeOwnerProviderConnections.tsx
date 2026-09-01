@@ -165,7 +165,7 @@ export function AeOwnerProviderConnections({
           return
         }
         commandIdsRef.current.delete(commandKey)
-        setNotice({ kind: 'error', text: connectionRefusalCopy(result.code) })
+        setNotice({ kind: 'error', text: connectionRefusalCopy(result.code, result.correlationRef) })
         return
       }
       commandIdsRef.current.delete(commandKey)
@@ -302,7 +302,7 @@ export function AeOwnerProviderConnections({
           return
         }
         commandIdsRef.current.delete(commandKey)
-        setNotice({ kind: 'error', text: connectionRefusalCopy(result.code) })
+        setNotice({ kind: 'error', text: connectionRefusalCopy(result.code, result.correlationRef) })
         return
       }
       commandIdsRef.current.delete(commandKey)
@@ -367,7 +367,7 @@ export function AeOwnerProviderConnections({
           return
         }
         commandIdsRef.current.delete(commandKey)
-        setNotice({ kind: 'error', text: connectionRefusalCopy(result.code) })
+        setNotice({ kind: 'error', text: connectionRefusalCopy(result.code, result.correlationRef) })
         return
       }
       commandIdsRef.current.delete(commandKey)
@@ -403,7 +403,7 @@ export function AeOwnerProviderConnections({
           return
         }
         commandIdsRef.current.delete(commandKey)
-        setNotice({ kind: 'error', text: connectionRefusalCopy(result.code) })
+        setNotice({ kind: 'error', text: connectionRefusalCopy(result.code, result.correlationRef) })
         return
       }
       commandIdsRef.current.delete(commandKey)
@@ -744,7 +744,10 @@ function providerConnectionHealth(connection: OwnerProviderConnection): string {
   return `Health needs attention (${connection.healthReasonCode ?? 'unavailable'}) · checked ${observed}`
 }
 
-function connectionRefusalCopy(code: string): string {
+function connectionRefusalCopy(code: string, correlationRef?: string): string {
+  if (code === 'security_control_unavailable') {
+    return `The security control is unavailable, so no supplier authority was changed.${correlationRef === undefined ? '' : ` Reference ${correlationRef}.`}`
+  }
   if (code === 'reauthentication_required' || code === 'proof_stale') return 'Verify your identity again before changing this supplier authority.'
   if (code === 'proof_replayed' || code === 'command_changed') return 'The verified command no longer matches this change. Review the connection and verify again.'
   if (code === 'rate_limited') return 'Too many supplier-authority changes were attempted. Wait, then reload the current connection before trying again.'

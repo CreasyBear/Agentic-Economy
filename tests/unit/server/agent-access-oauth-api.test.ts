@@ -1092,6 +1092,30 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(issuedInput?.requestedAccess).toEqual({ environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
     expect(issuedInput?.policy).toEqual(defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }))
   })
+  it('denies a pending grant without requiring approval proof or issuing a key', async () => {
+    const store = storeFixture()
+    await store.insertGrant({ grantRef: 'device:denied', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-denied', userCodeHash: 'u-denied', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Declined assistant' })
+    const reserveConsent = vi.fn<NonNullable<OAuthApiOptions['reserveConsent']>>()
+    const issueKey = vi.fn<NonNullable<OAuthApiOptions['issueKey']>>()
+
+    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', {
+      grant_ref: 'device:denied',
+      decision: 'deny',
+    }), {
+      store,
+      authObject: { ...strictAuthObject, has: () => false, sessionClaims: {} },
+      reserveConsent,
+      issueKey,
+      now: () => 1_000,
+      canonicalBaseUrl: 'http://localhost',
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ kind: 'denied', grantRef: 'device:denied' })
+    expect(store.grants.get('device:denied')?.status).toBe('denied')
+    expect(reserveConsent).not.toHaveBeenCalled()
+    expect(issueKey).not.toHaveBeenCalled()
+  })
   it('replays an identical completed approval without issuing another key', async () => {
     const store = storeFixture()
     await store.insertGrant({ grantRef: 'device:completed-replay', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-replay', userCodeHash: 'u-replay', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Replay-safe assistant' })
@@ -1310,6 +1334,41 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(reserveConsent).not.toHaveBeenCalled()
     expect(issueKey).not.toHaveBeenCalled()
     expect(store.grants.get('device:proof-gate')?.status).toBe('pending')
+  })
+  it('returns a durable reference and does not issue a key when the security rate limit is unavailable', async () => {
+    const store = storeFixture()
+    await store.insertGrant({ grantRef: 'device:rate-storage-outage', revision: 1, flow: 'device_code', clientId: 'client-local', requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'], requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS }, deviceCodeHash: 'd-rate-storage', userCodeHash: 'u-rate-storage', status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Rate-safe assistant' })
+    const reserveConsent = vi.fn<NonNullable<OAuthApiOptions['reserveConsent']>>(async () => ({
+      kind: 'unavailable',
+      code: 'security_control_unavailable',
+      correlationRef: 'oauth:grant:device:rate-storage-outage:reserve:1',
+    }))
+    const issueKey = vi.fn<NonNullable<OAuthApiOptions['issueKey']>>()
+
+    const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', {
+      grant_ref: 'device:rate-storage-outage',
+      expected_grant_revision: '1',
+      expected_target_revision: '1',
+      decision: 'approve',
+      authority_mode: 'inspect_only',
+      connection_target: 'new_agent',
+    }), {
+      store,
+      authObject: strictAuthObject,
+      reserveConsent,
+      issueKey,
+      now: () => 1_000,
+      canonicalBaseUrl: 'http://localhost',
+    })
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({
+      kind: 'unavailable',
+      code: 'security_control_unavailable',
+      correlationRef: 'oauth:grant:device:rate-storage-outage:reserve:1',
+    })
+    expect(issueKey).not.toHaveBeenCalled()
+    expect(store.grants.get('device:rate-storage-outage')?.status).toBe('pending')
   })
   it('reports key issuance outages as retryable server failures without consuming the grant', async () => {
     const store = storeFixture()

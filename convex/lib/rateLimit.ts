@@ -17,6 +17,11 @@ export const RATE_LIMIT_NAMES = [
 
 export type RateLimitName = (typeof RATE_LIMIT_NAMES)[number]
 
+export type ConsequentialRateAdmission =
+  | Readonly<{ kind: 'admitted' }>
+  | Readonly<{ kind: 'rate_limited'; retryAfter: number }>
+  | Readonly<{ kind: 'unavailable' }>
+
 type RateLimitDefinitions = Record<RateLimitName, RateLimitConfig>
 
 const limits: RateLimitDefinitions = {
@@ -88,6 +93,37 @@ export async function assertPayoutTransferAdmission(
   return await rateLimiter.limit(ctx, 'payout-transfer', {
     key: `account:${activeAccountRef}`,
   })
+}
+
+export async function admitAuthorityCredentialChangeRate(
+  ctx: RunMutationCtx,
+  activeAccountRef: string,
+): Promise<ConsequentialRateAdmission> {
+  return await consequentialRateAdmission(
+    () => assertAuthorityCredentialChangeAdmission(ctx, activeAccountRef),
+  )
+}
+
+export async function admitPayoutTransferRate(
+  ctx: RunMutationCtx,
+  activeAccountRef: string,
+): Promise<ConsequentialRateAdmission> {
+  return await consequentialRateAdmission(
+    () => assertPayoutTransferAdmission(ctx, activeAccountRef),
+  )
+}
+
+async function consequentialRateAdmission(
+  limit: () => Promise<RateLimitReturns>,
+): Promise<ConsequentialRateAdmission> {
+  try {
+    const result = await limit()
+    return result.ok
+      ? { kind: 'admitted' }
+      : { kind: 'rate_limited', retryAfter: result.retryAfter }
+  } catch {
+    return { kind: 'unavailable' }
+  }
 }
 
 export async function admissionKey(

@@ -124,6 +124,7 @@ const preparedPublicationRefusalValue = v.union(
   v.literal('proof_replayed'),
   v.literal('command_changed'),
   v.literal('rate_limited'),
+  v.literal('security_control_unavailable'),
   v.literal('registration_context_invalid'),
   v.literal('source_invalid'),
   v.literal('source_too_large'),

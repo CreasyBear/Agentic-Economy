@@ -33,7 +33,7 @@ export type OwnerProviderConnectionCommandResult =
       connection: ProviderConnectionOwnerProjection;
       commandDigest: string;
     }>
-  | Readonly<{ kind: "refused"; code: string }>;
+  | Readonly<{ kind: "refused"; code: string; correlationRef?: string }>;
 export type OwnerProviderConnection = ProviderConnectionOwnerProjection;
 
 export type OwnerProviderEarningsAccountReadback = Readonly<{

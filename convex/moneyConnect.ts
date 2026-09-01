@@ -255,8 +255,13 @@ export const recordConnectAccountEventArgs = {
   ...billingSourceArgs,
 }
 
-function refusedConnect(code: string, retryable: boolean) {
-  return { kind: 'refused' as const, code, retryable }
+function refusedConnect(code: string, retryable: boolean, correlationRef?: string) {
+  return {
+    kind: 'refused' as const,
+    code,
+    retryable,
+    ...(correlationRef === undefined ? {} : { correlationRef }),
+  }
 }
 
 function payoutAccountView(row: Doc<'moneyPayoutAccounts'>) {
@@ -423,7 +428,11 @@ export async function reserveConnectAccountHandler(
     now,
   })
   if (consequence.kind === 'refused')
-    return refusedConnect(consequence.code, consequence.code === 'rate_limited')
+    return refusedConnect(
+      consequence.code,
+      consequence.code === 'rate_limited' || consequence.code === 'security_control_unavailable',
+      consequence.correlationRef,
+    )
 
   if (bindingReplay)
     return { kind: 'accepted' as const, command: connectAccountCommandView(sameKey), execute: false }
@@ -582,7 +591,11 @@ export async function authorizeConnectOnboardingHandler(
     now,
   })
   if (consequence.kind === 'refused')
-    return refusedConnect(consequence.code, consequence.code === 'rate_limited')
+    return refusedConnect(
+      consequence.code,
+      consequence.code === 'rate_limited' || consequence.code === 'security_control_unavailable',
+      consequence.correlationRef,
+    )
 
   if (currentVersion === args.expectedAccountVersion + 1) {
     return consequence.proofUse === 'replayed'

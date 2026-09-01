@@ -45,6 +45,7 @@ export function AeAccountSecurityHistory({
 
   return (
     <AeSection
+      id="security-history"
       title="Security history"
       description="Account-scoped session, security, agent, connection, and consequential-action evidence recorded since history activation."
     >

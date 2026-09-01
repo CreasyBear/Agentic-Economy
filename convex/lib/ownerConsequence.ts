@@ -14,8 +14,8 @@ import {
   type ClerkConsequenceProofInput,
 } from './consequenceProof'
 import {
-  assertAuthorityCredentialChangeAdmission,
-  assertPayoutTransferAdmission,
+  admitAuthorityCredentialChangeRate,
+  admitPayoutTransferRate,
 } from './rateLimit'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import { brandNonEmpty } from '../../src/modules/common/ids'
@@ -29,6 +29,7 @@ export type OwnerConsequenceRefusal =
   | 'proof_replayed'
   | 'command_changed'
   | 'rate_limited'
+  | 'security_control_unavailable'
 
 type AuthenticatedOwner = Extract<BusinessActor, { kind: 'authenticated_owner' }>
 
@@ -59,7 +60,12 @@ export async function admitInteractiveOwnerConsequence(
       admission: AuthorityConsequenceAdmission
       proofUse?: 'consumed' | 'replayed'
     }>
-  | Readonly<{ kind: 'refused'; code: OwnerConsequenceRefusal; retryAfter?: number }>
+  | Readonly<{
+      kind: 'refused'
+      code: OwnerConsequenceRefusal
+      retryAfter?: number
+      correlationRef?: string
+    }>
 > {
   const provenance = input.actor.authorityProvenance
   if (provenance.accessKind !== 'ownership'
@@ -141,11 +147,18 @@ export async function admitInteractiveOwnerConsequence(
   const proof = deriveStrictConsequenceProof({ ...input.proof, now: input.now })
   if (proof.kind === 'refused') return proof
   const rate = input.action === 'payout.transfer'
-    ? await assertPayoutTransferAdmission(ctx, admission.activeAccountRef)
+    ? await admitPayoutTransferRate(ctx, admission.activeAccountRef)
     : input.action === 'payout_authority.create' || input.action === 'payout_authority.replace'
-      ? await assertAuthorityCredentialChangeAdmission(ctx, admission.activeAccountRef)
+      ? await admitAuthorityCredentialChangeRate(ctx, admission.activeAccountRef)
       : undefined
-  if (rate !== undefined && !rate.ok) {
+  if (rate?.kind === 'unavailable') {
+    return {
+      kind: 'refused',
+      code: 'security_control_unavailable',
+      correlationRef: input.correlationRef,
+    }
+  }
+  if (rate?.kind === 'rate_limited') {
     return { kind: 'refused', code: 'rate_limited', retryAfter: rate.retryAfter }
   }
   const consumed = await consumeConsequenceProof(ctx, {

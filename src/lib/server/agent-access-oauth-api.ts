@@ -278,36 +278,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   const grantRef = url.searchParams.get('grant_ref')
   if (userCode !== null && grantRef !== null) return oauthError('invalid_request', 400)
   if (userCode !== null || grantRef !== null) {
-    const locator = userCode === null ? `grant_ref:${grantRef}` : `user_code:${userCode}`
-    const limited = await oauthAdmissionResponse(request, options, locator)
-    if (limited !== undefined) return limited
-    const owner = await ownerIdentity(options)
-    if (!owner.isAuthenticated || owner.userId === null) return Response.redirect(new URL('/sign-in', baseUrl(request, options)), 302)
-    let result: Awaited<ReturnType<typeof readGrantForConsent>>
-    try {
-      result = await readGrantForConsent(requireStore(options), {
-        ...(userCode === null ? {} : { userCode }),
-        ...(grantRef === null ? {} : { grantRef }),
-        ownerId: owner.userId,
-        now: currentNow(options),
-      })
-    } catch {
-      return oauthAuthorizationUnavailableResponse()
-    }
-    if (result.kind === 'outcome_unknown') {
-      return new Response(consentRecoveryHtml(result.grant.grantRef), {
-        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
-      })
-    }
-    if (result.kind === 'completed') {
-      return new Response(consentCompletedHtml(result.grant.grantRef), {
-        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
-      })
-    }
-    if (result.kind !== 'ok') return oauthTransitionError(result)
-    const mode = modeForGrant(result.value)
-    if (mode === undefined) return oauthError('invalid_scope', 400)
-    return await consentResponse(result.value, mode, '', options, agentCursor)
+    return await locatedConsentResponse(request, options, agentCursor, userCode, grantRef)
   }
   const clientId = url.searchParams.get('client_id')
   const redirectUri = url.searchParams.get('redirect_uri')
@@ -358,6 +329,47 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   gate.searchParams.set('grant_ref', result.value.grant.grantRef)
   gate.searchParams.set('state', state)
   return Response.redirect(gate, 302)
+}
+
+async function locatedConsentResponse(
+  request: Request,
+  options: OAuthApiOptions,
+  agentCursor: string | null,
+  userCode: string | null,
+  grantRef: string | null,
+): Promise<Response> {
+  const locator = userCode === null ? `grant_ref:${grantRef}` : `user_code:${userCode}`
+  const limited = await oauthAdmissionResponse(request, options, locator)
+  if (limited !== undefined) return limited
+  const owner = await ownerIdentity(options)
+  if (!owner.isAuthenticated || owner.userId === null) {
+    return Response.redirect(new URL('/sign-in', baseUrl(request, options)), 302)
+  }
+  let result: Awaited<ReturnType<typeof readGrantForConsent>>
+  try {
+    result = await readGrantForConsent(requireStore(options), {
+      ...(userCode === null ? {} : { userCode }),
+      ...(grantRef === null ? {} : { grantRef }),
+      ownerId: owner.userId,
+      now: currentNow(options),
+    })
+  } catch {
+    return oauthAuthorizationUnavailableResponse()
+  }
+  if (result.kind === 'outcome_unknown') {
+    return new Response(consentRecoveryHtml(result.grant.grantRef), {
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    })
+  }
+  if (result.kind === 'completed') {
+    return new Response(consentCompletedHtml(result.grant.grantRef), {
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    })
+  }
+  if (result.kind !== 'ok') return oauthTransitionError(result)
+  const mode = modeForGrant(result.value)
+  if (mode === undefined) return oauthError('invalid_scope', 400)
+  return await consentResponse(result.value, mode, '', options, agentCursor)
 }
 
 async function consentResponse(
@@ -415,13 +427,7 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   if (!owner.isAuthenticated || owner.userId === null || grantRef === null) return oauthError('access_denied', 403)
   const store = requireStore(options)
   if (decision !== 'approve') {
-    const denied = await denyGrant(store, {
-      grantRef,
-      ownerId: owner.userId,
-      now: currentNow(options),
-    })
-    if (denied.kind !== 'ok') return oauthTransitionError(denied)
-    return consentJson({ kind: 'denied', grantRef }, 200)
+    return await denyConsentGrant(store, grantRef, owner.userId, options)
   }
   if (authorityMode === null || authorityMode === undefined) return oauthError('invalid_scope', 400)
   if (!authObject.has({ reverification: 'strict' })) return strictReverificationJson()
@@ -440,56 +446,104 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   const reservationTarget = targetKind === 'new_agent'
     ? { kind: 'new_agent' as const }
     : { kind: 'replace_credential' as const, principalRef: principalRef! }
-  const reservation = await (options.reserveConsent ?? reserveAgentAccessConsentForOwner)({
+  return await reserveAndFinalizeConsent({
     request,
-    body: sourceBody,
+    sourceBody,
+    store,
     authObject,
+    ownerId: owner.userId,
     grantRef,
     expectedGrantRevision,
     expectedTargetRevision,
     authorityMode,
-    connectionTarget: reservationTarget,
+    reservationTarget,
+    connectionTarget: parseConnectionTarget(form),
+    state,
     proof,
+    options,
+  })
+}
+
+async function denyConsentGrant(
+  store: AgentAccessOAuthStore,
+  grantRef: string,
+  ownerId: string,
+  options: OAuthApiOptions,
+): Promise<Response> {
+  const denied = await denyGrant(store, {
+    grantRef,
+    ownerId,
+    now: currentNow(options),
+  })
+  if (denied.kind !== 'ok') return oauthTransitionError(denied)
+  return consentJson({ kind: 'denied', grantRef }, 200)
+}
+
+async function reserveAndFinalizeConsent(input: Readonly<{
+  request: Request
+  sourceBody: string
+  store: AgentAccessOAuthStore
+  authObject: OAuthConsentAuthObject
+  ownerId: string
+  grantRef: string
+  expectedGrantRevision: number
+  expectedTargetRevision: number
+  authorityMode: AgentAccessAuthorityMode
+  reservationTarget: Parameters<typeof reserveAgentAccessConsentForOwner>[0]['connectionTarget']
+  connectionTarget: AgentConnectionTarget | undefined
+  state: string | null
+  proof: NonNullable<ReturnType<typeof consentProofFromAuth>>
+  options: OAuthApiOptions
+}>): Promise<Response> {
+  const reservation = await (input.options.reserveConsent ?? reserveAgentAccessConsentForOwner)({
+    request: input.request,
+    body: input.sourceBody,
+    authObject: input.authObject,
+    grantRef: input.grantRef,
+    expectedGrantRevision: input.expectedGrantRevision,
+    expectedTargetRevision: input.expectedTargetRevision,
+    authorityMode: input.authorityMode,
+    connectionTarget: input.reservationTarget,
+    proof: input.proof,
   })
   if (reservation.kind !== 'reserved' && reservation.kind !== 'replayed') {
     return reservationJson(reservation)
   }
   if (reservation.kind === 'replayed') {
-    const replay = await readGrantForConsent(store, {
-      grantRef,
-      ownerId: owner.userId,
-      now: currentNow(options),
+    const replay = await readGrantForConsent(input.store, {
+      grantRef: input.grantRef,
+      ownerId: input.ownerId,
+      now: currentNow(input.options),
     })
     if (replay.kind === 'outcome_unknown') {
       return consentJson({
         kind: 'outcome_unknown',
-        grantRef,
-        readbackRef: `agent-access/oauth/${grantRef}`,
+        grantRef: input.grantRef,
+        readbackRef: `agent-access/oauth/${input.grantRef}`,
         correlationRef: reservation.correlationRef,
       }, 202)
     }
     if (replay.kind === 'completed') {
       return consentJson({
         kind: 'approved',
-        grantRef,
-        readbackRef: `agent-access/oauth/${grantRef}`,
+        grantRef: input.grantRef,
+        readbackRef: `agent-access/oauth/${input.grantRef}`,
       }, 200)
     }
   }
-  const connectionTarget = parseConnectionTarget(form)
-  const approved = await approveGrant(store, {
-    grantRef,
-    ownerId: owner.userId,
-    now: currentNow(options),
-    ...(authorityMode === undefined ? {} : { authorityMode }),
-    ...(connectionTarget === undefined ? {} : { connectionTarget }),
-    issueKey: async ({ grant: sourceGrant, ownerId, target }) => await issueGrantKey(sourceGrant, ownerId, target, options),
+  const approved = await approveGrant(input.store, {
+    grantRef: input.grantRef,
+    ownerId: input.ownerId,
+    now: currentNow(input.options),
+    authorityMode: input.authorityMode,
+    ...(input.connectionTarget === undefined ? {} : { connectionTarget: input.connectionTarget }),
+    issueKey: async ({ grant: sourceGrant, ownerId, target }) => await issueGrantKey(sourceGrant, ownerId, target, input.options),
   })
   if (approved.kind === 'outcome_unknown') {
     return consentJson({
       kind: 'outcome_unknown',
-      grantRef,
-      readbackRef: `agent-access/oauth/${grantRef}`,
+      grantRef: input.grantRef,
+      readbackRef: `agent-access/oauth/${input.grantRef}`,
       correlationRef: reservation.correlationRef,
     }, 202)
   }
@@ -497,10 +551,10 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   if (approved.value.grant.flow === 'authorization_code' && approved.value.grant.redirectUri !== undefined && approved.value.authorizationCode !== undefined) {
     const location = new URL(approved.value.grant.redirectUri)
     location.searchParams.set('code', approved.value.authorizationCode)
-    if (state !== null) location.searchParams.set('state', state)
-    return consentJson({ kind: 'approved', grantRef, redirectTo: location.toString() }, 200)
+    if (input.state !== null) location.searchParams.set('state', input.state)
+    return consentJson({ kind: 'approved', grantRef: input.grantRef, redirectTo: location.toString() }, 200)
   }
-  return consentJson({ kind: 'approved', grantRef, readbackRef: `agent-access/oauth/${grantRef}` }, 200)
+  return consentJson({ kind: 'approved', grantRef: input.grantRef, readbackRef: `agent-access/oauth/${input.grantRef}` }, 200)
 }
 
 export function oauthAuthorizationServerMetadata(canonicalBaseUrl: string): Readonly<Record<string, unknown>> {
@@ -1018,6 +1072,9 @@ function strictReverificationJson(): Response {
 function reservationJson(result: AgentAccessConsentReservationResult): Response {
   if (result.kind === 'rate_limited') {
     return consentJson({ kind: result.kind, retryAfter: result.retryAfter }, 429)
+  }
+  if (result.kind === 'unavailable') {
+    return consentJson(result, 503)
   }
   if (result.kind === 'reserved' || result.kind === 'replayed') {
     return consentJson({ kind: 'conflict', code: 'invalid_state' }, 409)

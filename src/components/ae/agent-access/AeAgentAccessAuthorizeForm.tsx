@@ -42,6 +42,7 @@ type ConsentFormState = Readonly<{
   agentTargetsLoading: boolean
   agentTargetsError?: string
   replacementPrincipalRef?: string
+  errorReference?: string
 }>
 
 type ConsentFormAction =
@@ -52,7 +53,11 @@ type ConsentFormAction =
   | Readonly<{ kind: 'page_loaded'; targets: readonly AgentConsentTarget[]; nextCursor?: string }>
   | Readonly<{ kind: 'page_failed' }>
   | Readonly<{ kind: 'decision_started' }>
-  | Readonly<{ kind: 'decision_finished'; status: 'idle' | 'approved' | 'denied' | 'error' | 'outcome_unknown' }>
+  | Readonly<{
+      kind: 'decision_finished'
+      status: 'idle' | 'approved' | 'denied' | 'error' | 'outcome_unknown'
+      errorReference?: string
+    }>
 
 function initialConsentFormState(details: AgentConsentDetails): ConsentFormState {
   return {
@@ -100,8 +105,17 @@ function consentFormReducer(state: ConsentFormState, action: ConsentFormAction):
       ...(action.nextCursor === undefined ? {} : { agentTargetsNextCursor: action.nextCursor }),
     }
   }
-  if (action.kind === 'decision_started') return { ...state, pending: true }
-  return { ...state, pending: false, status: action.status }
+  if (action.kind === 'decision_started') {
+    const { errorReference: _errorReference, ...retained } = state
+    return { ...retained, pending: true }
+  }
+  const { errorReference: _errorReference, ...retained } = state
+  return {
+    ...retained,
+    pending: false,
+    status: action.status,
+    ...(action.errorReference === undefined ? {} : { errorReference: action.errorReference }),
+  }
 }
 
 type ConsentActionResult =
@@ -110,6 +124,7 @@ type ConsentActionResult =
   | Readonly<{ kind: 'outcome_unknown'; grantRef: string; readbackRef: string; correlationRef?: string }>
   | Readonly<{ kind: 'refused' | 'conflict'; code: string }>
   | Readonly<{ kind: 'rate_limited'; retryAfter: number }>
+  | Readonly<{ kind: 'unavailable'; code: 'security_control_unavailable'; correlationRef: string }>
 
 type AgentAccessAuthorizeFormProps = Readonly<{
   locator: Readonly<{ kind: 'user_code' | 'grant_ref'; value: string }>
@@ -227,7 +242,11 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
         return
       }
       setConfirmOpen(false)
-      dispatch({ kind: 'decision_finished', status: result.kind === 'outcome_unknown' ? 'outcome_unknown' : 'error' })
+      dispatch({
+        kind: 'decision_finished',
+        status: result.kind === 'outcome_unknown' ? 'outcome_unknown' : 'error',
+        ...(result.kind === 'unavailable' ? { errorReference: result.correlationRef } : {}),
+      })
     } catch (error) {
       setConfirmOpen(false)
       if (isReverificationCancelledError(error)) {
@@ -366,7 +385,14 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
         ) : status === 'outcome_unknown' ? (
           <Alert variant="destructive"><AlertTitle>Check the current access status</AlertTitle><AlertDescription>The approval may have completed. Do not submit it again. Return to your agent and reconcile this request using reference {grantRef}.</AlertDescription></Alert>
         ) : (
-          <Alert variant="destructive"><AlertTitle>Access request unavailable</AlertTitle><AlertDescription>It may have expired. Start a new request from your agent.</AlertDescription></Alert>
+          <Alert variant="destructive">
+            <AlertTitle>Access request unavailable</AlertTitle>
+            <AlertDescription>
+              {state.errorReference === undefined
+                ? 'It may have expired. Start a new request from your agent.'
+                : `The security control is unavailable, so no access was created. Keep reference ${state.errorReference} and try again after checking system status.`}
+            </AlertDescription>
+          </Alert>
         )}
       </AeSettingsStack>
     </AeOperatorShell>

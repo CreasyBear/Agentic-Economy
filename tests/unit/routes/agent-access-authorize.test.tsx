@@ -186,6 +186,24 @@ describe('/agent-access/authorize consent loading', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
+  it('keeps the security-control correlation reference when approval fails closed', async () => {
+    mockConsent({ userCode: 'RATE-DOWN', grantRef: 'grant-rate-down', clientName: 'Rate-safe CLI', mode: 'inspect_only' })
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({
+      kind: 'unavailable',
+      code: 'security_control_unavailable',
+      correlationRef: 'oauth:grant:grant-rate-down:reserve:1',
+    }, { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderComponent()
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
+
+    expect(await screen.findByText('Access request unavailable')).toBeTruthy()
+    expect(screen.getByText(/no access was created/u)).toBeTruthy()
+    expect(screen.getByText(/oauth:grant:grant-rate-down:reserve:1/u)).toBeTruthy()
+  })
+
   it('asks one authority question, defaults to the requested ceiling, and submits the owner choice', async () => {
     mockConsent({
       userCode: 'GOOD-CODE', grantRef: 'grant-1', clientName: 'Test assistant', mode: 'bounded_mandate',

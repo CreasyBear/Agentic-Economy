@@ -22,7 +22,7 @@ import { internal } from './_generated/api'
 import { internalMutation, mutation, query, type MutationCtx } from './_generated/server'
 import { resolveInteractiveAuthorityContext } from './interactiveAuthority'
 import { persistAuditEvent } from './securityShared'
-import { assertAuthorityCredentialChangeAdmission } from './lib/rateLimit'
+import { admitAuthorityCredentialChangeRate } from './lib/rateLimit'
 import {
   consumeConsequenceProof,
   deriveStrictConsequenceProof,
@@ -143,6 +143,11 @@ const agentAccessConsentReservationResult = v.union(
   v.object({
     kind: v.literal('rate_limited'),
     retryAfter: v.number(),
+  }),
+  v.object({
+    kind: v.literal('unavailable'),
+    code: v.literal('security_control_unavailable'),
+    correlationRef: v.string(),
   }),
 )
 
@@ -396,8 +401,17 @@ export const reserveAgentAccessConsent = mutation({
 
     const proof = deriveStrictConsequenceProof({ ...proofInput, now })
     if (proof.kind === 'refused') return proof
-    const rate = await assertAuthorityCredentialChangeAdmission(ctx, admission.activeAccountRef)
-    if (!rate.ok) return { kind: 'rate_limited' as const, retryAfter: rate.retryAfter }
+    const rate = await admitAuthorityCredentialChangeRate(ctx, admission.activeAccountRef)
+    if (rate.kind === 'unavailable') {
+      return {
+        kind: 'unavailable' as const,
+        code: 'security_control_unavailable' as const,
+        correlationRef: expectedRef,
+      }
+    }
+    if (rate.kind === 'rate_limited') {
+      return { kind: 'rate_limited' as const, retryAfter: rate.retryAfter }
+    }
 
     const consumed = await consumeConsequenceProof(ctx, {
       reverificationId: proofInput.reverificationId,

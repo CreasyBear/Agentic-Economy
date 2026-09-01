@@ -32,6 +32,7 @@ export const moneyRefusalValue = v.object({
   kind: v.literal('refused'),
   code: v.string(),
   retryable: v.boolean(),
+  correlationRef: v.optional(v.string()),
 })
 export const billingSourceArgs = {
   operationKey: identifier,
