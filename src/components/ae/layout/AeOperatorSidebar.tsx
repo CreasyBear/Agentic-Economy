@@ -1,10 +1,11 @@
 'use client'
 
-import { SearchIcon, UserRoundIcon } from 'lucide-react'
+import { UserRoundIcon } from 'lucide-react'
 import { UserButton, useUser } from '@clerk/tanstack-react-start'
 import { Link } from '@tanstack/react-router'
 
 import { Badge } from '@/components/ui/badge'
+import { SiteMarker } from '@/components/ui/site-marker'
 import {
   Sidebar,
   SidebarContent,
@@ -21,11 +22,11 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 
-import { useOpenOperatorCommand } from '@/components/ae/layout/operator-command-context'
 import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import {
   formatOperatorNavBadge,
+  isOperatorNavItemCurrent,
   isOperatorPathActive,
   navGroupsForContext,
   navGroupsForRole,
@@ -46,6 +47,7 @@ type AeOperatorSidebarProps = {
 }
 
 const EMPTY_NAV_BADGES: OperatorNavBadges = {}
+const OPERATOR_NAV_BUTTON_CLASS = 'rounded-none border-s-2 border-transparent px-2.5 data-[active=true]:border-info data-[active=true]:bg-sidebar-accent/50 data-[active=true]:font-semibold hover:bg-sidebar-accent/50'
 
 function AuthenticatedOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
   const { isLoaded, isSignedIn, user } = useUser()
@@ -56,7 +58,7 @@ function AuthenticatedOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
     <div
       role="group"
       aria-label={accountContext}
-      className="flex min-h-8 min-w-0 items-center gap-2 rounded-md p-1 group-data-[collapsible=icon]:size-8!"
+      className="flex min-h-8 min-w-0 items-center gap-2 p-1 group-data-[collapsible=icon]:size-8!"
     >
       <UserButton
         userProfileMode="modal"
@@ -79,7 +81,7 @@ function LocalPreviewOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
     <div
       role="group"
       aria-label="Local preview account context"
-      className="flex min-h-8 min-w-0 items-center gap-2 rounded-md p-2 text-muted-foreground group-data-[collapsible=icon]:size-8!"
+      className="flex min-h-8 min-w-0 items-center gap-2 p-2 text-muted-foreground group-data-[collapsible=icon]:size-8!"
     >
       <UserRoundIcon aria-hidden="true" className="size-4 shrink-0" />
       <span className={isCollapsed ? 'sr-only' : 'min-w-0 truncate text-xs'}>Local preview</span>
@@ -90,7 +92,6 @@ function LocalPreviewOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
 
 export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, navBadges = EMPTY_NAV_BADGES, suppressSurfaceNavigation = false }: AeOperatorSidebarProps) {
   const { state, isMobile, open, openMobile, setOpenMobile } = useSidebar()
-  const openCommand = useOpenOperatorCommand()
   const isCollapsed = !isMobile && state === 'collapsed'
   const expanded = isMobile ? openMobile : open
   const navGroups = suppressSurfaceNavigation
@@ -105,15 +106,15 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
   }
 
   return (
-    <Sidebar variant="inset" collapsible="icon" role="complementary" aria-label="Workspace navigation">
+    <Sidebar variant="sidebar" collapsible="icon" role="complementary" aria-label="Workspace navigation">
       <nav id="operator-sidebar-navigation" aria-label="Operator navigation" className="flex h-full min-h-0 flex-1 flex-col">
-        <SidebarHeader>
+        <SidebarHeader className="px-3 pt-3">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild size="lg" tooltip="Agentic Economy workspace">
+              <SidebarMenuButton asChild size="lg" tooltip="Agentic Economy workspace" className="h-14 rounded-none border-b border-sidebar-border px-1 hover:bg-transparent active:bg-transparent">
                 <Link
                   to={roleHomeHref[operatorRole]}
-                  aria-label={`${roleLabel[operatorRole]} home`}
+                  aria-label={operatorRole === 'owner' ? 'Operations home' : `${roleLabel[operatorRole]} home`}
                   onClick={closeMobileNavigation}
                 >
                   <img
@@ -122,9 +123,12 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
                     aria-hidden="true"
                     className={aeconMarkClassName.light}
                   />
-                  <span className={isCollapsed ? 'sr-only' : 'grid min-w-0 gap-0.5'}>
-                    <span className="truncate text-sm font-semibold text-sidebar-foreground">AECON</span>
-                    <span className="truncate text-xs text-muted-foreground">{roleLabel[operatorRole]}</span>
+                  <span className={isCollapsed ? 'sr-only' : 'grid min-w-0 gap-1'}>
+                    <span className="truncate font-sans text-sm font-semibold tracking-tight text-sidebar-foreground">AECON</span>
+                    <span className="flex items-center gap-2 truncate font-sans text-xs font-medium text-muted-foreground">
+                      <SiteMarker tone="info" visible />
+                      {roleLabel[operatorRole]}
+                    </span>
                   </span>
                 </Link>
               </SidebarMenuButton>
@@ -132,43 +136,21 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    type="button"
-                    tooltip="Search"
-                    onClick={() => {
-                      closeMobileNavigation()
-                      openCommand?.()
-                    }}
-                  >
-                    <SearchIcon aria-hidden="true" />
-                    <span className={isCollapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>Search</span>
-                    {isCollapsed ? null : (
-                      <kbd className="ms-auto font-mono text-[0.6875rem] text-muted-foreground">/</kbd>
-                    )}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
           {navGroups.map((group) => (
-            <SidebarGroup key={group.id}>
-              <SidebarGroupLabel asChild>
+            <SidebarGroup key={group.id} className="gap-1 px-3 py-3">
+              <SidebarGroupLabel asChild className="h-6 rounded-none px-2 font-sans text-xs font-medium text-muted-foreground">
                 <span>{group.label}</span>
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {group.items.map((item) => {
-                    const current = isOperatorPathActive(currentPath, item.href)
+                    const current = isOperatorNavItemCurrent(operatorRole, currentPath, item.href)
                     const badge = formatOperatorNavBadge(navBadges[item.href])
                     const Icon = item.icon
 
                     return (
                       <SidebarMenuItem key={item.href}>
-                        <SidebarMenuButton asChild isActive={current} tooltip={item.label}>
+                        <SidebarMenuButton asChild isActive={current} tooltip={item.label} className={OPERATOR_NAV_BUTTON_CLASS}>
                           <Link
                             to={item.href}
                             aria-label={isCollapsed ? item.label : undefined}
@@ -192,8 +174,8 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
             </SidebarGroup>
           ))}
         </SidebarContent>
-        <SidebarFooter className="mt-auto">
-          <SidebarGroupLabel asChild>
+        <SidebarFooter className="mt-auto gap-3 border-t border-sidebar-border px-3 py-3">
+          <SidebarGroupLabel asChild className="h-6 rounded-none px-2 font-sans text-xs font-medium text-muted-foreground">
             <span>Resources</span>
           </SidebarGroupLabel>
           <SidebarMenu>
@@ -203,7 +185,7 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
 
               return (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={current} tooltip={item.label}>
+                  <SidebarMenuButton asChild isActive={current} tooltip={item.label} className={OPERATOR_NAV_BUTTON_CLASS}>
                     <Link
                       to={item.href}
                       aria-label={isCollapsed ? item.label : undefined}

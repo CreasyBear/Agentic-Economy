@@ -1,15 +1,32 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
+import {
+  type OnChangeFn,
+  type RowSelectionState,
+} from "@tanstack/react-table";
 import { SearchIcon } from "lucide-react";
-import { Suspense, useMemo, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
 import { AePageHeader } from "@/components/ae/layout/AePageHeader";
 import { AeCapabilityTile } from "@/components/ae/market/AeCapabilityTile";
 import {
+  AE_COMPARE_MAX_OPERATIONS,
+  AeCompareTray,
+} from "@/components/ae/market/AeCompareTray";
+import {
+  AeMarketComparisonView,
+  type MarketComparison,
+} from "@/components/ae/market/AeMarketComparisonView";
+import {
   AeMarketToolbar,
   type AeMarketToolbarSearch,
 } from "@/components/ae/market/AeMarketToolbar";
 import { AeOperationTable } from "@/components/ae/market/AeOperationTable";
+import {
+  buildMarketReturnContext,
+  type MarketReturnContext,
+} from "@/components/ae/market/market-return-context";
+import type { AeRecordTableSelection } from "@/components/ae/operator/AeOperatorDataTable";
 import { AeSiteButton } from "@/components/ae/website/AeSiteButton";
 import { Button } from "@/components/ui/button";
 import { ItemGroup } from "@/components/ui/item";
@@ -28,10 +45,11 @@ import {
   groupOperationCards,
   type CapabilityGroupViewModel,
   type CategoryShelfViewModel,
+  type OperationCardViewModel,
 } from "@/modules/market/operation-view-model";
 import type { MarketRouteProjection } from "@/modules/market/server";
 
-type MarketPageSearch = AeMarketToolbarSearch;
+type MarketPageSearch = AeMarketToolbarSearch & Readonly<{ compare?: string }>;
 
 const CATALOG_DESCRIPTION =
   "Inspect price, access, and readiness without an account. Only available Operations can be called.";
@@ -39,13 +57,31 @@ const CATALOG_DESCRIPTION =
 export function AeMarketPage({
   projection,
   search,
+  comparison,
+  onCompareOperations,
 }: {
   projection: MarketRouteProjection;
   search: MarketPageSearch;
+  comparison?: MarketComparison;
+  onCompareOperations?: (operationRefs: readonly string[]) => void;
 }) {
   const { window, catalog } = projection;
   const navigate = useNavigate();
+  const router = useRouter();
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isEditingComparison, setIsEditingComparison] = useState(false);
+  const selectionFallbackRef = useRef<HTMLAnchorElement>(null);
+  const catalogContextKey = [
+    search.window,
+    search.query,
+    search.availability,
+    search.category,
+    search.capability,
+    search.cursor,
+  ].join("\u0000");
   const categoryId = search.category ?? "all";
+  const marketTableReturnTo = buildMarketReturnContext(search, "operations");
+  const marketComparisonReturnTo = buildMarketReturnContext(search);
   const operations = useMemo(
     () => catalog.kind === "ok" ? catalog.items : [],
     [catalog],
@@ -73,6 +109,42 @@ export function AeMarketPage({
   const empty = !unavailable && matchedCount === 0;
   const operationLabel = matchedCount === 1 ? "Operation" : "Operations";
   const shownCount = drilledGroup?.operations.length ?? operations.length;
+  const currentRowSelection = useMemo(
+    () => pruneRowSelection(rowSelection, operations),
+    [operations, rowSelection],
+  );
+  const selectedOperations = useMemo(
+    () => operations.filter((operation) => currentRowSelection[operation.operationRef] === true),
+    [currentRowSelection, operations],
+  );
+  useEffect(() => {
+    setIsEditingComparison(false);
+  }, [search.compare]);
+  useEffect(() => {
+    setRowSelection({});
+  }, [catalogContextKey]);
+  useEffect(() => {
+    if (isEditingComparison) selectionFallbackRef.current?.focus();
+  }, [isEditingComparison]);
+  const updateRowSelection: OnChangeFn<RowSelectionState> = (updater) => {
+    setRowSelection((current) => {
+      const currentVisible = pruneRowSelection(current, operations);
+      const next = typeof updater === "function" ? updater(currentVisible) : updater;
+      return pruneRowSelection(next, operations);
+    });
+  };
+  const marketSelection: AeRecordTableSelection<OperationCardViewModel> | undefined =
+    onCompareOperations === undefined ? undefined : {
+      state: currentRowSelection,
+      onChange: updateRowSelection,
+      getRowLabel: (operation) => `${operation.title} by ${operation.supplierName}`,
+      canSelectRow: (operation) =>
+        operation.readiness !== "Unavailable" &&
+        (currentRowSelection[operation.operationRef] === true ||
+          selectedOperations.length < AE_COMPARE_MAX_OPERATIONS),
+      showSelectAll: false,
+      showStatus: false,
+    };
   const status = unavailable
     ? "Catalogue unavailable"
     : catalog.kind === "ok" &&
@@ -80,6 +152,36 @@ export function AeMarketPage({
         (catalog.pagination.hasMore || matchedCount > shownCount)
       ? `${shownCount.toLocaleString()} of ${matchedCount.toLocaleString()}`
       : `${shownCount.toLocaleString()} shown`;
+
+  if (comparison !== undefined && !isEditingComparison) {
+    return (
+      <AeMarketComparisonView
+        comparison={comparison}
+        onEditSelection={() => {
+          const selectedRefs = new Set(search.compare?.split(",") ?? []);
+          setRowSelection(Object.fromEntries(
+            operations
+              .filter((operation) => selectedRefs.has(operation.operationRef))
+              .map((operation) => [operation.operationRef, true]),
+          ));
+          setIsEditingComparison(true);
+        }}
+        onBack={() => {
+          setRowSelection({});
+          setIsEditingComparison(true);
+          void navigate({
+            to: "/market",
+            replace: true,
+            search: marketSearchWithoutComparison(search),
+          });
+        }}
+        onRetry={() => {
+          void router.invalidate();
+        }}
+        returnTo={marketComparisonReturnTo}
+      />
+    );
+  }
 
   const handleCategoryChange = (value: MarketCategoryId | "all") => {
     void navigate({
@@ -97,7 +199,7 @@ export function AeMarketPage({
 
   const catalogLink = (
     <Button asChild variant="ghost" className="min-h-touch">
-      <Link to="/market" search={{ window }}>
+      <Link ref={selectionFallbackRef} to="/market" search={{ window }}>
         Catalog
       </Link>
     </Button>
@@ -113,7 +215,13 @@ export function AeMarketPage({
     title = drilledGroup.label;
     description = `${drilledGroup.category.label} · ${count.toLocaleString()} listed · ${capabilityFromPrice(drilledGroup.operations)}`;
     actions = catalogLink;
-    body = <AeOperationTable operations={drilledGroup.operations} />;
+    body = (
+      <AeOperationTable
+        operations={drilledGroup.operations}
+        returnTo={marketTableReturnTo}
+        {...(marketSelection === undefined ? {} : { selection: marketSelection })}
+      />
+    );
   } else if (isQuery) {
     title = `Results for “${query}”`;
     description =
@@ -128,6 +236,8 @@ export function AeMarketPage({
           catalog={catalog}
           window={window}
           search={search}
+          returnTo={marketTableReturnTo}
+          {...(marketSelection === undefined ? {} : { selection: marketSelection })}
         />
       );
   } else {
@@ -160,17 +270,36 @@ export function AeMarketPage({
   }
 
   return (
-    <div id="operations" className="scroll-mt-anchor">
+    <div id="operations" className="min-h-dvh scroll-mt-anchor">
       <AePageHeader
         eyebrow="Catalog"
         title={title}
         description={description}
         actions={actions}
         meta={status}
+        variant="market"
       />
-      <div className="ae-rail grid gap-section pb-page">
+      <div
+        className={selectedOperations.length === 0
+          ? "ae-rail grid gap-section pb-page"
+          : "ae-rail grid gap-section pb-96 sm:pb-72"}
+      >
         <AeMarketToolbar search={search} />
         {body}
+        {onCompareOperations === undefined ? null : (
+          <AeCompareTray
+            operations={selectedOperations}
+            onRemove={(operationRef) => {
+              setRowSelection((current) => ({ ...current, [operationRef]: false }));
+            }}
+            onClear={() => setRowSelection({})}
+            onCompare={(operationRefs) => {
+              setIsEditingComparison(false);
+              onCompareOperations(operationRefs);
+            }}
+            fallbackFocusRef={selectionFallbackRef}
+          />
+        )}
       </div>
     </div>
   );
@@ -334,19 +463,23 @@ function OperationResults({
   catalog,
   window,
   search,
+  selection,
+  returnTo,
 }: {
   groups: readonly CapabilityGroupViewModel[];
   catalog: Extract<MarketRouteProjection["catalog"], { kind: "ok" }>;
   window: MarketWindow;
   search: MarketPageSearch;
+  selection?: AeRecordTableSelection<OperationCardViewModel>;
+  returnTo: MarketReturnContext;
 }) {
   return (
-    <div className="grid gap-section">
+    <div className="grid min-w-0 gap-section">
       {groups.map((group) => (
         <section
           key={group.capabilityId}
           aria-labelledby={`capability-${group.capabilityId}`}
-          className="grid gap-related"
+          className="grid min-w-0 gap-related"
         >
           <div className="grid gap-intra">
             <h2
@@ -360,7 +493,11 @@ function OperationResults({
               {group.providerCount === 1 ? "provider" : "providers"}
             </p>
           </div>
-          <AeOperationTable operations={group.operations} />
+          <AeOperationTable
+            operations={group.operations}
+            returnTo={returnTo}
+            {...(selection === undefined ? {} : { selection })}
+          />
         </section>
       ))}
       <CatalogPagination
@@ -413,4 +550,20 @@ function CatalogPagination({
 
 function capabilityGroupCountLabel(count: number) {
   return `${count.toLocaleString()} capability ${count === 1 ? "group" : "groups"}`;
+}
+
+function pruneRowSelection(
+  selection: RowSelectionState,
+  operations: readonly OperationCardViewModel[],
+): RowSelectionState {
+  const currentRefs = new Set(operations.map((operation) => operation.operationRef));
+  return Object.fromEntries(
+    Object.entries(selection).filter(([operationRef, selected]) =>
+      selected === true && currentRefs.has(operationRef)),
+  );
+}
+
+function marketSearchWithoutComparison(search: MarketPageSearch): AeMarketToolbarSearch {
+  const { compare: _compare, ...remaining } = search;
+  return remaining;
 }

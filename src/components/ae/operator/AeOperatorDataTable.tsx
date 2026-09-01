@@ -16,7 +16,7 @@ import {
 import * as RovingFocusGroup from '@radix-ui/react-roving-focus'
 import { Link } from '@tanstack/react-router'
 import { ArrowUpDownIcon } from 'lucide-react'
-import { type ReactNode, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { AeViewBar } from '@/components/ae/data/AeViewBar'
 import { Button } from '@/components/ui/button'
@@ -70,6 +70,30 @@ type AeRecordTableBaseProps<TData> = {
    * settled result; refreshing an already-populated table keeps its rows.
    */
   loading?: boolean
+  filterValue?: string
+  onFilterChange?: (value: string) => void
+  sorting?: SortingState
+  onSortingChange?: OnChangeFn<SortingState>
+  /**
+   * Extra classes applied to rows in the selected state. Market compare
+   * uses this for a brand connection to the comparison tray; operator
+   * tables keep the default muted fill.
+   */
+  selectedRowClassName?: string
+  /**
+   * Roving row-action focus: when `restore` is true and `currentId` is set,
+   * focus returns to that row's action on the next render it is visible.
+   */
+  rowActionFocus?: Readonly<{
+    currentId?: string
+    onCurrentIdChange?: (id: string) => void
+    restore?: boolean
+  }>
+  /**
+   * Mobile-only content rendered above the table (compact cards). The table
+   * itself is hidden on small screens when provided.
+   */
+  compactContent?: ReactNode
 }
 
 type AeRecordTableProps<TData> = AeRecordTableBaseProps<TData> &
@@ -98,9 +122,22 @@ export function AeRecordTable<TData>({
   rowAction,
   selection,
   loading = false,
+  filterValue,
+  onFilterChange,
+  sorting: controlledSorting,
+  onSortingChange,
+  selectedRowClassName,
+  rowActionFocus,
+  compactContent,
 }: AeRecordTableProps<TData>) {
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [globalFilter, setGlobalFilter] = useState('')
+  const [internalSorting, setInternalSorting] = useState<SortingState>([])
+  const [internalGlobalFilter, setInternalGlobalFilter] = useState('')
+  const tableRootRef = useRef<HTMLDivElement>(null)
+  const sorting = controlledSorting ?? internalSorting
+  const globalFilter = filterValue ?? internalGlobalFilter
+  const updateSorting = onSortingChange ?? setInternalSorting
+  const updateGlobalFilter = onFilterChange ?? setInternalGlobalFilter
+  const onCurrentRowActionIdChange = rowActionFocus?.onCurrentIdChange
 
   const selectionColumn = useMemo<ColumnDef<TData, unknown> | undefined>(
     () =>
@@ -160,8 +197,8 @@ export function AeRecordTable<TData>({
       globalFilter,
       ...(selection === undefined ? {} : { rowSelection: selection.state }),
     },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
+    onSortingChange: updateSorting,
+    onGlobalFilterChange: updateGlobalFilter,
     ...(selection === undefined
       ? {}
       : {
@@ -184,21 +221,59 @@ export function AeRecordTable<TData>({
   const selectableVisibleRows =
     selection === undefined ? [] : visibleRows.filter((row) => row.getCanSelect())
   const selectedVisibleCount = selectableVisibleRows.filter((row) => row.getIsSelected()).length
+  const visibleRowKey = visibleRows.map((row) => row.id).join('\u0000')
+  const handleCurrentTabStopIdChange = useCallback(
+    (id: string | null) => {
+      if (id !== null) onCurrentRowActionIdChange?.(id)
+    },
+    [onCurrentRowActionIdChange],
+  )
+
+  useEffect(() => {
+    if (rowActionFocus?.restore !== true || rowActionFocus.currentId === undefined) return
+    const action = Array.from(
+      tableRootRef.current?.querySelectorAll<HTMLElement>('[data-ae-row-action-id]') ?? [],
+    ).find((element) => element.dataset.aeRowActionId === rowActionFocus.currentId)
+    if (action === undefined) return
+    const frame = window.requestAnimationFrame(() => {
+      action.focus({ preventScroll: true })
+      action.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [rowActionFocus?.currentId, rowActionFocus?.restore, visibleRowKey])
 
   return (
-    <div {...(showSkeleton ? { 'aria-busy': true } : {})} className="grid">
+    <div
+      ref={tableRootRef}
+      {...(showSkeleton ? { 'aria-busy': true } : {})}
+      className="grid"
+    >
       {showFilter || action !== undefined ? (
         <AeViewBar
           filterValue={globalFilter}
-          {...(showFilter ? { onFilterChange: setGlobalFilter } : {})}
+          {...(showFilter ? { onFilterChange: updateGlobalFilter } : {})}
           filterPlaceholder={filterPlaceholder}
           count={rowCount}
           countLabel={countLabel}
           {...(action === undefined ? {} : { action })}
         />
       ) : null}
+      {compactContent === undefined ? null : (
+        <div className="md:hidden">{compactContent}</div>
+      )}
       <div
-        {...(maxHeight === undefined ? {} : { className: 'overflow-auto', style: { maxHeight } })}
+        {...(maxHeight === undefined
+          ? {
+              className:
+                compactContent === undefined ? 'min-w-0' : 'hidden min-w-0 md:block',
+            }
+          : {
+              className:
+                compactContent === undefined
+                  ? 'overflow-auto'
+                  : 'hidden overflow-auto md:block',
+              style: { maxHeight },
+            })}
       >
         <Table>
           <caption className="sr-only">{caption}</caption>
@@ -231,6 +306,14 @@ export function AeRecordTable<TData>({
           <RecordTableBody
             roving={rowAction !== undefined}
             {...(visibleRows[0] === undefined ? {} : { defaultTabStopId: visibleRows[0].id })}
+            {...(onCurrentRowActionIdChange === undefined
+              ? {}
+              : {
+                  onCurrentTabStopChange: (target: EventTarget | null) => {
+                    const id = (target as HTMLElement | null)?.dataset.aeRowActionId ?? null
+                    handleCurrentTabStopIdChange(id)
+                  },
+                })}
           >
             {showSkeleton ? (
               Array.from({ length: 5 }, (_, index) => (
@@ -252,7 +335,7 @@ export function AeRecordTable<TData>({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => setGlobalFilter('')}
+                        onClick={() => updateGlobalFilter('')}
                       >
                         Clear filter
                       </Button>
@@ -262,7 +345,13 @@ export function AeRecordTable<TData>({
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => (
-                <RecordTableRow key={row.id} row={row} />
+                <RecordTableRow
+                  key={row.id}
+                  row={row}
+                  {...(selectedRowClassName === undefined
+                    ? {}
+                    : { selectedRowClassName })}
+                />
               ))
             )}
           </RecordTableBody>
@@ -284,13 +373,15 @@ export function AeRecordTable<TData>({
 
 function RecordTableRow<TData>({
   row,
+  selectedRowClassName,
 }: {
   row: Row<TData>
+  selectedRowClassName?: string
 }) {
   return (
     <TableRow
       data-state={row.getIsSelected() ? 'selected' : undefined}
-      className="has-[:focus-visible]:bg-muted/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring"
+      className={`has-[:focus-visible]:bg-muted/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring${row.getIsSelected() && selectedRowClassName !== undefined ? ` ${selectedRowClassName}` : ''}`}
     >
       {row.getVisibleCells().map((cell) => (
         <TableCell key={cell.id} className="whitespace-normal">
@@ -311,7 +402,13 @@ function RecordTableAction<TData>({
   const accessibleLabel = action.getAccessibleLabel(row.original)
   const control =
     action.kind === 'link' ? (
-      <Button asChild variant="ghost" size="sm" className="min-h-touch sm:min-h-8">
+      <Button
+        asChild
+        variant="ghost"
+        size="sm"
+        className="min-h-touch sm:min-h-8"
+        data-ae-row-action-id={row.id}
+      >
         <Link to={action.getHref(row.original)} aria-label={accessibleLabel}>
           {action.label}
         </Link>
@@ -323,6 +420,7 @@ function RecordTableAction<TData>({
         size="sm"
         className="min-h-touch sm:min-h-8"
         aria-label={accessibleLabel}
+        data-ae-row-action-id={row.id}
         onClick={() => action.onOpen(row.original)}
       >
         {action.label}
@@ -340,10 +438,12 @@ function RecordTableBody({
   children,
   roving,
   defaultTabStopId,
+  onCurrentTabStopChange,
 }: {
   children: ReactNode
   roving: boolean
   defaultTabStopId?: string
+  onCurrentTabStopChange?: (target: EventTarget | null) => void
 }) {
   const body = <TableBody>{children}</TableBody>
   return roving ? (
@@ -351,6 +451,9 @@ function RecordTableBody({
       asChild
       orientation="vertical"
       loop={false}
+      {...(onCurrentTabStopChange === undefined
+        ? {}
+        : { onCurrentTabStopChange })}
       {...(defaultTabStopId === undefined ? {} : { defaultCurrentTabStopId: defaultTabStopId })}
     >
       {body}

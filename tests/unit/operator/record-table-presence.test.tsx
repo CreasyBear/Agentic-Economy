@@ -254,16 +254,41 @@ describe('AeRecordTable interaction composition', () => {
     expect(screen.getAllByRole('checkbox')).toHaveLength(3)
     expect(screen.queryByRole('status')).toBeNull()
   })
+
+  it('applies selectedRowClassName only to selected rows (market compare seam)', () => {
+    render(<SelectableRecordTable selectedRowClassName="bg-brand-muted" />)
+
+    const first = screen.getByRole('checkbox', { name: 'Select weather.lookup' })
+    const rowOf = (name: string) =>
+      screen.getByRole('checkbox', { name }).closest('tr') as HTMLElement
+
+    expect(rowOf('Select weather.lookup').className).not.toContain('bg-brand-muted')
+    expect(rowOf('Select fx.convert').className).not.toContain('bg-brand-muted')
+
+    fireEvent.click(first)
+    expect(rowOf('Select weather.lookup').className).toContain('bg-brand-muted')
+    expect(rowOf('Select fx.convert').className).not.toContain('bg-brand-muted')
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select fx.convert' }))
+    expect(rowOf('Select weather.lookup').className).toContain('bg-brand-muted')
+    expect(rowOf('Select fx.convert').className).toContain('bg-brand-muted')
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all Operations' }))
+    expect(rowOf('Select weather.lookup').className).not.toContain('bg-brand-muted')
+    expect(rowOf('Select fx.convert').className).not.toContain('bg-brand-muted')
+  })
 })
 
 function SelectableRecordTable({
   initialSelection = {},
   disableSecond = false,
   showStatus,
+  selectedRowClassName,
 }: {
   initialSelection?: RowSelectionState
   disableSecond?: boolean
   showStatus?: boolean
+  selectedRowClassName?: string
 }) {
   const [selection, setSelection] = useState<RowSelectionState>(initialSelection)
   return (
@@ -281,6 +306,7 @@ function SelectableRecordTable({
           ...(disableSecond ? { canSelectRow: (row: Row) => row.id !== 'row-2' } : {}),
           ...(showStatus === undefined ? {} : { showStatus }),
         }}
+        {...(selectedRowClassName === undefined ? {} : { selectedRowClassName })}
       />
       <div data-testid="selection-state">{JSON.stringify(selection)}</div>
     </>
