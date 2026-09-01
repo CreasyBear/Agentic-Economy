@@ -1,82 +1,136 @@
-# Coding Conventions
+# CONVENTIONS.md
 
 **Analysis Date:** 2026-09-01
 
-This map describes the conventions in the current working tree. The tree is in active migration, so a nearby file is the final authority for formatting details; do not apply a repository-wide restyle merely to make files uniform.
+## Language & Compiler Strictness (tsconfig.json)
 
-## Naming Patterns
+`tsconfig.json` is aggressively strict — these flags are load-bearing contract, not decoration:
 
-- TypeScript source files under `src/modules/` and `src/lib/` are predominantly lower kebab-case, for example `src/modules/capability-supply/route-transport-runtime.ts`, `src/modules/market/operation-view-model.ts`, and `src/lib/server/request-correlation.ts`.
-- React components use PascalCase filenames and exported component names, for example `src/components/ae/command-panel/AeCommandPanel.tsx`, `src/components/ae/market/operation-detail/AeOperationInspector.tsx`, and `src/components/ui/button.tsx` (the latter exports `Button`).
-- Convex entry files retain a mixed historical convention: current files such as `convex/catalogPublicReads.ts`, `convex/capabilityOperationInvocationWorker.ts`, and `convex/facilitatorDiscovery.ts` use camelCase, while nested implementation files under `convex/lib/` use the surrounding directory's established names. Match the existing Convex file family when adding a function.
-- Tests use descriptive lower kebab-case names ending in `.test.ts` or `.test.tsx`, such as `tests/unit/server/operation-market-routes.test.ts` and `tests/unit/ui/owner-operations-workspace.test.tsx`. Playwright files use `.spec.ts`, such as `tests/e2e/owner-operations-compatibility.spec.ts`.
-- Functions, variables, object properties, and parameters use lower camelCase (`readMarketRouteProjection`, `publicSourceTransportForTests`, `operationRefs`). Constants that are shared or represent bounds use upper snake case (`MAX_OPERATION_SEARCH_BODY_BYTES`, `REQUEST_CORRELATION_HEADER`, `PROBLEM_KINDS`).
-- Types, interfaces, classes, and exported component names use PascalCase (`ProblemDetails`, `ConvexSourceError`, `MarketPageProjection`). Domain discriminants and machine codes are stable lower snake-case or short lower-case literals (`kind: 'refused'`, `code: 'operation_not_current'`); do not invent a second spelling for an existing code.
-- Use branded types for identity-bearing strings when a seam already has one. `src/modules/capability-supply/public.ts` brands `PublicOperationRef` and `RegisteredOperationMappingRef`; preserve the constructor and predicate rather than passing arbitrary strings through those APIs.
-- Prefer `Readonly<...>`, `readonly` arrays, `as const`, and `satisfies` for domain values and returned projections. Convex table IDs use generated types such as `Id<'businesses'>` from `convex/_generated/dataModel`.
+|Flag|Value|Consequence|
+|---|---|---|
+|`strict`|`true`|Base strictness|
+|`exactOptionalPropertyTypes`|`true`|Optional props cannot receive explicit `undefined` — see handling pattern below|
+|`noUncheckedIndexedAccess`|`true`|Every index access is `T \| undefined`|
+|`useUnknownInCatchVariables`|`true`|`catch (e)` gives `unknown`, never `any`|
+|`noImplicitOverride`|`true`|Class overrides must say `override`|
+|`forceConsistentCasingInFileNames`|`true`||
+|`isolatedModules` / `noEmit`|`true`|Type-check only; Vite/esbuild builds|
+|`allowJs`|`false`|TS only|
+|`moduleResolution`|`"Bundler"`||
+|`jsx`|`"react-jsx"`||
+|`target`/`lib`|`ES2022` / DOM + `ES2024`||
+|`types`|`["vite/client", "node"]`||
 
-## Code Style
+Path aliases (tsconfig.json `paths`): `@/*` and `~/*` → `./src/*`, plus route-specific aliases (`@/routes/owner.*` → `./src/routes/_operator/owner.*`, `@/routes/admin.*`, `@/routes/developers.discovery`). `vitest.config.ts` re-maps `@` → `./src` for the same reason. `convex/_generated` is excluded; `src/routeTree.gen.ts` is generated (oxlint-ignored).
 
-- The root has no Prettier configuration or Prettier dependency. Formatting is therefore not a separately configured contract. The active lint entry point is `npm run lint` in `package.json`, which runs `oxlint src convex tests tools --deny-warnings`; `oxlint.config.ts` extends `@nkzw/oxlint-config` and focuses its enabled categories on correctness.
-- Most core source follows single quotes, no semicolons, and trailing commas in multiline literals, as shown by `src/start.ts`, `src/lib/server/problem.ts`, and `src/components/ae/command-panel/AeCommandPanel.tsx`.
-- The current tree also contains double-quoted, semicolon-terminated slices, notably `src/components/ui/button.tsx` and the in-flight market files `src/modules/market/contracts.ts` and `src/modules/market/server.ts`. Preserve the nearest file's style; do not run a global quote or semicolon migration as part of an unrelated change.
-- TypeScript is intentionally strict in `tsconfig.json`: `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, `noImplicitOverride`, `forceConsistentCasingInFileNames`, `isolatedModules`, and `noEmit` are enabled. New code should narrow `unknown`, represent absent optional values explicitly, and avoid non-null assertions unless the invariant is local and obvious.
-- `tsconfig.json` uses `moduleResolution: 'Bundler'`, `jsx: 'react-jsx'`, and `target: 'ES2022'`. The scoped `convex/tsconfig.json` and `tools/tsconfig.json` preserve strict no-emit checking for their respective runtimes. The package engine is Node 22.x in `package.json`; use the supported runtime for Convex-dependent development.
-- `oxlint.config.ts` treats `no-unused-vars` and `no-debugger` as errors. Production `no-console` allows only `error`, `info`, and `warn`; tests and tools have an explicit override because they need controlled output and spies. Do not use `console.log` in product source to bypass the logging policy.
-- The lint configuration deliberately leaves `curly`, `prefer-arrow-callback`, and several sorting rules off. Do not infer a mandatory brace, arrow, or import-sort migration that the repository has not adopted. Keep conditionals and callbacks readable and follow the local file.
-- React components in `src/components/` use React 19 with the automatic JSX runtime. Use semantic elements, existing UI primitives, and the local Tailwind token vocabulary instead of adding one-off primitive markup; `src/components/ui/button.tsx` is the shared primitive example.
+## Linting (oxlint.config.ts)
 
-## Import Organization
+`npm run lint` = `oxlint src convex tests tools --deny-warnings`. Config extends `@nkzw/oxlint-config` with:
+- `categories: { correctness: 'error', suspicious: 'off' }` — correctness is the gate; style migrations are isolated, not "permanent release-gate noise" (comment in oxlint.config.ts).
+- `no-console: ['error', { allow: ['error', 'info', 'warn'] }]`; `no-debugger`, `no-unused-vars` errors.
+- Deliberately off: `perfectionist/sort-*` family, `prefer-const`, `curly`, many `unicorn/prefer-*`, `react/set-state-in-effect`, `react/incompatible-library`.
+- Overrides: `tests/**` and `tools/**` allow `any` and `console`. Per-file `complexity` caps of 10/20/30 (variant classic) on hot files — e.g. max 10 on `convex/lib/operationInvocations/**`, `src/modules/money/internal/ledger.ts`, max 20 on `src/modules/money/internal/payout-policy.ts`, max 30 on `convex/moneyChargeBrokered.ts`.
+- Ignores: `convex/_generated/**`, `src/routeTree.gen.ts`, `tests/fixtures/**`, `vendor/**`.
 
-- Group imports by purpose with blank lines: external packages first, then `@/` source aliases, then same-module relatives. `src/start.ts`, `src/lib/server/request-correlation.ts`, and `src/modules/capability-contract/internal/define-contract.ts` show this pattern. Some tests put a local harness before package imports; do not reorder an entire test file when a mock-hoisting setup depends on its current order.
-- Use explicit type-only imports (`import type { ... }`) and inline `type` specifiers where appropriate. This keeps runtime dependencies visible and is used throughout `src/modules/capability-supply/public.ts`, `convex/facilitatorDiscovery.ts`, and `tests/helpers/convex-fixtures.ts`.
-- `@/*` and `~/*` resolve to `src/*` in `tsconfig.json`; `convex/tsconfig.json` carries the `@/*` mapping for Convex-side source imports. Route-specific aliases for `@/routes/owner.*`, `@/routes/admin.*`, and `@/routes/developers.discovery` are also declared in `tsconfig.json`.
-- Runtime code should import a module's public or server boundary (`public.ts`, `server.ts`, or a named entry surface) rather than reaching into `internal/`. The allowed entry surfaces and dependency direction are recorded in `src/modules/module-boundaries.ts`; `tests/imports/module-boundaries.test.ts` enforces undeclared deep entries, reverse edges, cycles, and stale exceptions.
-- Convex code may use the generated `api` and `internal` references from `convex/_generated/api`; it must not pass a function implementation directly to `ctx.runQuery`, `ctx.runMutation`, or `ctx.runAction`. `convex/facilitatorDiscovery.ts` and `convex/_generated/ai/guidelines.md` show the expected references and contexts.
+`.aislop/config.yml` only sets `telemetry.enabled: false` (aislop is a devDependency used elsewhere for AI-slop scanning).
 
-## Error Handling
+## RULES.MD (binding)
 
-- Use typed discriminated outcomes for expected domain decisions. Existing modules return shapes such as `{ kind: 'available', ... }`, `{ kind: 'refused', code: ... }`, `{ kind: 'unavailable', reason: ... }`, or `{ kind: 'partial', ... }`. The action-invocation contracts in `src/modules/action-invocation/contracts.ts` and the operation projections in `src/modules/capability-supply/public.ts` are representative. Callers must branch on the discriminant before reading variant fields.
-- Reserve throws for invalid process inputs at a boundary, impossible state, corrupt persisted material, or an infrastructure failure that the caller cannot represent as a normal outcome. Use stable machine-readable error tokens, usually lower snake-case (`capability_contract_invalid`, `canonical_digest_value_invalid`), as in `src/modules/capability-contract/internal/define-contract.ts` and `src/modules/common/canonical-digest.ts`.
-- Validate untrusted JSON with a schema before use. Domain schemas use Zod (`z.strictObject`, `z.discriminatedUnion`, `.safeParse`) in `src/modules/capability-contract/internal/define-contract.ts`; Convex function arguments and persisted table shapes use `v.object`, `v.union`, `v.optional`, and related validators in `convex/facilitatorDiscovery.ts` and `convex/schema.ts`. Treat `Request.json()` as `unknown` and narrow it before accessing fields.
-- HTTP adapters must use the shared RFC 9457 model in `src/lib/errors.ts` and the `problem()` response builder in `src/lib/server/problem.ts`. Preserve canonical `kind`, stable `code`, status, `retryable`, correlation, and relevant retry/auth headers. Route files such as `src/routes/api.v1.market-operations.search.ts` explicitly reject unsupported methods with `methodNotAllowed`, parse bounded bodies, validate action results, and map unavailable reads to a problem response.
-- Keep domain results typed and successful where possible; project only refusal/error variants onto Problem Details. `operationInvokeResultToProblem` in `src/lib/errors.ts` documents this boundary. Never copy arbitrary provider text or remote error bodies into public error details.
-- Typed infrastructure errors are allowed when a boundary needs to carry a code and status. `ConvexSourceError` in `src/lib/server/convex-source.ts` carries `missing_auth` or `missing_convex_url`; CLI code maps it through `sourceErrorToCliFailure` in `tools/ae/lib/output.ts`.
-- Catch variables are `unknown`. Narrow with `instanceof Error`, a record predicate, or a schema, then return a typed unavailable/refused result or safe user-facing state. UI code captures the original cause through `captureClientExceptionOnClient` and renders an explicit unavailable or outcome-unknown state, as in `src/components/ae/market/operation-detail/AeOperationInspector.tsx` and `src/components/ae/offerings/AeOwnerOperationsWorkspace.tsx`.
-- Fail closed at authority, input, routeability, effect, and evidence boundaries. Do not turn a missing credential, stale revision, ambiguous provider response, invalid output, or ownership mismatch into a success-shaped fallback. The worker paths in `src/modules/capability-execution/invocation-worker/` and the readiness path in `src/modules/capability-supply/internal/readiness-probe.ts` make these refusals explicit.
+Key prohibitions that shape code review: no **gate self-weakening**, no **proof-class inflation** (fixtures/mocks are never live proof), no **golden regeneration reflex** (golden changes need a `GOLDEN-CHANGE` commit note), no `todo!()`/`unimplemented!()` scaffolds in committed code, no **tautological tests** (every feature must pre-specify ≥1 negative case a naive implementation would fail), no **demo-path hardcoding**. "Refusal is not delivery" — a correctly typed refusal earns at most partial credit; the positive capability must be implemented, tested, verified. Process artifacts only exist as hard gates for named features.
 
-## Logging
+## Module System (`src/modules/module-boundaries.ts`)
 
-- Product code uses contextual `console.error`, `console.warn`, or `console.info` only where an operational event needs a local log. `src/components/ae/offerings/owner-offering.functions.ts` prefixes a source failure with `[owner-offerings]` and passes the error through `sanitizeTelemetryError`; follow that pattern rather than logging an unbounded exception or request object.
-- Before sending an error or event to telemetry, use the sanitizers in `src/lib/observability/private-route-safety.ts`. Client and server capture are wrapped by `src/lib/observability/capture-client-exception.ts`, `src/lib/observability/capture-route-exception.ts`, `src/lib/observability/sentry.client.ts`, and `src/lib/observability/sentry.server.ts`; preserve the route-safety gate and redaction behavior.
-- Never log credentials, bearer material, cookies, API keys, request bodies, private URLs, idempotency keys, or raw provider payloads. Tests such as `tests/unit/server/diagnostic-routes.test.ts` assert both that errors are captured and that secret values are absent.
-- CLI output is a protocol. `tools/ae/cli.ts` and `tools/ae/lib/output.ts` write machine-readable JSON and normal command results to stdout, while human failures and next-step guidance go to stderr. Keep JSON output to one parseable value and sanitize `CliFailure` messages/details before printing.
-- Tests and maintenance tools may intentionally spy on or print console output because `oxlint.config.ts` grants them an override. Always restore spies and environment state in `afterEach`/`finally`; do not weaken the production logging rule to make a test pass.
+27 declared modules, each a `ModuleDeclaration { name, entrySurfaces, allowedDependencies }` in `MODULE_BOUNDARY_MANIFEST`. Target DAG (comment at top of file):
 
-## Comments / JSDoc
+```
+adapters/actions -> registry | capability-execution | capability-supply
+registry -> catalog | capability-supply
+capability-execution -> capability-supply | action-invocation | money | agent-access
+capability-supply -> capability-contract | business | security
+action-invocation -> money | capability-contract
+all lower layers -> dependency-free common (and guarded I/O -> network-guard)
+```
 
-- Add a short block comment or JSDoc when an exported seam, invariant, security rule, or non-obvious ordering needs to be understood six months later. Examples include the canonical model explanation in `src/lib/errors.ts`, the `inputExamples` contract note in `src/modules/capability-contract/internal/define-contract.ts`, and the command-panel behavior comment in `src/components/ae/command-panel/AeCommandPanel.tsx`.
-- Comments should explain why a boundary exists, what must remain true, or which evidence is intentionally absent; they should not restate the next line. `src/start.ts` documents middleware ordering because the ordering affects negotiated responses and authentication.
-- Use inline comments for security and lifecycle reasoning (for example, the redaction warning in `tools/ae/cli.ts`), and keep them adjacent to the code they constrain. If a deliberate simplification is tracked by a `ponytail:` marker, preserve the marker and its named test/seam as in `src/lib/server/convex-source.ts`.
-- Avoid stale migration history, speculative TODOs, or comments promising an unimplemented fallback. A comment must describe behavior that the current source and tests actually enforce.
+- `common` is dependency-free (27 entry surfaces incl. `ids.ts`, `canonical-digest.ts`, `bounded-json.ts`).
+- Every cross-module import must go through a **declared entry surface** (e.g. `money` exposes `public.ts`, `schema.ts`, `server.ts`, `money.functions.ts`). Deep `internal/**` imports are forbidden at runtime.
+- Deviations are explicit objects: `RuntimeBoundaryException` (with owner + removalTask T3–T7) and `TestBoundaryException` (currently ~60 entries, owner `source-tests`) — every exception must be *used* or the boundary scan fails.
+- Enforced by `tests/imports/module-boundaries.test.ts` (asserts `moduleCount === 27`, no cycles, no violations) via scanners in `src/lib/ui/contract-scans.ts`.
 
-## Function Design
+## Module File-Role Conventions
 
-- Give exported functions explicit input and return types when the type is not obvious. Prefer a small `Readonly<{ ... }>` input object for multi-field domain commands and a discriminated return union for decisions. `src/modules/market/server.ts` and `src/modules/capability-supply/public.ts` illustrate this style.
-- Keep pure parsing, validation, digest, projection, and classification logic deterministic and side-effect free. Put I/O behind an injected port or a narrowly named adapter. `src/modules/common/canonical-digest.ts` is pure; `src/lib/server/convex-source.ts` owns the Convex transport; `src/modules/capability-supply/internal/readiness-probe.ts` accepts transport dependencies.
-- Use `unknown` at trust boundaries and narrow it with Zod, Convex validators, `isRecord`, or explicit type guards. Avoid `any`; the test/tool exception in `oxlint.config.ts` exists for harness seams, not production domain code.
-- Bound body sizes, arrays, pagination, retries, and loops with named constants. `convex/facilitatorDiscovery.ts` shows explicit reconciliation and byte limits; Convex schema guidance in `convex/_generated/ai/guidelines.md` forbids unbounded arrays in a document.
-- For identity-bearing or persisted material, compute canonical digests with `canonicalDigest` and freeze returned domain snapshots when the module already does so. Do not silently normalize away a revision, source digest, authority reference, or price digest that participates in identity.
-- Use `async` only where a function awaits a real asynchronous operation. Keep orchestration readable by delegating policy decisions and row mapping to domain helpers rather than building a second parallel state machine in a route or UI component.
+Real examples from `src/modules/money/` and `src/modules/capability-supply/`:
 
-## Module Design
+|File|Role|Example|
+|---|---|---|
+|`public.ts`|The module's typed public seam: schemas, types, pure logic, re-exports from `internal/`|`src/modules/money/public.ts` re-exports `exactAmountSchema`, `pricingConfigSchema` etc. from `./internal/exact-amount` and `./internal/pricing-contract`; defines `MoneyRefusal`, `ChargeAuthorizationResult`|
+|`server.ts`|Server-side surface: Convex source actions, Stripe webhook handling, HTTP adapters|`src/modules/money/server.ts` imports `@/lib/server/convex-source`, `@/lib/server/stripe-money-provider`, `./internal/stripe-webhook`|
+|`schema.ts`|Convex table definitions consumed by `convex/schema.ts`|`business`, `security`, `capability-supply` each declare `schema.ts` in entrySurfaces|
+|`convex.ts`|Convex function registration surface|`capability-supply` declares `convex.ts`; `discovery` declares `convex.ts` + `discovery.functions.ts`|
+|`*.functions.ts` / `*.actions.ts`|Convex function / action definitions (registered via httpActions/actions)|`money/money.functions.ts`, `registry/registry.actions.ts`|
+|`internal/**`|Private implementation; importable only via the manifest's declared entries|`src/modules/capability-supply/internal/graph/qualify-candidate.ts` is only reachable via a test exception|
 
-- `src/modules/` owns domain logic and state vocabulary. Public projections and contracts belong behind explicit entry surfaces such as `src/modules/capability-supply/public.ts`, `src/modules/capability-supply/server.ts`, and `src/modules/market/server.ts`; implementation details live under `internal/`.
-- Preserve the dependency DAG declared in `src/modules/module-boundaries.ts`: lower layers do not import upward, and adapters/routes do not bypass module entry surfaces. If a test needs white-box access, add or update the explicit test-only exception rather than exposing the internal file to runtime callers; `tests/imports/module-boundaries.test.ts` is the contract.
-- `convex/` is the persistence and function host. Compose module-owned schema fragments in `convex/schema.ts`, register object-form Convex functions with complete `args`, `returns` where used, and `handler` fields, and keep contexts typed as `QueryCtx`, `MutationCtx`, or `ActionCtx`. `convex/facilitatorDiscovery.ts` demonstrates validator constants, helper commands, bounded work, and an `internalMutation` wrapper.
-- Keep server-only behavior in server boundaries. Files that require the Node runtime declare it explicitly, as `src/modules/capability-execution/invocation-runtime.ts` does with `"use node"`; browser components should call server functions rather than importing server-only credentials or transports.
-- Route modules under `src/routes/` adapt HTTP/Router concerns; they should parse requests, call the owning domain action, and project the result. They should not duplicate ledger, admission, identity, or operation-selection authority.
-- Tooling under `tools/ae/` is an external-surface adapter. Keep command parsing, CLI error projection, stdout/stderr protocol, and network calls in the CLI layer while reusing canonical domain contracts from `src/modules/`.
-- When adding a new feature, first locate its owning module and existing public/server entry surface. Add a focused internal helper only when it removes real duplication; do not create a second DTO, error vocabulary, or authorization seam for the same domain fact.
+## Error Handling Convention
 
-*Current-tree conventions map; analysis: 2026-09-01*
+**Single canonical model** in `src/lib/errors.ts`, anchored to RFC 9457 + `google.rpc.Code`:
+
+- `PROBLEM_KINDS` = `INVALID_ARGUMENT | FAILED_PRECONDITION | UNAUTHENTICATED | PERMISSION_DENIED | NOT_FOUND | ALREADY_EXISTS | METHOD_NOT_ALLOWED | PAYLOAD_TOO_LARGE | UNSUPPORTED_MEDIA_TYPE | RESOURCE_EXHAUSTED | UNAVAILABLE | INTERNAL | UNKNOWN | no_data` (`no_data` maps to HTTP 200 by design — it's an ok-outcome, not an error).
+- `buildProblem(input: ProblemInput): ProblemDetails` — pure projection; spreads `extras` FIRST so reserved keys (`type/title/status/kind/code`) always win; emits optional fields only when defined (see exactOptionalPropertyTypes pattern below).
+- `GATEWAY_PROBLEM_CODES` (~40 stable machine tokens like `operation_not_found`, `budget_exceeded`, `outcome_unknown`) mapped to kinds via `GATEWAY_CODE_KIND`; `gatewayFailureToProblem` projects untrusted runtime failures onto stable taxonomy.
+- `remoteProblemToProblem` deliberately never copies remote `title`/`detail` — "arbitrary backend prose… never copied" (src/lib/errors.ts:226-234). Only stable `code` (validated by `isStableProblemCode` regex `^[a-z][a-z0-9_:-]{0,95}$`), canonical `kind`, and `retryable` cross boundaries.
+
+**HTTP surface**: `src/lib/server/problem.ts` — `problem(input, headers?): Response` builds `application/problem+json` with `Cache-Control: no-store` (both reserved, non-overridable) and injects the correlation ID header from `currentRequestCorrelationId()`.
+
+**Typed result unions vs throwing (verified real example)**: domain seams return discriminated unions, not exceptions. `src/modules/money/public.ts:276-311`:
+
+```ts
+export type MoneyRefusal = Readonly<{
+  kind: "refused";
+  code: MoneyRefusalCode;        // 'billing_identity_missing' | 'price_unavailable' | ...
+  retryable: boolean;
+  correlationRef?: string;
+  nextAction?: "credit_topup_required";
+}>;
+export type ChargeAuthorizationResult = MoneyAcceptedInvocationCharge | MoneyRefusal;
+```
+
+`isMoneyRefusal(value: unknown): value is MoneyRefusal` is the guard. Zod action outputs follow the same shape — `supplyStatusResultSchema` is `z.union([strictObject({kind:'available',...}), strictObject({kind:'not_found'}), strictObject({kind:'error', code: z.enum([...])})])` (src/modules/capability-supply/supply-actions.ts:115-126). Throwing is reserved for genuinely exceptional transport failures (e.g. `throw new Error('catalog_search_unavailable')` in src/components/ae/command-panel/market-operations-client.ts:36).
+
+## Naming Conventions
+
+- **Directories & files**: kebab-case — `src/modules/capability-execution/invocation-worker/`, `src/lib/server/source-write-admission.ts`. Components: PascalCase — `src/components/ae/AeOwnerOfferings.tsx`, `AeOperatorShell.tsx` (prefix `Ae` for product components).
+- **Action IDs**: dot-delimited lowercase, `<module>.<noun>[.<verb>]` — real values from `src/modules/registry/registry.actions.ts` / `operation-action-contracts.ts`: `'registry.list'`, `'registry.search'`, `'registry.services_detail'`, `'registry.operations.search'`, `'registry.operations.inspectPlan'` (camelCase in the final segment is accepted: `inspectPlan`).
+- **Module name**: matches directory exactly (ModuleName union in module-boundaries.ts).
+- **Contract objects**: `defineAction({ id, name, summary, schema, surfaces })` (registry.actions.ts:55-58).
+
+## Import Style
+
+- `@/` alias everywhere (source, convex modules, tests, tools). `~/*` exists as a second alias to the same root but `@/` is what the codebase actually uses (see imports in money/public.ts, server.ts, tests).
+- Routes import only module public seams (enforced by `scanRouteBoundaries` — routes must not import `convex/schema` or own convex transport: `route-convex-schema-import`, `route-owned-convex-transport` rules in tests/imports/route-boundary.test.ts).
+- Cross-module: only declared entry surfaces (enforced by `scanPrivateImports` → `module-private-import` rule).
+
+## Zod Convention: `strictObject` by Default
+
+Zod 4 (`zod: 4.4.3` in package.json). Schemas use `z.strictObject` pervasively, composed with `z.discriminatedUnion('kind', [...])` for result unions. Real examples from `src/modules/capability-supply/operation-schemas.ts`:
+
+```ts
+export const publicOperationPriceSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('fixed'), amount: exactAmountSchema.describe('...') }),
+  z.strictObject({ kind: z.literal('range'), minimum: exactAmountSchema, maximum: exactAmountSchema }),
+  z.strictObject({ kind: z.literal('on_request') }),
+])
+export const supplyStatusInputSchema = z.strictObject({
+  businessId: z.string().trim().min(1),
+  offeringRef: z.string().trim().min(1).optional(),
+})
+```
+
+Also `operation-schemas.ts:83` provenance, `public.ts:529` `contractRefSchema` (`contractDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/)`), `internal/route-transport-observation.ts:82-110` (settlement evidence union with `.exactOptional()`). `z.infer<typeof schema>` for the TS side (`export type SupplyStatusResult = z.infer<typeof supplyStatusResultSchema>`).
+
+## exactOptionalPropertyTypes Handling Pattern
+
+Because `exactOptionalPropertyTypes: true`, spreading an optional value directly would put `undefined` into the type. The pervasive idiom is conditional spread: `...(x === undefined ? {} : { x })`. Verified in 207+ files, e.g.:
+
+- src/modules/capability-supply/supply-actions.ts:87-88 — `observedAt: z.number().optional()` fields built as `{ outcome, ...(observedAt === undefined ? {} : { observedAt, validUntil }) }`
+- src/components/ae/console/AeAgentOperatorConsole.tsx:158-159 — props: `{...(approvalsError === undefined ? {} : { error: approvalsError })}`
+- src/lib/errors.ts:204-206 — buildProblem itself: `...(detail === undefined ? {} : { detail })`
+- Read-only data types use `Readonly<{...}>` with `?:` fields; mutation of state objects uses spread-and-override, never direct property assignment of possibly-undefined values.
