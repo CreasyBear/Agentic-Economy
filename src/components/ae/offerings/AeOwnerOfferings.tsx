@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
-import type { ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef, OnChangeFn, SortingState } from '@tanstack/react-table'
 import { Link } from '@tanstack/react-router'
 import {
   BotIcon,
@@ -60,6 +60,11 @@ export type OwnerOfferingSummary = Readonly<{
   status: BusinessOfferingStatus
   accessPathCount: number
   support?: PublicOfferingSupplyProjection['support']
+  lifecycleLabel?: string
+  availability?: 'available' | 'unavailable' | 'unknown'
+  blocker?: string
+  continuation?: Readonly<{ label: string; href: string }>
+  lifecyclePending?: boolean
 }>
 
 export type OwnerOfferingEditorValue = Readonly<{
@@ -135,11 +140,57 @@ export function AeOwnerOfferingsList({
   offerings,
   projectionState = 'current',
   onRetryProjection,
+  loading = false,
+  filterValue,
+  onFilterChange,
+  sorting,
+  onSortingChange,
+  activeRowActionId,
+  onActiveRowActionIdChange,
+  restoreRowActionFocus = false,
 }: {
   offerings: readonly OwnerOfferingSummary[]
   projectionState?: 'current' | 'projection_pending'
   onRetryProjection?: () => void
+  loading?: boolean
+  filterValue?: string
+  onFilterChange?: (value: string) => void
+  sorting?: SortingState
+  onSortingChange?: OnChangeFn<SortingState>
+  activeRowActionId?: string
+  onActiveRowActionIdChange?: (id: string) => void
+  restoreRowActionFocus?: boolean
 }) {
+  const compactRootRef = useRef<HTMLUListElement>(null)
+  const hasLifecyclePresentation = offerings.some((item) => item.lifecycleLabel !== undefined)
+  const compactOfferings = useMemo(() => {
+    const query = filterValue?.trim().toLocaleLowerCase() ?? ''
+    const filtered = query.length === 0
+      ? [...offerings]
+      : offerings.filter((item) => [
+          item.offering.name,
+          item.offering.summary,
+          item.lifecycleLabel,
+          item.availability,
+          item.blocker,
+        ].some((value) => value?.toLocaleLowerCase().includes(query) === true))
+    const rule = sorting?.[0]
+    if (rule === undefined) return filtered
+    return filtered.sort((left, right) => {
+      const comparison = compactSortValue(left, rule.id).localeCompare(compactSortValue(right, rule.id), undefined, { numeric: true })
+      return rule.desc ? -comparison : comparison
+    })
+  }, [filterValue, offerings, sorting])
+
+  useEffect(() => {
+    if (!hasLifecyclePresentation || !restoreRowActionFocus || activeRowActionId === undefined) return
+    const action = Array.from(compactRootRef.current?.querySelectorAll<HTMLElement>('[data-ae-row-action-id]') ?? [])
+      .find((element) => element.dataset.aeRowActionId === activeRowActionId)
+    if (action === undefined) return
+    const frame = window.requestAnimationFrame(() => action.focus({ preventScroll: true }))
+    return () => window.cancelAnimationFrame(frame)
+  }, [activeRowActionId, compactOfferings, hasLifecyclePresentation, restoreRowActionFocus])
+
   const columns = useMemo<ColumnDef<OwnerOfferingSummary, unknown>[]>(
     () => [
       {
@@ -155,9 +206,31 @@ export function AeOwnerOfferingsList({
       },
       {
         id: 'status',
-        accessorFn: (item) => statusLabel(item.status),
-        header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
-        cell: ({ row }) => <Badge variant="outline">{statusLabel(row.original.status)}</Badge>,
+        accessorFn: (item) => item.lifecycleLabel ?? statusLabel(item.status),
+        header: ({ column }) => <AeOperatorSortableHeader label="Lifecycle" column={column} />,
+        cell: ({ row }) => (
+          <div className="grid gap-1">
+            <Badge variant="outline">{row.original.lifecyclePending ? 'Loading…' : row.original.lifecycleLabel ?? statusLabel(row.original.status)}</Badge>
+            {row.original.availability === undefined ? null : (
+              <span className="text-xs text-muted-foreground">{availabilityLabel(row.original.availability)}</span>
+            )}
+          </div>
+        ),
+      },
+      {
+        id: 'blocker',
+        accessorFn: (item) => item.blocker ?? '',
+        header: 'Blocker',
+        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.blocker ?? '—'}</span>,
+      },
+      {
+        id: 'continuation',
+        header: 'Next action',
+        cell: ({ row }) => row.original.continuation === undefined ? null : (
+          <Button asChild size="sm" variant="secondary" className="min-h-touch w-full whitespace-normal sm:w-auto">
+            <a href={row.original.continuation.href}>{row.original.continuation.label}</a>
+          </Button>
+        ),
       },
       {
         id: 'routes',
@@ -197,18 +270,18 @@ export function AeOwnerOfferingsList({
           <AlertDescription>
             <p>Your changes are saved. People still see the last safe page until this update finishes.</p>
             {onRetryProjection === undefined ? null : (
-              <Button type="button" variant="secondary" className="min-h-touch" onClick={onRetryProjection}>Try publishing again</Button>
+              <Button type="button" variant="secondary" className="min-h-touch" onClick={onRetryProjection}>Refresh public status</Button>
             )}
           </AlertDescription>
         </Alert>
       )}
-      {offerings.length === 0 ? (
+      {offerings.length === 0 && !loading ? (
         <AeEmptyState
           title="No Operations yet"
           description="Describe one exact tool, then add its price and access route."
           action={
             <Button asChild className="min-h-touch">
-              <a href="/owner/offerings/new">Add Operation</a>
+              <Link to="/owner/offerings/new">Add Operation</Link>
             </Button>
           }
         />
@@ -220,6 +293,51 @@ export function AeOwnerOfferingsList({
           countLabel="Operations"
           filterPlaceholder="Filter Operations…"
           getRowId={(item) => item.offering.offeringRef}
+          loading={loading}
+          {...(filterValue === undefined ? {} : { filterValue })}
+          {...(onFilterChange === undefined ? {} : { onFilterChange })}
+          {...(sorting === undefined ? {} : { sorting })}
+          {...(onSortingChange === undefined ? {} : { onSortingChange })}
+          rowActionFocus={{
+            ...(activeRowActionId === undefined ? {} : { currentId: activeRowActionId }),
+            ...(onActiveRowActionIdChange === undefined
+              ? {}
+              : { onCurrentIdChange: onActiveRowActionIdChange }),
+            restore: restoreRowActionFocus,
+          }}
+          {...(hasLifecyclePresentation ? {
+            compactContent: (
+              <ul ref={compactRootRef} className="m-0 list-none divide-y divide-border p-0" data-testid="owner-operations-compact-list">
+                {compactOfferings.map((item) => {
+                  const action = item.continuation ?? {
+                    label: 'Open Operation',
+                    href: `/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}`,
+                  }
+                  return (
+                    <li key={item.offering.offeringRef} className="grid min-w-0 gap-3 py-4">
+                      <div className="grid gap-1">
+                        <h3 className="break-words font-semibold">{item.offering.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {item.lifecyclePending ? 'Loading lifecycle' : item.lifecycleLabel} / {item.availability === undefined ? 'Availability unknown' : availabilityLabel(item.availability)}
+                        </p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{item.blocker ?? 'No blocker'}</p>
+                      <Button asChild variant="secondary" className="min-h-touch w-full whitespace-normal">
+                        <a
+                          href={action.href}
+                          data-ae-row-action-id={item.offering.offeringRef}
+                          aria-label={`${action.label} for ${item.offering.name}`}
+                          onFocus={() => onActiveRowActionIdChange?.(item.offering.offeringRef)}
+                        >
+                          {action.label}
+                        </a>
+                      </Button>
+                    </li>
+                  )
+                })}
+              </ul>
+            ),
+          } : {})}
           rowAction={{
             kind: 'link',
             label: 'Open',
@@ -381,7 +499,7 @@ export function AeOwnerOfferingEditor({
           <TextInput label="Coverage" value={value.serviceAreaSummary} onChange={(serviceAreaSummary) => update({ serviceAreaSummary })} disabled={editorDisabled} optional />
           <TextInput label="Availability" value={value.availabilitySummary} onChange={(availabilitySummary) => update({ availabilitySummary })} disabled={editorDisabled} optional />
           <TextInput label="Pricing" value={value.pricingSummary} onChange={(pricingSummary) => update({ pricingSummary })} disabled={editorDisabled} optional />
-          <div className="grid gap-4 rounded-lg border border-border p-4">
+          <div className="grid gap-4 border-t border-border pt-4">
             <div className="grid gap-1">
               <p className="font-semibold text-foreground">Comparable price</p>
               <p className="block text-sm text-muted-foreground">Optional, and separate from the note above. Choose a supported currency so agents can compare exact amounts. Your note is never used to infer this value.</p>
@@ -524,9 +642,9 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
   return (
     <AeSection title="Access routes" description="Give agents a clear route to call the Operation. Each route stands on its own.">
       {paths.length === 0 ? <p className="text-muted-foreground">Add a phone, website, or message route.</p> : (
-        <ul className="m-0 grid list-none gap-2 p-0">
+        <ul className="m-0 list-none divide-y divide-border p-0">
           {paths.map((path) => (
-            <li key={path.accessPathRef ?? path.localDraftKey} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+            <li key={path.accessPathRef ?? path.localDraftKey} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] sm:items-center">
               <div>
                 <p className="font-semibold text-foreground">{pathLabel(path.descriptor)}</p>
                 <p className="text-sm text-muted-foreground">{path.descriptor.kind === 'human_request' ? path.descriptor.disclosure : path.descriptor.summary}</p>
@@ -536,7 +654,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
           ))}
         </ul>
       )}
-      <FieldGroup className="gap-4 rounded-lg border border-border p-4">
+      <FieldGroup className="gap-4">
         <Field label="Add a contact route" inputID="access-path-kind">
           <Select value={selectedKind} disabled={disabled} onValueChange={(kind) => { setSelectedKind(toAccessKind(kind)); setTechnicalExpanded(false) }}>
             <SelectTrigger id="access-path-kind" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
@@ -760,6 +878,21 @@ function TextAreaInput({
 }
 
 function statusLabel(status: BusinessOfferingStatus) { return status[0]?.toUpperCase() + status.slice(1) }
+
+function availabilityLabel(value: 'available' | 'unavailable' | 'unknown'): string {
+  if (value === 'available') return 'Available'
+  if (value === 'unavailable') return 'Unavailable'
+  return 'Availability unknown'
+}
+
+function compactSortValue(item: OwnerOfferingSummary, id: string): string {
+  if (id === 'name') return item.offering.name
+  if (id === 'status') return item.lifecycleLabel ?? statusLabel(item.status)
+  if (id === 'blocker') return item.blocker ?? ''
+  if (id === 'routes') return String(item.accessPathCount)
+  if (id === 'ready') return String(item.support?.routeable === true)
+  return item.offering.name
+}
 function toStatus(value: string): BusinessOfferingStatus { return ['draft', 'published', 'paused', 'retired'].includes(value) ? value as BusinessOfferingStatus : 'draft' }
 function toAccessKind(value: string): 'phone' | 'website' | 'external_operation' { return ['phone', 'website', 'external_operation'].includes(value) ? value as 'phone' | 'website' | 'external_operation' : 'phone' }
 function pathLabel(descriptor: OfferingAccessPathDescriptor) { return descriptor.kind === 'external_operation' ? descriptor.name : descriptor.channel === 'phone' ? 'Call' : 'Website' }
