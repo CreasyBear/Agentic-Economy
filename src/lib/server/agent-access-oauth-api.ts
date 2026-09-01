@@ -402,6 +402,69 @@ async function consentResponse(
   })
 }
 
+function consentAuthorityMode(form: URLSearchParams): AgentAccessAuthorityMode | null | undefined {
+  const value = form.get('authority_mode')
+  if (value === null) return undefined
+  return AGENT_ACCESS_AUTHORITY_MODE_VALUES.includes(value as AgentAccessAuthorityMode)
+    ? value as AgentAccessAuthorityMode
+    : null
+}
+
+async function consentAuthObject(
+  form: URLSearchParams,
+  grantRef: string | null,
+  options: OAuthApiOptions,
+): Promise<OAuthConsentAuthObject> {
+  if (options.authObject !== undefined) return options.authObject
+  if (isLocalE2EAuthBypassEnabled()) {
+    return localE2EConsentAuth(grantRef, positiveFormInteger(form.get('expected_grant_revision')))
+  }
+  return await auth() as OAuthConsentAuthObject
+}
+
+type ConsentApprovalFields = Readonly<{
+  expectedGrantRevision: number
+  expectedTargetRevision: number
+  approvedOperationSelection: Readonly<{
+    operationAccess: AgentAccessOperationAccess
+    operationRefs: readonly string[]
+  }>
+  reservationTarget: Parameters<typeof reserveAgentAccessConsentForOwner>[0]['connectionTarget']
+  state: string | null
+}>
+
+function consentApprovalFields(form: URLSearchParams): ConsentApprovalFields | undefined {
+  const expectedGrantRevision = positiveFormInteger(form.get('expected_grant_revision'))
+  const expectedTargetRevision = positiveFormInteger(form.get('expected_target_revision'))
+  const approvedOperationSelection = parseApprovedOperationSelection(form)
+  const targetKind = form.get('connection_target')
+  const principalRef = form.get('principal_ref')
+  const replacementMode = form.get('replacement_mode')
+  const state = form.get('state')
+  if (
+    expectedGrantRevision === undefined
+    || expectedTargetRevision === undefined
+    || approvedOperationSelection === undefined
+    || (targetKind !== 'new_agent' && targetKind !== 'replace_credential')
+    || (targetKind === 'replace_credential' && (principalRef === null || principalRef.trim().length === 0))
+    || (targetKind === 'replace_credential' && replacementMode !== 'planned' && replacementMode !== 'compromise')
+    || (state !== null && state.length > 2_048)
+  ) return undefined
+  return {
+    expectedGrantRevision,
+    expectedTargetRevision,
+    approvedOperationSelection,
+    reservationTarget: targetKind === 'new_agent'
+      ? { kind: 'new_agent' }
+      : {
+          kind: 'replace_credential',
+          principalRef: principalRef!,
+          replacementMode: replacementMode as 'planned' | 'compromise',
+        },
+    state,
+  }
+}
+
 export async function handleOAuthConsentPost(request: Request, options: OAuthApiOptions = {}): Promise<Response> {
   const sourceBody = await request.clone().text()
   const formResult = await readForm(request)
@@ -416,17 +479,8 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   if (csrfDecision.kind === 'rejected') return oauthError('access_denied', 403)
   const grantRef = form.get('grant_ref')
   const decision = form.get('decision')
-  const localE2E = isLocalE2EAuthBypassEnabled()
-  const authObject = options.authObject ?? (localE2E
-    ? localE2EConsentAuth(grantRef, positiveFormInteger(form.get('expected_grant_revision')))
-    : await auth() as OAuthConsentAuthObject)
+  const authObject = await consentAuthObject(form, grantRef, options)
   const owner = await ownerIdentity(options, authObject)
-  const authorityModeText = form.get('authority_mode')
-  const authorityMode = authorityModeText === null
-    ? undefined
-    : AGENT_ACCESS_AUTHORITY_MODE_VALUES.includes(authorityModeText as AgentAccessAuthorityMode)
-      ? authorityModeText as AgentAccessAuthorityMode
-      : null
   const limited = await oauthAdmissionResponse(request, options, `consent:${grantRef ?? 'missing'}`)
   if (limited !== undefined) return limited
   if (!owner.isAuthenticated || owner.userId === null || grantRef === null) return oauthError('access_denied', 403)
@@ -434,31 +488,13 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   if (decision !== 'approve') {
     return await denyConsentGrant(store, grantRef, owner.userId, options)
   }
+  const authorityMode = consentAuthorityMode(form)
   if (authorityMode === null || authorityMode === undefined) return oauthError('invalid_scope', 400)
   if (!authObject.has({ reverification: 'strict' })) return strictReverificationJson()
   const proof = consentProofFromAuth(authObject)
   if (proof === null) return consentJson({ kind: 'refused', code: 'security_evidence_unavailable' }, 403)
-  const expectedGrantRevision = positiveFormInteger(form.get('expected_grant_revision'))
-  const expectedTargetRevision = positiveFormInteger(form.get('expected_target_revision'))
-  const targetKind = form.get('connection_target')
-  const principalRef = form.get('principal_ref')
-  const replacementMode = form.get('replacement_mode')
-  const approvedOperationSelection = parseApprovedOperationSelection(form)
-  const state = form.get('state')
-  if (expectedGrantRevision === undefined
-    || expectedTargetRevision === undefined
-    || approvedOperationSelection === undefined
-    || (targetKind !== 'new_agent' && targetKind !== 'replace_credential')
-    || (targetKind === 'replace_credential' && (principalRef === null || principalRef.trim().length === 0))
-    || (targetKind === 'replace_credential' && replacementMode !== 'planned' && replacementMode !== 'compromise')
-    || (state !== null && state.length > 2_048)) return oauthError('invalid_request', 400)
-  const reservationTarget = targetKind === 'new_agent'
-    ? { kind: 'new_agent' as const }
-    : {
-        kind: 'replace_credential' as const,
-        principalRef: principalRef!,
-        replacementMode: replacementMode as 'planned' | 'compromise',
-      }
+  const approval = consentApprovalFields(form)
+  if (approval === undefined) return oauthError('invalid_request', 400)
   return await reserveAndFinalizeConsent({
     request,
     sourceBody,
@@ -466,14 +502,14 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
     authObject,
     ownerId: owner.userId,
     grantRef,
-    expectedGrantRevision,
-    expectedTargetRevision,
+    expectedGrantRevision: approval.expectedGrantRevision,
+    expectedTargetRevision: approval.expectedTargetRevision,
     authorityMode,
-    approvedOperationAccess: approvedOperationSelection.operationAccess,
-    approvedOperationRefs: approvedOperationSelection.operationRefs,
-    reservationTarget,
+    approvedOperationAccess: approval.approvedOperationSelection.operationAccess,
+    approvedOperationRefs: approval.approvedOperationSelection.operationRefs,
+    reservationTarget: approval.reservationTarget,
     connectionTarget: parseConnectionTarget(form),
-    state,
+    state: approval.state,
     proof,
     options,
   })
