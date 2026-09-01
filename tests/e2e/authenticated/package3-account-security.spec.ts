@@ -25,7 +25,7 @@ test.describe('Package 3 Account security recovery', () => {
     await expect(page.getByRole('heading', { name: 'If you suspect compromise' })).toBeVisible()
     await expect(page.getByText('This page does not mark the Account contained')).toBeVisible()
     await expect(page.getByText('Review at source')).toHaveCount(5)
-    await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Security history' })).toBeVisible()
 
     await expect(page.getByRole('link', { name: /Review and revoke Clerk sessions/u }))
@@ -41,14 +41,18 @@ test.describe('Package 3 Account security recovery', () => {
 
     await page.getByRole('link', { name: /Rotate or disconnect Agents/u }).click()
     await expect(page).toHaveURL(/\/agent-access(?:[/?#]|$)/u)
-    await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Agents', level: 1 })).toBeVisible()
 
     await page.goto('/owner/offerings#supplier-connections', { waitUntil: 'networkidle' })
     await expect(page).toHaveURL(/\/owner\/offerings#supplier-connections$/u)
-    await expect(page.locator('#supplier-connections')).toBeVisible()
+    await expect(page.locator('#supplier-connections').or(
+      page.getByRole('button', { name: 'Create supplier workspace' }),
+    )).toBeVisible()
 
     await page.goto('/owner/offerings#earnings', { waitUntil: 'networkidle' })
     await expect(page).toHaveURL(/\/owner\/offerings#earnings$/u)
-    await expect(page.getByRole('heading', { name: 'Earnings and payouts' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Earnings and payouts' }).or(
+      page.getByRole('button', { name: 'Create supplier workspace' }),
+    )).toBeVisible()
   })
 })

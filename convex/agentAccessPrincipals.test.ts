@@ -15,6 +15,7 @@ import schema from './schema'
 import { api } from './_generated/api'
 import { resolveCanonicalAgentContext, validateCanonicalAgentDelegation } from './lib/canonicalAgentAuthority'
 import { canonicalAgentDelegationScopes } from './agentAccessPrincipals'
+import { resolveCanonicalAgentBinding } from './authorityBoundary'
 
 const modules = import.meta.glob('./**/*.ts')
 const NOW = 10_000
@@ -470,6 +471,20 @@ describe('issued agent binding', () => {
     await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual([
       expect.objectContaining({ principalRef: access.principalId, currentProviderCredentialId: first.credentialId }),
     ])
+    await expect(backend.run(async (ctx) => await resolveCanonicalAgentBinding(ctx, {
+      credentialId: first.credentialId,
+      applicationRef: first.applicationRef,
+      environment: first.environment,
+      scopes: first.scopes,
+      requiredScopes: [first.scopes[0]!],
+      authorityMode: first.authorityMode,
+      operationKey: 'surface:http:account-self',
+      correlationId: 'replacement-predecessor-still-current',
+    }))).resolves.toMatchObject({
+      principalId: access.principalId,
+      credentialId: first.credentialId,
+      grantRef: first.grantRef,
+    })
     const promoteAuth = await operationAssertion('agentAccessPrincipals.promoteCredentialReplacementForServer', transition)
     await expect(owner.mutation(promoteReplacement, { ...transition, serviceAuth: promoteAuth }))
       .resolves.toEqual({ kind: 'completed', providerCredentialId: first.credentialId })
@@ -485,6 +500,30 @@ describe('issued agent binding', () => {
         ]),
       }),
     ])
+    await expect(backend.run(async (ctx) => await resolveCanonicalAgentBinding(ctx, {
+      credentialId: replacement.credentialId,
+      applicationRef: replacement.applicationRef,
+      environment: replacement.environment,
+      scopes: replacement.scopes,
+      requiredScopes: [replacement.scopes[0]!],
+      authorityMode: replacement.authorityMode,
+      operationKey: 'surface:http:account-self',
+      correlationId: 'replacement-successor-promoted',
+    }))).resolves.toMatchObject({
+      principalId: access.principalId,
+      credentialId: replacement.credentialId,
+      grantRef: replacement.grantRef,
+    })
+    await expect(backend.run(async (ctx) => await resolveCanonicalAgentBinding(ctx, {
+      credentialId: first.credentialId,
+      applicationRef: first.applicationRef,
+      environment: first.environment,
+      scopes: first.scopes,
+      requiredScopes: [first.scopes[0]!],
+      authorityMode: first.authorityMode,
+      operationKey: 'surface:http:account-self',
+      correlationId: 'replacement-predecessor-revoked',
+    }))).resolves.toBeNull()
 
     const cancelledInput: AgentCredentialReplacementRegistration = {
       ...replacement,

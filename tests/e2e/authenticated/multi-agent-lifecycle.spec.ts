@@ -20,6 +20,7 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     await clerk.signIn({ page, emailAddress: configuredEnvironment.ownerEmail })
 
     const agentA = await connectNewAgent(page, agentAName)
+    await refreshOwnerProof(page, configuredEnvironment.ownerEmail)
     const agentB = await connectNewAgent(page, agentBName)
     const identityA = await expectUsableAgent(page.request, agentA.secret)
     const identityB = await expectUsableAgent(page.request, agentB.secret)
@@ -29,6 +30,7 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     await ensureAgentVisible(page, agentAName)
     await ensureAgentVisible(page, agentBName)
 
+    await refreshOwnerProof(page, configuredEnvironment.ownerEmail)
     const replacement = await replaceAgentCredential(page, `E2E Agent A replacement ${suffix}`, agentAName)
     const replacedIdentity = await expectUsableAgent(page.request, replacement.secret)
     expect(replacedIdentity.principalRef).toBe(identityA.principalRef)
@@ -44,8 +46,12 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     await expect(page.getByText('Generation 1')).toBeVisible()
     await expect(page.getByText('Generation 2')).toBeVisible()
     await expect(page.getByText('Revoked').first()).toBeVisible()
-    await page.getByRole('button', { name: 'Revoke', exact: true }).click()
-    await page.getByRole('button', { name: 'Revoke credential' }).click()
+    const revoke = page.getByRole('button', { name: 'Revoke', exact: true })
+    await expect(revoke).toBeVisible()
+    await revoke.dispatchEvent('click')
+    const confirmRevoke = page.getByRole('button', { name: 'Revoke credential' })
+    await expect(confirmRevoke).toBeVisible()
+    await confirmRevoke.dispatchEvent('click')
     await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
     await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
     await expect(page.getByText('Generation 1')).toBeVisible()
@@ -59,8 +65,12 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     await expectUsableAgent(page.request, agentB.secret)
 
     await openAgent(page, agentBName)
-    await page.getByRole('button', { name: 'Disconnect agent' }).click()
-    await page.getByRole('button', { name: 'Disconnect agent' }).last().click()
+    const disconnect = page.getByRole('button', { name: 'Disconnect agent' })
+    await expect(disconnect).toHaveCount(1)
+    await disconnect.dispatchEvent('click')
+    const confirmDisconnect = page.getByRole('button', { name: 'Disconnect agent' }).last()
+    await expect(confirmDisconnect).toBeVisible()
+    await confirmDisconnect.dispatchEvent('click')
     await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
     await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
     await expect(page.getByText('Generation 1')).toBeVisible()
@@ -74,11 +84,18 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
 
 type ConnectedAgent = Readonly<{ secret: string }>
 
+async function refreshOwnerProof(page: Page, ownerEmail: string): Promise<void> {
+  await page.goto('/')
+  await clerk.signOut({ page })
+  await clerk.signIn({ page, emailAddress: ownerEmail })
+}
+
 async function connectNewAgent(page: Page, name: string): Promise<ConnectedAgent> {
   const grant = await beginDeviceGrant(page.request, name)
   await page.goto(grant.verificationUri)
   await expect(page.getByRole('heading', { name: `Connect ${name}`, exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Approve access' }).click()
+  await confirmAgentApproval(page)
   await expect(page.getByText('Access approved — return to your agent')).toBeVisible()
   return { secret: await exchangeDeviceGrant(page.request, grant.clientId, grant.deviceCode) }
 }
@@ -108,6 +125,7 @@ async function replaceAgentCredential(page: Page, name: string, targetName: stri
     await loadNextConsentPage(page)
   }
   await page.getByRole('button', { name: 'Approve access' }).click()
+  await confirmAgentApproval(page)
   await expect(page.getByText('Access approved — return to your agent')).toBeVisible()
   return { secret: await exchangeDeviceGrant(page.request, grant.clientId, grant.deviceCode) }
 }
@@ -122,6 +140,16 @@ async function loadNextConsentPage(page: Page): Promise<void> {
     }),
     page.getByRole('button', { name: /Load more agents|Retry agent list/ }).click(),
   ])
+}
+
+async function confirmAgentApproval(page: Page): Promise<void> {
+  const responsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return url.pathname === '/oauth/authorize' && response.request().method() === 'POST'
+  })
+  await page.getByRole('button', { name: 'Confirm and approve' }).click()
+  const response = await responsePromise
+  await expect(response.json()).resolves.toMatchObject({ kind: 'approved' })
 }
 
 async function ensureAgentVisible(page: Page, name: string): Promise<void> {
@@ -139,7 +167,13 @@ async function ensureAgentVisible(page: Page, name: string): Promise<void> {
 async function openAgent(page: Page, name: string): Promise<void> {
   await page.goto('/agent-access', { waitUntil: 'networkidle' })
   await ensureAgentVisible(page, name)
-  await page.getByRole('link', { name: `Open ${name}`, exact: true }).click()
+  const link = page.getByRole('link', { name: `Open ${name}`, exact: true })
+  const href = await link.getAttribute('href')
+  if (href === null || !/^\/agent-access\?caller=prn_[0-9a-f]{32}$/u.test(href)) {
+    throw new Error('agent_detail_link_invalid')
+  }
+  await page.goto(href, { waitUntil: 'networkidle' })
+  await expect(page).toHaveURL(new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}$`, 'u'))
   await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
 }
 
@@ -195,9 +229,11 @@ async function expectUsableAgent(request: APIRequestContext, secret: string): Pr
   const response = await request.get('/api/v1/account', {
     headers: { Authorization: `Bearer ${secret}` },
   })
-  expect(response.ok()).toBe(true)
-  const identity = await response.json() as { kind: string; principalRef: string }
-  expect(identity.kind).toBe('authenticated')
+  const identity = await response.json() as { kind?: string; principalRef?: string; code?: string }
+  expect({ status: response.status(), identity }).toMatchObject({
+    status: 200,
+    identity: { kind: 'authenticated' },
+  })
   expect(identity.principalRef).toMatch(/^prn_[0-9a-f]{32}$/u)
-  return { principalRef: identity.principalRef }
+  return { principalRef: identity.principalRef! }
 }

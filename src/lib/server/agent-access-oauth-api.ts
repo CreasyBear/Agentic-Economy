@@ -564,6 +564,12 @@ async function reserveAndFinalizeConsent(input: Readonly<{
     proof: input.proof,
   })
   if (reservation.kind !== 'reserved' && reservation.kind !== 'replayed') {
+    if (reservation.kind === 'refused' && reservation.code !== 'authentication_required') {
+      const currentGrant = await input.store.getGrantByRef(input.grantRef)
+      if (currentGrant?.status === 'pending' && currentGrant.revision === input.expectedGrantRevision) {
+        return strictReverificationJson()
+      }
+    }
     return reservationJson(reservation)
   }
   let reservedGrant = await input.store.getGrantByRef(input.grantRef)

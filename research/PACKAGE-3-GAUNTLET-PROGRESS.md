@@ -434,3 +434,116 @@ adversarial-review passes.
    Convex codegen, and production build pass. The repository import gate remains
    blocked only by four unrelated Package 2 private imports in
    `owner-operations.functions.ts`.
+
+## PR6 — consequential controls across money and publication
+
+Status: accepted at `fd72ff730`, with the publication-authority correction at
+`ab1681509`.
+
+### Decisions closed
+
+- Funding keeps Stripe-hosted SCA as the escalation proof. AE binds the owner
+  Account, amount, fees, total, cancellation, and authoritative readback without
+  adding a duplicate Clerk prompt.
+- Payout authority and transfer use the shared server-derived consequence
+  descriptor and strict one-command Clerk proof before reservation or provider
+  handoff.
+- Publish and republish bind the exact Operation revision, market visibility,
+  commercial material, and withdrawal path. Withdrawal is an authority
+  reduction with exact confirmation and no escalation proof.
+- Ambiguous external outcomes retain their command and correlation references
+  and lead to status or reconciliation, never blind resubmission.
+
+### Gauntlet result
+
+1. Shared domain adoption: **accepted after correction**. Money, payout, and
+   publication retain their existing state machines and durable readbacks.
+2. Publication authority: **corrected**. Agent publication authority is derived
+   from canonical server state rather than a browser-supplied descriptor.
+3. Package 3C closure: **accepted**. Funding, payouts, publication, Agent
+   authority, and connection authority share one consequence vocabulary and one
+   server-enforced authority boundary.
+
+## PR7 — Account security and compromise recovery
+
+Status: accepted at `417c03cc9`, with canonical Operation recovery links at
+`07cd77d72` and bounded authority/lifecycle follow-ups through `6b1bbfa47`.
+
+### Decisions closed
+
+- Clerk `UserProfile` remains the owner of human sessions, devices, factors,
+  backup codes, and account recovery.
+- Compromise response is a checklist of independent authoritative actions. It
+  has no one-click “secure everything” mutation and never claims containment
+  from an MFA reset alone.
+- Recovery links open the current canonical Agent, supplier-connection, payout,
+  and security controls. Owners without a supplier identity see truthful setup
+  guidance rather than an unavailable control.
+- Authority reductions pass through the central consequence boundary with exact
+  confirmation and no authority-widening proof.
+
+### Gauntlet result
+
+1. Security history distinguishes `ae_recorded`, `clerk_observed`, and
+   `provider_observed` evidence.
+2. Changed sensitive commands require fresh proof. Planned credential
+   replacement preserves the Principal and predecessor until successor
+   promotion; compromise handling does not reactivate revoked authority.
+3. Package 3D closure: **accepted**. Clerk owns human security while AE owns the
+   Account-isolated evidence and truthful multi-system recovery path.
+
+## Final Package 3 journeys and closure
+
+Status: accepted in the 2026-09-01 working tree after live Clerk, Convex,
+browser, HTTP, and x402 journeys.
+
+### Firsthand references checked
+
+- Clerk Playwright testing: [overview](https://clerk.com/docs/guides/development/testing/playwright/overview)
+  and [test helpers](https://clerk.com/docs/guides/development/testing/playwright/test-helpers).
+- Clerk [interactive reverification](https://clerk.com/docs/react/reference/hooks/use-reverification)
+  and [server reverification](https://clerk.com/docs/guides/secure/reverification).
+- Playwright [web-server configuration](https://playwright.dev/docs/test-webserver).
+- TanStack Router [data loading](https://tanstack.com/router/latest/docs/guide/data-loading)
+  and [search-parameter navigation](https://tanstack.com/router/latest/docs/how-to/navigate-with-search-params).
+
+### Papercuts found and resolved
+
+1. **Local origin mismatch.** The authenticated test server now supplies its
+   actual `http://127.0.0.1:3021` canonical origin, so Clerk middleware evaluates
+   the same authorized party the browser uses.
+2. **Reused proof on a changed command.** Proof-related OAuth refusals now
+   return Clerk's maintained strict-reverification response. The authenticated
+   journey signs out and back in through Clerk's official test helpers before a
+   second changed sensitive command, producing fresh test proof rather than
+   weakening one-proof/one-command binding.
+3. **Credential and delegation generation conflation.** Canonical Agent
+   authentication now resolves the exact active grant attached to the presented
+   credential, validates that grant against current Agent admission, and selects
+   its exact Delegation by grant reference. A prepared predecessor remains
+   usable, a promoted successor retains the same Principal, and the predecessor
+   is refused after promotion.
+4. **Supplier-less owner recovery.** Account security now presents the existing
+   truthful supplier-workspace onboarding when the owner has no supplier
+   identity.
+5. **Browser-driver action wait.** The final sheet journey verifies the exact
+   row destination, direct-loads that detail view, asserts visible controls, and
+   dispatches the action before waiting for the real dialog, mutation, and
+   readback. This proves the lifecycle but is not pointer-timing or focus-ring
+   evidence; those remain covered by the existing component regressions.
+
+### Final evidence
+
+- Authenticated Package 3 Clerk/Convex journeys: **3/3 passed**.
+- Targeted multi-Agent lifecycle journeys: **2/2 passed**.
+- Focused unit and Convex suites: **102 tests passed across 7 files**.
+- Official and route-runtime x402 local canaries: **passed**.
+- Lint, TypeScript, import boundaries, UI contract, Convex generated-code
+  verification, anonymous Convex code generation, and production build:
+  **passed**.
+- The build retained only known non-blocking local warnings for the expired
+  Vercel OIDC token, Clerk development keys, and Vite dependency packaging.
+
+Packages 3A–3D are closed against the approved implementation plan. No custom
+human-security system, vault, rate limiter, provider registry, audit table, or
+parallel authority gateway was added.

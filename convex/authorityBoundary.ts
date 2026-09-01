@@ -151,12 +151,38 @@ export async function resolveCanonicalAgentBinding(
     return await denyKnownCredential('authentication_required')
   }
 
-  const candidates = await ctx.db.query('authorityDelegationGrants')
-    .withIndex('by_subjectPrincipalRef_and_lifecycle', (query) => query
-      .eq('subjectPrincipalRef', binding.principalRef)
-      .eq('lifecycle', 'active'))
-    .take(DELEGATION_MAX_ANCESTRY_GRANTS + 1)
-  if (candidates.length > DELEGATION_MAX_ANCESTRY_GRANTS) {
+  const [sandboxGrants, productionGrants, candidates] = await Promise.all([
+    ctx.db.query('agentAccessGrants')
+      .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+        .eq('credentialId', input.credentialId)
+        .eq('environment', 'sandbox')
+        .eq('lifecycle', 'active'))
+      .take(2),
+    ctx.db.query('agentAccessGrants')
+      .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+        .eq('credentialId', input.credentialId)
+        .eq('environment', 'production')
+        .eq('lifecycle', 'active'))
+      .take(2),
+    ctx.db.query('authorityDelegationGrants')
+      .withIndex('by_subjectPrincipalRef_and_lifecycle', (query) => query
+        .eq('subjectPrincipalRef', binding.principalRef)
+        .eq('lifecycle', 'active'))
+      .take(DELEGATION_MAX_ANCESTRY_GRANTS + 1),
+  ])
+  const accessGrants = [...sandboxGrants, ...productionGrants]
+  if (accessGrants.length !== 1 || candidates.length > DELEGATION_MAX_ANCESTRY_GRANTS) {
+    return await denyKnownCredential('authentication_required')
+  }
+  const accessGrant = accessGrants[0]
+  if (accessGrant === undefined
+    || accessGrant.principalId !== binding.principalRef
+    || accessGrant.ownerId !== admission.ownerId
+    || accessGrant.applicationRef !== input.applicationRef
+    || accessGrant.environment !== input.environment
+    || accessGrant.authorityMode !== input.authorityMode
+    || accessGrant.generation !== admission.grantGeneration
+    || accessGrant.policyDigest !== admission.policyDigest) {
     return await denyKnownCredential('authentication_required')
   }
   const consequenceNow = Date.now()
@@ -165,7 +191,8 @@ export async function resolveCanonicalAgentBinding(
     || (admission.expiresAt !== undefined && admission.expiresAt <= consequenceNow)) {
     return await denyKnownCredential('authentication_required', consequenceNow)
   }
-  const grants = candidates.filter((grant) => grant.expiresAt > consequenceNow
+  const grants = candidates.filter((grant) => grant.grantRef === accessGrant.grantRef
+    && grant.expiresAt > consequenceNow
     && requiredScopes.every((scope) => grant.scopes.includes(scope))
     && (grant.resourceRefs.includes('*') || grant.resourceRefs.includes(input.operationKey)))
   if (grants.length !== 1) {
@@ -180,7 +207,6 @@ export async function resolveCanonicalAgentBinding(
   const grant = grants[0]
   if (grant === undefined
     || grant.accountRef !== admission.ownerId
-    || grant.generation !== admission.grantGeneration
     || grant.subjectPrincipalRef !== principal.principalRef
     || !Number.isSafeInteger(grant.generation)
     || grant.generation < 0) return await denyKnownCredential('authentication_required', consequenceNow)

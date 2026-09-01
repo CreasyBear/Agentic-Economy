@@ -1478,6 +1478,18 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(reserveConsent).not.toHaveBeenCalled()
     expect(issueKey).not.toHaveBeenCalled()
     expect(store.grants.get('device:proof-gate')?.status).toBe('pending')
+
+    const freshProofRequired = await handleOAuthConsentPost(request(), {
+      store,
+      authObject: strictAuthObject,
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+      reserveConsent: async () => ({ kind: 'refused', code: 'command_changed' }),
+      issueKey,
+    })
+    expect(freshProofRequired.status).toBe(403)
+    await expect(freshProofRequired.json()).resolves.toHaveProperty('clerk_error')
+    expect(issueKey).not.toHaveBeenCalled()
+    expect(store.grants.get('device:proof-gate')?.status).toBe('pending')
   })
   it('returns a durable reference and does not issue a key when the security rate limit is unavailable', async () => {
     const store = storeFixture()

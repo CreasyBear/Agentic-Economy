@@ -44,6 +44,10 @@ export default defineConfig({
     webServer: {
       command: 'npm run dev -- --port 3021 --strictPort --host 127.0.0.1',
       url: 'http://127.0.0.1:3021',
+      env: {
+        ...process.env,
+        AE_CANONICAL_BASE_URL: environment.baseURL,
+      },
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: 'pipe' as const,
