@@ -189,7 +189,13 @@ describe('provider connection domain', () => {
   })
 
   it('increments generation and makes the prior authority stale on reauthorization', () => {
-    const current = create()
+    const current = {
+      ...create(),
+      healthStatus: 'healthy' as const,
+      healthCheckedAt: 1_500,
+      healthSubject: 'provider-account:old',
+      healthObservationDigest: `sha256:${'c'.repeat(64)}`,
+    }
     const result = reauthorizeProviderConnection(current, {
       ...baseCommand,
       commandId: 'command:reauthorize:one',
@@ -204,6 +210,11 @@ describe('provider connection domain', () => {
     if (result.kind !== 'applied') return
     expect(result.connection.authorityGeneration).toBe(2)
     expect(result.connection.authorityDigest).not.toBe(current.authorityDigest)
+    expect(result.connection).not.toHaveProperty('healthStatus')
+    expect(result.connection).not.toHaveProperty('healthCheckedAt')
+    expect(result.connection).not.toHaveProperty('healthSubject')
+    expect(result.connection).not.toHaveProperty('healthObservationDigest')
+    expect(result.connection).not.toHaveProperty('healthReasonCode')
     const expiringResult = createProviderConnection({
       ...baseCommand,
       commandId: 'command:create:expiring',
@@ -289,6 +300,8 @@ describe('provider connection domain', () => {
       providerRef: 'provider:x402:provider.example',
       providerAccountRef: 'x402:https://provider.example/paid',
       resourceUrl: 'https://provider.example/paid',
+      method: 'POST',
+      payee: '0x1111111111111111111111111111111111111111',
       evidenceRefs: [],
     }, 1_000)
     if (created.kind !== 'applied') throw new Error('x402 create failed')
@@ -384,6 +397,8 @@ describe('provider connection domain', () => {
       providerRef: 'provider:x402:lease',
       providerAccountRef: 'x402:https://provider.example/paid',
       resourceUrl: 'https://provider.example/paid',
+      method: 'POST',
+      payee: '0x1111111111111111111111111111111111111111',
       evidenceRefs: ['evidence:x402:lease'],
     }, 1_000)
     if (created.kind !== 'applied') throw new Error('x402_create_failed')
@@ -528,6 +543,8 @@ describe('provider connection domain', () => {
       providerRef: 'provider:x402:api.example.test',
       providerAccountRef: 'x402:https://api.example.test/quote',
       resourceUrl: 'https://api.example.test/quote',
+      method: 'POST',
+      payee: '0x1111111111111111111111111111111111111111',
       evidenceRefs: ['evidence:x402'],
     } as const
     const created = createX402ProviderConnection(command, 1_000)

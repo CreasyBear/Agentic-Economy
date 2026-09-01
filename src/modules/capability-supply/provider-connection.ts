@@ -78,3 +78,6 @@ export {
   projectProviderConnectionPublic,
 } from './internal/provider-connection/owner-projection'
 export type { ProviderConnectionOwnerProjection } from './internal/provider-connection/owner-projection'
+
+export { createConnectionHealthAuditEvent, createConnectionLifecycleAuditEvent } from './internal/provider-connection/audit'
+export type { ConnectionHealthAuditInput, ConnectionLifecycleAuditInput } from './internal/provider-connection/audit'

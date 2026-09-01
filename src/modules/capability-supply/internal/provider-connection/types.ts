@@ -40,6 +40,13 @@ export type ProviderConnection = Readonly<{
   providerAccountRef: string
   adapterId: string
   credentialRef: string | null
+  x402Method?: 'GET' | 'POST'
+  x402Payee?: string
+  healthStatus?: 'healthy' | 'unhealthy'
+  healthCheckedAt?: number
+  healthSubject?: string
+  healthObservationDigest?: string
+  healthReasonCode?: string
   grantedScopes: readonly string[]
   grantedResources: readonly string[]
   authorityGeneration: number
@@ -75,6 +82,8 @@ export type AuthorityCommandFields = Readonly<{
   providerAccountRef: string
   adapterId: string
   credentialRef: string | null
+  x402Method?: 'GET' | 'POST'
+  x402Payee?: string
   requestedScopes: readonly string[]
   grantedScopes: readonly string[]
   requestedResources: readonly string[]
@@ -141,6 +150,8 @@ export type CreateX402ProviderConnectionCommand = Readonly<{
   providerRef: string
   providerAccountRef: string
   resourceUrl: string
+  method: 'GET' | 'POST'
+  payee: string
   evidenceRefs: readonly string[]
   expiresAt?: number
   owningAccountRef: string

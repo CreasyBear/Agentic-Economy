@@ -54,6 +54,8 @@ function normalizeAuthorityCommand(command: AuthorityCommandFields & Readonly<{ 
     || !validIdentity(command.owningAccountRef) || !validIdentity(command.installedByPrincipalRef)
     || !validIdentity(command.authorityGrantRef) || !validGeneration(command.authorityGrantGeneration)) return { kind: 'refused', code: 'invalid_identity' }
   if (command.credentialRef !== null && !isProviderConnectionCredentialRef(command.credentialRef)) return { kind: 'refused', code: 'invalid_identity' }
+  if (command.x402Method !== undefined && command.x402Method !== 'GET' && command.x402Method !== 'POST') return { kind: 'refused', code: 'invalid_identity' }
+  if (command.x402Payee !== undefined && !validIdentity(command.x402Payee)) return { kind: 'refused', code: 'invalid_identity' }
   if (command.secretRef !== command.credentialRef && !(command.secretRef === undefined && command.credentialRef === null)) {
     return { kind: 'refused', code: 'invalid_identity' }
   }
@@ -78,7 +80,10 @@ function normalizeAuthorityCommand(command: AuthorityCommandFields & Readonly<{ 
     authorityGrantRef: command.authorityGrantRef, authorityGrantGeneration: command.authorityGrantGeneration,
     ...(command.secretRef === undefined ? {} : { secretRef: command.secretRef }), businessId: command.businessId,
     providerRef: command.providerRef, providerAccountRef: command.providerAccountRef, adapterId: command.adapterId,
-    credentialRef: command.credentialRef, requestedScopes: requestedScopes.values, grantedScopes: grantedScopes.values,
+    credentialRef: command.credentialRef,
+    ...(command.x402Method === undefined ? {} : { x402Method: command.x402Method }),
+    ...(command.x402Payee === undefined ? {} : { x402Payee: command.x402Payee }),
+    requestedScopes: requestedScopes.values, grantedScopes: grantedScopes.values,
     requestedResources: requestedResources.values, grantedResources: grantedResources.values,
     ...(command.expiresAt === undefined ? {} : { expiresAt: command.expiresAt }),
     ...(reasonCode.value === undefined ? {} : { reasonCode: reasonCode.value }), evidenceRefs: evidenceRefs.values,
@@ -164,11 +169,13 @@ export function providerConnectionCleanupCommandId(revocationRef: string, cleanu
 }
 
 export function isCanonicalCredentiallessX402ProviderConnection(
-  connection: Pick<ProviderConnection, 'adapterId' | 'credentialRef' | 'providerRef' | 'providerAccountRef' | 'grantedScopes' | 'grantedResources'>,
+  connection: Pick<ProviderConnection, 'adapterId' | 'credentialRef' | 'providerRef' | 'providerAccountRef' | 'x402Method' | 'x402Payee' | 'grantedScopes' | 'grantedResources'>,
 ): boolean {
   if (
     connection.adapterId !== 'x402-fetch:v2'
     || connection.credentialRef !== null
+    || (connection.x402Method !== 'GET' && connection.x402Method !== 'POST')
+    || connection.x402Payee === undefined
     || connection.grantedScopes.length !== 0
     || !connection.providerRef.startsWith('provider:x402:')
     || !connection.providerAccountRef.startsWith('x402:')
@@ -199,6 +206,8 @@ export function createProviderConnection(command: CreateProviderConnectionComman
     providerAccountRef: normalized.command.providerAccountRef,
     adapterId: normalized.command.adapterId,
     credentialRef: normalized.command.credentialRef,
+    ...(normalized.command.x402Method === undefined ? {} : { x402Method: normalized.command.x402Method }),
+    ...(normalized.command.x402Payee === undefined ? {} : { x402Payee: normalized.command.x402Payee }),
     grantedScopes: normalized.command.grantedScopes,
     grantedResources: normalized.command.grantedResources,
     authorityGeneration: 1,
@@ -232,6 +241,8 @@ export function createX402ProviderConnection(
     providerAccountRef: command.providerAccountRef,
     adapterId: 'x402-fetch:v2',
     credentialRef: null,
+    x402Method: command.method,
+    x402Payee: command.payee,
     requestedScopes: [],
     grantedScopes: [],
     requestedResources: [resourceUrl.toString()],
@@ -268,6 +279,11 @@ export function reauthorizeProviderConnection(current: ProviderConnection | unde
     reasonCode: _oldReasonCode,
     expiresAt: _oldExpiresAt,
     secretRef: _oldSecretRef,
+    healthStatus: _oldHealthStatus,
+    healthCheckedAt: _oldHealthCheckedAt,
+    healthSubject: _oldHealthSubject,
+    healthObservationDigest: _oldHealthObservationDigest,
+    healthReasonCode: _oldHealthReasonCode,
     ...base
   } = current
   const next = withAuthorityDigest({
@@ -278,6 +294,8 @@ export function reauthorizeProviderConnection(current: ProviderConnection | unde
     authorityGrantGeneration: normalized.command.authorityGrantGeneration,
     ...(normalized.command.secretRef === undefined ? {} : { secretRef: normalized.command.secretRef }),
     credentialRef: normalized.command.credentialRef,
+    ...(normalized.command.x402Method === undefined ? {} : { x402Method: normalized.command.x402Method }),
+    ...(normalized.command.x402Payee === undefined ? {} : { x402Payee: normalized.command.x402Payee }),
     grantedScopes: normalized.command.grantedScopes,
     grantedResources: normalized.command.grantedResources,
     authorityGeneration: current.authorityGeneration + 1,

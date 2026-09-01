@@ -16,6 +16,12 @@ export type ProviderConnectionOwnerProjection = Readonly<{
   lifecycle: ProviderConnectionLifecycle
   available: boolean
   credentialConfigured: boolean
+  x402Method?: 'GET' | 'POST'
+  x402Payee?: string
+  healthStatus?: 'healthy' | 'unhealthy'
+  healthCheckedAt?: number
+  healthSubject?: string
+  healthReasonCode?: string
   observedAt: number
   expiresAt?: number
   revokedAt?: number
@@ -51,6 +57,12 @@ export function projectProviderConnectionOwner(
     available: validTimestamp(now) && connection.lifecycle === 'active'
       && (connection.expiresAt === undefined || connection.expiresAt > now),
     credentialConfigured: connection.credentialRef !== null,
+    ...(connection.x402Method === undefined ? {} : { x402Method: connection.x402Method }),
+    ...(connection.x402Payee === undefined ? {} : { x402Payee: connection.x402Payee }),
+    ...(connection.healthStatus === undefined ? {} : { healthStatus: connection.healthStatus }),
+    ...(connection.healthCheckedAt === undefined ? {} : { healthCheckedAt: connection.healthCheckedAt }),
+    ...(connection.healthSubject === undefined ? {} : { healthSubject: connection.healthSubject }),
+    ...(connection.healthReasonCode === undefined ? {} : { healthReasonCode: connection.healthReasonCode }),
     observedAt: connection.observedAt,
     ...(connection.expiresAt === undefined ? {} : { expiresAt: connection.expiresAt }),
     ...(connection.revokedAt === undefined ? {} : { revokedAt: connection.revokedAt }),

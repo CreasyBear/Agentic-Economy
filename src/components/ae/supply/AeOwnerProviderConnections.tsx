@@ -1,4 +1,6 @@
 import { Link, useRouter } from '@tanstack/react-router'
+import { useReverification } from '@clerk/tanstack-react-start'
+import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 import { useServerFn } from '@tanstack/react-start'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
@@ -10,9 +12,9 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  checkOwnerX402Server,
   connectOwnerX402Server,
   inspectOwnerX402Server,
-  reconnectOwnerProviderConnectionServer,
   retryOwnerProviderConnectionCleanupServer,
   revokeOwnerProviderConnectionServer,
   type OwnerProviderConnection,
@@ -33,9 +35,10 @@ export function AeOwnerProviderConnections({
   readOnly?: boolean
 }>) {
   const router = useRouter()
-  const connectX402 = useServerFn(connectOwnerX402Server)
+  const connectX402Request = useServerFn(connectOwnerX402Server)
+  const connectX402 = useReverification(connectX402Request)
+  const checkX402 = useServerFn(checkOwnerX402Server)
   const inspectX402 = useServerFn(inspectOwnerX402Server)
-  const reconnect = useServerFn(reconnectOwnerProviderConnectionServer)
   const revoke = useServerFn(revokeOwnerProviderConnectionServer)
   const retryCleanup = useServerFn(retryOwnerProviderConnectionCleanupServer)
   const [resourceUrl, setResourceUrl] = useState('')
@@ -50,6 +53,7 @@ export function AeOwnerProviderConnections({
     claimExpiresAt: number
   }>>()
   const [claimSignature, setClaimSignature] = useState<string>()
+  const [reauthorizingConnectionRef, setReauthorizingConnectionRef] = useState<string>()
   const [busy, setBusy] = useState<string>()
   const [refreshRequired, setRefreshRequired] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'error' | 'status'; text: string }>()
@@ -139,6 +143,7 @@ export function AeOwnerProviderConnections({
     if (readOnly || !canConnect || businessId === undefined || inspection === undefined || claimSignature === undefined) return
     const commandKey = ['connect', businessId, method, resourceUrl, inspection.digest, claimSignature].join(':')
     const commandId = commandIdFor(commandKey)
+    const reauthorizationRef = reauthorizingConnectionRef
     setBusy('new')
     setNotice(undefined)
     try {
@@ -165,10 +170,22 @@ export function AeOwnerProviderConnections({
       }
       commandIdsRef.current.delete(commandKey)
       setResourceUrl('')
+      setReauthorizingConnectionRef(undefined)
       setInspection(undefined)
       setClaimSignature(undefined)
-      await refresh()
+      const refreshed = await refresh()
+      if (refreshed && reauthorizationRef !== undefined && rebindOfferingRef !== undefined) {
+        setRefreshedForRebind(reauthorizationRef)
+        setNotice({
+          kind: 'status',
+          text: 'Authority reauthorized. Re-admit the exact Operation so its binding uses the new generation and digest.',
+        })
+      }
     } catch (cause) {
+      if (isReverificationCancelledError(cause)) {
+        setNotice({ kind: 'status', text: 'Reverification was cancelled. No connection changed; your inspected endpoint and wallet proof remain on this page.' })
+        return
+      }
       captureClientExceptionOnClient(cause)
       setRefreshRequired(true)
       setNotice({
@@ -248,7 +265,7 @@ export function AeOwnerProviderConnections({
         throw new Error('invalid_signature')
       }
       setClaimSignature(signature)
-      setNotice({ kind: 'status', text: 'Payee control proved. AE will verify the live challenge again when you connect.' })
+      setNotice({ kind: 'status', text: `Payee control proved. AE will verify the live challenge again when you ${reauthorizingConnectionRef === undefined ? 'connect' : 'reauthorize'}.` })
     } catch {
       setNotice({ kind: 'error', text: 'The payee ownership signature was not completed.' })
     } finally {
@@ -257,7 +274,7 @@ export function AeOwnerProviderConnections({
   }
 
   async function updateConnection(
-    action: 'reconnect' | 'revoke',
+    action: 'revoke',
     connection: OwnerProviderConnection,
   ) {
     if (readOnly) return
@@ -277,9 +294,7 @@ export function AeOwnerProviderConnections({
       expectedAuthorityDigest: connection.authorityDigest,
     }
     try {
-      const result = action === 'reconnect'
-        ? await reconnect({ data })
-        : await revoke({ data })
+      const result = await revoke({ data })
       if (result.kind === 'refused') {
         if (result.code === 'source_unavailable') {
           setRefreshRequired(true)
@@ -291,20 +306,78 @@ export function AeOwnerProviderConnections({
         return
       }
       commandIdsRef.current.delete(commandKey)
-      const refreshed = await refresh()
-      if (refreshed && action === 'reconnect' && rebindOfferingRef !== undefined) {
-        setRefreshedForRebind(connection.connectionRef)
-        setNotice({
-          kind: 'status',
-          text: 'Authority refreshed. Re-admit the exact Operation so its binding uses the new generation and digest.',
-        })
-      }
+      await refresh()
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       setRefreshRequired(true)
       setNotice({
         kind: 'error',
         text: 'The supplier connection outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
+      })
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  function beginReauthorization(connection: OwnerProviderConnection) {
+    const exactResource = connection.grantedResources[0]
+    if (connection.adapterId !== 'x402-fetch:v2'
+      || exactResource === undefined
+      || connection.x402Method === undefined
+      || connection.x402Payee === undefined) {
+      setNotice({ kind: 'error', text: 'This connection does not have a complete x402 authority record. Revoke it and connect the endpoint again.' })
+      return
+    }
+    setReauthorizingConnectionRef(connection.connectionRef)
+    setResourceUrl(exactResource)
+    setMethod(connection.x402Method)
+    setInspection(undefined)
+    setClaimSignature(undefined)
+    setNotice({ kind: 'status', text: 'Inspect the exact endpoint and prove current payee control before reauthorizing it.' })
+    requestAnimationFrame(() => {
+      resourceUrlInputRef.current?.scrollIntoView({ block: 'center' })
+      resourceUrlInputRef.current?.focus({ preventScroll: true })
+    })
+  }
+
+  async function checkConnection(connection: OwnerProviderConnection) {
+    if (readOnly) return
+    const commandKey = [
+      'health',
+      connection.connectionRef,
+      String(connection.authorityGeneration),
+      connection.authorityDigest,
+    ].join(':')
+    setBusy(connection.connectionRef)
+    setNotice(undefined)
+    try {
+      const result = await checkX402({
+        data: {
+          connectionRef: connection.connectionRef,
+          commandId: commandIdFor(commandKey),
+          expectedAuthorityGeneration: connection.authorityGeneration,
+          expectedAuthorityDigest: connection.authorityDigest,
+          environment: 'production',
+        },
+      })
+      if (result.kind === 'refused') {
+        if (result.code === 'source_unavailable') {
+          setRefreshRequired(true)
+          setNotice({ kind: 'error', text: 'The health-check outcome was not confirmed. Reload current connections before repeating it.' })
+          return
+        }
+        commandIdsRef.current.delete(commandKey)
+        setNotice({ kind: 'error', text: connectionRefusalCopy(result.code) })
+        return
+      }
+      commandIdsRef.current.delete(commandKey)
+      await refresh()
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setRefreshRequired(true)
+      setNotice({
+        kind: 'error',
+        text: 'The health-check outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
       })
     } finally {
       setBusy(undefined)
@@ -401,8 +474,16 @@ export function AeOwnerProviderConnections({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="grid min-w-0 gap-1">
                   <p className="font-medium text-foreground">{providerConnectionStatus(connection)}</p>
-                  <p className="break-all text-sm text-muted-foreground">{providerConnectionResource(connection)}</p>
-                  {connection.expiresAt === undefined ? null : (
+                  <p className="break-all text-sm text-muted-foreground">
+                    {connection.x402Method ?? 'Method not recorded'} {providerConnectionResource(connection)}
+                  </p>
+                  <p className="break-all text-sm text-muted-foreground">
+                    Permission: route x402 payment to {connection.x402Payee ?? 'an unrecorded payee'} for this exact method and resource.
+                  </p>
+                  <p className="text-sm text-muted-foreground">Authority generation {connection.authorityGeneration}</p>
+                  {connection.expiresAt === undefined ? (
+                    <p className="text-sm text-muted-foreground">No scheduled authority expiry</p>
+                  ) : (
                     <time
                       dateTime={timestampIso(connection.expiresAt)}
                       className="text-sm text-muted-foreground"
@@ -410,17 +491,29 @@ export function AeOwnerProviderConnections({
                       Authority expires {formatRelativeTime(connection.expiresAt)} · {formatTimestamp(connection.expiresAt)}
                     </time>
                   )}
+                  <p className="text-sm text-muted-foreground">{providerConnectionHealth(connection)}</p>
+                  <p className="text-sm text-muted-foreground">Credential rotation: not applicable. x402 stores no provider credential or private key.</p>
+                  <p className="text-sm text-muted-foreground">Operation readiness is checked per Operation and is not implied by connection health.</p>
                   <AeCopyReference label="connection reference" value={connection.connectionRef} />
                 </div>
                 {(connection.lifecycle === 'active' || connection.lifecycle === 'reauthorization_required') ? (
                   <div className="flex flex-wrap gap-2">
                     <Button
+                      type="button"
                       variant="secondary"
                       className="min-h-touch"
                       disabled={readOnly || busy !== undefined || refreshRequired}
-                      onClick={() => void updateConnection('reconnect', connection)}
+                      onClick={() => void checkConnection(connection)}
                     >
-                      {connection.lifecycle === 'active' ? 'Refresh authority' : 'Reconnect'}
+                      {busy === connection.connectionRef ? 'Checking…' : 'Check connection'}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="min-h-touch"
+                      disabled={readOnly || busy !== undefined || refreshRequired}
+                      onClick={() => beginReauthorization(connection)}
+                    >
+                      Reauthorize
                     </Button>
                     <Button
                       type="button"
@@ -502,6 +595,7 @@ export function AeOwnerProviderConnections({
               maxLength={2_048}
               placeholder="https://api.example.com/paid-operation"
               value={resourceUrl}
+              readOnly={reauthorizingConnectionRef !== undefined}
               onChange={(event) => {
                 setResourceUrl(event.target.value)
                 setInspection(undefined)
@@ -518,7 +612,7 @@ export function AeOwnerProviderConnections({
               id="provider-x402-method"
               className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               value={method}
-              disabled={busy !== undefined}
+              disabled={busy !== undefined || reauthorizingConnectionRef !== undefined}
               onChange={(event) => {
                 setMethod(event.currentTarget.value === 'GET' ? 'GET' : 'POST')
                 setInspection(undefined)
@@ -560,8 +654,27 @@ export function AeOwnerProviderConnections({
               {claimSignature !== undefined ? 'Payee control proved' : busy === 'claim' ? 'Waiting for wallet…' : 'Prove payee control'}
             </Button>
             <Button type="submit" className="min-h-touch" disabled={busy !== undefined || refreshRequired || inspection === undefined || claimSignature === undefined}>
-              {busy === 'new' ? 'Connecting…' : 'Connect verified endpoint'}
+              {busy === 'new'
+                ? reauthorizingConnectionRef === undefined ? 'Connecting…' : 'Reauthorizing…'
+                : reauthorizingConnectionRef === undefined ? 'Connect verified endpoint' : 'Reauthorize verified endpoint'}
             </Button>
+            {reauthorizingConnectionRef === undefined ? null : (
+              <Button
+                type="button"
+                variant="ghost"
+                className="min-h-touch"
+                disabled={busy !== undefined}
+                onClick={() => {
+                  setReauthorizingConnectionRef(undefined)
+                  setResourceUrl('')
+                  setInspection(undefined)
+                  setClaimSignature(undefined)
+                  setNotice({ kind: 'status', text: 'Reauthorization cancelled. No connection changed.' })
+                }}
+              >
+                Cancel reauthorization
+              </Button>
+            )}
           </div>
         </form>
       ) : readOnly ? null : (
@@ -620,7 +733,21 @@ function providerConnectionStatus(connection: OwnerProviderConnection): string {
   }
 }
 
+function providerConnectionHealth(connection: OwnerProviderConnection): string {
+  if (connection.healthStatus === undefined || connection.healthCheckedAt === undefined) {
+    return 'Connection health not checked yet'
+  }
+  const observed = `${formatRelativeTime(connection.healthCheckedAt)} · ${formatTimestamp(connection.healthCheckedAt)}`
+  if (connection.healthStatus === 'healthy') {
+    return `Healthy unpaid x402 challenge observed ${observed}; payee ${connection.healthSubject ?? 'not recorded'}`
+  }
+  return `Health needs attention (${connection.healthReasonCode ?? 'unavailable'}) · checked ${observed}`
+}
+
 function connectionRefusalCopy(code: string): string {
+  if (code === 'reauthentication_required' || code === 'proof_stale') return 'Verify your identity again before changing this supplier authority.'
+  if (code === 'proof_replayed' || code === 'command_changed') return 'The verified command no longer matches this change. Review the connection and verify again.'
+  if (code === 'rate_limited') return 'Too many supplier-authority changes were attempted. Wait, then reload the current connection before trying again.'
   if (code === 'claim_invalid' || code === 'invalid_identity') return 'The payee claim expired or no longer matches this supplier and endpoint. Inspect it and sign again.'
   if (code === 'inspection_ambiguous') return 'The endpoint now exposes more than one supported payment lane. Make one Base USDC exact lane unambiguous, then inspect again.'
   if (code === 'inspection_unsupported') return 'The endpoint no longer exposes AE’s supported Base USDC exact payment lane.'

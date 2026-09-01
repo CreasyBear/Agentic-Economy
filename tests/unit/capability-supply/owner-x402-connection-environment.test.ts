@@ -34,7 +34,16 @@ vi.mock('@/modules/security/source-write-admission', async (importOriginal) => (
   sourceWriteRequestFromAdmission: mocks.sourceWriteRequest,
 }))
 
+vi.mock('@/lib/server/clerk-consequence-proof', () => ({
+  requireStrictClerkConsequenceProof: vi.fn().mockResolvedValue({
+    reverificationId: 'rev_test_x402',
+    firstFactorAgeMinutes: 0,
+    secondFactorAgeMinutes: -1,
+  }),
+}))
+
 import {
+  checkOwnerX402,
   connectOwnerX402,
   inspectOwnerX402,
 } from '@/modules/capability-supply/supply-funnel.functions'
@@ -180,5 +189,72 @@ describe('owner x402 connection payment environment', () => {
 
     expect(mocks.sourceWrite).not.toHaveBeenCalled()
     expect(mocks.mutation).not.toHaveBeenCalled()
+  })
+
+  it('reuses the exact stored method and resource for a bounded health observation', async () => {
+    mocks.query.mockResolvedValueOnce([{
+      connectionRef: 'connection:x402:one',
+      adapterId: 'x402-fetch:v2',
+      grantedResources: [endpoint],
+      x402Method: 'POST',
+      x402Payee: payTo,
+      authorityGeneration: 3,
+      authorityDigest: `sha256:${'c'.repeat(64)}`,
+    }])
+
+    await expect(checkOwnerX402({
+      context: {},
+      data: {
+        connectionRef: 'connection:x402:one',
+        commandId: 'check-x402-one',
+        expectedAuthorityGeneration: 3,
+        expectedAuthorityDigest: `sha256:${'c'.repeat(64)}`,
+        environment: 'sandbox',
+      },
+    })).resolves.toMatchObject({ kind: 'applied' })
+
+    expect(mocks.inspect).toHaveBeenCalledWith({
+      endpointUrl: endpoint,
+      method: 'POST',
+      aeEnvironment: 'sandbox',
+    })
+    expect(mocks.mutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      connectionRef: 'connection:x402:one',
+      method: 'POST',
+      resourceUrl: endpoint,
+      payee: payTo,
+      status: 'healthy',
+      observationDigest: observation.digest,
+    }))
+    expect(JSON.stringify(mocks.mutation.mock.calls)).not.toMatch(/signature|payment-required|private[_-]?key/iu)
+  })
+
+  it('records payee drift as unhealthy instead of advancing authority', async () => {
+    mocks.query.mockResolvedValueOnce([{
+      connectionRef: 'connection:x402:one',
+      adapterId: 'x402-fetch:v2',
+      grantedResources: [endpoint],
+      x402Method: 'POST',
+      x402Payee: '0x2222222222222222222222222222222222222222',
+      authorityGeneration: 3,
+      authorityDigest: `sha256:${'c'.repeat(64)}`,
+    }])
+
+    await checkOwnerX402({
+      context: {},
+      data: {
+        connectionRef: 'connection:x402:one',
+        commandId: 'check-x402-drift',
+        expectedAuthorityGeneration: 3,
+        expectedAuthorityDigest: `sha256:${'c'.repeat(64)}`,
+        environment: 'sandbox',
+      },
+    })
+
+    expect(mocks.mutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      status: 'unhealthy',
+      reasonCode: 'payee_changed',
+    }))
+    expect(mocks.mutation.mock.calls.at(-1)?.[1]).not.toHaveProperty('authorityGeneration')
   })
 })

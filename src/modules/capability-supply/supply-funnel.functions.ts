@@ -3,6 +3,8 @@ import { createServerFn } from "@tanstack/react-start";
 import {
   connectOwnerX402,
   connectOwnerX402InputSchema,
+  checkOwnerX402,
+  checkOwnerX402InputSchema,
   inspectOwnerX402,
   inspectOwnerX402InputSchema,
   ownerConnectionCommandSchema,
@@ -73,7 +75,7 @@ export type {
 } from "./internal/supply-funnel/types";
 
 export { filterOwnerSupplyAuthorityOptions } from "./internal/supply-funnel/connections";
-export { connectOwnerX402, inspectOwnerX402 } from "./internal/supply-funnel/connections";
+export { checkOwnerX402, connectOwnerX402, inspectOwnerX402 } from "./internal/supply-funnel/connections";
 export { loadSupplyLandingReadback } from "./internal/supply-funnel/landing";
 export { ownerPublicationImport } from "./internal/supply-funnel/publication-import";
 export { ownerPublicationWithCatalogOrigin } from "./internal/supply-funnel/publication-admit";
@@ -95,6 +97,10 @@ export const connectOwnerX402Server = createServerFn({ method: "POST" })
 export const inspectOwnerX402Server = createServerFn({ method: "POST" })
   .validator((data) => inspectOwnerX402InputSchema.parse(data))
   .handler(inspectOwnerX402);
+
+export const checkOwnerX402Server = createServerFn({ method: "POST" })
+  .validator((data) => checkOwnerX402InputSchema.parse(data))
+  .handler(checkOwnerX402);
 
 export const reconnectOwnerProviderConnectionServer = createServerFn({
   method: "POST",

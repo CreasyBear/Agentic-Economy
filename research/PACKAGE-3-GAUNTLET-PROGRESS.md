@@ -216,3 +216,221 @@ Status: accepted after three independent critique passes and an isolated staged-
    generation passes under the supported Node runtime. The full worktree
    import gate remains blocked only by four unrelated, unstaged Package 2
    private imports.
+
+## PR4 — Agent access management
+
+Status: accepted after docs-first implementation, live CLI/browser proof, focused
+gates, and independent adversarial review.
+
+### Firsthand references checked
+
+- Clerk's maintained API-key guide and the installed
+  `@clerk/backend@3.16.13` API-key types and endpoint declarations. Clerk
+  supports create, verify, expiry, last-use evidence, secret retrieval, and
+  revoke; it does not expose API-key rotation or rename.
+- A non-production Clerk probe created a short-lived API key, retrieved the
+  same secret through the installed `getSecret()` API, verified it, and revoked
+  it immediately without logging or persisting secret material.
+- Existing AE replacement, Principal rename, Delegation resource, invocation
+  admission, Package 3 audit, and Account/target history implementations.
+- RFC 9396 Rich Authorization Requests: `authorization_details` carries
+  fine-grained consent material; unknown, malformed, or missing fields for the
+  registered detail type must be refused. AE keeps its detail type closed and
+  stores normalized Operation selection before consent.
+
+### Decisions closed by firsthand proof and critique
+
+- Agent rename changes only the durable AE Principal. A Clerk key name is not
+  Agent identity and will not be synchronized.
+- Ordinary rotation remains the existing agent-initiated OAuth successor
+  lifecycle. The owner console will not invent a second secret-delivery path.
+- Compromise recovery must extend the same replacement lifecycle: prepare the
+  successor under the same Principal, revoke predecessor authority
+  immediately, and truthfully report reduced availability until delivery.
+- Operation-specific policy is enforced after the request body resolves the
+  canonical Operation, and again before rate-limit consumption or reservation.
+  Delegation and policy must independently allow the same Operation.
+- Successful authentication and known-credential denial evidence belong at
+  the canonical credential boundary and are coarsened there. Unknown keys do
+  not create domain rows.
+
+### Gauntlet iterations
+
+1. Policy compatibility slice 1: **rejected**. It relabelled v1 policy
+   material as v2 while retaining the v1 digest, used a permissive hybrid
+   storage validator, made normalized owner scope optional, and left the
+   repository uncompilable.
+2. Policy compatibility slice 2: **rejected**. It separated exact storage,
+   v2-only writes, and normalized reads, but still added `operationRefs` to the
+   nested legacy policy and therefore changed the material protected by the
+   retained digest.
+3. Policy compatibility slice 3: **accepted**. Storage is an exact runtime
+   union of genuine v1 and v2 shapes; public and internal writes are v2-only;
+   v1 reads preserve source format and canonical policy digest while deriving
+   only top-level `operationRefs: []`; selected v2 references are canonical,
+   unique, sorted, and bounded to 1–64. Hybrid rows and mismatched policy/grant
+   selections fail closed. Full typecheck, 45 focused tests, scoped lint, and
+   diff checks pass.
+4. Exact Operation admission slice 1: **rejected**. New invocation binding and
+   reservation correctly required Agent policy and Delegation independently,
+   but the same check accidentally treated the synthetic invocation-list
+   authority target as a Public Operation and denied every Agent receipt list.
+5. Exact Operation admission slice 2: **accepted**. New Operations are checked
+   against stored policy before Delegation and again before rate limiting,
+   concurrency, reservation, evidence, or effects. Exact existing reservations
+   replay before current policy checks. Receipt listing uses an explicit
+   internal purpose and a server-derived live-Delegation probe, not a synthetic
+   Operation permission; persisted invocation recovery remains unchanged. Full
+   typecheck, 121 focused tests, scoped lint, and diff checks pass.
+6. OAuth selection/issuance slice 1: **rejected**. The HTTP parser normalized
+   Operation refs, but the two direct OAuth grant constructors still stored
+   caller-supplied access verbatim. Internal callers could therefore persist
+   unsorted, invalid, or supplier-selected material and make proof comparison
+   order-sensitive.
+7. OAuth selection/issuance slice 2: **accepted**. Both OAuth constructors now
+   normalize before insertion and refuse invalid or supplier-selected access
+   without writes. The immutable stored selection is visible in consent but is
+   absent from the approval POST; it is bound into the existing consequence
+   digest, a compact Clerk replay claim, the v2 Agent policy, signed issuance
+   registration, and identical Delegation resources for both new and
+   replacement credentials. Full typecheck and 139 focused tests pass. The
+   development OAuth grant table is empty, so this required-field schema change
+   needs no non-production cleanup or backfill.
+8. Local consent ceremony: **rejected**. The local Clerk bypass still rendered
+   the Clerk-only `useReverification` hook without a `ClerkProvider`, so the
+   authorization loader failed before consent. The correction keeps one shared
+   form but selects the maintained Clerk proof adapter or the production-guarded
+   local proof adapter before either hook is called. The route suite proves the
+   local branch never invokes Clerk.
+9. Completed consent replay: **rejected**. Reposting the exact proof and exact
+   already-approved command returned HTTP 409 even though issuance had already
+   succeeded. Terminal replay now re-resolves owner, Account, target revision,
+   current authority, proof, and command digest before returning the durable
+   success projection. Direct Convex tests prove approved, delivery-claimed,
+   and consumed replay performs no second proof, rate, audit, reservation, or
+   provider write; changed proof, command, revision, owner, or authority refuses.
+10. Local credential wiring: **rejected twice**. A module-local key map produced
+    a live 401 across separate Vite server graphs; a process-wide, production-
+    guarded registry corrected custody. The next live call returned 403 because
+    local issuance wrote only a legacy grant. Local issuance now uses the same
+    `issueAgentAccessKey` and signed `registerIssuedAgentBinding` seam as Clerk,
+    with only the provider adapter replaced. The authenticated `ae account
+    status` projection resolves the resulting Principal, Account, credential,
+    scope, and authority.
+11. Convex deployment: **rejected then accepted**. The running local deployment
+    was stale and the broad Agent-access public barrel was not schema-safe. A
+    narrow `agent-access/schema.ts` entry now follows the repository's existing
+    schema-entry pattern; the module manifest declares it, Convex pushes cleanly,
+    and codegen passes on the pinned Node 22 runtime. The canonical Operation-ref
+    validator was extracted to the dependency-free common layer so Agent access
+    does not introduce the forbidden reverse dependency on capability supply.
+12. Device polling race: **rejected then accepted**. Approval could win the
+    grant compare-and-swap while an in-flight pending poll lost its scheduling
+    update; the losing poll was incorrectly converted to terminal
+    `invalid_grant`. RFC 8628 requires an unapproved device request to continue
+    as `authorization_pending`, so only that pending scheduling conflict now
+    remains pending. Other grant conflicts remain fail-closed. The race test
+    proves the stored approval survives while the concurrent poll stays retryable.
+13. Local replacement lifecycle: **rejected then corrected**. Local
+    `replace_credential` consent was audited as replacement but fell through to
+    new-Agent issuance. Local replacement now uses the existing prepare,
+    delivery-time promote/cancel, and predecessor-revocation lifecycle with the
+    same process-local provider adapter. The selected Principal and replacement
+    generation remain intact, and the local new-Agent regression now exercises
+    the real `issueAgentAccessKey` plus binding path instead of an injected
+    imitation. Independent re-review accepted the shared lifecycle and found no
+    production-path regression.
+14. Live CLI/browser recovery: **accepted in runtime**. A fresh device request
+    was approved through the real browser surface, the waiting CLI exited
+    `connected` without printing the credential, and `ae account status`
+    authenticated the stored origin-bound key against the canonical Agent
+    binding. The focused closure gate passes 167 tests, typecheck, Convex
+    codegen, and diff checks. The import gate reports only four pre-existing,
+    unrelated Package 2 private imports in `owner-operations.functions.ts`.
+15. Agent rename and lifecycle history: **accepted after adversarial review**.
+    Rename updates the canonical Principal through revision-checked optimistic
+    concurrency and refreshes the authoritative directory instead of applying
+    an optimistic browser patch. Create, credential replacement preparation,
+    promotion, cancellation, revocation, and Agent disconnection now write
+    closed, secret-safe Package 3 events in the same Convex transaction as the
+    authoritative transition; replay and no-op branches do not duplicate
+    evidence. The selected Agent sheet loads its own history only when opened,
+    verifies Account ownership and live Agent admission, and paginates natively
+    through the existing Account/target index. The shared table renderer keeps
+    the owner Account history projection intact while hiding raw actor and
+    target references in the Agent-specific view. The focused gate passes 48
+    tests across six suites, typecheck, Convex codegen, production build, and
+    diff checks. Independent critique found no blocking defect.
+16. Canonical authentication evidence: **accepted after docs-first correction**.
+    The first design was rejected before implementation because Clerk
+    `lastUsedAt` can precede AE authority admission, missing evidence cannot be
+    called “Never,” and the lifecycle audit constructor would have falsely
+    attributed Agent authentication to an owner. Final evidence is written only
+    after the canonical credential, Agent Principal, Account admission, current
+    grant generation, Delegation snapshot, scope/resource, and final expiry
+    checks agree. Successful authentication updates the credential and one
+    `agent.credential.authenticated` event at most every 15 minutes; known
+    canonical denials share one secret-safe event identity per credential per
+    five-minute bucket, independent of request correlation or refusal reason.
+    Unknown locators create no domain row. The audit vocabulary now identifies
+    the actor as `agent`, inconsistent human-Principal/Agent-admission rows fail
+    closed, and the owner directory derives current “Last authenticated” from
+    the current credential while keeping “Last seen” separate. Missing evidence
+    reads “Not recorded” and discloses the 15-minute precision. The combined
+    gate passes 107 tests, typecheck, Convex codegen, production build, and diff
+    checks; independent critique found no blocking defect.
+17. PR4 closure: **accepted**. Owners can create and name an Agent, constrain it
+    to all admitted or selected Operations, inspect exact scope, budget, expiry,
+    credential generations, last authenticated evidence, and activity, and use
+    the existing replacement, revocation, disconnection, and compromise paths.
+    Principal identity and history survive credential generations; admission
+    checks policy and Delegation independently. The live CLI/browser ceremony
+    delivered one key to its caller, authenticated the resulting Agent, and did
+    not expose supplier authority. No parallel rotation, credential, audit, or
+    human-security system was added.
+
+## PR5 — x402 supplier connections
+
+Status: accepted after official x402/Clerk references, focused gates, and two
+adversarial-review passes.
+
+### Firsthand references checked
+
+- The x402 v2 specification, official HTTP 402 guide, and installed `@x402`
+  implementation. x402 defines payment requirements and signed payment proof;
+  it does not define a stored provider credential or scheduled connection
+  expiry.
+- Clerk's maintained TanStack `useReverification` and server strict-
+  reverification contracts already proven in PR2.
+- Existing guarded x402 endpoint inspector, wallet-control claim, source-write
+  admission, connection authority model, durable cleanup worker, Account audit
+  envelope, and provider-connection UI.
+
+### Gauntlet iterations
+
+1. Authority and health slice: **rejected once, then accepted**. The connection
+   now stores the exact method and payee-control subject, exposes a safe unpaid
+   challenge check, keeps health separate from Operation readiness, and records
+   redacted provider-observed evidence. The first version incorrectly carried a
+   generation N health observation into generation N+1. Reauthorization now
+   clears all five health fields, and domain plus owner-integration tests protect
+   that invariant.
+2. Consequence proof and replay: **accepted**. Connect and reauthorize repeat
+   live endpoint inspection and wallet-control proof, then require Clerk strict
+   reverification. The existing authority boundary derives the exact Account,
+   ownership revision, connection target, method, resource, payee, observation,
+   and claim digest. Rate admission and proof consumption occur in the same
+   Convex transaction before grant or connection mutation. Exact replay is
+   duplicate-safe; changed command IDs and changed material under the same
+   command ID return typed `command_changed` without a new generation, grant,
+   or proof use.
+3. Package 3B closure: **accepted**. The owner surface shows exact HTTPS method
+   and resource, requested payee authority, generation, honest no-scheduled-
+   expiry copy, health observation, no-credential custody, and separate
+   Operation readiness. The old one-click x402 reconnect path is closed;
+   reauthorization requires the full proof ceremony. Revoke remains exact
+   confirmation with durable cleanup/readback. The focused connection gate
+   passes 52 tests, the Infisical regression gate passes 47 tests, typecheck,
+   Convex codegen, and production build pass. The repository import gate remains
+   blocked only by four unrelated Package 2 private imports in
+   `owner-operations.functions.ts`.

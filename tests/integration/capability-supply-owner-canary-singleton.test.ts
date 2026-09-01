@@ -151,6 +151,8 @@ async function canaryFixture(suffix: string) {
     providerRef,
     providerAccountRef: `x402:${ENDPOINT}`,
     resourceUrl: ENDPOINT,
+    method: sellerClaim.method,
+    payee: sellerClaim.payTo,
     evidenceRefs: [claimEvidence, inspectionEvidence],
     owningAccountRef: canonicalAccountRef,
     installedByPrincipalRef: canonicalPrincipalRef,

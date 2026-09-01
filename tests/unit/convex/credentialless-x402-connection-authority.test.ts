@@ -20,6 +20,8 @@ function connectionRow() {
     providerRef: 'provider:x402:seller.example',
     providerAccountRef: `x402:${RESOURCE_URL}`,
     resourceUrl: RESOURCE_URL,
+    method: 'POST',
+    payee: '0x1111111111111111111111111111111111111111',
     evidenceRefs: ['evidence:test-seller'],
   }, NOW - 1_000)
   if (created.kind !== 'applied') throw new Error('credentialless_x402_fixture_invalid')

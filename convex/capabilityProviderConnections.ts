@@ -67,6 +67,8 @@ import {
 import {
   connectX402OwnerArgs,
   connectX402OwnerHandler,
+  checkX402OwnerArgs,
+  checkX402OwnerHandler,
   listOwnerArgs,
   listOwnerHandler,
   ownerCommandResult,
@@ -247,4 +249,10 @@ export const connectX402Owner = mutationGeneric({
   args: connectX402OwnerArgs,
   returns: ownerCommandResult,
   handler: connectX402OwnerHandler,
+})
+
+export const checkX402Owner = mutationGeneric({
+  args: checkX402OwnerArgs,
+  returns: ownerCommandResult,
+  handler: checkX402OwnerHandler,
 })

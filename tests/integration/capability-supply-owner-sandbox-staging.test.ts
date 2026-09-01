@@ -166,6 +166,8 @@ describe('owner Base Sepolia staging publication', () => {
       providerRef: PROVIDER_REF,
       providerAccountRef: `x402:${ENDPOINT}`,
       resourceUrl: ENDPOINT,
+      method: sellerClaim.method,
+      payee: sellerClaim.payTo,
       evidenceRefs: [claimEvidence, inspectionEvidence],
       owningAccountRef: canonicalAccountRef,
       installedByPrincipalRef: canonicalPrincipalRef,

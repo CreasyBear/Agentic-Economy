@@ -287,7 +287,7 @@ async function reconcileDraft(
   if (probe.kind === 'refused') return 'skipped'
   const business = await ensureProviderBusiness(ctx, route.host, now)
   if (business === undefined) return 'skipped'
-  const connection = await ensureProviderConnection(ctx, business.businessId, route.resourceUrl, now)
+  const connection = await ensureProviderConnection(ctx, business.businessId, route, now)
   if (connection === undefined) {
     if (business.created || business.activated) throw new Error('facilitator_discovery_connection_unavailable')
     return 'skipped'
@@ -383,14 +383,21 @@ function routeIdentity(
 ): Readonly<{
   host: string
   resourceUrl: string
+  method: 'GET' | 'POST'
+  payee: string
 }> | undefined {
   const resource = isRecord(sourceImport.resource) ? sourceImport.resource : undefined
   const rawUrl = typeof resource?.resourceUrl === 'string' ? resource.resourceUrl : undefined
-  if (rawUrl === undefined) return undefined
+  const method = resource?.method
+  const payee = resource?.payTo
+  if (rawUrl === undefined
+    || (method !== 'GET' && method !== 'POST')
+    || typeof payee !== 'string'
+    || !/^0x[0-9a-f]{40}$/u.test(payee)) return undefined
   try {
     const parsed = new URL(rawUrl)
     if (parsed.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '' || parsed.hash !== '') return undefined
-    return { host: parsed.host.toLowerCase(), resourceUrl: parsed.toString() }
+    return { host: parsed.host.toLowerCase(), resourceUrl: parsed.toString(), method, payee }
   } catch {
     return undefined
   }
@@ -440,9 +447,10 @@ function providerBusinessSlug(host: string): string {
 async function ensureProviderConnection(
   ctx: MutationCtx,
   businessId: Id<'businesses'>,
-  resourceUrl: string,
+  route: Readonly<{ resourceUrl: string; method: 'GET' | 'POST'; payee: string }>,
   now: number,
 ) {
+  const { resourceUrl, method, payee } = route
   const parsed = new URL(resourceUrl)
   const identity = { businessId: String(businessId), resourceUrl }
   const connectionRef = `connection:x402:${canonicalDigest(identity)}`
@@ -470,6 +478,8 @@ async function ensureProviderConnection(
     providerRef,
     providerAccountRef,
     resourceUrl,
+    method,
+    payee,
     evidenceRefs: [SOURCE_EVIDENCE],
     owningAccountRef: business.owningAccountRef,
     installedByPrincipalRef: FACILITATOR_DISCOVERY_PUBLISHER_REF,

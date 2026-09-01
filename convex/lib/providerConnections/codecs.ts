@@ -50,6 +50,13 @@ function optionalConnectionFields(connection: ProviderConnection) {
     cleanupCallbackGraceUntil: connection.cleanupCallbackGraceUntil,
     revokedAt: connection.revokedAt,
     reasonCode: connection.reasonCode,
+    x402Method: connection.x402Method,
+    x402Payee: connection.x402Payee,
+    healthStatus: connection.healthStatus,
+    healthCheckedAt: connection.healthCheckedAt,
+    healthSubject: connection.healthSubject,
+    healthObservationDigest: connection.healthObservationDigest,
+    healthReasonCode: connection.healthReasonCode,
   }).filter(([, value]) => value !== undefined))
 }
 

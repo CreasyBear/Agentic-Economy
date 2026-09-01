@@ -24,6 +24,8 @@ import {
   verifyEip191Message,
 } from "../x402-evm-protocol";
 import { OWNER_SUPPLY_UNAVAILABLE_MESSAGE } from "./types";
+import { canonicalDigest } from "@/modules/common/canonical-digest";
+import { requireStrictClerkConsequenceProof } from "@/lib/server/clerk-consequence-proof";
 
 export type OwnerProviderConnectionCommandResult =
   | Readonly<{
@@ -72,12 +74,33 @@ const connectOwnerX402Mutation = sourceMutation<
     claimExpiresAt: number;
     claimDigest: string;
     claimSignature: string;
+    proof: Awaited<ReturnType<typeof requireStrictClerkConsequenceProof>>;
     evidenceRefs: readonly string[];
     sourceWrite: Awaited<ReturnType<typeof sourceWriteAdmissionFromContext>>;
     sourceWriteRequest: ReturnType<typeof sourceWriteRequestFromAdmission>;
   },
   OwnerProviderConnectionCommandResult
 >("capabilityProviderConnections:connectX402Owner");
+const checkOwnerX402Mutation = sourceMutation<
+  {
+    connectionRef: string;
+    commandId: string;
+    operationKey: string;
+    correlationId: string;
+    expectedAuthorityGeneration: number;
+    expectedAuthorityDigest: string;
+    method: "GET" | "POST";
+    resourceUrl: string;
+    payee: string;
+    status: "healthy" | "unhealthy";
+    checkedAt: number;
+    observationDigest: string;
+    reasonCode?: string;
+    sourceWrite: Awaited<ReturnType<typeof sourceWriteAdmissionFromContext>>;
+    sourceWriteRequest: ReturnType<typeof sourceWriteRequestFromAdmission>;
+  },
+  OwnerProviderConnectionCommandResult
+>("capabilityProviderConnections:checkX402Owner");
 const reconnectOwnerProviderConnectionMutation = sourceMutation<
   {
     connectionRef: string;
@@ -131,6 +154,9 @@ export const inspectOwnerX402InputSchema = connectOwnerX402InputSchema.pick({
   method: true,
   environment: true,
 });
+export const checkOwnerX402InputSchema = ownerConnectionCommandSchema.extend({
+  environment: z.enum(["sandbox", "production"]),
+});
 export const retryOwnerProviderConnectionCleanupInputSchema =
   ownerConnectionCommandSchema.pick({ connectionRef: true, commandId: true });
 
@@ -165,6 +191,7 @@ export async function connectOwnerX402({
   data: z.infer<typeof connectOwnerX402InputSchema>;
   context: unknown;
 }): Promise<OwnerProviderConnectionCommandResult> {
+  const proof = await requireStrictClerkConsequenceProof(data.commandId);
   try {
     if (!await callSourceQuery(authorizeSupplierBusinessQuery, { businessId: data.businessId })) {
       return { kind: "refused", code: "authorization_denied" };
@@ -228,6 +255,7 @@ export async function connectOwnerX402({
       claimExpiresAt: data.claimExpiresAt,
       claimDigest: x402SellerClaimDigest(claim),
       claimSignature: data.claimSignature,
+      proof,
       evidenceRefs: [`x402-endpoint-inspection:${inspection.digest}`],
     };
     const sourceWrite = await sourceWriteAdmissionFromContext({
@@ -303,6 +331,95 @@ export async function inspectOwnerX402({
       message: x402SellerClaimMessage(claim),
     },
   };
+}
+
+export async function checkOwnerX402({
+  data,
+  context,
+}: {
+  data: z.infer<typeof checkOwnerX402InputSchema>;
+  context: unknown;
+}): Promise<OwnerProviderConnectionCommandResult> {
+  try {
+    const connections = await readOwnerProviderConnections();
+    const connection = connections.find((candidate) => candidate.connectionRef === data.connectionRef);
+    const resourceUrl = connection?.grantedResources[0];
+    if (connection === undefined
+      || connection.adapterId !== "x402-fetch:v2"
+      || connection.x402Method === undefined
+      || connection.x402Payee === undefined
+      || resourceUrl === undefined
+      || connection.authorityGeneration !== data.expectedAuthorityGeneration
+      || connection.authorityDigest !== data.expectedAuthorityDigest) {
+      return { kind: "refused", code: "invalid_transition" };
+    }
+    const inspection = await inspectX402SellerEndpoint({
+      endpointUrl: resourceUrl,
+      method: connection.x402Method,
+      aeEnvironment: data.environment,
+    });
+    const checkedAt = inspection.probe.observedAt;
+    let status: "healthy" | "unhealthy" = "unhealthy";
+    let reasonCode: string | undefined;
+    let observationDigest: string;
+    if (inspection.kind === "refused") {
+      reasonCode = inspection.reason;
+      observationDigest = canonicalDigest({
+        version: "ae.x402-health-refusal:v1",
+        resourceUrl,
+        method: connection.x402Method,
+        reason: inspection.reason,
+        httpStatus: inspection.probe.httpStatus ?? null,
+      });
+    } else if (inspection.payment.selection.kind !== "selected") {
+      reasonCode = `payment_${inspection.payment.selection.kind}`;
+      observationDigest = inspection.digest;
+    } else {
+      const selectedAlternativeId = inspection.payment.selection.alternativeId;
+      const selected = inspection.payment.accepts.find((candidate) =>
+        candidate.alternativeId === selectedAlternativeId);
+      observationDigest = inspection.digest;
+      if (inspection.backend.method !== connection.x402Method
+        || inspection.backend.resource !== resourceUrl) {
+        reasonCode = "authority_target_changed";
+      } else if (selected === undefined) {
+        reasonCode = "payment_inconsistent";
+      } else if (canonicalEvmAddress(selected.payTo) !== connection.x402Payee) {
+        reasonCode = "payee_changed";
+      } else {
+        status = "healthy";
+      }
+    }
+    const command = {
+      connectionRef: connection.connectionRef,
+      commandId: data.commandId,
+      operationKey: data.commandId,
+      correlationId: data.commandId,
+      expectedAuthorityGeneration: connection.authorityGeneration,
+      expectedAuthorityDigest: connection.authorityDigest,
+      method: connection.x402Method,
+      resourceUrl,
+      payee: connection.x402Payee,
+      status,
+      checkedAt,
+      observationDigest,
+      ...(reasonCode === undefined ? {} : { reasonCode }),
+    };
+    const sourceWrite = await sourceWriteAdmissionFromContext({
+      context,
+      command,
+      scope: "catalog_publish",
+      operationKey: data.commandId,
+      correlationId: data.commandId,
+    });
+    return await callSourceMutation(checkOwnerX402Mutation, {
+      ...command,
+      sourceWrite,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    });
+  } catch {
+    return { kind: "refused", code: "source_unavailable" };
+  }
 }
 
 export async function reconnectOwnerProviderConnection({

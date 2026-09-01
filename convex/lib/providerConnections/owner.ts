@@ -2,6 +2,8 @@ import type { WorkId } from '@convex-dev/workpool'
 import { v } from 'convex/values'
 import {
   beginProviderConnectionRevocation,
+  createConnectionHealthAuditEvent,
+  createConnectionLifecycleAuditEvent,
   createX402ProviderConnection,
   projectProviderConnectionOwner,
   providerConnectionAuthorityProvenanceIsValid,
@@ -13,6 +15,10 @@ import {
   type ProviderConnection,
   type ProviderConnectionCommandResult,
 } from '../../../src/modules/capability-supply/provider-connection'
+import {
+  ConsequenceAuthorityBoundary,
+  type AuthorityConsequenceAdmission,
+} from '../../../src/modules/authority/context/public'
 import {
   canonicalEvmAddress,
   validPublicHttpsEndpoint,
@@ -34,12 +40,19 @@ import {
 } from './authority'
 import { lifecycle } from './contracts'
 import { resolveBusinessActor } from '../../authz'
-import { accountRef, principalRef } from '../../../src/modules/principal-account/public'
+import { accountRef, ownershipRef, principalRef } from '../../../src/modules/principal-account/public'
 import {
   validX402SellerClaimTime,
   x402SellerClaimDigest,
 } from '../../../src/modules/capability-supply/public'
 import { requireSourceWrite, sourceWriteArgs } from '../../sourceWriteAdmission'
+import { persistAuditEvent } from '../../securityShared'
+import { assertAuthorityCredentialChangeAdmission } from '../rateLimit'
+import {
+  consumeConsequenceProof,
+  deriveStrictConsequenceProof,
+  isValidClerkFactorEvidence,
+} from '../consequenceProof'
 
 export const ownerProjection = v.object({
   connectionRef: v.string(),
@@ -54,6 +67,12 @@ export const ownerProjection = v.object({
   lifecycle,
   available: v.boolean(),
   credentialConfigured: v.boolean(),
+  x402Method: v.optional(v.union(v.literal('GET'), v.literal('POST'))),
+  x402Payee: v.optional(v.string()),
+  healthStatus: v.optional(v.union(v.literal('healthy'), v.literal('unhealthy'))),
+  healthCheckedAt: v.optional(v.number()),
+  healthSubject: v.optional(v.string()),
+  healthReasonCode: v.optional(v.string()),
   observedAt: v.number(),
   expiresAt: v.optional(v.number()),
   revokedAt: v.optional(v.number()),
@@ -71,6 +90,8 @@ export const ownerCommandResult = v.union(
       v.literal('invalid_identity'), v.literal('invalid_time'), v.literal('invalid_scope'),
       v.literal('invalid_resource'), v.literal('invalid_generation'), v.literal('invalid_digest'),
       v.literal('invalid_transition'), v.literal('command_identity_conflict'),
+      v.literal('reauthentication_required'), v.literal('proof_stale'),
+      v.literal('proof_replayed'), v.literal('command_changed'), v.literal('rate_limited'),
     ),
   }),
 )
@@ -111,7 +132,28 @@ export const connectX402OwnerArgs = {
   claimExpiresAt: v.number(),
   claimDigest: v.string(),
   claimSignature: v.string(),
+  proof: v.optional(v.object({
+    reverificationId: v.string(),
+    firstFactorAgeMinutes: v.number(),
+    secondFactorAgeMinutes: v.number(),
+  })),
   evidenceRefs: v.array(v.string()),
+  ...sourceWriteArgs,
+} as const
+export const checkX402OwnerArgs = {
+  connectionRef: v.string(),
+  commandId: v.string(),
+  operationKey: v.string(),
+  correlationId: v.string(),
+  expectedAuthorityGeneration: v.number(),
+  expectedAuthorityDigest: v.string(),
+  method: v.union(v.literal('GET'), v.literal('POST')),
+  resourceUrl: v.string(),
+  payee: v.string(),
+  status: v.union(v.literal('healthy'), v.literal('unhealthy')),
+  checkedAt: v.number(),
+  observationDigest: v.string(),
+  reasonCode: v.optional(v.string()),
   ...sourceWriteArgs,
 } as const
 type ReauthorizeOwnerArgs = {
@@ -142,7 +184,30 @@ type ConnectX402OwnerArgs = {
   claimExpiresAt: number
   claimDigest: string
   claimSignature: string
+  proof?: {
+    reverificationId: string
+    firstFactorAgeMinutes: number
+    secondFactorAgeMinutes: number
+  }
   evidenceRefs: string[]
+  sourceWrite?: unknown
+  sourceWriteRequest?: unknown
+}
+
+type CheckX402OwnerArgs = {
+  connectionRef: string
+  commandId: string
+  operationKey: string
+  correlationId: string
+  expectedAuthorityGeneration: number
+  expectedAuthorityDigest: string
+  method: 'GET' | 'POST'
+  resourceUrl: string
+  payee: string
+  status: 'healthy' | 'unhealthy'
+  checkedAt: number
+  observationDigest: string
+  reasonCode?: string
   sourceWrite?: unknown
   sourceWriteRequest?: unknown
 }
@@ -453,6 +518,24 @@ export async function revokeProviderConnectionForActor(
       cleanupAttempt,
       workKind: hasMore ? 'lease_drain' : 'cleanup',
     }, now)
+    await persistAuditEvent(ctx.db, createConnectionLifecycleAuditEvent({
+      eventType: 'connection.revoked',
+      actorPrincipalRef: actor.canonicalPrincipalRef,
+      activeAccountRef: actor.canonicalAccountRef,
+      connectionRef: revoked.connectionRef,
+      authorityGeneration: revoked.authorityGeneration,
+      commandId: args.commandId,
+      correlationRef: args.commandId,
+      commandDigest: result.commandDigest,
+      adapterId: revoked.adapterId,
+      beforeState: current.lifecycle,
+      outcome: 'revocation_started',
+      ...(revoked.x402Method === undefined ? {} : { method: revoked.x402Method }),
+      ...(revoked.grantedResources[0] === undefined ? {} : { resourceUrl: revoked.grantedResources[0] }),
+      ...(revoked.x402Payee === undefined ? {} : { payee: revoked.x402Payee }),
+      ...(args.reasonCode === undefined ? {} : { reasonCode: args.reasonCode }),
+      occurredAt: now,
+    }))
     return projectOwnerResult({ kind: 'applied', connection: scheduled, commandDigest: result.commandDigest }, now)
   }
   return projectOwnerResult(result, now)
@@ -570,6 +653,10 @@ export async function reauthorizeOwnerHandler(ctx: MutationCtx, args: Reauthoriz
   if (actor.kind !== 'authenticated_owner') {
     return { kind: 'refused' as const, code: 'invalid_transition' as const }
   }
+  const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor, false)
+  if (owned !== null && owned.connection.adapterId === 'x402-fetch:v2') {
+    return { kind: 'refused' as const, code: 'invalid_transition' as const }
+  }
   const now = Date.now()
   return projectOwnerResult(await reauthorizeProviderConnectionForActor(ctx, args, actor, now), now)
 }
@@ -584,6 +671,89 @@ export async function connectX402OwnerHandler(ctx: MutationCtx, args: ConnectX40
     return { kind: 'refused' as const, code: 'invalid_identity' as const }
   }
   return await connectX402ProviderConnectionForActor(ctx, args, actor, true)
+}
+
+export async function checkX402OwnerHandler(ctx: MutationCtx, args: CheckX402OwnerArgs) {
+  const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
+  if (sourceWrite.kind === 'rejected') {
+    return { kind: 'refused' as const, code: 'invalid_identity' as const }
+  }
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') {
+    return { kind: 'refused' as const, code: 'invalid_identity' as const }
+  }
+  const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor, false)
+  if (owned === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
+  const current = toDomain(owned.row)
+  const now = Date.now()
+  const resource = validPublicHttpsEndpoint(args.resourceUrl)
+  const checkedAtIsCurrent = Number.isSafeInteger(args.checkedAt)
+    && args.checkedAt >= 0
+    && args.checkedAt <= now
+    && now - args.checkedAt <= 2 * 60_000
+  if (current.adapterId !== 'x402-fetch:v2'
+    || current.x402Method === undefined
+    || current.x402Payee === undefined
+    || current.x402Method !== args.method
+    || current.x402Payee !== args.payee
+    || resource === undefined
+    || resource.hash !== ''
+    || current.grantedResources.length !== 1
+    || current.grantedResources[0] !== resource.toString()
+    || !checkedAtIsCurrent
+    || !isCanonicalDigest(args.observationDigest)
+    || args.expectedAuthorityGeneration !== current.authorityGeneration
+    || args.expectedAuthorityDigest !== current.authorityDigest
+    || (args.status === 'healthy' && args.reasonCode !== undefined)
+    || (args.status === 'unhealthy' && (args.reasonCode === undefined || args.reasonCode.trim().length === 0))) {
+    return { kind: 'refused' as const, code: 'invalid_digest' as const }
+  }
+  const audit = createConnectionHealthAuditEvent({
+    actorPrincipalRef: actor.canonicalPrincipalRef,
+    activeAccountRef: actor.canonicalAccountRef,
+    connectionRef: current.connectionRef,
+    authorityGeneration: current.authorityGeneration,
+    commandId: args.commandId,
+    correlationRef: args.correlationId,
+    method: current.x402Method,
+    resourceUrl: resource.toString(),
+    payee: current.x402Payee,
+    status: args.status,
+    observationDigest: args.observationDigest,
+    ...(args.reasonCode === undefined ? {} : { reasonCode: args.reasonCode }),
+    observedAt: args.checkedAt,
+  })
+  const existing = await ctx.db.query('auditEvents')
+    .withIndex('by_eventId', (index) => index.eq('eventId', audit.eventId))
+    .unique()
+  if (existing !== null) {
+    return existing.activeAccountRef === actor.canonicalAccountRef
+      && existing.targetRef === current.connectionRef
+      && existing.payloadHash === audit.payloadHash
+      ? {
+          kind: 'duplicate' as const,
+          connection: projectOwnerProjection(current, now),
+          commandDigest: audit.payloadHash,
+        }
+      : { kind: 'refused' as const, code: 'command_identity_conflict' as const }
+  }
+  await ctx.db.patch(owned.row._id, {
+    healthStatus: args.status,
+    healthCheckedAt: args.checkedAt,
+    healthSubject: current.x402Payee,
+    healthObservationDigest: args.observationDigest,
+    ...(args.reasonCode === undefined
+      ? { healthReasonCode: undefined }
+      : { healthReasonCode: args.reasonCode }),
+  })
+  await persistAuditEvent(ctx.db, audit)
+  const updated = await ctx.db.get(owned.row._id)
+  if (updated === null) throw new Error('provider_connection_health_write_lost')
+  return {
+    kind: 'applied' as const,
+    connection: projectOwnerProjection(toDomain(updated), now),
+    commandDigest: audit.payloadHash,
+  }
 }
 
 async function prepareX402ConnectionClaim(
@@ -679,6 +849,67 @@ export async function connectX402ProviderConnectionForActor(
   if (existing !== null && String(existing.businessId) !== String(args.businessId)) {
     return { kind: 'refused' as const, code: 'invalid_identity' as const }
   }
+  let proofReplay = false
+  if (provisionOwnerGrant) {
+    const proofInput = args.proof
+    if (proofInput === undefined || !isValidClerkFactorEvidence(proofInput)) {
+      return { kind: 'refused' as const, code: 'reauthentication_required' as const }
+    }
+    const existingProof = await ctx.db.query('consequenceProofUses')
+      .withIndex('by_reverificationId', (query) => query.eq('reverificationId', proofInput.reverificationId))
+      .unique()
+    if (existingProof !== null && existing?.lastCommandId === args.commandId) {
+      if (existingProof.actorPrincipalRef !== actor.canonicalPrincipalRef
+        || existingProof.activeAccountRef !== actor.canonicalAccountRef) {
+        return { kind: 'refused' as const, code: 'proof_replayed' as const }
+      }
+      proofReplay = true
+    } else {
+      const admission = await x402ConnectionConsequenceAdmission({
+        ctx,
+        actor: actor as Parameters<typeof x402ConnectionConsequenceAdmission>[0]['actor'],
+        connectionRef,
+        canonicalResourceUrl,
+        method: claim.method,
+        payee: claim.payTo,
+        observationDigest: claim.observationDigest,
+        claimDigest: args.claimDigest,
+        commandId: args.commandId,
+        existing,
+        now,
+      })
+      if (admission === null
+        || admission.descriptor === undefined
+        || admission.proofPolicy?.kind !== 'clerk_reverification'
+        || admission.proofPolicy.preset !== 'strict'
+        || admission.proofPolicy.uniquePerCommand !== true) {
+        return { kind: 'refused' as const, code: 'invalid_transition' as const }
+      }
+      if (existingProof !== null) {
+        if (existingProof.actorPrincipalRef !== admission.actorPrincipalRef
+          || existingProof.activeAccountRef !== admission.activeAccountRef) {
+          return { kind: 'refused' as const, code: 'proof_replayed' as const }
+        }
+        return { kind: 'refused' as const, code: existingProof.commandDigest === admission.descriptor.commandDigest
+          ? 'proof_replayed' as const
+          : 'command_changed' as const }
+      }
+      const proof = deriveStrictConsequenceProof({ ...proofInput, now })
+      if (proof.kind === 'refused') return proof
+      const rate = await assertAuthorityCredentialChangeAdmission(ctx, admission.activeAccountRef)
+      if (!rate.ok) return { kind: 'refused' as const, code: 'rate_limited' as const }
+      const consumed = await consumeConsequenceProof(ctx, {
+        reverificationId: proofInput.reverificationId,
+        actorPrincipalRef: admission.actorPrincipalRef,
+        activeAccountRef: admission.activeAccountRef,
+        commandDigest: admission.descriptor.commandDigest,
+        proof: proof.proof,
+        correlationRef: admission.correlationRef,
+        idempotencyRef: admission.idempotencyRef,
+      })
+      if (consumed.kind === 'refused') return consumed
+    }
+  }
   const canonicalActor = {
     principalRef: principalRef(ownedBusiness.actor.canonicalPrincipalRef),
     accountRef: accountRef(ownedBusiness.actor.canonicalAccountRef),
@@ -693,7 +924,10 @@ export async function connectX402ProviderConnectionForActor(
       ? {}
       : { delegatedGrantRef: actor.authorityGrantRef }),
   })
-  if (provenance === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
+  if (provenance === null) {
+    if (provisionOwnerGrant) throw new Error('provider_connection_authority_resolution_failed_after_proof')
+    return { kind: 'refused' as const, code: 'invalid_transition' as const }
+  }
   const connectionCommand = {
     commandId: args.commandId,
     connectionRef,
@@ -701,6 +935,8 @@ export async function connectX402ProviderConnectionForActor(
     providerRef,
     providerAccountRef,
     resourceUrl: canonicalResourceUrl,
+    method: claim.method,
+    payee: claim.payTo,
     evidenceRefs: [
       ...args.evidenceRefs,
       `x402-payee-claim:${x402SellerClaimDigest(claim)}`,
@@ -720,6 +956,8 @@ export async function connectX402ProviderConnectionForActor(
         ...connectionCommand,
         adapterId: 'x402-fetch:v2',
         credentialRef: null,
+        x402Method: claim.method,
+        x402Payee: claim.payTo,
         requestedScopes: [],
         grantedScopes: [],
         requestedResources: [canonicalResourceUrl],
@@ -727,7 +965,122 @@ export async function connectX402ProviderConnectionForActor(
         expectedAuthorityGeneration: existing.authorityGeneration,
         expectedAuthorityDigest: existing.authorityDigest,
       }, now)
-  if (result.kind === 'refused') return result
+  if (result.kind === 'refused') {
+    if (provisionOwnerGrant && proofReplay) {
+      return { kind: 'refused' as const, code: 'command_changed' as const }
+    }
+    if (provisionOwnerGrant) throw new Error(`provider_connection_state_refused_after_proof:${result.code}`)
+    return result
+  }
+  if (proofReplay && result.kind !== 'duplicate') {
+    throw new Error('provider_connection_proof_replay_state_mismatch')
+  }
   await persistX402ConnectionResult(ctx, existing, args.commandId, result)
+  if (result.kind === 'applied') {
+    await persistAuditEvent(ctx.db, createConnectionLifecycleAuditEvent({
+      eventType: existing === null ? 'connection.connected' : 'connection.reauthorized',
+      actorPrincipalRef: ownedBusiness.actor.canonicalPrincipalRef,
+      activeAccountRef: ownedBusiness.actor.canonicalAccountRef,
+      connectionRef: result.connection.connectionRef,
+      authorityGeneration: result.connection.authorityGeneration,
+      commandId: args.commandId,
+      correlationRef: args.correlationId,
+      commandDigest: result.commandDigest,
+      adapterId: result.connection.adapterId,
+      beforeState: existing === null ? 'missing' : toDomain(existing).lifecycle,
+      outcome: existing === null ? 'connected' : 'reauthorized',
+      method: claim.method,
+      resourceUrl: canonicalResourceUrl,
+      payee: claim.payTo,
+      occurredAt: now,
+    }))
+  }
   return projectOwnerResult(result, now)
+}
+
+async function x402ConnectionConsequenceAdmission(input: Readonly<{
+  ctx: MutationCtx
+  actor: ProviderConnectionActor & Readonly<{
+    authorityRevision?: Readonly<{ account: number; currentOwnership: number }>
+    authorityProvenance?: Readonly<{
+      accessKind: string
+      accessRef: string
+      currentOwnershipRef: string
+    }>
+  }>
+  connectionRef: string
+  canonicalResourceUrl: string
+  method: 'GET' | 'POST'
+  payee: string
+  observationDigest: string
+  claimDigest: string
+  commandId: string
+  existing: Doc<'capabilityProviderConnections'> | null
+  now: number
+}>): Promise<AuthorityConsequenceAdmission | null> {
+  const provenance = input.actor.authorityProvenance
+  const revision = input.actor.authorityRevision
+  if (provenance?.accessKind !== 'ownership'
+    || provenance.accessRef !== provenance.currentOwnershipRef
+    || revision === undefined) return null
+  const ownership = await input.ctx.db.query('accountOwnerships')
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', provenance.currentOwnershipRef as never))
+    .unique()
+  if (ownership === null
+    || ownership.lifecycle !== 'active'
+    || ownership.accountRef !== input.actor.canonicalAccountRef
+    || ownership.ownerPrincipalRef !== input.actor.canonicalPrincipalRef
+    || ownership.revision !== revision.currentOwnership) return null
+  const action = input.existing === null ? 'connection.connect' as const : 'connection.reauthorize' as const
+  const boundary = new ConsequenceAuthorityBoundary({
+    admitConsequence: async () => {
+      throw new Error('provider_connection_owner_delegation_unreachable')
+    },
+  })
+  return await boundary.forSurface('convex', {
+    resolveCanonicalBinding: async () => ({
+      principalClass: 'interactive',
+      actorPrincipalRef: principalRef(input.actor.canonicalPrincipalRef),
+      activeAccountRef: accountRef(input.actor.canonicalAccountRef),
+      authoritySource: {
+        kind: 'account_ownership',
+        ownershipRef: ownershipRef(ownership.ownershipRef),
+        ownershipRevision: ownership.revision,
+        accountRevision: revision.account,
+        admittedAt: input.now,
+        expiresAt: input.now + 1,
+      },
+    }),
+  }).withCurrentAuthority({
+    requiredScopes: [input.existing === null ? 'connection:install' : 'connection:refresh'],
+    resourceRefs: [`connection:${input.connectionRef}`, `connection-provider:x402:${input.canonicalResourceUrl}`],
+    budgetAmount: 0,
+    correlationRef: input.commandId,
+    idempotencyRef: input.commandId,
+    consequence: {
+      action,
+      target: {
+        targetType: 'provider_connection',
+        targetRef: input.connectionRef,
+        targetRevision: input.existing?.authorityGeneration ?? 1,
+      },
+      consequenceSummary: input.existing === null
+        ? 'Connect this exact x402 resource and payee authority.'
+        : 'Reauthorize this exact x402 resource and payee authority.',
+      statusReadbackRef: `provider-connections/${input.connectionRef}`,
+      command: {
+        version: 'ae.x402-connection-authority:v1',
+        action,
+        commandId: input.commandId,
+        connectionRef: input.connectionRef,
+        expectedAuthorityGeneration: input.existing?.authorityGeneration ?? 0,
+        expectedAuthorityDigest: input.existing?.authorityDigest ?? null,
+        method: input.method,
+        resourceUrl: input.canonicalResourceUrl,
+        payee: input.payee,
+        observationDigest: input.observationDigest,
+        claimDigest: input.claimDigest,
+      },
+    },
+  }, async (admission) => admission)
 }

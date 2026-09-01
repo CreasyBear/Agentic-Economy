@@ -74,7 +74,7 @@ export function normalizeReasonCode(value: string | undefined):
   return { kind: 'ok', ...(value === undefined ? {} : { value }) }
 }
 
-export function providerConnectionAuthorityDigest(connection: Pick<ProviderConnection, 'connectionRef' | 'owningAccountRef' | 'installedByPrincipalRef' | 'authorityGrantRef' | 'authorityGrantGeneration' | 'secretRef' | 'businessId' | 'providerRef' | 'providerAccountRef' | 'adapterId' | 'credentialRef' | 'grantedScopes' | 'grantedResources' | 'authorityGeneration' | 'expiresAt'>): string {
+export function providerConnectionAuthorityDigest(connection: Pick<ProviderConnection, 'connectionRef' | 'owningAccountRef' | 'installedByPrincipalRef' | 'authorityGrantRef' | 'authorityGrantGeneration' | 'secretRef' | 'businessId' | 'providerRef' | 'providerAccountRef' | 'adapterId' | 'credentialRef' | 'x402Method' | 'x402Payee' | 'grantedScopes' | 'grantedResources' | 'authorityGeneration' | 'expiresAt'>): string {
   return canonicalDigest({
     connectionRef: connection.connectionRef,
     owningAccountRef: connection.owningAccountRef,
@@ -84,6 +84,7 @@ export function providerConnectionAuthorityDigest(connection: Pick<ProviderConne
     secretRef: connection.secretRef ?? null,
     businessId: connection.businessId, providerRef: connection.providerRef,
     providerAccountRef: connection.providerAccountRef, adapterId: connection.adapterId, credentialRef: connection.credentialRef,
+    x402Method: connection.x402Method ?? null, x402Payee: connection.x402Payee ?? null,
     grantedScopes: uniqueSorted(connection.grantedScopes), grantedResources: uniqueSorted(connection.grantedResources),
     authorityGeneration: connection.authorityGeneration, expiresAt: connection.expiresAt ?? null,
   })
@@ -97,6 +98,13 @@ export function stateIntegrity(current: ProviderConnection, now: number): Provid
   if (!validIdentity(current.connectionRef) || !validIdentity(current.businessId) || !validIdentity(current.providerRef)
     || !validIdentity(current.providerAccountRef) || !validIdentity(current.adapterId)
     || (current.credentialRef !== null && !isProviderConnectionCredentialRef(current.credentialRef))) return 'invalid_identity'
+  if (current.x402Method !== undefined && current.x402Method !== 'GET' && current.x402Method !== 'POST') return 'invalid_identity'
+  if (current.x402Payee !== undefined && !validIdentity(current.x402Payee)) return 'invalid_identity'
+  if (current.healthStatus !== undefined && current.healthStatus !== 'healthy' && current.healthStatus !== 'unhealthy') return 'invalid_transition'
+  if (current.healthCheckedAt !== undefined && !validTimestamp(current.healthCheckedAt)) return 'invalid_time'
+  if (current.healthSubject !== undefined && !validIdentity(current.healthSubject)) return 'invalid_identity'
+  if (current.healthObservationDigest !== undefined && !isCanonicalDigest(current.healthObservationDigest)) return 'invalid_digest'
+  if (current.healthReasonCode !== undefined && !validIdentity(current.healthReasonCode)) return 'invalid_identity'
   if (!VALID_LIFECYCLES.has(current.lifecycle)) return 'invalid_transition'
   if (!validGeneration(current.authorityGeneration)) return 'invalid_generation'
   if (!isCanonicalDigest(current.authorityDigest) || current.authorityDigest !== providerConnectionAuthorityDigest(current)) return 'invalid_digest'
