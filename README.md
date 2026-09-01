@@ -7,6 +7,9 @@ The active product is an **Operation market**. An Operation is one exact,
 callable contribution an outside supplier can provide when an agent reaches the
 edge of its current capabilities.
 
+Read [the Australian Agentic Economy whitepaper](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md)
+for the market thesis, commercial model, and case for the company's existence.
+
 ## The product loop
 
 1. An agent encounters a capability gap while pursuing its own project.
