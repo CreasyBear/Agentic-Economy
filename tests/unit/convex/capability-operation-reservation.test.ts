@@ -16,6 +16,7 @@ beforeEach(() => {
 import { abandon, reserve } from '../../../convex/capabilityOperationInvocations'
 import { invokeArgs } from '../../../convex/lib/operationInvocations/contracts'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 type Row = Record<string, unknown> & { _id: string }
 type Filter = (row: Row) => boolean
@@ -107,24 +108,80 @@ const abandonHandler = (abandon as unknown as { _handler: Handler })._handler
 const baseOperation = buildDevelopmentPublishedOperationEvidence().operation
 const baseOperationJson = JSON.stringify(baseOperation)
 const now = 100_000
-const grant = (overrides: Record<string, unknown> = {}): Row => ({
-  _id: 'agentAccessGrants:one',
-  grantRef: 'grant:one',
-  principalId: 'principal:one',
-  ownerId: 'owner:one',
-  credentialId: 'credential:one',
-  applicationRef: 'application:one',
-  environment: 'sandbox',
-  lifecycle: 'active',
-  generation: 1,
-  policyDigest: 'sha256:policy-one',
-  expiresAt: now + 60_000,
-  policy: {
-    rate: { maximumCallsPerMinute: 10, maximumCallsPerHour: 100 },
-    budget: { maximumConcurrentInvocations: 2 },
+const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
+const OTHER_OPERATION_REF = `operation:v1:${'b'.repeat(64)}`
+const BASE_POLICY = {
+  format: 'ae.agent-access-policy:v1' as const,
+  operationAccess: 'all_admitted' as const,
+  environment: 'sandbox' as const,
+  budget: {
+    budgetPolicyRef: 'budget:reservation',
+    generation: 1,
+    currency: 'USD',
+    exponent: 2,
+    maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+    maximumDailySpend: { currency: 'USD', units: '1000', exponent: 2 },
+    maximumMonthlySpend: { currency: 'USD', units: '10000', exponent: 2 },
+    maximumConcurrentInvocations: 2,
   },
-  ...overrides,
-})
+  rate: {
+    ratePolicyRef: 'rate:reservation',
+    generation: 1,
+    maximumCallsPerMinute: 10,
+    maximumCallsPerHour: 100,
+  },
+}
+const BASE_POLICY_DIGEST = canonicalDigest(BASE_POLICY as never)
+
+function selectedGrantOverrides(operationRefs: readonly string[]): Record<string, unknown> {
+  const policy = {
+    ...BASE_POLICY,
+    format: 'ae.agent-access-policy:v2' as const,
+    operationAccess: 'selected_operations' as const,
+    operationRefs: [...operationRefs].sort(),
+  }
+  return {
+    format: 'ae.agent-access-grant:v2',
+    operationAccess: 'selected_operations',
+    operationRefs: [...policy.operationRefs],
+    policy,
+    policyDigest: canonicalDigest(policy as never),
+  }
+}
+
+const grant = (overrides: Record<string, unknown> = {}): Row => {
+  const { policy: policyOverrideValue, policyDigest: policyDigestOverride, ...grantOverrides } = overrides
+  const policyOverride = policyOverrideValue as Partial<typeof BASE_POLICY> | undefined
+  const policy = {
+    ...BASE_POLICY,
+    ...policyOverride,
+    budget: { ...BASE_POLICY.budget, ...policyOverride?.budget },
+    rate: { ...BASE_POLICY.rate, ...policyOverride?.rate },
+  }
+  return {
+    _id: 'agentAccessGrants:one',
+    _creationTime: now - 1_000,
+    format: 'ae.agent-access-grant:v1',
+    grantRef: 'grant:one',
+    principalId: 'principal:one',
+    ownerId: 'owner:one',
+    credentialId: 'credential:one',
+    applicationRef: 'application:one',
+    environment: 'sandbox',
+    operationAccess: 'all_admitted',
+    authorityMode: 'approve_each',
+    lifecycle: 'active',
+    generation: 1,
+    policy,
+    budgetPolicyRef: policy.budget.budgetPolicyRef,
+    ratePolicyRef: policy.rate.ratePolicyRef,
+    policyDigest: policyDigestOverride ?? canonicalDigest(policy as never),
+    createdAt: now - 1_000,
+    updatedAt: now - 1_000,
+    expiresAt: now + 60_000,
+    ...grantOverrides,
+  }
+}
 
 const args = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
   invocationRef: 'operation-invocation:v1:one',
@@ -134,12 +191,12 @@ const args = (overrides: Record<string, unknown> = {}): Record<string, unknown> 
   applicationRef: 'application:one',
   grantRef: 'grant:one',
   environment: 'sandbox',
-  operationRef: 'operation:one',
+  operationRef: OPERATION_REF,
   idempotencyKey: 'idempotency:one',
   inputDigest: 'sha256:input-one',
   requestDigest: 'sha256:request-one',
   grantGeneration: 1,
-  policyDigest: 'sha256:policy-one',
+  policyDigest: BASE_POLICY_DIGEST,
   grantExpiresAt: now + 60_000,
   operationJson: baseOperationJson,
   inputJson: '{}',
@@ -151,7 +208,7 @@ const canaryEnvelope = (overrides: Record<string, unknown> = {}) => ({
   canaryRef: 'seller-canary:one',
   canaryCommitmentDigest: 'sha256:canary-one',
   invocationRef: 'operation-invocation:v1:one',
-  operationRef: 'operation:one',
+  operationRef: OPERATION_REF,
   ownerId: 'owner:one',
   businessId: 'business:one',
   offeringRef: 'offering:one',
@@ -183,7 +240,7 @@ const canaryEnvelope = (overrides: Record<string, unknown> = {}) => ({
     applicationRef: 'application:one',
     grantRef: 'grant:one',
     grantGeneration: 1,
-    policyDigest: 'sha256:policy-one',
+    policyDigest: BASE_POLICY_DIGEST,
     budgetRef: 'budget:canary',
     maximumSpend: { currency: 'USDC', units: '2000', exponent: 6 },
     requestedSpend: { currency: 'USDC', units: '1000', exponent: 6 },
@@ -208,7 +265,12 @@ const abandonmentArgs = (overrides: Record<string, unknown> = {}): Record<string
 function context(grantOverrides: Record<string, unknown> = {}): HandlerContext {
   const db = new MemoryDb()
   db.seed('agentAccessGrants', grant(grantOverrides))
-  return { db, runMutation: async () => undefined }
+  return { db, runMutation: vi.fn(async () => undefined) }
+}
+
+function argsFor(ctx: HandlerContext, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const storedGrant = ctx.db.rows('agentAccessGrants')[0]
+  return args({ policyDigest: storedGrant?.policyDigest, ...overrides })
 }
 
 let seedSequence = 0
@@ -228,7 +290,7 @@ function invocation(overrides: Record<string, unknown> = {}): Row {
     inputDigest: 'sha256:seed-input',
     requestDigest: 'sha256:seed-request',
     grantGeneration: 1,
-    policyDigest: 'sha256:policy-one',
+    policyDigest: BASE_POLICY_DIGEST,
     grantExpiresAt: now + 60_000,
     state: 'completed',
     createdAt: now - 1,
@@ -278,8 +340,8 @@ describe('capability operation reservation admission', () => {
       policy: { rate: { maximumCallsPerMinute: 1, maximumCallsPerHour: 1 }, budget: { maximumConcurrentInvocations: 1 } },
     })
 
-    const first = await reserveHandler(ctx, args())
-    const replay = await reserveHandler(ctx, args())
+    const first = await reserveHandler(ctx, argsFor(ctx))
+    const replay = await reserveHandler(ctx, argsFor(ctx))
 
     expect(first).toMatchObject({ kind: 'reserved', reservation: { invocationRef: 'operation-invocation:v1:one' } })
     expect(replay).toEqual({
@@ -288,6 +350,41 @@ describe('capability operation reservation admission', () => {
     })
     expect(ctx.db.rows('capabilityOperationInvocations')).toHaveLength(1)
     expect(mocks.assertAgentAccessRateAdmission).toHaveBeenCalledTimes(1)
+  })
+
+  it('admits v1 all-admitted and a v2 grant selecting the exact Operation', async () => {
+    const legacy = context()
+    await expect(reserveHandler(legacy, args())).resolves.toMatchObject({ kind: 'reserved' })
+
+    const selected = context(selectedGrantOverrides([OPERATION_REF]))
+    await expect(reserveHandler(selected, argsFor(selected))).resolves.toMatchObject({ kind: 'reserved' })
+  })
+
+  it('refuses an unselected Operation or invalid stored grant before rate, reservation, and evidence writes', async () => {
+    for (const ctx of [
+      context(selectedGrantOverrides([OTHER_OPERATION_REF])),
+      context({ operationRefs: [] }),
+    ]) {
+      mocks.assertAgentAccessRateAdmission.mockClear()
+      await expect(reserveHandler(ctx, argsFor(ctx))).resolves.toMatchObject({
+        kind: 'refused',
+        code: 'grant_not_found',
+      })
+      expect(mocks.assertAgentAccessRateAdmission).not.toHaveBeenCalled()
+      expect(ctx.db.rows('capabilityOperationInvocations')).toHaveLength(0)
+      expect(ctx.runMutation).not.toHaveBeenCalled()
+    }
+  })
+
+  it('replays an exact admitted reservation before a later selected-policy change', async () => {
+    const ctx = context()
+    const originalArgs = args()
+    await expect(reserveHandler(ctx, originalArgs)).resolves.toMatchObject({ kind: 'reserved' })
+    Object.assign(ctx.db.rows('agentAccessGrants')[0]!, selectedGrantOverrides([OTHER_OPERATION_REF]))
+
+    await expect(reserveHandler(ctx, originalArgs)).resolves.toMatchObject({ kind: 'replayed' })
+    expect(mocks.assertAgentAccessRateAdmission).toHaveBeenCalledTimes(1)
+    expect(ctx.db.rows('capabilityOperationInvocations')).toHaveLength(1)
   })
   it('replays stable operation material when readiness observation changes', async () => {
     const ctx = context()
@@ -336,7 +433,7 @@ describe('capability operation reservation admission', () => {
       policy: { rate: { maximumCallsPerMinute: 7, maximumCallsPerHour: 42 }, budget: { maximumConcurrentInvocations: 2 } },
     })
 
-    await expect(reserveHandler(ctx, args())).resolves.toMatchObject({ kind: 'reserved' })
+    await expect(reserveHandler(ctx, argsFor(ctx))).resolves.toMatchObject({ kind: 'reserved' })
     expect(mocks.assertAgentAccessRateAdmission).toHaveBeenCalledWith(ctx, {
       applicationRef: 'application:one',
       credentialId: 'credential:one',
@@ -350,13 +447,13 @@ describe('capability operation reservation admission', () => {
       policy: { rate: { maximumCallsPerMinute: 1, maximumCallsPerHour: 2 }, budget: { maximumConcurrentInvocations: 2 } },
     })
     minuteCtx.db.seed('capabilityOperationInvocations', invocation({ createdAt: now - 60_000 }))
-    await expect(reserveHandler(minuteCtx, args())).resolves.toMatchObject({ kind: 'reserved' })
+    await expect(reserveHandler(minuteCtx, argsFor(minuteCtx))).resolves.toMatchObject({ kind: 'reserved' })
 
     const hourCtx = context({
       policy: { rate: { maximumCallsPerMinute: 1, maximumCallsPerHour: 1 }, budget: { maximumConcurrentInvocations: 2 } },
     })
     hourCtx.db.seed('capabilityOperationInvocations', invocation({ createdAt: now - 3_600_000 }))
-    await expect(reserveHandler(hourCtx, args())).resolves.toMatchObject({ kind: 'reserved' })
+    await expect(reserveHandler(hourCtx, argsFor(hourCtx))).resolves.toMatchObject({ kind: 'reserved' })
     expect(mocks.assertAgentAccessRateAdmission).toHaveBeenCalledTimes(2)
   })
 
@@ -366,13 +463,13 @@ describe('capability operation reservation admission', () => {
     })
     blocked.db.seed('capabilityOperationInvocations', invocation({ state: 'pending' }))
     blocked.db.seed('capabilityOperationInvocations', invocation({ state: 'reconciliation_required' }))
-    await expect(reserveHandler(blocked, args())).resolves.toMatchObject({ kind: 'refused', code: 'concurrency_limited' })
+    await expect(reserveHandler(blocked, argsFor(blocked))).resolves.toMatchObject({ kind: 'refused', code: 'concurrency_limited' })
 
     const available = context({
       policy: { rate: { maximumCallsPerMinute: 10, maximumCallsPerHour: 100 }, budget: { maximumConcurrentInvocations: 1 } },
     })
     for (const state of ['completed', 'refused', 'cancelled'] as const) available.db.seed('capabilityOperationInvocations', invocation({ state }))
-    await expect(reserveHandler(available, args())).resolves.toMatchObject({ kind: 'reserved' })
+    await expect(reserveHandler(available, argsFor(available))).resolves.toMatchObject({ kind: 'reserved' })
   })
   it('does not let an expired pending grant consume concurrency', async () => {
     const ctx = context({
@@ -383,7 +480,7 @@ describe('capability operation reservation admission', () => {
       grantExpiresAt: now,
     }))
 
-    await expect(reserveHandler(ctx, args())).resolves.toMatchObject({ kind: 'reserved' })
+    await expect(reserveHandler(ctx, argsFor(ctx))).resolves.toMatchObject({ kind: 'reserved' })
   })
 
   it('refuses expired and environment-mismatched grants with stable codes', async () => {

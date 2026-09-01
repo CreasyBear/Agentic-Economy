@@ -161,14 +161,70 @@ describe('account security history', () => {
     expect(page.page[0]).not.toHaveProperty('observedAt')
     expect(page.page.map((row) => row.eventRef)).toEqual(['audit:current'])
   })
+
+  it('paginates one owned Agent by the Account-target index without leaking sibling history', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = await insertOwner(backend, 'agent_history_owner')
+    const sibling = await insertOwner(backend, 'agent_history_sibling')
+    const agentPrincipalRef = await insertAgent(backend, owner, 'history_agent')
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('auditEvents', auditRow({
+        eventId: 'audit:agent-history:created',
+        activeAccountRef: owner.accountRef,
+        targetRef: agentPrincipalRef,
+        sourceSystem: 'ae_recorded',
+        createdAt: ACCOUNT_SECURITY_HISTORY_ACTIVATED_AT + 1_000,
+      }))
+      await ctx.db.insert('auditEvents', auditRow({
+        eventId: 'audit:agent-history:renamed',
+        activeAccountRef: owner.accountRef,
+        targetRef: agentPrincipalRef,
+        eventType: 'agent.renamed',
+        sourceSystem: 'ae_recorded',
+        createdAt: ACCOUNT_SECURITY_HISTORY_ACTIVATED_AT + 2_000,
+      }))
+      await ctx.db.insert('auditEvents', auditRow({
+        eventId: 'audit:agent-history:foreign',
+        activeAccountRef: sibling.accountRef,
+        targetRef: agentPrincipalRef,
+        sourceSystem: 'ae_recorded',
+        createdAt: ACCOUNT_SECURITY_HISTORY_ACTIVATED_AT + 3_000,
+      }))
+    })
+
+    const firstPage = await owner.client.query(
+      api.securityAccountHistory.listCurrentOwnerAgentSecurityHistory,
+      { principalRef: agentPrincipalRef, paginationOpts: { cursor: null, numItems: 1 } },
+    )
+    expect(firstPage.page).toEqual([expect.objectContaining({
+      eventRef: 'audit:agent-history:renamed',
+      targetRef: agentPrincipalRef,
+      sourceSystem: 'ae_recorded',
+    })])
+    expect(firstPage.isDone).toBe(false)
+    const secondPage = await owner.client.query(
+      api.securityAccountHistory.listCurrentOwnerAgentSecurityHistory,
+      { principalRef: agentPrincipalRef, paginationOpts: { cursor: firstPage.continueCursor, numItems: 1 } },
+    )
+    expect(secondPage.page).toEqual([expect.objectContaining({
+      eventRef: 'audit:agent-history:created',
+      targetRef: agentPrincipalRef,
+    })])
+    expect(secondPage.page.some(({ eventRef }) => eventRef === 'audit:agent-history:foreign')).toBe(false)
+    await expect(sibling.client.query(
+      api.securityAccountHistory.listCurrentOwnerAgentSecurityHistory,
+      { principalRef: agentPrincipalRef, paginationOpts: { cursor: null, numItems: 10 } },
+    )).rejects.toThrow('agent_history_not_found')
+  })
 })
 
 function auditRow(input: Readonly<{
   eventId: string
   activeAccountRef: string
-  eventType?: 'agent.created' | 'billing.receipt_recorded'
+  eventType?: 'agent.created' | 'agent.renamed' | 'billing.receipt_recorded'
   sourceSystem?: 'ae_recorded'
   afterState?: string | undefined
+  targetRef?: string
   createdAt: number
 }>) {
   return {
@@ -179,7 +235,7 @@ function auditRow(input: Readonly<{
     activeAccountRef: input.activeAccountRef,
     ...(input.sourceSystem === undefined ? {} : { sourceSystem: input.sourceSystem }),
     targetType: 'agent' as const,
-    targetRef: 'prn_abcdef0123456789abcdef0123456789',
+    targetRef: input.targetRef ?? 'prn_abcdef0123456789abcdef0123456789',
     beforeState: 'missing',
     ...(input.afterState === undefined && Object.hasOwn(input, 'afterState')
       ? {}
@@ -191,6 +247,57 @@ function auditRow(input: Readonly<{
     payloadHash: canonicalDigest({ eventId: input.eventId }),
     createdAt: input.createdAt,
   }
+}
+
+async function insertAgent(
+  backend: TestConvex<typeof schema>,
+  owner: Awaited<ReturnType<typeof insertOwner>>,
+  suffix: string,
+): Promise<string> {
+  const digest = canonicalDigest({ kind: 'security-history-agent', suffix })
+    .slice('sha256:'.length, 'sha256:'.length + 32)
+  const principalRef = `prn_${digest}`
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('principals', {
+      principalRef,
+      kind: 'agent',
+      displayName: `${suffix} agent`,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert('memberships', {
+      membershipRef: `mem_${digest}`,
+      accountRef: owner.accountRef,
+      memberPrincipalRef: principalRef,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: 1,
+      createdBy: {
+        actorPrincipalRef: owner.principalRef,
+        activeAccountRef: owner.accountRef,
+        correlationRef: `create:${principalRef}`,
+        idempotencyRef: `create:${principalRef}`,
+      },
+    })
+    await ctx.db.insert('agentAccessPrincipals', {
+      principalId: principalRef,
+      ownerId: owner.accountRef,
+      credentialId: `key_${suffix}`,
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      scopes: ['market_operations:invoke'],
+      authorityMode: 'inspect_only',
+      grantGeneration: 1,
+      policyDigest: canonicalDigest({ kind: 'agent-policy', suffix }),
+      lifecycle: 'active',
+      expiresAt: 8_000_000_000_000,
+      recordedAt: 1,
+      lastSeenAt: 1,
+    })
+  })
+  return principalRef
 }
 
 function observation(

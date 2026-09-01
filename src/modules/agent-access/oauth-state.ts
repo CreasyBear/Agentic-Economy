@@ -3,13 +3,15 @@ import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety
 
 import { base64Codec } from '@/modules/common/base64-codec'
 import type { ExactAmount } from '@/modules/money/public'
+import {
+  normalizeAgentAccessOperationSelection,
+  type AgentAccessOperationAccess,
+} from './policy'
 
 import {
-  AGENT_ACCESS_AUTHORITY_MODE_VALUES,
   CUSTOMER_REQUEST_AGENT_SCOPE,
   MARKET_OPERATIONS_INVOKE_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
-  agentAuthorityModeAllows,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
@@ -82,6 +84,8 @@ export type AgentCredentialReplacement = Readonly<{
 }>
 export type AgentAccessOAuthRequestedAccess = Readonly<{
   environment: AgentAccessEnvironment
+  operationAccess: AgentAccessOperationAccess
+  operationRefs: readonly string[]
   maximumSpendPerInvocation?: ExactAmount
   maximumDailySpend?: ExactAmount
   maximumMonthlySpend?: ExactAmount
@@ -129,7 +133,7 @@ export type AgentAccessOAuthGrant = Readonly<{
   }>
 }>
 
-export type AgentAccessOAuthGrantPatch = Partial<Omit<AgentAccessOAuthGrant, 'revision'>>
+export type AgentAccessOAuthGrantPatch = Partial<Omit<AgentAccessOAuthGrant, 'revision' | 'requestedAccess'>>
 
 export type AgentAccessOAuthClient = Readonly<{
   clientId: string
@@ -274,6 +278,11 @@ export async function beginDeviceGrant(
   if (!input.client.grantTypes.includes('urn:ietf:params:oauth:grant-type:device_code')) return { kind: 'refused', reason: 'invalid_client' }
   const scopes = normalizeRequestedScopes(input.requestedScopes.join(' '))
   if (scopes === undefined) return { kind: 'refused', reason: 'invalid_scope' }
+  const requestedAccess = normalizeOAuthRequestedAccess(input.requestedAccess)
+  if (requestedAccess === undefined
+    || (scopes.profile === 'supplier' && requestedAccess.operationAccess !== 'all_admitted')) {
+    return { kind: 'refused', reason: 'invalid_scope' }
+  }
   const deviceCode = createOpaqueOAuthValue()
   const userCode = createUserCode()
   const grant: AgentAccessOAuthGrant = {
@@ -282,10 +291,7 @@ export async function beginDeviceGrant(
     flow: 'device_code',
     clientId: input.client.clientId,
     requestedScopes: [...scopes.scopes],
-    requestedAccess: input.requestedAccess ?? {
-      environment: 'sandbox',
-      expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
-    },
+    requestedAccess,
     deviceCodeHash: await hashOAuthValue(deviceCode),
     userCodeHash: await hashOAuthValue(userCode),
     status: 'pending',
@@ -317,6 +323,11 @@ export async function beginAuthorizationCodeGrant(
   if (input.ownerId.trim().length === 0) return { kind: 'refused', reason: 'owner_required' }
   const scopes = normalizeRequestedScopes(input.requestedScopes.join(' '))
   if (scopes === undefined) return { kind: 'refused', reason: 'invalid_scope' }
+  const requestedAccess = normalizeOAuthRequestedAccess(input.requestedAccess)
+  if (requestedAccess === undefined
+    || (scopes.profile === 'supplier' && requestedAccess.operationAccess !== 'all_admitted')) {
+    return { kind: 'refused', reason: 'invalid_scope' }
+  }
   const grant: AgentAccessOAuthGrant = {
     grantRef: `authorization:${createOpaqueOAuthValue(18)}`,
     revision: 1,
@@ -324,10 +335,7 @@ export async function beginAuthorizationCodeGrant(
     clientId: input.client.clientId,
     redirectUri: input.redirectUri,
     requestedScopes: [...scopes.scopes],
-    requestedAccess: input.requestedAccess ?? {
-      environment: 'sandbox',
-      expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
-    },
+    requestedAccess,
     codeChallenge: input.codeChallenge,
     codeChallengeMethod: 'S256',
     status: 'pending',
@@ -338,6 +346,23 @@ export async function beginAuthorizationCodeGrant(
   }
   await store.insertGrant(grant)
   return { kind: 'ok', value: { grant, expiresIn: AGENT_ACCESS_AUTHORIZATION_CODE_TTL_SECONDS } }
+}
+
+function normalizeOAuthRequestedAccess(
+  requestedAccess: AgentAccessOAuthRequestedAccess | undefined,
+): AgentAccessOAuthRequestedAccess | undefined {
+  const source = requestedAccess ?? {
+    environment: 'sandbox' as const,
+    operationAccess: 'all_admitted' as const,
+    operationRefs: [],
+    expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
+  }
+  const selection = normalizeAgentAccessOperationSelection(source)
+  return selection === undefined ? undefined : {
+    ...source,
+    operationAccess: selection.operationAccess,
+    operationRefs: selection.operationRefs,
+  }
 }
 
 export async function readGrantForConsent(
@@ -499,7 +524,7 @@ export async function pollDeviceGrant(
   }
   const tooSoon = grant.nextPollAt !== undefined && input.now < grant.nextPollAt
   const updated = await store.updateGrant(grant.grantRef, 'pending', grant.revision, { nextPollAt: input.now + AGENT_ACCESS_POLL_INTERVAL_SECONDS * 1000 })
-  if (updated === null) return { kind: 'conflict', reason: 'concurrent_transition' }
+  if (updated === null) return { kind: 'authorization_pending' }
   return tooSoon ? { kind: 'slow_down' } : { kind: 'authorization_pending' }
 }
 

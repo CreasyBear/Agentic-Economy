@@ -207,6 +207,25 @@ const revokeCredentialMutation = sourceMutation<LifecycleMutationArgs<RevokeCred
 const disconnectAgentMutation = sourceMutation<LifecycleMutationArgs<DisconnectAgentCommand>, AgentLifecycleCanonicalResult>(
   'agentAccessPrincipals:disconnectAgentForServer',
 )
+type RenameAgentCommand = Readonly<{
+  principalRef: string
+  expectedRevision: number
+  displayName: string
+  correlationRef: string
+}>
+export type RenameAgentResult =
+  | Readonly<{
+      kind: 'completed' | 'replayed'
+      principalRef: string
+      displayName: string
+      revision: number
+      correlationRef: string
+    }>
+  | Readonly<{ kind: 'conflict'; code: string; correlationRef: string }>
+  | Readonly<{ kind: 'refused'; code: 'authentication_required' | 'source_unavailable'; correlationRef: string }>
+const renameAgentMutation = sourceMutation<RenameAgentCommand, Exclude<RenameAgentResult, { kind: 'refused'; code: 'source_unavailable' }>>(
+  'agentAccessPrincipals:renameAgentForServer',
+)
 type ProviderRevocationCommand = Readonly<{
   principalRef: string
   credentialRef: string
@@ -291,6 +310,7 @@ export async function registerIssuedAgentBinding(
     const command = {
       ...input,
       scopes: [...input.scopes],
+      operationRefs: [...input.operationRefs],
     }
     const serviceAuth = await createConvexServerFunctionAssertion({
       operation: 'agentAccessPrincipals.registerIssuedAgentBindingForServer',
@@ -326,7 +346,7 @@ export async function prepareAgentCredentialReplacement(
   return await callReplacementMutation(
     'agentAccessPrincipals.prepareCredentialReplacementForServer',
     prepareCredentialReplacementMutation,
-    { ...input, scopes: [...input.scopes] },
+    { ...input, scopes: [...input.scopes], operationRefs: [...input.operationRefs] },
   ) as AgentCredentialReplacementRegistrationResult
 }
 
@@ -517,6 +537,22 @@ export const disconnectAgentServer = createServerFn({ method: 'POST' })
         disconnectAgentMutation,
         command,
       ))
+    } catch {
+      return { kind: 'refused', code: 'source_unavailable', correlationRef }
+    }
+  })
+
+export const renameAgentServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({
+    principalRef: z.string().trim().min(1).max(300),
+    expectedRevision: z.number().int().safe().positive(),
+    displayName: z.string().trim().min(1).max(200),
+  }).parse(data))
+  .handler(async ({ data }): Promise<RenameAgentResult> => {
+    const correlationRef = lifecycleCorrelationRef()
+    try {
+      await requireCanonicalOwnerAuthorityServer()
+      return await callSourceMutation(renameAgentMutation, { ...data, correlationRef })
     } catch {
       return { kind: 'refused', code: 'source_unavailable', correlationRef }
     }

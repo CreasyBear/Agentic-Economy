@@ -19,6 +19,7 @@ const routeHarness = vi.hoisted(() => ({
   readCanonicalBaseUrl: vi.fn(),
   revokeRef: Symbol('revoke'),
   disconnectRef: Symbol('disconnect'),
+  renameRef: Symbol('rename'),
   readApprovalsRef: Symbol('read-approvals'),
   decideApprovalRef: Symbol('decide-approval'),
 }))
@@ -54,6 +55,10 @@ vi.mock('@/components/ae/console/AeAssistantInstallFunnel', () => ({
   AeAssistantInstallFunnel: () => null,
 }))
 
+vi.mock('@/components/ae/agent-access/AeAgentSecurityHistory', () => ({
+  AeAgentSecurityHistory: ({ principalRef }: { principalRef: string }) => <div data-agent-history={principalRef} />,
+}))
+
 vi.mock('@/components/ae/layout/AeOperatorShell', () => ({
   AeOperatorShell: ({ children }: { children?: ReactNode }) => children ?? null,
 }))
@@ -75,6 +80,7 @@ vi.mock('@/lib/server/agent-access-console.functions', () => ({
 
 vi.mock('@/modules/agent-access/agent-access.functions', () => ({
   disconnectAgentServer: routeHarness.disconnectRef,
+  renameAgentServer: routeHarness.renameRef,
   revokeAgentCredentialServer: routeHarness.revokeRef,
 }))
 
@@ -109,6 +115,8 @@ const caller: AgentCredentialSource = {
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
     authorityMode: 'inspect_only',
+    operationAccess: 'all_admitted',
+    operationRefs: [],
     lifecycle: 'active',
     expiresAt: 604_800_000,
     budget: {
@@ -133,11 +141,19 @@ function renderRoute() {
 
 function installServerFns(readDirectory: () => Promise<AgentDirectoryProjection> = async () => directory) {
   const revoke = vi.fn(async () => ({ kind: 'revoked' as const, keyId: KEY_ID }))
+  const rename = vi.fn(async () => ({
+    kind: 'completed' as const,
+    principalRef: PRINCIPAL_ID,
+    displayName: 'Research assistant',
+    revision: 2,
+    correlationRef: 'agent:rename-safe',
+  }))
   routeHarness.serverFns.set(routeHarness.readDirectory, readDirectory)
   routeHarness.serverFns.set(routeHarness.revokeRef, revoke)
+  routeHarness.serverFns.set(routeHarness.renameRef, rename)
   routeHarness.serverFns.set(routeHarness.readApprovalsRef, async () => [])
   routeHarness.serverFns.set(routeHarness.decideApprovalRef, async () => ({ kind: 'denied' }))
-  return { revoke }
+  return { revoke, rename }
 }
 
 beforeEach(() => {
@@ -207,6 +223,32 @@ describe('agent-access caller route continuation', () => {
 
     const getAgentHref = routeHarness.consoleProps?.getAgentHref as ((principalId: string) => string) | undefined
     expect(getAgentHref?.(PRINCIPAL_ID)).toBe(`/agent-access?caller=${PRINCIPAL_ID}`)
+  })
+
+  it('renames the exact Principal revision then reloads authoritative directory state', async () => {
+    routeHarness.search = { caller: PRINCIPAL_ID }
+    const readDirectory = vi.fn(async () => directory)
+    const { rename } = installServerFns(readDirectory)
+    renderRoute()
+
+    await waitFor(() => expect(routeHarness.consoleProps?.onRenameAgent).toBeTypeOf('function'))
+    const onRename = routeHarness.consoleProps?.onRenameAgent as (
+      principalRef: string,
+      expectedRevision: number,
+      displayName: string,
+    ) => Promise<boolean>
+    await expect(onRename(PRINCIPAL_ID, directory.items[0]!.principalRevision, 'Research assistant')).resolves.toBe(true)
+
+    expect(rename).toHaveBeenCalledWith({
+      data: {
+        principalRef: PRINCIPAL_ID,
+        expectedRevision: directory.items[0]!.principalRevision,
+        displayName: 'Research assistant',
+      },
+    })
+    expect(readDirectory).toHaveBeenCalledOnce()
+    expect(routeHarness.consoleProps?.selectedPrincipalId).toBe(PRINCIPAL_ID)
+    expect(routeHarness.navigate).not.toHaveBeenCalled()
   })
 
   it('preserves an unmatched loader-backed locator for the in-shell not-found state', async () => {

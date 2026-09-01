@@ -372,6 +372,7 @@ export async function invokeHandler(
             expiresAt: row.expiresAt,
             lifecycle: 'active',
             operationAccess: row.operationAccess,
+            operationRefs: row.operationRefs,
           },
         }
       },

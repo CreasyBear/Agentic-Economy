@@ -32,6 +32,7 @@ const directoryRecord = v.object({
     predecessorCredentialRef: v.optional(v.string()),
     issuedAt: v.number(),
     expiresAt: v.number(),
+    lastAuthenticatedAt: v.optional(v.number()),
   })),
 })
 
@@ -149,6 +150,9 @@ async function projectMemberships(
             : { predecessorCredentialRef: credential.predecessorCredentialRef }),
           issuedAt: credential.issuedAt,
           expiresAt: credential.expiresAt,
+          ...(credential.lastAuthenticatedAt === undefined
+            ? {}
+            : { lastAuthenticatedAt: credential.lastAuthenticatedAt }),
         }]
       }).toSorted((left, right) => left.generation - right.generation)
       if (!projectedCredentials.some(({ providerCredentialId }) => (

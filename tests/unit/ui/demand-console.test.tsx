@@ -45,6 +45,8 @@ const keyReadback: AgentCredentialSource = {
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
     authorityMode: 'inspect_only',
+    operationAccess: 'all_admitted',
+    operationRefs: [],
     lifecycle: 'active',
     expiresAt: 604_800_000,
     budget: {
@@ -291,7 +293,7 @@ describe('assistant access components', () => {
     expect(screen.getByRole('heading', { name: 'Credit' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Credit' })).toBeTruthy()
     expect(screen.getByRole('list')).toBeTruthy()
-    expect(screen.getByText('Lost, expired, or revoked agent key')).toBeTruthy()
+    expect(screen.getByText('Rotate, replace, or recover a key')).toBeTruthy()
     expect(screen.getByText('Provider reauthorization required')).toBeTruthy()
     expect(screen.getByText('Outcome uncertain')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'View UI assistant' }))

@@ -43,6 +43,7 @@ export type CanonicalAgentDirectoryRecord = Readonly<{
     predecessorCredentialRef?: string
     issuedAt: number
     expiresAt: number
+    lastAuthenticatedAt?: number
   }>[]
 }>
 type CanonicalAgentDirectoryPage = Readonly<{
@@ -135,6 +136,9 @@ function projectAgentDetail(
       : { predecessorCredentialRef: credential.predecessorCredentialRef }),
     issuedAt: credential.issuedAt,
     expiresAt: credential.expiresAt,
+    ...(credential.lastAuthenticatedAt === undefined
+      ? {}
+      : { lastAuthenticatedAt: credential.lastAuthenticatedAt }),
   }))
   const hasUnavailable = ordered.some(({ dataState }) => dataState === 'unavailable')
   const allUnavailable = ordered.every(({ dataState }) => dataState === 'unavailable')
@@ -156,6 +160,9 @@ function projectAgentDetail(
     environment: canonical.environment,
     status,
     ...(canonical.admissionLifecycle !== 'active' ? {} : { currentCredentialGeneration: currentCanonicalCredential.generation }),
+    ...(currentCanonicalCredential.lastAuthenticatedAt === undefined
+      ? {}
+      : { lastAuthenticatedAt: currentCanonicalCredential.lastAuthenticatedAt }),
     lastSeenAt: Math.max(lastSeenAt, canonical.lastSeenAt),
   }
   const activity = ordered

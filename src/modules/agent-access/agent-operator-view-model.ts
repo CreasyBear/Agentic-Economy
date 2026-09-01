@@ -33,6 +33,7 @@ export type AgentCredentialSummary = Readonly<{
   predecessorCredentialRef?: string
   issuedAt: number
   expiresAt: number
+  lastAuthenticatedAt?: number
 }>
 
 export type AgentDirectoryItem = Readonly<{
@@ -43,6 +44,7 @@ export type AgentDirectoryItem = Readonly<{
   environment: 'sandbox' | 'production'
   status: 'connected' | 'attention' | 'expired' | 'disconnected'
   currentCredentialGeneration?: number
+  lastAuthenticatedAt?: number
   lastSeenAt?: number
 }>
 

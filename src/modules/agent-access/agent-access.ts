@@ -8,17 +8,24 @@ import {
   agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
 } from './contract'
-import type { AgentAccessPolicy } from './policy'
+import {
+  AGENT_ACCESS_ENVIRONMENT_VALUES,
+  normalizeAgentAccessOperationSelection,
+  type AgentAccessEnvironment,
+  type AgentAccessOperationAccess,
+  type AgentAccessPolicy,
+} from './policy'
 import { compareExactAmounts, type ExactAmount } from '@/modules/money/public'
 import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 export const AGENT_ACCESS_KEY_TTL_SECONDS = 7 * 24 * 60 * 60
 export const AGENT_ACCESS_MIN_TTL_SECONDS = 1
 export const AGENT_ACCESS_MAX_TTL_SECONDS = 365 * 24 * 60 * 60
 export const AGENT_ACCESS_PURPOSE = 'agent_access' as const
 export const AGENT_ACCESS_DEFAULT_APPLICATION_REF = 'agentic-economy' as const
-export const AGENT_ACCESS_ENVIRONMENT_VALUES = ['sandbox', 'production'] as const
-export type AgentAccessEnvironment = typeof AGENT_ACCESS_ENVIRONMENT_VALUES[number]
+export { AGENT_ACCESS_ENVIRONMENT_VALUES }
+export type { AgentAccessEnvironment }
 
 export type AgentAccessPrincipal = Readonly<{
   principalId: string
@@ -60,7 +67,8 @@ export type AgentAccessGrantRegistrationInput = Readonly<{
   applicationRef: string
   credentialId: string
   environment: AgentAccessEnvironment
-  operationAccess: 'all_admitted'
+  operationAccess: AgentAccessOperationAccess
+  operationRefs: readonly string[]
   authorityMode: AgentAccessAuthorityMode
   policy: AgentAccessPolicy
   lifecycle: 'active'
@@ -97,6 +105,8 @@ export type IssuedAgentBindingRegistration = Readonly<{
   environment: AgentAccessEnvironment
   scopes: readonly string[]
   authorityMode: AgentAccessAuthorityMode
+  operationAccess: AgentAccessOperationAccess
+  operationRefs: readonly string[]
   policy: AgentAccessPolicy
   createdAt: number
   expiresAt: number
@@ -111,6 +121,8 @@ export type AgentCredentialReplacementRegistration = Readonly<{
   environment: AgentAccessEnvironment
   scopes: readonly string[]
   authorityMode: AgentAccessAuthorityMode
+  operationAccess: AgentAccessOperationAccess
+  operationRefs: readonly string[]
   policy: AgentAccessPolicy
   createdAt: number
   expiresAt: number
@@ -207,6 +219,8 @@ export type AgentAccessKeyIssueInput = Readonly<{
   grantRef?: string
   applicationRef?: string
   environment?: AgentAccessEnvironment
+  operationAccess?: AgentAccessOperationAccess
+  operationRefs?: readonly string[]
   maximumSpendPerInvocation?: ExactAmount
   maximumDailySpend?: ExactAmount
   maximumMonthlySpend?: ExactAmount
@@ -351,6 +365,8 @@ async function bindAgentPrincipal(
       scopes: [...scopes],
       authorityMode,
       policy: input.policy,
+      operationAccess: input.policy.operationAccess,
+      operationRefs: input.policy.operationRefs,
       createdAt: createdAt ?? Date.now(),
       expiresAt,
     }))
@@ -450,6 +466,14 @@ function policyMatchesRequestedControls(
   policy: AgentAccessPolicy,
   input: AgentAccessKeyIssueInput,
 ): boolean {
+  const selection = normalizeAgentAccessOperationSelection({
+    operationAccess: input.operationAccess ?? 'all_admitted',
+    ...(input.operationRefs === undefined ? {} : { operationRefs: input.operationRefs }),
+  })
+  if (selection === undefined
+    || selection.operationAccess !== policy.operationAccess
+    || selection.operationRefs.length !== policy.operationRefs.length
+    || selection.operationRefs.some((ref, index) => ref !== policy.operationRefs[index])) return false
   const amounts: readonly [ExactAmount | undefined, ExactAmount][] = [
     [input.maximumSpendPerInvocation, policy.budget.maximumSpendPerInvocation],
     [input.maximumDailySpend, policy.budget.maximumDailySpend],
@@ -469,7 +493,14 @@ function amountClaim(amount: ExactAmount): string {
 }
 
 function issuanceClaimMaterial(input: AgentAccessKeyIssueInput): Record<string, string> {
+  const selection = normalizeAgentAccessOperationSelection({
+    operationAccess: input.operationAccess ?? 'all_admitted',
+    ...(input.operationRefs === undefined ? {} : { operationRefs: input.operationRefs }),
+  })
   return {
+    ...(selection === undefined ? {} : {
+      aeOperationSelectionDigest: agentAccessOperationSelectionDigest(selection),
+    }),
     ...(input.maximumSpendPerInvocation === undefined ? {} : { aeMaximumSpendPerInvocation: amountClaim(input.maximumSpendPerInvocation) }),
     ...(input.maximumDailySpend === undefined ? {} : { aeMaximumDailySpend: amountClaim(input.maximumDailySpend) }),
     ...(input.maximumMonthlySpend === undefined ? {} : { aeMaximumMonthlySpend: amountClaim(input.maximumMonthlySpend) }),
@@ -478,6 +509,19 @@ function issuanceClaimMaterial(input: AgentAccessKeyIssueInput): Record<string, 
     ...(input.maximumCallsPerHour === undefined ? {} : { aeMaximumCallsPerHour: String(input.maximumCallsPerHour) }),
     ...(input.expiresInSeconds === undefined ? {} : { aeExpiresInSeconds: String(input.expiresInSeconds) }),
   }
+}
+
+export function agentAccessOperationSelectionDigest(selection: Readonly<{
+  operationAccess: AgentAccessOperationAccess
+  operationRefs: readonly string[]
+}>): string {
+  const normalized = normalizeAgentAccessOperationSelection(selection)
+  if (normalized === undefined) throw new Error('agent_access_operation_selection_invalid')
+  return canonicalDigest({
+    format: 'ae.operation-selection:v1',
+    operationAccess: normalized.operationAccess,
+    operationRefs: normalized.operationRefs,
+  } as never)
 }
 
 function canonicalAgentScopes(scopes: readonly string[]): readonly string[] | undefined {

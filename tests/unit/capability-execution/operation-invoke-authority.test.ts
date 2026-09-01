@@ -37,6 +37,7 @@ const grant: OperationInvokeGrant = {
   expiresAt: Number.MAX_SAFE_INTEGER,
   lifecycle: 'active',
   operationAccess: 'all_admitted',
+  operationRefs: [],
 }
 
 function fixture() {

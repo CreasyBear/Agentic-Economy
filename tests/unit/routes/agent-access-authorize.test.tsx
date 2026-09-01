@@ -16,6 +16,12 @@ import '../../setup/jsdom-platform'
 const serverMocks = vi.hoisted(() => ({
   readConsent: vi.fn(),
   reverifyMode: 'pass' as 'pass' | 'cancel',
+  useReverification: vi.fn((fetcher: (...args: unknown[]) => Promise<unknown>) => async (...args: unknown[]) => {
+    if (serverMocks.reverifyMode === 'cancel') throw { code: 'reverification_cancelled' }
+    const result = await fetcher(...args)
+    return result instanceof Response ? await result.json() : result
+  }),
+  localE2E: false,
 }))
 
 vi.mock('@/lib/server/agent-access-consent.functions', () => ({
@@ -35,10 +41,11 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
     sessionId: 'session_private_ada',
   }),
   UserButton: () => <button type="button" aria-label="Account menu" />,
-  useReverification: (fetcher: (...args: unknown[]) => Promise<Response>) => async (...args: unknown[]) => {
-    if (serverMocks.reverifyMode === 'cancel') throw { code: 'reverification_cancelled' }
-    return await (await fetcher(...args)).json()
-  },
+  useReverification: serverMocks.useReverification,
+}))
+
+vi.mock('@/lib/client/local-e2e-auth', () => ({
+  isLocalE2EAuthBypassEnabled: () => serverMocks.localE2E,
 }))
 
 vi.mock('@clerk/tanstack-react-start/errors', async (importOriginal) => ({
@@ -59,13 +66,14 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.unstubAllGlobals()
   serverMocks.reverifyMode = 'pass'
+  serverMocks.localE2E = false
 })
 
 describe('/agent-access/authorize consent loading', () => {
   it('loads and validates initial consent through the route loader', async () => {
     serverMocks.readConsent.mockResolvedValue({
       status: 200,
-      html: '<main data-ae-consent data-grant-ref="grant-loader" data-grant-revision="1" data-flow="device_code" data-client-name="Loader agent" data-authority-mode="inspect_only" data-environment="production" data-expires-in-seconds="7200" data-access-summary="Maximum daily spend: USD 5.00."></main>',
+      html: '<main data-ae-consent data-grant-ref="grant-loader" data-grant-revision="1" data-flow="device_code" data-client-name="Loader agent" data-authority-mode="inspect_only" data-environment="production" data-operation-access="all_admitted" data-operation-refs="%5B%5D" data-expires-in-seconds="7200" data-access-summary="Maximum daily spend: USD 5.00."></main>',
     })
     const loader = AgentAccessAuthorizeRoute.options.loader
     if (typeof loader !== 'function') throw new Error('authorize_loader_missing')
@@ -80,6 +88,7 @@ describe('/agent-access/authorize consent loading', () => {
       details: {
         grantRef: 'grant-loader', clientName: 'Loader agent', mode: 'inspect_only',
         environment: 'production', expiresInSeconds: 7_200,
+        operationAccess: 'all_admitted', operationRefs: [],
         accessSummary: 'Maximum daily spend: USD 5.00.',
       },
     })
@@ -155,6 +164,24 @@ describe('/agent-access/authorize consent loading', () => {
     expect(screen.queryByText('Loading access request')).toBeNull()
   })
 
+  it('uses the existing local-E2E bypass without mounting Clerk reverification', async () => {
+    serverMocks.localE2E = true
+    mockConsent({ userCode: 'LOCAL-E2E', grantRef: 'grant-local', clientName: 'Local CLI', mode: 'inspect_only' })
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({
+      kind: 'approved',
+      grantRef: 'grant-local',
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderComponent()
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
+
+    expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
+    expect(serverMocks.useReverification).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
   it('asks one authority question, defaults to the requested ceiling, and submits the owner choice', async () => {
     mockConsent({
       userCode: 'GOOD-CODE', grantRef: 'grant-1', clientName: 'Test assistant', mode: 'bounded_mandate',
@@ -183,7 +210,26 @@ describe('/agent-access/authorize consent loading', () => {
     expect(String(request?.body)).toContain('expected_target_revision=1')
     expect(String(request?.body)).toContain('authority_mode=bounded_mandate')
     expect(String(request?.body)).toContain('connection_target=new_agent')
+    expect(String(request?.body)).not.toContain('operation')
     expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
+  })
+
+  it('shows and confirms the caller-requested exact Operations without posting them back', async () => {
+    const refs = [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`]
+    mockConsent({
+      userCode: 'SELE-CTED', grantRef: 'grant-selected', clientName: 'Selected CLI', mode: 'inspect_only',
+      operationAccess: 'selected_operations', operationRefs: refs,
+    })
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ kind: 'approved', grantRef: 'grant-selected' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderComponent()
+    expect(screen.getByText(refs.join(', '))).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
+    expect((await screen.findAllByText(new RegExp(refs[0]!))).length).toBeGreaterThan(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and approve' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain('operation')
   })
 
   it('shows a fixed, separate supplier permission instead of buyer authority choices', async () => {
@@ -323,6 +369,8 @@ function mockConsent(input: Readonly<{
   environment?: 'sandbox' | 'production'
   expiresInSeconds?: number
   accessSummary?: string
+  operationAccess?: 'all_admitted' | 'selected_operations'
+  operationRefs?: readonly string[]
 }>) {
   vi.spyOn(AgentAccessAuthorizeRoute, 'useLoaderData').mockReturnValue({
     kind: 'ready',
@@ -335,6 +383,8 @@ function mockConsent(input: Readonly<{
       clientName: input.clientName,
       mode: input.mode,
       environment: input.environment ?? 'sandbox',
+      operationAccess: input.operationAccess ?? 'all_admitted',
+      operationRefs: input.operationRefs ?? [],
       expiresInSeconds: input.expiresInSeconds ?? 604_800,
       accessSummary: input.accessSummary ?? 'No additional spend or rate controls were supplied.',
       ...(input.accessProfile === undefined ? {} : { accessProfile: input.accessProfile }),

@@ -4,8 +4,17 @@ import { env, mutation, internalMutation, internalQuery, type MutationCtx, type 
 import type { Doc } from './_generated/dataModel'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { agentAccessPolicyValue } from '@/modules/agent-access/public'
-import { createAgentAccessGrant } from '@/modules/agent-access/policy'
+import {
+  agentAccessPolicyValue,
+  agentAuditOpaqueRef,
+  createAgentAuditEnvelope,
+  type AgentAuditInput,
+} from '@/modules/agent-access/public'
+import {
+  createAgentAccessGrant,
+  normalizeAgentAccessOperationSelection,
+  normalizeStoredAgentAccessGrant,
+} from '@/modules/agent-access/policy'
 import type {
   AgentAccessGrantRegistrationResult,
   IssuedAgentBindingRegistration,
@@ -27,7 +36,13 @@ import {
 } from '@/modules/agent-access/service-auth-envelope'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { DelegationService, delegationGrantRef } from '@/modules/authority/delegation/public'
-import { principalRef } from '@/modules/principal-account/public'
+import {
+  PrincipalRegistry,
+  PrincipalRegistryError,
+  principalRef,
+  type Principal,
+} from '@/modules/principal-account/public'
+import { createPackage3AuditEvent } from '@/modules/observability/public'
 import {
   resolveCanonicalAgentContext,
   validateCanonicalAgentDelegation,
@@ -36,6 +51,7 @@ import { resolveInteractiveAuthorityContext } from './interactiveAuthority'
 import { createConvexDelegationContextPort, createConvexDelegationStore } from './lib/delegationPersistence'
 import { serviceAssertion } from './serviceAssertion'
 import { internal } from './_generated/api'
+import { persistAuditEvent } from './securityShared'
 
 
 const environment = v.union(v.literal('sandbox'), v.literal('production'))
@@ -89,6 +105,8 @@ const issuedBindingArgs = {
   environment,
   scopes: v.array(v.string()),
   authorityMode,
+  operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
+  operationRefs: v.array(v.string()),
   policy: agentAccessPolicyValue,
   createdAt: v.number(),
   expiresAt: v.number(),
@@ -128,6 +146,8 @@ const replacementTransitionResult = v.union(
 const replacementRegistrationArgs = {
   principalRef: v.string(), issuanceKey: v.string(), grantRef: v.string(), credentialId: v.string(),
   applicationRef: v.string(), environment, scopes: v.array(v.string()), authorityMode,
+  operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
+  operationRefs: v.array(v.string()),
   policy: agentAccessPolicyValue, createdAt: v.number(), expiresAt: v.number(),
 }
 const replacementTransitionArgs = {
@@ -158,6 +178,17 @@ const providerRevocationResult = v.union(
   v.object({ kind: v.literal('conflict') }),
   v.object({ kind: v.literal('refused'), code: v.literal('authentication_required') }),
 )
+const renameAgentResult = v.union(
+  v.object({
+    kind: v.union(v.literal('completed'), v.literal('replayed')),
+    principalRef: v.string(),
+    displayName: v.string(),
+    revision: v.number(),
+    correlationRef: v.string(),
+  }),
+  v.object({ kind: v.literal('conflict'), code: v.string(), correlationRef: v.string() }),
+  v.object({ kind: v.literal('refused'), code: v.literal('authentication_required'), correlationRef: v.string() }),
+)
 
 type AgentPrincipalWrite = Readonly<{
   principalId: string
@@ -186,6 +217,86 @@ export function canonicalAgentDelegationScopes(scopes: readonly string[]): reado
   return scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)
     ? uniqueSorted([...scopes, ...SUPPLIER_CONNECTION_DELEGATION_SCOPES])
     : uniqueSorted(scopes)
+}
+
+async function persistAgentAudit(
+  ctx: Pick<MutationCtx, 'db'>,
+  input: AgentAuditInput,
+): Promise<void> {
+  const audit = createPackage3AuditEvent(createAgentAuditEnvelope(input))
+  if (!audit.valid) throw new Error(`agent_audit_invalid:${audit.reason}`)
+  await persistAuditEvent(ctx.db, audit.event)
+}
+
+function principalFromDocument(row: Doc<'principals'>): Principal {
+  return Object.freeze({
+    principalRef: principalRef(row.principalRef),
+    kind: row.kind,
+    displayName: row.displayName,
+    lifecycle: row.lifecycle,
+    revision: row.revision,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    ...(row.mergedIntoPrincipalRef === undefined
+      ? {}
+      : { mergedIntoPrincipalRef: principalRef(row.mergedIntoPrincipalRef) }),
+  })
+}
+
+function principalDocument(principal: Principal) {
+  return {
+    principalRef: principal.principalRef,
+    kind: principal.kind,
+    displayName: principal.displayName,
+    lifecycle: principal.lifecycle,
+    revision: principal.revision,
+    createdAt: principal.createdAt,
+    updatedAt: principal.updatedAt,
+    ...(principal.mergedIntoPrincipalRef === undefined
+      ? {}
+      : { mergedIntoPrincipalRef: principal.mergedIntoPrincipalRef }),
+  }
+}
+
+function principalRegistry(ctx: Pick<MutationCtx, 'db'>, now: number): PrincipalRegistry {
+  return new PrincipalRegistry({
+    transact: async (operation) => await operation({
+      get: async (ref) => {
+        const row = await ctx.db.query('principals')
+          .withIndex('by_principalRef', (query) => query.eq('principalRef', ref))
+          .unique()
+        return row === null ? undefined : principalFromDocument(row)
+      },
+      insert: async (principal) => {
+        const existing = await ctx.db.query('principals')
+          .withIndex('by_principalRef', (query) => query.eq('principalRef', principal.principalRef))
+          .unique()
+        if (existing !== null) throw new PrincipalRegistryError('principal_ref_conflict')
+        await ctx.db.insert('principals', principalDocument(principal))
+      },
+      replace: async (principal, expectedRevision) => {
+        const current = await ctx.db.query('principals')
+          .withIndex('by_principalRef', (query) => query.eq('principalRef', principal.principalRef))
+          .unique()
+        if (current === null) throw new PrincipalRegistryError('principal_not_found')
+        if (current.revision !== expectedRevision) throw new PrincipalRegistryError('principal_revision_conflict')
+        await ctx.db.replace(current._id, principalDocument(principal))
+      },
+      replaceMany: async (replacements) => {
+        const current = await Promise.all(replacements.map(async ({ principal, expectedRevision }) => {
+          const row = await ctx.db.query('principals')
+            .withIndex('by_principalRef', (query) => query.eq('principalRef', principal.principalRef))
+            .unique()
+          if (row === null) throw new PrincipalRegistryError('principal_not_found')
+          if (row.revision !== expectedRevision) throw new PrincipalRegistryError('principal_revision_conflict')
+          return { row, principal }
+        }))
+        await Promise.all(current.map(async ({ row, principal }) => {
+          await ctx.db.replace(row._id, principalDocument(principal))
+        }))
+      },
+    }),
+  }, { now: () => now })
 }
 
 async function writeAgentPrincipal(ctx: Pick<MutationCtx, 'db'>, args: AgentPrincipalWrite): Promise<{ kind: 'recorded' } | { kind: 'conflict' }> {
@@ -237,6 +348,7 @@ function issuedBindingCommand(args: IssuedAgentBindingRegistration): StableHashV
   return {
     ...args,
     scopes: [...args.scopes],
+    operationRefs: [...args.operationRefs],
   } as StableHashValue
 }
 
@@ -294,6 +406,7 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
     }
     const now = Date.now()
     const scopes = uniqueSorted(input.scopes)
+    const operationSelection = normalizeAgentAccessOperationSelection(input)
     if (input.grantRef !== issuedAgentGrantRef(identity.subject, input.issuanceKey)) {
       return { kind: 'refused' as const, code: 'authentication_required' as const }
     }
@@ -304,6 +417,10 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       || input.expiresAt <= now
       || input.createdAt > now + 60_000
       || scopes.length !== input.scopes.length
+      || operationSelection === undefined
+      || operationSelection.operationAccess !== input.policy.operationAccess
+      || operationSelection.operationRefs.length !== input.policy.operationRefs.length
+      || operationSelection.operationRefs.some((ref, index) => ref !== input.policy.operationRefs[index])
       || agentAuthorityModeForScopes(scopes) !== input.authorityMode
       || input.policy.environment !== input.environment
       || (input.environment === 'production' && input.authorityMode === 'full_yolo')) {
@@ -324,7 +441,8 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       applicationRef: input.applicationRef,
       credentialId: input.credentialId,
       environment: input.environment,
-      operationAccess: 'all_admitted',
+      operationAccess: operationSelection.operationAccess,
+      operationRefs: operationSelection.operationRefs,
       authorityMode: input.authorityMode,
       policy: input.policy,
       lifecycle: 'active',
@@ -442,7 +560,7 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       context: action,
       subjectPrincipalRef: principalRef(refs.principalRef),
       scopes: canonicalAgentDelegationScopes(scopes),
-      resourceRefs: ['*'],
+      resourceRefs: operationSelection.operationAccess === 'all_admitted' ? ['*'] : operationSelection.operationRefs,
       budgetLimit: 1,
       expiresAt: input.expiresAt,
     })
@@ -474,6 +592,18 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       seenAt: now,
     })
     if (storedPrincipal.kind !== 'recorded') throw new Error('issued_agent_principal_conflict')
+    if (existingPrincipal === null) await persistAgentAudit(ctx, {
+      eventType: 'agent.created',
+      actorPrincipalRef: owner.principalRef,
+      activeAccountRef: owner.accountRef,
+      agentPrincipalRef: refs.principalRef,
+      correlationRef: action.correlationRef,
+      idempotencyRef: action.idempotencyRef,
+      authorityGeneration: storedGrant.generation,
+      beforeState: 'missing',
+      outcome: 'created',
+      occurredAt: now,
+    })
     return {
       kind: replaying || storedGrant.kind === 'replayed' ? 'replayed' as const : 'recorded' as const,
       grantRef: storedGrant.grantRef,
@@ -481,6 +611,90 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       policyDigest: storedGrant.policyDigest,
       lifecycle: storedGrant.lifecycle,
       expiresAt: storedGrant.expiresAt,
+    }
+  },
+})
+
+export const renameAgentForServer = mutation({
+  args: {
+    principalRef: v.string(),
+    expectedRevision: v.number(),
+    displayName: v.string(),
+    correlationRef: v.string(),
+  },
+  returns: renameAgentResult,
+  handler: async (ctx, args) => {
+    try {
+      agentAuditOpaqueRef(args.correlationRef, 'correlationRef')
+    } catch {
+      return { kind: 'conflict' as const, code: 'correlation_ref_invalid' as const, correlationRef: 'invalid-correlation-reference' }
+    }
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      return { kind: 'refused' as const, code: 'authentication_required' as const, correlationRef: args.correlationRef }
+    }
+    let owner: Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>
+    try {
+      owner = await resolveInteractiveAuthorityContext(ctx, identity)
+    } catch {
+      return { kind: 'refused' as const, code: 'authentication_required' as const, correlationRef: args.correlationRef }
+    }
+    if (owner.provenance.accessKind !== 'ownership') {
+      return { kind: 'conflict' as const, code: 'account_ownership_required' as const, correlationRef: args.correlationRef }
+    }
+    const [principal, membership, admission] = await Promise.all([
+      ctx.db.query('principals')
+        .withIndex('by_principalRef', (query) => query.eq('principalRef', args.principalRef))
+        .unique(),
+      ctx.db.query('memberships')
+        .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
+          .eq('accountRef', owner.accountRef)
+          .eq('memberPrincipalRef', args.principalRef)
+          .eq('lifecycle', 'active'))
+        .unique(),
+      ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query.eq('principalId', args.principalRef))
+        .unique(),
+    ])
+    if (principal === null
+      || principal.kind !== 'agent'
+      || membership === null
+      || admission === null
+      || admission.ownerId !== owner.accountRef) {
+      return { kind: 'conflict' as const, code: 'agent_not_found' as const, correlationRef: args.correlationRef }
+    }
+
+    const now = Date.now()
+    try {
+      const renamed = await principalRegistry(ctx, now).rename({
+        principalRef: principalRef(args.principalRef),
+        expectedRevision: args.expectedRevision,
+        displayName: args.displayName,
+      })
+      const replayed = renamed.revision === principal.revision
+      if (!replayed) await persistAgentAudit(ctx, {
+        eventType: 'agent.renamed',
+        actorPrincipalRef: owner.principalRef,
+        activeAccountRef: owner.accountRef,
+        agentPrincipalRef: renamed.principalRef,
+        correlationRef: args.correlationRef,
+        idempotencyRef: `agent-rename:${renamed.principalRef}:${args.expectedRevision}`,
+        beforeState: 'named',
+        outcome: 'renamed',
+        occurredAt: now,
+      })
+      return {
+        kind: replayed ? 'replayed' as const : 'completed' as const,
+        principalRef: renamed.principalRef,
+        displayName: renamed.displayName,
+        revision: renamed.revision,
+        correlationRef: args.correlationRef,
+      }
+    } catch (error) {
+      if (error instanceof PrincipalRegistryError) {
+        return { kind: 'conflict' as const, code: error.code, correlationRef: args.correlationRef }
+      }
+      throw error
     }
   },
 })
@@ -493,7 +707,7 @@ export const prepareCredentialReplacementForServer = mutation({
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null || !await validReplacementAssertion(
       PREPARE_REPLACEMENT_OPERATION,
-      { ...input, scopes: [...input.scopes] } as StableHashValue,
+      { ...input, scopes: [...input.scopes], operationRefs: [...input.operationRefs] } as StableHashValue,
       serviceAuth,
     )) return { kind: 'refused' as const, code: 'authentication_required' as const }
     let owner: Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>
@@ -504,12 +718,17 @@ export const prepareCredentialReplacementForServer = mutation({
     }
     const now = Date.now()
     const scopes = uniqueSorted(input.scopes)
+    const operationSelection = normalizeAgentAccessOperationSelection(input)
     if (input.grantRef !== issuedAgentGrantRef(identity.subject, input.issuanceKey)
       || input.principalRef.trim().length === 0
       || input.credentialId.trim().length === 0
       || input.expiresAt <= now
       || input.createdAt > now + 60_000
       || scopes.length !== input.scopes.length
+      || operationSelection === undefined
+      || operationSelection.operationAccess !== input.policy.operationAccess
+      || operationSelection.operationRefs.length !== input.policy.operationRefs.length
+      || operationSelection.operationRefs.some((ref, index) => ref !== input.policy.operationRefs[index])
       || agentAuthorityModeForScopes(scopes) !== input.authorityMode
       || input.policy.environment !== input.environment
       || (input.environment === 'production' && input.authorityMode === 'full_yolo')) {
@@ -612,7 +831,8 @@ export const prepareCredentialReplacementForServer = mutation({
       applicationRef: current.applicationRef,
       credentialId: input.credentialId,
       environment: input.environment,
-      operationAccess: 'all_admitted',
+      operationAccess: operationSelection.operationAccess,
+      operationRefs: operationSelection.operationRefs,
       authorityMode: input.authorityMode,
       policy: {
         ...input.policy,
@@ -634,13 +854,26 @@ export const prepareCredentialReplacementForServer = mutation({
       context: action,
       subjectPrincipalRef: principalRef(input.principalRef),
       scopes: canonicalAgentDelegationScopes(scopes),
-      resourceRefs: ['*'],
+      resourceRefs: operationSelection.operationAccess === 'all_admitted' ? ['*'] : operationSelection.operationRefs,
       budgetLimit: 1,
       expiresAt: input.expiresAt,
     })
     if (delegation.grantRef !== input.grantRef) throw new Error('replacement_agent_grant_ref_mismatch')
     const storedGrant: AgentAccessGrantRegistrationResult = await ctx.runMutation(internal.agentAccessPolicy.upsertGrant, { grant: grantDecision.grant })
     if (storedGrant.kind !== 'recorded' && storedGrant.kind !== 'replayed') throw new Error('replacement_agent_grant_conflict')
+    if (!replaying && storedGrant.kind === 'recorded') await persistAgentAudit(ctx, {
+      eventType: 'agent.credential.replacement_prepared',
+      actorPrincipalRef: owner.principalRef,
+      activeAccountRef: owner.accountRef,
+      agentPrincipalRef: input.principalRef,
+      credentialRef: refs.credentialRef,
+      correlationRef: action.correlationRef,
+      idempotencyRef: action.idempotencyRef,
+      authorityGeneration: generation,
+      beforeState: 'predecessor_active',
+      outcome: 'replacement_prepared',
+      occurredAt: now,
+    })
     return {
       kind: replaying || storedGrant.kind === 'replayed' ? 'replayed' as const : 'recorded' as const,
       principalRef: input.principalRef,
@@ -692,6 +925,19 @@ async function transitionReplacement(
   if (mode === 'cancel') {
     if (successor.lifecycle === 'revoked') return { kind: 'replayed' as const, providerCredentialId: successorBinding.providerIdentifier }
     await revokeReplacementMaterial(ctx, successor, successorBinding, successorGrant, owner, now, 'successor_cancelled')
+    await persistAgentAudit(ctx, {
+      eventType: 'agent.credential.replacement_cancelled',
+      actorPrincipalRef: owner.principalRef,
+      activeAccountRef: owner.accountRef,
+      agentPrincipalRef: input.principalRef,
+      credentialRef: successor.credentialRef,
+      correlationRef: canonicalDigest({ format: 'agent-credential-replacement-cancel:v1', successorGrantRef: input.successorGrantRef } as never),
+      idempotencyRef: `agent-credential-replacement-cancel:${input.successorGrantRef}`,
+      authorityGeneration: successor.generation,
+      beforeState: 'replacement_prepared',
+      outcome: 'replacement_cancelled',
+      occurredAt: now,
+    })
     return { kind: 'completed' as const, providerCredentialId: successorBinding.providerIdentifier }
   }
   if (current.credentialId === successorBinding.providerIdentifier) {
@@ -715,6 +961,19 @@ async function transitionReplacement(
     lifecycle: successorGrant.lifecycle,
     expiresAt: successorGrant.expiresAt,
     lastSeenAt: now,
+  })
+  await persistAgentAudit(ctx, {
+    eventType: 'agent.credential.replacement_promoted',
+    actorPrincipalRef: owner.principalRef,
+    activeAccountRef: owner.accountRef,
+    agentPrincipalRef: input.principalRef,
+    credentialRef: successor.credentialRef,
+    correlationRef: canonicalDigest({ format: 'agent-credential-replacement-promote:v1', successorGrantRef: input.successorGrantRef } as never),
+    idempotencyRef: `agent-credential-replacement-promote:${input.successorGrantRef}`,
+    authorityGeneration: successor.generation,
+    beforeState: 'replacement_prepared',
+    outcome: 'replacement_promoted',
+    occurredAt: now,
   })
   return { kind: 'completed' as const, providerCredentialId: predecessor.binding.providerIdentifier }
 }
@@ -1029,6 +1288,23 @@ export const revokeCredentialForServer = mutation({
     if (admission.credentialId === revoked.providerCredentialId && admission.lifecycle === 'active') {
       await promoteRemainingCredential(ctx, admission, credential.credentialRef, now)
     }
+    if (revoked.changed) await persistAgentAudit(ctx, {
+      eventType: 'agent.credential.revoked',
+      actorPrincipalRef: owner.principalRef,
+      activeAccountRef: owner.accountRef,
+      agentPrincipalRef: credential.principalRef,
+      credentialRef: credential.credentialRef,
+      correlationRef: args.correlationRef,
+      idempotencyRef: canonicalDigest({
+        format: 'agent-credential-revocation-audit:v1',
+        credentialRef: credential.credentialRef,
+        correlationRef: args.correlationRef,
+      } as never),
+      authorityGeneration: credential.generation,
+      beforeState: 'active_or_stale',
+      outcome: 'revoked',
+      occurredAt: now,
+    })
     return {
       kind: revoked.changed ? 'completed' as const : 'replayed' as const,
       principalRef: credential.principalRef,
@@ -1106,6 +1382,21 @@ export const disconnectAgentForServer = mutation({
       ? []
       : [{ credentialRef: credential.credentialRef, providerCredentialId: revoked.providerCredentialId }])
     if (admission.lifecycle !== 'revoked') await ctx.db.patch(admission._id, { lifecycle: 'revoked', lastSeenAt: now })
+    if (changed) await persistAgentAudit(ctx, {
+      eventType: 'agent.disconnected',
+      actorPrincipalRef: owner.principalRef,
+      activeAccountRef: owner.accountRef,
+      agentPrincipalRef: args.principalRef,
+      correlationRef: args.correlationRef,
+      idempotencyRef: canonicalDigest({
+        format: 'agent-disconnect-audit:v1',
+        principalRef: args.principalRef,
+        correlationRef: args.correlationRef,
+      } as never),
+      beforeState: 'connected_or_attention',
+      outcome: 'disconnected',
+      occurredAt: now,
+    })
     return {
       kind: changed ? 'completed' as const : 'replayed' as const,
       principalRef: args.principalRef,
@@ -1203,12 +1494,17 @@ async function verifyAgentPrincipalForScope(
         .eq('lifecycle', 'active')
     ))
     .take(8)
-  const grant = grants.find((candidate) => candidate.principalId === stored.principalId
+  const grant = grants.flatMap((candidate) => {
+    try {
+      return [normalizeStoredAgentAccessGrant(candidate)]
+    } catch {
+      return []
+    }
+  }).find((candidate) => candidate.principalId === stored.principalId
     && candidate.ownerId === stored.ownerId
     && candidate.credentialId === stored.credentialId
     && candidate.applicationRef === stored.applicationRef
     && candidate.authorityMode === stored.authorityMode
-    && candidate.operationAccess === 'all_admitted'
     && candidate.generation === stored.grantGeneration
     && candidate.policyDigest === stored.policyDigest
     && candidate.expiresAt > Date.now())

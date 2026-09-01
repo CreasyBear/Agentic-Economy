@@ -49,6 +49,12 @@ const revokeCredentialLifecycle = makeFunctionReference<'mutation', { credential
 const disconnectAgentLifecycle = makeFunctionReference<'mutation', { principalRef: string; correlationRef: string; serviceAuth: CustomerRequestServiceAssertion }, RegisterResult>(
   'agentAccessPrincipals:disconnectAgentForServer',
 )
+const renameAgent = makeFunctionReference<'mutation', {
+  principalRef: string
+  expectedRevision: number
+  displayName: string
+  correlationRef: string
+}, RegisterResult>('agentAccessPrincipals:renameAgentForServer')
 const recordProviderRevocation = makeFunctionReference<'mutation', {
   principalRef: string
   credentialRef: string
@@ -70,6 +76,8 @@ function bindingInput(subject = 'user_owner'): IssuedAgentBindingRegistration {
     scopes: ['customer_requests:inspect_only', 'market_operations:invoke'],
     authorityMode: 'inspect_only',
     policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
+    operationAccess: 'all_admitted',
+    operationRefs: [],
     createdAt: NOW,
     expiresAt: NOW + 600_000,
   }
@@ -79,7 +87,7 @@ async function assertion(input: IssuedAgentBindingRegistration): Promise<Custome
   return await createCustomerRequestServiceAssertion({
     key: SERVICE_KEY,
     operation: OPERATION,
-    command: toStableHashValue({ ...input, scopes: [...input.scopes] }),
+    command: toStableHashValue({ ...input, scopes: [...input.scopes], operationRefs: [...input.operationRefs] }),
     principal: {
       principalId: 'ae:server-function',
       ownerId: 'ae:server-function',
@@ -157,6 +165,19 @@ describe('issued agent binding', () => {
     expect(rows.delegation).toMatchObject({ subjectPrincipalRef: refs.principalRef, resourceRefs: ['*'] })
     expect(rows.accessPrincipal).toMatchObject({ principalId: refs.principalRef, ownerId: rows.membership?.accountRef })
     expect(rows.accessGrant).toMatchObject({ principalId: refs.principalRef, ownerId: rows.membership?.accountRef })
+    await expect(backend.run(async (ctx) => await ctx.db.query('auditEvents')
+      .withIndex('by_activeAccountRef_and_targetType_and_targetRef_and_createdAt', (query) => query
+        .eq('activeAccountRef', recordedAccess.ownerId)
+        .eq('targetType', 'agent')
+        .eq('targetRef', refs.principalRef))
+      .collect())).resolves.toEqual([expect.objectContaining({
+      eventType: 'agent.created',
+      actorRef: rows.membership?.createdBy.actorPrincipalRef,
+      activeAccountRef: recordedAccess.ownerId,
+      targetRef: refs.principalRef,
+      sourceSystem: 'ae_recorded',
+      afterState: 'created',
+    })])
     await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual([expect.objectContaining({
       principalRef: refs.principalRef,
       displayName: input.displayName,
@@ -214,6 +235,139 @@ describe('issued agent binding', () => {
     })
   })
 
+  it('renames one owned Agent through the Principal registry and audits only the state change', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const input = bindingInput()
+    await owner.mutation(registerIssuedBinding, { ...input, serviceAuth: await assertion(input) })
+    const [agent] = await owner.query(api.agentDirectory.listOwned, { now: NOW })
+    if (agent === undefined) throw new Error('agent_missing')
+    const command = {
+      principalRef: agent.principalRef,
+      expectedRevision: 1,
+      displayName: 'Renamed Agent',
+      correlationRef: 'corr-rename-agent',
+    }
+
+    await expect(owner.mutation(renameAgent, {
+      ...command,
+      displayName: 'Must not be applied',
+      correlationRef: 'sk_live_secret-shaped-correlation',
+    })).resolves.toEqual({
+      kind: 'conflict',
+      code: 'correlation_ref_invalid',
+      correlationRef: 'invalid-correlation-reference',
+    })
+    await expect(owner.mutation(renameAgent, command)).resolves.toEqual({
+      kind: 'completed',
+      principalRef: agent.principalRef,
+      displayName: 'Renamed Agent',
+      revision: 2,
+      correlationRef: command.correlationRef,
+    })
+    await expect(owner.mutation(renameAgent, {
+      ...command,
+      expectedRevision: 2,
+      displayName: ' Renamed Agent ',
+      correlationRef: 'corr-rename-agent-noop',
+    })).resolves.toEqual({
+      kind: 'replayed',
+      principalRef: agent.principalRef,
+      displayName: 'Renamed Agent',
+      revision: 2,
+      correlationRef: 'corr-rename-agent-noop',
+    })
+    await expect(owner.mutation(renameAgent, command)).resolves.toEqual({
+      kind: 'conflict', code: 'principal_revision_conflict', correlationRef: command.correlationRef,
+    })
+
+    const sibling = backend.withIdentity(identity('user_sibling'))
+    await sibling.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    await expect(sibling.mutation(renameAgent, {
+      ...command,
+      expectedRevision: 2,
+    })).resolves.toEqual({
+      kind: 'conflict', code: 'agent_not_found', correlationRef: command.correlationRef,
+    })
+    await expect(backend.mutation(renameAgent, command)).resolves.toEqual({
+      kind: 'refused', code: 'authentication_required', correlationRef: command.correlationRef,
+    })
+
+    const renamedEvents = await backend.run(async (ctx) => {
+      const admission = await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query.eq('principalId', agent.principalRef))
+        .unique()
+      if (admission === null) throw new Error('agent_admission_missing')
+      return await ctx.db.query('auditEvents')
+        .withIndex('by_activeAccountRef_and_targetType_and_targetRef_and_createdAt', (query) => query
+          .eq('activeAccountRef', admission.ownerId)
+          .eq('targetType', 'agent')
+          .eq('targetRef', agent.principalRef))
+        .collect()
+    })
+    expect(renamedEvents.filter(({ eventType }) => eventType === 'agent.renamed')).toHaveLength(1)
+    expect(JSON.stringify(renamedEvents)).not.toContain(input.displayName)
+    expect(JSON.stringify(renamedEvents)).not.toContain(command.displayName)
+  })
+
+  it('issues and replaces selected-Operation access with the exact Delegation resources', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const operationRefs = [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`]
+    const base = bindingInput()
+    const input: IssuedAgentBindingRegistration = {
+      ...base,
+      operationAccess: 'selected_operations',
+      operationRefs,
+      policy: { ...base.policy, operationAccess: 'selected_operations', operationRefs },
+    }
+    await expect(owner.mutation(registerIssuedBinding, { ...input, serviceAuth: await assertion(input) }))
+      .resolves.toMatchObject({ kind: 'recorded' })
+    const firstDelegation = await backend.run(async (ctx) => await ctx.db.query('authorityDelegationGrants')
+      .withIndex('by_grantRef', (query) => query.eq('grantRef', input.grantRef)).unique())
+    expect(firstDelegation?.resourceRefs).toEqual(operationRefs)
+
+    const access = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_credentialId', (query) => query.eq('credentialId', input.credentialId)).unique())
+    if (access === null) throw new Error('selected_agent_access_missing')
+    const replacement: AgentCredentialReplacementRegistration = {
+      principalRef: access.principalId,
+      issuanceKey: 'selected-replacement-12345678',
+      grantRef: issuedAgentGrantRef('user_owner', 'selected-replacement-12345678'),
+      credentialId: 'key_selected_replacement',
+      applicationRef: input.applicationRef,
+      environment: input.environment,
+      scopes: input.scopes,
+      authorityMode: input.authorityMode,
+      operationAccess: 'selected_operations',
+      operationRefs,
+      policy: input.policy,
+      createdAt: NOW,
+      expiresAt: NOW + 600_000,
+    }
+    await expect(owner.mutation(prepareReplacement, {
+      ...replacement,
+      serviceAuth: await operationAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...replacement, scopes: [...replacement.scopes], operationRefs: [...replacement.operationRefs] },
+      ),
+    })).resolves.toMatchObject({ kind: 'recorded' })
+    const replacementDelegation = await backend.run(async (ctx) => await ctx.db.query('authorityDelegationGrants')
+      .withIndex('by_grantRef', (query) => query.eq('grantRef', replacement.grantRef)).unique())
+    expect(replacementDelegation?.resourceRefs).toEqual(operationRefs)
+
+    const mismatched = { ...replacement, issuanceKey: 'selected-mismatch-12345678', grantRef: issuedAgentGrantRef('user_owner', 'selected-mismatch-12345678'), operationRefs: [operationRefs[0]!] }
+    await expect(owner.mutation(prepareReplacement, {
+      ...mismatched,
+      serviceAuth: await operationAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...mismatched, scopes: [...mismatched.scopes], operationRefs: [...mismatched.operationRefs] },
+      ),
+    })).resolves.toEqual({ kind: 'conflict' })
+  })
+
   it('projects credential expiry from the caller-supplied read time', async () => {
     const backend = convexTest(schema, modules)
     const owner = backend.withIdentity(identity('user_owner'))
@@ -228,6 +382,35 @@ describe('issued agent binding', () => {
         status: 'expired',
         credentials: [expect.objectContaining({ lifecycle: 'stale' })],
       })])
+  })
+
+  it('projects Last authenticated for the current Agent and each credential without replacing Last seen', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const input = bindingInput()
+    await owner.mutation(registerIssuedBinding, { ...input, serviceAuth: await assertion(input) })
+    const authenticatedAt = NOW - 12_345
+    await backend.run(async (ctx) => {
+      const admission = await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_credentialId', (index) => index.eq('credentialId', input.credentialId))
+        .unique()
+      if (admission === null) throw new Error('agent_admission_missing')
+      const credential = await ctx.db.query('credentials')
+        .withIndex('by_principalRef_and_lifecycle', (query) => query
+          .eq('principalRef', admission.principalId)
+          .eq('lifecycle', 'active'))
+        .unique()
+      if (credential === null) throw new Error('credential_missing')
+      await ctx.db.patch(credential._id, { lastAuthenticatedAt: authenticatedAt })
+    })
+
+    await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual([
+      expect.objectContaining({
+        lastSeenAt: NOW,
+        credentials: [expect.objectContaining({ lastAuthenticatedAt: authenticatedAt })],
+      }),
+    ])
   })
 
   it('keeps the public supplier scope exact while granting only its canonical connection verbs', () => {
@@ -260,6 +443,8 @@ describe('issued agent binding', () => {
       environment: first.environment,
       scopes: first.scopes,
       authorityMode: first.authorityMode,
+      operationAccess: first.operationAccess,
+      operationRefs: first.operationRefs,
       policy: first.policy,
       createdAt: NOW,
       expiresAt: NOW + 600_000,
@@ -268,7 +453,7 @@ describe('issued agent binding', () => {
       ...replacement,
       serviceAuth: await operationAssertion(
         'agentAccessPrincipals.prepareCredentialReplacementForServer',
-        { ...replacement, scopes: [...replacement.scopes] },
+        { ...replacement, scopes: [...replacement.scopes], operationRefs: [...replacement.operationRefs] },
       ),
     })
     expect(prepared).toMatchObject({
@@ -309,7 +494,7 @@ describe('issued agent binding', () => {
       ...cancelledInput,
       serviceAuth: await operationAssertion(
         'agentAccessPrincipals.prepareCredentialReplacementForServer',
-        { ...cancelledInput, scopes: [...cancelledInput.scopes] },
+        { ...cancelledInput, scopes: [...cancelledInput.scopes], operationRefs: [...cancelledInput.operationRefs] },
       ),
     })
     const cancel = {
@@ -325,6 +510,24 @@ describe('issued agent binding', () => {
     await expect(owner.query(api.agentDirectory.listOwned, { now: NOW })).resolves.toEqual([
       expect.objectContaining({ principalRef: access.principalId, currentProviderCredentialId: replacement.credentialId }),
     ])
+    const auditEvents = await backend.run(async (ctx) => await ctx.db.query('auditEvents')
+      .withIndex('by_activeAccountRef_and_targetType_and_targetRef_and_createdAt', (query) => query
+        .eq('activeAccountRef', access.ownerId)
+        .eq('targetType', 'agent')
+        .eq('targetRef', access.principalId))
+      .collect())
+    expect(auditEvents.map(({ eventType }) => eventType)).toEqual(expect.arrayContaining([
+      'agent.created',
+      'agent.credential.replacement_prepared',
+      'agent.credential.replacement_promoted',
+      'agent.credential.replacement_cancelled',
+    ]))
+    expect(auditEvents.filter(({ eventType }) => eventType === 'agent.credential.replacement_prepared')).toHaveLength(2)
+    expect(auditEvents.filter(({ eventType }) => eventType === 'agent.credential.replacement_promoted')).toHaveLength(1)
+    expect(auditEvents.filter(({ eventType }) => eventType === 'agent.credential.replacement_cancelled')).toHaveLength(1)
+    expect(JSON.stringify(auditEvents)).not.toContain(first.credentialId)
+    expect(JSON.stringify(auditEvents)).not.toContain(replacement.credentialId)
+    expect(JSON.stringify(auditEvents)).not.toContain(cancelledInput.credentialId)
   })
 
   it('admits only one pending successor for a credential generation', async () => {
@@ -346,6 +549,8 @@ describe('issued agent binding', () => {
       environment: first.environment,
       scopes: first.scopes,
       authorityMode: first.authorityMode,
+      operationAccess: first.operationAccess,
+      operationRefs: first.operationRefs,
       policy: first.policy,
       createdAt: NOW,
       expiresAt: NOW + 600_000,
@@ -420,6 +625,8 @@ describe('issued agent binding', () => {
       environment: agentA.environment,
       scopes: agentA.scopes,
       authorityMode: agentA.authorityMode,
+      operationAccess: agentA.operationAccess,
+      operationRefs: agentA.operationRefs,
       policy: agentA.policy,
       createdAt: NOW,
       expiresAt: NOW + 600_000,
@@ -428,7 +635,7 @@ describe('issued agent binding', () => {
       ...replacement,
       serviceAuth: await operationAssertion(
         'agentAccessPrincipals.prepareCredentialReplacementForServer',
-        { ...replacement, scopes: [...replacement.scopes] },
+        { ...replacement, scopes: [...replacement.scopes], operationRefs: [...replacement.operationRefs] },
       ),
     })
     const promote = {
@@ -519,6 +726,21 @@ describe('issued agent binding', () => {
     ]))
     await expect(backend.run(async (ctx) => resolveCanonicalAgentContext(ctx, agentB.credentialId, NOW + 1)))
       .resolves.toMatchObject({ principalRef: principalB })
+    const lifecycleEvents = await backend.run(async (ctx) => {
+      const admission = await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query.eq('principalId', principalA))
+        .unique()
+      if (admission === null) throw new Error('agent_admission_missing')
+      return await ctx.db.query('auditEvents')
+        .withIndex('by_activeAccountRef_and_targetType_and_targetRef_and_createdAt', (query) => query
+          .eq('activeAccountRef', admission.ownerId)
+          .eq('targetType', 'agent')
+          .eq('targetRef', principalA))
+        .collect()
+    })
+    expect(lifecycleEvents.filter(({ eventType }) => eventType === 'agent.credential.revoked')).toHaveLength(1)
+    expect(lifecycleEvents.filter(({ eventType }) => eventType === 'agent.disconnected')).toHaveLength(1)
+    expect(lifecycleEvents.every(({ sourceSystem }) => sourceSystem === 'ae_recorded')).toBe(true)
   })
 
   it('fails closed for anonymous, sibling-owner, and assertion-mismatch calls', async () => {
@@ -585,6 +807,8 @@ describe('issued agent binding', () => {
       environment: agentA.environment,
       scopes: agentA.scopes,
       authorityMode: agentA.authorityMode,
+      operationAccess: agentA.operationAccess,
+      operationRefs: agentA.operationRefs,
       policy: agentA.policy,
       createdAt: NOW,
       expiresAt: NOW + 600_000,
@@ -593,7 +817,7 @@ describe('issued agent binding', () => {
       ...extra,
       serviceAuth: await operationAssertion(
         'agentAccessPrincipals.prepareCredentialReplacementForServer',
-        { ...extra, scopes: [...extra.scopes] },
+        { ...extra, scopes: [...extra.scopes], operationRefs: [...extra.operationRefs] },
       ),
     })
     const extraCredentialRef = String(extraPrepared.successorCredentialRef)

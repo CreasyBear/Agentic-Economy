@@ -66,6 +66,8 @@ const grant = {
   applicationRef: key.applicationRef,
   environment: key.environment,
   authorityMode: key.authorityMode,
+  operationAccess: 'all_admitted' as const,
+  operationRefs: [],
   lifecycle: 'active' as const,
   expiresAt: 10_000,
   budget: {
@@ -162,6 +164,33 @@ describe('agent access money seam', () => {
     expect(directory.details.find(({ agent }) => agent.principalRef === otherPrincipal.principalId)?.credentials)
       .toHaveLength(1)
     expect(JSON.stringify(directory)).not.toContain('secret')
+  })
+
+  it('keeps current credential authentication separate from broader Agent activity', () => {
+    const source = {
+      key: { ...key, createdAt: 90_000 },
+      grant,
+      principalId,
+      activity: [],
+      dataState: 'source' as const,
+    }
+    const canonical = canonicalAgentRecord([source])
+    const current = canonical.credentials[0]
+    if (current === undefined) throw new Error('expected canonical credential')
+
+    const directory = projectAgentDirectory([source], [{
+      ...canonical,
+      lastSeenAt: 150_000,
+      credentials: [{ ...current, lastAuthenticatedAt: 60_000 }],
+    }])
+
+    expect(directory.items[0]).toMatchObject({
+      lastAuthenticatedAt: 60_000,
+      lastSeenAt: 150_000,
+    })
+    expect(directory.details[0]?.credentials[0]).toMatchObject({
+      lastAuthenticatedAt: 60_000,
+    })
   })
 
 })

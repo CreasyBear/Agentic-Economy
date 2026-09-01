@@ -8,6 +8,8 @@ const requestedAccessAmount = v.object({
 })
 const requestedAccess = v.object({
   environment: v.union(v.literal('sandbox'), v.literal('production')),
+  operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
+  operationRefs: v.array(v.string()),
   maximumSpendPerInvocation: v.optional(requestedAccessAmount),
   maximumDailySpend: v.optional(requestedAccessAmount),
   maximumMonthlySpend: v.optional(requestedAccessAmount),

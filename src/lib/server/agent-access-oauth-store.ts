@@ -282,6 +282,8 @@ function requestedAccessForConvex(
 ): GrantArgs['grant']['requestedAccess'] {
   return {
     environment: requestedAccess.environment,
+    operationAccess: requestedAccess.operationAccess,
+    operationRefs: [...requestedAccess.operationRefs],
     expiresInSeconds: requestedAccess.expiresInSeconds,
     ...(requestedAccess.maximumSpendPerInvocation === undefined
       ? {}

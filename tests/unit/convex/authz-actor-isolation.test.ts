@@ -11,6 +11,24 @@ import {
 type Backend = ConvexFixtureBackend
 
 describe('resolveBusinessActor isolation through the registered owner catalog supply query', () => {
+  it('fails closed when the current account owns multiple supplier identities', async () => {
+    const backend = convexTestWithMarketComponents()
+    const published = await publishedBusinessOwner(backend, 'owner-identity-conflict')
+    await backend.run(async (ctx) => {
+      const business = await ctx.db.get(published.businessId)
+      if (business === null) throw new Error('identity_conflict_fixture_missing')
+      const { _id: _ignoredId, _creationTime: _ignoredTime, ...fields } = business
+      await ctx.db.insert('businesses', {
+        ...fields,
+        slug: 'owner-identity-conflict-second',
+        name: 'Second supplier',
+      })
+    })
+
+    await expect(published.owner.query(api.catalog.getCurrentOwnerSupplierIdentity, {}))
+      .resolves.toEqual({ kind: 'conflict', code: 'multiple_businesses' })
+  })
+
   it.each([
     'owner',
     'member',

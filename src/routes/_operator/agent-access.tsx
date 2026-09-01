@@ -5,6 +5,7 @@ import { Link, Outlet, createFileRoute, useLocation, useNavigate } from '@tansta
 import { useServerFn } from '@tanstack/react-start'
 
 import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
+import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecurityHistory'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
@@ -13,7 +14,11 @@ import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { readAgentDirectoryPageServer, readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
-import { disconnectAgentServer, revokeAgentCredentialServer } from '@/modules/agent-access/agent-access.functions'
+import {
+  disconnectAgentServer,
+  renameAgentServer,
+  revokeAgentCredentialServer,
+} from '@/modules/agent-access/agent-access.functions'
 import type { AgentLifecycleResult } from '@/modules/agent-access/agent-access'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import {
@@ -73,6 +78,7 @@ function AgentAccessHome() {
   const localE2E = isLocalE2EAuthBypassEnabled()
   const revokeCredential = useServerFn(revokeAgentCredentialServer)
   const disconnectAgent = useServerFn(disconnectAgentServer)
+  const renameAgent = useServerFn(renameAgentServer)
   const [directory, setDirectory] = useState<AgentDirectoryProjection>(initialDirectory)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -221,6 +227,18 @@ function AgentAccessHome() {
     return runLifecycle({ kind: 'agent', ref: principalRef })
   }
 
+  async function rename(principalRef: string, expectedRevision: number, displayName: string): Promise<boolean> {
+    try {
+      const result = await renameAgent({ data: { principalRef, expectedRevision, displayName } })
+      await load()
+      return result.kind === 'completed' || result.kind === 'replayed'
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      await load().catch(() => undefined)
+      return false
+    }
+  }
+
   async function decidePendingApproval(invocationRef: string, operationRef: string, decision: 'approve' | 'deny') {
     if (localE2E || approvalDecision !== undefined) return
     setApprovalDecision({ invocationRef, decision })
@@ -307,6 +325,11 @@ function AgentAccessHome() {
         }}
         onRevokeCredential={(credentialRef) => revoke(credentialRef)}
         onDisconnectAgent={(principalRef) => disconnect(principalRef)}
+        onRenameAgent={(principalRef, expectedRevision, displayName) => rename(principalRef, expectedRevision, displayName)}
+        {...(search.caller !== undefined
+          && directory.details.some(({ agent }) => agent.principalRef === search.caller)
+          ? { agentHistory: <AeAgentSecurityHistory key={search.caller} principalRef={search.caller} /> }
+          : {})}
         {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
         accessUnavailable={directoryError !== undefined}
         approvals={approvals}

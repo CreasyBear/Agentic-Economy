@@ -122,6 +122,30 @@ describe('audit and redaction contracts', () => {
     }
   })
 
+  it('accepts a canonical Agent as the actor for credential authentication evidence', () => {
+    expect(createPackage3AuditEvent({
+      eventId: brandNonEmpty('audit:agent.credential.authenticated:1', 'AuditEventId'),
+      eventType: 'agent.credential.authenticated',
+      actorKind: 'agent',
+      actorRef: 'prn_agent',
+      activeAccountRef: 'acc_owner',
+      sourceSystem: 'ae_recorded',
+      targetType: 'agent',
+      targetRef: 'prn_agent',
+      idempotencyKey: brandNonEmpty('idem:agent-auth:1', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:agent-auth:1', 'CorrelationId'),
+      evidenceRefs: ['credential:crd_current'],
+      redactedPayload: { credentialRef: 'crd_current' },
+      commandDigest: canonicalDigest('agent-auth-command'),
+      beforeState: 'presented',
+      outcome: 'authenticated',
+      createdAt: 10,
+    })).toMatchObject({
+      valid: true,
+      event: { actorKind: 'agent', actorRef: 'prn_agent' },
+    })
+  })
+
   it('refuses Package 3 events missing security context or containing raw secret material', () => {
     expect(validateAuditEvent(auditInput({
       eventType: 'agent.created',

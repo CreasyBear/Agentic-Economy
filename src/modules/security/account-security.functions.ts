@@ -36,9 +36,16 @@ const listHistoryQuery = sourceQuery<
   { paginationOpts: { numItems: number; cursor: string | null } },
   NativeHistoryPage
 >('securityAccountHistory:listCurrentOwnerSecurityHistory')
+const listAgentHistoryQuery = sourceQuery<
+  { principalRef: string; paginationOpts: { numItems: number; cursor: string | null } },
+  NativeHistoryPage
+>('securityAccountHistory:listCurrentOwnerAgentSecurityHistory')
 
 const historyInput = z.strictObject({
   cursor: z.string().max(4_096).nullable().optional(),
+})
+const agentHistoryInput = historyInput.extend({
+  principalRef: z.string().regex(/^prn_[0-9a-f]{32}$/u),
 })
 
 export async function recordClerkSecurityObservationThroughSource(
@@ -76,4 +83,25 @@ export const readAccountSecurityHistoryServer = createServerFn({ method: 'GET' }
   .validator((input) => historyInput.parse(input ?? {}))
   .handler(async ({ data }): Promise<AccountSecurityHistoryResult> => {
     return await readAccountSecurityHistoryThroughSource(data.cursor ?? null)
+  })
+
+export const readAgentSecurityHistoryServer = createServerFn({ method: 'GET' })
+  .validator((input) => agentHistoryInput.parse(input))
+  .handler(async ({ data }): Promise<AccountSecurityHistoryResult> => {
+    try {
+      const page = await callSourceQuery(listAgentHistoryQuery, {
+        principalRef: data.principalRef,
+        paginationOpts: { numItems: 25, cursor: data.cursor ?? null },
+      })
+      return {
+        kind: 'available',
+        page: {
+          items: page.page,
+          continueCursor: page.continueCursor,
+          isDone: page.isDone,
+        },
+      }
+    } catch {
+      return { kind: 'unavailable', reason: 'source_unavailable' }
+    }
   })

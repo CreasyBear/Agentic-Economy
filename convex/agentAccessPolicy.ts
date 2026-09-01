@@ -2,8 +2,13 @@ import { v, type Infer } from 'convex/values'
 import type { RegisteredMutation } from 'convex/server'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { agentAccessGrantValue } from '@/modules/agent-access/public'
-import type { AgentAccessGrant } from '@/modules/agent-access/policy'
+import { agentAccessGrantV2Value, normalizedAgentAccessGrantValue } from '@/modules/agent-access/public'
+import {
+  normalizeAgentAccessOperationSelection,
+  normalizeStoredAgentAccessGrant,
+  type AgentAccessGrant,
+  type NormalizedStoredAgentAccessGrant,
+} from '@/modules/agent-access/policy'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import {
   verifyCustomerRequestServiceAssertion,
@@ -55,13 +60,15 @@ type RegisterGrantForServerArgs = {
 }
 type RegisterGrantForServerResult = Infer<typeof grantWriteForServerResult>
 
-const grantReadResult = v.union(agentAccessGrantValue, v.null())
+const grantReadResult = v.union(normalizedAgentAccessGrantValue, v.null())
 const publicGrantReadback = v.object({
   principalId: v.string(),
   credentialId: v.string(),
   applicationRef: v.string(),
   environment,
   authorityMode: v.union(v.literal('inspect_only'), v.literal('approve_each'), v.literal('bounded_mandate'), v.literal('full_yolo')),
+  operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
+  operationRefs: v.array(v.string()),
   lifecycle: v.union(v.literal('active'), v.literal('revoked'), v.literal('expired')),
   expiresAt: v.number(),
   budget: v.object({
@@ -101,14 +108,18 @@ function grantBindingMatchesAssertion(grant: AgentAccessGrant, assertion: Custom
     && assertion.credentialId === grant.credentialId
 }
 
-function sameGrantMaterial(left: AgentAccessGrant, right: AgentAccessGrant): boolean {
-  return left.grantRef === right.grantRef
+function sameGrantMaterial(left: NormalizedStoredAgentAccessGrant, right: NormalizedStoredAgentAccessGrant): boolean {
+  return left.format === right.format
+    && left.policy.format === right.policy.format
+    && left.grantRef === right.grantRef
     && left.principalId === right.principalId
     && left.ownerId === right.ownerId
     && left.applicationRef === right.applicationRef
     && left.credentialId === right.credentialId
     && left.environment === right.environment
     && left.operationAccess === right.operationAccess
+    && left.operationRefs.length === right.operationRefs.length
+    && left.operationRefs.every((ref, index) => ref === right.operationRefs[index])
     && left.authorityMode === right.authorityMode
     && left.generation === right.generation
     && left.policyDigest === right.policyDigest
@@ -131,30 +142,35 @@ export const listOwnerGrantReadbacks = query({
       .withIndex('by_ownerId_and_updatedAt', (grantQuery) => grantQuery.eq('ownerId', actor.canonicalAccountRef))
       .order('desc')
       .take(64)
-    return rows.map((row) => ({
-      principalId: row.principalId,
-      credentialId: row.credentialId,
-      applicationRef: row.applicationRef,
-      environment: row.environment,
-      authorityMode: row.authorityMode,
-      lifecycle: row.lifecycle,
-      expiresAt: row.expiresAt,
-      budget: {
-        maximumSpendPerInvocation: row.policy.budget.maximumSpendPerInvocation,
-        maximumDailySpend: row.policy.budget.maximumDailySpend,
-        maximumMonthlySpend: row.policy.budget.maximumMonthlySpend,
-        maximumConcurrentInvocations: row.policy.budget.maximumConcurrentInvocations,
-      },
-      rate: {
-        maximumCallsPerMinute: row.policy.rate.maximumCallsPerMinute,
-        maximumCallsPerHour: row.policy.rate.maximumCallsPerHour,
-      },
-    }))
+    return rows.map((stored) => {
+      const row = normalizeStoredAgentAccessGrant(stored)
+      return {
+        principalId: row.principalId,
+        credentialId: row.credentialId,
+        applicationRef: row.applicationRef,
+        environment: row.environment,
+        authorityMode: row.authorityMode,
+        operationAccess: row.operationAccess,
+        operationRefs: [...row.operationRefs],
+        lifecycle: row.lifecycle,
+        expiresAt: row.expiresAt,
+        budget: {
+          maximumSpendPerInvocation: row.policy.budget.maximumSpendPerInvocation,
+          maximumDailySpend: row.policy.budget.maximumDailySpend,
+          maximumMonthlySpend: row.policy.budget.maximumMonthlySpend,
+          maximumConcurrentInvocations: row.policy.budget.maximumConcurrentInvocations,
+        },
+        rate: {
+          maximumCallsPerMinute: row.policy.rate.maximumCallsPerMinute,
+          maximumCallsPerHour: row.policy.rate.maximumCallsPerHour,
+        },
+      }
+    })
   },
 })
 export const registerGrantForServer: RegisteredMutation<'public', RegisterGrantForServerArgs, RegisterGrantForServerResult> = mutation({
   args: {
-    grant: agentAccessGrantValue,
+    grant: agentAccessGrantV2Value,
     serviceAuth: serverServiceAuth,
   },
   returns: grantWriteForServerResult,
@@ -179,12 +195,27 @@ export const registerGrantForServer: RegisteredMutation<'public', RegisterGrantF
 })
 export const upsertGrant = internalMutation({
   args: {
-    grant: agentAccessGrantValue,
+    grant: agentAccessGrantV2Value,
   },
   returns: grantWriteResult,
   handler: async (ctx, args) => {
-    const grant = args.grant
-    if (grant.policy.environment !== grant.environment
+    let grant: AgentAccessGrant
+    try {
+      const normalized = normalizeStoredAgentAccessGrant(args.grant)
+      if (normalized.format !== 'ae.agent-access-grant:v2') {
+        return { kind: 'conflict' as const, code: 'grant_material_invalid' as const }
+      }
+      grant = normalized
+    } catch {
+      return { kind: 'conflict' as const, code: 'grant_material_invalid' as const }
+    }
+    const selection = normalizeAgentAccessOperationSelection(grant)
+    if (selection === undefined
+      || selection.operationRefs.some((ref, index) => ref !== grant.operationRefs[index])
+      || grant.operationAccess !== grant.policy.operationAccess
+      || grant.operationRefs.length !== grant.policy.operationRefs.length
+      || grant.operationRefs.some((ref, index) => ref !== grant.policy.operationRefs[index])
+      || grant.policy.environment !== grant.environment
       || (grant.environment === 'production' && grant.authorityMode === 'full_yolo')
       || grant.policy.budget.budgetPolicyRef !== grant.budgetPolicyRef
       || grant.policy.rate.ratePolicyRef !== grant.ratePolicyRef
@@ -198,7 +229,7 @@ export const upsertGrant = internalMutation({
     const existingByRef = await ctx.db.query('agentAccessGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', grant.grantRef)).unique()
     if (existingByRef !== null) {
-      return sameGrantMaterial(existingByRef, grant)
+      return sameGrantMaterial(normalizeStoredAgentAccessGrant(existingByRef), grant)
         ? {
             kind: 'replayed' as const,
             grantRef: existingByRef.grantRef,
@@ -239,7 +270,7 @@ export const readGrant = internalQuery({
       .withIndex('by_grantRef', (query) => query.eq('grantRef', args.grantRef)).unique()
     if (row === null) return null
     const { _id, _creationTime, ...grant } = row
-    return grant
+    return normalizeStoredAgentAccessGrant(grant)
   },
 })
 
@@ -269,7 +300,7 @@ export const readActiveGrant = internalQuery({
     if (row === undefined || row.expiresAt <= args.now
       || (row.environment === 'production' && row.authorityMode === 'full_yolo')) return null
     const { _id, _creationTime, ...grant } = row
-    return grant
+    return normalizeStoredAgentAccessGrant(grant)
   },
 })
 

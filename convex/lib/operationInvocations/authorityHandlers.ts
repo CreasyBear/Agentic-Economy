@@ -4,6 +4,10 @@ import type { Doc } from '../../_generated/dataModel'
 import type { ActionCtx, MutationCtx, QueryCtx } from '../../_generated/server'
 import { resolveBusinessActor } from '../../authz'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import {
+  normalizeStoredAgentAccessGrant,
+  normalizeStoredAgentAccessGrantForOperation,
+} from '@/modules/agent-access/policy'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import {
   operationResultValue,
@@ -39,12 +43,17 @@ import { readExactSellerOnboardingCanaryPlatformGrantHandler } from '../../capab
 
 export const resolveInvocationAgentAuthorityRef = makeFunctionReference<
   'mutation',
-  { principal: OperationPrincipal; operationRef?: string; invocationRef?: string },
+  { principal: OperationPrincipal; operationRef?: string; invocationRef?: string; receiptList?: true },
   OperationPrincipal | null
 >('capabilityOperationInvocations:resolveInvocationAgentAuthority')
 
+type CurrentAuthorityPurpose =
+  | Readonly<{ kind: 'new_operation'; operationRef: string }>
+  | Readonly<{ kind: 'persisted_invocation'; operationRef: string }>
+  | Readonly<{ kind: 'receipt_list' }>
+
 type InvocationAuthorityTarget = Readonly<{
-  operationRef: string
+  purpose: CurrentAuthorityPurpose
   invocation: Doc<'capabilityOperationInvocations'> | null
 }>
 
@@ -67,10 +76,16 @@ function invocationMatchesCurrentAuthority(
 
 async function resolveInvocationAuthorityTarget(
   ctx: MutationCtx,
-  args: Readonly<{ operationRef?: string; invocationRef?: string }>,
+  args: Readonly<{ operationRef?: string; invocationRef?: string; receiptList?: true }>,
 ): Promise<InvocationAuthorityTarget | null> {
-  if ((args.operationRef === undefined) === (args.invocationRef === undefined)) return null
-  if (args.operationRef !== undefined) return { operationRef: args.operationRef, invocation: null }
+  const targetCount = Number(args.operationRef !== undefined)
+    + Number(args.invocationRef !== undefined)
+    + Number(args.receiptList === true)
+  if (targetCount !== 1) return null
+  if (args.operationRef !== undefined) {
+    return { purpose: { kind: 'new_operation', operationRef: args.operationRef }, invocation: null }
+  }
+  if (args.receiptList === true) return { purpose: { kind: 'receipt_list' }, invocation: null }
   if (args.invocationRef === undefined) return null
   const invocationRef = args.invocationRef
   const rows = await ctx.db.query('capabilityOperationInvocations')
@@ -80,16 +95,24 @@ async function resolveInvocationAuthorityTarget(
   const [invocation] = rows
   return invocation === undefined
     ? null
-    : { operationRef: invocation.operationRef, invocation }
+    : {
+        purpose: { kind: 'persisted_invocation', operationRef: invocation.operationRef },
+        invocation,
+      }
 }
 
 export async function resolveInvocationAgentAuthorityHandler(
   ctx: MutationCtx,
-  args: Readonly<{ principal: OperationPrincipal; operationRef?: string; invocationRef?: string }>,
+  args: Readonly<{ principal: OperationPrincipal; operationRef?: string; invocationRef?: string; receiptList?: true }>,
 ): Promise<OperationPrincipal | null> {
   const target = await resolveInvocationAuthorityTarget(ctx, args)
   if (target === null) return null
-  const current = await resolveCurrentAgentAuthority(ctx, args.principal, Date.now(), target.operationRef)
+  const current = await resolveCurrentAgentAuthority(
+    ctx,
+    args.principal,
+    Date.now(),
+    target.purpose,
+  )
   if (current === null) return null
   if (target.invocation !== null && !invocationMatchesCurrentAuthority(target.invocation, current)) return null
   return current.principal
@@ -182,7 +205,7 @@ async function reconcilePersistedSellerCanaryAuthority(
 export async function canonicalAgentPrincipal(
   ctx: ActionCtx,
   principal: OperationPrincipal,
-  target: Readonly<{ operationRef: string } | { invocationRef: string }>,
+  target: Readonly<{ operationRef: string } | { invocationRef: string } | { receiptList: true }>,
 ): Promise<OperationPrincipal | null> {
   return await ctx.runMutation(resolveInvocationAgentAuthorityRef, { principal, ...target })
 }
@@ -191,11 +214,11 @@ type CanonicalAgentContext = NonNullable<Awaited<ReturnType<typeof resolveCanoni
 type StoredAgent = Doc<'agentAccessPrincipals'>
 type ActiveGrant = Doc<'agentAccessGrants'>
 
-function validAuthorityRequest(candidate: OperationPrincipal, now: number, operationRef: string): boolean {
+function validAuthorityRequest(candidate: OperationPrincipal, now: number, purpose: CurrentAuthorityPurpose): boolean {
   return [
     Number.isSafeInteger(now),
     now >= 0,
-    operationRef.trim().length > 0,
+    purpose.kind === 'receipt_list' || purpose.operationRef.trim().length > 0,
     candidate.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE),
   ].every(Boolean)
 }
@@ -293,32 +316,57 @@ async function loadCurrentActiveGrant(
   return activeGrantMatches(grant, stored, canonical, now) ? grant : null
 }
 
+function delegationResourceForPurpose(
+  grant: ActiveGrant,
+  purpose: CurrentAuthorityPurpose,
+): string | undefined {
+  if (purpose.kind === 'persisted_invocation') return purpose.operationRef
+  if (purpose.kind === 'new_operation') {
+    return normalizeStoredAgentAccessGrantForOperation(grant, purpose.operationRef) === undefined
+      ? undefined
+      : purpose.operationRef
+  }
+  try {
+    const normalized = normalizeStoredAgentAccessGrant(grant)
+    return normalized.operationAccess === 'all_admitted' ? '*' : normalized.operationRefs[0]
+  } catch {
+    return undefined
+  }
+}
+
 export async function resolveCurrentAgentAuthority(
   ctx: MutationCtx,
   candidate: OperationPrincipal,
   now: number,
-  operationRef: string,
+  purpose: CurrentAuthorityPurpose,
 ): Promise<CurrentAgentAuthority | null> {
-  if (!validAuthorityRequest(candidate, now, operationRef)) return null
+  if (!validAuthorityRequest(candidate, now, purpose)) return null
 
   const canonical = await resolveCanonicalAgentContext(ctx, candidate.credentialId, now)
   if (canonical === null || !candidateMatchesCanonical(candidate, canonical)) return null
   const storedAgent = await loadCurrentStoredAgent(ctx, candidate, canonical, now)
   if (storedAgent === null) return null
-  const grant = await loadCurrentActiveGrant(ctx, storedAgent, canonical, now)
+  const grant = await loadCurrentActiveGrant(
+    ctx,
+    storedAgent,
+    canonical,
+    now,
+  )
   if (grant === null) return null
+  const resourceRef = delegationResourceForPurpose(grant, purpose)
+  if (resourceRef === undefined) return null
 
   const scopes = uniqueSorted(candidate.scopes)
   if (scopes.length !== candidate.scopes.length) return null
   const delegation = await validateCanonicalAgentDelegation(ctx, {
-    evidenceKind: 'operation-public-admission',
-    evidenceRef: operationRef,
+    evidenceKind: purpose.kind === 'receipt_list' ? 'operation-receipt-list' : 'operation-public-admission',
+    evidenceRef: resourceRef,
     principalRef: canonical.principalRef,
     accountRef: canonical.accountRef,
     grantRef: grant.grantRef,
     grantGeneration: grant.generation,
     requiredScopes: scopes,
-    resourceRefs: [operationRef],
+    resourceRefs: [resourceRef],
     now,
   })
   if (delegation === null) return null
@@ -385,7 +433,7 @@ export async function reconcilePersistedInvocationAuthority(
     environment: storedAgent.environment,
     scopes: storedAgent.scopes,
     authorityMode: storedAgent.authorityMode,
-  }, now, row.operationRef)
+  }, now, { kind: 'persisted_invocation', operationRef: row.operationRef })
   if (current === null) return null
   if (!invocationMatchesCurrentAuthority(row, current)) return null
   const delegationIsCurrent = await validatePersistedInvocationDelegation(ctx, {
@@ -459,7 +507,7 @@ export async function canonicalAgentListHandler(
   ctx: ActionCtx,
   args: Parameters<typeof listAgentInvocationsHandler>[1],
 ): Promise<Infer<typeof invocationSummaryPageValue>> {
-  const principal = await canonicalAgentPrincipal(ctx, args.principal, { operationRef: 'operation-list:v1' })
+  const principal = await canonicalAgentPrincipal(ctx, args.principal, { receiptList: true })
   if (principal === null) throw new Error('agent_invocation_list_unauthorized')
   return await listAgentInvocationsHandler(ctx, { ...args, principal })
 }

@@ -1,5 +1,5 @@
 import { auth } from '@clerk/tanstack-react-start/server'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
+import { isLocalE2EAuthBypassEnabled, LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { ConvexHttpClient } from 'convex/browser'
@@ -145,8 +145,8 @@ export async function createAuthenticatedConvexClient(
     }
     Reflect.apply(setAdminAuth, client, [localAdminKey, {
       issuer: 'https://convex.test',
-      subject: 'dev-seed-owner-session',
-      tokenIdentifier: 'https://convex.test|dev-seed-owner-session',
+      subject: LOCAL_E2E_OPERATOR_PRINCIPAL,
+      tokenIdentifier: `https://convex.test|${LOCAL_E2E_OPERATOR_PRINCIPAL}`,
       name: 'Dev Seed Owner',
     }])
   } else {

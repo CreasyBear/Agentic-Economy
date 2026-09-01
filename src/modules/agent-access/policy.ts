@@ -1,11 +1,8 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isPublicOperationRef } from '@/modules/common/operation-ref'
 import { compareExactAmounts, exactAmountSchema, type ExactAmount } from '@/modules/money/public'
-import {
-  AGENT_ACCESS_ENVIRONMENT_VALUES,
-  type AgentAccessEnvironment,
-} from './agent-access'
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
   type AgentAccessAuthorityMode,
@@ -13,23 +10,29 @@ import {
 
 export {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
-  AGENT_ACCESS_ENVIRONMENT_VALUES,
 }
 export type { AgentAccessAuthorityMode, AgentAccessEnvironment }
 
-export const AGENT_ACCESS_POLICY_FORMAT = 'ae.agent-access-policy:v1' as const
-export const AGENT_ACCESS_GRANT_FORMAT = 'ae.agent-access-grant:v1' as const
-export const AGENT_ACCESS_OPERATION_ACCESS_VALUES = ['all_admitted'] as const
+export const LEGACY_AGENT_ACCESS_POLICY_FORMAT = 'ae.agent-access-policy:v1' as const
+export const LEGACY_AGENT_ACCESS_GRANT_FORMAT = 'ae.agent-access-grant:v1' as const
+export const AGENT_ACCESS_POLICY_FORMAT = 'ae.agent-access-policy:v2' as const
+export const AGENT_ACCESS_GRANT_FORMAT = 'ae.agent-access-grant:v2' as const
+export const AGENT_ACCESS_ENVIRONMENT_VALUES = ['sandbox', 'production'] as const
+export const AGENT_ACCESS_OPERATION_ACCESS_VALUES = ['all_admitted', 'selected_operations'] as const
 export const AGENT_ACCESS_LIFECYCLE_VALUES = ['active', 'revoked', 'expired'] as const
 
 export type AgentAccessOperationAccess = typeof AGENT_ACCESS_OPERATION_ACCESS_VALUES[number]
 export type AgentAccessLifecycle = typeof AGENT_ACCESS_LIFECYCLE_VALUES[number]
+type AgentAccessEnvironment = typeof AGENT_ACCESS_ENVIRONMENT_VALUES[number]
 
 const identifier = z.string().trim().min(1).max(300)
 const positiveSafeInteger = z.number().int().safe().positive()
 const nonNegativeSafeInteger = z.number().int().safe().nonnegative()
 const money = exactAmountSchema
 const environment = z.enum(AGENT_ACCESS_ENVIRONMENT_VALUES)
+const operationRef = z.string().superRefine((value, context) => {
+  if (!isPublicOperationRef(value)) context.addIssue({ code: 'custom', message: 'operation_ref_invalid' })
+})
 
 
 export const agentAccessBudgetPolicySchema = z.strictObject({
@@ -74,14 +77,42 @@ export const agentAccessRatePolicySchema = z.strictObject({
 })
 export type AgentAccessRatePolicy = z.infer<typeof agentAccessRatePolicySchema>
 
-export const agentAccessPolicySchema = z.strictObject({
-  format: z.literal(AGENT_ACCESS_POLICY_FORMAT),
-  operationAccess: z.literal('all_admitted'),
+const policyFields = {
   environment,
   budget: agentAccessBudgetPolicySchema,
   rate: agentAccessRatePolicySchema,
+} as const
+
+export const legacyAgentAccessPolicySchema = z.strictObject({
+  format: z.literal(LEGACY_AGENT_ACCESS_POLICY_FORMAT),
+  operationAccess: z.literal('all_admitted'),
+  ...policyFields,
 })
+
+const allAdmittedPolicySchema = z.strictObject({
+  format: z.literal(AGENT_ACCESS_POLICY_FORMAT),
+  operationAccess: z.literal('all_admitted'),
+  operationRefs: z.array(operationRef).length(0),
+  ...policyFields,
+})
+const selectedOperationsPolicySchema = z.strictObject({
+  format: z.literal(AGENT_ACCESS_POLICY_FORMAT),
+  operationAccess: z.literal('selected_operations'),
+  operationRefs: z.array(operationRef).min(1).max(64).superRefine((refs, context) => {
+    if (new Set(refs).size !== refs.length) {
+      context.addIssue({ code: 'custom', message: 'operation_refs_duplicate' })
+    }
+  }),
+  ...policyFields,
+})
+
+export const agentAccessPolicySchema = z.discriminatedUnion('operationAccess', [
+  allAdmittedPolicySchema,
+  selectedOperationsPolicySchema,
+]).transform((policy) => ({ ...policy, operationRefs: [...policy.operationRefs].sort() }))
 export type AgentAccessPolicy = z.infer<typeof agentAccessPolicySchema>
+export type LegacyAgentAccessPolicy = z.infer<typeof legacyAgentAccessPolicySchema>
+export type StoredAgentAccessPolicy = AgentAccessPolicy | LegacyAgentAccessPolicy
 
 export type AgentAccessGrant = Readonly<{
   format: typeof AGENT_ACCESS_GRANT_FORMAT
@@ -92,6 +123,7 @@ export type AgentAccessGrant = Readonly<{
   credentialId: string
   environment: AgentAccessEnvironment
   operationAccess: AgentAccessOperationAccess
+  operationRefs: string[]
   authorityMode: AgentAccessAuthorityMode
   policy: AgentAccessPolicy
   budgetPolicyRef: string
@@ -113,6 +145,7 @@ export type AgentAccessGrantReadback = Readonly<{
   environment: AgentAccessEnvironment
   authorityMode: AgentAccessAuthorityMode
   operationAccess: AgentAccessOperationAccess
+  operationRefs: string[]
   lifecycle: AgentAccessLifecycle
   generation: number
   policyDigest: string
@@ -128,6 +161,8 @@ export type AgentAccessOwnerGrantReadback = Readonly<{
   applicationRef: string
   environment: AgentAccessEnvironment
   authorityMode: AgentAccessAuthorityMode
+  operationAccess: AgentAccessOperationAccess
+  operationRefs: readonly string[]
   lifecycle: AgentAccessLifecycle
   expiresAt: number
   budget: Readonly<{
@@ -143,8 +178,9 @@ export type AgentAccessOwnerGrantReadback = Readonly<{
 }>
 
 
-export type AgentAccessGrantInput = Readonly<Omit<AgentAccessGrant, 'format' | 'policyDigest' | 'budgetPolicyRef' | 'ratePolicyRef'> & {
-  policy: AgentAccessPolicy
+export type AgentAccessGrantInput = Readonly<Omit<AgentAccessGrant, 'format' | 'operationRefs' | 'policyDigest' | 'budgetPolicyRef' | 'ratePolicyRef'> & {
+  policy: StoredAgentAccessPolicy
+  operationRefs?: readonly string[]
   budgetPolicyRef?: string
   ratePolicyRef?: string
 }>
@@ -157,6 +193,7 @@ export type AgentAccessPolicyRefusalCode =
   | 'grant_principal_mismatch'
   | 'grant_application_mismatch'
   | 'grant_environment_mismatch'
+  | 'operation_not_allowed'
   | 'spend_limit_exceeded'
   | 'budget_currency_mismatch'
 
@@ -177,10 +214,157 @@ export function agentAccessPolicyDigest(policy: AgentAccessPolicy): string {
   return canonicalDigest(policy as never)
 }
 
+export function normalizeStoredAgentAccessPolicy(policy: StoredAgentAccessPolicy): AgentAccessPolicy | undefined {
+  if (policy.format === AGENT_ACCESS_POLICY_FORMAT) {
+    const parsed = agentAccessPolicySchema.safeParse(policy)
+    return parsed.success ? parsed.data : undefined
+  }
+  const legacy = legacyAgentAccessPolicySchema.safeParse(policy)
+  if (!legacy.success) return undefined
+  return agentAccessPolicySchema.parse({
+    ...legacy.data,
+    format: AGENT_ACCESS_POLICY_FORMAT,
+    operationRefs: [] as [],
+  })
+}
+
+export function normalizeAgentAccessOperationSelection(input: Readonly<{
+  operationAccess: AgentAccessOperationAccess
+  operationRefs?: readonly string[]
+}>): Readonly<{ operationAccess: AgentAccessOperationAccess; operationRefs: string[] }> | undefined {
+  const operationRefs = input.operationRefs ?? []
+  if (input.operationAccess === 'all_admitted') {
+    return operationRefs.length === 0 ? { operationAccess: input.operationAccess, operationRefs: [] } : undefined
+  }
+  if (operationRefs.length < 1 || operationRefs.length > 64
+    || new Set(operationRefs).size !== operationRefs.length
+    || operationRefs.some((ref) => !isPublicOperationRef(ref))) return undefined
+  return { operationAccess: input.operationAccess, operationRefs: [...operationRefs].sort() }
+}
+
+export function agentAccessGrantAllowsOperation(
+  grant: Readonly<{ operationAccess: AgentAccessOperationAccess; operationRefs: readonly string[] }>,
+  operationRef: string,
+): boolean {
+  if (!isPublicOperationRef(operationRef)) return false
+  return grant.operationAccess === 'all_admitted' || grant.operationRefs.includes(operationRef)
+}
+
+type AgentAccessGrantMaterial = Omit<AgentAccessGrant, 'format' | 'operationAccess' | 'operationRefs' | 'policy'>
+export type LegacyAgentAccessGrant = Readonly<AgentAccessGrantMaterial & {
+  format: typeof LEGACY_AGENT_ACCESS_GRANT_FORMAT
+  operationAccess: 'all_admitted'
+  policy: LegacyAgentAccessPolicy
+}>
+export type StoredAgentAccessGrant = AgentAccessGrant | LegacyAgentAccessGrant
+export type NormalizedLegacyAgentAccessGrant = Readonly<LegacyAgentAccessGrant & {
+  operationRefs: []
+}>
+export type NormalizedStoredAgentAccessGrant = AgentAccessGrant | NormalizedLegacyAgentAccessGrant
+
+const storedGrantFields = {
+  grantRef: identifier,
+  principalId: identifier,
+  ownerId: identifier,
+  applicationRef: identifier,
+  credentialId: identifier,
+  environment,
+  authorityMode: z.enum(AGENT_ACCESS_AUTHORITY_MODE_VALUES),
+  budgetPolicyRef: identifier,
+  ratePolicyRef: identifier,
+  lifecycle: z.enum(AGENT_ACCESS_LIFECYCLE_VALUES),
+  generation: positiveSafeInteger,
+  policyDigest: identifier,
+  createdAt: z.number().finite(),
+  updatedAt: z.number().finite(),
+  expiresAt: z.number().finite(),
+} as const
+
+export const legacyAgentAccessGrantSchema = z.strictObject({
+  format: z.literal(LEGACY_AGENT_ACCESS_GRANT_FORMAT),
+  ...storedGrantFields,
+  operationAccess: z.literal('all_admitted'),
+  policy: legacyAgentAccessPolicySchema,
+})
+export const v2AgentAccessGrantSchema = z.strictObject({
+  format: z.literal(AGENT_ACCESS_GRANT_FORMAT),
+  ...storedGrantFields,
+  operationAccess: z.enum(AGENT_ACCESS_OPERATION_ACCESS_VALUES),
+  operationRefs: z.array(operationRef),
+  policy: agentAccessPolicySchema,
+})
+export const storedAgentAccessGrantSchema = z.union([
+  legacyAgentAccessGrantSchema,
+  v2AgentAccessGrantSchema,
+])
+
+export function normalizeStoredAgentAccessGrant(input: unknown): NormalizedStoredAgentAccessGrant {
+  let material = input
+  if (typeof input === 'object' && input !== null
+    && '_id' in input && typeof input._id === 'string'
+    && '_creationTime' in input && typeof input._creationTime === 'number') {
+    const { _id, _creationTime, ...storedMaterial } = input
+    void _id
+    void _creationTime
+    material = storedMaterial
+  }
+  const stored = storedAgentAccessGrantSchema.safeParse(material)
+  if (!stored.success) throw new Error('stored_agent_access_grant_invalid')
+  const grant = stored.data
+  if (grant.format === AGENT_ACCESS_GRANT_FORMAT) {
+    const policy = agentAccessPolicySchema.safeParse(grant.policy)
+    const selection = normalizeAgentAccessOperationSelection(grant)
+    if (!policy.success || selection === undefined
+      || selection.operationAccess !== policy.data.operationAccess
+      || selection.operationRefs.length !== policy.data.operationRefs.length
+      || selection.operationRefs.some((ref, index) => ref !== policy.data.operationRefs[index])
+      || canonicalDigest(policy.data as never) !== grant.policyDigest) {
+      throw new Error('stored_agent_access_grant_invalid')
+    }
+    return Object.freeze({
+      ...grant,
+      format: AGENT_ACCESS_GRANT_FORMAT,
+      operationAccess: selection.operationAccess,
+      operationRefs: selection.operationRefs,
+      policy: policy.data,
+    })
+  }
+  const legacyPolicy = legacyAgentAccessPolicySchema.safeParse(grant.policy)
+  if (!legacyPolicy.success || grant.operationAccess !== 'all_admitted'
+    || canonicalDigest(legacyPolicy.data as never) !== grant.policyDigest) {
+    throw new Error('stored_agent_access_grant_invalid')
+  }
+  return Object.freeze({
+    ...grant,
+    format: LEGACY_AGENT_ACCESS_GRANT_FORMAT,
+    operationRefs: [] as [],
+    policy: legacyPolicy.data,
+  })
+}
+
+export function normalizeStoredAgentAccessGrantForOperation(
+  input: unknown,
+  operationRef: string,
+): NormalizedStoredAgentAccessGrant | undefined {
+  try {
+    const grant = normalizeStoredAgentAccessGrant(input)
+    return agentAccessGrantAllowsOperation(grant, operationRef) ? grant : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function createAgentAccessGrant(input: AgentAccessGrantInput): AgentAccessPolicyDecision {
-  const policy = agentAccessPolicySchema.safeParse(input.policy)
-  if (!policy.success) return { kind: 'refused', code: 'grant_material_invalid' }
-  if (policy.data.environment !== input.environment) return { kind: 'refused', code: 'grant_environment_mismatch' }
+  const policy = normalizeStoredAgentAccessPolicy(input.policy)
+  if (policy === undefined) return { kind: 'refused', code: 'grant_material_invalid' }
+  const selection = normalizeAgentAccessOperationSelection(input)
+  if (selection === undefined
+    || selection.operationAccess !== policy.operationAccess
+    || selection.operationRefs.length !== policy.operationRefs.length
+    || selection.operationRefs.some((ref, index) => ref !== policy.operationRefs[index])) {
+    return { kind: 'refused', code: 'grant_material_invalid' }
+  }
+  if (policy.environment !== input.environment) return { kind: 'refused', code: 'grant_environment_mismatch' }
   if (input.environment === 'production' && input.authorityMode === 'full_yolo') {
     return { kind: 'refused', code: 'grant_material_invalid' }
   }
@@ -188,9 +372,9 @@ export function createAgentAccessGrant(input: AgentAccessGrantInput): AgentAcces
     || !Number.isFinite(input.updatedAt) || !Number.isFinite(input.expiresAt) || input.expiresAt <= input.createdAt) {
     return { kind: 'refused', code: 'grant_material_invalid' }
   }
-  const budgetPolicyRef = input.budgetPolicyRef ?? policy.data.budget.budgetPolicyRef
-  const ratePolicyRef = input.ratePolicyRef ?? policy.data.rate.ratePolicyRef
-  const policyDigest = agentAccessPolicyDigest(policy.data)
+  const budgetPolicyRef = input.budgetPolicyRef ?? policy.budget.budgetPolicyRef
+  const ratePolicyRef = input.ratePolicyRef ?? policy.rate.ratePolicyRef
+  const policyDigest = agentAccessPolicyDigest(policy)
   return {
     kind: 'accepted',
     grant: Object.freeze({
@@ -201,9 +385,10 @@ export function createAgentAccessGrant(input: AgentAccessGrantInput): AgentAcces
       applicationRef: input.applicationRef,
       credentialId: input.credentialId,
       environment: input.environment,
-      operationAccess: input.operationAccess,
+      operationAccess: selection.operationAccess,
+      operationRefs: selection.operationRefs,
       authorityMode: input.authorityMode,
-      policy: policy.data,
+      policy,
       budgetPolicyRef,
       ratePolicyRef,
       lifecycle: input.lifecycle,
@@ -216,7 +401,7 @@ export function createAgentAccessGrant(input: AgentAccessGrantInput): AgentAcces
   }
 }
 
-export function projectAgentAccessGrant(grant: AgentAccessGrant): AgentAccessGrantReadback {
+export function projectAgentAccessGrant(grant: NormalizedStoredAgentAccessGrant): AgentAccessGrantReadback {
   return {
     grantRef: grant.grantRef,
     principalId: grant.principalId,
@@ -226,6 +411,7 @@ export function projectAgentAccessGrant(grant: AgentAccessGrant): AgentAccessGra
     environment: grant.environment,
     authorityMode: grant.authorityMode,
     operationAccess: grant.operationAccess,
+    operationRefs: grant.operationRefs,
     lifecycle: grant.lifecycle,
     generation: grant.generation,
     policyDigest: grant.policyDigest,
@@ -244,11 +430,19 @@ export function buildAgentAccessPolicy(input: Readonly<{
   maximumSpendPerInvocation: ExactAmount
   maximumDailySpend: ExactAmount
   maximumMonthlySpend: ExactAmount
+  operationAccess?: AgentAccessOperationAccess
+  operationRefs?: readonly string[]
 }>): AgentAccessPolicy {
+  const selection = normalizeAgentAccessOperationSelection({
+    operationAccess: input.operationAccess ?? 'all_admitted',
+    ...(input.operationRefs === undefined ? {} : { operationRefs: input.operationRefs }),
+  })
+  if (selection === undefined) throw new Error('agent_access_operation_selection_invalid')
   const policyNamespace = `${input.environment}:${input.currency}:${input.exponent}`
   return {
     format: AGENT_ACCESS_POLICY_FORMAT,
-    operationAccess: 'all_admitted',
+    operationAccess: selection.operationAccess,
+    operationRefs: selection.operationRefs,
     environment: input.environment,
     budget: {
       budgetPolicyRef: `budget:${policyNamespace}`,
@@ -270,7 +464,7 @@ export function buildAgentAccessPolicy(input: Readonly<{
 }
 
 export function evaluateAgentAccessOperation(input: Readonly<{
-  grant: AgentAccessGrant
+  grant: NormalizedStoredAgentAccessGrant
   principal: Readonly<{
     principalId: string
     applicationRef: string

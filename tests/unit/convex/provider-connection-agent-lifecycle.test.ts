@@ -81,6 +81,8 @@ async function issueSupplierAgent(
     applicationRef: 'agentic-economy',
     environment: 'sandbox' as const,
     scopes: ['market_supply:manage'],
+    operationAccess: 'all_admitted' as const,
+    operationRefs: [],
     authorityMode: 'bounded_mandate' as const,
     policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
     createdAt: now,

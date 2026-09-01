@@ -4,12 +4,16 @@ import { compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
 import { identifier, jsonValueSchema, type CapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  isPublicOperationRef,
+  type PublicOperationRef,
+} from '@/modules/common/operation-ref'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
-declare const operationRefBrand: unique symbol
 declare const mappingRefBrand: unique symbol
 
-export type PublicOperationRef = string & Readonly<{ [operationRefBrand]: true }>
+export { isPublicOperationRef }
+export type { PublicOperationRef }
 export type RegisteredOperationMappingRef = string & Readonly<{ [mappingRefBrand]: true }>
 export type RegisteredOperationMappingContractBinding = Readonly<{
   sourceContractRef: CapabilityContractRef
@@ -64,10 +68,6 @@ export function createPublicOperationRef(input: Readonly<{
 }
 export function capabilityOperationId(capabilityId: string): string {
   return `capability:${capabilityId}`
-}
-
-export function isPublicOperationRef(value: unknown): value is PublicOperationRef {
-  return typeof value === 'string' && /^operation:v1:[0-9a-f]{64}$/.test(value)
 }
 
 export type AnonymousKeylessOperationEffect = Readonly<{

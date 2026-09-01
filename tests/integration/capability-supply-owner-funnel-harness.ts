@@ -426,8 +426,9 @@ export async function seedSupplyAgentPrincipal(
   const now = Date.now()
   const amount = { currency: 'USD', units: '0', exponent: 2 }
   const policy = {
-    format: 'ae.agent-access-policy:v1' as const,
+    format: 'ae.agent-access-policy:v2' as const,
     operationAccess: 'all_admitted' as const,
+    operationRefs: [],
     environment: 'production' as const,
     budget: {
       budgetPolicyRef: `budget-policy:supply-reservation:${suffix}`,
@@ -447,7 +448,7 @@ export async function seedSupplyAgentPrincipal(
     },
   }
   const grant = {
-    format: 'ae.agent-access-grant:v1' as const,
+    format: 'ae.agent-access-grant:v2' as const,
     grantRef: `grant:supply-reservation:${suffix}`,
     principalId: principal.principalId,
     ownerId: principal.ownerId,
@@ -455,6 +456,7 @@ export async function seedSupplyAgentPrincipal(
     credentialId: principal.credentialId,
     environment: principal.environment,
     operationAccess: 'all_admitted' as const,
+    operationRefs: [],
     authorityMode: principal.authorityMode,
     policy,
     budgetPolicyRef: policy.budget.budgetPolicyRef,

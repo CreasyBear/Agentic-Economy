@@ -1,9 +1,13 @@
 export {
   agentAccessBudgetPolicyValue,
   agentAccessGrantValue,
+  agentAccessGrantV2Value,
+  normalizedAgentAccessGrantValue,
   agentAccessPolicyTables,
   agentAccessPolicyValue,
+  agentAccessPolicyV2Value,
   agentAccessRatePolicyValue,
+  storedAgentAccessGrantValue,
 } from './internal/convex-schema'
 export {
   agentAccessConsentReservationValue,
@@ -18,5 +22,7 @@ export type {
 } from './agent-operator-view-model'
 export type { AgentConnectionTarget } from './oauth-state'
 export type { AgentLifecycleResult } from './agent-access'
+export { agentAuditOpaqueRef, createAgentAuditEnvelope } from './agent-audit'
+export type { AgentAuditEnvelope, AgentAuditInput } from './agent-audit'
 export { readAgentConsentDetails } from './consent-read-model'
 export type { AgentConsentDetails, AgentConsentTarget } from './consent-read-model'

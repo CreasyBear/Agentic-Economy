@@ -95,6 +95,7 @@ export const resolveInvocationAgentAuthority = internalMutation({
     principal: principalValue,
     operationRef: v.optional(v.string()),
     invocationRef: v.optional(v.string()),
+    receiptList: v.optional(v.literal(true)),
   },
   returns: v.union(principalValue, v.null()),
   handler: resolveInvocationAgentAuthorityHandler,

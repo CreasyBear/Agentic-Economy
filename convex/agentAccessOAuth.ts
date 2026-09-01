@@ -51,6 +51,8 @@ const requestedAccessAmount = v.object({
 })
 const requestedAccess = v.object({
   environment: v.union(v.literal('sandbox'), v.literal('production')),
+  operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
+  operationRefs: v.array(v.string()),
   maximumSpendPerInvocation: v.optional(requestedAccessAmount),
   maximumDailySpend: v.optional(requestedAccessAmount),
   maximumMonthlySpend: v.optional(requestedAccessAmount),
@@ -331,14 +333,19 @@ export const reserveAgentAccessConsent = mutation({
     const oauthGrant = await ctx.db.query('agentAccessOAuthGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', args.grantRef))
       .unique()
+    const completedReplay = oauthGrant !== null
+      && isCompletedConsentGrant(oauthGrant.status)
+      && oauthGrant.consequenceReservation?.correlationRef === expectedRef
+      && oauthGrant.consequenceReservation.idempotencyRef === expectedRef
     if (oauthGrant === null
       || (oauthGrant.revision !== args.expectedGrantRevision
         && !(oauthGrant.status === 'issuing'
-          && oauthGrant.revision === args.expectedGrantRevision + 1))) {
+          && oauthGrant.revision === args.expectedGrantRevision + 1)
+        && !completedReplay)) {
       return { kind: 'conflict' as const, code: 'stale_grant' as const }
     }
     const now = Date.now()
-    if (oauthGrant.expiresAt <= now
+    if ((!completedReplay && oauthGrant.expiresAt <= now)
       || (oauthGrant.ownerId !== undefined && oauthGrant.ownerId !== identity.subject)) {
       return { kind: 'conflict' as const, code: 'invalid_state' as const }
     }
@@ -562,6 +569,10 @@ async function deriveConsentCommand(
     if (oauthGrant.displayName.trim().length === 0
       || oauthGrant.displayName.length > 80
       || args.expectedTargetRevision !== args.expectedGrantRevision) return null
+    if (isCompletedConsentGrant(oauthGrant.status)
+      && (oauthGrant.consequenceReservation?.action !== 'agent_access.create'
+        || oauthGrant.consequenceReservation.targetRevision !== args.expectedTargetRevision
+        || oauthGrant.connectionTarget?.kind !== 'new_agent')) return null
     return {
       action: 'agent_access.create',
       grantRef: oauthGrant.grantRef,
@@ -586,6 +597,32 @@ async function deriveConsentCommand(
     canonicalPrincipalRef = principalRef(args.connectionTarget.principalRef)
   } catch {
     return null
+  }
+  if (isCompletedConsentGrant(oauthGrant.status)) {
+    const reservation = oauthGrant.consequenceReservation
+    if (reservation?.action !== 'agent_access.replace_credential'
+      || reservation.predecessor === undefined
+      || reservation.targetRevision !== args.expectedTargetRevision
+      || oauthGrant.connectionTarget?.kind !== 'replace_credential'
+      || oauthGrant.connectionTarget.principalRef !== canonicalPrincipalRef) return null
+    return {
+      action: 'agent_access.replace_credential',
+      grantRef: oauthGrant.grantRef,
+      expectedGrantRevision: args.expectedGrantRevision,
+      authorityMode: args.authorityMode,
+      connectionTarget: { kind: 'replace_credential', principalRef: canonicalPrincipalRef },
+      resolvedConnectionTarget: { kind: 'replace_credential', principalRef: canonicalPrincipalRef },
+      selectedScopes,
+      issuanceMaterial,
+      predecessor: reservation.predecessor,
+      target: {
+        targetType: 'agent',
+        targetRef: canonicalPrincipalRef,
+        targetRevision: reservation.targetRevision,
+      },
+      targetRevision: reservation.targetRevision,
+      consequenceSummary: 'Replace the selected Agent credential while preserving its canonical identity.',
+    }
   }
   const [targetPrincipal, memberships] = await Promise.all([
     ctx.db.query('principals')
@@ -764,7 +801,7 @@ function reservationMatches(
   ownerPrincipalRevision: number,
 ): boolean {
   const reservation = oauthGrant.consequenceReservation
-  return oauthGrant.status === 'issuing'
+  return (oauthGrant.status === 'issuing' || isCompletedConsentGrant(oauthGrant.status))
     && reservation !== undefined
     && admission.descriptor !== undefined
     && admission.consequenceAction === reservation.action
@@ -781,6 +818,10 @@ function reservationMatches(
     && samePredecessorSnapshot(reservation.predecessor, consent.predecessor)
     && reservation.correlationRef === admission.correlationRef
     && reservation.idempotencyRef === admission.idempotencyRef
+}
+
+function isCompletedConsentGrant(status: Doc<'agentAccessOAuthGrants'>['status']): boolean {
+  return status === 'approved' || status === 'delivery_claimed' || status === 'consumed'
 }
 
 function samePredecessorSnapshot(
@@ -980,6 +1021,8 @@ function sameRequestedAccess(
       && leftAmount.units === rightAmount.units
       && leftAmount.exponent === rightAmount.exponent
   return left.environment === right.environment
+    && left.operationAccess === right.operationAccess
+    && sameStringArray(left.operationRefs, right.operationRefs)
     && sameAmount(left.maximumSpendPerInvocation, right.maximumSpendPerInvocation)
     && sameAmount(left.maximumDailySpend, right.maximumDailySpend)
     && sameAmount(left.maximumMonthlySpend, right.maximumMonthlySpend)

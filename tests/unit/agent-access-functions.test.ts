@@ -36,6 +36,7 @@ import {
   buildOwnerAgentAccessPolicy,
   disconnectAgentServer,
   issueAgentAccessKeyServer,
+  renameAgentServer,
   revokeAgentCredentialServer,
 } from '@/modules/agent-access/agent-access.functions'
 
@@ -216,6 +217,45 @@ describe('owner agent-access issuance policy', () => {
     await expect(disconnectAgentServer({ data: { principalRef: 'prn_agent_a' } }))
       .resolves.toEqual({ kind: 'completed', principalRef: 'prn_agent_a', correlationRef: 'corr-disconnect-a' })
     expect(clerkApi.revoke).not.toHaveBeenCalled()
+  })
+
+  it('renames through canonical Principal CAS without calling Clerk', async () => {
+    serverMocks.callSourceMutation.mockImplementation(async (reference: { name: string }, input: Record<string, unknown>) => {
+      if (reference.name !== 'agentAccessPrincipals:renameAgentForServer') {
+        throw new Error(`unexpected mutation ${reference.name}`)
+      }
+      expect(input).toMatchObject({
+        principalRef: 'prn_agent_a',
+        expectedRevision: 4,
+        displayName: 'Research assistant',
+        correlationRef: expect.any(String),
+      })
+      return {
+        kind: 'completed',
+        principalRef: 'prn_agent_a',
+        displayName: 'Research assistant',
+        revision: 5,
+        correlationRef: input.correlationRef,
+      }
+    })
+
+    await expect(renameAgentServer({
+      data: {
+        principalRef: 'prn_agent_a',
+        expectedRevision: 4,
+        displayName: 'Research assistant',
+      },
+    })).resolves.toMatchObject({
+      kind: 'completed',
+      principalRef: 'prn_agent_a',
+      displayName: 'Research assistant',
+      revision: 5,
+    })
+    expect(serverMocks.callSourceQuery).toHaveBeenCalledWith(
+      { name: 'agentAccessPolicy:listOwnerGrantReadbacks' },
+      { requireAuthority: true },
+    )
+    expect(serverMocks.clerkClient).not.toHaveBeenCalled()
   })
 
   it('returns resumable partial state when canonical disconnection has another bounded batch', async () => {

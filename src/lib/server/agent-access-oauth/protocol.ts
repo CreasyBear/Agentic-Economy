@@ -19,6 +19,7 @@ import {
   AGENT_ACCESS_MIN_TTL_SECONDS,
 } from '@/modules/agent-access/agent-access'
 import { buildProductionAgentAccessPolicy } from '@/modules/agent-access/production-policy'
+import { normalizeAgentAccessOperationSelection } from '@/modules/agent-access/policy'
 import { exactAmountSchema, formatExactAmount, type ExactAmount } from '@/modules/money/public'
 
 const MAX_OAUTH_FORM_BODY_BYTES = 16 * 1024
@@ -45,6 +46,8 @@ type AuthorizationDetailsResult =
 const AUTHORIZATION_DETAILS_KEYS = new Set([
   'type',
   'environment',
+  'operation_access',
+  'operation_refs',
   'expires_in_seconds',
   'maximum_spend_per_invocation',
   'maximum_daily_spend',
@@ -100,6 +103,8 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
   if (detail.type !== 'agentic_economy_market_operations') return { kind: 'invalid' }
   const environment = detail.environment
   if (environment !== 'sandbox' && environment !== 'production') return { kind: 'invalid' }
+  const operationSelection = parseOperationSelection(detail)
+  if (operationSelection === undefined) return { kind: 'invalid' }
   const expiresInSeconds = detail.expires_in_seconds
   if (!isSafeInteger(expiresInSeconds)) return { kind: 'invalid' }
   if (!everyFact([
@@ -170,6 +175,8 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
     kind: 'ok',
     requestedAccess: {
       environment,
+      operationAccess: operationSelection.operationAccess,
+      operationRefs: operationSelection.operationRefs,
       expiresInSeconds,
       ...(maximumSpendPerInvocation === undefined ? {} : { maximumSpendPerInvocation }),
       ...(maximumDailySpend === undefined ? {} : { maximumDailySpend }),
@@ -179,6 +186,21 @@ export function parseAuthorizationDetails(raw: string | null): AuthorizationDeta
       ...(maximumCallsPerHour === undefined ? {} : { maximumCallsPerHour }),
     },
   }
+}
+
+function parseOperationSelection(detail: Record<string, unknown>) {
+  const hasOperationAccess = Object.hasOwn(detail, 'operation_access')
+  const hasOperationRefs = Object.hasOwn(detail, 'operation_refs')
+  if (hasOperationAccess !== hasOperationRefs) return undefined
+  const operationAccess = hasOperationAccess ? detail.operation_access : 'all_admitted'
+  const operationRefs = hasOperationRefs ? detail.operation_refs : []
+  if ((operationAccess !== 'all_admitted' && operationAccess !== 'selected_operations')
+    || !Array.isArray(operationRefs)
+    || operationRefs.some((ref) => typeof ref !== 'string')) return undefined
+  return normalizeAgentAccessOperationSelection({
+    operationAccess,
+    operationRefs: operationRefs as string[],
+  })
 }
 
 export function isSafeInteger(value: unknown): value is number {
@@ -235,15 +257,18 @@ export function consentHtml(input: Readonly<{
   const scope = profile === 'supplier' ? MARKET_SUPPLY_MANAGE_SCOPE : agentAuthorityScopeForMode(input.mode)
   const permission = consentPermissionCopy(input.mode, profile)
   const environment = escapeHtml(input.requestedAccess.environment)
+  const operationAccess = escapeHtml(input.requestedAccess.operationAccess)
+  const operationRefs = escapeHtml(encodeURIComponent(JSON.stringify(input.requestedAccess.operationRefs)))
   const authorityMode = escapeHtml(input.mode)
   const expiry = String(input.requestedAccess.expiresInSeconds)
   const accessSummary = escapeHtml(consentAccessSummary(input.requestedAccess))
+  const operationSummary = escapeHtml(consentOperationAccessSummary(input.requestedAccess))
   const targets = escapeHtml(encodeURIComponent(JSON.stringify(input.agentTargets ?? [])))
   const nextCursor = input.agentTargetsNextCursor === undefined
     ? ''
     : escapeHtml(encodeURIComponent(input.agentTargetsNextCursor))
   const targetsUnavailable = input.agentTargetsUnavailable === true ? 'true' : 'false'
-  return `<main data-ae-consent data-grant-ref="${escapedGrantRef}" data-grant-revision="${grantRevision}" data-flow="${input.flow}" data-client-name="${escapedName}" data-authority-mode="${authorityMode}" data-access-profile="${profile}" data-environment="${environment}" data-expires-in-seconds="${expiry}" data-access-summary="${accessSummary}" data-agent-targets="${targets}" data-agent-targets-next-cursor="${nextCursor}" data-agent-targets-unavailable="${targetsUnavailable}"><h1>Connect ${escapedName} to Agentic Economy</h1><p>This agent may ${permission.allowed}.</p><p>${permission.approval}</p><p data-ae-access>Environment: ${environment}. Access expires in ${expiry} seconds. Authority mode: ${authorityMode}. ${accessSummary}</p><p>You can revoke it at any time from the Access &amp; usage workspace.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${authorityMode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
+  return `<main data-ae-consent data-grant-ref="${escapedGrantRef}" data-grant-revision="${grantRevision}" data-flow="${input.flow}" data-client-name="${escapedName}" data-authority-mode="${authorityMode}" data-access-profile="${profile}" data-environment="${environment}" data-operation-access="${operationAccess}" data-operation-refs="${operationRefs}" data-expires-in-seconds="${expiry}" data-access-summary="${accessSummary}" data-agent-targets="${targets}" data-agent-targets-next-cursor="${nextCursor}" data-agent-targets-unavailable="${targetsUnavailable}"><h1>Connect ${escapedName} to Agentic Economy</h1><p>This agent may ${permission.allowed}.</p><p>${permission.approval}</p><p data-ae-operations>${operationSummary}</p><p data-ae-access>Environment: ${environment}. Access expires in ${expiry} seconds. Authority mode: ${authorityMode}. ${accessSummary}</p><p>You can revoke it at any time from the Access &amp; usage workspace.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${authorityMode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
 }
 
 export function consentRecoveryHtml(grantRef: string): string {
@@ -292,6 +317,12 @@ export function consentAccessSummary(requestedAccess: AgentAccessOAuthRequestedA
   }
   if (controls.length === 0) controls.push('No additional spend or rate controls were supplied.')
   return controls.join(' ')
+}
+
+function consentOperationAccessSummary(requestedAccess: AgentAccessOAuthRequestedAccess): string {
+  return requestedAccess.operationAccess === 'all_admitted'
+    ? 'Operations: all admitted Operations, including Operations admitted in the future.'
+    : `Operations: selected only — ${requestedAccess.operationRefs.join(', ')}.`
 }
 
 export function formatConsentAmount(amount: ExactAmount): string {

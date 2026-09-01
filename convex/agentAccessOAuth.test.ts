@@ -63,6 +63,8 @@ const grant = {
   requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
   requestedAccess: {
     environment: 'production' as const,
+    operationAccess: 'all_admitted' as const,
+    operationRefs: [],
     maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
     maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
     maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
@@ -94,6 +96,8 @@ const client = {
 }
 const cleanupRequestedAccess = {
   environment: 'sandbox' as const,
+  operationAccess: 'all_admitted' as const,
+  operationRefs: [],
   expiresInSeconds: 600,
 }
 
@@ -172,6 +176,30 @@ const consentMaterialMutations: ReadonlyArray<Readonly<{
   {
     name: 'environment', id: 'environment',
     patch: (row) => ({ requestedAccess: { ...row.requestedAccess, environment: 'sandbox' } }),
+  },
+  {
+    name: 'Operation access mode', id: 'operation-access',
+    patch: (row) => ({ requestedAccess: {
+      ...row.requestedAccess,
+      operationAccess: 'selected_operations',
+      operationRefs: [`operation:v1:${'a'.repeat(64)}`],
+    } }),
+  },
+  {
+    name: 'selected Operation reference', id: 'operation-ref',
+    patch: (row) => ({ requestedAccess: {
+      ...row.requestedAccess,
+      operationAccess: 'selected_operations',
+      operationRefs: [`operation:v1:${'b'.repeat(64)}`],
+    } }),
+  },
+  {
+    name: 'selected Operation cardinality', id: 'operation-cardinality',
+    patch: (row) => ({ requestedAccess: {
+      ...row.requestedAccess,
+      operationAccess: 'selected_operations',
+      operationRefs: [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`],
+    } }),
   },
   {
     name: 'per-invocation spend cap', id: 'per-invocation-spend',
@@ -689,11 +717,80 @@ describe('Agent Access consequence proof reservation', () => {
       ...(await sourceArgs(command, 'nonce:reserve:exact:first')),
     })
     expect(first).toMatchObject({ kind: 'reserved', grantRef: oauthGrant.grantRef, grantRevision: 2 })
+    if (first.kind !== 'reserved') throw new Error('exact reservation missing')
 
     await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
       ...command,
       ...(await sourceArgs(command, 'nonce:reserve:exact:replay')),
     })).resolves.toEqual({ ...first, kind: 'replayed' })
+
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('agentAccessOAuthGrants')
+        .withIndex('by_grantRef', (query) => query.eq('grantRef', oauthGrant.grantRef))
+        .unique()
+      if (row === null) throw new Error('grant_missing')
+      await ctx.db.patch(row._id, {
+        status: 'approved',
+        revision: row.revision + 1,
+        approvedAt: Date.now(),
+        keyId: 'ak_completed_replay',
+      })
+    })
+    const completedFacts = await reservationFacts(backend)
+    const completedReplay = await owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...command,
+      ...(await sourceArgs(command, 'nonce:reserve:exact:completed-replay')),
+    })
+    expect(completedReplay).toMatchObject({
+      kind: 'replayed',
+      grantRef: oauthGrant.grantRef,
+      grantRevision: 3,
+      commandDigest: first.commandDigest,
+      correlationRef: first.correlationRef,
+    })
+    expect(await reservationFacts(backend)).toEqual(completedFacts)
+
+    const changedProof = {
+      ...command,
+      proof: proofEvidence('rev_exact_changed'),
+    }
+    await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...changedProof,
+      ...(await sourceArgs(changedProof, 'nonce:reserve:exact:changed-proof')),
+    })).resolves.toEqual({ kind: 'conflict', code: 'invalid_state' })
+
+    const changedAuthorityMode = { ...command, authorityMode: 'approve_each' as const }
+    await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...changedAuthorityMode,
+      ...(await sourceArgs(changedAuthorityMode, 'nonce:reserve:exact:changed-mode')),
+    })).resolves.toEqual({ kind: 'conflict', code: 'stale_target' })
+
+    const changedTarget = { ...command, expectedTargetRevision: 2 }
+    await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...changedTarget,
+      ...(await sourceArgs(changedTarget, 'nonce:reserve:exact:changed-target')),
+    })).resolves.toEqual({ kind: 'conflict', code: 'stale_target' })
+
+    const foreignOwner = await materializeReservationOwner(backend, 'exact-foreign')
+    await expect(foreignOwner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...command,
+      ...(await sourceArgs(command, 'nonce:reserve:exact:foreign-owner')),
+    })).resolves.toEqual({ kind: 'conflict', code: 'invalid_state' })
+    expect(await reservationFacts(backend)).toEqual(completedFacts)
+
+    await backend.run(async (ctx) => {
+      const ownership = await ctx.db.query('accountOwnerships')
+        .withIndex('by_ownerPrincipalRef_and_lifecycle', (query) => query
+          .eq('ownerPrincipalRef', owner.principalRef).eq('lifecycle', 'active'))
+        .unique()
+      if (ownership === null) throw new Error('owner_ownership_missing')
+      await ctx.db.patch(ownership._id, { revision: ownership.revision + 1 })
+    })
+    await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...command,
+      ...(await sourceArgs(command, 'nonce:reserve:exact:changed-owner-authority')),
+    })).resolves.toEqual({ kind: 'refused', code: 'command_changed' })
+    expect(await reservationFacts(backend)).toEqual(completedFacts)
 
     await backend.run(async (ctx) => {
       const row = await ctx.db.query('agentAccessOAuthGrants')
@@ -713,17 +810,17 @@ describe('Agent Access consequence proof reservation', () => {
       ...(await sourceArgs(changed, 'nonce:reserve:exact:changed')),
     })).resolves.toEqual({ kind: 'refused', code: 'command_changed' })
 
-    const facts = await reservationFacts(backend)
-    expect(facts.proofs).toHaveLength(1)
-    expect(facts.proofs[0]).toMatchObject({
+    const refusalFacts = await reservationFacts(backend)
+    expect(refusalFacts.proofs).toHaveLength(1)
+    expect(refusalFacts.proofs[0]).toMatchObject({
       reverificationId: 'rev_exact',
       factorEvidence: { firstFactorAgeMinutes: 30, secondFactorAgeMinutes: 0 },
     })
-    expect(facts.proofs[0]?.verifiedAt).toBeGreaterThan(Date.now() - 5_000)
-    expect(facts.audits).toHaveLength(1)
-    expect(facts.grants[0]).toMatchObject({
-      status: 'issuing',
-      revision: 2,
+    expect(refusalFacts.proofs[0]?.verifiedAt).toBeGreaterThan(Date.now() - 5_000)
+    expect(refusalFacts.audits).toHaveLength(1)
+    expect(refusalFacts.grants[0]).toMatchObject({
+      status: 'approved',
+      revision: 3,
       consequenceReservation: {
         action: 'agent_access.create',
         reverificationId: 'rev_exact',
@@ -731,6 +828,27 @@ describe('Agent Access consequence proof reservation', () => {
         activeAccountRef: owner.accountRef,
       },
     })
+
+    for (let index = 0; index < 4; index += 1) {
+      const capacityGrant = await insertReservableGrant(backend, `device:reserve-exact-capacity-${index}`)
+      const capacityCommand = reservationCommand({
+        grantRef: capacityGrant.grantRef,
+        reverificationId: `rev_exact_capacity_${index}`,
+      })
+      await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+        ...capacityCommand,
+        ...(await sourceArgs(capacityCommand, `nonce:reserve:exact:capacity:${index}`)),
+      })).resolves.toMatchObject({ kind: 'reserved' })
+    }
+    const limitedGrant = await insertReservableGrant(backend, 'device:reserve-exact-capacity-limited')
+    const limitedCommand = reservationCommand({
+      grantRef: limitedGrant.grantRef,
+      reverificationId: 'rev_exact_capacity_limited',
+    })
+    await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...limitedCommand,
+      ...(await sourceArgs(limitedCommand, 'nonce:reserve:exact:capacity:limited')),
+    })).resolves.toMatchObject({ kind: 'rate_limited' })
   })
 
   it.each(consentMaterialMutations)(

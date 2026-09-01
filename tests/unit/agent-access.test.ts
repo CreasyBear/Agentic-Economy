@@ -7,6 +7,7 @@ import {
   MARKET_OPERATIONS_INVOKE_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
   issueAgentAccessKey,
+  agentAccessOperationSelectionDigest,
   listAgentAccessKeys,
   projectAgentAccessKey,
 } from '../../src/modules/agent-access/agent-access'
@@ -14,6 +15,8 @@ import { CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_S
 import { defaultSandboxAgentAccessPolicy } from '../../src/modules/agent-access/sandbox-policy'
 import { buildProductionAgentAccessPolicy } from '../../src/modules/agent-access/production-policy'
 import { issuedAgentCanonicalRefs } from '../../src/modules/agent-access/issued-agent-binding'
+import { createLocalE2EAgentAccessKeyApi } from '../../src/lib/server/local-e2e-agent-key'
+import { LOCAL_E2E_OPERATOR_PRINCIPAL } from '../../src/lib/server/local-e2e-bypass'
 
 const policy = defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
 const scopes = [
@@ -29,6 +32,7 @@ const canonicalClaims = {
   aeApplicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
   aeEnvironment: 'sandbox',
   aeScopes: JSON.stringify(scopes),
+  aeOperationSelectionDigest: agentAccessOperationSelectionDigest({ operationAccess: 'all_admitted', operationRefs: [] }),
 }
 
 function existingKey(overrides: Record<string, unknown> = {}) {
@@ -211,6 +215,100 @@ describe('agent access', () => {
       policy,
     }))
     expect(getSecret).toHaveBeenCalledWith('key_123')
+  })
+
+  it('uses the local E2E key adapter through canonical binding and distinct issuances', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+    vi.stubEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'true')
+    const api = createLocalE2EAgentAccessKeyApi()
+    const registerBinding = vi.fn(async (binding: Parameters<Parameters<typeof issueAgentAccessKey>[0]['registerBinding']>[0]) => ({
+      ...recordedBinding(binding.grantRef),
+      expiresAt: binding.expiresAt,
+    }))
+    const issue = async (idempotencyKey: string, grantRef: string, name: string) => await issueAgentAccessKey({
+      ownerId: LOCAL_E2E_OPERATOR_PRINCIPAL,
+      principal: { userId: LOCAL_E2E_OPERATOR_PRINCIPAL },
+      input: {
+        name,
+        idempotencyKey,
+        grantRef,
+        scopes,
+        environment: 'sandbox',
+        expiresInSeconds: 60,
+      },
+      policy,
+      api,
+      registerBinding,
+      returnSecret: false,
+    })
+
+    try {
+      const first = await issue('local-canonical-first-12345678', 'grt_local_canonical_first', 'Local canonical first')
+      const replay = await issue('local-canonical-first-12345678', 'grt_local_canonical_first', 'Local canonical first')
+      const second = await issue('local-canonical-second-12345678', 'grt_local_canonical_second', 'Local canonical second')
+
+      expect(first).toMatchObject({ kind: 'created', grantRef: 'grt_local_canonical_first' })
+      expect(replay).toMatchObject({ kind: 'replayed', keyId: first.kind === 'error' ? '' : first.keyId })
+      expect(second).toMatchObject({ kind: 'created', grantRef: 'grt_local_canonical_second' })
+      if (first.kind === 'error' || second.kind === 'error') throw new Error('local issuance failed')
+      expect(second.keyId).not.toBe(first.keyId)
+      expect(registerBinding).toHaveBeenCalledTimes(3)
+      expect(registerBinding).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        issuanceKey: 'local-canonical-first-12345678',
+        grantRef: 'grt_local_canonical_first',
+        credentialId: first.keyId,
+        displayName: 'Local canonical first',
+        applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
+        environment: 'sandbox',
+        scopes,
+        authorityMode: 'inspect_only',
+        operationAccess: 'all_admitted',
+        operationRefs: [],
+        policy,
+      }))
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('binds Clerk replay to one compact canonical Operation-selection digest', async () => {
+    const operationRefs = [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`]
+    const selectedPolicy = { ...policy, operationAccess: 'selected_operations' as const, operationRefs }
+    const create = vi.fn().mockResolvedValue({ id: 'key_selected', secret: 'selected_secret' })
+    const registerBinding = vi.fn().mockResolvedValue(recordedBinding('selected-12345678'))
+    const input = {
+      name: 'Selected assistant', idempotencyKey: 'selected-12345678',
+      operationAccess: 'selected_operations' as const, operationRefs: [...operationRefs].reverse(),
+    }
+    await expect(issueAgentAccessKey({
+      principal: { userId: 'owner_123' }, input, policy: selectedPolicy,
+      api: { create, getSecret: vi.fn().mockResolvedValue({ secret: 'selected_secret' }), list: vi.fn().mockResolvedValue({ data: [] }) },
+      registerBinding,
+    })).resolves.toMatchObject({ kind: 'created' })
+    const claims = create.mock.calls[0]?.[0]?.claims as Record<string, string>
+    expect(claims.aeOperationSelectionDigest).toBe(agentAccessOperationSelectionDigest(selectedPolicy))
+    expect(JSON.stringify(claims)).not.toContain(operationRefs[0])
+    expect(JSON.stringify(claims)).not.toContain(operationRefs[1])
+
+    const existing = existingKey({
+      id: 'key_selected',
+      claims: { ...canonicalClaims, ...claims, aeDisplayName: input.name, aeIssuanceKey: input.idempotencyKey, aeGrantRef: input.idempotencyKey },
+    })
+    await expect(issueAgentAccessKey({
+      principal: { userId: 'owner_123' }, input, policy: selectedPolicy,
+      api: { create: vi.fn(), getSecret: vi.fn().mockResolvedValue({ secret: 'selected_secret' }), list: vi.fn().mockResolvedValue({ data: [existing] }) },
+      registerBinding,
+    })).resolves.toMatchObject({ kind: 'replayed' })
+    const narrowedPolicy = { ...policy, operationAccess: 'selected_operations' as const, operationRefs: [operationRefs[0]!] }
+    await expect(issueAgentAccessKey({
+      principal: { userId: 'owner_123' },
+      input: { ...input, operationRefs: [operationRefs[0]!] },
+      policy: narrowedPolicy,
+      api: { create: vi.fn(), getSecret: vi.fn(), list: vi.fn().mockResolvedValue({ data: [existing] }) },
+      registerBinding,
+    })).resolves.toEqual({ kind: 'error', code: 'idempotency_conflict', retryable: false })
   })
 
   it('binds a fresh key through one atomic owner-authorized registration', async () => {

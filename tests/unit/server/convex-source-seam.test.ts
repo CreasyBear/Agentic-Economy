@@ -16,6 +16,7 @@ import {
   sourceQuery,
   sourceAction,
 } from '@/lib/server/convex-source'
+import { LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 
 import { convexUrl } from './server-seams-harness'
 
@@ -90,6 +91,16 @@ describe('server Convex source seam', () => {
       path: 'interactiveAuthority:materializeCurrentInteractiveAuthority',
       authorization: expect.stringMatching(/^Convex local-admin-key:/),
     }])
+    const authorization = calls[0]?.authorization
+    if (authorization === undefined) throw new Error('local E2E admin identity missing')
+    const actingAs = JSON.parse(atob(authorization.slice('Convex local-admin-key:'.length))) as {
+      subject: string
+      tokenIdentifier: string
+    }
+    expect(actingAs).toMatchObject({
+      subject: LOCAL_E2E_OPERATOR_PRINCIPAL,
+      tokenIdentifier: `https://convex.test|${LOCAL_E2E_OPERATOR_PRINCIPAL}`,
+    })
   })
 
   it('fails closed before an authenticated source call when canonical expiry cannot be armed', async () => {

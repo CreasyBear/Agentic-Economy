@@ -20,7 +20,7 @@
  * Fixed principal every local-E2E bypass surface impersonates, so bypass
  * identity stays one shared seam instead of per-file literals.
  */
-export const LOCAL_E2E_OPERATOR_PRINCIPAL = 'local-e2e-operator' as const
+export const LOCAL_E2E_OPERATOR_PRINCIPAL = 'dev-seed-owner-session' as const
 
 export function isLocalE2EAuthBypassEnabled(): boolean {
   if (process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E !== 'true') {

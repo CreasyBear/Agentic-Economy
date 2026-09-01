@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeFactList, type AeFact } from '@/components/ae/data/AeFactList'
@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { InlineEditField } from '@/components/ui/inline-edit-field'
 
 import type {
   AgentDetail,
@@ -33,6 +34,8 @@ export type AeAgentOperatorConsoleProps = Readonly<{
   loading: boolean
   onRevokeCredential: (credentialRef: string) => void | Promise<void>
   onDisconnectAgent: (principalRef: string) => void | Promise<void>
+  onRenameAgent?: (principalRef: string, expectedRevision: number, displayName: string) => Promise<boolean>
+  agentHistory?: ReactNode
   lifecyclePending?: Readonly<{ kind: 'credential' | 'agent'; ref: string }>
   approvals: readonly PendingOperationApproval[]
   approvalsLoading: boolean
@@ -52,6 +55,8 @@ export function AeAgentOperatorConsole({
   loading,
   onRevokeCredential,
   onDisconnectAgent,
+  onRenameAgent,
+  agentHistory,
   lifecyclePending,
   approvals,
   approvalsLoading,
@@ -88,7 +93,19 @@ export function AeAgentOperatorConsole({
         id: 'name',
         accessorFn: (item) => item.displayName,
         header: ({ column }) => <AeOperatorSortableHeader label="Name" column={column} />,
-        cell: ({ row }) => <span className="font-medium text-foreground">{row.original.displayName}</span>,
+        cell: ({ row }) => (
+          <InlineEditField
+            value={row.original.displayName}
+            label={`Rename ${row.original.displayName}`}
+            readOnly={onRenameAgent === undefined}
+            errorMessage="Could not rename this Agent. Current saved name has been restored."
+            onSave={async (displayName) => onRenameAgent?.(
+              row.original.principalRef,
+              row.original.principalRevision,
+              displayName,
+            ) ?? false}
+          />
+        ),
       },
       {
         id: 'status',
@@ -114,6 +131,14 @@ export function AeAgentOperatorConsole({
           : <span className="font-mono tabular-nums">{String(row.original.currentCredentialGeneration)}</span>,
       },
       {
+        id: 'lastAuthenticated',
+        accessorFn: (item) => item.lastAuthenticatedAt ?? 0,
+        header: ({ column }) => <AeOperatorSortableHeader label="Last authenticated" column={column} />,
+        cell: ({ row }) => row.original.lastAuthenticatedAt === undefined
+          ? 'Not recorded'
+          : <span className="font-mono tabular-nums">{formatTimestamp(row.original.lastAuthenticatedAt)}</span>,
+      },
+      {
         id: 'lastSeen',
         accessorFn: (item) => item.lastSeenAt ?? 0,
         header: ({ column }) => <AeOperatorSortableHeader label="Last seen" column={column} />,
@@ -122,7 +147,7 @@ export function AeAgentOperatorConsole({
           : <span className="font-mono tabular-nums">{formatTimestamp(row.original.lastSeenAt)}</span>,
       },
     ],
-    [],
+    [onRenameAgent],
   )
 
   const approvalsSection = (
@@ -295,6 +320,7 @@ export function AeAgentOperatorConsole({
               {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
               onRequestRevoke={(credentialRef, generation, trigger) => requestCredentialRevoke(selected, credentialRef, generation, trigger)}
             />
+            {agentHistory}
           </div>
         )}
       </AeRecordSheet>
@@ -323,8 +349,8 @@ export function AeAgentOperatorConsole({
 
       <AeSection title="Recovery" description="The next step depends on what stopped the call.">
         <ul className="m-0 grid list-none divide-y divide-border p-0">
-          <RecoveryItem title="Lost, expired, or revoked agent key">
-            Start a new access request from the agent. AE delivers the replacement caller key to that agent once; supplier credentials stay server-side.
+          <RecoveryItem title="Rotate, replace, or recover a key">
+            For planned rotation, start a replacement request from the agent; the old credential remains active until the successor is delivered. If compromise is suspected, revoke the current credential first, then start replacement. AE delivers the replacement caller key once; supplier credentials stay server-side.
           </RecoveryItem>
           <RecoveryItem title="Stale access grant">
             Revoke the affected access, then approve a new request so the key and current grant are issued together.
@@ -449,6 +475,11 @@ function agentFacts(detail: AgentDetail): readonly AeFact[] {
       ? 'None'
       : String(detail.agent.currentCredentialGeneration),
       mono: true },
+    { label: 'Last authenticated', value: detail.agent.lastAuthenticatedAt === undefined
+      ? 'Not recorded'
+      : formatTimestamp(detail.agent.lastAuthenticatedAt),
+      definition: 'Recorded at most once every 15 minutes for the current credential.',
+      mono: true },
     { label: 'Last seen', value: detail.agent.lastSeenAt === undefined
       ? 'No activity recorded'
       : formatTimestamp(detail.agent.lastSeenAt),
@@ -464,6 +495,7 @@ function agentFacts(detail: AgentDetail): readonly AeFact[] {
     { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentInvocations), mono: true},
     { label: 'Authority', value: scopeLabel(detail.authorityMode) },
     { label: 'Scopes', value: detail.scopes.length === 0 ? 'None' : detail.scopes.join(', ') },
+    { label: 'Operations', value: operationAccessLabel(detail) },
     { label: 'Balance', value: formatAmount(accountBalance), mono: true},
     { label: 'Calls', value: String(detail.usage?.callCount ?? 0), mono: true},
     { label: 'Spend', value: formatAmount(detail.usage?.grossSpend ?? zeroBalance), mono: true},
@@ -490,7 +522,17 @@ function CredentialHistory({
             key={credential.credentialRef}
             className="flex flex-wrap items-center justify-between gap-intra py-intra text-sm"
           >
-            <span>Generation {credential.generation}</span>
+            <span className="grid gap-1">
+              <span>Generation {credential.generation}</span>
+              <span className="text-xs text-muted-foreground">
+                Issued {formatTimestamp(credential.issuedAt)} · expires {formatTimestamp(credential.expiresAt)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Last authenticated {credential.lastAuthenticatedAt === undefined
+                  ? 'not recorded'
+                  : formatTimestamp(credential.lastAuthenticatedAt)}
+              </span>
+            </span>
             <span className="flex items-center gap-2">
               <Badge variant={credential.lifecycle === 'active' ? 'default' : 'outline'}>
                 {credential.lifecycle === 'active'
@@ -592,6 +634,14 @@ function scopeLabel(mode: AgentDetail['authorityMode']): string {
       return exhaustive
     }
   }
+}
+
+function operationAccessLabel(detail: AgentDetail): string {
+  if (detail.grant === undefined) return 'Unavailable'
+  if (detail.grant.operationAccess === 'all_admitted') return 'All admitted Operations'
+  return detail.grant.operationRefs.length === 0
+    ? 'None'
+    : detail.grant.operationRefs.join(', ')
 }
 
 function redactedKeyId(keyId: string): string {

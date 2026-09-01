@@ -11,6 +11,12 @@ const mocks = vi.hoisted(() => ({
     authorityProvenance: {},
   } as Record<string, unknown>,
   invoke: vi.fn(async (_ctx: unknown, args: Record<string, unknown>) => args.principal),
+  list: vi.fn(async (_ctx: unknown, args: Record<string, unknown>) => ({
+    page: [],
+    isDone: true,
+    continueCursor: '',
+    principal: args.principal,
+  })),
   readStatus: vi.fn(async (_ctx: unknown, args: Record<string, unknown>) => ({
     kind: 'found', invocationRef: args.invocationRef, operationRef: 'operation:test', state: 'pending',
   })),
@@ -50,6 +56,7 @@ vi.mock('../../../convex/authz', async (importOriginal) => ({
 vi.mock('../../../convex/lib/operationInvocations/invokeActions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../convex/lib/operationInvocations/invokeActions')>()),
   invokeHandler: mocks.invoke,
+  listAgentInvocationsHandler: mocks.list,
   readInvocationStatusHandler: mocks.readStatus,
   cancelInvocationHandler: mocks.cancel,
   reconcileInvocationHandler: mocks.reconcile,
@@ -69,6 +76,7 @@ import {
   cancelOwnerInvocation,
   decideOperationApproval,
   invoke,
+  listInvocations,
   listPendingOperationApprovals,
   readInvocationStatus,
   readOwnerInvocationStatus,
@@ -82,6 +90,7 @@ import { registerGrantForServer } from '../../../convex/agentAccessPolicy'
 import { validateCanonicalAgentDelegation } from '../../../convex/lib/canonicalAgentAuthority'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import { createCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 type Handler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
 type IsolationCaseKind =
@@ -103,6 +112,7 @@ const ISOLATION_CASES = [
   'stale_generation',
 ] as const satisfies readonly IsolationCaseKind[]
 const invokeBoundary = (invoke as unknown as { _handler: Handler })._handler
+const listBoundary = (listInvocations as unknown as { _handler: Handler })._handler
 const statusBoundary = (readInvocationStatus as unknown as { _handler: Handler })._handler
 const cancelBoundary = (cancelInvocation as unknown as { _handler: Handler })._handler
 const reconcileBoundary = (reconcileInvocation as unknown as { _handler: Handler })._handler
@@ -147,9 +157,18 @@ function agentArgs() {
     operationKey: 'surface:http:agent-operation-invoke',
     correlationId: 'correlation:operation:1',
     principal: callerPrincipal,
-    operationRef: 'operation:test',
+    operationRef: OPERATION_REF,
     input: { query: 'btc' },
     idempotencyKey: 'idempotency:operation:1',
+  }
+}
+
+function agentListArgs() {
+  return {
+    operationKey: 'surface:http:agent-operation-list',
+    correlationId: 'correlation:operation-list:1',
+    principal: callerPrincipal,
+    paginationOpts: { cursor: null, numItems: 20 },
   }
 }
 
@@ -208,8 +227,55 @@ const PRINCIPAL_REF = canonicalPrincipal.principalId
 const ACCOUNT_REF = canonicalPrincipal.ownerId
 const GRANT_REF = `grt_${'7'.repeat(32)}`
 const OWNERSHIP_REF = `own_${'8'.repeat(32)}`
-const OPERATION_REF = 'operation:test'
+const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
+const OTHER_OPERATION_REF = `operation:v1:${'b'.repeat(64)}`
 const PARENT_GRANT_REF = `grt_${'9'.repeat(32)}`
+const AUTHORITY_POLICY = {
+  format: 'ae.agent-access-policy:v1' as const,
+  operationAccess: 'all_admitted' as const,
+  environment: 'production' as const,
+  budget: {
+    budgetPolicyRef: 'budget:authority-boundary',
+    generation: 4,
+    currency: 'USD',
+    exponent: 2,
+    maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+    maximumDailySpend: { currency: 'USD', units: '1000', exponent: 2 },
+    maximumMonthlySpend: { currency: 'USD', units: '10000', exponent: 2 },
+    maximumConcurrentInvocations: 2,
+  },
+  rate: {
+    ratePolicyRef: 'rate:authority-boundary',
+    generation: 4,
+    maximumCallsPerMinute: 10,
+    maximumCallsPerHour: 100,
+  },
+}
+const AUTHORITY_POLICY_DIGEST = canonicalDigest(AUTHORITY_POLICY as never)
+
+function selectedAuthorityPolicy(operationRefs: readonly string[]) {
+  const policy = {
+    ...AUTHORITY_POLICY,
+    format: 'ae.agent-access-policy:v2' as const,
+    operationAccess: 'selected_operations' as const,
+    operationRefs: [...operationRefs].sort(),
+  }
+  return { policy, policyDigest: canonicalDigest(policy as never) }
+}
+
+function selectedAccessGrant(operationRefs: readonly string[]) {
+  const { policy, policyDigest } = selectedAuthorityPolicy(operationRefs)
+  return {
+    accessGrant: {
+      format: 'ae.agent-access-grant:v2',
+      operationAccess: 'selected_operations',
+      operationRefs: [...policy.operationRefs],
+      policy,
+      policyDigest,
+    },
+    storedAgent: { policyDigest },
+  }
+}
 
 function authorityRows(overrides: Readonly<{
   binding?: Record<string, unknown>
@@ -240,14 +306,20 @@ function authorityRows(overrides: Readonly<{
     }],
     agentAccessPrincipals: [{
       _id: 'agentAccessPrincipals:1', ...canonicalPrincipal, grantGeneration: 4,
-      policyDigest: 'sha256:policy', lifecycle: 'active', ...overrides.storedAgent,
+      policyDigest: AUTHORITY_POLICY_DIGEST, lifecycle: 'active', ...overrides.storedAgent,
     }],
     agentAccessGrants: [{
-      _id: 'agentAccessGrants:1', grantRef: GRANT_REF, principalId: PRINCIPAL_REF,
+      _id: 'agentAccessGrants:1', _creationTime: NOW - 1_000,
+      format: 'ae.agent-access-grant:v1', grantRef: GRANT_REF, principalId: PRINCIPAL_REF,
       ownerId: ACCOUNT_REF, credentialId: callerPrincipal.credentialId,
       applicationRef: callerPrincipal.applicationRef, environment: 'production',
-      authorityMode: 'bounded_mandate', generation: 4, policyDigest: 'sha256:policy',
-      lifecycle: 'active', expiresAt: NOW + 50_000, ...overrides.accessGrant,
+      operationAccess: 'all_admitted', authorityMode: 'bounded_mandate',
+      policy: AUTHORITY_POLICY,
+      budgetPolicyRef: AUTHORITY_POLICY.budget.budgetPolicyRef,
+      ratePolicyRef: AUTHORITY_POLICY.rate.ratePolicyRef,
+      generation: 4, policyDigest: AUTHORITY_POLICY_DIGEST,
+      lifecycle: 'active', createdAt: NOW - 1_000, updatedAt: NOW - 1_000,
+      expiresAt: NOW + 50_000, ...overrides.accessGrant,
     }],
     authorityDelegationGrants: [
       ...(overrides.parentDelegation === undefined || overrides.parentDelegation === null ? [] : [{
@@ -290,9 +362,22 @@ function authorityRows(overrides: Readonly<{
       _id: 'capabilityOperationInvocations:1', invocationRef: 'invocation:canonical',
       principalId: PRINCIPAL_REF, ownerId: ACCOUNT_REF, credentialId: callerPrincipal.credentialId,
       applicationRef: callerPrincipal.applicationRef, environment: 'production',
-      grantRef: GRANT_REF, grantGeneration: 4, policyDigest: 'sha256:policy',
+      grantRef: GRANT_REF, grantGeneration: 4, policyDigest: AUTHORITY_POLICY_DIGEST,
       grantExpiresAt: NOW + 50_000, operationRef: OPERATION_REF, ...overrides.invocation,
     }],
+  }
+}
+
+function liveAgentActionContext(rows: ReturnType<typeof authorityRows>) {
+  const db = new AuthorityMemoryDb(rows)
+  return {
+    db,
+    runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+      if (path(reference) === 'capabilityOperationInvocations:resolveInvocationAgentAuthority') {
+        return await resolveAgentBoundary({ db }, args)
+      }
+      throw new Error(`unexpected_mutation:${path(reference)}`)
+    }),
   }
 }
 
@@ -305,7 +390,7 @@ function registrationArgs(overrides: Record<string, unknown> = {}) {
     scopes: callerPrincipal.scopes,
     authorityMode: callerPrincipal.authorityMode,
     grantGeneration: 4,
-    policyDigest: 'sha256:policy',
+    policyDigest: AUTHORITY_POLICY_DIGEST,
     lifecycle: 'active',
     expiresAt: NOW + 50_000,
     seenAt: NOW,
@@ -412,6 +497,75 @@ describe('capability operation canonical authority boundary', () => {
       { principal: callerPrincipal, operationRef: OPERATION_REF },
     )
     expect(result).toEqual(canonicalPrincipal)
+  })
+
+  it('admits v1 all-admitted and v2 selected grants only when Agent policy independently allows the Operation', async () => {
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows()) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toEqual(canonicalPrincipal)
+
+    const selected = selectedAccessGrant([OPERATION_REF])
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows(selected)) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toEqual(canonicalPrincipal)
+  })
+
+  it('fails closed when Agent policy and Delegation disagree or the stored grant is invalid', async () => {
+    const policyDenies = selectedAccessGrant([OTHER_OPERATION_REF])
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows(policyDenies)) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+
+    const policyAllows = selectedAccessGrant([OPERATION_REF])
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows({
+        ...policyAllows,
+        delegation: { resourceRefs: [OTHER_OPERATION_REF] },
+      })) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows({ accessGrant: { operationRefs: [] } })) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+  })
+
+  it('lists the Agent own receipts through live v1 or selected authority without treating listing as an Operation', async () => {
+    const legacyContext = liveAgentActionContext(authorityRows({
+      delegation: { resourceRefs: ['*'] },
+    }))
+    await expect(listBoundary(legacyContext, agentListArgs())).resolves.toMatchObject({
+      isDone: true,
+      principal: canonicalPrincipal,
+    })
+    expect(legacyContext.runMutation).toHaveBeenCalledWith(expect.anything(), {
+      principal: callerPrincipal,
+      receiptList: true,
+    })
+
+    const selectedContext = liveAgentActionContext(authorityRows(selectedAccessGrant([OPERATION_REF])))
+    await expect(listBoundary(selectedContext, agentListArgs())).resolves.toMatchObject({
+      isDone: true,
+      principal: canonicalPrincipal,
+    })
+    expect(mocks.list).toHaveBeenCalledTimes(2)
+    for (const call of mocks.list.mock.calls) {
+      expect(call[1]).toEqual(expect.objectContaining({ principal: canonicalPrincipal }))
+    }
+
+    const unselectedContext = liveAgentActionContext(authorityRows({
+      ...selectedAccessGrant([OPERATION_REF]),
+      delegation: { resourceRefs: [OPERATION_REF, OTHER_OPERATION_REF] },
+    }))
+    await expect(invokeBoundary(unselectedContext, {
+      ...agentArgs(),
+      operationRef: OTHER_OPERATION_REF,
+    })).resolves.toMatchObject({ kind: 'refused', code: 'grant_not_found' })
+    expect(mocks.invoke).not.toHaveBeenCalled()
   })
 
   it('accepts a generation-bound, monotonically narrowed multi-hop delegation chain', async () => {
@@ -616,6 +770,15 @@ describe('capability operation canonical authority boundary', () => {
       { principal: callerPrincipal, invocationRef: 'invocation:canonical' },
     )).resolves.toEqual(canonicalPrincipal)
 
+    const changedPolicy = selectedAccessGrant([OTHER_OPERATION_REF])
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows({
+        ...changedPolicy,
+        invocation: { policyDigest: changedPolicy.accessGrant.policyDigest },
+      })) },
+      { principal: callerPrincipal, invocationRef: 'invocation:canonical' },
+    )).resolves.toEqual(canonicalPrincipal)
+
     await expect(resolveAgentBoundary(
       { db: new AuthorityMemoryDb(authorityRows({
         invocation: { grantGeneration: 3 },
@@ -667,7 +830,7 @@ describe('capability operation canonical authority boundary', () => {
         ownerTokenIdentifier: callerPrincipal.credentialId,
         credentialId: callerPrincipal.credentialId,
         grantGeneration: 4,
-        policyDigest: 'sha256:policy',
+        policyDigest: AUTHORITY_POLICY_DIGEST,
         scopes: ['market_operations:invoke'],
         recordedAt: NOW,
         lastSeenAt: NOW,
@@ -765,7 +928,7 @@ describe('capability operation canonical authority boundary', () => {
         credentialId: callerPrincipal.credentialId,
         grantRef: GRANT_REF,
         grantGeneration: 4,
-        policyDigest: 'sha256:policy',
+        policyDigest: AUTHORITY_POLICY_DIGEST,
         expiresAt: NOW + 50_000,
       },
     })
@@ -895,7 +1058,7 @@ const grantRegistrationMaterial = {
   environment: callerPrincipal.environment,
   authorityMode: callerPrincipal.authorityMode,
   generation: 4,
-  policyDigest: 'sha256:policy',
+  policyDigest: AUTHORITY_POLICY_DIGEST,
   lifecycle: 'active',
 }
 

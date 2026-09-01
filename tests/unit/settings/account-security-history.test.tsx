@@ -24,6 +24,7 @@ vi.mock('@tanstack/react-router', async () => {
 })
 
 import { AeAccountSecurityHistory } from '@/components/ae/settings/AeAccountSecurityHistory'
+import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecurityHistory'
 import type { AccountSecurityHistoryResult } from '@/modules/security/account-security'
 
 afterEach(() => {
@@ -102,6 +103,40 @@ describe('account security history', () => {
     await waitFor(() => expect(screen.getByText('Session ended')).toBeTruthy())
     expect(screen.getByText('Session revoked')).toBeTruthy()
     expect(readHistory).toHaveBeenCalledWith({ data: { cursor: 'cursor-1' } })
+  })
+})
+
+describe('Agent security history', () => {
+  it('loads only the selected Principal and omits raw actor and target references', async () => {
+    const principalRef = `prn_${'a'.repeat(32)}`
+    readHistory.mockResolvedValueOnce({
+      kind: 'available',
+      page: {
+        items: [{
+          eventRef: 'audit:agent:rename-safe',
+          eventType: 'agent.renamed',
+          actorKind: 'owner',
+          actorRef: `prn_${'b'.repeat(32)}`,
+          targetType: 'agent',
+          targetRef: principalRef,
+          outcome: 'renamed',
+          sourceSystem: 'ae_recorded',
+          recordedAt: 1_700_000_060_000,
+          correlationRef: 'agent:rename-safe',
+        }],
+        continueCursor: '',
+        isDone: true,
+      },
+    })
+
+    render(<AeAgentSecurityHistory principalRef={principalRef} />)
+
+    expect(await screen.findByText('Agent renamed')).toBeTruthy()
+    expect(screen.getByText('AE recorded')).toBeTruthy()
+    expect(screen.getByText('agent:rename-safe')).toBeTruthy()
+    expect(readHistory).toHaveBeenCalledWith({ data: { principalRef } })
+    expect(document.body.textContent).not.toContain(principalRef)
+    expect(document.body.textContent).not.toContain(`prn_${'b'.repeat(32)}`)
   })
 })
 

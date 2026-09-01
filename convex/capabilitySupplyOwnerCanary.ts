@@ -201,6 +201,7 @@ function operationGrant(grant: AgentAccessGrant): OperationInvokeGrant {
     expiresAt: grant.expiresAt,
     lifecycle: 'active',
     operationAccess: grant.operationAccess,
+    operationRefs: grant.operationRefs,
   }
 }
 

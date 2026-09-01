@@ -46,6 +46,8 @@ export const Route = createFileRoute('/_operator/agent-access/authorize')({
       || details.clientName === undefined
       || details.mode === undefined
       || details.environment === undefined
+      || details.operationAccess === undefined
+      || details.operationRefs === undefined
       || details.expiresInSeconds === undefined
       || details.accessSummary === undefined) {
       throw new Error('authorization_details_missing')
@@ -64,6 +66,8 @@ export const Route = createFileRoute('/_operator/agent-access/authorize')({
         clientName: details.clientName,
         mode: details.mode,
         environment: details.environment,
+        operationAccess: details.operationAccess,
+        operationRefs: details.operationRefs,
         expiresInSeconds: details.expiresInSeconds,
         accessSummary: details.accessSummary,
       },

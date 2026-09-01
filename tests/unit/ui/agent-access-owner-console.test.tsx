@@ -41,6 +41,8 @@ const caller: AgentCredentialSource = {
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
     authorityMode: 'inspect_only',
+    operationAccess: 'all_admitted',
+    operationRefs: [],
     lifecycle: 'active',
     expiresAt: 604_800_000,
     budget: {
@@ -57,6 +59,16 @@ const caller: AgentCredentialSource = {
 }
 const directory = projectAgentDirectory([caller], [canonicalAgentRecord([caller])])
 const emptyDirectory: AgentDirectoryProjection = { items: [], details: [] }
+
+function directoryWithLastAuthentication(timestamp: number): AgentDirectoryProjection {
+  const canonical = canonicalAgentRecord([caller])
+  const current = canonical.credentials[0]
+  if (current === undefined) throw new Error('expected canonical credential')
+  return projectAgentDirectory([caller], [{
+    ...canonical,
+    credentials: [{ ...current, lastAuthenticatedAt: timestamp }],
+  }])
+}
 
 function consoleProps() {
   return {
@@ -111,6 +123,7 @@ describe('assistant access owner continuation anchors', () => {
         selectedPrincipalId={PRINCIPAL_ID}
         getAgentHref={(principalId) => `/agent-access?caller=${principalId}`}
         onClearSelectedPrincipal={onClearSelectedPrincipal}
+        agentHistory={<div>Agent renamed · AE recorded · rename:corr-safe</div>}
       />,
     )
 
@@ -119,6 +132,15 @@ describe('assistant access owner continuation anchors', () => {
     expect(dialog.textContent).not.toContain(KEY_ID_CANARY)
     expect(dialog.textContent).not.toContain(PRINCIPAL_ID)
     expect(dialog.textContent).toContain('Credential history')
+    expect(dialog.textContent).toContain('All admitted Operations')
+    expect(dialog.textContent).toContain('Issued')
+    expect(dialog.textContent).toContain('expires')
+    expect(dialog.textContent).toContain('Last authenticated')
+    expect(dialog.textContent).toContain('Not recorded')
+    expect(within(dialog).getByText('Last authenticated', { selector: 'dt' }).getAttribute('aria-description'))
+      .toBe('Recorded at most once every 15 minutes for the current credential.')
+    expect(dialog.textContent).toContain('Agent renamed')
+    expect(dialog.textContent).toContain('rename:corr-safe')
 
     const trigger = screen.getByRole('button', { name: 'Disconnect agent' })
     fireEvent.click(trigger)
@@ -155,6 +177,89 @@ describe('assistant access owner continuation anchors', () => {
     if (closeButton === undefined) throw new Error('sheet_close_button_missing')
     fireEvent.click(closeButton)
     expect(onClearSelectedPrincipal).toHaveBeenCalledOnce()
+  })
+
+  it('renames the exact current Principal revision', async () => {
+    const onRenameAgent = vi.fn(async () => true)
+    render(
+      <AeAgentOperatorConsole
+        {...consoleProps()}
+        onRenameAgent={onRenameAgent}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Route assistant' }))
+    const input = screen.getByRole('textbox', { name: 'Rename Route assistant' })
+    fireEvent.change(input, { target: { value: 'Research assistant' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onRenameAgent).toHaveBeenCalledWith(
+      PRINCIPAL_ID,
+      directory.items[0]?.principalRevision,
+      'Research assistant',
+    ))
+    expect(document.body.textContent).not.toContain(PRINCIPAL_ID)
+    expect(document.body.textContent).not.toContain(KEY_ID_CANARY)
+  })
+
+  it('shows canonical authentication separately from broader last-seen activity', () => {
+    const authenticatedAt = 60_000
+    render(
+      <AeAgentOperatorConsole
+        {...consoleProps()}
+        directory={directoryWithLastAuthentication(authenticatedAt)}
+        selectedPrincipalId={PRINCIPAL_ID}
+        getAgentHref={(principalRef) => `/agent-access?caller=${principalRef}`}
+      />,
+    )
+
+    const expected = new Intl.DateTimeFormat('en-AU', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(authenticatedAt))
+    expect(screen.getByRole('columnheader', { name: /Last authenticated/u, hidden: true })).toBeDefined()
+    const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    expect(screen.getAllByText(expected).length).toBeGreaterThanOrEqual(1)
+    expect(dialog.textContent).toContain(expected)
+    expect(dialog.textContent).toContain('Last seen')
+  })
+
+  it('shows the exact selected Operation authority', () => {
+    const operationRefs = [
+      `operation:v1:${'1'.repeat(64)}`,
+      `operation:v1:${'2'.repeat(64)}`,
+    ]
+    if (caller.grant === undefined) throw new Error('expected Agent grant')
+    const selectedCaller: AgentCredentialSource = {
+      ...caller,
+      grant: { ...caller.grant, operationAccess: 'selected_operations', operationRefs },
+    }
+    render(
+      <AeAgentOperatorConsole
+        {...consoleProps()}
+        directory={projectAgentDirectory([selectedCaller], [canonicalAgentRecord([selectedCaller])])}
+        selectedPrincipalId={PRINCIPAL_ID}
+        getAgentHref={(principalRef) => `/agent-access?caller=${principalRef}`}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    for (const operationRef of operationRefs) expect(dialog.textContent).toContain(operationRef)
+    expect(dialog.textContent).not.toContain('All admitted Operations')
+  })
+
+  it('restores the authoritative Agent name when rename is refused', async () => {
+    const onRenameAgent = vi.fn(async () => false)
+    render(<AeAgentOperatorConsole {...consoleProps()} onRenameAgent={onRenameAgent} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Route assistant' }))
+    const input = screen.getByRole('textbox', { name: 'Rename Route assistant' })
+    fireEvent.change(input, { target: { value: 'Unconfirmed name' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Current saved name has been restored')
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Rename Route assistant' }).value).toBe('Route assistant')
+    expect(document.body.textContent).not.toContain(PRINCIPAL_ID)
   })
 
   it('revokes once after confirmation and locks dismissal while the exact callback is pending', async () => {

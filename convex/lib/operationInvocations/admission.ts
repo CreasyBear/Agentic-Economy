@@ -29,6 +29,11 @@ import {
 import { currentOperationCommitmentsMatch } from '@/modules/capability-execution/current-operation-commitment'
 import { recordMarketEvidenceFact } from '../../marketEvidence'
 import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
+import {
+  normalizeStoredAgentAccessGrant,
+  normalizeStoredAgentAccessGrantForOperation,
+  type NormalizedStoredAgentAccessGrant,
+} from '@/modules/agent-access/policy'
 
 export function assertJsonObject(value: unknown): asserts value is Record<string, JsonValue> {
   if (!isRecord(value) || !isBoundedJsonValue(value)) throw new Error('operation_invocation_json_invalid')
@@ -299,6 +304,20 @@ function grantAdmissionRefusal(grant: GrantRow | null, args: ReserveArgs): Grant
     : { kind: 'refused', code: 'grant_generation_stale', retryable: false, nextAction: 'Refresh the agent grant and retry.' }
 }
 
+async function loadReservationGrant(
+  ctx: MutationCtx,
+  args: ReserveArgs,
+): Promise<GrantRefusal | { kind: 'granted'; grant: NormalizedStoredAgentAccessGrant }> {
+  const storedGrant = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_grantRef', (query) => query.eq('grantRef', args.grantRef))
+    .unique()
+  const refusal = grantAdmissionRefusal(storedGrant, args)
+  if (refusal !== null) return refusal
+  if (storedGrant === null) return missingGrant()
+  const grant = normalizeStoredAgentAccessGrantForOperation(storedGrant, args.operationRef)
+  return grant === undefined ? missingGrant() : { kind: 'granted', grant }
+}
+
 async function concurrencyAdmissionRefusal(
   ctx: MutationCtx,
   args: ReserveArgs,
@@ -333,18 +352,15 @@ export async function reserveHandler(
   const reservation = reservationFromArgs(args)
   if (existing !== null) return await replayExistingReservation(ctx, existing, args)
 
-  const grant = await ctx.db.query('agentAccessGrants')
-    .withIndex('by_grantRef', (query) => query.eq('grantRef', args.grantRef))
-    .unique()
-  const grantRefusal = grantAdmissionRefusal(grant, args)
-  if (grantRefusal !== null) return grantRefusal
-  if (grant === null) return missingGrant()
+  const grantDecision = await loadReservationGrant(ctx, args)
+  if (grantDecision.kind === 'refused') return grantDecision
+  const normalizedGrant = grantDecision.grant
 
   const rate = await assertAgentAccessRateAdmission(ctx, {
     applicationRef: args.applicationRef,
     credentialId: args.credentialId,
-    maximumCallsPerMinute: grant.policy.rate.maximumCallsPerMinute,
-    maximumCallsPerHour: grant.policy.rate.maximumCallsPerHour,
+    maximumCallsPerMinute: normalizedGrant.policy.rate.maximumCallsPerMinute,
+    maximumCallsPerHour: normalizedGrant.policy.rate.maximumCallsPerHour,
   })
   if (!rate.ok) {
     return {
@@ -359,7 +375,7 @@ export async function reserveHandler(
   const concurrencyRefusal = await concurrencyAdmissionRefusal(
     ctx,
     args,
-    grant.policy.budget.maximumConcurrentInvocations,
+    normalizedGrant.policy.budget.maximumConcurrentInvocations,
   )
   if (concurrencyRefusal !== null) return concurrencyRefusal
 
@@ -602,18 +618,20 @@ function currentApprovalGrant(grant: GrantRow | null, row: InvocationRow, now: n
 }
 
 function operationGrantFromRow(grant: GrantRow): OperationInvokeGrant {
+  const normalized = normalizeStoredAgentAccessGrant(grant)
   return {
-    grantRef: grant.grantRef,
-    principalId: grant.principalId,
-    ownerId: grant.ownerId,
-    applicationRef: grant.applicationRef,
-    credentialId: grant.credentialId,
-    environment: grant.environment,
-    generation: grant.generation,
-    policyDigest: grant.policyDigest,
-    expiresAt: grant.expiresAt,
+    grantRef: normalized.grantRef,
+    principalId: normalized.principalId,
+    ownerId: normalized.ownerId,
+    applicationRef: normalized.applicationRef,
+    credentialId: normalized.credentialId,
+    environment: normalized.environment,
+    generation: normalized.generation,
+    policyDigest: normalized.policyDigest,
+    expiresAt: normalized.expiresAt,
     lifecycle: 'active',
-    operationAccess: grant.operationAccess,
+    operationAccess: normalized.operationAccess,
+    operationRefs: normalized.operationRefs,
   }
 }
 

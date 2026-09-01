@@ -3,11 +3,17 @@ import { convexTest, type TestConvex } from 'convex-test'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { makeFunctionReference } from 'convex/server'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '../src/modules/agent-access/service-auth-envelope'
 import {
+  LEGACY_AGENT_ACCESS_GRANT_FORMAT,
+  LEGACY_AGENT_ACCESS_POLICY_FORMAT,
   createAgentAccessGrant,
   type AgentAccessGrant,
   type AgentAccessGrantInput,
+  type LegacyAgentAccessPolicy,
+  type NormalizedStoredAgentAccessGrant,
+  type StoredAgentAccessGrant,
 } from '../src/modules/agent-access/policy'
 import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
 import schema from './schema'
@@ -21,6 +27,7 @@ type GrantWriteResult = Readonly<Record<string, unknown>>
 type Backend = TestConvex<typeof schema>
 
 const registerGrantForServer = makeFunctionReference<'mutation', RegisterArgs, GrantWriteResult>('agentAccessPolicy:registerGrantForServer')
+const readGrant = makeFunctionReference<'query', { grantRef: string }, NormalizedStoredAgentAccessGrant | null>('agentAccessPolicy:readGrant')
 
 const previousServerKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
 afterEach(() => {
@@ -52,6 +59,52 @@ function grant(overrides: Partial<AgentAccessGrantInput> = {}): AgentAccessGrant
   const result = createAgentAccessGrant(grantInput(overrides))
   if (result.kind === 'refused') throw new Error(result.code)
   return result.grant
+}
+
+const operationRef = (value: string) => `operation:v1:${value.repeat(64)}`
+
+function selectedGrant(operationRefs: readonly string[], overrides: Partial<AgentAccessGrantInput> = {}): AgentAccessGrant {
+  const base = defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
+  return grant({
+    operationAccess: 'selected_operations',
+    operationRefs,
+    policy: {
+      ...base,
+      operationAccess: 'selected_operations',
+      operationRefs: [...operationRefs],
+    },
+    ...overrides,
+  })
+}
+
+function legacyStoredGrant(): StoredAgentAccessGrant {
+  const current = grant()
+  const {
+    format: _policyFormat,
+    operationAccess: _policyOperationAccess,
+    operationRefs: _policyOperationRefs,
+    ...policyMaterial
+  } = current.policy
+  const legacyPolicy = {
+    ...policyMaterial,
+    format: LEGACY_AGENT_ACCESS_POLICY_FORMAT,
+    operationAccess: 'all_admitted',
+  } satisfies LegacyAgentAccessPolicy
+  const {
+    format: _grantFormat,
+    operationAccess: _grantOperationAccess,
+    operationRefs: _grantOperationRefs,
+    policy: _policy,
+    policyDigest: _policyDigest,
+    ...grantMaterial
+  } = current
+  return {
+    ...grantMaterial,
+    format: LEGACY_AGENT_ACCESS_GRANT_FORMAT,
+    operationAccess: 'all_admitted',
+    policy: legacyPolicy,
+    policyDigest: canonicalDigest(legacyPolicy as never),
+  }
 }
 
 async function serviceAuth(
@@ -115,6 +168,72 @@ describe('agent access Convex server grant wrappers', () => {
 
     await expect(backend.mutation(registerGrantForServer, { grant: current, serviceAuth: assertion }))
       .resolves.toMatchObject({ kind: 'recorded', grantRef: current.grantRef, generation: current.generation })
+  })
+
+  it('reads legacy v1 rows with derived selection while preserving v1 format and digest', async () => {
+    const backend = convexTest(schema, modules)
+    const legacy = legacyStoredGrant()
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('agentAccessGrants', legacy)
+    })
+
+    await expect(backend.query(readGrant, { grantRef: legacy.grantRef })).resolves.toMatchObject({
+      format: LEGACY_AGENT_ACCESS_GRANT_FORMAT,
+      operationAccess: 'all_admitted',
+      operationRefs: [],
+      policy: { format: LEGACY_AGENT_ACCESS_POLICY_FORMAT, operationAccess: 'all_admitted' },
+      policyDigest: legacy.policyDigest,
+    })
+    const normalized = await backend.query(readGrant, { grantRef: legacy.grantRef })
+    expect(normalized).not.toBeNull()
+    if (normalized === null) return
+    expect('operationRefs' in normalized.policy).toBe(false)
+    expect(canonicalDigest(normalized.policy as never)).toBe(normalized.policyDigest)
+  })
+
+  it('rejects all four hybrid stored grant shapes at the schema boundary', async () => {
+    const legacy = legacyStoredGrant()
+    const current = grant()
+    const { operationRefs: _topLevelRefs, ...v2WithoutTopLevelRefs } = current
+    const { operationRefs: _policyRefs, ...v2PolicyWithoutRefs } = current.policy
+    const hybrids = [
+      { ...legacy, operationRefs: [] },
+      { ...legacy, policy: { ...legacy.policy, operationRefs: [] } },
+      v2WithoutTopLevelRefs,
+      { ...current, policy: v2PolicyWithoutRefs },
+    ]
+
+    for (const hybrid of hybrids) {
+      const backend = convexTest(schema, modules)
+      await expect(backend.run(async (ctx) => await ctx.db.insert('agentAccessGrants', hybrid as never)))
+        .rejects.toThrow()
+    }
+  })
+
+  it('replays the same selected-operation material and conflicts when references change', async () => {
+    const backend = convexTest(schema, modules)
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY
+    const firstRef = operationRef('a')
+    const secondRef = operationRef('b')
+    const current = selectedGrant([firstRef, secondRef])
+    const reordered = {
+      ...current,
+      operationRefs: [secondRef, firstRef],
+      policy: { ...current.policy, operationRefs: [secondRef, firstRef] },
+    }
+    await seedCanonicalPrincipal(backend, current)
+    const reorderedAssertion = await serviceAuth('agentAccessPolicy.registerGrantForServer', { grant: reordered }, current)
+
+    await expect(backend.mutation(registerGrantForServer, { grant: reordered, serviceAuth: reorderedAssertion }))
+      .resolves.toMatchObject({ kind: 'recorded' })
+    const canonicalAssertion = await serviceAuth('agentAccessPolicy.registerGrantForServer', { grant: current }, current)
+    await expect(backend.mutation(registerGrantForServer, { grant: current, serviceAuth: canonicalAssertion }))
+      .resolves.toMatchObject({ kind: 'replayed' })
+
+    const changed = selectedGrant([firstRef, operationRef('c')])
+    const changedAssertion = await serviceAuth('agentAccessPolicy.registerGrantForServer', { grant: changed }, changed)
+    await expect(backend.mutation(registerGrantForServer, { grant: changed, serviceAuth: changedAssertion }))
+      .resolves.toEqual({ kind: 'conflict', code: 'grant_exists' })
   })
 
 })

@@ -3,8 +3,10 @@ import { v } from 'convex/values'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import {
   createAgentAccessGrant,
+  normalizeStoredAgentAccessGrant,
   type AgentAccessGrant,
   type AgentAccessPolicy,
+  type NormalizedStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
 import { agentAccessGrantValue } from '@/modules/agent-access/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -165,8 +167,9 @@ type ReadinessCode =
 function canaryPolicy(): AgentAccessPolicy {
   const amount = (units: string) => ({ currency: 'USD', units, exponent: 6 })
   return {
-    format: 'ae.agent-access-policy:v1',
+    format: 'ae.agent-access-policy:v2',
     operationAccess: 'all_admitted',
+    operationRefs: [],
     environment: 'sandbox',
     budget: {
       budgetPolicyRef: SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF,
@@ -222,19 +225,27 @@ export function sellerOnboardingCanaryPlatformGrantExpectation(
 }
 
 function grantReadinessCodes(
-  grant: AgentAccessGrant,
+  storedGrant: unknown,
   expected: AgentAccessGrant,
   now: number,
 ): ReadinessCode[] {
+  let grant: NormalizedStoredAgentAccessGrant
+  try {
+    grant = normalizeStoredAgentAccessGrant(storedGrant)
+  } catch {
+    return ['canary_grant_material_invalid']
+  }
   const codes: ReadinessCode[] = []
   if (
-    grant.grantRef !== expected.grantRef
+    grant.format !== 'ae.agent-access-grant:v2'
+    || grant.grantRef !== expected.grantRef
     || grant.principalId !== expected.principalId
     || grant.ownerId !== expected.ownerId
     || grant.applicationRef !== expected.applicationRef
     || grant.credentialId !== expected.credentialId
     || grant.environment !== 'sandbox'
     || grant.operationAccess !== 'all_admitted'
+    || grant.operationRefs.length !== 0
     || grant.authorityMode !== 'full_yolo'
     || grant.generation !== SELLER_ONBOARDING_CANARY_GRANT_GENERATION
     || grant.expiresAt !== SELLER_ONBOARDING_CANARY_GRANT_EXPIRES_AT
@@ -303,60 +314,68 @@ export async function readExactSellerOnboardingCanaryPlatformGrantHandler(
   const grant = await ctx.db.query('agentAccessGrants')
     .withIndex('by_grantRef', (query) => query.eq('grantRef', SELLER_ONBOARDING_CANARY_PLATFORM_GRANT_REF))
     .unique()
+  if (grant === null) return null
+  let normalized: NormalizedStoredAgentAccessGrant
+  try {
+    normalized = normalizeStoredAgentAccessGrant(grant)
+  } catch {
+    return null
+  }
   if (
-    grant === null
-    || grant.principalId !== SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID
-    || grant.ownerId !== SELLER_ONBOARDING_CANARY_PLATFORM_OWNER_ID
-    || grant.credentialId !== SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID
-    || grant.applicationRef !== SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF
-    || grant.environment !== 'sandbox'
-    || grant.lifecycle !== 'active'
-    || grant.expiresAt <= args.now
-    || grant.authorityMode !== 'full_yolo'
-    || grant.operationAccess !== 'all_admitted'
-    || grant.policy.environment !== 'sandbox'
-    || grant.policy.operationAccess !== 'all_admitted'
-    || grant.budgetPolicyRef !== SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF
-    || grant.ratePolicyRef !== SELLER_ONBOARDING_CANARY_RATE_POLICY_REF
-    || grant.policy.budget.budgetPolicyRef !== grant.budgetPolicyRef
-    || grant.policy.rate.ratePolicyRef !== grant.ratePolicyRef
-    || grant.policy.budget.generation !== grant.generation
-    || grant.policy.rate.generation !== grant.generation
-    || canonicalDigest(grant.policy as never) !== grant.policyDigest
+    normalized.format !== 'ae.agent-access-grant:v2'
+    || normalized.principalId !== SELLER_ONBOARDING_CANARY_PLATFORM_PRINCIPAL_ID
+    || normalized.ownerId !== SELLER_ONBOARDING_CANARY_PLATFORM_OWNER_ID
+    || normalized.credentialId !== SELLER_ONBOARDING_CANARY_PLATFORM_CREDENTIAL_ID
+    || normalized.applicationRef !== SELLER_ONBOARDING_CANARY_PLATFORM_APPLICATION_REF
+    || normalized.environment !== 'sandbox'
+    || normalized.lifecycle !== 'active'
+    || normalized.expiresAt <= args.now
+    || normalized.authorityMode !== 'full_yolo'
+    || normalized.operationAccess !== 'all_admitted'
+    || normalized.operationRefs.length !== 0
+    || normalized.policy.environment !== 'sandbox'
+    || normalized.policy.operationAccess !== 'all_admitted'
+    || normalized.policy.operationRefs.length !== 0
+    || normalized.budgetPolicyRef !== SELLER_ONBOARDING_CANARY_BUDGET_POLICY_REF
+    || normalized.ratePolicyRef !== SELLER_ONBOARDING_CANARY_RATE_POLICY_REF
+    || normalized.policy.budget.budgetPolicyRef !== normalized.budgetPolicyRef
+    || normalized.policy.rate.ratePolicyRef !== normalized.ratePolicyRef
+    || normalized.policy.budget.generation !== normalized.generation
+    || normalized.policy.rate.generation !== normalized.generation
+    || canonicalDigest(normalized.policy as never) !== normalized.policyDigest
   ) return null
   if (args.expected.kind === 'persisted_dispatch' && (
-    grant.grantRef !== args.expected.grantRef
-    || grant.principalId !== args.expected.principalId
-    || grant.ownerId !== args.expected.ownerId
-    || grant.credentialId !== args.expected.credentialId
-    || grant.applicationRef !== args.expected.applicationRef
-    || grant.environment !== args.expected.environment
-    || grant.generation !== args.expected.generation
-    || grant.policyDigest !== args.expected.policyDigest
-    || grant.expiresAt !== args.expected.expiresAt
+    normalized.grantRef !== args.expected.grantRef
+    || normalized.principalId !== args.expected.principalId
+    || normalized.ownerId !== args.expected.ownerId
+    || normalized.credentialId !== args.expected.credentialId
+    || normalized.applicationRef !== args.expected.applicationRef
+    || normalized.environment !== args.expected.environment
+    || normalized.generation !== args.expected.generation
+    || normalized.policyDigest !== args.expected.policyDigest
+    || normalized.expiresAt !== args.expected.expiresAt
   )) return null
 
   const principal = await ctx.db.query('agentAccessPrincipals')
-    .withIndex('by_principalId', (query) => query.eq('principalId', grant.principalId))
+    .withIndex('by_principalId', (query) => query.eq('principalId', normalized.principalId))
     .unique()
   if (
     principal === null
     || principal.ownerId === args.sellerOwnerId
-    || principal.ownerId !== grant.ownerId
-    || principal.credentialId !== grant.credentialId
-    || principal.applicationRef !== grant.applicationRef
-    || principal.environment !== grant.environment
-    || principal.authorityMode !== grant.authorityMode
+    || principal.ownerId !== normalized.ownerId
+    || principal.credentialId !== normalized.credentialId
+    || principal.applicationRef !== normalized.applicationRef
+    || principal.environment !== normalized.environment
+    || principal.authorityMode !== normalized.authorityMode
     || principal.lifecycle !== 'active'
-    || principal.grantGeneration !== grant.generation
-    || principal.policyDigest !== grant.policyDigest
+    || principal.grantGeneration !== normalized.generation
+    || principal.policyDigest !== normalized.policyDigest
     || principal.expiresAt === undefined
     || principal.expiresAt <= args.now
     || !principal.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
   ) return null
 
-  const { _id, _creationTime, ...material } = grant
-  return material
+  return normalized
 }
 
 export const readExactSellerOnboardingCanaryPlatformGrant = internalQuery({

@@ -7,7 +7,7 @@ import {
   agentAccessOAuthTables,
   agentAccessPolicyTables,
   agentAccessPrincipalTables,
-} from '../src/modules/agent-access/public'
+} from '../src/modules/agent-access/schema'
 import { actionInvocationTables } from '../src/modules/action-invocation/schema'
 import { capabilityOperationInvocationTables } from '../src/modules/capability-execution/schema'
 import { observabilityTables } from '../src/modules/observability/schema'

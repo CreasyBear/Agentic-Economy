@@ -1,6 +1,6 @@
 import type { AuditEventId, BusinessId, CorrelationId, OperationKey, SourceHash } from '@/modules/common/ids'
 
-export const ActorKindValues = ['owner', 'admin', 'system', 'anonymous'] as const
+export const ActorKindValues = ['owner', 'agent', 'admin', 'system', 'anonymous'] as const
 
 export const AuditSourceSystemValues = ['ae_recorded', 'clerk_observed', 'provider_observed'] as const
 

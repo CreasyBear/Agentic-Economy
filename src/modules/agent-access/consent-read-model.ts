@@ -1,3 +1,5 @@
+import { normalizeAgentAccessOperationSelection, type AgentAccessOperationAccess } from './policy'
+
 export type AgentConsentTarget = Readonly<{
   principalRef: string
   principalRevision: number
@@ -13,6 +15,8 @@ export type AgentConsentDetails = Readonly<{
   mode?: string
   accessProfile?: 'market' | 'supplier'
   environment?: 'sandbox' | 'production'
+  operationAccess?: AgentAccessOperationAccess
+  operationRefs?: readonly string[]
   expiresInSeconds?: number
   accessSummary?: string
   agentTargets: readonly AgentConsentTarget[]
@@ -38,6 +42,18 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
   const mode = consent?.dataset.authorityMode
   const accessProfile = consent?.dataset.accessProfile
   const environment = consent?.dataset.environment
+  const operationAccessValue = consent?.dataset.operationAccess
+  let operationSelection: ReturnType<typeof normalizeAgentAccessOperationSelection>
+  try {
+    const operationRefs: unknown = JSON.parse(decodeURIComponent(consent?.dataset.operationRefs ?? ''))
+    operationSelection = (operationAccessValue === 'all_admitted' || operationAccessValue === 'selected_operations')
+      && Array.isArray(operationRefs)
+      && operationRefs.every((ref) => typeof ref === 'string')
+      ? normalizeAgentAccessOperationSelection({ operationAccess: operationAccessValue, operationRefs })
+      : undefined
+  } catch {
+    operationSelection = undefined
+  }
   const expiresInSecondsValue = Number(consent?.dataset.expiresInSeconds)
   const expiresInSeconds = Number.isSafeInteger(expiresInSecondsValue) && expiresInSecondsValue > 0
     ? expiresInSecondsValue
@@ -76,6 +92,10 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
     ...(mode === undefined || mode.length === 0 ? {} : { mode }),
     ...(accessProfile === 'market' || accessProfile === 'supplier' ? { accessProfile } : {}),
     ...(environment === 'sandbox' || environment === 'production' ? { environment } : {}),
+    ...(operationSelection === undefined ? {} : {
+      operationAccess: operationSelection.operationAccess,
+      operationRefs: operationSelection.operationRefs,
+    }),
     ...(expiresInSeconds === undefined ? {} : { expiresInSeconds }),
     ...(accessSummary === undefined || accessSummary.length === 0 ? {} : { accessSummary }),
     agentTargets,

@@ -89,6 +89,28 @@ const authClient: AgentAccessOAuthClient = {
 
 const scopes = [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:approve_each']
 const issueKey = async () => ({ keyId: 'key_machine' })
+const operationRefA = `operation:v1:${'a'.repeat(64)}`
+const operationRefB = `operation:v1:${'b'.repeat(64)}`
+
+async function beginDirectGrant(
+  flow: 'device_code' | 'authorization_code',
+  store: AgentAccessOAuthStore,
+  requestedAccess: AgentAccessOAuthGrant['requestedAccess'],
+  requestedScopes: readonly string[] = scopes,
+) {
+  return flow === 'device_code'
+    ? await beginDeviceGrant(store, { client: deviceClient, requestedScopes, requestedAccess, now: 1_000 })
+    : await beginAuthorizationCodeGrant(store, {
+        client: authClient,
+        redirectUri: 'http://localhost/callback',
+        requestedScopes,
+        requestedAccess,
+        codeChallenge: 'challenge',
+        codeChallengeMethod: 'S256',
+        ownerId: 'owner-one',
+        now: 1_000,
+      })
+}
 
 async function deviceGrant(store: AgentAccessOAuthStore) {
   const result = await beginDeviceGrant(store, { client: deviceClient, requestedScopes: scopes, now: 1_000 })
@@ -150,6 +172,8 @@ describe('Customer Request OAuth state machine', () => {
   it('persists explicit requested access for both flows and the exact default when absent', async () => {
     const requestedAccess = {
       environment: 'production' as const,
+      operationAccess: 'selected_operations' as const,
+      operationRefs: [`operation:v1:${'a'.repeat(64)}`],
       maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
       maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
       maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
@@ -182,6 +206,8 @@ describe('Customer Request OAuth state machine', () => {
 
     const expectedDefault = {
       environment: 'sandbox' as const,
+      operationAccess: 'all_admitted' as const,
+      operationRefs: [],
       expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
     }
     expect(JSON.stringify((await deviceGrant(storeFixture())).grant.requestedAccess)).toBe(JSON.stringify(expectedDefault))
@@ -199,6 +225,54 @@ describe('Customer Request OAuth state machine', () => {
     expect(deviceResult.value.grant.revision).toBe(1)
     expect(authResult.value.grant.revision).toBe(1)
   })
+
+  it.each(['device_code', 'authorization_code'] as const)(
+    'canonicalizes direct %s selected-Operation requests before insert',
+    async (flow) => {
+      const store = storeFixture()
+      const result = await beginDirectGrant(flow, store, {
+        environment: 'sandbox',
+        operationAccess: 'selected_operations',
+        operationRefs: [operationRefB, operationRefA],
+        expiresInSeconds: 600,
+      })
+      expect(result.kind).toBe('ok')
+      expect([...store.grants.values()][0]?.requestedAccess).toMatchObject({
+        operationAccess: 'selected_operations', operationRefs: [operationRefA, operationRefB],
+      })
+      expect(store.grants.size).toBe(1)
+    },
+  )
+
+  it.each(['device_code', 'authorization_code'] as const)(
+    'refuses invalid direct %s Operation selection before insert',
+    async (flow) => {
+      const invalidSelections = [
+        { operationAccess: 'selected_operations' as const, operationRefs: [] },
+        { operationAccess: 'selected_operations' as const, operationRefs: [operationRefA, operationRefA] },
+        { operationAccess: 'selected_operations' as const, operationRefs: ['operation:not-canonical'] },
+        { operationAccess: 'all_admitted' as const, operationRefs: [operationRefA] },
+      ]
+      for (const selection of invalidSelections) {
+        const store = storeFixture()
+        await expect(beginDirectGrant(flow, store, {
+          environment: 'sandbox', ...selection, expiresInSeconds: 600,
+        })).resolves.toEqual({ kind: 'refused', reason: 'invalid_scope' })
+        expect(store.grants.size).toBe(0)
+      }
+    },
+  )
+
+  it.each(['device_code', 'authorization_code'] as const)(
+    'refuses direct %s supplier-selected access before insert',
+    async (flow) => {
+      const store = storeFixture()
+      await expect(beginDirectGrant(flow, store, {
+        environment: 'sandbox', operationAccess: 'selected_operations', operationRefs: [operationRefA], expiresInSeconds: 600,
+      }, [MARKET_SUPPLY_MANAGE_SCOPE])).resolves.toEqual({ kind: 'refused', reason: 'invalid_scope' })
+      expect(store.grants.size).toBe(0)
+    },
+  )
 
   it('requires the current revision and increments it exactly once on a successful transition', async () => {
     const store = storeFixture()
@@ -282,6 +356,46 @@ describe('Customer Request OAuth state machine', () => {
     expect(pending).toEqual({ kind: 'authorization_pending' })
     expect(slow).toEqual({ kind: 'slow_down' })
     expect(store.grants.get(started.grant.grantRef)).toMatchObject({ revision: 1, nextPollAt: 6_000 })
+  })
+
+  it('keeps polling pending when approval wins the pending poll update race', async () => {
+    const store = storeFixture()
+    const started = await deviceGrant(store)
+    const racingStore: AgentAccessOAuthStore = {
+      ...store,
+      updateGrant: async (grantRef, expectedStatus, expectedRevision, patch, expectedIssuanceStartedAt) => {
+        if (expectedStatus === 'pending' && patch.nextPollAt !== undefined) {
+          const current = store.grants.get(grantRef)
+          if (current === undefined) throw new Error('racing grant missing')
+          store.grants.set(grantRef, {
+            ...current,
+            status: 'approved',
+            revision: current.revision + 1,
+            ownerId: 'owner-one',
+            keyId: 'key-approved-concurrently',
+            approvedAt: 1_000,
+          })
+          return null
+        }
+        return await store.updateGrant(
+          grantRef,
+          expectedStatus,
+          expectedRevision,
+          patch,
+          expectedIssuanceStartedAt,
+        )
+      },
+    }
+
+    await expect(pollDeviceGrant(racingStore, {
+      clientId: deviceClient.clientId,
+      deviceCode: started.deviceCode,
+      now: 1_000,
+    })).resolves.toEqual({ kind: 'authorization_pending' })
+    expect(store.grants.get(started.grant.grantRef)).toMatchObject({
+      status: 'approved',
+      keyId: 'key-approved-concurrently',
+    })
   })
 
   it('refuses denied grants and bounds completed delivery replay to the original exchange', async () => {

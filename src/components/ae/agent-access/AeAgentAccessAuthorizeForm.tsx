@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import {
   readAgentConsentDetails,
   type AgentConsentDetails,
@@ -110,7 +111,7 @@ type ConsentActionResult =
   | Readonly<{ kind: 'refused' | 'conflict'; code: string }>
   | Readonly<{ kind: 'rate_limited'; retryAfter: number }>
 
-export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: Readonly<{
+type AgentAccessAuthorizeFormProps = Readonly<{
   locator: Readonly<{ kind: 'user_code' | 'grant_ref'; value: string }>
   oauthState?: string
   details: AgentConsentDetails & Readonly<{
@@ -120,26 +121,56 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: Rea
     clientName: string
     mode: string
     environment: 'sandbox' | 'production'
+    operationAccess: 'all_admitted' | 'selected_operations'
+    operationRefs: readonly string[]
     expiresInSeconds: number
     accessSummary: string
   }>
-}>) {
-  const [state, dispatch] = useReducer(consentFormReducer, details, initialConsentFormState)
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const approveButtonRef = useRef<HTMLButtonElement>(null)
-  const { grantRef, grantRevision, clientName, mode, environment, expiresInSeconds, accessSummary } = details
-  const accessProfile = details.accessProfile ?? 'market'
-  const {
-    status, pending, selectedMode, connectionTarget, agentTargets, agentTargetsNextCursor,
-    agentTargetsLoading, agentTargetsError, replacementPrincipalRef,
-  } = state
+}>
 
+type SubmitApproval = (body: string) => Promise<ConsentActionResult>
+
+export function AeAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
+  return isLocalE2EAuthBypassEnabled()
+    ? <LocalAgentAccessAuthorizeForm {...props} />
+    : <ClerkAgentAccessAuthorizeForm {...props} />
+}
+
+function ClerkAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
   const submitApproval = useReverification(async (body: string) => await fetch('/oauth/authorize', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
-  }))
+  }).then(async (response) => await response.json() as ConsentActionResult))
+  return <AgentAccessAuthorizeForm {...props} submitApproval={submitApproval} />
+}
+
+function LocalAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
+  const submitApproval: SubmitApproval = async (body) => await fetch('/oauth/authorize', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  }).then(async (response) => await response.json() as ConsentActionResult)
+  return <AgentAccessAuthorizeForm {...props} submitApproval={submitApproval} />
+}
+
+function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval }: AgentAccessAuthorizeFormProps & Readonly<{
+  submitApproval: SubmitApproval
+}>) {
+  const [state, dispatch] = useReducer(consentFormReducer, details, initialConsentFormState)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const approveButtonRef = useRef<HTMLButtonElement>(null)
+  const { grantRef, grantRevision, clientName, mode, environment, operationAccess, operationRefs, expiresInSeconds, accessSummary } = details
+  const operationSelection = operationAccess === 'all_admitted'
+    ? 'All admitted Operations, including future admitted Operations'
+    : operationRefs.join(', ')
+  const accessProfile = details.accessProfile ?? 'market'
+  const {
+    status, pending, selectedMode, connectionTarget, agentTargets, agentTargetsNextCursor,
+    agentTargetsLoading, agentTargetsError, replacementPrincipalRef,
+  } = state
 
   async function loadAgentTargets() {
     if (agentTargetsLoading) return
@@ -188,7 +219,7 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: Rea
     if (body === undefined) return
     dispatch({ kind: 'decision_started' })
     try {
-      const result = await submitApproval(body) as unknown as ConsentActionResult
+      const result = await submitApproval(body)
       if (result.kind === 'approved') {
         dispatch({ kind: 'decision_finished', status: 'approved' })
         setConfirmOpen(false)
@@ -216,7 +247,13 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: Rea
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ grant_ref: grantRef, decision: 'deny' }).toString(),
-      }).then(async (response) => await response.json() as ConsentActionResult)
+      }).then(async (response) => {
+        if (!response.ok) {
+          const snapshot = await response.text().catch(() => '')
+          throw new Error(`Deny decision refused with HTTP ${response.status}${snapshot.length === 0 ? '' : `: ${snapshot.slice(0, 120)}`}`)
+        }
+        return await response.json() as ConsentActionResult
+      })
       dispatch({ kind: 'decision_finished', status: result.kind === 'denied' ? 'denied' : 'error' })
     } catch {
       dispatch({ kind: 'decision_finished', status: 'error' })
@@ -299,6 +336,7 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: Rea
               <AeFactList facts={[
                 { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
                 { label: 'Request revision', value: String(grantRevision) },
+                { label: 'Operations', value: operationSelection },
                 { label: 'Approved limits', value: accessSummary },
                 { label: 'Expiry', value: `Access expires ${formatConsentDuration(expiresInSeconds)} after issue. You can revoke it at any time from Agents.` },
               ]} />
@@ -313,8 +351,8 @@ export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: Rea
               onOpenChange={setConfirmOpen}
               title="Confirm agent access"
               description={connectionTarget === 'replace_credential'
-                ? `Replace the credential for ${agentTargets.find((target) => target.principalRef === replacementPrincipalRef)?.displayName ?? 'the selected agent'} and grant ${clientName} ${authorityLabel(selectedMode).toLowerCase()} authority. The current credential remains usable until replacement delivery succeeds.`
-                : `Create a new agent identity for ${clientName} with ${authorityLabel(selectedMode).toLowerCase()} authority and the exact limits shown on this page. You can revoke it from Agents.`}
+                ? `Replace the credential for ${agentTargets.find((target) => target.principalRef === replacementPrincipalRef)?.displayName ?? 'the selected agent'} and grant ${clientName} ${authorityLabel(selectedMode).toLowerCase()} authority for ${operationSelection}. The current credential remains usable until replacement delivery succeeds.`
+                : `Create a new agent identity for ${clientName} with ${authorityLabel(selectedMode).toLowerCase()} authority for ${operationSelection} and the exact limits shown on this page. You can revoke it from Agents.`}
               confirmLabel="Confirm and approve"
               pending={pending}
               onConfirm={approve}

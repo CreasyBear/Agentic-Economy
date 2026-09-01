@@ -1,4 +1,5 @@
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
+import type { AgentAccessOperationAccess } from '@/modules/agent-access/policy'
 import {
   isPublicOperationRef,
   materializeRuntimePublishedOperation,
@@ -35,7 +36,8 @@ export type OperationInvokeGrant = Readonly<{
   policyDigest: string
   expiresAt: number
   lifecycle: 'active'
-  operationAccess: 'all_admitted'
+  operationAccess: AgentAccessOperationAccess
+  operationRefs: readonly string[]
 }>
 
 export type OperationInvokeGrantDecision =

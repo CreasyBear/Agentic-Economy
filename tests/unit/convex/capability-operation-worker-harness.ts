@@ -383,6 +383,8 @@ function withCredentiallessX402Connection(
     providerRef,
     providerAccountRef: `x402:${endpoint}`,
     resourceUrl: endpoint,
+    method: 'POST',
+    payee: '0x1111111111111111111111111111111111111111',
     evidenceRefs: ['evidence:x402:test-worker'],
   }, observedAt)
   if (created.kind !== 'applied') throw new Error('credentialless_x402_worker_fixture_invalid')
