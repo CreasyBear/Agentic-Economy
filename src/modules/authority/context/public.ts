@@ -19,6 +19,7 @@ export type {
   AuthoritySurface,
   ConsequenceActionClass,
   ConsequenceActionPolicy,
+  ConsequenceConfirmationField,
   ConsequenceDescriptor,
   ConsequenceProofPolicy,
   ConsequenceRecoveryClass,

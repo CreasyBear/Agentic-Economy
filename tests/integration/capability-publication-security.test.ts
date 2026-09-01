@@ -12,6 +12,7 @@ import {
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
 import type { CapabilityTransportAuthority } from '@/modules/capability-supply/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import { installProviderConnectionFixture } from './capability-publication-harness'
 const SECURITY_AUTHORITY: CapabilityTransportAuthority = {
@@ -27,7 +28,18 @@ async function preparedPublicationArgs(
   backend: ConvexFixtureBackend,
   input: PublicationFixtureInput,
 ): Promise<PublishPreparedCapabilityArgs> {
-  return await withSourceWrite('catalog_publish', await prepareCapabilityPublicationMutation(backend, input))
+  const args = await prepareCapabilityPublicationMutation(backend, input)
+  return await withSourceWrite('catalog_publish', {
+    ...args,
+    proof: {
+      reverificationId: `test:${canonicalDigest({
+        operationKey: args.operationKey,
+        correlationId: args.correlationId,
+      })}`,
+      firstFactorAgeMinutes: 0,
+      secondFactorAgeMinutes: -1,
+    },
+  })
 }
 
 describe('capability publication security', () => {

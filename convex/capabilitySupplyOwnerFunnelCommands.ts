@@ -30,6 +30,7 @@ import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAc
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { resolveBusinessActor } from './authz'
 import { clerkConsequenceProofValue } from './lib/consequenceProof'
+import { admitAgentPublicationConsequence } from './lib/agentPublicationConsequence'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 
 export const ownerSupplyCommandArgsValue = v.object({
@@ -408,6 +409,44 @@ export async function withdrawOwnerCapabilityHandler(
     const ownerActor = args.agentPrincipal === undefined
       ? await resolveBusinessActor(ctx)
       : undefined
+    const agentAdmission = args.agentPrincipal === undefined
+      ? undefined
+      : await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
+    if (args.agentPrincipal !== undefined && agentAdmission?.kind !== 'allowed') {
+      return { kind: 'refused', reason: 'authorization_denied' }
+    }
+    const consequenceCommand = {
+      version: 'ae.publication-consequence:v1',
+      action: 'publication.withdraw',
+      operationKey: args.operationKey,
+      businessId: String(args.businessId),
+      offeringRef: args.offeringRef,
+      offeringRevision: args.offeringRevision,
+      offeringSourceHash: args.offeringSourceHash,
+      publicationRef: args.publicationRef,
+      publicationRevision: args.publicationRevision,
+    }
+    if (agentAdmission?.kind === 'allowed') {
+      const consequence = await admitAgentPublicationConsequence(ctx, {
+        agent: agentAdmission,
+        action: 'publication.withdraw',
+        target: {
+          targetType: 'capability_publication',
+          targetRef: args.publicationRef,
+          targetRevision: args.publicationRevision,
+        },
+        resourceRefs: [`publication:${args.publicationRef}`],
+        consequenceSummary: 'Withdraw this exact Operation revision from new market work.',
+        statusReadbackRef: `owner/supply/${args.offeringRef}`,
+        correlationRef: args.correlationId,
+        idempotencyRef: args.operationKey,
+        command: consequenceCommand,
+        now,
+      })
+      if (consequence === null) {
+        return { kind: 'refused', reason: 'authorization_denied' }
+      }
+    }
     if (ownerActor?.kind === 'authenticated_owner') {
       const consequence = await admitInteractiveOwnerConsequence(ctx, {
         actor: ownerActor,
@@ -424,17 +463,7 @@ export async function withdrawOwnerCapabilityHandler(
         statusReadbackRef: `owner/supply/${args.offeringRef}`,
         correlationRef: args.correlationId,
         idempotencyRef: args.operationKey,
-        command: {
-          version: 'ae.publication-consequence:v1',
-          action: 'publication.withdraw',
-          operationKey: args.operationKey,
-          businessId: String(args.businessId),
-          offeringRef: args.offeringRef,
-          offeringRevision: args.offeringRevision,
-          offeringSourceHash: args.offeringSourceHash,
-          publicationRef: args.publicationRef,
-          publicationRevision: args.publicationRevision,
-        },
+        command: consequenceCommand,
         now,
       })
       if (consequence.kind === 'refused') {
@@ -535,6 +564,43 @@ export async function republishOwnerCapabilityHandler(
     )
     if (reconstructed.kind === 'refused') return reconstructed
     const now = Date.now()
+    const consequenceCommand = {
+      version: 'ae.publication-consequence:v1',
+      action: 'publication.republish',
+      operationKey: args.operationKey,
+      businessId: String(args.businessId),
+      offeringRef: args.offeringRef,
+      offeringRevision: args.offeringRevision,
+      offeringSourceHash: args.offeringSourceHash,
+      publicationRef: args.publicationRef,
+      expectedPublicationRevision: args.publicationRevision,
+      nextPublicationRevision: args.publicationRevision + 1,
+      sourceDigest: reconstructed.prepared.sourceDigest,
+      priceDigest: reconstructed.prepared.priceDigest,
+      bindingId: reconstructed.prepared.binding.bindingId,
+      documentDigest: canonicalDigest(reconstructed.prepared.documentJson),
+    }
+    if (agentAdmission?.kind === 'allowed') {
+      const consequence = await admitAgentPublicationConsequence(ctx, {
+        agent: agentAdmission,
+        action: 'publication.republish',
+        target: {
+          targetType: 'capability_publication',
+          targetRef: args.publicationRef,
+          targetRevision: args.publicationRevision,
+        },
+        resourceRefs: [`publication:${args.publicationRef}`],
+        consequenceSummary: 'Republish this exact withdrawn Operation revision to the market.',
+        statusReadbackRef: `owner/supply/${args.offeringRef}`,
+        correlationRef: args.correlationId,
+        idempotencyRef: args.operationKey,
+        command: consequenceCommand,
+        now,
+      })
+      if (consequence === null) {
+        return { kind: 'refused', reason: 'authorization_denied' }
+      }
+    }
     if (ownerActor?.kind === 'authenticated_owner') {
       const consequence = await admitInteractiveOwnerConsequence(ctx, {
         actor: ownerActor,
@@ -551,22 +617,7 @@ export async function republishOwnerCapabilityHandler(
         statusReadbackRef: `owner/supply/${args.offeringRef}`,
         correlationRef: args.correlationId,
         idempotencyRef: args.operationKey,
-        command: {
-          version: 'ae.publication-consequence:v1',
-          action: 'publication.republish',
-          operationKey: args.operationKey,
-          businessId: String(args.businessId),
-          offeringRef: args.offeringRef,
-          offeringRevision: args.offeringRevision,
-          offeringSourceHash: args.offeringSourceHash,
-          publicationRef: args.publicationRef,
-          expectedPublicationRevision: args.publicationRevision,
-          nextPublicationRevision: args.publicationRevision + 1,
-          sourceDigest: reconstructed.prepared.sourceDigest,
-          priceDigest: reconstructed.prepared.priceDigest,
-          bindingId: reconstructed.prepared.binding.bindingId,
-          documentDigest: canonicalDigest(reconstructed.prepared.documentJson),
-        },
+        command: consequenceCommand,
         ...(args.proof === undefined ? {} : { proof: args.proof }),
         now,
       })

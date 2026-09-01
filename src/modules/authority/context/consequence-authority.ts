@@ -70,6 +70,26 @@ export type ConsequenceProofPolicy =
     uniquePerCommand: true
   }>
 
+export type ConsequenceConfirmationField =
+  | 'actor'
+  | 'account'
+  | 'target'
+  | 'scope'
+  | 'spending_limits'
+  | 'expiry'
+  | 'credential_generation'
+  | 'provider_permissions'
+  | 'authority_generation'
+  | 'amount'
+  | 'fees_and_total'
+  | 'destination'
+  | 'timing'
+  | 'operation_revision'
+  | 'market_visibility'
+  | 'price_and_effects'
+  | 'consequence'
+  | 'recovery'
+
 export type ConsequenceTarget = Readonly<{
   targetType: string
   targetRef: string
@@ -93,6 +113,7 @@ export type ConsequenceDescriptor = Readonly<{
 export type ConsequenceActionPolicy = Readonly<{
   actionClass: ConsequenceActionClass
   proofPolicy: ConsequenceProofPolicy
+  confirmationFields: readonly ConsequenceConfirmationField[]
   recoveryClass: ConsequenceRecoveryClass
 }>
 
@@ -106,29 +127,35 @@ const STRICT_CLERK_REVERIFICATION = Object.freeze({
 function consequencePolicy(
   actionClass: ConsequenceActionClass,
   proofPolicy: ConsequenceProofPolicy,
+  confirmationFields: readonly ConsequenceConfirmationField[],
   recoveryClass: ConsequenceRecoveryClass,
 ): ConsequenceActionPolicy {
-  return Object.freeze({ actionClass, proofPolicy, recoveryClass })
+  return Object.freeze({
+    actionClass,
+    proofPolicy,
+    confirmationFields: Object.freeze([...confirmationFields]),
+    recoveryClass,
+  })
 }
 
 export const PACKAGE_3_CONSEQUENCE_ACTION_POLICY = Object.freeze({
-  'agent_access.create': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, 'reversible_before_dispatch'),
-  'agent_access.replace_credential': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, 'reversible_while_pending'),
-  'agent_access.increase_authority': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, 'reversible_before_dispatch'),
-  'agent_access.reduce_authority': consequencePolicy('authority_reduction', NO_CONSEQUENCE_PROOF, 'compensatable'),
-  'agent_access.revoke_credential': consequencePolicy('authority_reduction', NO_CONSEQUENCE_PROOF, 'compensatable'),
-  'agent_access.disconnect': consequencePolicy('authority_reduction', NO_CONSEQUENCE_PROOF, 'compensatable'),
-  'connection.test': consequencePolicy('safe_validation', NO_CONSEQUENCE_PROOF, 'reversible_before_dispatch'),
-  'connection.connect': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, 'compensatable'),
-  'connection.reauthorize': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, 'compensatable'),
-  'connection.revoke': consequencePolicy('authority_reduction', NO_CONSEQUENCE_PROOF, 'compensatable'),
-  'funding.top_up': consequencePolicy('spend_or_transfer', NO_CONSEQUENCE_PROOF, 'irreversible'),
-  'payout_authority.create': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, 'compensatable'),
-  'payout_authority.replace': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, 'reversible_while_pending'),
-  'payout.transfer': consequencePolicy('spend_or_transfer', STRICT_CLERK_REVERIFICATION, 'irreversible'),
-  'publication.publish': consequencePolicy('publish_or_withdraw', STRICT_CLERK_REVERIFICATION, 'compensatable'),
-  'publication.republish': consequencePolicy('publish_or_withdraw', STRICT_CLERK_REVERIFICATION, 'compensatable'),
-  'publication.withdraw': consequencePolicy('publish_or_withdraw', NO_CONSEQUENCE_PROOF, 'compensatable'),
+  'agent_access.create': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'scope', 'spending_limits', 'expiry', 'consequence', 'recovery'], 'reversible_before_dispatch'),
+  'agent_access.replace_credential': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'scope', 'spending_limits', 'expiry', 'credential_generation', 'consequence', 'recovery'], 'reversible_while_pending'),
+  'agent_access.increase_authority': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'scope', 'spending_limits', 'expiry', 'consequence', 'recovery'], 'reversible_before_dispatch'),
+  'agent_access.reduce_authority': consequencePolicy('authority_reduction', NO_CONSEQUENCE_PROOF, ['actor', 'account', 'target', 'scope', 'spending_limits', 'consequence', 'recovery'], 'compensatable'),
+  'agent_access.revoke_credential': consequencePolicy('authority_reduction', NO_CONSEQUENCE_PROOF, ['actor', 'account', 'target', 'credential_generation', 'consequence', 'recovery'], 'compensatable'),
+  'agent_access.disconnect': consequencePolicy('authority_reduction', NO_CONSEQUENCE_PROOF, ['actor', 'account', 'target', 'consequence', 'recovery'], 'compensatable'),
+  'connection.test': consequencePolicy('safe_validation', NO_CONSEQUENCE_PROOF, ['actor', 'account', 'target', 'provider_permissions', 'consequence', 'recovery'], 'reversible_before_dispatch'),
+  'connection.connect': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'provider_permissions', 'expiry', 'authority_generation', 'consequence', 'recovery'], 'compensatable'),
+  'connection.reauthorize': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'provider_permissions', 'expiry', 'authority_generation', 'consequence', 'recovery'], 'compensatable'),
+  'connection.revoke': consequencePolicy('authority_reduction', NO_CONSEQUENCE_PROOF, ['actor', 'account', 'target', 'provider_permissions', 'authority_generation', 'consequence', 'recovery'], 'compensatable'),
+  'funding.top_up': consequencePolicy('spend_or_transfer', NO_CONSEQUENCE_PROOF, ['actor', 'account', 'target', 'amount', 'fees_and_total', 'consequence', 'recovery'], 'irreversible'),
+  'payout_authority.create': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'destination', 'authority_generation', 'consequence', 'recovery'], 'compensatable'),
+  'payout_authority.replace': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'destination', 'authority_generation', 'consequence', 'recovery'], 'reversible_while_pending'),
+  'payout.transfer': consequencePolicy('spend_or_transfer', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'amount', 'destination', 'timing', 'consequence', 'recovery'], 'irreversible'),
+  'publication.publish': consequencePolicy('publish_or_withdraw', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'operation_revision', 'market_visibility', 'price_and_effects', 'consequence', 'recovery'], 'compensatable'),
+  'publication.republish': consequencePolicy('publish_or_withdraw', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'operation_revision', 'market_visibility', 'price_and_effects', 'consequence', 'recovery'], 'compensatable'),
+  'publication.withdraw': consequencePolicy('publish_or_withdraw', NO_CONSEQUENCE_PROOF, ['actor', 'account', 'target', 'operation_revision', 'market_visibility', 'consequence', 'recovery'], 'compensatable'),
 } as const satisfies Readonly<Record<Package3ConsequenceAction, ConsequenceActionPolicy>>)
 
 export const AUTHORITY_SURFACES = Object.freeze([
@@ -711,6 +738,7 @@ function consequenceCommandEnvelope(
     version: 'ae.consequence-command:v1',
     action: consequence.action,
     actionClass: policy.actionClass,
+    confirmationFields: policy.confirmationFields,
     actorPrincipalRef: admission.actorPrincipalRef,
     activeAccountRef: admission.activeAccountRef,
     accountRevision: admission.accountRevision,

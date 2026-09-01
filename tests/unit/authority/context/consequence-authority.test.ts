@@ -763,86 +763,103 @@ describe('centralized cross-surface consequence authority', () => {
       'agent_access.create': {
         actionClass: 'authority_increase',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'scope', 'spending_limits', 'expiry', 'consequence', 'recovery'],
         recoveryClass: 'reversible_before_dispatch',
       },
       'agent_access.replace_credential': {
         actionClass: 'authority_increase',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'scope', 'spending_limits', 'expiry', 'credential_generation', 'consequence', 'recovery'],
         recoveryClass: 'reversible_while_pending',
       },
       'agent_access.increase_authority': {
         actionClass: 'authority_increase',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'scope', 'spending_limits', 'expiry', 'consequence', 'recovery'],
         recoveryClass: 'reversible_before_dispatch',
       },
       'agent_access.reduce_authority': {
         actionClass: 'authority_reduction',
         proofPolicy: { kind: 'none' },
+        confirmationFields: ['actor', 'account', 'target', 'scope', 'spending_limits', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
       'agent_access.revoke_credential': {
         actionClass: 'authority_reduction',
         proofPolicy: { kind: 'none' },
+        confirmationFields: ['actor', 'account', 'target', 'credential_generation', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
       'agent_access.disconnect': {
         actionClass: 'authority_reduction',
         proofPolicy: { kind: 'none' },
+        confirmationFields: ['actor', 'account', 'target', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
       'connection.test': {
         actionClass: 'safe_validation',
         proofPolicy: { kind: 'none' },
+        confirmationFields: ['actor', 'account', 'target', 'provider_permissions', 'consequence', 'recovery'],
         recoveryClass: 'reversible_before_dispatch',
       },
       'connection.connect': {
         actionClass: 'authority_increase',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'provider_permissions', 'expiry', 'authority_generation', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
       'connection.reauthorize': {
         actionClass: 'authority_increase',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'provider_permissions', 'expiry', 'authority_generation', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
       'connection.revoke': {
         actionClass: 'authority_reduction',
         proofPolicy: { kind: 'none' },
+        confirmationFields: ['actor', 'account', 'target', 'provider_permissions', 'authority_generation', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
       'funding.top_up': {
         actionClass: 'spend_or_transfer',
         proofPolicy: { kind: 'none' },
+        confirmationFields: ['actor', 'account', 'target', 'amount', 'fees_and_total', 'consequence', 'recovery'],
         recoveryClass: 'irreversible',
       },
       'payout_authority.create': {
         actionClass: 'authority_increase',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'destination', 'authority_generation', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
       'payout_authority.replace': {
         actionClass: 'authority_increase',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'destination', 'authority_generation', 'consequence', 'recovery'],
         recoveryClass: 'reversible_while_pending',
       },
       'payout.transfer': {
         actionClass: 'spend_or_transfer',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'amount', 'destination', 'timing', 'consequence', 'recovery'],
         recoveryClass: 'irreversible',
       },
       'publication.publish': {
         actionClass: 'publish_or_withdraw',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'operation_revision', 'market_visibility', 'price_and_effects', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
       'publication.republish': {
         actionClass: 'publish_or_withdraw',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'operation_revision', 'market_visibility', 'price_and_effects', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
       'publication.withdraw': {
         actionClass: 'publish_or_withdraw',
         proofPolicy: { kind: 'none' },
+        confirmationFields: ['actor', 'account', 'target', 'operation_revision', 'market_visibility', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
     })
@@ -851,6 +868,11 @@ describe('centralized cross-surface consequence authority', () => {
       const policy = PACKAGE_3_CONSEQUENCE_ACTION_POLICY[action]
       expect(Object.isFrozen(policy)).toBe(true)
       expect(Object.isFrozen(policy.proofPolicy)).toBe(true)
+      expect(Object.isFrozen(policy.confirmationFields)).toBe(true)
+      expect(policy.confirmationFields).toEqual(expect.arrayContaining([
+        'actor', 'account', 'target', 'consequence', 'recovery',
+      ]))
+      expect(new Set(policy.confirmationFields).size).toBe(policy.confirmationFields.length)
       if (policy.actionClass === 'authority_increase') {
         expect(policy.proofPolicy).toEqual({
           kind: 'clerk_reverification',
@@ -959,6 +981,16 @@ describe('centralized cross-surface consequence authority', () => {
       version: 'ae.consequence-command:v1',
       action: 'agent_access.create',
       actionClass: 'authority_increase',
+      confirmationFields: [
+        'actor',
+        'account',
+        'target',
+        'scope',
+        'spending_limits',
+        'expiry',
+        'consequence',
+        'recovery',
+      ],
       actorPrincipalRef: admission.actorPrincipalRef,
       activeAccountRef: admission.activeAccountRef,
       accountRevision: admission.accountRevision,

@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
 import { convexTestWithWorkers } from '../helpers/convex-fixtures'
-import { withSourceWrite } from '../helpers/source-write-admission'
+import { withoutSourceWrite, withSourceWrite } from '../helpers/source-write-admission'
 import {
   createPublishedBusinessOwner,
   openApiSource,
   prepareOwnerPublicationCommand,
   seedCatalogOffering,
+  seedSupplyAgentPrincipal,
 } from './capability-supply-owner-funnel-harness'
 
 describe('owner capability withdraw and republish', () => {
@@ -347,6 +348,115 @@ describe('owner capability withdraw and republish', () => {
       )?.stepStates.test,
     ).toBe('in_progress')
     expect(afterSecondTest.callLog).toEqual([])
+  })
+
+  it('admits Agent publish, withdraw, and republish through bounded delegation without Clerk proof', async () => {
+    const backend = convexTestWithWorkers()
+    const { businessId, canonicalAccountRef } = await createPublishedBusinessOwner(
+      backend,
+      'agent-publication-consequences',
+    )
+    const agentPrincipal = await seedSupplyAgentPrincipal(
+      backend,
+      canonicalAccountRef,
+      'publication-consequences',
+    )
+    const offeringRef = 'catalog-offering:agent-publication-consequences'
+    const sourceHash = 'catalog-source:agent-publication-consequences:v1'
+    await seedCatalogOffering(backend, businessId, offeringRef, 1, 1, sourceHash)
+    const prepared = await prepareOwnerPublicationCommand(
+      backend,
+      businessId,
+      offeringRef,
+      1,
+      sourceHash,
+      openApiSource('agent.publication.consequences'),
+      'agent-publication:publish',
+      {
+        kind: 'catalog_offering',
+        offeringRef,
+        offeringRevision: 1,
+        offeringSourceHash: sourceHash,
+      },
+    )
+    if (prepared.kind === 'refused') {
+      throw new Error(`agent_publication_prepare_failed:${prepared.reason}`)
+    }
+    const unsignedPrepared = withoutSourceWrite(prepared.command)
+    const { proof: _ownerProof, ...agentPublishCommand } = unsignedPrepared
+    const published = await backend.mutation(
+      api.capabilitySupply.publishPreparedCapability,
+      await withSourceWrite('catalog_publish', {
+        ...agentPublishCommand,
+        agentPrincipal,
+      }),
+    )
+    if (published.kind === 'refused') {
+      throw new Error(`agent_publication_failed:${published.reason}`)
+    }
+    expect(published.kind).toBe('published')
+
+    const maintenanceBase = {
+      businessId,
+      offeringRef,
+      offeringRevision: 1,
+      offeringSourceHash: sourceHash,
+      publicationRef: published.publicationRef,
+      publicationRevision: published.publicationRevision,
+      reasonCode: 'agent_publication_consequence',
+      evidenceRefs: ['agent-publication:consequence'],
+      agentPrincipal,
+    }
+    const withdrawn = await backend.mutation(
+      api.capabilitySupplyOwnerFunnel.withdrawOwnerCapability,
+      await withSourceWrite('catalog_publish', {
+        ...maintenanceBase,
+        operationKey: 'agent-publication:withdraw',
+        correlationId: 'agent-publication:withdraw',
+      }),
+    )
+    expect(withdrawn).toMatchObject({ kind: 'withdrawn' })
+
+    const republished = await backend.mutation(
+      api.capabilitySupplyOwnerFunnel.republishOwnerCapability,
+      await withSourceWrite('catalog_publish', {
+        ...maintenanceBase,
+        operationKey: 'agent-publication:republish',
+        correlationId: 'agent-publication:republish',
+      }),
+    )
+    expect(republished).toMatchObject({
+      kind: 'republished',
+      revision: published.publicationRevision + 1,
+    })
+
+    const evidence = await backend.run(async (ctx) => ({
+      snapshots: await ctx.db.query('authorityDelegationSnapshots')
+        .withIndex('by_accountRef_and_actorPrincipalRef_and_idempotencyRef', (query) => query
+          .eq('accountRef', canonicalAccountRef)
+          .eq('actorPrincipalRef', agentPrincipal.principalId))
+        .collect(),
+      proofUses: await ctx.db.query('consequenceProofUses').collect(),
+    }))
+    expect(evidence.snapshots.map((snapshot) => snapshot.idempotencyRef).sort()).toEqual([
+      'agent-publication:publish',
+      'agent-publication:republish',
+      'agent-publication:withdraw',
+    ])
+    for (const snapshot of evidence.snapshots) {
+      expect(snapshot).toMatchObject({
+        actorPrincipalRef: agentPrincipal.principalId,
+        accountRef: canonicalAccountRef,
+        grantRef: expect.stringMatching(/^grt_/u),
+        generation: 1,
+        scopes: ['market_supply:manage'],
+        budgetAmount: 0,
+      })
+      expect(snapshot.resourceRefs.every((ref) => (
+        ref.startsWith('offering:') || ref.startsWith('publication:')
+      ))).toBe(true)
+    }
+    expect(evidence.proofUses).toEqual([])
   })
 })
 

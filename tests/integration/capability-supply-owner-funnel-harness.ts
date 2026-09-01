@@ -419,8 +419,13 @@ export async function seedSupplyAgentPrincipal(
   ownerId: string,
   suffix: string,
 ) {
+  const canonicalSuffix = canonicalDigest({
+    format: 'supply-agent-principal-fixture:v1',
+    ownerId,
+    suffix,
+  }).slice('sha256:'.length, 'sha256:'.length + 32)
   const principal = {
-    principalId: `principal:supply-reservation:${suffix}`,
+    principalId: `prn_${canonicalSuffix}`,
     ownerId,
     credentialId: `credential:supply-reservation:${suffix}`,
     applicationRef: 'agentic-economy',
@@ -454,7 +459,7 @@ export async function seedSupplyAgentPrincipal(
   }
   const grant = {
     format: 'ae.agent-access-grant:v2' as const,
-    grantRef: `grant:supply-reservation:${suffix}`,
+    grantRef: `grt_${canonicalSuffix}`,
     principalId: principal.principalId,
     ownerId: principal.ownerId,
     applicationRef: principal.applicationRef,
@@ -473,6 +478,60 @@ export async function seedSupplyAgentPrincipal(
     updatedAt: now,
     expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
   }
+  await backend.run(async (ctx) => {
+    const account = await ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', ownerId))
+      .unique()
+    if (account === null) throw new Error('supply_reservation_account_missing')
+    const ownership = await ctx.db.query('accountOwnerships')
+      .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+      .unique()
+    if (ownership === null) throw new Error('supply_reservation_ownership_missing')
+    await ctx.db.insert('principals', {
+      principalRef: principal.principalId,
+      kind: 'agent',
+      displayName: `Supply Agent ${suffix}`,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await ctx.db.insert('memberships', {
+      membershipRef: `mbr_${canonicalSuffix}`,
+      accountRef: ownerId,
+      memberPrincipalRef: principal.principalId,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      createdBy: {
+        actorPrincipalRef: ownership.ownerPrincipalRef,
+        activeAccountRef: ownerId,
+        correlationRef: `fixture:${grant.grantRef}`,
+        idempotencyRef: `fixture:${grant.grantRef}`,
+      },
+    })
+    await ctx.db.insert('authorityDelegationGrants', {
+      grantRef: grant.grantRef,
+      accountRef: ownerId,
+      actorPrincipalRef: ownership.ownerPrincipalRef,
+      subjectPrincipalRef: principal.principalId,
+      scopes: ['market_supply:manage'],
+      resourceRefs: ['*'],
+      budgetLimit: 1,
+      budgetUsed: 0,
+      expiresAt: grant.expiresAt,
+      generation: 1,
+      revision: 1,
+      lifecycle: 'active',
+      createdAt: now,
+      createdBy: {
+        actorPrincipalRef: ownership.ownerPrincipalRef,
+        activeAccountRef: ownerId,
+        correlationRef: `fixture:${grant.grantRef}`,
+        idempotencyRef: `fixture:${grant.grantRef}`,
+      },
+    })
+  })
   const recorded = await backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
     ...principal,
     scopes: [...principal.scopes],

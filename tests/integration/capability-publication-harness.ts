@@ -45,7 +45,7 @@ export async function preparedPublicationArgs(
   const args = await prepareCapabilityPublicationMutation(backend, input)
   const origin = args.prepared.offering.origin
   if (origin?.kind !== 'catalog_offering')
-    return await withSourceWrite('catalog_publish', args)
+    return await admittedPublicationArgs(args)
   const accessPath = await backend.run(
     async (ctx) =>
       await ctx.db
@@ -55,7 +55,7 @@ export async function preparedPublicationArgs(
         )
         .unique(),
   )
-  if (accessPath === null) return await withSourceWrite('catalog_publish', args)
+  if (accessPath === null) return await admittedPublicationArgs(args)
   const bound = await prepareCapabilityPublicationMutation(backend, {
     ...input,
     offering: {
@@ -67,7 +67,23 @@ export async function preparedPublicationArgs(
       },
     },
   })
-  return await withSourceWrite('catalog_publish', bound)
+  return await admittedPublicationArgs(bound)
+}
+
+async function admittedPublicationArgs(
+  args: PublishPreparedCapabilityArgs,
+): Promise<PublishPreparedCapabilityArgs> {
+  return await withSourceWrite('catalog_publish', {
+    ...args,
+    proof: {
+      reverificationId: `test:${canonicalDigest({
+        operationKey: args.operationKey,
+        correlationId: args.correlationId,
+      })}`,
+      firstFactorAgeMinutes: 0,
+      secondFactorAgeMinutes: -1,
+    },
+  })
 }
 
 type CapabilityContractAnnotation = Omit<
