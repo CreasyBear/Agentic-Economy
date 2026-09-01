@@ -47,7 +47,7 @@ type AeOperatorSidebarProps = {
 }
 
 const EMPTY_NAV_BADGES: OperatorNavBadges = {}
-const OPERATOR_NAV_BUTTON_CLASS = 'rounded-none border-s-2 border-transparent px-2.5 data-[active=true]:border-info data-[active=true]:bg-sidebar-accent/50 data-[active=true]:font-semibold hover:bg-sidebar-accent/50'
+const OPERATOR_NAV_BUTTON_CLASS = 'rounded-none border-s-2 border-transparent px-intra data-[active=true]:border-info data-[active=true]:bg-sidebar-accent/50 data-[active=true]:font-semibold hover:bg-sidebar-accent/50'
 
 function AuthenticatedOwnerAccount({ isCollapsed }: { isCollapsed: boolean }) {
   const { isLoaded, isSignedIn, user } = useUser()
@@ -108,7 +108,7 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
   return (
     <Sidebar variant="sidebar" collapsible="icon" role="complementary" aria-label="Workspace navigation">
       <nav id="operator-sidebar-navigation" aria-label="Operator navigation" className="flex h-full min-h-0 flex-1 flex-col">
-        <SidebarHeader className="px-3 pt-3">
+        <SidebarHeader className="px-related pt-intra">
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton asChild size="lg" tooltip="Agentic Economy workspace" className="h-14 rounded-none border-b border-sidebar-border px-1 hover:bg-transparent active:bg-transparent">
@@ -137,7 +137,7 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
         </SidebarHeader>
         <SidebarContent>
           {navGroups.map((group) => (
-            <SidebarGroup key={group.id} className="gap-1 px-3 py-3">
+            <SidebarGroup key={group.id} className="gap-related px-related py-related">
               <SidebarGroupLabel asChild className="h-6 rounded-none px-2 font-sans text-xs font-medium text-muted-foreground">
                 <span>{group.label}</span>
               </SidebarGroupLabel>
@@ -174,7 +174,7 @@ export function AeOperatorSidebar({ operatorRole, operatorContext, currentPath, 
             </SidebarGroup>
           ))}
         </SidebarContent>
-        <SidebarFooter className="mt-auto gap-3 border-t border-sidebar-border px-3 py-3">
+        <SidebarFooter className="mt-auto gap-related border-t border-sidebar-border px-related py-related">
           <SidebarGroupLabel asChild className="h-6 rounded-none px-2 font-sans text-xs font-medium text-muted-foreground">
             <span>Resources</span>
           </SidebarGroupLabel>

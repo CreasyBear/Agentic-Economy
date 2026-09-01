@@ -4,6 +4,7 @@ import { createContext, use, useCallback, useEffect, useLayoutEffect, useMemo, u
 import type { ReactNode } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { Separator } from '@/components/ui/separator'
+import { SiteMarker } from '@/components/ui/site-marker'
 import {
   SidebarInset,
   SidebarProvider,
@@ -16,9 +17,9 @@ import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNav
 import { AeCommandPanel, CommandPanelProvider } from '@/components/ae/command-panel'
 import { AeOperatorSidebar } from '@/components/ae/layout/AeOperatorSidebar'
 import { AeRecordHeader } from '@/components/ae/layout/AeRecordHeader'
-import { OperatorCommandOpenContext } from '@/components/ae/layout/operator-command-context'
 import {
   resolveOperatorListCrumb,
+  roleLabel,
   type OperatorBreadcrumbItem,
   type OperatorNavBadges,
   type OperatorRole,
@@ -169,8 +170,17 @@ function RootOperatorShell(props: AeOperatorShellProps) {
       && key.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
     ))
   }, [readAgentKeys])
-  const openCommand = useCallback(() => setCommandOpen(true), [])
   const shellRef = useRef<HTMLDivElement>(null)
+  const previousCommittedPathRef = useRef(currentPath)
+
+  useEffect(() => {
+    if (previousCommittedPathRef.current === currentPath) return
+    previousCommittedPathRef.current = currentPath
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(resolvedMainContentId)?.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [currentPath, resolvedMainContentId])
 
   useEffect(() => {
     const mainContent = document.getElementById(resolvedMainContentId)
@@ -202,35 +212,39 @@ function RootOperatorShell(props: AeOperatorShellProps) {
   }, [currentPath, operatorRole, providedBreadcrumbs, title])
 
   return (
-    <OperatorCommandOpenContext.Provider value={openCommand}>
-      <OperatorShellChromeContext.Provider value={registration}>
-        <SidebarProvider ref={shellRef}>
-          <a
-            data-testid="skip-to-content"
-            href={`#${resolvedMainContentId}`}
-            className="sr-only focus:not-sr-only focus:absolute focus:start-gutter focus:top-gutter focus:z-20 focus:rounded-md focus:bg-container focus:px-gutter focus:py-intra focus:text-sm focus:font-medium focus:text-foreground"
-          >
-            Skip to content
-          </a>
-          <AeOperatorSidebar
-            operatorRole={operatorRole}
-            {...(operatorContext === undefined ? {} : { operatorContext })}
-            currentPath={currentPath}
-            navBadges={navBadges ?? {}}
-            {...(suppressSurfaceNavigation === undefined ? {} : { suppressSurfaceNavigation })}
-          />
-          <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="bg-card">
-            <header className="flex min-h-touch shrink-0 items-center gap-intra border-b border-border">
-              <div className="flex min-w-0 items-center gap-intra px-gutter">
+    <OperatorShellChromeContext.Provider value={registration}>
+      <SidebarProvider ref={shellRef} className="bg-background">
+        <a
+          data-testid="skip-to-content"
+          href={`#${resolvedMainContentId}`}
+          className="sr-only focus:not-sr-only focus:absolute focus:start-gutter focus:top-gutter focus:z-20 focus:rounded-md focus:bg-container focus:px-gutter focus:py-intra focus:text-sm focus:font-medium focus:text-foreground"
+        >
+          Skip to content
+        </a>
+        <AeOperatorSidebar
+          operatorRole={operatorRole}
+          {...(operatorContext === undefined ? {} : { operatorContext })}
+          currentPath={currentPath}
+          navBadges={navBadges ?? {}}
+          {...(suppressSurfaceNavigation === undefined ? {} : { suppressSurfaceNavigation })}
+        />
+        <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="bg-background focus:outline-none">
+            <header className="sticky top-0 z-20 flex min-h-nav-stack shrink-0 items-center gap-related border-b border-border bg-background/95 px-gutter backdrop-blur supports-[backdrop-filter]:bg-background/85">
+              <div className="flex min-w-0 items-center gap-intra">
                 <OperatorSidebarToggle />
+                <Separator orientation="vertical" className="data-[orientation=vertical]:h-4" />
+                <span className="hidden shrink-0 items-center gap-2 font-sans text-xs font-medium text-muted-foreground sm:inline-flex">
+                  <SiteMarker tone="info" visible />
+                  {roleLabel[operatorRole]}
+                </span>
                 {breadcrumbs.length === 0 ? null : (
                   <>
-                    <Separator orientation="vertical" className="me-intra data-[orientation=vertical]:h-4" />
+                    <Separator orientation="vertical" className="hidden data-[orientation=vertical]:h-4 sm:block" />
                     <AeOperatorBreadcrumbs items={breadcrumbs} />
                   </>
                 )}
               </div>
-              <div className="ms-auto px-gutter">
+              <div className="ms-auto shrink-0">
                 <CommandPanelProvider
                   open={commandOpen}
                   onOpenChange={setCommandOpen}
@@ -242,28 +256,27 @@ function RootOperatorShell(props: AeOperatorShellProps) {
             </header>
             <div
               data-testid="operator-content"
-              className="flex min-h-0 flex-1 flex-col px-gutter pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-gutter"
+              className="flex min-h-0 flex-1 flex-col px-gutter pb-[calc(var(--spacing-touch)+env(safe-area-inset-bottom,0px))] md:px-related md:pb-related"
             >
               <AeRecordHeader
                 title={title}
                 description={description}
-                {...(secondaryBar === undefined ? {} : { className: 'border-b-0 pb-0' })}
+                {...(secondaryBar === undefined ? {} : { className: 'pb-intra' })}
                 {...(actions === undefined ? {} : { actions })}
               />
               {secondaryBar === undefined ? null : secondaryBar}
-              <div className="min-h-0 flex-1 pt-intra">{children}</div>
+              <div className="min-h-0 flex-1 pt-related">{children}</div>
             </div>
-          </SidebarInset>
-          {operatorRole === 'owner' && suppressSurfaceNavigation !== true
-            ? (
-                <AeOwnerMobileNavigation
-                  {...(operatorContext === undefined ? {} : { operatorContext })}
-                  currentPath={currentPath}
-                />
-              )
-            : null}
-        </SidebarProvider>
-      </OperatorShellChromeContext.Provider>
-    </OperatorCommandOpenContext.Provider>
+        </SidebarInset>
+        {operatorRole === 'owner' && suppressSurfaceNavigation !== true
+          ? (
+              <AeOwnerMobileNavigation
+                {...(operatorContext === undefined ? {} : { operatorContext })}
+                currentPath={currentPath}
+              />
+            )
+          : null}
+      </SidebarProvider>
+    </OperatorShellChromeContext.Provider>
   )
 }

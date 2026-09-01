@@ -50,7 +50,7 @@ export function AePageHeader({
                   {title}
                 </h1>
                 {eyebrow === undefined ? null : (
-                  <span className="shrink-0 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  <span className="shrink-0 font-sans text-xs font-medium text-muted-foreground">
                     {eyebrow}
                   </span>
                 )}

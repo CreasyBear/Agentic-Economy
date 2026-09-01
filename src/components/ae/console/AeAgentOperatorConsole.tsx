@@ -111,7 +111,7 @@ export function AeAgentOperatorConsole({
         header: ({ column }) => <AeOperatorSortableHeader label="Generation" column={column} />,
         cell: ({ row }) => row.original.currentCredentialGeneration === undefined
           ? '—'
-          : String(row.original.currentCredentialGeneration),
+          : <span className="font-mono tabular-nums">{String(row.original.currentCredentialGeneration)}</span>,
       },
       {
         id: 'lastSeen',
@@ -119,7 +119,7 @@ export function AeAgentOperatorConsole({
         header: ({ column }) => <AeOperatorSortableHeader label="Last seen" column={column} />,
         cell: ({ row }) => row.original.lastSeenAt === undefined
           ? 'No activity'
-          : formatTimestamp(row.original.lastSeenAt),
+          : <span className="font-mono tabular-nums">{formatTimestamp(row.original.lastSeenAt)}</span>,
       },
     ],
     [],
@@ -427,7 +427,7 @@ function approvalFacts(approval: PendingOperationApproval): readonly AeFact[] {
     { label: 'Consequence', value: consequenceLabel(approval.authorityRequest.consequence) },
   ]
   if (approval.authorityRequest.maximumSpend !== undefined) {
-    facts.push({ label: 'Maximum spend', value: formatCurrencyAmount(approval.authorityRequest.maximumSpend) })
+    facts.push({ label: 'Maximum spend', value: formatCurrencyAmount(approval.authorityRequest.maximumSpend), mono: true})
   }
   facts.push({
     label: 'Data fields',
@@ -442,28 +442,31 @@ function agentFacts(detail: AgentDetail): readonly AeFact[] {
   const accountBalance = detail.account?.balance
   const zeroBalance = accountBalance === undefined ? undefined : { ...accountBalance, units: '0' }
   return [
-    { label: 'Application', value: detail.agent.applicationRef },
+    { label: 'Application', value: detail.agent.applicationRef, mono: true},
     { label: 'Environment', value: environmentLabel(detail.agent.environment) },
-    { label: 'Credentials', value: String(detail.credentials.length) },
+    { label: 'Credentials', value: String(detail.credentials.length), mono: true},
     { label: 'Current generation', value: detail.agent.currentCredentialGeneration === undefined
       ? 'None'
-      : String(detail.agent.currentCredentialGeneration) },
+      : String(detail.agent.currentCredentialGeneration),
+      mono: true },
     { label: 'Last seen', value: detail.agent.lastSeenAt === undefined
       ? 'No activity recorded'
-      : formatTimestamp(detail.agent.lastSeenAt) },
+      : formatTimestamp(detail.agent.lastSeenAt),
+      mono: true },
     { label: 'Current credential', value: detail.currentCredentialRef === undefined
       ? 'None'
-      : redactedKeyId(detail.currentCredentialRef) },
-    { label: 'Per call', value: formatAmount(detail.grant?.budget.maximumSpendPerInvocation) },
-    { label: 'Daily budget', value: formatAmount(detail.grant?.budget.maximumDailySpend) },
-    { label: 'Monthly budget', value: formatAmount(detail.grant?.budget.maximumMonthlySpend) },
-    { label: 'Rate', value: detail.grant === undefined ? 'Unavailable' : `${detail.grant.rate.maximumCallsPerMinute}/min · ${detail.grant.rate.maximumCallsPerHour}/hour` },
-    { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentInvocations) },
+      : redactedKeyId(detail.currentCredentialRef),
+      mono: true },
+    { label: 'Per call', value: formatAmount(detail.grant?.budget.maximumSpendPerInvocation), mono: true},
+    { label: 'Daily budget', value: formatAmount(detail.grant?.budget.maximumDailySpend), mono: true},
+    { label: 'Monthly budget', value: formatAmount(detail.grant?.budget.maximumMonthlySpend), mono: true},
+    { label: 'Rate', value: detail.grant === undefined ? 'Unavailable' : `${detail.grant.rate.maximumCallsPerMinute}/min · ${detail.grant.rate.maximumCallsPerHour}/hour`, mono: true},
+    { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentInvocations), mono: true},
     { label: 'Authority', value: scopeLabel(detail.authorityMode) },
     { label: 'Scopes', value: detail.scopes.length === 0 ? 'None' : detail.scopes.join(', ') },
-    { label: 'Balance', value: formatAmount(accountBalance) },
-    { label: 'Calls', value: String(detail.usage?.callCount ?? 0) },
-    { label: 'Spend', value: formatAmount(detail.usage?.grossSpend ?? zeroBalance) },
+    { label: 'Balance', value: formatAmount(accountBalance), mono: true},
+    { label: 'Calls', value: String(detail.usage?.callCount ?? 0), mono: true},
+    { label: 'Spend', value: formatAmount(detail.usage?.grossSpend ?? zeroBalance), mono: true},
     { label: 'Unknown', value: detail.usage?.states.includes('outcome_unknown') ? 'Needs review' : 'None' },
     { label: 'Usage and balance', value: dataLabel(detail.dataState), muted: true },
   ]
@@ -481,11 +484,11 @@ function CredentialHistory({
   return (
     <div className="grid gap-2">
       <p className="text-sm font-medium text-foreground">Credential history</p>
-      <ul className="m-0 grid list-none gap-2 p-0">
+      <ul className="m-0 list-none divide-y divide-border border-y border-border p-0">
         {detail.credentials.toReversed().map((credential) => (
           <li
             key={credential.credentialRef}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3 text-sm"
+            className="flex flex-wrap items-center justify-between gap-intra py-intra text-sm"
           >
             <span>Generation {credential.generation}</span>
             <span className="flex items-center gap-2">

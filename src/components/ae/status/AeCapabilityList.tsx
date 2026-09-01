@@ -34,9 +34,14 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
         accessorFn: (item) => item.accessPaths.length,
         header: 'Access',
         cell: ({ row }) =>
-          row.original.accessPaths.length === 0
-            ? 'No access route'
-            : `${row.original.accessPaths.length} ${row.original.accessPaths.length === 1 ? 'route' : 'routes'}`,
+          row.original.accessPaths.length === 0 ? (
+            'No access route'
+          ) : (
+            <span className="font-mono tabular-nums">
+              {row.original.accessPaths.length}{' '}
+              {row.original.accessPaths.length === 1 ? 'route' : 'routes'}
+            </span>
+          ),
       },
     ],
     [],

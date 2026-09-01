@@ -101,7 +101,7 @@ export function AeOwnerCredit({
         accessorFn: (row) => formatCreditAmount(row.entry.grossAmount),
         header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
         cell: ({ row }) => (
-          <span className="font-medium tabular-nums">{formatCreditAmount(row.original.entry.grossAmount)}</span>
+          <span className="font-medium font-mono tabular-nums">{formatCreditAmount(row.original.entry.grossAmount)}</span>
         ),
       },
       {
@@ -134,6 +134,7 @@ export function AeOwnerCredit({
                 : hasUnavailableData
                   ? 'Balance unavailable'
                   : formatCreditAmount(balance),
+              mono: true,
             },
             {
               label: 'Assignment',
@@ -218,15 +219,15 @@ export function AeOwnerCredit({
   )
 }
 
-function chargeFacts(row: CreditChargeRow): readonly { label: string; value: string; muted?: boolean }[] {
+function chargeFacts(row: CreditChargeRow): readonly { label: string; value: string; muted?: boolean; mono?: boolean }[] {
   return [
     { label: 'Outcome', value: activityLabel(row.entry) },
     { label: 'Agent', value: row.item.agent.displayName },
-    { label: 'Amount', value: formatCreditAmount(row.entry.grossAmount) },
+    { label: 'Amount', value: formatCreditAmount(row.entry.grossAmount), mono: true },
     ...(row.entry.operation === undefined
       ? []
       : [{ label: 'Supplier', value: row.entry.operation.supplier }]),
-    { label: 'When', value: formatTimestamp(row.entry.observedAt) },
+    { label: 'When', value: formatTimestamp(row.entry.observedAt), mono: true },
   ]
 }
 

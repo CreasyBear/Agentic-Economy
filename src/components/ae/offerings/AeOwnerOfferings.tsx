@@ -314,7 +314,7 @@ export function AeOwnerOfferingsList({
                     href: `/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}`,
                   }
                   return (
-                    <li key={item.offering.offeringRef} className="grid min-w-0 gap-3 py-4">
+                    <li key={item.offering.offeringRef} className="grid min-w-0 gap-related py-related">
                       <div className="grid gap-1">
                         <h3 className="break-words font-semibold">{item.offering.name}</h3>
                         <p className="text-sm text-muted-foreground">
@@ -462,7 +462,7 @@ export function AeOwnerOfferingEditor({
   }
 
   return (
-    <form className="grid gap-6" onSubmit={(event) => void submit(event)} noValidate>
+    <form className="grid gap-section" onSubmit={(event) => void submit(event)} noValidate>
       {result === undefined ? null : (
         <Alert variant={result.kind === 'invalid' || result.kind === 'refused' ? 'destructive' : 'default'}>
           <AlertTitle>{result.kind === 'saved' ? 'Operation saved' : result.kind === 'revision_conflict' ? 'This Operation changed elsewhere' : 'Operation needs attention'}</AlertTitle>
@@ -484,22 +484,22 @@ export function AeOwnerOfferingEditor({
         <EditorStep icon={value.status === 'published' ? <CheckCircle2Icon aria-hidden="true" /> : <CircleDashedIcon aria-hidden="true" />} label="Publish" detail={value.status === 'published' ? 'Visible in the market' : 'Choose when it goes live'} active={value.status === 'published'} />
       </ol>
       {seed === undefined ? null : (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" variant="secondary" disabled={editorDisabled} onClick={() => update(seed.value)}>
+        <div className="flex flex-wrap items-center gap-intra">
+          <Button type="button" variant="secondary" className="min-h-touch" disabled={editorDisabled} onClick={() => update(seed.value)}>
             Start from {seed.label}
           </Button>
           <p className="text-sm text-muted-foreground">Fills the details below. You can change every field.</p>
         </div>
       )}
       <AeSection {...(headingRef === undefined ? {} : { headingRef })} title="Public details" description="Describe the exact tool and outcome agents can inspect before calling it.">
-        <FieldGroup className="gap-4">
+        <FieldGroup className="gap-related">
           <TextInput label="Name" value={value.name} onChange={(name) => update({ name })} disabled={editorDisabled} inputRef={firstFieldRef} {...(invalidField === 'name' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
           <TextInput label="Category" value={value.category} onChange={(category) => update({ category })} disabled={editorDisabled} inputRef={categoryFieldRef} {...(invalidField === 'category' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
           <TextAreaInput label="Summary" value={value.summary} onChange={(summary) => update({ summary })} disabled={editorDisabled} inputRef={summaryFieldRef} {...(invalidField === 'summary' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
           <TextInput label="Coverage" value={value.serviceAreaSummary} onChange={(serviceAreaSummary) => update({ serviceAreaSummary })} disabled={editorDisabled} optional />
           <TextInput label="Availability" value={value.availabilitySummary} onChange={(availabilitySummary) => update({ availabilitySummary })} disabled={editorDisabled} optional />
           <TextInput label="Pricing" value={value.pricingSummary} onChange={(pricingSummary) => update({ pricingSummary })} disabled={editorDisabled} optional />
-          <div className="grid gap-4 border-t border-border pt-4">
+          <div className="grid gap-related border-t border-border pt-related">
             <div className="grid gap-1">
               <p className="font-semibold text-foreground">Comparable price</p>
               <p className="block text-sm text-muted-foreground">Optional, and separate from the note above. Choose a supported currency so agents can compare exact amounts. Your note is never used to infer this value.</p>
@@ -577,7 +577,7 @@ export function AeOwnerOfferingEditor({
 
       <OwnerAccessPathsEditor paths={value.accessPaths} disabled={editorDisabled} onChange={(accessPaths) => update({ accessPaths })} />
 
-      <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-card py-4 sm:flex-row sm:items-center">
+      <div className="sticky bottom-0 flex flex-col gap-intra border-t border-border bg-card py-related sm:flex-row sm:items-center">
         <Button asChild variant="secondary" className="min-h-touch">
           {backAction ?? <a href="/owner/offerings">Back to Operations</a>}
         </Button>
@@ -644,7 +644,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
       {paths.length === 0 ? <p className="text-muted-foreground">Add a phone, website, or message route.</p> : (
         <ul className="m-0 list-none divide-y divide-border p-0">
           {paths.map((path) => (
-            <li key={path.accessPathRef ?? path.localDraftKey} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] sm:items-center">
+            <li key={path.accessPathRef ?? path.localDraftKey} className="grid gap-intra py-intra sm:grid-cols-[1fr_auto] sm:items-center">
               <div>
                 <p className="font-semibold text-foreground">{pathLabel(path.descriptor)}</p>
                 <p className="text-sm text-muted-foreground">{path.descriptor.kind === 'human_request' ? path.descriptor.disclosure : path.descriptor.summary}</p>
@@ -654,7 +654,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
           ))}
         </ul>
       )}
-      <FieldGroup className="gap-4">
+      <FieldGroup className="gap-related">
         <Field label="Add a contact route" inputID="access-path-kind">
           <Select value={selectedKind} disabled={disabled} onValueChange={(kind) => { setSelectedKind(toAccessKind(kind)); setTechnicalExpanded(false) }}>
             <SelectTrigger id="access-path-kind" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
@@ -678,14 +678,14 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
           />
         ) : null}
         {selectedKind === 'external_operation' ? (
-          <Collapsible open={technicalExpanded} onOpenChange={setTechnicalExpanded} className="grid gap-3">
+          <Collapsible open={technicalExpanded} onOpenChange={setTechnicalExpanded} className="grid gap-intra">
             <CollapsibleTrigger asChild>
               <Button type="button" variant="link" className="h-auto min-h-touch justify-self-start px-0 font-semibold text-foreground underline">
                 {technicalExpanded ? 'Hide request details' : 'Add request details'}
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <FieldGroup className="gap-4">
+              <FieldGroup className="gap-related">
                 <TextInput label="Request name" value={endpoint.name} onChange={(name) => setEndpoint((current) => ({ ...current, name }))} disabled={disabled} description="What an agent should call this. Left blank, it publishes as “Agent request”." />
                 <TextInput label="Request URL" value={endpoint.url} onChange={(url) => setEndpoint((current) => ({ ...current, url }))} disabled={disabled} inputMode="url" />
                 <Field label="Method" inputID="access-path-method" description="Optional">
@@ -726,6 +726,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
         <Button
           type="button"
           variant="secondary"
+          className="min-h-touch"
           disabled={disabled || draftDetail.trim().length === 0 || (selectedKind === 'external_operation' && endpoint.url.trim().length === 0) || (selectedKind === 'website' && websiteUrl.trim().length === 0)}
           onClick={() => {
             if (selectedKind === 'website' && !isHttpsUrl(websiteUrl)) {
@@ -752,8 +753,8 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
 
 function EditorStep({ icon, label, detail, active }: { icon: ReactNode; label: string; detail: string; active: boolean }) {
   return (
-    <li className={cn('flex min-h-16 items-center gap-3 rounded-lg border p-3', active ? 'border-ring bg-muted/60' : 'border-border bg-card')}>
-      <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-full', active ? 'bg-brand text-on-brand' : 'bg-muted text-muted-foreground')}>{icon}</span>
+    <li className={cn('flex min-h-16 items-center gap-intra rounded-lg border p-related', active ? 'border-ring' : 'border-border bg-card')}>
+      <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-md', active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>{icon}</span>
       <span className="grid min-w-0 gap-0.5">
         <span className="font-semibold text-foreground">{label}</span>
         <span className="text-sm text-muted-foreground">{detail}</span>

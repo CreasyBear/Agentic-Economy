@@ -22,7 +22,7 @@ export function AeOwnerMobileNavigation({ operatorContext, currentPath }: AeOwne
       aria-label="Owner primary navigation"
       className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur supports-[backdrop-filter]:bg-background/85 md:hidden"
     >
-      <div className="grid h-16 grid-cols-3 px-gutter">
+      <div className="grid min-h-touch grid-cols-3 px-gutter">
         {items.map((item) => {
           const current = isOperatorNavItemCurrent('owner', currentPath, item.href)
           const Icon = item.icon
