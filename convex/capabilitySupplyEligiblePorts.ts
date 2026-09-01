@@ -14,6 +14,7 @@ import type { QueryCtx } from './_generated/server'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
+import { toDomain as providerConnectionDomain } from './lib/providerConnections/codecs'
 export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
   return {
     listAdmittedConformantBindingsByNetwork: async (networkId, take) => {
@@ -45,33 +46,7 @@ export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
     loadProviderConnection: async (connectionRef): Promise<ProviderConnection | undefined> => {
       const row = await db.query('capabilityProviderConnections')
         .withIndex('by_connectionRef', (query) => query.eq('connectionRef', connectionRef)).unique()
-      return row === null ? undefined : {
-        connectionRef: row.connectionRef,
-        owningAccountRef: row.owningAccountRef,
-        installedByPrincipalRef: row.installedByPrincipalRef,
-        authorityGrantRef: row.authorityGrantRef,
-        authorityGrantGeneration: row.authorityGrantGeneration,
-        ...(row.secretRef === undefined ? {} : { secretRef: row.secretRef }),
-        businessId: String(row.businessId),
-        providerRef: row.providerRef,
-        providerAccountRef: row.providerAccountRef,
-        adapterId: row.adapterId,
-        credentialRef: row.credentialRef,
-        grantedScopes: row.grantedScopes,
-        grantedResources: row.grantedResources,
-        authorityGeneration: row.authorityGeneration,
-        authorityDigest: row.authorityDigest,
-        lifecycle: row.lifecycle,
-        observedAt: row.observedAt,
-        ...(row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt }),
-        ...(row.revokedAt === undefined ? {} : { revokedAt: row.revokedAt }),
-        ...(row.reasonCode === undefined ? {} : { reasonCode: row.reasonCode }),
-        evidenceRefs: row.evidenceRefs,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-        lastCommandId: row.lastCommandId,
-        lastCommandDigest: row.lastCommandDigest,
-      }
+      return row === null ? undefined : providerConnectionDomain(row)
     },
     catalogOriginIsCurrent: async (origin, businessId) => {
       const offering = await db.query('businessOfferings')

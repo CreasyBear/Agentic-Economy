@@ -188,6 +188,7 @@ async function canaryFixture(suffix: string) {
   if (prepared.kind === 'refused') throw new Error('canary_singleton_prepare_failed')
   const {
     runtimeEnvironment: _runtimeEnvironment,
+    proof: _proof,
     sourceWrite: _sourceWrite,
     sourceWriteRequest: _sourceWriteRequest,
     ...unsignedCommand

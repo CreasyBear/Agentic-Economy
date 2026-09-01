@@ -210,6 +210,7 @@ describe('owner Base Sepolia staging publication', () => {
     }
     const {
       runtimeEnvironment: _runtimeEnvironment,
+      proof: _proof,
       sourceWrite: _oldSourceWrite,
       sourceWriteRequest: _oldSourceWriteRequest,
       ...unsignedCommand
@@ -465,6 +466,7 @@ describe('owner Base Sepolia staging publication', () => {
     }
     const {
       runtimeEnvironment: _repeatRuntimeEnvironment,
+      proof: _repeatProof,
       sourceWrite: _repeatSourceWrite,
       sourceWriteRequest: _repeatSourceWriteRequest,
       ...repeatUnsignedCommand
