@@ -1,0 +1,180 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  RouterContextProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import "../../setup/jsdom-platform";
+
+import {
+  AeMarketComparisonView,
+  type MarketComparison,
+} from "@/components/ae/market/AeMarketComparisonView";
+import {
+  buildMarketReturnContext,
+  type MarketReturnContext,
+} from "@/components/ae/market/market-return-context";
+import { operationChoiceCompareOutputSchema } from "@/modules/registry/operation-choice-contracts";
+
+const firstRef = `operation:v1:${"a".repeat(64)}`;
+const secondRef = `operation:v1:${"b".repeat(64)}`;
+
+const comparison = operationChoiceCompareOutputSchema.parse({
+  kind: "ok",
+  schemaVersion: "registry-operations:v1",
+  operations: [
+    operation(firstRef, "Registry search", "Registry Works", {
+      kind: "fixed",
+      amount: { currency: "USD", units: "25", exponent: 2 },
+    }),
+    operation(secondRef, "Company lookup", "Clear Ledger", {
+      kind: "on_request",
+    }),
+  ],
+  facts: [
+    fact("price", [
+      { operationRef: firstRef, value: { kind: "fixed", amount: { currency: "USD", units: "25", exponent: 2 } }, source: "catalog" },
+      { operationRef: secondRef, value: { kind: "on_request" }, source: "catalog" },
+    ]),
+    fact("availability", [
+      { operationRef: firstRef, value: { posture: "routeable" }, source: "readiness" },
+      { operationRef: secondRef, value: { posture: "setup_required" }, source: "readiness" },
+    ]),
+    fact("dataUse", [
+      { operationRef: firstRef, value: [], source: "contract" },
+      { operationRef: secondRef, value: [{ effectId: "customer", inputPointer: "/company", classification: "personal", phase: "execution", recipient: "selected_binding", purposes: ["lookup"] }], source: "contract" },
+    ]),
+    fact("effects", [
+      { operationRef: firstRef, value: [{ effectId: "release", class: "data_release", authority: "explicit", reversibility: "irreversible" }], source: "contract" },
+      { operationRef: secondRef, value: [{ effectId: "charge", class: "financial_exposure", authority: "mandate_or_explicit", reversibility: "conditional" }], source: "contract" },
+    ]),
+    fact("summary", [
+      { operationRef: firstRef, value: "Private canonical summary", source: "contract" },
+      { operationRef: secondRef, value: "Another summary", source: "contract" },
+    ]),
+  ],
+  navigation: [],
+});
+
+afterEach(cleanup);
+
+describe("market comparison view", () => {
+  it("keeps the comparison workspace ahead of the editorial footer", () => {
+    const { container } = renderComparison(comparison);
+
+    expect(container.firstElementChild?.className).toContain("min-h-dvh");
+    expect(container.firstElementChild?.className).toContain("content-start");
+  });
+
+  it("renders only approved canonical facts with supplier-qualified identities and inspect links", () => {
+    const returnTo = buildMarketReturnContext({
+      window: "30d",
+      query: "registry",
+      compare: `${firstRef},${secondRef}`,
+    });
+    renderComparison(comparison, { returnTo });
+
+    const heading = screen.getByRole("heading", { level: 1, name: "Compare Operations" });
+    expect(document.activeElement).toBe(heading);
+    const table = screen.getByRole("table");
+    expect(table.closest('[data-slot="table-container"]')?.className).toContain("overflow-x-auto");
+    expect(table.closest('[data-slot="card"]')?.className).toContain("min-w-0");
+    expect(within(table).getByText("Registry Works")).toBeTruthy();
+    expect(within(table).getByText("Clear Ledger")).toBeTruthy();
+    expect(within(table).getByText("USD 0.25")).toBeTruthy();
+    expect(within(table).getByText("Price on request")).toBeTruthy();
+    expect(within(table).getByText("Ready now")).toBeTruthy();
+    expect(within(table).getByText("Setup required")).toBeTruthy();
+    expect(within(table).getByText("Personal data")).toBeTruthy();
+    expect(within(table).getByText("Financial exposure")).toBeTruthy();
+    expect(screen.queryByText("Private canonical summary")).toBeNull();
+    const inspectHref = screen.getByRole("link", {
+      name: "Inspect Registry search by Registry Works",
+    }).getAttribute("href");
+    expect(inspectHref).not.toBeNull();
+    const inspectUrl = new URL(inspectHref!, "https://agentic-economy.example");
+    expect(inspectUrl.pathname).toContain(encodeURIComponent(firstRef));
+    expect(inspectUrl.searchParams.get("from")).toBe(returnTo);
+  });
+
+  it("offers retry, edit, and back recovery for an unavailable comparison", () => {
+    const onRetry = vi.fn();
+    const onEditSelection = vi.fn();
+    const onBack = vi.fn();
+    renderComparison({
+      kind: "unavailable",
+      schemaVersion: "registry-operations:v1",
+      reason: "operation_unavailable",
+      navigation: [],
+    }, { onRetry, onEditSelection, onBack });
+
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Comparison unavailable" }));
+    expect(screen.getByRole("alert").textContent).toContain("Readiness changed after selection");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit selection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to results" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+    expect(onEditSelection).toHaveBeenCalledOnce();
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+});
+
+function operation(
+  operationRef: string,
+  title: string,
+  supplierName: string,
+  price: MarketComparison extends infer _Comparison ? { kind: "fixed"; amount: { currency: string; units: string; exponent: number } } | { kind: "on_request" } : never,
+) {
+  return {
+    operationRef,
+    capabilityId: "identity.company_search",
+    title,
+    summary: "Look up a company.",
+    supplier: { name: supplierName, slug: supplierName.toLowerCase().replaceAll(" ", "-") },
+    price,
+    authentication: { kind: "unknown" as const },
+    availability: { posture: "routeable" as const },
+    navigation: [],
+  };
+}
+
+function fact(field: string, values: readonly Record<string, unknown>[]) {
+  return { field, values };
+}
+
+function renderComparison(
+  value: MarketComparison,
+  callbacks: {
+    onEditSelection?: () => void;
+    onBack?: () => void;
+    onRetry?: () => void;
+    returnTo?: MarketReturnContext;
+  } = {},
+) {
+  const rootRoute = createRootRoute();
+  const routeTree = rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: "/market" }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/operations/$operationRef" }),
+  ]);
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: ["/market"] }),
+  });
+  return render(
+    <RouterContextProvider router={router}>
+      <AeMarketComparisonView
+        comparison={value}
+        onEditSelection={callbacks.onEditSelection ?? vi.fn()}
+        onBack={callbacks.onBack ?? vi.fn()}
+        onRetry={callbacks.onRetry ?? vi.fn()}
+        {...(callbacks.returnTo === undefined ? {} : { returnTo: callbacks.returnTo })}
+      />
+    </RouterContextProvider>,
+  );
+}

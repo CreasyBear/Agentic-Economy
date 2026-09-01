@@ -6,6 +6,10 @@ import {
   type AeRecordTableSelection,
 } from "@/components/ae/operator/AeOperatorDataTable";
 import { Badge } from "@/components/ui/badge";
+import {
+  FALLBACK_MARKET_RETURN_CONTEXT,
+  type MarketReturnContext,
+} from "@/components/ae/market/market-return-context";
 import type { OperationCardViewModel } from "@/modules/market/operation-view-model";
 
 const readinessVariants = {
@@ -17,9 +21,11 @@ const readinessVariants = {
 export function AeOperationTable({
   operations,
   selection,
+  returnTo = FALLBACK_MARKET_RETURN_CONTEXT,
 }: {
   operations: readonly OperationCardViewModel[];
   selection?: AeRecordTableSelection<OperationCardViewModel>;
+  returnTo?: MarketReturnContext;
 }) {
   const columns = useMemo<ColumnDef<OperationCardViewModel, unknown>[]>(
     () => [
@@ -120,7 +126,7 @@ export function AeOperationTable({
         kind: "link",
         label: "Open",
         getHref: (operation) =>
-          `/operations/${encodeURIComponent(operation.operationRef)}`,
+          `/operations/${encodeURIComponent(operation.operationRef)}?${new URLSearchParams({ from: returnTo }).toString()}`,
         getAccessibleLabel: (operation) =>
           `${operation.readiness === "Routeable" ? "Use" : "Inspect"} ${operation.title}`,
       }}
