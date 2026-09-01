@@ -30,7 +30,6 @@ import {
 } from '../src/modules/money/public'
 import {
   payoutAttemptMaterialIsFrozen,
-  payoutAuthorityAllowed,
   payoutFromRow,
   payoutReservationCurrentAmountMatches,
   payoutReservationIdentity,
@@ -43,13 +42,18 @@ import {
   readPayoutReservationJournal,
   type PayoutTransferResult,
 } from './moneyPayoutTransferShared'
+import { resolveBusinessActor } from './authz'
+import {
+  clerkConsequenceProofValue,
+  type ClerkConsequenceProofInput,
+} from './lib/consequenceProof'
+import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 
 function refusedPayout(code: string, retryable: boolean): PayoutTransferResult {
   return { kind: 'refused', code, retryable }
 }
 
 export type BeginPayoutTransferArgs = BillingSourceWriteArgs & {
-  authority: { principalId: string }
   businessId: string
   amount: ExactAmount
   providerAccountRef: string
@@ -61,6 +65,9 @@ export type BeginPayoutTransferArgs = BillingSourceWriteArgs & {
   idempotencyKey: string
   providerRecoveryDeadlineAt: number
   observedAt: number
+  expectedPayoutRevision: number
+  expectedAccountVersion: number
+  proof?: ClerkConsequenceProofInput
 }
 
 export const payoutTransferStateValue = v.union(
@@ -105,7 +112,6 @@ export const payoutTransferResultValue = v.union(
   moneyRefusalValue,
 )
 export const payoutBeginArgs = {
-  authority: v.object({ principalId: identifier }),
   businessId: identifier,
   amount: exactAmount,
   providerAccountRef: identifier,
@@ -117,6 +123,9 @@ export const payoutBeginArgs = {
   idempotencyKey: identifier,
   providerRecoveryDeadlineAt: v.number(),
   observedAt: v.number(),
+  expectedPayoutRevision: v.number(),
+  expectedAccountVersion: v.number(),
+  proof: v.optional(clerkConsequenceProofValue),
   ...billingSourceArgs,
 }
 
@@ -132,6 +141,13 @@ type PayoutTransferBeginInput = Readonly<{
   idempotencyKey: string
   providerRecoveryDeadlineAt: number
   observedAt: number
+  expectedPayoutRevision: number
+  expectedAccountVersion: number
+  consequence?: Readonly<{
+    actor: Extract<Awaited<ReturnType<typeof resolveBusinessActor>>, { kind: 'authenticated_owner' }>
+    proof?: ClerkConsequenceProofInput
+    correlationRef: string
+  }>
 }>
 
 export async function beginPayoutTransferReservation(
@@ -146,6 +162,10 @@ export async function beginPayoutTransferReservation(
       args.requestDigest.length === 0 ||
       args.inputDigest.length === 0 ||
       args.idempotencyKey.length === 0 ||
+      !Number.isSafeInteger(args.expectedPayoutRevision) ||
+      args.expectedPayoutRevision <= 0 ||
+      !Number.isSafeInteger(args.expectedAccountVersion) ||
+      args.expectedAccountVersion < 0 ||
       args.providerRecoveryDeadlineAt <= args.observedAt ||
       args.providerRecoveryDeadlineAt >
         args.observedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS
@@ -240,6 +260,8 @@ export async function beginPayoutTransferReservation(
         ? refusedPayout('payout_reconciliation_required', false)
         : { kind: 'accepted' as const, transfer }
     }
+    if (payout.updatedAt !== args.expectedPayoutRevision)
+      return refusedPayout('payout_not_ready', false)
     const externalTransactions = await ctx.db
       .query('moneyTransactions')
       .withIndex('by_externalRef', (q) => q.eq('externalRef', args.payoutRef))
@@ -262,6 +284,7 @@ export async function beginPayoutTransferReservation(
     if (
       payoutAccount === null ||
       payoutAccount.stripeAccountId !== args.destinationAccountId ||
+      (payoutAccount.version ?? 0) !== args.expectedAccountVersion ||
       payoutAccount.state !== 'ready' ||
       !payoutAccount.detailsSubmitted ||
       !payoutAccount.recipientCapabilityActive
@@ -385,6 +408,46 @@ export async function beginPayoutTransferReservation(
     const paidBefore = providerPaidBefore ?? zeroPaid
     if (paidBefore === undefined)
       return refusedPayout('payout_reconciliation_required', false)
+    if (args.consequence === undefined)
+      return refusedPayout('reauthentication_required', false)
+    const consequence = await admitInteractiveOwnerConsequence(ctx, {
+      actor: args.consequence.actor,
+      action: 'payout.transfer',
+      target: {
+        targetType: 'payout',
+        targetRef: args.payoutRef,
+        targetRevision: args.expectedPayoutRevision,
+      },
+      requiredScopes: ['money:payout_transfer'],
+      resourceRefs: [
+        `business:${args.businessId}`,
+        `payout:${args.payoutRef}`,
+        `destination:${args.destinationAccountId}`,
+      ],
+      budgetAmount: 0,
+      consequenceSummary: `Transfer ${amount.currency} ${amount.units} to the current Stripe payout destination.`,
+      statusReadbackRef: '/owner/offerings#earnings',
+      command: {
+        version: 'ae.payout-transfer-consequence:v1',
+        businessId: args.businessId,
+        payoutRef: args.payoutRef,
+        expectedPayoutRevision: args.expectedPayoutRevision,
+        expectedAccountVersion: args.expectedAccountVersion,
+        amount,
+        providerAccountRef: args.providerAccountRef,
+        destinationAccountId: args.destinationAccountId,
+        commandId: args.commandId,
+        inputDigest: args.inputDigest,
+        requestDigest: args.requestDigest,
+        idempotencyKey: args.idempotencyKey,
+      },
+      correlationRef: args.consequence.correlationRef,
+      idempotencyRef: args.idempotencyKey,
+      ...(args.consequence.proof === undefined ? {} : { proof: args.consequence.proof }),
+      now: args.observedAt,
+    })
+    if (consequence.kind === 'refused')
+      return refusedPayout(consequence.code, consequence.code === 'rate_limited')
     const identity = payoutReservationIdentity({
       payoutRef: args.payoutRef,
       payoutCommandId: args.commandId,
@@ -460,13 +523,20 @@ export async function beginPayoutTransferHandler(
   args: BeginPayoutTransferArgs,
 ): Promise<PayoutTransferResult> {
     await requireBillingSourceWrite(ctx, args)
-    if (
-      !(await payoutAuthorityAllowed(
-        ctx,
-        args.businessId,
-        args.authority.principalId,
-      ))
-    )
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner')
       return refusedPayout('billing_identity_missing', false)
-    return await beginPayoutTransferReservation(ctx, args)
+    const businessId = ctx.db.normalizeId('businesses', args.businessId)
+    if (businessId === null) return refusedPayout('billing_identity_missing', false)
+    const business = await ctx.db.get(businessId)
+    if (business === null || business.owningAccountRef !== actor.canonicalAccountRef)
+      return refusedPayout('billing_identity_missing', false)
+    return await beginPayoutTransferReservation(ctx, {
+      ...args,
+      consequence: {
+        actor,
+        ...(args.proof === undefined ? {} : { proof: args.proof }),
+        correlationRef: args.correlationId,
+      },
+    })
 }

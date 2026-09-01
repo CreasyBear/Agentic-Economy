@@ -300,6 +300,11 @@ describe('owner capability withdraw and republish', () => {
         ...maintenanceBase,
         operationKey: 'owner-test-republish',
         correlationId: 'owner-test-republish',
+        proof: {
+          reverificationId: 'test:owner-republish',
+          firstFactorAgeMinutes: 0,
+          secondFactorAgeMinutes: -1,
+        },
       }),
     )
     if (republished.kind === 'refused')

@@ -232,7 +232,11 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
             />
             <p id="credit-topup-amount-help" className="text-xs text-muted-foreground">The configured minimum and maximum are enforced by the authenticated server.</p>
             {preview === undefined ? null : (
-              <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm" aria-label="Funding quote">
+              <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm">
+                <p className="m-0 text-muted-foreground">
+                  Your signed-in owner Account will fund Agent <span className="font-mono text-foreground">{target.principalId}</span>. Stripe confirms the total payment before any credit is added.
+                </p>
+              <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1" aria-label="Funding quote">
                 <dt className="text-muted-foreground">Credit amount</dt>
                 <dd className="font-mono">{preview.amount.currency} {formatExactAmount(preview.amount)}</dd>
                 <dt className="text-muted-foreground">Processing fee</dt>
@@ -240,6 +244,7 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
                 <dt className="font-medium">Total payment</dt>
                 <dd className="font-mono font-medium">{preview.chargeAmount.currency} {formatExactAmount(preview.chargeAmount)}</dd>
               </dl>
+              </div>
             )}
           </div>
         ) : null}

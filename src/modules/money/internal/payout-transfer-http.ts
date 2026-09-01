@@ -8,6 +8,10 @@ import {
   sourceQuery,
 } from '@/lib/server/convex-source'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  requireStrictClerkConsequenceProof,
+  type ClerkConsequenceProofInput,
+} from '@/lib/server/clerk-consequence-proof'
 import { isRecord } from '@/modules/common/is-record'
 import {
   accountRefForProvider,
@@ -67,7 +71,13 @@ export type OwnerPayoutTransferInput = Readonly<{
   currency: string
   payoutRef: string
   amount: ExactAmount
+  expectedPayoutRevision?: number
+  expectedAccountVersion?: number
   idempotencyKey: string
+}>
+type OwnerPayoutTransferStartInput = OwnerPayoutTransferInput & Readonly<{
+  expectedPayoutRevision: number
+  expectedAccountVersion: number
 }>
 
 export type OwnerPayoutTransferReadInput = Readonly<{
@@ -82,6 +92,8 @@ const ownerPayoutTransferInputSchema = z.strictObject({
   currency: z.string().regex(/^[A-Z][A-Z0-9]{2,19}$/u),
   payoutRef: z.string().trim().min(1).max(500),
   amount: exactAmountSchema,
+  expectedPayoutRevision: z.number().int().positive(),
+  expectedAccountVersion: z.number().int().nonnegative(),
   idempotencyKey: z.string().trim().min(8).max(200),
 })
 const ownerPayoutTransferReadInputSchema = z.strictObject({
@@ -116,7 +128,16 @@ export const beginOwnerPayoutTransferServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerPayoutTransferInputSchema.parse(data))
   .handler(async ({ data, context }): Promise<OwnerPayoutTransferResult> => {
     setResponseHeader('cache-control', 'no-store')
-    return await runOwnerPayoutTransferThroughSource(data, context)
+    const proof = await requireStrictClerkConsequenceProof(data.idempotencyKey)
+    return await runOwnerPayoutTransferThroughSource({
+      businessId: data.businessId,
+      currency: data.currency,
+      payoutRef: data.payoutRef,
+      amount: data.amount,
+      idempotencyKey: data.idempotencyKey,
+      expectedPayoutRevision: data.expectedPayoutRevision,
+      expectedAccountVersion: data.expectedAccountVersion,
+    }, context, { proof })
   })
 
 export const recoverOwnerPayoutTransferServer = createServerFn({
@@ -125,7 +146,15 @@ export const recoverOwnerPayoutTransferServer = createServerFn({
   .validator((data) => ownerPayoutTransferInputSchema.parse(data))
   .handler(async ({ data, context }): Promise<OwnerPayoutTransferResult> => {
     setResponseHeader('cache-control', 'no-store')
-    return await runOwnerPayoutTransferThroughSource(data, context, {
+    return await runOwnerPayoutTransferThroughSource({
+      businessId: data.businessId,
+      currency: data.currency,
+      payoutRef: data.payoutRef,
+      amount: data.amount,
+      idempotencyKey: data.idempotencyKey,
+      expectedPayoutRevision: data.expectedPayoutRevision,
+      expectedAccountVersion: data.expectedAccountVersion,
+    }, context, {
       recovery: true,
     })
   })
@@ -140,19 +169,30 @@ export const readOwnerPayoutTransferServer = createServerFn({ method: 'POST' })
 export async function runOwnerPayoutTransferThroughSource(
   input: OwnerPayoutTransferInput,
   context?: unknown,
-  options: Readonly<{ recovery?: boolean }> = {},
+  options: Readonly<{ recovery?: boolean; proof?: ClerkConsequenceProofInput }> = {},
   runtime: OwnerMoneyServerRuntime = {},
 ): Promise<OwnerPayoutTransferResult> {
   const owner = await ownerBusiness(input.businessId, context)
   if (owner.kind === 'refused') return owner
+  let beginInput: OwnerPayoutTransferStartInput | undefined
   if (options.recovery !== true) {
     const currency = ownerCurrency(owner.value, input.currency)
-    if (currency === undefined || currency.payout.payoutRef !== input.payoutRef)
+    if (
+      currency === undefined
+      || currency.payout.payoutRef !== input.payoutRef
+      || input.expectedPayoutRevision === undefined
+      || input.expectedAccountVersion === undefined
+      || currency.payout.payoutRevision !== input.expectedPayoutRevision
+      || (currency.payout.accountVersion ?? 0) !== input.expectedAccountVersion
+    )
       return { kind: 'refused', code: 'payout_not_ready', retryable: false }
+    beginInput = input as OwnerPayoutTransferStartInput
   }
   const command = options.recovery
     ? await readBoundPayoutCommand(input, context)
-    : await beginPayoutCommand(input, context, runtime)
+    : beginInput === undefined
+      ? { kind: 'refused' as const, code: 'payout_not_ready' as const, retryable: false }
+      : await beginPayoutCommand(beginInput, context, runtime, options.proof)
   if (isMoneyRefusal(command)) return command
   return await executePayoutTransfer(
     command,
@@ -212,9 +252,10 @@ export async function readOwnerPayoutTransferThroughSource(
 }
 
 async function beginPayoutCommand(
-  input: OwnerPayoutTransferInput,
+  input: OwnerPayoutTransferStartInput,
   context: unknown,
   runtime: OwnerMoneyServerRuntime,
+  proof?: ClerkConsequenceProofInput,
 ): Promise<OwnerPayoutTransferView | MoneyRefusal> {
   const gate = payoutProvider(runtime)
   if (isMoneyRefusal(gate)) return gate
@@ -227,15 +268,23 @@ async function beginPayoutCommand(
     businessId: input.businessId,
     currency: input.currency,
   })
-  if (binding === null || binding.stripeAccountId.length === 0)
+  if (
+    binding === null
+    || binding.stripeAccountId.length === 0
+    || (binding.version ?? 0) !== input.expectedAccountVersion
+  )
     return { kind: 'refused', code: 'payout_not_ready', retryable: true }
   const observedAt = runtime.now ?? Date.now()
+  const expectedPayoutRevision = input.expectedPayoutRevision
+  const expectedAccountVersion = input.expectedAccountVersion
   const minted = payoutTransferCommand({
     businessId: input.businessId,
     payoutRef: input.payoutRef,
     amount: input.amount,
     providerAccountRef,
     destinationAccountId: binding.stripeAccountId,
+    expectedPayoutRevision,
+    expectedAccountVersion,
     idempotencyKey: input.idempotencyKey,
     observedAt,
   })
@@ -243,8 +292,8 @@ async function beginPayoutCommand(
     return { kind: 'refused', code: 'payout_not_ready', retryable: true }
   const correlationId = minted.commandId
   const command = {
-    authority: { principalId: `business:${input.businessId}` },
     ...minted,
+    ...(proof === undefined ? {} : { proof }),
     operationKey,
     correlationId,
   }
@@ -365,7 +414,6 @@ async function applyPayoutEvidence(
     evidence: evidence.evidenceDigest,
   })
   const commandArgs = {
-    authority: { principalId: `business:${command.businessId}` },
     businessId: command.businessId,
     payoutRef: command.payoutRef,
     providerAccountRef: accountRefForProvider(
@@ -427,7 +475,6 @@ async function markPayoutOutcomeUnknown(
   const operationKey = 'moneyLedger:markPayoutTransferOutcomeUnknown'
   const correlationId = command.payoutCommandId
   const mutationCommand = {
-    authority: { principalId: `business:${command.businessId}` },
     businessId: command.businessId,
     payoutRef: command.payoutRef,
     amount: command.amount,

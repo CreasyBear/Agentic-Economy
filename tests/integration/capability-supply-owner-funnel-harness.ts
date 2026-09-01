@@ -131,6 +131,11 @@ export async function prepareOwnerPublicationCommand(
       runtimeEnvironment: 'production',
       prepared: preparedMaterial,
       operationKey,
+      proof: {
+        reverificationId: `test:${canonicalDigest({ operationKey })}`,
+        firstFactorAgeMinutes: 0,
+        secondFactorAgeMinutes: -1,
+      },
       correlationId: `owner-supply:${offeringRef}`,
       reasonCode: 'owner_supply_publication',
       evidenceRefs: [...source.evidenceRefs],

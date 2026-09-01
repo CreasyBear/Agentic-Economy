@@ -405,6 +405,30 @@ export const moneyTables = {
     .index('by_commandRef', ['commandRef'])
     .index('by_idempotencyKey', ['idempotencyKey'])
     .index('by_externalRef', ['externalRef']),
+  moneyConnectAccountCommands: defineTable({
+    commandRef: identifier,
+    businessId: identifier,
+    currency,
+    exponent,
+    idempotencyKey: identifier,
+    inputDigest: identifier,
+    providerRequestDigest: identifier,
+    providerRecoveryDeadlineAt: v.number(),
+    recoveryLeaseGeneration: v.number(),
+    recoveryLeaseOwner: v.optional(identifier),
+    recoveryLeaseExpiresAt: v.optional(v.number()),
+    state: v.union(v.literal('pending'), v.literal('succeeded'), v.literal('failed'), v.literal('outcome_unknown')),
+    stripeAccountId: v.optional(identifier),
+    providerEvidenceRef: v.optional(identifier),
+    failureCode: v.optional(identifier),
+    failureRetryable: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_commandRef', ['commandRef'])
+    .index('by_businessId_and_currency', ['businessId', 'currency'])
+    .index('by_businessId_and_currency_and_idempotencyKey', ['businessId', 'currency', 'idempotencyKey'])
+    .index('by_idempotencyKey', ['idempotencyKey']),
   moneyStripeEvents: defineTable({
     stripeEventId: identifier,
     eventType: identifier,

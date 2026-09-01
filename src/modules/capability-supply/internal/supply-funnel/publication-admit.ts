@@ -9,6 +9,7 @@ import {
   sourceMutation,
 } from "@/lib/server/convex-source";
 import { sourceWriteAdmissionFromContext } from "@/lib/server/source-write-admission";
+import { requireStrictClerkConsequenceProof } from "@/lib/server/clerk-consequence-proof";
 import {
   SourceWriteAdmissionError,
   sourceWriteRequestFromAdmission,
@@ -80,9 +81,12 @@ type OwnerSupplyPreparedCommand = Readonly<{
   evidenceRefs: readonly string[];
 }>;
 type OwnerSupplyPreparedInput = OwnerSupplyPreparedCommand & SourceWriteFields;
+type OwnerSupplyPreparedProofInput = OwnerSupplyPreparedInput & Readonly<{
+  proof: Awaited<ReturnType<typeof requireStrictClerkConsequenceProof>>;
+}>;
 
 const publishMutation = sourceMutation<
-  OwnerSupplyPreparedInput,
+  OwnerSupplyPreparedProofInput,
   PublishPreparedCapabilityCommandResult
 >("capabilitySupply:publishPreparedCapability");
 
@@ -368,6 +372,7 @@ export async function admitOwnerCapability({
     evidenceRefs: data.evidenceRefs,
   };
   try {
+    const proof = await requireStrictClerkConsequenceProof(command.operationKey);
     const sourceWrite = await sourceWriteAdmissionFromContext({
       context,
       command,
@@ -377,6 +382,7 @@ export async function admitOwnerCapability({
     });
     return callSourceMutation(publishMutation, {
       ...command,
+      proof,
       sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       sourceWrite,
     });

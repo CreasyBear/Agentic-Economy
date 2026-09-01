@@ -13,6 +13,10 @@ import {
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import {
+  requireStrictClerkConsequenceProof,
+  type ClerkConsequenceProofInput,
+} from '@/lib/server/clerk-consequence-proof'
 import { createRuntimeId } from '@/modules/common/runtime-id'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
 import {
@@ -89,6 +93,7 @@ type ReserveConnectAccountArgs = Readonly<{
   recoveryLeaseOwner: string
   operationKey: string
   correlationId: string
+  proof?: ClerkConsequenceProofInput
 }> &
   SourceWriteBoundArgs
 type FinalizeConnectAccountArgs = Readonly<{
@@ -106,6 +111,17 @@ type FinalizeConnectAccountArgs = Readonly<{
   correlationId: string
 }> &
   SourceWriteBoundArgs
+type AuthorizeConnectOnboardingArgs = Readonly<{
+  businessId: string
+  currency: string
+  stripeAccountId: string
+  expectedAccountVersion: number
+  commandRef: string
+  idempotencyKey: string
+  proof: ClerkConsequenceProofInput
+  operationKey: string
+  correlationId: string
+}> & SourceWriteBoundArgs
 
 type ConnectBindingView = Readonly<{
   businessId: string
@@ -156,6 +172,7 @@ export type OwnerConnectAccountResult =
       currency: string
       stripeAccountId: string
       evidenceRef: string
+      onboardingUrl?: string
     }>
   | OwnerMoneyActionRefusal
 
@@ -182,6 +199,10 @@ export type OwnerOnboardingLinkInput = Readonly<{
   stripeAccountId?: string
 }>
 
+export type OwnerPayoutAuthorityUpdateInput = OwnerOnboardingLinkInput & Readonly<{
+  expectedAccountVersion: number
+}>
+
 const ownerConnectAccountInputSchema = z.strictObject({
   businessId: z.string().trim().min(1).max(500),
   currency: z.string().regex(/^[A-Z][A-Z0-9]{2,19}$/u),
@@ -189,6 +210,7 @@ const ownerConnectAccountInputSchema = z.strictObject({
 })
 const ownerOnboardingLinkInputSchema = ownerConnectAccountInputSchema.extend({
   stripeAccountId: z.string().trim().min(1).max(500).optional(),
+  expectedAccountVersion: z.number().int().nonnegative(),
 })
 
 export const readPayoutAccountByStripeIdQuery = sourceQuery<
@@ -207,6 +229,10 @@ const finalizeConnectAccountMutation = sourceMutation<
   FinalizeConnectAccountArgs,
   ConnectAccountReservationResult
 >('moneyLedger:finalizeConnectAccount')
+const authorizeConnectOnboardingMutation = sourceMutation<
+  AuthorizeConnectOnboardingArgs,
+  Readonly<{ kind: 'accepted'; account: ConnectBindingView } | OwnerMoneyActionRefusal>
+>('moneyLedger:authorizeConnectOnboarding')
 const recordConnectAccountEventMutation = sourceMutation<
   Record<string, unknown>,
   Readonly<
@@ -220,7 +246,18 @@ export const createOwnerConnectAccountServer = createServerFn({
   .validator((data) => ownerConnectAccountInputSchema.parse(data))
   .handler(async ({ data, context }): Promise<OwnerConnectAccountResult> => {
     setResponseHeader('cache-control', 'no-store')
-    return await createOwnerConnectAccountThroughSource(data, context)
+    const proof = await requireStrictClerkConsequenceProof(data.idempotencyKey)
+    const connected = await createOwnerConnectAccountThroughSource(data, context, {}, proof)
+    if (connected.kind !== 'ok') return connected
+    const onboarding = await createOwnerOnboardingLinkThroughSource({
+      businessId: data.businessId,
+      currency: data.currency,
+      stripeAccountId: connected.stripeAccountId,
+      idempotencyKey: `onboarding:${data.idempotencyKey}`,
+    }, context)
+    return onboarding.kind === 'ok'
+      ? { ...connected, onboardingUrl: onboarding.url }
+      : connected
   })
 
 export const createOwnerOnboardingLinkServer = createServerFn({
@@ -229,17 +266,21 @@ export const createOwnerOnboardingLinkServer = createServerFn({
   .validator((data) => ownerOnboardingLinkInputSchema.parse(data))
   .handler(async ({ data, context }): Promise<OwnerOnboardingLinkResult> => {
     setResponseHeader('cache-control', 'no-store')
-    const normalizedInput: OwnerOnboardingLinkInput = {
+    const proof = await requireStrictClerkConsequenceProof(data.idempotencyKey)
+    const normalizedInput: OwnerPayoutAuthorityUpdateInput = {
       businessId: data.businessId,
       currency: data.currency,
       idempotencyKey: data.idempotencyKey,
+      expectedAccountVersion: data.expectedAccountVersion,
       ...(data.stripeAccountId === undefined
         ? {}
         : { stripeAccountId: data.stripeAccountId }),
     }
-    return await createOwnerOnboardingLinkThroughSource(
+    return await updateOwnerPayoutAuthorityThroughSource(
       normalizedInput,
       context,
+      {},
+      proof,
     )
   })
 
@@ -254,6 +295,7 @@ export async function createOwnerConnectAccountThroughSource(
   input: OwnerConnectAccountInput,
   context?: unknown,
   runtime: OwnerMoneyServerRuntime = {},
+  proof?: ClerkConsequenceProofInput,
 ): Promise<OwnerConnectAccountResult> {
   const providerResult = payoutProvider(runtime)
   if (isMoneyRefusal(providerResult)) return providerResult
@@ -294,6 +336,7 @@ export async function createOwnerConnectAccountThroughSource(
     inputDigest,
     providerRequestDigest,
     recoveryLeaseOwner: reservationLeaseOwner,
+    ...(proof === undefined ? {} : { proof }),
     operationKey: reserveOperationKey,
     correlationId: commandRef,
   }
@@ -481,6 +524,58 @@ export async function createOwnerOnboardingLinkThroughSource(
     stripeAccountId,
     url: link.url,
   }
+}
+
+export async function updateOwnerPayoutAuthorityThroughSource(
+  input: OwnerPayoutAuthorityUpdateInput,
+  context?: unknown,
+  runtime: OwnerMoneyServerRuntime = {},
+  proof?: ClerkConsequenceProofInput,
+): Promise<OwnerOnboardingLinkResult> {
+  if (input.stripeAccountId === undefined || proof === undefined)
+    return { kind: 'refused', code: 'reauthentication_required', retryable: false }
+  const commandRef = canonicalDigest({
+    format: 'money-payout-authority-update-command:v1',
+    businessId: input.businessId,
+    currency: input.currency,
+    stripeAccountId: input.stripeAccountId,
+    expectedAccountVersion: input.expectedAccountVersion,
+    idempotencyKey: input.idempotencyKey,
+  })
+  const operationKey = 'moneyLedger:authorizeConnectOnboarding'
+  const command = {
+    businessId: input.businessId,
+    currency: input.currency,
+    stripeAccountId: input.stripeAccountId,
+    expectedAccountVersion: input.expectedAccountVersion,
+    commandRef,
+    idempotencyKey: input.idempotencyKey,
+    proof,
+    operationKey,
+    correlationId: commandRef,
+  }
+  const sourceWrite = await sourceWriteOrRefusal(
+    context,
+    command,
+    operationKey,
+    commandRef,
+  )
+  if (isMoneyRefusal(sourceWrite)) return sourceWrite
+  const authorized = await callSourceMutation(authorizeConnectOnboardingMutation, {
+    ...command,
+    ...sourceWrite,
+  })
+  if (isMoneyRefusal(authorized)) return authorized
+  return await createOwnerOnboardingLinkThroughSource(
+    {
+      businessId: input.businessId,
+      currency: input.currency,
+      stripeAccountId: input.stripeAccountId,
+      idempotencyKey: input.idempotencyKey,
+    },
+    context,
+    runtime,
+  )
 }
 
 export async function readOwnerConnectReadinessThroughSource(): Promise<OwnerConnectReadinessReadback> {

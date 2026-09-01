@@ -9,6 +9,7 @@ import {
   sourceQuery,
 } from "@/lib/server/convex-source";
 import { sourceWriteAdmissionFromContext } from "@/lib/server/source-write-admission";
+import { requireStrictClerkConsequenceProof } from "@/lib/server/clerk-consequence-proof";
 import { sourceWriteRequestFromAdmission } from "@/modules/security/source-write-admission";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import {
@@ -215,6 +216,7 @@ export async function promoteOwnerSellerCanary({
 async function admitOwnerSupplyMaintenance(
   context: unknown,
   command: OwnerSupplyMaintenanceCommand,
+  proof?: Awaited<ReturnType<typeof requireStrictClerkConsequenceProof>>,
 ): Promise<OwnerSupplyMaintenanceSourceInput> {
   const sourceWrite = await sourceWriteAdmissionFromContext({
     context,
@@ -225,6 +227,7 @@ async function admitOwnerSupplyMaintenance(
   });
   return {
     ...command,
+    ...(proof === undefined ? {} : { proof }),
     sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
     sourceWrite,
   };
@@ -263,8 +266,9 @@ export async function republishOwnerCapability({
   data: z.infer<typeof ownerSupplyMaintenanceInputSchema>;
   context: unknown;
 }): Promise<OwnerSupplyCommandResult> {
+  const proof = await requireStrictClerkConsequenceProof(data.operationKey);
   return await callSourceMutation(
     republishMutation,
-    await admitOwnerSupplyMaintenance(context, data),
+    await admitOwnerSupplyMaintenance(context, data, proof),
   );
 }

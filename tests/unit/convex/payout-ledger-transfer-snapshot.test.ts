@@ -30,21 +30,36 @@ vi.mock('../../../convex/sourceWriteAdmission', () => ({
 describe('Convex payout persistence — transfer snapshots', () => {
   it('derives bounded cumulative paid snapshots across older and latest reversals', async () => {
     const argsForPayout = (
+      fixtureDb: MemoryDb,
       payoutRef: string,
       commandId: string,
       inputDigest: string,
       idempotencyKey: string,
       observedAt: number,
-    ): Record<string, unknown> => ({
-      ...commandArgs(),
-      payoutRef,
-      commandId,
-      inputDigest,
-      idempotencyKey,
-      observedAt,
-      providerRecoveryDeadlineAt:
-        observedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
-    })
+    ): Record<string, unknown> => {
+      const payout = fixtureDb.rows('moneyPayouts').find((row) => row.payoutRef === payoutRef)
+      const account = fixtureDb.rows('moneyPayoutAccounts')[0]
+      if (payout === undefined || typeof payout.updatedAt !== 'number'
+        || account === undefined || typeof account.version !== 'number')
+        throw new Error('payout_authority_fixture_missing')
+      return {
+        ...commandArgs(),
+        payoutRef,
+        commandId,
+        inputDigest,
+        idempotencyKey,
+        observedAt,
+        expectedPayoutRevision: payout.updatedAt,
+        expectedAccountVersion: account.version,
+        proof: {
+          reverificationId: `reverify:payout:${commandId}`,
+          firstFactorAgeMinutes: 0,
+          secondFactorAgeMinutes: 0,
+        },
+        providerRecoveryDeadlineAt:
+          observedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
+      }
+    }
     const argsA = commandArgs()
     const periodB = {
       start: '2026-07-02T00:00:00.000Z',
@@ -88,6 +103,7 @@ describe('Convex payout persistence — transfer snapshots', () => {
     creditProvider(db, '5000', normalTransferObservedAt + 2)
     const argsB = {
       ...argsForPayout(
+        db,
         payoutB,
         'command-2',
         'sha256:input-2',
@@ -147,6 +163,7 @@ describe('Convex payout persistence — transfer snapshots', () => {
     const beginC = await begin(
       { db, auth: identity },
       argsForPayout(
+        db,
         payoutC,
         'command-3',
         'sha256:input-3',
@@ -192,6 +209,7 @@ describe('Convex payout persistence — transfer snapshots', () => {
     creditProvider(latestDb, '5000', normalTransferObservedAt + 2)
     const latestArgsB = {
       ...argsForPayout(
+        latestDb,
         latestB,
         'command-2',
         'sha256:input-2',
@@ -232,21 +250,36 @@ describe('Convex payout persistence — transfer snapshots', () => {
 
   it('refreshes a new success snapshot after a delayed reversal', async () => {
     const argsForPayout = (
+      fixtureDb: MemoryDb,
       payoutRef: string,
       commandId: string,
       inputDigest: string,
       idempotencyKey: string,
       observedAt: number,
-    ): Record<string, unknown> => ({
-      ...commandArgs(),
-      payoutRef,
-      commandId,
-      inputDigest,
-      idempotencyKey,
-      observedAt,
-      providerRecoveryDeadlineAt:
-        observedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
-    })
+    ): Record<string, unknown> => {
+      const payout = fixtureDb.rows('moneyPayouts').find((row) => row.payoutRef === payoutRef)
+      const account = fixtureDb.rows('moneyPayoutAccounts')[0]
+      if (payout === undefined || typeof payout.updatedAt !== 'number'
+        || account === undefined || typeof account.version !== 'number')
+        throw new Error('payout_authority_fixture_missing')
+      return {
+        ...commandArgs(),
+        payoutRef,
+        commandId,
+        inputDigest,
+        idempotencyKey,
+        observedAt,
+        expectedPayoutRevision: payout.updatedAt,
+        expectedAccountVersion: account.version,
+        proof: {
+          reverificationId: `reverify:payout:${commandId}`,
+          firstFactorAgeMinutes: 0,
+          secondFactorAgeMinutes: 0,
+        },
+        providerRecoveryDeadlineAt:
+          observedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
+      }
+    }
     const argsA = commandArgs()
     const periodB = {
       start: '2026-07-02T00:00:00.000Z',
@@ -293,6 +326,7 @@ describe('Convex payout persistence — transfer snapshots', () => {
     creditProvider(db, '5000', normalTransferObservedAt + 2)
     const argsB: Record<string, unknown> = {
       ...argsForPayout(
+        db,
         payoutB,
         'command-delayed-b',
         'sha256:input-delayed-b',
@@ -426,6 +460,7 @@ describe('Convex payout persistence — transfer snapshots', () => {
     const beginC = await begin(
       { db, auth: identity },
       argsForPayout(
+        db,
         payoutC,
         'command-delayed-c',
         'sha256:input-delayed-c',

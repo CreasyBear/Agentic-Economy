@@ -20,6 +20,7 @@ import {
   type CustomerRequestServiceAssertion,
 } from '../src/modules/agent-access/service-auth-envelope'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import type { BusinessActor } from '../src/modules/business/public'
 import {
   accountRefForOwner,
   amountFromParts,
@@ -45,6 +46,7 @@ import {
   type TopupWebhookResult,
 } from './moneyCreditTopup/contracts'
 import { topupCommandView } from './moneyCreditTopup/command_view'
+import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 
 export {
   applyCreditTopupArgs,
@@ -91,6 +93,7 @@ async function topupWebhookLookupAuthorized(
 export async function reserveCreditTopupHandler(
   ctx: MutationCtx,
   args: ReserveCreditTopupArgs,
+  actor: Extract<BusinessActor, { kind: 'authenticated_owner' }>,
 ) {
   await requireBillingSourceWrite(ctx, args)
   const prior = await ctx.db
@@ -166,6 +169,39 @@ export async function reserveCreditTopupHandler(
   if (financials === undefined)
     return refusedTopup('credit_topup_amount_invalid', false)
   const now = Date.now()
+  const consequence = await admitInteractiveOwnerConsequence(ctx, {
+    actor,
+    action: 'funding.top_up',
+    target: {
+      targetType: 'agent_credit_account',
+      targetRef: args.principalId,
+      targetRevision: Math.max(1, principal.grantGeneration),
+    },
+    requiredScopes: ['billing'],
+    resourceRefs: [`agent:${args.principalId}`, `credit-account:${args.accountRef}`],
+    budgetAmount: 0,
+    consequenceSummary: 'Fund this exact Agent credit account through Stripe.',
+    statusReadbackRef: 'owner/credit',
+    correlationRef: args.commandRef,
+    idempotencyRef: args.idempotencyKey,
+    command: {
+      version: 'ae.funding-consequence:v1',
+      action: 'funding.top_up',
+      commandRef: args.commandRef,
+      principalId: args.principalId,
+      accountRef: args.accountRef,
+      grantGeneration: principal.grantGeneration,
+      amount: financials.amount,
+      processingFee: financials.processingFee,
+      total: financials.chargeAmount,
+      successReturnRef: args.successReturnRef,
+      inputDigest: args.inputDigest,
+    },
+    now,
+  })
+  if (consequence.kind === 'refused') {
+    return refusedTopup('billing_identity_mismatch', false)
+  }
   const preparedAccount =
     existing === null
       ? await prepareCanonicalMoneyAccount(ctx, {

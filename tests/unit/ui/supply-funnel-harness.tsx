@@ -27,12 +27,20 @@ import {
 import type { SupplyEndpointConfigValue } from "@/components/ae/supply/AeSupplyEndpointConfigStep";
 
 export const moneyServerMocks = {
+  beginOwnerPayoutTransferServer: vi.fn(),
   createOwnerConnectAccountServer: vi.fn(),
   createOwnerOnboardingLinkServer: vi.fn(),
   readOwnerPayoutTransferServer: vi.fn(),
 };
 
-vi.mock("@/modules/money/server", () => moneyServerMocks);
+vi.mock("@/modules/money/money.functions", () => moneyServerMocks);
+vi.mock("@clerk/tanstack-react-start", () => ({
+  useReverification: <T extends (...args: never[]) => unknown>(callback: T) => callback,
+}));
+vi.mock("@tanstack/react-start", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-start")>()),
+  useServerFn: <T extends (...args: never[]) => unknown>(callback: T) => callback,
+}));
 
 export const tool: SupplyLandingTool = {
   id: "registry.services_list",

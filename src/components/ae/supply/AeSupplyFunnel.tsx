@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { AeFactList } from '@/components/ae/data/AeFactList'
@@ -27,7 +28,7 @@ import {
   type SupplyEndpointPreflightResult,
   type SupplyPublicationImport,
 } from './AeSupplyEndpointConfigStep'
-import { parseX402FetchTransportConfiguration } from '@/modules/capability-supply/public'
+import { parseX402FetchTransportConfiguration, type PreparedPublicationMaterial } from '@/modules/capability-supply/public'
 import { formatExactAmount, rescaleExactAmount } from '@/modules/money/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
@@ -104,6 +105,12 @@ export function AeSupplyFunnel({
   const [confirmTest, setConfirmTest] = useState(false)
   const [reloadRequired, setReloadRequired] = useState(false)
   const [reloadPending, setReloadPending] = useState(false)
+  const [publishReview, setPublishReview] = useState<Readonly<{
+    source: SupplyPublicationImport
+    prepared: PreparedPublicationMaterial
+  }>>()
+  const [publishPending, setPublishPending] = useState(false)
+  const publishInFlight = useRef(false)
   const actionContext = contextForOffering(businessId, offering)
   const currentStep = offering.currentStep
   const isX402Test = offering.publication?.source.kind === 'x402'
@@ -124,6 +131,13 @@ export function AeSupplyFunnel({
     : AeSupplyEndpointConfigStep
 
   function showUnexpected(cause: unknown, message = 'AE could not confirm this setup action. Reload the authoritative setup before changing or repeating it.') {
+    if (isReverificationCancelledError(cause)) {
+      setFeedback({
+        message: 'Reverification was cancelled. No publication changed; your Operation details remain on this page.',
+        variant: 'default',
+      })
+      return
+    }
     captureClientExceptionOnClient(cause)
     setFeedback({ message, variant: 'destructive' })
   }
@@ -179,6 +193,21 @@ export function AeSupplyFunnel({
       variant: result.kind === 'refused' ? 'destructive' : 'default',
     })
     await reload()
+  }
+
+  async function confirmPublication() {
+    if (publishReview === undefined || publishInFlight.current) return
+    publishInFlight.current = true
+    setPublishPending(true)
+    try {
+      await showCompletion(await callbacks.admit(publishReview.source))
+      setPublishReview(undefined)
+    } catch (cause) {
+      showUnexpected(cause)
+    } finally {
+      publishInFlight.current = false
+      setPublishPending(false)
+    }
   }
 
   return (
@@ -276,9 +305,22 @@ export function AeSupplyFunnel({
             {...(callbacks.saveSourceDraft === undefined ? {} : { onSaveDraft: callbacks.saveSourceDraft })}
             onPreflight={callbacks.preflight}
             authorityOptions={authorityOptions}
-            onSubmit={async (value) => {
-              await showCompletion(await callbacks.admit(value))
+            onSubmit={async (value, prepared) => {
+              setPublishReview({ source: value, prepared })
             }}
+          />
+          <AeConfirmDialog
+            open={publishReview !== undefined}
+            onOpenChange={(open) => {
+              if (!open && !publishPending) setPublishReview(undefined)
+            }}
+            title="Publish this exact Operation?"
+            description={publishReview === undefined
+              ? ''
+              : publicationConsequenceCopy(offering.revision, publishReview.prepared)}
+            confirmLabel="Confirm publication"
+            pending={publishPending}
+            onConfirm={confirmPublication}
           />
         </div>
       ) : null}
@@ -702,6 +744,9 @@ function MaintenanceActions({
   const [withdrawOpen, setWithdrawOpen] = useState(false)
   const [withdrawPending, setWithdrawPending] = useState(false)
   const withdrawInFlight = useRef(false)
+  const [republishOpen, setRepublishOpen] = useState(false)
+  const [republishPending, setRepublishPending] = useState(false)
+  const republishInFlight = useRef(false)
   async function confirmWithdrawal() {
     if (withdraw === undefined || withdrawInFlight.current) return
     withdrawInFlight.current = true
@@ -714,6 +759,20 @@ function MaintenanceActions({
     } finally {
       withdrawInFlight.current = false
       setWithdrawPending(false)
+    }
+  }
+  async function confirmRepublish() {
+    if (republish === undefined || republishInFlight.current) return
+    republishInFlight.current = true
+    setRepublishPending(true)
+    try {
+      await onResult(await republish(context))
+      setRepublishOpen(false)
+    } catch (cause) {
+      onError(cause)
+    } finally {
+      republishInFlight.current = false
+      setRepublishPending(false)
     }
   }
   return (
@@ -737,7 +796,22 @@ function MaintenanceActions({
             />
           </>
         ) : null}
-        {publicationState === 'withdrawn' && republish !== undefined ? <MaintenanceButton label="Republish" callback={republish} context={context} onResult={onResult} onError={onError} /> : null}
+        {publicationState === 'withdrawn' && republish !== undefined ? (
+          <>
+            <Button type="button" disabled={republishPending} onClick={() => setRepublishOpen(true)} className="min-h-touch">
+              Republish
+            </Button>
+            <AeConfirmDialog
+              open={republishOpen}
+              onOpenChange={setRepublishOpen}
+              title="Republish this exact Operation?"
+              description={`Publication ${context.publicationRef} revision ${context.publicationRevision} will become visible for new market work as revision ${context.publicationRevision + 1}. AE will revalidate the retained source, price, payment, and effect material. You can withdraw the new revision later.`}
+              confirmLabel="Confirm republish"
+              pending={republishPending}
+              onConfirm={confirmRepublish}
+            />
+          </>
+        ) : null}
       </div>
     </AeSection>
   )
@@ -797,6 +871,20 @@ function maintenanceMessage(result: Exclude<OwnerSupplyCommandResult, { kind: 'r
   if (result.kind === 'withdrawn') return 'The current publication is withdrawn. Its evidence remains immutable history.'
   if (result.kind === 'republished') return `Publication revision ${result.revision} was created and readiness is unobserved until a fresh check succeeds.`
   return `Publication revision ${result.revision} was scheduled for a fresh readiness check.`
+}
+
+function publicationConsequenceCopy(
+  offeringRevision: number,
+  prepared: PreparedPublicationMaterial,
+): string {
+  const amount = prepared.offering.presentation.price.kind === 'fixed'
+    ? prepared.offering.presentation.price.amount
+    : undefined
+  const formatted = formatExactAmount(amount)
+  const price = amount === undefined || formatted === undefined
+    ? 'an unavailable price'
+    : `${amount.currency} ${formatted}`
+  return `${prepared.offering.presentation.label} revision ${offeringRevision} will become eligible for public market discovery and outside execution at ${price} per call. AE will publish only source ${prepared.sourceRevision}, price ${prepared.priceDigest}, and binding ${prepared.binding.bindingId}. Existing evidence remains attributable, and you can withdraw this publication later.`
 }
 
 function refusalMessage(refusal: SupplyFunnelRefusal | string): string {

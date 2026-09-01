@@ -99,6 +99,7 @@ import type * as lib_operationInvocations_dispatch from "../lib/operationInvocat
 import type * as lib_operationInvocations_invokeActions from "../lib/operationInvocations/invokeActions.js";
 import type * as lib_operationInvocations_reconciliation from "../lib/operationInvocations/reconciliation.js";
 import type * as lib_operationInvocations_workComplete from "../lib/operationInvocations/workComplete.js";
+import type * as lib_ownerConsequence from "../lib/ownerConsequence.js";
 import type * as lib_providerConnections_agent from "../lib/providerConnections/agent.js";
 import type * as lib_providerConnections_authority from "../lib/providerConnections/authority.js";
 import type * as lib_providerConnections_cleanup from "../lib/providerConnections/cleanup.js";
@@ -288,6 +289,7 @@ declare const fullApi: ApiFromModules<{
   "lib/operationInvocations/invokeActions": typeof lib_operationInvocations_invokeActions;
   "lib/operationInvocations/reconciliation": typeof lib_operationInvocations_reconciliation;
   "lib/operationInvocations/workComplete": typeof lib_operationInvocations_workComplete;
+  "lib/ownerConsequence": typeof lib_ownerConsequence;
   "lib/providerConnections/agent": typeof lib_providerConnections_agent;
   "lib/providerConnections/authority": typeof lib_providerConnections_authority;
   "lib/providerConnections/cleanup": typeof lib_providerConnections_cleanup;

@@ -54,13 +54,14 @@ describe("current supply funnel", () => {
     ).toBeDefined();
     expect(
       screen.getByText(
-        "Your payout account is ready. Payout begins when supplier earnings reach the minimum shown above.",
+        "Your payout account is ready. You can approve a payout after supplier earnings reach the minimum shown above.",
       ),
     ).toBeDefined();
     expect(
       screen.queryByRole("button", { name: "Set up payouts" }),
     ).toBeNull();
     for (const name of [
+      "Review payout",
       "Start payout",
       "Confirm payout",
       "Recover transfer",
@@ -75,12 +76,117 @@ describe("current supply funnel", () => {
     expect(
       moneyServerMocks.readOwnerPayoutTransferServer,
     ).not.toHaveBeenCalled();
-    expect(moneyServerMocks).not.toHaveProperty(
-      "beginOwnerPayoutTransferServer",
-    );
+    expect(moneyServerMocks.beginOwnerPayoutTransferServer).not.toHaveBeenCalled();
     expect(moneyServerMocks).not.toHaveProperty(
       "recoverOwnerPayoutTransferServer",
     );
+  });
+
+  it("binds an eligible payout confirmation to the exact amount, destination, and revisions", async () => {
+    const onStatusRefreshed = vi.fn();
+    const exact = { currency: "USD", units: "5000", exponent: 2 };
+    moneyServerMocks.beginOwnerPayoutTransferServer.mockResolvedValue({
+      kind: "ok",
+      transfer: { state: "transfer_pending" },
+    });
+
+    render(
+      <AeSupplyEarningsCard
+        readback={{
+          kind: "available",
+          businessId: "business-1",
+          accountsTruncated: false,
+          accounts: [
+            {
+              currency: "USD",
+              earnings: {
+                kind: "ok",
+                businessId: "business-1",
+                grossAccrual: exact,
+                rake: { ...exact, units: "500" },
+                providerNet: exact,
+                paidOut: { ...exact, units: "0" },
+                held: exact,
+                recoveryDue: { ...exact, units: "0" },
+                truncated: false,
+                evidence: "source",
+              },
+              payout: {
+                kind: "ok",
+                businessId: "business-1",
+                accountState: "ready",
+                accountVersion: 7,
+                payoutState: "held_threshold",
+                payoutRef: "payout-eligible",
+                payoutRevision: 11,
+                idempotencyKey: "payout-key-eligible",
+                providerNet: exact,
+                minimumPayout: { ...exact, units: "1000" },
+                evidence: "source",
+              },
+            },
+          ],
+        }}
+        connect={{
+          kind: "available",
+          businessId: "business-1",
+          accounts: [
+            {
+              currency: "USD",
+              account: {
+                businessId: "business-1",
+                currency: "USD",
+                exponent: 2,
+                stripeAccountId: "acct_1234",
+                state: "ready",
+                detailsSubmitted: true,
+                recipientCapabilityActive: true,
+                version: 7,
+              },
+              payout: {
+                businessId: "business-1",
+                accountState: "ready",
+                accountVersion: 7,
+                payoutState: "held_threshold",
+                payoutRef: "payout-eligible",
+                payoutRevision: 11,
+                idempotencyKey: "payout-key-eligible",
+                providerNet: exact,
+                minimumPayout: { ...exact, units: "1000" },
+                evidence: "source",
+              },
+            },
+          ],
+          accountsTruncated: false,
+        }}
+        onStatusRefreshed={onStatusRefreshed}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Review payout" }));
+    expect(screen.getByRole("alertdialog", { name: "Confirm payout" })).toBeDefined();
+    expect(screen.getByText(/Transfer USD 50\.00/)).toBeDefined();
+    expect(screen.getByText(/Stripe account ending 1234/)).toBeDefined();
+    expect(screen.getByText(/must be reconciled by status, not resubmitted/)).toBeDefined();
+    expect(moneyServerMocks.beginOwnerPayoutTransferServer).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm payout" }));
+
+    await waitFor(() =>
+      expect(moneyServerMocks.beginOwnerPayoutTransferServer).toHaveBeenCalledWith({
+        data: {
+          businessId: "business-1",
+          currency: "USD",
+          payoutRef: "payout-eligible",
+          amount: exact,
+          expectedPayoutRevision: 11,
+          expectedAccountVersion: 7,
+          idempotencyKey: "payout-key-eligible",
+        },
+      }),
+    );
+    expect(moneyServerMocks.beginOwnerPayoutTransferServer).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onStatusRefreshed).toHaveBeenCalledOnce());
   });
 
   it("keeps Connect setup available when the payout account has not started", () => {
@@ -125,6 +231,10 @@ describe("current supply funnel", () => {
     expect(
       screen.getByRole("button", { name: "Set up payouts" }),
     ).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Set up payouts" }));
+    expect(screen.getByRole("alertdialog", { name: "Confirm payout authority" })).toBeDefined();
+    expect(screen.getByText(/This does not transfer funds/)).toBeDefined();
+    expect(moneyServerMocks.createOwnerConnectAccountServer).not.toHaveBeenCalled();
     expect(screen.queryByText("Waiting for minimum payout")).toBeNull();
     expect(screen.queryByText("USD 5.00 of USD 10.00")).toBeNull();
   });
@@ -223,6 +333,7 @@ describe("current supply funnel", () => {
       screen.queryByRole("button", { name: "Check transfer status" }),
     ).toBeNull();
     for (const name of [
+      "Review payout",
       "Start payout",
       "Confirm payout",
       "Recover transfer",
@@ -230,9 +341,7 @@ describe("current supply funnel", () => {
     ]) {
       expect(screen.queryByRole("button", { name })).toBeNull();
     }
-    expect(moneyServerMocks).not.toHaveProperty(
-      "beginOwnerPayoutTransferServer",
-    );
+    expect(moneyServerMocks.beginOwnerPayoutTransferServer).not.toHaveBeenCalled();
     expect(moneyServerMocks).not.toHaveProperty(
       "recoverOwnerPayoutTransferServer",
     );
@@ -307,9 +416,7 @@ describe("current supply funnel", () => {
       ),
     );
     await waitFor(() => expect(onStatusRefreshed).toHaveBeenCalledOnce());
-    expect(moneyServerMocks).not.toHaveProperty(
-      "beginOwnerPayoutTransferServer",
-    );
+    expect(moneyServerMocks.beginOwnerPayoutTransferServer).not.toHaveBeenCalled();
     expect(moneyServerMocks).not.toHaveProperty(
       "recoverOwnerPayoutTransferServer",
     );
@@ -391,5 +498,93 @@ describe("current supply funnel", () => {
     expect(moneyServerMocks.createOwnerConnectAccountServer).not.toHaveBeenCalled();
     expect(moneyServerMocks.createOwnerOnboardingLinkServer).not.toHaveBeenCalled();
     await waitFor(() => expect(onStatusRefreshed).toHaveBeenCalledOnce());
+  });
+
+  it("binds a payout authority update to the current account generation", async () => {
+    const exact = { currency: "USD", units: "500", exponent: 2 };
+    moneyServerMocks.createOwnerOnboardingLinkServer.mockResolvedValue({
+      kind: "refused",
+      code: "payout_not_ready",
+      retryable: false,
+    });
+    render(
+      <AeSupplyEarningsCard
+        readback={{
+          kind: "available",
+          businessId: "business-1",
+          accountsTruncated: false,
+          accounts: [{
+            currency: "USD",
+            earnings: {
+              kind: "ok",
+              businessId: "business-1",
+              grossAccrual: exact,
+              rake: { ...exact, units: "50" },
+              providerNet: exact,
+              paidOut: { ...exact, units: "0" },
+              held: exact,
+              recoveryDue: { ...exact, units: "0" },
+              truncated: false,
+              evidence: "source",
+            },
+            payout: {
+              kind: "ok",
+              businessId: "business-1",
+              accountState: "onboarding_started",
+              accountVersion: 4,
+              payoutState: "held_threshold",
+              payoutRef: "payout-1",
+              providerNet: exact,
+              minimumPayout: { ...exact, units: "1000" },
+              evidence: "source",
+            },
+          }],
+        }}
+        connect={{
+          kind: "available",
+          businessId: "business-1",
+          accountsTruncated: false,
+          accounts: [{
+            currency: "USD",
+            account: {
+              businessId: "business-1",
+              currency: "USD",
+              exponent: 2,
+              stripeAccountId: "acct_9876",
+              state: "onboarding_started",
+              detailsSubmitted: false,
+              recipientCapabilityActive: false,
+              version: 4,
+            },
+            payout: {
+              businessId: "business-1",
+              accountState: "onboarding_started",
+              accountVersion: 4,
+              payoutState: "held_threshold",
+              payoutRef: "payout-1",
+              providerNet: exact,
+              minimumPayout: { ...exact, units: "1000" },
+              evidence: "source",
+            },
+          }],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue onboarding" }));
+    expect(screen.getByRole("alertdialog", { name: "Confirm payout authority update" })).toBeDefined();
+    expect(moneyServerMocks.createOwnerOnboardingLinkServer).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm and continue" }));
+    await waitFor(() =>
+      expect(moneyServerMocks.createOwnerOnboardingLinkServer).toHaveBeenCalledWith({
+        data: {
+          businessId: "business-1",
+          currency: "USD",
+          stripeAccountId: "acct_9876",
+          expectedAccountVersion: 4,
+          idempotencyKey: "onboarding:business-1:USD:4",
+        },
+      }),
+    );
   });
 });

@@ -41,6 +41,8 @@ import {
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
+import { clerkConsequenceProofValue } from './lib/consequenceProof'
+import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import {
   authorityValue,
   cancellationValue,
@@ -116,6 +118,12 @@ export const preparedPublicationMaterialValue = v.object({
 })
 const preparedPublicationRefusalValue = v.union(
   v.literal('authorization_denied'),
+  v.literal('authority_mismatch'),
+  v.literal('reauthentication_required'),
+  v.literal('proof_stale'),
+  v.literal('proof_replayed'),
+  v.literal('command_changed'),
+  v.literal('rate_limited'),
   v.literal('registration_context_invalid'),
   v.literal('source_invalid'),
   v.literal('source_too_large'),
@@ -244,6 +252,7 @@ export const publishPreparedCapabilityArgs = {
   sourceHash: v.string(),
   runtimeEnvironment: v.literal('production'),
   prepared: preparedPublicationMaterialValue,
+  proof: v.optional(clerkConsequenceProofValue),
   ...contextFields,
   agentPrincipal: v.optional(agentAccessPrincipalValue),
   ...sourceWriteArgs,
@@ -305,6 +314,7 @@ export async function publishPreparedCapabilityHandler(
     sourceHash: string
     runtimeEnvironment: 'production'
     prepared: Infer<typeof preparedPublicationMaterialValue>
+    proof?: Infer<typeof clerkConsequenceProofValue>
     operationKey: string
     correlationId: string
     reasonCode: string
@@ -377,6 +387,47 @@ export async function publishPreparedCapabilityHandler(
       kind: 'refused' as const,
       reason: 'authorization_denied' as const,
     }
+  if (args.agentPrincipal === undefined && ownerActor?.kind === 'authenticated_owner') {
+    const consequence = await admitInteractiveOwnerConsequence(ctx, {
+      actor: ownerActor,
+      action: 'publication.publish',
+      target: {
+        targetType: 'capability_publication',
+        targetRef: args.prepared.offering.offeringId,
+        targetRevision: 1,
+      },
+      requiredScopes: ['catalog_publish'],
+      resourceRefs: [
+        `offering:${args.offeringRef}`,
+        `publication:${args.prepared.offering.offeringId}`,
+      ],
+      budgetAmount: 0,
+      consequenceSummary: 'Publish this exact Operation revision to the market.',
+      statusReadbackRef: `owner/supply/${args.offeringRef}`,
+      correlationRef: args.correlationId,
+      idempotencyRef: args.operationKey,
+      command: {
+        version: 'ae.publication-consequence:v1',
+        action: 'publication.publish',
+        operationKey: args.operationKey,
+        businessId: String(args.businessId),
+        offeringRef: args.offeringRef,
+        offeringRevision: args.revision,
+        offeringSourceHash: args.sourceHash,
+        publicationRef: args.prepared.offering.offeringId,
+        publicationRevision: 1,
+        sourceDigest: args.prepared.sourceDigest,
+        priceDigest: args.prepared.priceDigest,
+        bindingId: args.prepared.binding.bindingId,
+        documentDigest: canonicalDigest(args.prepared.documentJson),
+      },
+      ...(args.proof === undefined ? {} : { proof: args.proof }),
+      now: Date.now(),
+    })
+    if (consequence.kind === 'refused') {
+      return { kind: 'refused' as const, reason: consequence.code }
+    }
+  }
   const result = await publishPreparedCapabilityCommand(
     {
       businessId: String(args.businessId),

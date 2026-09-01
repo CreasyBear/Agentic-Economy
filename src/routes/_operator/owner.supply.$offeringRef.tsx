@@ -1,6 +1,7 @@
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useRef } from "react";
+import { useReverification } from "@clerk/tanstack-react-start";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { brandNonEmpty } from "@/modules/common/ids";
@@ -102,12 +103,14 @@ function OwnerSupplyDetailRoute() {
   const operationKeys = useRef(new Map<string, string>());
   const preflightDocument = useServerFn(preflightOwnerOpenApiDocumentServer);
   const preflight = useServerFn(preflightOwnerCapabilityServer);
-  const admit = useServerFn(admitOwnerCapabilityServer);
+  const admitRequest = useServerFn(admitOwnerCapabilityServer);
+  const admit = useReverification(admitRequest);
   const readiness = useServerFn(runOwnerSupplyReadinessServer);
   const test = useServerFn(runOwnerSupplyTestServer);
   const recheck = useServerFn(recheckOwnerCapabilityServer);
   const withdraw = useServerFn(withdrawOwnerCapabilityServer);
-  const republish = useServerFn(republishOwnerCapabilityServer);
+  const republishRequest = useServerFn(republishOwnerCapabilityServer);
+  const republish = useReverification(republishRequest);
   const promoteCanary = useServerFn(promoteOwnerSellerCanaryServer);
   const durableOffering = result.durableOffering;
   const editorSource = result.source;

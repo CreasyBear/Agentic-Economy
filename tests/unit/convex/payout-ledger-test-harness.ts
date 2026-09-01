@@ -157,6 +157,10 @@ type Handler = (
   ctx: {
     db: MemoryDb
     scheduler?: Record<string, never>
+    runMutation?: (
+      reference: unknown,
+      args: Record<string, unknown>,
+    ) => Promise<{ ok: true; retryAfter?: number }>
     auth: {
       getUserIdentity: () => Promise<{ tokenIdentifier: string; subject?: string } | null>
     }
@@ -165,7 +169,11 @@ type Handler = (
 ) => Promise<unknown>
 type HandlerExport = { _handler: Handler }
 const withConsequenceScheduler = (handler: Handler): Handler => async (ctx, args) =>
-  handler({ ...ctx, scheduler: {} }, args)
+  handler({
+    ...ctx,
+    scheduler: {},
+    runMutation: async () => ({ ok: true as const }),
+  }, args)
 export const begin = withConsequenceScheduler(
   (beginPayoutTransfer as unknown as HandlerExport)._handler,
 )
@@ -597,7 +605,6 @@ export function creditProvider(
 
 export function commandArgs(): Record<string, unknown> {
   return {
-    authority: { principalId: payoutAuthorityPrincipalRef },
     businessId: 'business-1',
     amount,
     providerAccountRef: 'business:business-1:USD',
@@ -609,6 +616,13 @@ export function commandArgs(): Record<string, unknown> {
     idempotencyKey: 'payout-idempotency-1',
     providerRecoveryDeadlineAt: normalProviderRecoveryDeadlineAt,
     observedAt: normalTransferObservedAt,
+    expectedPayoutRevision: 1,
+    expectedAccountVersion: 1,
+    proof: {
+      reverificationId: 'reverify:payout:command-1',
+      firstFactorAgeMinutes: 0,
+      secondFactorAgeMinutes: 0,
+    },
     ...sourceArgs,
   }
 }

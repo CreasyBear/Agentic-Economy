@@ -360,7 +360,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
             />
           </>
         ) : status === 'approved' ? (
-          <Alert><AlertTitle>Access approved — return to your agent</AlertTitle><AlertDescription>{accessProfile === 'supplier' ? 'AE delivers the separate supplier key to that agent once. It can now manage the approved supplier lifecycle.' : 'AE delivers the caller key to that agent once. It can now finish setup; supplier authority is not included.'}</AlertDescription></Alert>
+          <Alert><AlertTitle>Access approved — return to your agent</AlertTitle><AlertDescription>{accessProfile === 'supplier' ? 'Approval is complete. Return to your agent so it can finish the token exchange for its separate supplier access.' : 'Approval is complete. Return to your agent so it can finish the token exchange. Supplier authority is not included.'}</AlertDescription></Alert>
         ) : status === 'denied' ? (
           <Alert><AlertTitle>Access not approved</AlertTitle><AlertDescription>Your agent can start a new request if you want to try again.</AlertDescription></Alert>
         ) : status === 'outcome_unknown' ? (

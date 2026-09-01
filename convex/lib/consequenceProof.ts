@@ -1,4 +1,5 @@
 import type { MutationCtx } from '../_generated/server'
+import { v } from 'convex/values'
 
 const STRICT_PROOF_MAX_AGE_MINUTES = 10
 const MINUTE_MS = 60_000
@@ -7,6 +8,16 @@ export type ClerkFactorEvidence = Readonly<{
   firstFactorAgeMinutes: number
   secondFactorAgeMinutes: number
 }>
+
+export type ClerkConsequenceProofInput = ClerkFactorEvidence & Readonly<{
+  reverificationId: string
+}>
+
+export const clerkConsequenceProofValue = v.object({
+  reverificationId: v.string(),
+  firstFactorAgeMinutes: v.number(),
+  secondFactorAgeMinutes: v.number(),
+})
 
 export type StrictConsequenceProof = Readonly<{
   reverificationId: string

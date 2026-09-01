@@ -105,6 +105,7 @@ describe("current supply funnel", () => {
 
     nextStep = "readiness";
     fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm publication" }));
     await waitFor(() =>
       expect(
         screen.getByRole("heading", {
@@ -431,6 +432,7 @@ describe("current supply funnel", () => {
       screen.getByRole("option", { name: /provider:replacement · available/i }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm publication" }));
 
     await waitFor(() => expect(admit).toHaveBeenCalledOnce());
     expect(preflight).toHaveBeenCalledWith(expect.objectContaining({
@@ -518,6 +520,7 @@ describe("current supply funnel", () => {
       expect(document.activeElement?.getAttribute("id")).toBe("provider"),
     );
     fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm publication" }));
 
     await waitFor(() => expect(admit).toHaveBeenCalledOnce());
     expect(preflight).toHaveBeenCalledWith(expect.objectContaining({

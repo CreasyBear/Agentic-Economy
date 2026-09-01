@@ -12,14 +12,12 @@ export {
   type PayoutTransferResult,
 } from './moneyPayoutTransferShared/row_projection'
 
-export async function payoutAuthorityAllowed(
+export async function payoutOwnedByCurrentOwner(
   ctx: Pick<MutationCtx, 'auth' | 'db' | 'scheduler'>,
   businessId: string,
-  principalId: string,
 ): Promise<boolean> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return false
-  if (principalId !== actor.canonicalPrincipalRef) return false
   const canonicalBusinessId = ctx.db.normalizeId('businesses', businessId)
   if (canonicalBusinessId === null) return false
   const business = await ctx.db.get(canonicalBusinessId)

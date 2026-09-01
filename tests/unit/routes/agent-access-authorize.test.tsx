@@ -17,7 +17,9 @@ const serverMocks = vi.hoisted(() => ({
   readConsent: vi.fn(),
   reverifyMode: 'pass' as 'pass' | 'cancel',
   useReverification: vi.fn((fetcher: (...args: unknown[]) => Promise<unknown>) => async (...args: unknown[]) => {
-    if (serverMocks.reverifyMode === 'cancel') throw { code: 'reverification_cancelled' }
+    if (serverMocks.reverifyMode === 'cancel') {
+      throw Object.assign(new Error('reverification_cancelled'), { code: 'reverification_cancelled' })
+    }
     const result = await fetcher(...args)
     return result instanceof Response ? await result.json() : result
   }),
@@ -178,6 +180,8 @@ describe('/agent-access/authorize consent loading', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
 
     expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
+    expect(screen.getByText('Approval is complete. Return to your agent so it can finish the token exchange. Supplier authority is not included.')).toBeTruthy()
+    expect(screen.queryByText(/delivers the caller key/i)).toBeNull()
     expect(serverMocks.useReverification).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledOnce()
   })
@@ -250,7 +254,7 @@ describe('/agent-access/authorize consent loading', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = fetchMock.mock.calls[0]?.[1]
     expect(String(request?.body)).toContain('authority_mode=bounded_mandate')
-    expect(await screen.findByText(/separate supplier key/)).toBeTruthy()
+    expect(await screen.findByText(/finish the token exchange for its separate supplier access/)).toBeTruthy()
   })
 
   it('requires an explicit existing agent before credential replacement can be approved', async () => {

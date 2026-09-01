@@ -83,6 +83,7 @@ type PayoutStatusReadResult =
       providerPaidAfter?: ExactAmount
       stripeAccountId?: string
       payoutRef?: string
+      payoutRevision?: number
       payoutCommandId?: string
       idempotencyKey?: string
       stripeTransferId?: string
@@ -502,6 +503,7 @@ async function readPayoutStatusForRows(
     ...accountProjection,
     payoutState: current.state,
     payoutRef: current.payoutRef,
+    payoutRevision: current.updatedAt,
     ...(current.payoutCommandId === undefined
       ? {}
       : { payoutCommandId: current.payoutCommandId }),

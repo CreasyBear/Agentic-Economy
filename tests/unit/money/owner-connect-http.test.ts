@@ -12,6 +12,7 @@ import { SourceWriteAdmissionError } from '@/modules/security/source-write-admis
 import {
   applyVerifiedStripeEventThroughSource,
   createOwnerConnectAccountThroughSource,
+  updateOwnerPayoutAuthorityThroughSource,
 } from '@/modules/money/server'
 
 describe('owner Connect account reservation', () => {
@@ -20,6 +21,91 @@ describe('owner Connect account reservation', () => {
     currency: 'USD',
     idempotencyKey: 'owner-connect:test-1',
   }
+  it('authorizes an exact payout authority update before creating the Stripe-hosted link', async () => {
+    const proof = {
+      reverificationId: 'reverification:payout-authority:update',
+      firstFactorAgeMinutes: 0,
+      secondFactorAgeMinutes: -1,
+    } as const
+    const createOnboardingLink = vi.fn<Provider['createOnboardingLink']>(async () => ({
+      provider: 'stripe',
+      url: 'https://connect.stripe.test/onboarding',
+      evidenceRef: 'evidence:onboarding-link',
+    }))
+    sourceMocks.callSourceMutation.mockResolvedValue({
+      kind: 'accepted',
+      account: { ...payoutAccount, version: 2 },
+    })
+    sourceMocks.callSourceQuery
+      .mockResolvedValueOnce(ownerProjection)
+      .mockResolvedValueOnce(payoutAccount)
+
+    const result = await updateOwnerPayoutAuthorityThroughSource(
+      {
+        businessId: 'business-1',
+        currency: 'USD',
+        stripeAccountId: 'acct_1',
+        expectedAccountVersion: 1,
+        idempotencyKey: 'onboarding:business-1:USD:1',
+      },
+      {},
+      {
+        ...connectRuntime(async () => ({
+          kind: 'refused',
+          code: 'payout_outcome_unknown',
+          retryable: false,
+        })),
+        provider: {
+          ...connectRuntime(async () => ({
+            kind: 'refused',
+            code: 'payout_outcome_unknown',
+            retryable: false,
+          })).provider!,
+          createOnboardingLink,
+        },
+      },
+      proof,
+    )
+
+    expect(result).toEqual({
+      kind: 'ok',
+      businessId: 'business-1',
+      currency: 'USD',
+      stripeAccountId: 'acct_1',
+      url: 'https://connect.stripe.test/onboarding',
+    })
+    expect(sourceMocks.callSourceMutation).toHaveBeenCalledOnce()
+    expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({
+      operationKey: 'moneyLedger:authorizeConnectOnboarding',
+      expectedAccountVersion: 1,
+      stripeAccountId: 'acct_1',
+      proof,
+    })
+    expect(createOnboardingLink).toHaveBeenCalledOnce()
+  })
+
+  it('does not create an onboarding link without strict proof', async () => {
+    const createOnboardingLink = vi.fn<Provider['createOnboardingLink']>()
+    const result = await updateOwnerPayoutAuthorityThroughSource(
+      {
+        businessId: 'business-1',
+        currency: 'USD',
+        stripeAccountId: 'acct_1',
+        expectedAccountVersion: 1,
+        idempotencyKey: 'onboarding:business-1:USD:1',
+      },
+      {},
+      { ...connectRuntime(async () => ({ kind: 'refused', code: 'payout_outcome_unknown', retryable: false })), provider: { ...connectRuntime(async () => ({ kind: 'refused', code: 'payout_outcome_unknown', retryable: false })).provider!, createOnboardingLink } },
+    )
+
+    expect(result).toEqual({
+      kind: 'refused',
+      code: 'reauthentication_required',
+      retryable: false,
+    })
+    expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
+    expect(createOnboardingLink).not.toHaveBeenCalled()
+  })
   it('refuses a Stripe config and mode mismatch before reserving a Connect command', async () => {
     const createOrRecoverConnectAccount =
       vi.fn<Provider['createOrRecoverConnectAccount']>()

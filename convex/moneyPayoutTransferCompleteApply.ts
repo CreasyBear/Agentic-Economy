@@ -23,7 +23,7 @@ import {
 } from '../src/modules/money/public'
 import {
   payoutAccountAfterReservationMatches,
-  payoutAuthorityAllowed,
+  payoutOwnedByCurrentOwner,
   payoutEvidenceSourceDigest,
   payoutFromRow,
   payoutReservationCurrentAmountMatches,
@@ -64,7 +64,6 @@ export type PayoutTransferEvidence =
     }
 
 export type CompletePayoutTransferArgs = BillingSourceWriteArgs & {
-  authority: { principalId: string }
   businessId: string
   amount: ExactAmount
   providerAccountRef: string
@@ -81,7 +80,6 @@ export type CompletePayoutTransferArgs = BillingSourceWriteArgs & {
 }
 
 type PayoutCompletionInput = Readonly<{
-  authority: { principalId: string }
   businessId: string
   amount: ExactAmount
   providerAccountRef: string
@@ -378,14 +376,6 @@ export async function completePayoutBody(
   ctx: MutationCtx,
   args: PayoutCompletionInput,
 ): Promise<PayoutTransferResult> {
-  if (
-    !(await payoutAuthorityAllowed(
-      ctx,
-      args.businessId,
-      args.authority.principalId,
-    ))
-  )
-    return refusedPayout('billing_identity_missing', false)
   if (args.evidenceRefs.length !== 1 || args.sourceDigest.length === 0)
     return refusedPayout('payout_reconciliation_required', false)
   const transferId =
@@ -872,5 +862,7 @@ export async function completePayoutTransferHandler(
   args: CompletePayoutTransferArgs,
 ): Promise<PayoutTransferResult> {
     await requireBillingSourceWrite(ctx, args)
+    if (!(await payoutOwnedByCurrentOwner(ctx, args.businessId)))
+      return refusedPayout('billing_identity_missing', false)
     return await completePayoutBody(ctx, args)
 }

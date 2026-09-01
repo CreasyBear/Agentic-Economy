@@ -9,13 +9,12 @@ import {
   runOwnerSupplyTest,
 } from '../../../convex/capabilitySupplyOwnerSupply'
 import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
-import { payoutAuthorityAllowed } from '../../../convex/moneyPayoutTransferShared'
+import { payoutOwnedByCurrentOwner } from '../../../convex/moneyPayoutTransferShared'
 import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 import {
   MemoryDb,
   identity as payoutIdentity,
-  payoutAuthorityPrincipalRef,
   seedPayout,
 } from './payout-ledger-test-harness'
 
@@ -170,7 +169,7 @@ describe('interactive consequence authority', () => {
     }
   })
 
-  it('payout rejects hostile authority substitutions', async () => {
+  it('payout resolves the current owner and rejects invalid authority state', async () => {
     const db = new MemoryDb()
     const auth = {
       getUserIdentity: async () => ({
@@ -181,31 +180,20 @@ describe('interactive consequence authority', () => {
     }
 
     await expect(
-      payoutAuthorityAllowed(
+      payoutOwnedByCurrentOwner(
         { db: db as never, auth: auth as never, scheduler: {} as never },
         'business-1',
-        'forged-request-principal',
       ),
     ).resolves.toBe(false)
-
-    const canonicalDb = new MemoryDb()
-    seedPayout(canonicalDb)
-    const principalSubstitution = `${payoutAuthorityPrincipalRef}-caller-shaped`
-    await expect(payoutAuthorityAllowed(
-      { db: canonicalDb as never, auth: payoutIdentity as never, scheduler: {} as never },
-      'business-1',
-      principalSubstitution,
-    )).resolves.toBe(false)
 
     const revokedDb = new MemoryDb()
     seedPayout(revokedDb)
     const credential = revokedDb.rows('credentials')[0]
     if (credential === undefined) throw new Error('payout_credential_fixture_missing')
     credential.lifecycle = 'revoked'
-    await expect(payoutAuthorityAllowed(
+    await expect(payoutOwnedByCurrentOwner(
       { db: revokedDb as never, auth: payoutIdentity as never, scheduler: {} as never },
       'business-1',
-      payoutAuthorityPrincipalRef,
     )).resolves.toBe(false)
 
     const crossAccountDb = new MemoryDb()
@@ -215,10 +203,9 @@ describe('interactive consequence authority', () => {
       owningAccountRef: `acc_${'b'.repeat(32)}`,
       updatedAt: 1,
     })
-    await expect(payoutAuthorityAllowed(
+    await expect(payoutOwnedByCurrentOwner(
       { db: crossAccountDb as never, auth: payoutIdentity as never, scheduler: {} as never },
       'businesses:cross-account',
-      payoutAuthorityPrincipalRef,
     )).resolves.toBe(false)
 
     const expiredDb = new MemoryDb()
@@ -240,7 +227,7 @@ describe('interactive consequence authority', () => {
       scheduleRef: 'scheduled:payout-expired',
       materializedAt: 1,
     }
-    await expect(payoutAuthorityAllowed(
+    await expect(payoutOwnedByCurrentOwner(
       {
         db: expiredDb as never,
         auth: {
@@ -254,7 +241,6 @@ describe('interactive consequence authority', () => {
         scheduler: {} as never,
       },
       'business-1',
-      payoutAuthorityPrincipalRef,
     )).resolves.toBe(false)
   })
 
@@ -263,10 +249,9 @@ describe('interactive consequence authority', () => {
     seedPayout(db)
 
 
-    await expect(payoutAuthorityAllowed(
+    await expect(payoutOwnedByCurrentOwner(
       { db: db as never, auth: payoutIdentity as never, scheduler: {} as never },
       'business-1',
-      payoutAuthorityPrincipalRef,
     )).resolves.toBe(true)
   })
 

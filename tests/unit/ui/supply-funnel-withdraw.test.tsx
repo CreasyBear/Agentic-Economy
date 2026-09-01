@@ -74,4 +74,55 @@ describe("current supply funnel", () => {
       "text-destructive",
     );
   });
+
+  it("requires one exact confirmation before republishing and locks duplicate confirms", async () => {
+    let resolveRepublish!: (result: OwnerSupplyCommandResult) => void;
+    const republish = vi.fn(
+      () =>
+        new Promise<OwnerSupplyCommandResult>((resolve) => {
+          resolveRepublish = resolve;
+        }),
+    );
+    const withdrawn = offeringAt("test");
+    if (withdrawn.publication === undefined)
+      throw new Error("withdrawn_publication_missing");
+    render(
+      <AeSupplyFunnel
+        businessId="business:one"
+        offering={{
+          ...withdrawn,
+          publication: { ...withdrawn.publication, state: "withdrawn" },
+        }}
+        initialOffering={emptyOwnerOfferingEditorValue}
+        callbacks={{
+          saveOffering: async (value) => ({ kind: "saved", value, message: "Saved." }),
+          preflight: async () => ({ kind: "prepared", prepared: preparedPublication }),
+          admit: async () => ({ step: "admission", state: "completed" }),
+          runReadiness: async () => ({ step: "readiness", state: "completed" }),
+          runTest: async () => ({ step: "test", state: "completed" }),
+          republish,
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Republish" }));
+    expect(screen.getByText(/revision 1 will become visible.*revision 2/i)).toBeDefined();
+    expect(republish).not.toHaveBeenCalled();
+    const confirm = screen.getByRole("button", { name: "Confirm republish" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(republish).toHaveBeenCalledOnce();
+
+    resolveRepublish({
+      kind: "republished",
+      publicationRef: "publication:one",
+      revision: 2,
+      operationRef: "operation:two",
+      bindingId: "binding:one",
+      lifecycle: { state: "active", reasons: [] },
+    });
+    await waitFor(() =>
+      expect(screen.getByText(/Publication revision 2 was created/i)).toBeDefined(),
+    );
+  });
 });

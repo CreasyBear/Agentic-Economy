@@ -4,6 +4,9 @@ vi.mock('../../../convex/sourceWriteAdmission', () => ({
   sourceWriteArgs: {},
   requireSourceWrite: vi.fn(async () => ({ kind: 'accepted' as const })),
 }))
+vi.mock('../../../convex/lib/ownerConsequence', () => ({
+  admitInteractiveOwnerConsequence: vi.fn(async () => ({ kind: 'admitted' as const })),
+}))
 
 import {
   applyCreditTopupHandler,

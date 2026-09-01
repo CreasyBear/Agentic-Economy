@@ -65,6 +65,8 @@ export const ownerProjection = {
         accountState: 'ready' as const,
         payoutState: 'held_threshold' as const,
         payoutRef: 'payout-1',
+        payoutRevision: 50,
+        accountVersion: 1,
         providerNet: amount,
         minimumPayout: { currency: 'USD', units: '1000', exponent: 2 },
         evidence: 'source' as const,
@@ -81,12 +83,15 @@ export const payoutAccount = {
   state: 'ready' as const,
   detailsSubmitted: true,
   recipientCapabilityActive: true,
+  version: 1,
 }
 export const input = {
   businessId: 'business-1',
   currency: 'USD',
   payoutRef: 'payout-1',
   amount,
+  expectedPayoutRevision: 50,
+  expectedAccountVersion: 1,
   idempotencyKey: 'owner-payout:test-1',
 }
 export const config = {

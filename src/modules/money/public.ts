@@ -76,6 +76,11 @@ export type MoneyRefusalCode =
   | "payment_binding_invalid"
   | "payment_approval_expired"
   | "fresh_approval_required"
+  | "reauthentication_required"
+  | "proof_stale"
+  | "proof_replayed"
+  | "command_changed"
+  | "rate_limited"
   | "budget_policy_missing"
   | "budget_generation_stale"
   | "budget_invocation_limit_exceeded"
@@ -450,8 +455,10 @@ export type ProviderEarningsView = Readonly<{
 export type PayoutStatusView = Readonly<{
   businessId: string;
   accountState: PayoutAccountState | "missing";
+  accountVersion?: number;
   payoutState?: PayoutState;
   payoutRef?: string;
+  payoutRevision?: number;
   payoutCommandId?: string;
   idempotencyKey?: string;
   providerNet: ExactAmount;

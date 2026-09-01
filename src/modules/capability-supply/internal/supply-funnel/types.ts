@@ -252,6 +252,11 @@ export type OwnerSupplyMaintenanceSourceInput = OwnerSupplyMaintenanceCommand &
   Readonly<{
     sourceWrite: SourceWriteAdmission;
     sourceWriteRequest: SourceWriteAdmissionRequest;
+    proof?: Readonly<{
+      reverificationId: string;
+      firstFactorAgeMinutes: number;
+      secondFactorAgeMinutes: number;
+    }>;
   }>;
 export type OwnerSupplyCommandResult = Readonly<
   | {

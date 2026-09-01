@@ -18,7 +18,7 @@ vi.mock('../../../convex/sourceWriteAdmission', () => ({
 }))
 
 describe('Convex payout persistence — settlement', () => {
-  it('reserves yesterday UTC daily payouts once and does not double-reserve on replay', async () => {
+  it('reports eligible payouts without initiating a consequential transfer', async () => {
     const db = new MemoryDb()
     seedPayout(db)
     const now = Date.parse(dailyPayoutPeriodEnd) + 1
@@ -27,12 +27,13 @@ describe('Convex payout persistence — settlement', () => {
     ).resolves.toMatchObject({
       kind: 'ran',
       periodStart: dailyPayoutPeriodStart,
-      begunCount: 1,
+      begunCount: 0,
+      notReadyCount: 1,
       unresolvedReservationCount: 0,
     })
-    expect(db.rows('moneyTransactions')).toHaveLength(1)
+    expect(db.rows('moneyTransactions')).toHaveLength(0)
     expect(db.rows('moneyPayouts')[0]).toMatchObject({
-      state: 'transfer_pending',
+      state: 'held_threshold',
       payoutRef: dailyPayoutRef,
     })
     await expect(
@@ -41,7 +42,7 @@ describe('Convex payout persistence — settlement', () => {
       kind: 'ran',
       begunCount: 0,
     })
-    expect(db.rows('moneyTransactions')).toHaveLength(1)
+    expect(db.rows('moneyTransactions')).toHaveLength(0)
   })
 
   it('accounts an unresolved reservation instead of beginning a second transfer', async () => {

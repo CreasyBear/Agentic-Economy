@@ -10,6 +10,16 @@ const sourceMocks = vi.hoisted(() => ({
   callSourceMutation: vi.fn(),
   sourceWriteAdmissionFromContext: vi.fn(),
   preparePublicationDraft: vi.fn(),
+  requireStrictClerkConsequenceProof: vi.fn(async () => ({
+    reverificationId: "test:publication-proof",
+    firstFactorAgeMinutes: 0,
+    secondFactorAgeMinutes: -1,
+  })),
+}));
+
+vi.mock("@/lib/server/clerk-consequence-proof", () => ({
+  requireStrictClerkConsequenceProof:
+    sourceMocks.requireStrictClerkConsequenceProof,
 }));
 
 vi.mock("@tanstack/react-start", async (importOriginal) => ({

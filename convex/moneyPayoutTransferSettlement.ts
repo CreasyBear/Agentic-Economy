@@ -2,37 +2,26 @@ import { v } from 'convex/values'
 
 import type { Doc } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
-import { requireBillingSourceWrite } from './moneyBillingAuthorization'
+import {
+  requireBillingSourceWrite,
+  type BillingSourceWriteArgs,
+} from './moneyBillingAuthorization'
 import { accountFromRow } from './moneyCanonicalAccounts'
-import { identifier } from './moneyLedgerValues'
+import { billingSourceArgs, exactAmount, identifier } from './moneyLedgerValues'
+import { utcPeriodStartIso } from './lib/qualifiedUsePayout'
 import {
-  requireCanonicalPayoutAuthority,
-  utcPeriodStartIso,
-} from './lib/qualifiedUsePayout'
-import {
-  reconcileWorkloadCronResourceAccount,
   reconcileWorkloadCronSnapshot,
   parseWorkloadCronSnapshot,
 } from './workloadCron'
 import {
-  AccountRegistryError,
-  WorkloadContextError,
-} from '../src/modules/principal-account/public'
-import {
   amountAtScale,
-  amountFromParts,
-  payoutTransferCommand,
   readExactAmount,
   transitionPayout,
+  type ExactAmount,
 } from '../src/modules/money/public'
 import {
-  beginPayoutTransferReservation,
-  payoutBeginArgs,
-  type BeginPayoutTransferArgs,
-} from './moneyPayoutTransferBegin'
-import {
   payoutAccountAfterReservationMatches,
-  payoutAuthorityAllowed,
+  payoutOwnedByCurrentOwner,
   payoutFromRow,
   payoutReservationCurrentAmountMatches,
   payoutReservationRowIdentityMatches,
@@ -47,7 +36,18 @@ function refusedPayout(code: string, retryable: boolean): PayoutTransferResult {
   return { kind: 'refused', code, retryable }
 }
 
-export type MarkPayoutTransferOutcomeUnknownArgs = BeginPayoutTransferArgs & {
+export type MarkPayoutTransferOutcomeUnknownArgs = BillingSourceWriteArgs & {
+  businessId: string
+  amount: ExactAmount
+  providerAccountRef: string
+  destinationAccountId: string
+  payoutRef: string
+  commandId: string
+  inputDigest: string
+  requestDigest: string
+  idempotencyKey: string
+  providerRecoveryDeadlineAt: number
+  observedAt: number
   failureCode: string
 }
 
@@ -65,8 +65,19 @@ export type DailySettlementResult = {
 }
 
 export const markPayoutTransferOutcomeUnknownArgs = {
-  ...payoutBeginArgs,
+  businessId: identifier,
+  amount: exactAmount,
+  providerAccountRef: identifier,
+  destinationAccountId: identifier,
+  payoutRef: identifier,
+  commandId: identifier,
+  inputDigest: identifier,
+  requestDigest: identifier,
+  idempotencyKey: identifier,
+  providerRecoveryDeadlineAt: v.number(),
+  observedAt: v.number(),
   failureCode: identifier,
+  ...billingSourceArgs,
 }
 export const dailySettlementResultValue = v.object({
   kind: v.literal('ran'),
@@ -94,21 +105,20 @@ async function listDailyPayoutsByState(
 }
 
 /**
- * UTC daily supplier settlement. Convex cron docs: internal.*, idempotent.
- * Stripe Transfer I/O is not issued here; this reuses beginPayoutTransferReservation only.
+ * Read-only daily payout sweep. A human-confirmed owner mutation is the only
+ * path that may reserve a new transfer.
  */
 export async function runDailySupplierSettlementHandler(
   ctx: MutationCtx,
   args: DailySupplierSettlementArgs,
 ): Promise<DailySettlementResult> {
-    let workload = await reconcileWorkloadCronSnapshot(
+    await reconcileWorkloadCronSnapshot(
       ctx,
       'run daily supplier settlement',
       parseWorkloadCronSnapshot(args.workload),
     )
     const now = args.now ?? Date.now()
     const periodStart = utcPeriodStartIso(now, 1)
-    const unresolvedKeys = new Set<string>()
     let unresolvedReservationCount = 0
     for (let daysAgo = 1; daysAgo <= DAILY_SETTLEMENT_LOOKBACK_DAYS; daysAgo += 1) {
       const start = utcPeriodStartIso(now, daysAgo)
@@ -116,10 +126,7 @@ export async function runDailySupplierSettlementHandler(
         listDailyPayoutsByState(ctx, start, 'transfer_pending'),
         listDailyPayoutsByState(ctx, start, 'outcome_unknown'),
       ])
-      for (const row of [...pending, ...unknown]) {
-        unresolvedKeys.add(`${row.businessId}:${row.currency}`)
-        unresolvedReservationCount += 1
-      }
+      unresolvedReservationCount += pending.length + unknown.length
     }
     const eligible: Doc<'moneyPayouts'>[] = []
     for (let daysAgo = 1; daysAgo <= DAILY_SETTLEMENT_LOOKBACK_DAYS; daysAgo += 1) {
@@ -134,85 +141,12 @@ export async function runDailySupplierSettlementHandler(
         eligible.push(payout)
       }
     }
-    let begunCount = 0
-    let notReadyCount = 0
-    for (const payout of eligible) {
-      const key = `${payout.businessId}:${payout.currency}`
-      if (unresolvedKeys.has(key)) {
-        unresolvedReservationCount += 1
-        continue
-      }
-      const payoutAccount = await ctx.db
-        .query('moneyPayoutAccounts')
-        .withIndex('by_businessId_and_currency', (q) =>
-          q.eq('businessId', payout.businessId).eq('currency', payout.currency),
-        )
-        .unique()
-      if (payoutAccount === null || payoutAccount.stripeAccountId.length === 0) {
-        notReadyCount += 1
-        continue
-      }
-      const amount = amountFromParts(
-        payout.currency,
-        payout.providerNetUnits,
-        payout.exponent,
-      )
-      if (
-        amount === undefined ||
-        payout.providerAccountRef === undefined
-      ) {
-        notReadyCount += 1
-        continue
-      }
-      try {
-        const authority = await requireCanonicalPayoutAuthority(ctx, payout)
-        workload = await reconcileWorkloadCronResourceAccount(
-          ctx,
-          'run daily supplier settlement',
-          workload,
-          authority.owningAccountRef,
-        )
-      } catch (error) {
-        if ((error instanceof Error && error.message === 'qualified_use_authority_invalid')
-          || error instanceof AccountRegistryError
-          || error instanceof WorkloadContextError) {
-          notReadyCount += 1
-          continue
-        }
-        throw error
-      }
-      const command = payoutTransferCommand({
-        businessId: payout.businessId,
-        payoutRef: payout.payoutRef,
-        amount,
-        providerAccountRef: payout.providerAccountRef,
-        destinationAccountId: payoutAccount.stripeAccountId,
-        idempotencyKey: payout.idempotencyKey,
-        observedAt: now,
-      })
-      if (command === undefined) {
-        notReadyCount += 1
-        continue
-      }
-      const result = await beginPayoutTransferReservation(ctx, command)
-      if (result.kind === 'accepted') {
-        begunCount += 1
-        unresolvedKeys.add(key)
-        continue
-      }
-      if (result.code === 'payout_reconciliation_required') {
-        unresolvedReservationCount += 1
-        unresolvedKeys.add(key)
-        continue
-      }
-      notReadyCount += 1
-    }
     return {
       kind: 'ran' as const,
       periodStart,
       unresolvedReservationCount,
-      begunCount,
-      notReadyCount,
+      begunCount: 0,
+      notReadyCount: eligible.length,
     }
 }
 
@@ -221,13 +155,7 @@ export async function markPayoutTransferOutcomeUnknownHandler(
   args: MarkPayoutTransferOutcomeUnknownArgs,
 ): Promise<PayoutTransferResult> {
     await requireBillingSourceWrite(ctx, args)
-    if (
-      !(await payoutAuthorityAllowed(
-        ctx,
-        args.businessId,
-        args.authority.principalId,
-      ))
-    )
+    if (!(await payoutOwnedByCurrentOwner(ctx, args.businessId)))
       return refusedPayout('billing_identity_missing', false)
     const requested = readExactAmount(args.amount)
     if (requested === undefined || requested.units === '0')

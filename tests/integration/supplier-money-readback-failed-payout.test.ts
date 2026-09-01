@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { STRIPE_TRANSFER_RECOVERY_WINDOW_MS } from '@/modules/money/public'
 import { withSourceWrite } from '../helpers/source-write-admission'
+import { publishedBusinessOwner } from '../helpers/convex-fixtures'
 
 describe('supplier money readback failed payout', () => {
   it('reads failed payout amount from its immutable reservation and refuses inconsistent journals', async () => {
@@ -123,8 +124,12 @@ describe('supplier money readback failed payout', () => {
         createdAt: 1,
       })
     })
-    const hostileBeginArgs = await withSourceWrite('billing', {
-      authority: { principalId: `principal:${businessRef}` },
+    const proof = {
+      reverificationId: `reverification:${businessRef}:payout`,
+      firstFactorAgeMinutes: 0,
+      secondFactorAgeMinutes: -1,
+    } as const
+    const beginCommandBase = {
       businessId: businessRef,
       amount,
       providerAccountRef,
@@ -136,8 +141,14 @@ describe('supplier money readback failed payout', () => {
       idempotencyKey,
       providerRecoveryDeadlineAt,
       observedAt,
+      expectedPayoutRevision: 1,
+      expectedAccountVersion: 0,
       operationKey: `money:readback:begin:${businessRef}`,
       correlationId: `money:readback:begin:${businessRef}`,
+    } as const
+    const hostileBeginArgs = await withSourceWrite('billing', {
+      ...beginCommandBase,
+      proof,
     })
     const beforeHostileBegin = await backend.run(async (ctx) => ({
       account: await ctx.db
@@ -149,8 +160,9 @@ describe('supplier money readback failed payout', () => {
         .withIndex('by_externalRef', (q) => q.eq('externalRef', payoutRef))
         .take(4),
     }))
+    const foreign = await publishedBusinessOwner(backend, 'supplier-earnings-reservation-foreign')
     await expect(
-      owner.mutation(beginPayoutTransfer, hostileBeginArgs),
+      foreign.owner.mutation(beginPayoutTransfer, hostileBeginArgs),
     ).resolves.toEqual({
       kind: 'refused',
       code: 'billing_identity_missing',
@@ -167,9 +179,25 @@ describe('supplier money readback failed payout', () => {
         .take(4),
     }))
     expect(afterHostileBegin).toEqual(beforeHostileBegin)
+    await expect(
+      owner.mutation(
+        beginPayoutTransfer,
+        await withSourceWrite('billing', beginCommandBase),
+      ),
+    ).resolves.toEqual({
+      kind: 'refused',
+      code: 'reauthentication_required',
+      retryable: false,
+    })
+    await expect(backend.run(async (ctx) => ({
+      transactions: await ctx.db.query('moneyTransactions')
+        .withIndex('by_externalRef', (query) => query.eq('externalRef', payoutRef))
+        .collect(),
+      proofs: await ctx.db.query('consequenceProofUses').collect(),
+    }))).resolves.toEqual({ transactions: [], proofs: [] })
     const beginArgs = await withSourceWrite('billing', {
-      ...hostileBeginArgs,
-      authority: { principalId },
+      ...beginCommandBase,
+      proof,
     })
     await expect(
       owner.mutation(beginPayoutTransfer, beginArgs),
@@ -189,7 +217,6 @@ describe('supplier money readback failed payout', () => {
       observedAt: observedAt + 1,
     }
     const reconcileArgs = await withSourceWrite('billing', {
-      authority: { principalId },
       businessId: businessRef,
       amount,
       providerAccountRef,

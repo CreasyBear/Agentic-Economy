@@ -31,6 +31,8 @@ import {
   reconcileInvocationChargeHandler,
 } from './moneyChargeReconcile'
 import {
+  authorizeConnectOnboardingArgs,
+  authorizeConnectOnboardingHandler,
   bindConnectAccountArgs,
   bindConnectAccountHandler,
   connectAccountResultValue,
@@ -89,6 +91,7 @@ import {
   canonicalBillingTopupContext,
   persistedInvocationAuthorityIsCurrent,
 } from './moneyBillingAuthorization'
+import { resolveBusinessActor } from './authz'
 import {
   beginPayoutTransferHandler,
   payoutBeginArgs,
@@ -309,6 +312,14 @@ export const reserveCreditTopup = mutation({
   args: reserveCreditTopupArgs.fields,
   returns: topupCommandResultValue,
   handler: async (ctx, args) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') {
+      return {
+        kind: 'refused' as const,
+        code: 'billing_identity_missing',
+        retryable: false,
+      }
+    }
     const canonicalCtx = await canonicalBillingPrincipalContext(
       ctx,
       args.principalId,
@@ -319,7 +330,7 @@ export const reserveCreditTopup = mutation({
           code: 'billing_identity_missing',
           retryable: false,
         }
-      : await reserveCreditTopupHandler(canonicalCtx, args)
+      : await reserveCreditTopupHandler(canonicalCtx, args, actor)
   },
 })
 export const markCreditTopupOutcomeUnknown = mutation({
@@ -393,6 +404,12 @@ export const reserveConnectAccount = mutation({
   args: reserveConnectAccountArgs,
   returns: connectAccountReservationResultValue,
   handler: reserveConnectAccountHandler,
+})
+
+export const authorizeConnectOnboarding = mutation({
+  args: authorizeConnectOnboardingArgs,
+  returns: connectAccountResultValue,
+  handler: authorizeConnectOnboardingHandler,
 })
 
 export const finalizeConnectAccount = mutation({

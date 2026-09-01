@@ -49,7 +49,6 @@ export const payoutTransferEvidenceArg = v.union(
   }),
 )
 export const payoutCompleteArgs = {
-  authority: v.object({ principalId: identifier }),
   businessId: identifier,
   amount: exactAmount,
   providerAccountRef: identifier,

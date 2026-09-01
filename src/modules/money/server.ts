@@ -85,6 +85,7 @@ export {
   createOwnerOnboardingLinkServer,
   createOwnerOnboardingLinkThroughSource,
   readOwnerConnectReadinessThroughSource,
+  updateOwnerPayoutAuthorityThroughSource,
 } from './internal/payout-connect-http'
 export type {
   OwnerConnectAccountInput,
@@ -92,6 +93,7 @@ export type {
   OwnerConnectReadinessReadback,
   OwnerOnboardingLinkInput,
   OwnerOnboardingLinkResult,
+  OwnerPayoutAuthorityUpdateInput,
 } from './internal/payout-connect-http'
 export {
   beginOwnerPayoutTransferServer,

@@ -1,10 +1,8 @@
-import { convexTest } from 'convex-test'
 import { anyApi } from 'convex/server'
 
-import schema from '../../convex/schema'
 import { accountRefForProvider } from '@/modules/money/public'
 import {
-  convexModules as modules,
+  convexTestWithMarketComponents,
   publishedBusinessOwner,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
@@ -38,7 +36,7 @@ if (reconcileTransfer === undefined)
 export const reconcilePayoutTransfer = reconcileTransfer
 
 export function createSupplierMoneyBackend(): ConvexFixtureBackend {
-  return convexTest(schema, modules)
+  return convexTestWithMarketComponents()
 }
 
 export function withBillingIdentity(

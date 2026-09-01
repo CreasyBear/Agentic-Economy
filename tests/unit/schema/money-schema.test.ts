@@ -39,7 +39,10 @@ describe('money schema ownership', () => {
       expect.objectContaining({ indexDescriptor: 'by_stripeAccountId', fields: ['stripeAccountId'] }),
     ]))
     expect(byName.has('moneyFreeTierCounters')).toBe(false)
-    expect(byName.has('moneyConnectAccountCommands')).toBe(false)
+    expect(byName.get('moneyConnectAccountCommands')?.indexes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ indexDescriptor: 'by_commandRef', fields: ['commandRef'] }),
+      expect.objectContaining({ indexDescriptor: 'by_businessId_and_currency_and_idempotencyKey', fields: ['businessId', 'currency', 'idempotencyKey'] }),
+    ]))
     const serialized = JSON.stringify(tables.filter((table) => table.tableName.startsWith('money')))
     expect(serialized).not.toMatch(/secret|paymentMethod|clientSecret/i)
     expect(serialized).toContain('journalDigest')
