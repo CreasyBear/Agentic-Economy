@@ -29,9 +29,45 @@ const replacement = v.object({
   successorGrantRef: v.string(),
 })
 
+const agentAccessPredecessorSnapshotValue = v.object({
+  credentialId: v.string(),
+  applicationRef: v.string(),
+  environment: v.union(v.literal('sandbox'), v.literal('production')),
+  grantRef: v.string(),
+  grantGeneration: v.number(),
+  policyDigest: v.string(),
+  bindingRef: v.string(),
+  bindingRevision: v.number(),
+  bindingCredentialGeneration: v.number(),
+  credentialRef: v.string(),
+  credentialRevision: v.number(),
+  credentialGeneration: v.number(),
+})
+
+export const agentAccessConsentReservationValue = v.object({
+  action: v.union(v.literal('agent_access.create'), v.literal('agent_access.replace_credential')),
+  commandDigest: v.string(),
+  reverificationId: v.string(),
+  targetRevision: v.number(),
+  actorPrincipalRef: v.string(),
+  ownerPrincipalRevision: v.number(),
+  activeAccountRef: v.string(),
+  accountRevision: v.number(),
+  authoritySource: v.object({
+    kind: v.literal('account_ownership'),
+    ownershipRef: v.string(),
+    ownershipRevision: v.number(),
+  }),
+  predecessor: v.optional(agentAccessPredecessorSnapshotValue),
+  correlationRef: v.string(),
+  idempotencyRef: v.string(),
+  reservedAt: v.number(),
+})
+
 export const agentAccessOAuthTables = {
   agentAccessOAuthGrants: defineTable({
     grantRef: v.string(),
+    revision: v.number(),
     flow: v.union(v.literal('device_code'), v.literal('authorization_code')),
     clientId: v.string(),
     redirectUri: v.optional(v.string()),
@@ -67,6 +103,7 @@ export const agentAccessOAuthTables = {
     denialReason: v.optional(v.literal('access_denied')),
     connectionTarget: v.optional(connectionTarget),
     replacement: v.optional(replacement),
+    consequenceReservation: v.optional(agentAccessConsentReservationValue),
   })
     .index('by_grantRef', ['grantRef'])
     .index('by_deviceCodeHash', ['deviceCodeHash'])

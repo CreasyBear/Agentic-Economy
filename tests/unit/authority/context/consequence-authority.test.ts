@@ -14,6 +14,10 @@ import {
 import {
   ConsequenceAuthorityBoundary,
   AuthorityBoundaryError,
+  PACKAGE_3_CONSEQUENCE_ACTION_POLICY,
+  PACKAGE_3_CONSEQUENCE_ACTIONS,
+  type AuthorityAccountOwnershipBinding,
+  type AuthorityDelegationBinding,
   type AuthorityResolvedBinding,
   type ServerAuthorityResolutionPort,
 } from '../../../../src/modules/authority/context/public'
@@ -31,6 +35,7 @@ import {
 } from '../../../../src/lib/server/authority-boundary/public'
 import {
   accountRef,
+  ownershipRef,
   type AccountActionContext,
   type ActiveAccountContext,
 } from '../../../../src/modules/principal-account/account/public'
@@ -38,6 +43,7 @@ import {
   principalRef,
   type PrincipalRef,
 } from '../../../../src/modules/principal-account/principal/public'
+import { sourceWriteCommandDigest } from '../../../../src/modules/security/source-write-admission'
 
 class MemoryDelegationStore implements DelegationStore {
   readonly grants = new Map<DelegationGrantRef, DelegationGrant>()
@@ -141,7 +147,7 @@ async function harness() {
     budgetLimit: 100,
     expiresAt: 1_000,
   })
-  const binding = (principalClass: 'interactive' | 'workload' = 'interactive'): AuthorityResolvedBinding => ({
+  const binding = (principalClass: 'interactive' | 'workload' = 'interactive'): AuthorityDelegationBinding => ({
     principalClass,
     actorPrincipalRef: principalClass === 'workload' ? WORKLOAD : HUMAN,
     activeAccountRef: ACCOUNT,
@@ -185,6 +191,11 @@ describe('centralized cross-surface consequence authority', () => {
       const admission = await adapter.withCurrentAuthority(intent(`interactive-${index}`), async (current) => current)
       expect(admission).toMatchObject({
         surface: adapter.surface,
+        authoritySource: {
+          kind: 'delegation_snapshot',
+          grantRef: setup.humanGrant.grantRef,
+          grantGeneration: 1,
+        },
         actorPrincipalRef: HUMAN,
         activeAccountRef: ACCOUNT,
         accountRevision: 17,
@@ -197,6 +208,7 @@ describe('centralized cross-surface consequence authority', () => {
         expiresAt: 1_000,
       })
       expect(Object.isFrozen(admission)).toBe(true)
+      expect(Object.isFrozen(admission.authoritySource)).toBe(true)
       expect(Object.isFrozen(admission.requiredScopes)).toBe(true)
       expect(Object.isFrozen(admission.resourceRefs)).toBe(true)
     }
@@ -265,7 +277,7 @@ describe('centralized cross-surface consequence authority', () => {
           ownerId: OTHER_ACCOUNT,
           providerAccountRef: OTHER_ACCOUNT,
           authorityProof: { actorPrincipalRef: STRANGER },
-        } as AuthorityResolvedBinding
+        } as unknown as AuthorityResolvedBinding
       },
     }
     const injected = {
@@ -621,6 +633,56 @@ describe('centralized cross-surface consequence authority', () => {
       .toThrowError(AuthorityBoundaryError)
   })
 
+  it('rejects hybrid ownership bindings and any declared authority source on legacy delegation bindings', async () => {
+    const setup = await harness()
+    const ownerSource = {
+      kind: 'account_ownership',
+      ownershipRef: ownershipRef('own_00000000000040008000000000000021'),
+      ownershipRevision: 3,
+      accountRevision: 17,
+      admittedAt: 100,
+      expiresAt: 200,
+    } as const
+    const hybridOwnerWithGrantRef = {
+      principalClass: 'interactive',
+      actorPrincipalRef: HUMAN,
+      activeAccountRef: ACCOUNT,
+      authoritySource: ownerSource,
+      grantRef: setup.humanGrant.grantRef,
+    }
+    const hybridOwnerWithGeneration = {
+      principalClass: 'interactive',
+      actorPrincipalRef: HUMAN,
+      activeAccountRef: ACCOUNT,
+      authoritySource: ownerSource,
+      grantGeneration: 1,
+    }
+    const declaredDelegationSource = {
+      ...setup.binding(),
+      authoritySource: {
+        kind: 'delegation_snapshot',
+        snapshotRef: 'das_00000000000040008000000000000021',
+      },
+    }
+    const unknownSource = {
+      ...setup.binding(),
+      authoritySource: { kind: 'provider_admin' },
+    }
+
+    for (const [index, binding] of [
+      hybridOwnerWithGrantRef,
+      hybridOwnerWithGeneration,
+      declaredDelegationSource,
+      unknownSource,
+    ].entries()) {
+      await expect(createHttpAuthorityAdapter(
+        setup.boundary,
+        setup.resolver(binding as unknown as AuthorityResolvedBinding),
+      ).withCurrentAuthority(intent(`authority-source-${index}`), async () => 'not-run'))
+        .rejects.toMatchObject({ code: 'authority_binding_invalid' })
+    }
+  })
+
   it('fails closed if an authority provider returns attribution that differs from the resolved binding', async () => {
     const setup = await harness()
     const forgedBoundary = new ConsequenceAuthorityBoundary({
@@ -690,5 +752,465 @@ describe('centralized cross-surface consequence authority', () => {
     expect(first).toMatchObject({ grantGeneration: 1, admittedAt: 100 })
     await expect(adapter.withCurrentAuthority(intent('reconcile'), async () => 'not-run'))
       .rejects.toMatchObject({ code: 'delegation_revoked' })
+  })
+
+  it('defines one closed and frozen policy for every Package 3 consequential action', () => {
+    expect(Object.keys(PACKAGE_3_CONSEQUENCE_ACTION_POLICY)).toEqual(PACKAGE_3_CONSEQUENCE_ACTIONS)
+    expect(Object.isFrozen(PACKAGE_3_CONSEQUENCE_ACTIONS)).toBe(true)
+    expect(Object.isFrozen(PACKAGE_3_CONSEQUENCE_ACTION_POLICY)).toBe(true)
+
+    expect(PACKAGE_3_CONSEQUENCE_ACTION_POLICY).toEqual({
+      'agent_access.create': {
+        actionClass: 'authority_increase',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        recoveryClass: 'reversible_before_dispatch',
+      },
+      'agent_access.replace_credential': {
+        actionClass: 'authority_increase',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        recoveryClass: 'reversible_while_pending',
+      },
+      'agent_access.increase_authority': {
+        actionClass: 'authority_increase',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        recoveryClass: 'reversible_before_dispatch',
+      },
+      'agent_access.reduce_authority': {
+        actionClass: 'authority_reduction',
+        proofPolicy: { kind: 'none' },
+        recoveryClass: 'compensatable',
+      },
+      'agent_access.revoke_credential': {
+        actionClass: 'authority_reduction',
+        proofPolicy: { kind: 'none' },
+        recoveryClass: 'compensatable',
+      },
+      'agent_access.disconnect': {
+        actionClass: 'authority_reduction',
+        proofPolicy: { kind: 'none' },
+        recoveryClass: 'compensatable',
+      },
+      'connection.test': {
+        actionClass: 'safe_validation',
+        proofPolicy: { kind: 'none' },
+        recoveryClass: 'reversible_before_dispatch',
+      },
+      'connection.connect': {
+        actionClass: 'authority_increase',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        recoveryClass: 'compensatable',
+      },
+      'connection.reauthorize': {
+        actionClass: 'authority_increase',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        recoveryClass: 'compensatable',
+      },
+      'connection.revoke': {
+        actionClass: 'authority_reduction',
+        proofPolicy: { kind: 'none' },
+        recoveryClass: 'compensatable',
+      },
+      'funding.top_up': {
+        actionClass: 'spend_or_transfer',
+        proofPolicy: { kind: 'none' },
+        recoveryClass: 'irreversible',
+      },
+      'payout_authority.create': {
+        actionClass: 'authority_increase',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        recoveryClass: 'compensatable',
+      },
+      'payout_authority.replace': {
+        actionClass: 'authority_increase',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        recoveryClass: 'reversible_while_pending',
+      },
+      'payout.transfer': {
+        actionClass: 'spend_or_transfer',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        recoveryClass: 'irreversible',
+      },
+      'publication.publish': {
+        actionClass: 'publish_or_withdraw',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        recoveryClass: 'compensatable',
+      },
+      'publication.republish': {
+        actionClass: 'publish_or_withdraw',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        recoveryClass: 'compensatable',
+      },
+      'publication.withdraw': {
+        actionClass: 'publish_or_withdraw',
+        proofPolicy: { kind: 'none' },
+        recoveryClass: 'compensatable',
+      },
+    })
+
+    for (const action of PACKAGE_3_CONSEQUENCE_ACTIONS) {
+      const policy = PACKAGE_3_CONSEQUENCE_ACTION_POLICY[action]
+      expect(Object.isFrozen(policy)).toBe(true)
+      expect(Object.isFrozen(policy.proofPolicy)).toBe(true)
+      if (policy.actionClass === 'authority_increase') {
+        expect(policy.proofPolicy).toEqual({
+          kind: 'clerk_reverification',
+          preset: 'strict',
+          uniquePerCommand: true,
+        })
+      }
+      if (policy.actionClass === 'authority_reduction') {
+        expect(policy.proofPolicy).toEqual({ kind: 'none' })
+      }
+    }
+
+    expect(PACKAGE_3_CONSEQUENCE_ACTION_POLICY['funding.top_up'].proofPolicy).toEqual({ kind: 'none' })
+    expect(PACKAGE_3_CONSEQUENCE_ACTION_POLICY['payout.transfer'].proofPolicy.kind)
+      .toBe('clerk_reverification')
+    expect(PACKAGE_3_CONSEQUENCE_ACTION_POLICY['publication.publish'].proofPolicy.kind)
+      .toBe('clerk_reverification')
+    expect(PACKAGE_3_CONSEQUENCE_ACTION_POLICY['publication.republish'].proofPolicy.kind)
+      .toBe('clerk_reverification')
+    expect(PACKAGE_3_CONSEQUENCE_ACTION_POLICY['publication.withdraw'].proofPolicy).toEqual({ kind: 'none' })
+  })
+
+  it('rejects actions outside the closed Package 3 policy before resolving authority', async () => {
+    const setup = await harness()
+    let resolverRuns = 0
+    const resolver: ServerAuthorityResolutionPort = {
+      resolveCanonicalBinding: async () => {
+        resolverRuns += 1
+        return setup.binding()
+      },
+    }
+
+    await expect(createHttpAuthorityAdapter(setup.boundary, resolver).withCurrentAuthority({
+      ...intent('unknown-policy'),
+      consequence: {
+        action: 'provider.generic_connect',
+        target: {
+          targetType: 'provider_connection',
+          targetRef: 'connection:alpha',
+          targetRevision: 1,
+        },
+        consequenceSummary: 'Connect an unsupported generic provider.',
+        statusReadbackRef: '/owner/connections/connection:alpha',
+        command: { provider: 'generic' },
+      },
+    } as never, async () => 'not-run')).rejects.toMatchObject({ code: 'authority_admission_invalid' })
+
+    expect(resolverRuns).toBe(0)
+  })
+
+  it('snapshots the payload before awaiting authority and derives the final descriptor from admitted canonical authority', async () => {
+    const setup = await harness()
+    const command = {
+      displayName: 'Research agent',
+      expiresAt: 4_000,
+      operationRefs: ['operation:alpha'],
+    }
+    const expectedPayloadDigest = sourceWriteCommandDigest(command)
+    const reads = {
+      action: 0,
+      target: 0,
+      consequenceSummary: 0,
+      statusReadbackRef: 0,
+      command: 0,
+      targetType: 0,
+      targetRef: 0,
+      targetRevision: 0,
+    }
+    const consequence = {
+      get action() {
+        reads.action += 1
+        return 'agent_access.create' as const
+      },
+      get target() {
+        reads.target += 1
+        return {
+          get targetType() { reads.targetType += 1; return 'agent_access_grant' },
+          get targetRef() { reads.targetRef += 1; return 'grant:pending:alpha' },
+          get targetRevision() { reads.targetRevision += 1; return 1 },
+        }
+      },
+      get consequenceSummary() {
+        reads.consequenceSummary += 1
+        return '  Create an Agent with access to one Operation.  '
+      },
+      get statusReadbackRef() {
+        reads.statusReadbackRef += 1
+        return '/owner/agent-access/grant:pending:alpha'
+      },
+      get command() {
+        reads.command += 1
+        return command
+      },
+    }
+    const resolver: ServerAuthorityResolutionPort = {
+      resolveCanonicalBinding: async () => {
+        command.displayName = 'Attacker mutation'
+        command.operationRefs[0] = 'operation:attacker'
+        return setup.binding()
+      },
+    }
+
+    const admission = await createHttpAuthorityAdapter(setup.boundary, resolver)
+      .withCurrentAuthority({ ...intent('descriptor'), consequence }, async (current) => current)
+    const expectedDigest = sourceWriteCommandDigest({
+      version: 'ae.consequence-command:v1',
+      action: 'agent_access.create',
+      actionClass: 'authority_increase',
+      actorPrincipalRef: admission.actorPrincipalRef,
+      activeAccountRef: admission.activeAccountRef,
+      accountRevision: admission.accountRevision,
+      authoritySource: admission.authoritySource,
+      target: {
+        targetType: 'agent_access_grant',
+        targetRef: 'grant:pending:alpha',
+        targetRevision: 1,
+      },
+      requiredScopes: admission.requiredScopes,
+      resourceRefs: admission.resourceRefs,
+      budgetAmount: admission.budgetAmount,
+      consequenceSummary: 'Create an Agent with access to one Operation.',
+      recoveryClass: 'reversible_before_dispatch',
+      statusReadbackRef: '/owner/agent-access/grant:pending:alpha',
+      payloadDigest: expectedPayloadDigest,
+    })
+
+    expect(reads).toEqual({
+      action: 1,
+      target: 1,
+      consequenceSummary: 1,
+      statusReadbackRef: 1,
+      command: 1,
+      targetType: 1,
+      targetRef: 1,
+      targetRevision: 1,
+    })
+    expect(admission).toMatchObject({
+      consequenceAction: 'agent_access.create',
+      proofPolicy: {
+        kind: 'clerk_reverification',
+        preset: 'strict',
+        uniquePerCommand: true,
+      },
+      descriptor: {
+        actionClass: 'authority_increase',
+        actorPrincipalRef: HUMAN,
+        activeAccountRef: ACCOUNT,
+        target: {
+          targetType: 'agent_access_grant',
+          targetRef: 'grant:pending:alpha',
+          targetRevision: 1,
+        },
+        requiredScopes: ['operation:invoke'],
+        resourceRefs: ['operation:alpha'],
+        budgetAmount: 1,
+        consequenceSummary: 'Create an Agent with access to one Operation.',
+        recoveryClass: 'reversible_before_dispatch',
+        statusReadbackRef: '/owner/agent-access/grant:pending:alpha',
+        commandDigest: expectedDigest,
+      },
+    })
+    expect(Object.isFrozen(admission.descriptor)).toBe(true)
+    expect(Object.isFrozen(admission.descriptor?.target)).toBe(true)
+    expect(Object.isFrozen(admission.descriptor?.requiredScopes)).toBe(true)
+    expect(Object.isFrozen(admission.descriptor?.resourceRefs)).toBe(true)
+    expect(Object.isFrozen(admission.proofPolicy)).toBe(true)
+  })
+
+  it('binds the final digest to every material canonical command and authority field', async () => {
+    const baseOwnerBinding: AuthorityAccountOwnershipBinding = {
+      principalClass: 'interactive',
+      actorPrincipalRef: HUMAN,
+      activeAccountRef: ACCOUNT,
+      authoritySource: {
+        kind: 'account_ownership',
+        ownershipRef: ownershipRef('own_00000000000040008000000000000021'),
+        ownershipRevision: 3,
+        accountRevision: 17,
+        admittedAt: 100,
+        expiresAt: 200,
+      },
+    }
+    const baseTarget = {
+      targetType: 'agent_access_grant',
+      targetRef: 'grant:pending:alpha',
+      targetRevision: 1,
+    }
+    const ownerDigest = async (options: Readonly<{
+      binding?: AuthorityAccountOwnershipBinding
+      action?: 'agent_access.create' | 'agent_access.replace_credential'
+      target?: typeof baseTarget
+      requiredScopes?: readonly string[]
+      resourceRefs?: readonly string[]
+      budgetAmount?: number
+      consequenceSummary?: string
+      statusReadbackRef?: string
+      command?: unknown
+    }> = {}) => {
+      const boundary = new ConsequenceAuthorityBoundary({
+        admitConsequence: async () => { throw new Error('delegation_must_not_run_for_owner') },
+      })
+      const admission = await createHttpAuthorityAdapter(boundary, {
+        resolveCanonicalBinding: async () => options.binding ?? baseOwnerBinding,
+      }).withCurrentAuthority({
+        requiredScopes: options.requiredScopes ?? ['operation:invoke'],
+        resourceRefs: options.resourceRefs ?? ['operation:alpha'],
+        budgetAmount: options.budgetAmount ?? 1,
+        correlationRef: 'correlation:digest-envelope',
+        idempotencyRef: 'idempotency:digest-envelope',
+        consequence: {
+          action: options.action ?? 'agent_access.create',
+          target: options.target ?? baseTarget,
+          consequenceSummary: options.consequenceSummary ?? 'Create one bounded Agent credential.',
+          statusReadbackRef: options.statusReadbackRef ?? '/owner/agent-access/grant:pending:alpha',
+          command: options.command ?? { displayName: 'Research agent', limits: { calls: 5, spend: 10 } },
+        },
+      }, async (current) => current)
+      if (admission.descriptor === undefined) throw new Error('descriptor_missing')
+      return admission.descriptor.commandDigest
+    }
+    const withOwnerBinding = (
+      binding: Partial<Omit<AuthorityAccountOwnershipBinding, 'authoritySource'>> & Readonly<{
+        authoritySource?: Partial<AuthorityAccountOwnershipBinding['authoritySource']>
+      }>,
+    ): AuthorityAccountOwnershipBinding => ({
+      ...baseOwnerBinding,
+      ...binding,
+      authoritySource: {
+        ...baseOwnerBinding.authoritySource,
+        ...binding.authoritySource,
+      },
+    })
+
+    const baseline = await ownerDigest()
+    const changed = await Promise.all([
+      ownerDigest({ binding: withOwnerBinding({ actorPrincipalRef: STRANGER }) }),
+      ownerDigest({ binding: withOwnerBinding({ activeAccountRef: OTHER_ACCOUNT }) }),
+      ownerDigest({ binding: withOwnerBinding({ authoritySource: { ownershipRef: ownershipRef('own_00000000000040008000000000000022') } }) }),
+      ownerDigest({ binding: withOwnerBinding({ authoritySource: { ownershipRevision: 4 } }) }),
+      ownerDigest({ binding: withOwnerBinding({ authoritySource: { accountRevision: 18 } }) }),
+      ownerDigest({ target: { ...baseTarget, targetType: 'agent_credential' } }),
+      ownerDigest({ target: { ...baseTarget, targetRef: 'grant:pending:beta' } }),
+      ownerDigest({ target: { ...baseTarget, targetRevision: 2 } }),
+      ownerDigest({ requiredScopes: ['agent:manage'] }),
+      ownerDigest({ resourceRefs: ['operation:beta'] }),
+      ownerDigest({ budgetAmount: 2 }),
+      ownerDigest({ consequenceSummary: 'Replace one bounded Agent credential.' }),
+      ownerDigest({ statusReadbackRef: '/owner/agent-access/grant:pending:beta' }),
+      ownerDigest({ action: 'agent_access.replace_credential' }),
+      ownerDigest({ command: { displayName: 'Different agent', limits: { calls: 5, spend: 10 } } }),
+    ])
+    for (const digest of changed) expect(digest).not.toBe(baseline)
+
+    const orderedPayload = await ownerDigest({
+      command: { displayName: 'Research agent', limits: { calls: 5, spend: 10 } },
+    })
+    const reorderedPayload = await ownerDigest({
+      command: { limits: { spend: 10, calls: 5 }, displayName: 'Research agent' },
+    })
+    expect(reorderedPayload).toBe(orderedPayload)
+
+    const setup = await harness()
+    const delegatedDigest = async (options: Readonly<{
+      grantRef?: DelegationGrantRef
+      generation?: number
+      snapshotRef?: ReturnType<typeof delegationSnapshotRef>
+    }> = {}) => {
+      const binding: AuthorityDelegationBinding = {
+        ...setup.binding(),
+        grantRef: options.grantRef ?? setup.humanGrant.grantRef,
+        grantGeneration: options.generation ?? 1,
+      }
+      const boundary = new ConsequenceAuthorityBoundary({
+        admitConsequence: async (request) => Object.freeze({
+          snapshotRef: options.snapshotRef ?? delegationSnapshotRef('das_00000000000040008000000000000031'),
+          grantRef: request.grantRef,
+          generation: request.expectedGeneration,
+          accountRef: request.context.activeAccountRef,
+          accountRevision: 17,
+          actorPrincipalRef: request.context.actorPrincipalRef,
+          subjectPrincipalRef: request.context.actorPrincipalRef,
+          scopes: Object.freeze([...request.requiredScopes]),
+          resourceRefs: Object.freeze([...request.resourceRefs]),
+          budgetAmount: request.budgetAmount,
+          admittedAt: 100,
+          expiresAt: 1_000,
+          correlationRef: request.context.correlationRef,
+          idempotencyRef: request.context.idempotencyRef,
+          ancestry: Object.freeze([]),
+        } satisfies DelegationAuthoritySnapshot),
+      })
+      const admission = await createHttpAuthorityAdapter(boundary, setup.resolver(binding))
+        .withCurrentAuthority({
+          ...intent('delegated-digest'),
+          consequence: {
+            action: 'agent_access.create',
+            target: baseTarget,
+            consequenceSummary: 'Create one bounded Agent credential.',
+            statusReadbackRef: '/owner/agent-access/grant:pending:alpha',
+            command: { displayName: 'Research agent', limits: { calls: 5, spend: 10 } },
+          },
+        }, async (current) => current)
+      if (admission.descriptor === undefined) throw new Error('descriptor_missing')
+      return admission.descriptor.commandDigest
+    }
+
+    const delegatedBaseline = await delegatedDigest()
+    expect(await delegatedDigest({ generation: 2 })).not.toBe(delegatedBaseline)
+    expect(await delegatedDigest({ grantRef: setup.workloadGrant.grantRef })).not.toBe(delegatedBaseline)
+    expect(await delegatedDigest({
+      snapshotRef: delegationSnapshotRef('das_00000000000040008000000000000032'),
+    })).not.toBe(delegatedBaseline)
+    expect(delegatedBaseline).not.toBe(baseline)
+  })
+
+  it('admits a trusted Account ownership source without inventing a Delegation Grant', async () => {
+    let delegationRuns = 0
+    const boundary = new ConsequenceAuthorityBoundary({
+      admitConsequence: async () => {
+        delegationRuns += 1
+        throw new Error('delegation_must_not_run_for_owner')
+      },
+    })
+    const ownerBinding: AuthorityAccountOwnershipBinding = {
+      principalClass: 'interactive',
+      actorPrincipalRef: HUMAN,
+      activeAccountRef: ACCOUNT,
+      authoritySource: {
+        kind: 'account_ownership',
+        ownershipRef: ownershipRef('own_00000000000040008000000000000021'),
+        ownershipRevision: 3,
+        accountRevision: 17,
+        admittedAt: 100,
+        expiresAt: 200,
+      },
+    }
+    const resolver: ServerAuthorityResolutionPort = {
+      resolveCanonicalBinding: async () => ownerBinding,
+    }
+
+    const admission = await createHttpAuthorityAdapter(boundary, resolver)
+      .withCurrentAuthority(intent('owner-source'), async (current) => current)
+
+    expect(delegationRuns).toBe(0)
+    expect(admission).toMatchObject({
+      actorPrincipalRef: HUMAN,
+      activeAccountRef: ACCOUNT,
+      accountRevision: 17,
+      admittedAt: 100,
+      expiresAt: 200,
+      authoritySource: {
+        kind: 'account_ownership',
+        ownershipRef: 'own_00000000000040008000000000000021',
+        ownershipRevision: 3,
+      },
+    })
+    expect('grantRef' in admission).toBe(false)
+    expect('grantGeneration' in admission).toBe(false)
+    expect('snapshotRef' in admission).toBe(false)
+    expect(Object.isFrozen(admission)).toBe(true)
+    expect(Object.isFrozen(admission.authoritySource)).toBe(true)
   })
 })

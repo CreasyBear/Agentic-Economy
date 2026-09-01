@@ -11,13 +11,17 @@ const admitOAuthConsent = createHttpRateLimitAdmission('oauth-issuance')
 
 export const readAgentAccessConsentServer = createServerFn({ method: 'GET' })
   .validator((data) => z.strictObject({
-    userCode: z.string().trim().min(3).max(32),
+    userCode: z.string().trim().min(3).max(32).optional(),
+    grantRef: z.string().trim().min(3).max(160).optional(),
     agentCursor: z.string().min(1).max(2_048).optional(),
+  }).refine((value) => (value.userCode === undefined) !== (value.grantRef === undefined), {
+    message: 'Exactly one consent locator is required.',
   }).parse(data))
   .handler(async ({ data }) => {
     const incoming = getRequest()
     const url = new URL('/oauth/authorize', incoming.url)
-    url.searchParams.set('user_code', data.userCode)
+    if (data.userCode !== undefined) url.searchParams.set('user_code', data.userCode)
+    if (data.grantRef !== undefined) url.searchParams.set('grant_ref', data.grantRef)
     if (data.agentCursor !== undefined) url.searchParams.set('agent_cursor', data.agentCursor)
     const request = new Request(url, { headers: incoming.headers })
     try {

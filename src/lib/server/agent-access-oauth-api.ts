@@ -1,4 +1,5 @@
 import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
+import { reverificationErrorResponse } from '@clerk/shared/authorization-errors'
 import type { RateLimitAdmission } from '@/lib/server/rate-limit'
 import type { ProblemInput } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
@@ -69,12 +70,26 @@ import { assertCsrf } from '@/modules/security/public'
 import { loadAgentDirectoryReadback } from '@/modules/agent-access/agent-access-console'
 import { readCapabilityOperationCompare } from '@/modules/capability-supply/operation-source'
 import { isPublicOperationRef } from '@/modules/capability-supply/public'
+import {
+  reserveAgentAccessConsentForOwner,
+  type AgentAccessConsentReservationResult,
+} from '@/lib/server/agent-access-oauth-store'
+import type { ConvexSourceAuth } from '@/lib/server/convex-source'
+
+type OAuthConsentAuthObject = ConvexSourceAuth & Readonly<{
+  userId: string | null
+  has: (params: { reverification: 'strict' }) => boolean
+  sessionClaims: Record<string, unknown> | null
+  factorVerificationAge: readonly [number, number] | null
+}>
 
 type OAuthApiOptions = Readonly<{
   store?: AgentAccessOAuthStore
   now?: () => number
   canonicalBaseUrl?: string
   authenticateOwner?: () => Promise<{ isAuthenticated: boolean; userId: string | null }>
+  authObject?: OAuthConsentAuthObject
+  reserveConsent?: typeof reserveAgentAccessConsentForOwner
   issueKey?: (input: Readonly<{
     ownerId: string
     name: string
@@ -101,13 +116,13 @@ type OAuthApiOptions = Readonly<{
   rateLimit?: RateLimitAdmission
   devicePollRateLimit?: RateLimitAdmission
   listAgents?: (cursor: string | null) => Promise<Readonly<{
-    items: readonly Readonly<{ principalRef: string; displayName: string }>[]
+    items: readonly Readonly<{ principalRef: string; principalRevision: number; displayName: string }>[]
     nextCursor?: string
   }>>
 }>
 
 type ConsentAgentTargets = Readonly<{
-  items: readonly Readonly<{ principalRef: string; displayName: string }>[]
+  items: readonly Readonly<{ principalRef: string; principalRevision: number; displayName: string }>[]
   nextCursor?: string
   unavailable?: true
 }>
@@ -141,7 +156,9 @@ import {
   DEVICE_GRANT_TYPE,
   PUBLIC_CLIENT_AUTH_METHOD,
   arrayOfStrings,
+  consentCompletedHtml,
   consentHtml,
+  consentRecoveryHtml,
   modeForGrant,
   oauthError,
   oauthTransitionError,
@@ -250,16 +267,34 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   const agentCursor = readAgentCursor(url)
   if (agentCursor === undefined) return oauthError('invalid_request', 400)
   const userCode = url.searchParams.get('user_code')
-  if (userCode !== null) {
-    const limited = await oauthAdmissionResponse(request, options, `user_code:${userCode}`)
+  const grantRef = url.searchParams.get('grant_ref')
+  if (userCode !== null && grantRef !== null) return oauthError('invalid_request', 400)
+  if (userCode !== null || grantRef !== null) {
+    const locator = userCode === null ? `grant_ref:${grantRef}` : `user_code:${userCode}`
+    const limited = await oauthAdmissionResponse(request, options, locator)
     if (limited !== undefined) return limited
     const owner = await ownerIdentity(options)
     if (!owner.isAuthenticated || owner.userId === null) return Response.redirect(new URL('/sign-in', baseUrl(request, options)), 302)
-    let result: AgentAccessOAuthTransition<AgentAccessOAuthGrant>
+    let result: Awaited<ReturnType<typeof readGrantForConsent>>
     try {
-      result = await readGrantForConsent(requireStore(options), { userCode, ownerId: owner.userId, now: currentNow(options) })
+      result = await readGrantForConsent(requireStore(options), {
+        ...(userCode === null ? {} : { userCode }),
+        ...(grantRef === null ? {} : { grantRef }),
+        ownerId: owner.userId,
+        now: currentNow(options),
+      })
     } catch {
       return oauthAuthorizationUnavailableResponse()
+    }
+    if (result.kind === 'outcome_unknown') {
+      return new Response(consentRecoveryHtml(result.grant.grantRef), {
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+      })
+    }
+    if (result.kind === 'completed') {
+      return new Response(consentCompletedHtml(result.grant.grantRef), {
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+      })
     }
     if (result.kind !== 'ok') return oauthTransitionError(result)
     const mode = modeForGrant(result.value)
@@ -307,7 +342,10 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   if (result.kind !== 'ok') return oauthTransitionError(result)
   const mode = modeForGrant(result.value.grant)
   if (mode === undefined) return oauthError('invalid_scope', 400)
-  return await consentResponse(result.value.grant, mode, state, options, agentCursor)
+  const gate = new URL(AGENT_ACCESS_OAUTH_PATHS.deviceVerification, baseUrl(request, options))
+  gate.searchParams.set('grant_ref', result.value.grant.grantRef)
+  gate.searchParams.set('state', state)
+  return Response.redirect(gate, 302)
 }
 
 async function consentResponse(
@@ -320,6 +358,8 @@ async function consentResponse(
   const targets = await consentAgentTargets(options, cursor)
   return new Response(consentHtml({
     grantRef: grant.grantRef,
+    grantRevision: grant.revision,
+    flow: grant.flow,
     clientName: grant.displayName,
     mode,
     requestedScopes: grant.requestedScopes,
@@ -334,6 +374,7 @@ async function consentResponse(
 }
 
 export async function handleOAuthConsentPost(request: Request, options: OAuthApiOptions = {}): Promise<Response> {
+  const sourceBody = await request.clone().text()
   const formResult = await readForm(request)
   if (formResult.kind === 'too_large') return oauthError('invalid_request', 413)
   if (formResult.kind !== 'ok') return oauthError('invalid_request', 400)
@@ -344,7 +385,8 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
     allowedOrigins: [new URL(baseUrl(request, options)).origin],
   })
   if (csrfDecision.kind === 'rejected') return oauthError('access_denied', 403)
-  const owner = await ownerIdentity(options)
+  const authObject = options.authObject ?? await auth() as OAuthConsentAuthObject
+  const owner = await ownerIdentity(options, authObject)
   const grantRef = form.get('grant_ref')
   const decision = form.get('decision')
   const authorityModeText = form.get('authority_mode')
@@ -364,9 +406,39 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
       now: currentNow(options),
     })
     if (denied.kind !== 'ok') return oauthTransitionError(denied)
-    return new Response('Authorization denied. You may close this window.', { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } })
+    return consentJson({ kind: 'denied', grantRef }, 200)
   }
-  if (authorityMode === null) return oauthError('invalid_scope', 400)
+  if (authorityMode === null || authorityMode === undefined) return oauthError('invalid_scope', 400)
+  if (!authObject.has({ reverification: 'strict' })) return strictReverificationJson()
+  const proof = consentProofFromAuth(authObject)
+  if (proof === null) return consentJson({ kind: 'refused', code: 'security_evidence_unavailable' }, 403)
+  const expectedGrantRevision = positiveFormInteger(form.get('expected_grant_revision'))
+  const expectedTargetRevision = positiveFormInteger(form.get('expected_target_revision'))
+  const targetKind = form.get('connection_target')
+  const principalRef = form.get('principal_ref')
+  const state = form.get('state')
+  if (expectedGrantRevision === undefined
+    || expectedTargetRevision === undefined
+    || (targetKind !== 'new_agent' && targetKind !== 'replace_credential')
+    || (targetKind === 'replace_credential' && (principalRef === null || principalRef.trim().length === 0))
+    || (state !== null && state.length > 2_048)) return oauthError('invalid_request', 400)
+  const reservationTarget = targetKind === 'new_agent'
+    ? { kind: 'new_agent' as const }
+    : { kind: 'replace_credential' as const, principalRef: principalRef! }
+  const reservation = await (options.reserveConsent ?? reserveAgentAccessConsentForOwner)({
+    request,
+    body: sourceBody,
+    authObject,
+    grantRef,
+    expectedGrantRevision,
+    expectedTargetRevision,
+    authorityMode,
+    connectionTarget: reservationTarget,
+    proof,
+  })
+  if (reservation.kind !== 'reserved' && reservation.kind !== 'replayed') {
+    return reservationJson(reservation)
+  }
   const connectionTarget = parseConnectionTarget(form)
   const approved = await approveGrant(store, {
     grantRef,
@@ -376,15 +448,22 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
     ...(connectionTarget === undefined ? {} : { connectionTarget }),
     issueKey: async ({ grant: sourceGrant, ownerId, target }) => await issueGrantKey(sourceGrant, ownerId, target, options),
   })
+  if (approved.kind === 'outcome_unknown') {
+    return consentJson({
+      kind: 'outcome_unknown',
+      grantRef,
+      readbackRef: `agent-access/oauth/${grantRef}`,
+      correlationRef: reservation.correlationRef,
+    }, 202)
+  }
   if (approved.kind !== 'ok') return oauthTransitionError(approved)
   if (approved.value.grant.flow === 'authorization_code' && approved.value.grant.redirectUri !== undefined && approved.value.authorizationCode !== undefined) {
     const location = new URL(approved.value.grant.redirectUri)
     location.searchParams.set('code', approved.value.authorizationCode)
-    const state = form.get('state')
     if (state !== null) location.searchParams.set('state', state)
-    return Response.redirect(location, 302)
+    return consentJson({ kind: 'approved', grantRef, redirectTo: location.toString() }, 200)
   }
-  return new Response('Approved — return to your assistant.', { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } })
+  return consentJson({ kind: 'approved', grantRef, readbackRef: `agent-access/oauth/${grantRef}` }, 200)
 }
 
 export function oauthAuthorizationServerMetadata(canonicalBaseUrl: string): Readonly<Record<string, unknown>> {
@@ -421,23 +500,7 @@ async function pollDeviceGrantRequest(form: URLSearchParams, request: Request, o
   const now = currentNow(options)
   let result = await pollDeviceGrant(requireStore(options), { clientId: client.clientId, deviceCode, now })
   if (result.kind === 'issuance_recovery_required') {
-    const ownerId = result.grant.ownerId
-    if (ownerId === undefined) return oauthError('server_error', 503)
-    const recovered = await approveGrant(requireStore(options), {
-      grantRef: result.grant.grantRef,
-      ownerId,
-      now,
-      ...(result.grant.connectionTarget === undefined ? {} : { connectionTarget: result.grant.connectionTarget }),
-      issueKey: async ({ grant: sourceGrant, ownerId: sourceOwnerId, target }) => (
-        await issueGrantKey(sourceGrant, sourceOwnerId, target, options)
-      ),
-    })
-    if (recovered.kind !== 'ok') {
-      return recovered.kind === 'refused' && recovered.reason === 'issuance_unavailable'
-        ? oauthError('server_error', 503)
-        : oauthTransitionError(recovered)
-    }
-    result = { kind: 'ready', grant: recovered.value.grant }
+    return oauthError('server_error', 503)
   }
   if (result.kind === 'authorization_pending') return oauthError('authorization_pending', 400)
   if (result.kind === 'slow_down') return oauthError('slow_down', 400)
@@ -809,7 +872,11 @@ async function consentAgentTargets(options: OAuthApiOptions, cursor: string | nu
       isOperationRef: isPublicOperationRef,
     }, cursor)
     return {
-      items: directory.items.map(({ principalRef, displayName }) => ({ principalRef, displayName })),
+      items: directory.items.map(({ principalRef, principalRevision, displayName }) => ({
+        principalRef,
+        principalRevision,
+        displayName,
+      })),
       ...(directory.nextCursor === undefined ? {} : { nextCursor: directory.nextCursor }),
     }
   } catch {
@@ -883,11 +950,64 @@ async function readClient(clientId: string | null, options: OAuthApiOptions): Pr
   return await requireStore(options).getClient(clientId)
 }
 
-async function ownerIdentity(options: OAuthApiOptions): Promise<{ isAuthenticated: boolean; userId: string | null }> {
+function consentProofFromAuth(authObject: OAuthConsentAuthObject) {
+  const reverificationId = authObject.sessionClaims?.reverification_id
+  const factorAges = authObject.factorVerificationAge
+  if (typeof reverificationId !== 'string'
+    || reverificationId.trim().length === 0
+    || reverificationId.length > 256
+    || factorAges === null
+    || factorAges.length !== 2
+    || !factorAges.every((value) => Number.isSafeInteger(value) && value >= -1)) return null
+  return {
+    reverificationId,
+    firstFactorAgeMinutes: factorAges[0],
+    secondFactorAgeMinutes: factorAges[1],
+  }
+}
+
+function positiveFormInteger(value: string | null): number | undefined {
+  if (value === null || !/^[1-9][0-9]*$/u.test(value)) return undefined
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) ? parsed : undefined
+}
+
+function consentJson(body: Readonly<Record<string, unknown>>, status: number): Response {
+  return Response.json(body, {
+    status,
+    headers: { 'Cache-Control': 'no-store' },
+  })
+}
+
+function strictReverificationJson(): Response {
+  const maintained = reverificationErrorResponse('strict')
+  return new Response(maintained.body, {
+    status: maintained.status,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
+  })
+}
+
+function reservationJson(result: AgentAccessConsentReservationResult): Response {
+  if (result.kind === 'rate_limited') {
+    return consentJson({ kind: result.kind, retryAfter: result.retryAfter }, 429)
+  }
+  if (result.kind === 'reserved' || result.kind === 'replayed') {
+    return consentJson({ kind: 'conflict', code: 'invalid_state' }, 409)
+  }
+  return consentJson(result, result.kind === 'refused' ? 403 : 409)
+}
+
+async function ownerIdentity(
+  options: OAuthApiOptions,
+  authObject?: Pick<OAuthConsentAuthObject, 'isAuthenticated' | 'userId'>,
+): Promise<{ isAuthenticated: boolean; userId: string | null }> {
   if (options.authenticateOwner === undefined && isLocalE2EAuthBypassEnabled()) {
     return { isAuthenticated: true, userId: LOCAL_E2E_OPERATOR_PRINCIPAL }
   }
-  return options.authenticateOwner === undefined ? await auth() : await options.authenticateOwner()
+  return options.authenticateOwner === undefined ? authObject ?? await auth() : await options.authenticateOwner()
 }
 
 function requireStore(options: OAuthApiOptions): AgentAccessOAuthStore {

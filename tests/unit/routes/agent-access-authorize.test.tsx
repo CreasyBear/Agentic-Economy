@@ -15,6 +15,7 @@ import '../../setup/jsdom-platform'
 
 const serverMocks = vi.hoisted(() => ({
   readConsent: vi.fn(),
+  reverifyMode: 'pass' as 'pass' | 'cancel',
 }))
 
 vi.mock('@/lib/server/agent-access-consent.functions', () => ({
@@ -34,6 +35,16 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
     sessionId: 'session_private_ada',
   }),
   UserButton: () => <button type="button" aria-label="Account menu" />,
+  useReverification: (fetcher: (...args: unknown[]) => Promise<Response>) => async (...args: unknown[]) => {
+    if (serverMocks.reverifyMode === 'cancel') throw { code: 'reverification_cancelled' }
+    return await (await fetcher(...args)).json()
+  },
+}))
+
+vi.mock('@clerk/tanstack-react-start/errors', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@clerk/tanstack-react-start/errors')>()),
+  isReverificationCancelledError: (error: unknown) =>
+    typeof error === 'object' && error !== null && 'code' in error && error.code === 'reverification_cancelled',
 }))
 
 import { Route as AgentAccessAuthorizeRoute } from '@/routes/_operator/agent-access.authorize'
@@ -47,13 +58,14 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.clearAllMocks()
   vi.unstubAllGlobals()
+  serverMocks.reverifyMode = 'pass'
 })
 
 describe('/agent-access/authorize consent loading', () => {
   it('loads and validates initial consent through the route loader', async () => {
     serverMocks.readConsent.mockResolvedValue({
       status: 200,
-      html: '<main data-ae-consent data-grant-ref="grant-loader" data-client-name="Loader agent" data-authority-mode="inspect_only" data-environment="production" data-expires-in-seconds="7200" data-access-summary="Maximum daily spend: USD 5.00."></main>',
+      html: '<main data-ae-consent data-grant-ref="grant-loader" data-grant-revision="1" data-flow="device_code" data-client-name="Loader agent" data-authority-mode="inspect_only" data-environment="production" data-expires-in-seconds="7200" data-access-summary="Maximum daily spend: USD 5.00."></main>',
     })
     const loader = AgentAccessAuthorizeRoute.options.loader
     if (typeof loader !== 'function') throw new Error('authorize_loader_missing')
@@ -64,7 +76,7 @@ describe('/agent-access/authorize consent loading', () => {
 
     expect(loaded).toMatchObject({
       kind: 'ready',
-      userCode: 'LOAD-CODE',
+      locator: { kind: 'user_code', value: 'LOAD-CODE' },
       details: {
         grantRef: 'grant-loader', clientName: 'Loader agent', mode: 'inspect_only',
         environment: 'production', expiresInSeconds: 7_200,
@@ -86,6 +98,53 @@ describe('/agent-access/authorize consent loading', () => {
     expect(screen.getByText(/Try loading it again/)).toBeTruthy()
   })
 
+  it('renders an issuing request as read-only recovery without approval or generic retry', async () => {
+    serverMocks.readConsent.mockResolvedValue({
+      status: 200,
+      html: '<main data-ae-consent data-ae-consent-state="outcome_unknown" data-grant-ref="device:grant-issuing"></main>',
+    })
+    const loader = AgentAccessAuthorizeRoute.options.loader
+    if (typeof loader !== 'function') throw new Error('authorize_loader_missing')
+    const loaded = await (loader as unknown as (
+      input: Readonly<{ deps: Readonly<{ userCode?: string }> }>,
+    ) => Promise<unknown>)({ deps: { userCode: 'ISSU-ING1' } })
+    expect(loaded).toEqual({ kind: 'outcome_unknown', grantRef: 'device:grant-issuing' })
+
+    vi.spyOn(AgentAccessAuthorizeRoute, 'useLoaderData').mockReturnValue(loaded as never)
+    renderComponent()
+
+    expect(screen.getByText('Check the current access status')).toBeTruthy()
+    expect(screen.getByText('The approval may have completed. Do not submit it again.')).toBeTruthy()
+    expect(screen.getByText('Request reference: device:grant-issuing')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Agents' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Approve access' })).toBeNull()
+    expect(screen.queryByText('Try again')).toBeNull()
+  })
+
+  it('renders a completed request as read-only success after refresh', async () => {
+    serverMocks.readConsent.mockResolvedValue({
+      status: 200,
+      html: '<main data-ae-consent data-ae-consent-state="succeeded" data-grant-ref="device:grant-complete"></main>',
+    })
+    const loader = AgentAccessAuthorizeRoute.options.loader
+    if (typeof loader !== 'function') throw new Error('authorize_loader_missing')
+    const loaded = await (loader as unknown as (
+      input: Readonly<{ deps: Readonly<{ userCode?: string }> }>,
+    ) => Promise<unknown>)({ deps: { userCode: 'COMP-LETE' } })
+    expect(loaded).toEqual({ kind: 'succeeded', grantRef: 'device:grant-complete' })
+
+    vi.spyOn(AgentAccessAuthorizeRoute, 'useLoaderData').mockReturnValue(loaded as never)
+    renderComponent()
+
+    expect(screen.getByText('Access approved')).toBeTruthy()
+    expect(screen.getByText('This approval has completed. Open Agents for the current credential status.')).toBeTruthy()
+    expect(screen.queryByText(/ready for one-time delivery/i)).toBeNull()
+    expect(screen.getByText('Request reference: device:grant-complete')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Agents' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Approve access' })).toBeNull()
+    expect(screen.queryByText('Try again')).toBeNull()
+  })
+
   it('reaches approval controls after a valid consent response', async () => {
     mockConsent({ userCode: 'GOOD-CODE', grantRef: 'grant-1', clientName: 'Test assistant', mode: 'inspect_only' })
 
@@ -103,7 +162,7 @@ describe('/agent-access/authorize consent loading', () => {
       accessSummary: 'Maximum daily spend: USD 5.00. Maximum calls per hour: 42.',
     })
     const fetchMock = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response('Approved', { status: 200 }))
+      .mockResolvedValueOnce(Response.json({ kind: 'approved', grantRef: 'grant-1' }))
     vi.stubGlobal('fetch', fetchMock)
 
     renderComponent()
@@ -115,10 +174,13 @@ describe('/agent-access/authorize consent loading', () => {
     expect(screen.queryByText(/\$1 each/)).toBeNull()
     expect(screen.getByRole('radio', { name: /Work within limits/ }).getAttribute('data-state')).toBe('checked')
     fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = fetchMock.mock.calls[0]?.[1]
     expect(String(request?.body)).toContain('decision=approve')
+    expect(String(request?.body)).toContain('expected_grant_revision=1')
+    expect(String(request?.body)).toContain('expected_target_revision=1')
     expect(String(request?.body)).toContain('authority_mode=bounded_mandate')
     expect(String(request?.body)).toContain('connection_target=new_agent')
     expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
@@ -127,7 +189,7 @@ describe('/agent-access/authorize consent loading', () => {
   it('shows a fixed, separate supplier permission instead of buyer authority choices', async () => {
     mockConsent({ userCode: 'SUPP-LIER', grantRef: 'grant-supplier', clientName: 'Supplier CLI', mode: 'bounded_mandate', accessProfile: 'supplier' })
     const fetchMock = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response('Approved', { status: 200 }))
+      .mockResolvedValueOnce(Response.json({ kind: 'approved', grantRef: 'grant-supplier' }))
     vi.stubGlobal('fetch', fetchMock)
 
     renderComponent()
@@ -137,6 +199,7 @@ describe('/agent-access/authorize consent loading', () => {
     expect(screen.queryByRole('radio', { name: /Browse only/ })).toBeNull()
     expect(screen.getByRole('radio', { name: /New agent/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = fetchMock.mock.calls[0]?.[1]
@@ -146,12 +209,12 @@ describe('/agent-access/authorize consent loading', () => {
 
   it('requires an explicit existing agent before credential replacement can be approved', async () => {
     const targets = [
-      { principalRef: 'prn_agent_a', displayName: 'Research agent' },
-      { principalRef: 'prn_agent_b', displayName: 'Shipping agent' },
+      { principalRef: 'prn_agent_a', principalRevision: 3, displayName: 'Research agent' },
+      { principalRef: 'prn_agent_b', principalRevision: 5, displayName: 'Shipping agent' },
     ]
     mockConsent({ userCode: 'REPL-ACE', grantRef: 'grant-replace', clientName: 'Agent CLI', mode: 'approve_each', agentTargets: targets })
     const fetchMock = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response('Approved', { status: 200 }))
+      .mockResolvedValueOnce(Response.json({ kind: 'approved', grantRef: 'grant-replace' }))
     vi.stubGlobal('fetch', fetchMock)
 
     renderComponent()
@@ -163,19 +226,57 @@ describe('/agent-access/authorize consent loading', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'Research agent' }))
     expect(screen.getByRole('button', { name: 'Approve access' }).hasAttribute('disabled')).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = fetchMock.mock.calls[0]?.[1]
     expect(String(request?.body)).toContain('connection_target=replace_credential')
     expect(String(request?.body)).toContain('principal_ref=prn_agent_a')
+    expect(String(request?.body)).toContain('expected_target_revision=3')
+  })
+
+  it('retains the exact choice and restores focus when Clerk reverification is cancelled', async () => {
+    mockConsent({ userCode: 'CANCEL-1', grantRef: 'grant-cancel', clientName: 'Test assistant', mode: 'bounded_mandate' })
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+    serverMocks.reverifyMode = 'cancel'
+    renderComponent()
+
+    const approveButton = await screen.findByRole('button', { name: 'Approve access' })
+    approveButton.focus()
+    fireEvent.click(approveButton)
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Confirm and approve' })).toBeNull())
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.getByRole('radio', { name: /Work within limits/ }).getAttribute('data-state')).toBe('checked')
+    await waitFor(() => expect(document.activeElement).toBe(approveButton))
+  })
+
+  it('dispatches one immutable approval when confirm is activated twice before rerender', async () => {
+    mockConsent({ userCode: 'DOUBLE-1', grantRef: 'grant-double', clientName: 'Test assistant', mode: 'inspect_only' })
+    let resolveResponse: ((response: Response) => void) | undefined
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => await new Promise<Response>((resolve) => {
+      resolveResponse = resolve
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderComponent()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve access' }))
+    const confirm = await screen.findByRole('button', { name: 'Confirm and approve' })
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    resolveResponse?.(Response.json({ kind: 'approved', grantRef: 'grant-double' }))
+    expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
   })
 
   it('retains loaded choices when the next replacement-target page fails and retries it', async () => {
     const firstTargets = [
-      { principalRef: 'prn_agent_a', displayName: 'Research agent' },
+      { principalRef: 'prn_agent_a', principalRevision: 3, displayName: 'Research agent' },
     ]
     const secondTargets = encodeURIComponent(JSON.stringify([
-      { principalRef: 'prn_agent_b', displayName: 'Shipping agent' },
+      { principalRef: 'prn_agent_b', principalRevision: 5, displayName: 'Shipping agent' },
     ]))
     const cursor = 'opaque+/cursor=='
     mockConsent({
@@ -184,11 +285,11 @@ describe('/agent-access/authorize consent loading', () => {
     })
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(
-        '<main data-ae-consent data-grant-ref="grant-paged" data-client-name="Agent CLI" data-authority-mode="approve_each" data-agent-targets="%5B%5D" data-agent-targets-unavailable="true"></main>',
+        '<main data-ae-consent data-grant-ref="grant-paged" data-grant-revision="1" data-flow="device_code" data-client-name="Agent CLI" data-authority-mode="approve_each" data-agent-targets="%5B%5D" data-agent-targets-unavailable="true"></main>',
         { status: 200 },
       ))
       .mockResolvedValueOnce(new Response(
-        `<main data-ae-consent data-grant-ref="grant-paged" data-client-name="Agent CLI" data-authority-mode="approve_each" data-agent-targets="${secondTargets}" data-agent-targets-unavailable="false"></main>`,
+        `<main data-ae-consent data-grant-ref="grant-paged" data-grant-revision="1" data-flow="device_code" data-client-name="Agent CLI" data-authority-mode="approve_each" data-agent-targets="${secondTargets}" data-agent-targets-unavailable="false"></main>`,
         { status: 200 },
       ))
     vi.stubGlobal('fetch', fetchMock)
@@ -217,7 +318,7 @@ function mockConsent(input: Readonly<{
   clientName: string
   mode: string
   accessProfile?: 'market' | 'supplier'
-  agentTargets?: readonly Readonly<{ principalRef: string; displayName: string }>[]
+  agentTargets?: readonly Readonly<{ principalRef: string; principalRevision: number; displayName: string }>[]
   agentTargetsNextCursor?: string
   environment?: 'sandbox' | 'production'
   expiresInSeconds?: number
@@ -225,9 +326,12 @@ function mockConsent(input: Readonly<{
 }>) {
   vi.spyOn(AgentAccessAuthorizeRoute, 'useLoaderData').mockReturnValue({
     kind: 'ready',
-    userCode: input.userCode,
+    locator: { kind: 'user_code', value: input.userCode },
     details: {
+      state: 'ready',
       grantRef: input.grantRef,
+      grantRevision: 1,
+      flow: 'device_code',
       clientName: input.clientName,
       mode: input.mode,
       environment: input.environment ?? 'sandbox',

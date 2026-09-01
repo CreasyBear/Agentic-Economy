@@ -13,6 +13,7 @@ const credentialLifecycle = v.union(
 
 const directoryRecord = v.object({
   principalRef: v.string(),
+  principalRevision: v.number(),
   displayName: v.string(),
   applicationRef: v.string(),
   environment: v.union(v.literal('sandbox'), v.literal('production')),
@@ -170,6 +171,7 @@ async function projectMemberships(
 
       return {
         principalRef: principal.principalRef,
+        principalRevision: principal.revision,
         displayName: principal.displayName,
         applicationRef: admission.applicationRef,
         environment: admission.environment,

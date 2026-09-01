@@ -1,4 +1,4 @@
-import { HOUR, MINUTE, RateLimiter, type RateLimitReturns, type RunMutationCtx } from '@convex-dev/rate-limiter'
+import { HOUR, MINUTE, RateLimiter, type RateLimitConfig, type RateLimitReturns, type RunMutationCtx } from '@convex-dev/rate-limiter'
 import { components } from '../_generated/api'
 import type { MutationCtx } from '../_generated/server'
 
@@ -7,6 +7,7 @@ export const RATE_LIMIT_NAMES = [
   'public-mutation',
   'oauth-issuance',
   'oauth-device-poll',
+  'authority-credential-change',
   'chat-submit',
   'chat-anonymous',
   'chat-anonymous-edge',
@@ -15,18 +16,14 @@ export const RATE_LIMIT_NAMES = [
 
 export type RateLimitName = (typeof RATE_LIMIT_NAMES)[number]
 
-type RateLimitDefinitions = Record<RateLimitName, {
-  kind: 'token bucket'
-  rate: number
-  period: number
-  capacity: number
-}>
+type RateLimitDefinitions = Record<RateLimitName, RateLimitConfig>
 
 const limits: RateLimitDefinitions = {
   'public-read': { kind: 'token bucket', rate: 120, period: MINUTE, capacity: 120 },
   'public-mutation': { kind: 'token bucket', rate: 5, period: MINUTE, capacity: 5 },
   'oauth-issuance': { kind: 'token bucket', rate: 5, period: MINUTE, capacity: 5 },
   'oauth-device-poll': { kind: 'token bucket', rate: 24, period: MINUTE, capacity: 24 },
+  'authority-credential-change': { kind: 'fixed window', rate: 5, period: 10 * MINUTE },
   'chat-submit': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
   'chat-anonymous': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
   'chat-anonymous-edge': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
@@ -70,6 +67,15 @@ export async function assertAgentAccessRateAdmission(
       period: MINUTE,
       capacity: Math.min(input.maximumCallsPerMinute, 60),
     },
+  })
+}
+
+export async function assertAuthorityCredentialChangeAdmission(
+  ctx: RunMutationCtx,
+  activeAccountRef: string,
+): Promise<RateLimitReturns> {
+  return await rateLimiter.limit(ctx, 'authority-credential-change', {
+    key: `account:${activeAccountRef}`,
   })
 }
 

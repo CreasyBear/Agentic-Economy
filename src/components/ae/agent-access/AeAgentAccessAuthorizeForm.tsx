@@ -1,8 +1,11 @@
-import { useReducer } from 'react'
+import { useReducer, useRef, useState } from 'react'
+import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
+import { useReverification } from '@clerk/tanstack-react-start'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeSection, AeSettingsStack } from '@/components/ae/layout/AeSection'
+import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -29,7 +32,7 @@ function canSelectAuthority(value: PublicAuthorityMode, ceiling: string): boolea
 }
 
 type ConsentFormState = Readonly<{
-  status: 'idle' | 'approved' | 'denied' | 'error'
+  status: 'idle' | 'approved' | 'denied' | 'error' | 'outcome_unknown'
   pending: boolean
   selectedMode: PublicAuthorityMode
   connectionTarget: 'new_agent' | 'replace_credential'
@@ -48,7 +51,7 @@ type ConsentFormAction =
   | Readonly<{ kind: 'page_loaded'; targets: readonly AgentConsentTarget[]; nextCursor?: string }>
   | Readonly<{ kind: 'page_failed' }>
   | Readonly<{ kind: 'decision_started' }>
-  | Readonly<{ kind: 'decision_finished'; status: 'approved' | 'denied' | 'error' }>
+  | Readonly<{ kind: 'decision_finished'; status: 'idle' | 'approved' | 'denied' | 'error' | 'outcome_unknown' }>
 
 function initialConsentFormState(details: AgentConsentDetails): ConsentFormState {
   return {
@@ -100,10 +103,20 @@ function consentFormReducer(state: ConsentFormState, action: ConsentFormAction):
   return { ...state, pending: false, status: action.status }
 }
 
-export function AeAgentAccessAuthorizeForm({ userCode, details }: Readonly<{
-  userCode: string
+type ConsentActionResult =
+  | Readonly<{ kind: 'approved'; grantRef: string; redirectTo?: string; readbackRef?: string }>
+  | Readonly<{ kind: 'denied'; grantRef: string }>
+  | Readonly<{ kind: 'outcome_unknown'; grantRef: string; readbackRef: string; correlationRef?: string }>
+  | Readonly<{ kind: 'refused' | 'conflict'; code: string }>
+  | Readonly<{ kind: 'rate_limited'; retryAfter: number }>
+
+export function AeAgentAccessAuthorizeForm({ locator, oauthState, details }: Readonly<{
+  locator: Readonly<{ kind: 'user_code' | 'grant_ref'; value: string }>
+  oauthState?: string
   details: AgentConsentDetails & Readonly<{
     grantRef: string
+    grantRevision: number
+    flow: 'device_code' | 'authorization_code'
     clientName: string
     mode: string
     environment: 'sandbox' | 'production'
@@ -112,18 +125,27 @@ export function AeAgentAccessAuthorizeForm({ userCode, details }: Readonly<{
   }>
 }>) {
   const [state, dispatch] = useReducer(consentFormReducer, details, initialConsentFormState)
-  const { grantRef, clientName, mode, environment, expiresInSeconds, accessSummary } = details
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const approveButtonRef = useRef<HTMLButtonElement>(null)
+  const { grantRef, grantRevision, clientName, mode, environment, expiresInSeconds, accessSummary } = details
   const accessProfile = details.accessProfile ?? 'market'
   const {
     status, pending, selectedMode, connectionTarget, agentTargets, agentTargetsNextCursor,
     agentTargetsLoading, agentTargetsError, replacementPrincipalRef,
   } = state
 
+  const submitApproval = useReverification(async (body: string) => await fetch('/oauth/authorize', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  }))
+
   async function loadAgentTargets() {
     if (agentTargetsLoading) return
     dispatch({ kind: 'page_started' })
     try {
-      const query = new URLSearchParams({ user_code: userCode })
+      const query = new URLSearchParams({ [locator.kind]: locator.value })
       if (agentTargetsNextCursor !== undefined) query.set('agent_cursor', agentTargetsNextCursor)
       const response = await fetch(`/oauth/authorize?${query.toString()}`, { credentials: 'same-origin' })
       if (!response.ok) throw new Error('agent_targets_unavailable')
@@ -139,24 +161,63 @@ export function AeAgentAccessAuthorizeForm({ userCode, details }: Readonly<{
     }
   }
 
-  async function decide(decision: 'approve' | 'deny') {
+  function approvalBody(): string | undefined {
+    const replacement = connectionTarget === 'replace_credential'
+      ? agentTargets.find((target) => target.principalRef === replacementPrincipalRef)
+      : undefined
+    const expectedTargetRevision = connectionTarget === 'new_agent'
+      ? grantRevision
+      : replacement?.principalRevision
+    if (expectedTargetRevision === undefined) return undefined
+    return new URLSearchParams({
+      grant_ref: grantRef,
+      expected_grant_revision: String(grantRevision),
+      expected_target_revision: String(expectedTargetRevision),
+      decision: 'approve',
+      authority_mode: selectedMode,
+      connection_target: connectionTarget,
+      ...(replacementPrincipalRef === undefined || connectionTarget !== 'replace_credential'
+        ? {}
+        : { principal_ref: replacementPrincipalRef }),
+      ...(oauthState === undefined ? {} : { state: oauthState }),
+    }).toString()
+  }
+
+  async function approve() {
+    const body = approvalBody()
+    if (body === undefined) return
     dispatch({ kind: 'decision_started' })
     try {
-      const response = await fetch('/oauth/authorize', {
+      const result = await submitApproval(body) as unknown as ConsentActionResult
+      if (result.kind === 'approved') {
+        dispatch({ kind: 'decision_finished', status: 'approved' })
+        setConfirmOpen(false)
+        if (result.redirectTo !== undefined) window.location.assign(result.redirectTo)
+        return
+      }
+      setConfirmOpen(false)
+      dispatch({ kind: 'decision_finished', status: result.kind === 'outcome_unknown' ? 'outcome_unknown' : 'error' })
+    } catch (error) {
+      setConfirmOpen(false)
+      if (isReverificationCancelledError(error)) {
+        dispatch({ kind: 'decision_finished', status: 'idle' })
+        setTimeout(() => approveButtonRef.current?.focus(), 0)
+        return
+      }
+      dispatch({ kind: 'decision_finished', status: 'error' })
+    }
+  }
+
+  async function deny() {
+    dispatch({ kind: 'decision_started' })
+    try {
+      const result = await fetch('/oauth/authorize', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_ref: grantRef,
-          decision,
-          authority_mode: selectedMode,
-          connection_target: connectionTarget,
-          ...(connectionTarget === 'replace_credential' && replacementPrincipalRef !== undefined
-            ? { principal_ref: replacementPrincipalRef }
-            : {}),
-        }).toString(),
-      })
-      dispatch({ kind: 'decision_finished', status: response.ok ? (decision === 'approve' ? 'approved' : 'denied') : 'error' })
+        body: new URLSearchParams({ grant_ref: grantRef, decision: 'deny' }).toString(),
+      }).then(async (response) => await response.json() as ConsentActionResult)
+      dispatch({ kind: 'decision_finished', status: result.kind === 'denied' ? 'denied' : 'error' })
     } catch {
       dispatch({ kind: 'decision_finished', status: 'error' })
     }
@@ -237,26 +298,45 @@ export function AeAgentAccessAuthorizeForm({ userCode, details }: Readonly<{
               </fieldset>}
               <AeFactList facts={[
                 { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
+                { label: 'Request revision', value: String(grantRevision) },
                 { label: 'Approved limits', value: accessSummary },
                 { label: 'Expiry', value: `Access expires ${formatConsentDuration(expiresInSeconds)} after issue. You can revoke it at any time from Agents.` },
               ]} />
               <p id="consent-expiry" className="sr-only">Access expires {formatConsentDuration(expiresInSeconds)} after issue. You can revoke it at any time from Agents.</p>
             </AeSection>
             <div className="flex flex-wrap gap-3">
-              <Button aria-describedby="consent-expiry" onClick={() => void decide('approve')} disabled={pending || (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined)}>{pending ? 'Approving…' : 'Approve access'}</Button>
-              <Button aria-describedby="consent-expiry" variant="secondary" onClick={() => void decide('deny')} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
+              <Button ref={approveButtonRef} aria-describedby="consent-expiry" onClick={() => setConfirmOpen(true)} disabled={pending || (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined)}>{pending ? 'Approving…' : 'Approve access'}</Button>
+              <Button aria-describedby="consent-expiry" variant="secondary" onClick={() => void deny()} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
             </div>
+            <AeConfirmDialog
+              open={confirmOpen}
+              onOpenChange={setConfirmOpen}
+              title="Confirm agent access"
+              description={connectionTarget === 'replace_credential'
+                ? `Replace the credential for ${agentTargets.find((target) => target.principalRef === replacementPrincipalRef)?.displayName ?? 'the selected agent'} and grant ${clientName} ${authorityLabel(selectedMode).toLowerCase()} authority. The current credential remains usable until replacement delivery succeeds.`
+                : `Create a new agent identity for ${clientName} with ${authorityLabel(selectedMode).toLowerCase()} authority and the exact limits shown on this page. You can revoke it from Agents.`}
+              confirmLabel="Confirm and approve"
+              pending={pending}
+              onConfirm={approve}
+              returnFocusRef={approveButtonRef}
+            />
           </>
         ) : status === 'approved' ? (
           <Alert><AlertTitle>Access approved — return to your agent</AlertTitle><AlertDescription>{accessProfile === 'supplier' ? 'AE delivers the separate supplier key to that agent once. It can now manage the approved supplier lifecycle.' : 'AE delivers the caller key to that agent once. It can now finish setup; supplier authority is not included.'}</AlertDescription></Alert>
         ) : status === 'denied' ? (
           <Alert><AlertTitle>Access not approved</AlertTitle><AlertDescription>Your agent can start a new request if you want to try again.</AlertDescription></Alert>
+        ) : status === 'outcome_unknown' ? (
+          <Alert variant="destructive"><AlertTitle>Check the current access status</AlertTitle><AlertDescription>The approval may have completed. Do not submit it again. Return to your agent and reconcile this request using reference {grantRef}.</AlertDescription></Alert>
         ) : (
           <Alert variant="destructive"><AlertTitle>Access request unavailable</AlertTitle><AlertDescription>It may have expired. Start a new request from your agent.</AlertDescription></Alert>
         )}
       </AeSettingsStack>
     </AeOperatorShell>
   )
+}
+
+function authorityLabel(mode: PublicAuthorityMode): string {
+  return authorityOptions.find((option) => option.value === mode)?.label ?? 'Selected'
 }
 
 function formatConsentDuration(seconds: number): string {

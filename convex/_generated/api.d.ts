@@ -88,6 +88,7 @@ import type * as lib_authorityRegistrars from "../lib/authorityRegistrars.js";
 import type * as lib_brokeredDisputeEvidence_contracts from "../lib/brokeredDisputeEvidence/contracts.js";
 import type * as lib_brokeredDisputeEvidence_validation from "../lib/brokeredDisputeEvidence/validation.js";
 import type * as lib_canonicalAgentAuthority from "../lib/canonicalAgentAuthority.js";
+import type * as lib_consequenceProof from "../lib/consequenceProof.js";
 import type * as lib_delegationPersistence from "../lib/delegationPersistence.js";
 import type * as lib_marketExternalRegistry_contracts from "../lib/marketExternalRegistry/contracts.js";
 import type * as lib_marketExternalRegistry_validation from "../lib/marketExternalRegistry/validation.js";
@@ -275,6 +276,7 @@ declare const fullApi: ApiFromModules<{
   "lib/brokeredDisputeEvidence/contracts": typeof lib_brokeredDisputeEvidence_contracts;
   "lib/brokeredDisputeEvidence/validation": typeof lib_brokeredDisputeEvidence_validation;
   "lib/canonicalAgentAuthority": typeof lib_canonicalAgentAuthority;
+  "lib/consequenceProof": typeof lib_consequenceProof;
   "lib/delegationPersistence": typeof lib_delegationPersistence;
   "lib/marketExternalRegistry/contracts": typeof lib_marketExternalRegistry_contracts;
   "lib/marketExternalRegistry/validation": typeof lib_marketExternalRegistry_validation;

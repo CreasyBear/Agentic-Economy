@@ -1,5 +1,5 @@
 import { useReverification } from '@clerk/tanstack-react-start'
-import { reverificationError } from '@clerk/backend/internal'
+import { reverificationError } from '@clerk/shared/authorization-errors'
 import { auth } from '@clerk/tanstack-react-start/server'
 import { verifyWebhook } from '@clerk/tanstack-react-start/webhooks'
 import { describe, expect, it } from 'vitest'

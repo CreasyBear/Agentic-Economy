@@ -5,7 +5,10 @@ export {
   agentAccessPolicyValue,
   agentAccessRatePolicyValue,
 } from './internal/convex-schema'
-export { agentAccessOAuthTables } from './internal/oauth-convex-schema'
+export {
+  agentAccessConsentReservationValue,
+  agentAccessOAuthTables,
+} from './internal/oauth-convex-schema'
 export { agentAccessPrincipalTables } from './internal/principal-convex-schema'
 export type {
   AgentCredentialSummary,

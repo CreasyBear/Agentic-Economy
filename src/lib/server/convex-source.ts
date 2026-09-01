@@ -128,11 +128,12 @@ export async function createAuthenticatedConvexClient(
   const env = options.env ?? process.env
   const convexUrl = readRequiredConvexUrl(env)
   const localAdminKey = env.CONVEX_SELF_HOSTED_ADMIN_KEY?.trim()
+  let client: ConvexHttpClient
   if (isLocalE2EAuthBypassEnabled()) {
     if (localAdminKey === undefined || localAdminKey.length === 0) {
       throw new ConvexSourceError('missing_auth', 'Local source credentials are unavailable.', 503)
     }
-    const client = new ConvexHttpClient(convexUrl, {
+    client = new ConvexHttpClient(convexUrl, {
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
       ...(options.skipConvexDeploymentUrlCheck === undefined
         ? {}
@@ -148,18 +149,18 @@ export async function createAuthenticatedConvexClient(
       tokenIdentifier: 'https://convex.test|dev-seed-owner-session',
       name: 'Dev Seed Owner',
     }])
-    return client
-  }
-  const authObject = options.authObject ?? (await auth())
-  const token = await readRequiredConvexAuthToken(authObject, options.tokenTemplate ?? 'convex')
+  } else {
+    const authObject = options.authObject ?? (await auth())
+    const token = await readRequiredConvexAuthToken(authObject, options.tokenTemplate ?? 'convex')
 
-  const client = new ConvexHttpClient(convexUrl, {
-    auth: token,
-    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-    ...(options.skipConvexDeploymentUrlCheck === undefined
-      ? {}
-      : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),
-  })
+    client = new ConvexHttpClient(convexUrl, {
+      auth: token,
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      ...(options.skipConvexDeploymentUrlCheck === undefined
+        ? {}
+        : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),
+    })
+  }
   let materialized: boolean
   try {
     materialized = await client.mutation(materializeCurrentInteractiveAuthorityMutation, {})

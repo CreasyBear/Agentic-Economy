@@ -1,7 +1,9 @@
 import {
+  createAuthenticatedSourceTransport,
   createPublicSourceTransport,
   sourceMutation,
   sourceQuery,
+  type ConvexSourceAuth,
 } from './convex-source'
 import {
   sourceWriteAdmissionFromRequest,
@@ -10,6 +12,7 @@ import {
 import type {
   AgentAccessOAuthClient,
   AgentAccessOAuthGrant,
+  AgentAccessOAuthGrantPatch,
   AgentAccessOAuthGrantStatus,
   AgentAccessOAuthRequestedAccess,
   AgentAccessOAuthStore,
@@ -29,6 +32,7 @@ type SourceWriteArgs = {
 type GrantArgs = SourceWriteArgs & {
   grant: {
     grantRef: string
+    revision: number
     flow: 'device_code' | 'authorization_code'
     clientId: string
     requestedScopes: string[]
@@ -64,6 +68,7 @@ type GrantRefArgs = SourceWriteArgs & { grantRef: string }
 type GrantUpdateArgs = SourceWriteArgs & {
   grantRef: string
   expectedStatus: AgentAccessOAuthGrantStatus
+  expectedRevision: number
   expectedIssuanceStartedAt?: number
   patch: {
     status?: AgentAccessOAuthGrantStatus
@@ -108,6 +113,68 @@ const getGrantByRef = sourceQuery<GrantRefArgs, AgentAccessOAuthGrant | null>('a
 const updateGrant = sourceMutation<GrantUpdateArgs, AgentAccessOAuthGrant | null>('agentAccessOAuth:updateGrant')
 const insertClient = sourceMutation<ClientArgs, null>('agentAccessOAuth:insertClient')
 const getClient = sourceQuery<ClientReadArgs, AgentAccessOAuthClient | null>('agentAccessOAuth:getClient')
+export type AgentAccessConsentReservationResult =
+  | Readonly<{ kind: 'reserved' | 'replayed'; grantRef: string; grantRevision: number; commandDigest: string; correlationRef: string }>
+  | Readonly<{ kind: 'refused'; code: 'authentication_required' | 'reauthentication_required' | 'proof_stale' | 'proof_replayed' | 'command_changed' }>
+  | Readonly<{ kind: 'conflict'; code: 'stale_grant' | 'stale_target' | 'invalid_state' | 'authority_mismatch' }>
+  | Readonly<{ kind: 'rate_limited'; retryAfter: number }>
+
+type ReserveConsentCommand = Readonly<{
+  grantRef: string
+  expectedGrantRevision: number
+  expectedTargetRevision: number
+  authorityMode: 'inspect_only' | 'approve_each' | 'bounded_mandate' | 'full_yolo'
+  connectionTarget: Readonly<{ kind: 'new_agent' }> | Readonly<{ kind: 'replace_credential'; principalRef: string }>
+  proof: Readonly<{
+    reverificationId: string
+    firstFactorAgeMinutes: number
+    secondFactorAgeMinutes: number
+  }>
+  operationKey: string
+  correlationId: string
+}>
+
+const reserveConsent = sourceMutation<ReserveConsentCommand & SourceWriteArgs, AgentAccessConsentReservationResult>(
+  'agentAccessOAuth:reserveAgentAccessConsent',
+)
+
+export async function reserveAgentAccessConsentForOwner(input: Readonly<{
+  request: Request
+  body: string | Uint8Array
+  authObject: ConvexSourceAuth
+  grantRef: string
+  expectedGrantRevision: number
+  expectedTargetRevision: number
+  authorityMode: ReserveConsentCommand['authorityMode']
+  connectionTarget: ReserveConsentCommand['connectionTarget']
+  proof: ReserveConsentCommand['proof']
+}>): Promise<AgentAccessConsentReservationResult> {
+  const operationKey = `oauth:grant:${input.grantRef}:reserve:${input.expectedGrantRevision}`
+  const command: ReserveConsentCommand = {
+    grantRef: input.grantRef,
+    expectedGrantRevision: input.expectedGrantRevision,
+    expectedTargetRevision: input.expectedTargetRevision,
+    authorityMode: input.authorityMode,
+    connectionTarget: input.connectionTarget,
+    proof: input.proof,
+    operationKey,
+    correlationId: operationKey,
+  }
+  const sourceWrite = await sourceWriteAdmissionFromRequest({
+    request: input.request,
+    command,
+    body: input.body,
+    scope: 'agent_identity',
+    operationKey,
+    correlationId: operationKey,
+  })
+  const transport = await createAuthenticatedSourceTransport({ authObject: input.authObject })
+  return await transport.mutation(reserveConsent, {
+    ...command,
+    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    sourceWrite,
+  })
+}
 
 export function createConvexAgentAccessOAuthStore(
   request: Request,
@@ -151,11 +218,12 @@ export function createConvexAgentAccessOAuthStore(
       const command = { grantRef, operationKey, correlationId: operationKey }
       return await transport.query(getGrantByRef, { ...command, ...await sourceWriteFor(command) })
     },
-    updateGrant: async (grantRef, expectedStatus, patch, expectedIssuanceStartedAt) => {
-      const operationKey = `oauth:grant:${grantRef}:update:${expectedStatus}:${patch.status ?? 'fields'}`
+    updateGrant: async (grantRef, expectedStatus, expectedRevision, patch, expectedIssuanceStartedAt) => {
+      const operationKey = `oauth:grant:${grantRef}:update:${expectedStatus}:revision:${expectedRevision}:${patch.status ?? 'fields'}`
       const command = {
         grantRef,
         expectedStatus,
+        expectedRevision,
         ...(expectedIssuanceStartedAt === undefined ? {} : { expectedIssuanceStartedAt }),
         patch: patchForConvex(patch),
         operationKey,
@@ -178,6 +246,7 @@ export function createConvexAgentAccessOAuthStore(
 function grantForConvex(grant: AgentAccessOAuthGrant): GrantArgs['grant'] {
   return {
     grantRef: grant.grantRef,
+    revision: grant.revision,
     flow: grant.flow,
     clientId: grant.clientId,
     requestedScopes: [...grant.requestedScopes],
@@ -235,7 +304,7 @@ function requestedAccessForConvex(
   }
 }
 
-function patchForConvex(patch: Partial<AgentAccessOAuthGrant>): GrantUpdateArgs['patch'] {
+function patchForConvex(patch: AgentAccessOAuthGrantPatch): GrantUpdateArgs['patch'] {
   return {
     ...(patch.status === undefined ? {} : { status: patch.status }),
     ...(patch.redirectUri === undefined ? {} : { redirectUri: patch.redirectUri }),

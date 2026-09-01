@@ -37,6 +37,7 @@ export type AgentCredentialSummary = Readonly<{
 
 export type AgentDirectoryItem = Readonly<{
   principalRef: string
+  principalRevision: number
   displayName: string
   applicationRef: string
   environment: 'sandbox' | 'production'

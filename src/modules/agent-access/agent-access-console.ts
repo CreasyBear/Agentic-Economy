@@ -24,6 +24,7 @@ const listOwnerGrantReadbacksQuery = sourceQuery<Record<string, never>, readonly
 )
 export type CanonicalAgentDirectoryRecord = Readonly<{
   principalRef: string
+  principalRevision: number
   displayName: string
   applicationRef: string
   environment: 'sandbox' | 'production'
@@ -149,6 +150,7 @@ function projectAgentDetail(
   )
   const agent: AgentDirectoryItem = {
     principalRef: canonical.principalRef,
+    principalRevision: canonical.principalRevision,
     displayName: canonical.displayName,
     applicationRef: canonical.applicationRef,
     environment: canonical.environment,

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/server/convex-source', () => ({
   createPublicSourceTransport: () => ({ mutation: mocks.mutation, query: mocks.query }),
+  createAuthenticatedSourceTransport: () => ({ mutation: mocks.mutation, query: mocks.query }),
   sourceMutation: (name: string) => ({ name }),
   sourceQuery: (name: string) => ({ name }),
 }))
@@ -18,7 +19,10 @@ vi.mock('@/lib/server/source-write-admission', () => ({
   sourceWriteRequestFromAdmission: mocks.sourceWriteRequestFromAdmission,
 }))
 
-import { createConvexAgentAccessOAuthStore } from '@/lib/server/agent-access-oauth-store'
+import {
+  createConvexAgentAccessOAuthStore,
+  reserveAgentAccessConsentForOwner,
+} from '@/lib/server/agent-access-oauth-store'
 import type { AgentAccessOAuthGrant } from '@/modules/agent-access/oauth-state'
 
 const replacement = {
@@ -32,6 +36,7 @@ const replacement = {
 
 const grant: AgentAccessOAuthGrant = {
   grantRef: 'device:persistence',
+  revision: 4,
   flow: 'device_code',
   clientId: 'client-persistence',
   requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
@@ -81,11 +86,12 @@ describe('Convex Agent Access OAuth store adapter', () => {
       }) }),
     )
 
-    await store.updateGrant(grant.grantRef, 'issuing', grant, 1_001)
+    await store.updateGrant(grant.grantRef, 'issuing', grant.revision, grant, 1_001)
     expect(mocks.mutation).toHaveBeenNthCalledWith(
       2,
       { name: 'agentAccessOAuth:updateGrant' },
       expect.objectContaining({
+        expectedRevision: grant.revision,
         expectedIssuanceStartedAt: 1_001,
         patch: expect.objectContaining({
           issuanceKey: grant.issuanceKey,
@@ -97,5 +103,53 @@ describe('Convex Agent Access OAuth store adapter', () => {
         }),
       }),
     )
+    expect(mocks.mutation.mock.calls[1]?.[1]?.patch).not.toHaveProperty('revision')
+  })
+
+  it('signs and sends only the exact server-derived consent reservation command', async () => {
+    mocks.mutation.mockResolvedValue({
+      kind: 'reserved',
+      grantRef: 'device:proof-bound',
+      grantRevision: 2,
+      commandDigest: 'sha256:command',
+      correlationRef: 'oauth:grant:device:proof-bound:reserve:1',
+    })
+    const request = new Request('https://ae.example/oauth/authorize', { method: 'POST' })
+    const authObject = { isAuthenticated: true, getToken: vi.fn().mockResolvedValue('convex-token') }
+    const result = await reserveAgentAccessConsentForOwner({
+      request,
+      body: 'exact-body',
+      authObject,
+      grantRef: 'device:proof-bound',
+      expectedGrantRevision: 1,
+      expectedTargetRevision: 1,
+      authorityMode: 'inspect_only',
+      connectionTarget: { kind: 'new_agent' },
+      proof: { reverificationId: 'rev_exact', firstFactorAgeMinutes: 3, secondFactorAgeMinutes: -1 },
+    })
+
+    const exactCommand = {
+      grantRef: 'device:proof-bound',
+      expectedGrantRevision: 1,
+      expectedTargetRevision: 1,
+      authorityMode: 'inspect_only',
+      connectionTarget: { kind: 'new_agent' },
+      proof: { reverificationId: 'rev_exact', firstFactorAgeMinutes: 3, secondFactorAgeMinutes: -1 },
+      operationKey: 'oauth:grant:device:proof-bound:reserve:1',
+      correlationId: 'oauth:grant:device:proof-bound:reserve:1',
+    } as const
+    expect(mocks.sourceWriteAdmissionFromRequest).toHaveBeenCalledWith({
+      request,
+      command: exactCommand,
+      body: 'exact-body',
+      scope: 'agent_identity',
+      operationKey: 'oauth:grant:device:proof-bound:reserve:1',
+      correlationId: 'oauth:grant:device:proof-bound:reserve:1',
+    })
+    expect(mocks.mutation).toHaveBeenCalledWith(
+      { name: 'agentAccessOAuth:reserveAgentAccessConsent' },
+      expect.objectContaining(exactCommand),
+    )
+    expect(result.kind).toBe('reserved')
   })
 })

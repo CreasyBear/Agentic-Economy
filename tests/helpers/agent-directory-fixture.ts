@@ -10,6 +10,7 @@ export function canonicalAgentRecord(
   const current = ordered.at(-1)!
   return {
     principalRef: current.principalId,
+    principalRevision: 1,
     displayName: current.key.name,
     applicationRef: current.key.applicationRef,
     environment: current.key.environment,
