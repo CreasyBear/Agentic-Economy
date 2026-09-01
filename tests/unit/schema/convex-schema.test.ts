@@ -329,11 +329,11 @@ describe('Convex schema', () => {
     }
   })
 
-  it('stages the Account audit indexes without making them queryable', () => {
+  it('activates the backfilled Account audit indexes', () => {
     const auditEvents = exported.tables.find((table) => table.tableName === 'auditEvents')
 
-    expect(auditEvents?.indexes.map((index) => index.indexDescriptor)).toEqual(['by_eventId'])
-    expect(auditEvents?.stagedDbIndexes).toEqual([
+    expect(auditEvents?.indexes).toEqual([
+      { indexDescriptor: 'by_eventId', fields: ['eventId'] },
       {
         indexDescriptor: 'by_activeAccountRef_and_createdAt',
         fields: ['activeAccountRef', 'createdAt'],
@@ -343,6 +343,7 @@ describe('Convex schema', () => {
         fields: ['activeAccountRef', 'targetType', 'targetRef', 'createdAt'],
       },
     ])
+    expect(auditEvents?.stagedDbIndexes).toEqual([])
   })
 
   it('accepts and indexes canonical durable admin authority records', async () => {

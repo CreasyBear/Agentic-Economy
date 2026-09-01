@@ -37,14 +37,13 @@ export const observabilityTables = {
     createdAt: v.number(),
   })
     .index('by_eventId', ['eventId'])
-    .index('by_activeAccountRef_and_createdAt', {
-      fields: ['activeAccountRef', 'createdAt'],
-      staged: true,
-    })
-    .index('by_activeAccountRef_and_targetType_and_targetRef_and_createdAt', {
-      fields: ['activeAccountRef', 'targetType', 'targetRef', 'createdAt'],
-      staged: true,
-    }),
+    .index('by_activeAccountRef_and_createdAt', ['activeAccountRef', 'createdAt'])
+    .index('by_activeAccountRef_and_targetType_and_targetRef_and_createdAt', [
+      'activeAccountRef',
+      'targetType',
+      'targetRef',
+      'createdAt',
+    ]),
 
   operationKeys: defineTable({
     scope: v.string(),
