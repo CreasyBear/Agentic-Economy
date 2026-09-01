@@ -65,6 +65,7 @@ export const credentialValue = v.object({
   revision: v.number(),
   issuedAt: v.number(),
   expiresAt: v.number(),
+  lastAuthenticatedAt: v.optional(v.number()),
   // Optional only for staged deployment. Interactive authority rejects rows
   // without a matching generation-bound materialization until backfilled.
   expiryMaterialization: v.optional(credentialExpiryMaterializationValue),

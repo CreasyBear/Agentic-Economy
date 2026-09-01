@@ -7,6 +7,7 @@ import {
   OperationKeyStatusValues,
 } from '@/modules/observability/public'
 import {
+  AuditSourceSystemValues,
   AuditEventTypeValues,
   AuditTargetTypeValues,
 } from '@/modules/common/audit-events'
@@ -17,6 +18,10 @@ export const observabilityTables = {
     eventType: literalUnion(AuditEventTypeValues),
     actorKind: literalUnion(ActorKindValues),
     actorRef: v.string(),
+    activeAccountRef: v.optional(v.string()),
+    sourceSystem: v.optional(literalUnion(AuditSourceSystemValues)),
+    observedAt: v.optional(v.number()),
+    authorityGeneration: v.optional(v.number()),
     businessId: v.optional(v.id('businesses')),
     targetType: literalUnion(AuditTargetTypeValues),
     targetRef: v.string(),
@@ -30,7 +35,16 @@ export const observabilityTables = {
     payloadHash: v.string(),
     failureCode: v.optional(v.string()),
     createdAt: v.number(),
-  }).index('by_eventId', ['eventId']),
+  })
+    .index('by_eventId', ['eventId'])
+    .index('by_activeAccountRef_and_createdAt', {
+      fields: ['activeAccountRef', 'createdAt'],
+      staged: true,
+    })
+    .index('by_activeAccountRef_and_targetType_and_targetRef_and_createdAt', {
+      fields: ['activeAccountRef', 'targetType', 'targetRef', 'createdAt'],
+      staged: true,
+    }),
 
   operationKeys: defineTable({
     scope: v.string(),

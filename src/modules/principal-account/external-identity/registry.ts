@@ -60,6 +60,7 @@ export type Credential = Readonly<{
   revision: number
   issuedAt: number
   expiresAt: number
+  lastAuthenticatedAt?: number
   updatedAt: number
   predecessorCredentialRef?: CredentialRef
   staleAt?: number

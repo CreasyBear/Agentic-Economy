@@ -2,14 +2,18 @@ export const OperationKeyStatusValues = ['in_progress', 'succeeded', 'failed_ret
 
 import {
   ActorKindValues,
+  AuditSourceSystemValues as AllAuditSourceSystemValues,
   AuditEventTypeValues as AllAuditEventTypeValues,
   AuditTargetTypeValues as AllAuditTargetTypeValues,
+  Package3AuditEventTypeValues as AllPackage3AuditEventTypeValues,
 } from '@/modules/common/audit-events'
 
 export { ActorKindValues }
 
 export const AuditEventTypeValues = AllAuditEventTypeValues
 export const AuditTargetTypeValues = AllAuditTargetTypeValues
+export const AuditSourceSystemValues = AllAuditSourceSystemValues
+export const Package3AuditEventTypeValues = AllPackage3AuditEventTypeValues
 
 export const InvalidationSurfaceValues = ['public_catalog', 'registry_projection', 'discovery_manifest'] as const
 

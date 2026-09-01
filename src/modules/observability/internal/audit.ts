@@ -1,11 +1,17 @@
 export {
+  AuditSourceSystemValues,
+  Package3AuditEventTypeValues,
+  createPackage3AuditEvent,
   validateAuditEvent,
   type ActorKind,
+  type AuditSourceSystem,
   type AuditEventContract,
   type AuditEventInput,
   type AuditEventSink,
   type AuditEventType,
   type AuditTargetType,
   type AuditValidationResult,
+  type Package3AuditEventInput,
+  type Package3AuditEventType,
   type RedactedPayload,
 } from '@/modules/common/audit-events'

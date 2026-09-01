@@ -2,6 +2,36 @@ import type { AuditEventId, BusinessId, CorrelationId, OperationKey, SourceHash 
 
 export const ActorKindValues = ['owner', 'admin', 'system', 'anonymous'] as const
 
+export const AuditSourceSystemValues = ['ae_recorded', 'clerk_observed', 'provider_observed'] as const
+
+export const Package3AuditEventTypeValues = [
+  'account.session.created',
+  'account.session.ended',
+  'account.session.revoked',
+  'account.security_profile.updated',
+  'agent.created',
+  'agent.renamed',
+  'agent.policy_updated',
+  'agent.disconnected',
+  'agent.credential.authenticated',
+  'agent.credential.denied',
+  'agent.credential.replacement_prepared',
+  'agent.credential.replacement_promoted',
+  'agent.credential.replacement_cancelled',
+  'agent.credential.revoked',
+  'agent.credential.expired',
+  'connection.connected',
+  'connection.health_checked',
+  'connection.reauthorized',
+  'connection.revoked',
+  'connection.cleanup_required',
+  'consequence.admitted',
+  'consequence.refused',
+  'consequence.proof_consumed',
+  'consequence.outcome_unknown',
+  'consequence.succeeded',
+] as const
+
 export const AuditTargetTypeValues = [
   'business',
   'service',
@@ -21,6 +51,13 @@ export const AuditTargetTypeValues = [
   'billing',
   'billing_provider_event',
   'billing_reconciliation',
+  'account',
+  'session',
+  'security_profile',
+  'agent',
+  'credential',
+  'provider_connection',
+  'consequence_command',
 ] as const
 
 export const AuditEventTypeValues = [
@@ -98,11 +135,14 @@ export const AuditEventTypeValues = [
   'billing.reconciliation_failed',
   'billing.reconciliation_repaired',
   'billing.no_repair_marked',
+  ...Package3AuditEventTypeValues,
 ] as const
 
 export type ActorKind = (typeof ActorKindValues)[number]
+export type AuditSourceSystem = (typeof AuditSourceSystemValues)[number]
 export type AuditTargetType = (typeof AuditTargetTypeValues)[number]
 export type AuditEventType = (typeof AuditEventTypeValues)[number]
+export type Package3AuditEventType = (typeof Package3AuditEventTypeValues)[number]
 
 export type RedactedPayload =
   | null
@@ -117,6 +157,10 @@ export type AuditEventContract = {
   eventType: AuditEventType
   actorKind: ActorKind
   actorRef: string
+  activeAccountRef?: string
+  sourceSystem?: AuditSourceSystem
+  observedAt?: number
+  authorityGeneration?: number
   targetType: AuditTargetType
   targetRef: string
   businessId?: BusinessId
@@ -138,7 +182,19 @@ export type AuditEventInput = Omit<AuditEventContract, 'evidenceRefs'> & {
 
 export type AuditValidationResult =
   | { valid: true; event: AuditEventContract }
-  | { valid: false; reason: 'invalid_event_type' | 'invalid_target_type' | 'missing_identity' | 'missing_payload_hash' | 'missing_state_transition' }
+  | { valid: false; reason: 'invalid_event_type' | 'invalid_target_type' | 'missing_identity' | 'missing_payload_hash' | 'missing_state_transition' | 'missing_security_context' | 'unsafe_security_evidence' }
+
+export type Package3AuditEventInput = Omit<
+  AuditEventInput,
+  'eventType' | 'activeAccountRef' | 'sourceSystem' | 'payloadHash' | 'beforeState' | 'afterState'
+> & {
+  eventType: Package3AuditEventType
+  activeAccountRef: string
+  sourceSystem: AuditSourceSystem
+  commandDigest: SourceHash
+  beforeState: string
+  outcome: string
+}
 
 export type AuditEventSink = {
   auditEvents: AuditEventContract[]
@@ -209,6 +265,10 @@ const stateChangingEvents: Partial<Record<AuditEventType, true>> = {
 
 const auditEventTypes = new Set<string>(AuditEventTypeValues)
 const auditTargetTypes = new Set<string>(AuditTargetTypeValues)
+const package3AuditEventTypes = new Set<string>(Package3AuditEventTypeValues)
+const secretValuePattern = /(?:\bBearer\s+|\bsk_(?:live|test)_|\bwhsec_|-----BEGIN [A-Z ]*PRIVATE KEY-----)/u
+
+for (const eventType of Package3AuditEventTypeValues) stateChangingEvents[eventType] = true
 
 export function validateAuditEvent(input: AuditEventInput): AuditValidationResult {
   if (!auditEventTypes.has(input.eventType)) return { valid: false, reason: 'invalid_event_type' }
@@ -227,6 +287,21 @@ export function validateAuditEvent(input: AuditEventInput): AuditValidationResul
     return { valid: false, reason: 'missing_payload_hash' }
   }
 
+  if (package3AuditEventTypes.has(input.eventType)) {
+    if (
+      input.activeAccountRef === undefined
+      || input.activeAccountRef.length === 0
+      || input.sourceSystem === undefined
+      || input.afterState === undefined
+      || input.afterState.length === 0
+    ) {
+      return { valid: false, reason: 'missing_security_context' }
+    }
+    if (containsSecretMaterial(input.redactedPayload) || input.evidenceRefs?.some((value) => secretValuePattern.test(value)) === true) {
+      return { valid: false, reason: 'unsafe_security_evidence' }
+    }
+  }
+
   if (stateChangingEvents[input.eventType] === true && (input.beforeState === undefined || input.afterState === undefined)) {
     return { valid: false, reason: 'missing_state_transition' }
   }
@@ -238,4 +313,20 @@ export function validateAuditEvent(input: AuditEventInput): AuditValidationResul
       evidenceRefs: input.evidenceRefs ?? [],
     },
   }
+}
+
+export function createPackage3AuditEvent(input: Package3AuditEventInput): AuditValidationResult {
+  const { commandDigest, outcome, ...event } = input
+  return validateAuditEvent({
+    ...event,
+    payloadHash: commandDigest,
+    afterState: outcome,
+  })
+}
+
+function containsSecretMaterial(value: RedactedPayload): boolean {
+  if (typeof value === 'string') return secretValuePattern.test(value)
+  if (Array.isArray(value)) return value.some((item) => containsSecretMaterial(item))
+  if (value === null || typeof value !== 'object') return false
+  return Object.values(value).some((item) => containsSecretMaterial(item))
 }

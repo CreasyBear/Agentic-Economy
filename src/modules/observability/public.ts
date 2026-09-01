@@ -5,14 +5,20 @@ import {
   reserveOperationKey as reserveOperationKeyImpl,
 } from './internal/operation-keys'
 import { recordInvalidationIntent as recordInvalidationIntentImpl } from './internal/outbox'
-import { validateAuditEvent as validateStoredAuditEvent } from './internal/audit'
+import {
+  createPackage3AuditEvent as createPackage3AuditEventImpl,
+  validateAuditEvent as validateStoredAuditEvent,
+} from './internal/audit'
 import type {
   ActorKind,
+  AuditSourceSystem,
   AuditEventContract,
   AuditEventInput,
   AuditEventType,
   AuditTargetType,
   AuditValidationResult,
+  Package3AuditEventInput,
+  Package3AuditEventType,
   RedactedPayload,
 } from './internal/audit'
 import type {
@@ -24,23 +30,27 @@ import type {
 import {
   ActivationStageValues,
   ActorKindValues,
+  AuditSourceSystemValues,
   AuditEventTypeValues,
   AuditTargetTypeValues,
   FunnelEventTypeValues,
   InvalidationIntentStatusValues,
   InvalidationSurfaceValues,
   OperationKeyStatusValues,
+  Package3AuditEventTypeValues,
 } from './internal/literals'
 
 export {
   ActivationStageValues,
   ActorKindValues,
+  AuditSourceSystemValues,
   AuditEventTypeValues,
   AuditTargetTypeValues,
   FunnelEventTypeValues,
   InvalidationIntentStatusValues,
   InvalidationSurfaceValues,
   OperationKeyStatusValues,
+  Package3AuditEventTypeValues,
 }
 
 export type OperationKeyStatus = (typeof OperationKeyStatusValues)[number]
@@ -78,11 +88,14 @@ export type InvalidationIntent = {
 
 export type {
   ActorKind,
+  AuditSourceSystem,
   AuditEventContract,
   AuditEventInput,
   AuditEventType,
   AuditTargetType,
   AuditValidationResult,
+  Package3AuditEventInput,
+  Package3AuditEventType,
   RedactedPayload,
   OperationKeyAuditSink,
   OperationKeyDecision,
@@ -95,5 +108,7 @@ export const markOperationSucceeded = markOperationSucceededImpl
 export const reserveOperationKey = reserveOperationKeyImpl
 
 export const validateAuditEvent = validateStoredAuditEvent
+
+export const createPackage3AuditEvent = createPackage3AuditEventImpl
 
 export const recordInvalidationIntent = recordInvalidationIntentImpl

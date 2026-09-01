@@ -24,6 +24,7 @@ const SearchIndexSchema = z.object({
 const TableSchema = z.object({
   tableName: z.string(),
   indexes: z.array(IndexSchema),
+  stagedDbIndexes: z.array(IndexSchema).optional(),
   searchIndexes: z.array(SearchIndexSchema).optional(),
 })
 
@@ -41,6 +42,7 @@ const durableTables = [
   'accountSuccessionAuthorizationParticipants',
   'externalIdentityBindings',
   'credentials',
+  'consequenceProofUses',
   'authorityDelegationGrants',
   'authorityDelegationSnapshots',
   'authorityDelegationSnapshotAncestors',
@@ -154,6 +156,7 @@ const requiredIndexes = {
     'by_principalRef_and_issueIdempotencyRef',
     'by_predecessorCredentialRef',
   ],
+  consequenceProofUses: ['by_reverificationId'],
   authorityDelegationGrants: [
     'by_grantRef',
     'by_subjectPrincipalRef_and_lifecycle',
@@ -310,7 +313,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(73)
+    expect(durableTables).toHaveLength(74)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
@@ -324,6 +327,22 @@ describe('Convex schema', () => {
         expect(tableIndexes[tableName]).toEqual(indexes)
       else expect(tableIndexes[tableName]).toEqual(expect.arrayContaining(indexes))
     }
+  })
+
+  it('stages the Account audit indexes without making them queryable', () => {
+    const auditEvents = exported.tables.find((table) => table.tableName === 'auditEvents')
+
+    expect(auditEvents?.indexes.map((index) => index.indexDescriptor)).toEqual(['by_eventId'])
+    expect(auditEvents?.stagedDbIndexes).toEqual([
+      {
+        indexDescriptor: 'by_activeAccountRef_and_createdAt',
+        fields: ['activeAccountRef', 'createdAt'],
+      },
+      {
+        indexDescriptor: 'by_activeAccountRef_and_targetType_and_targetRef_and_createdAt',
+        fields: ['activeAccountRef', 'targetType', 'targetRef', 'createdAt'],
+      },
+    ])
   })
 
   it('accepts and indexes canonical durable admin authority records', async () => {
@@ -396,6 +415,56 @@ describe('Convex schema', () => {
       membershipAuditType: 'membership_bootstrapped',
       auditType: 'admin.membership_bootstrapped',
     })
+  })
+
+  it('accepts the staged Package 3 proof, credential-use, and audit compatibility fields', async () => {
+    const backend = convexTest(schema, convexModules)
+    const result = await backend.run(async (ctx) => {
+      await ctx.db.insert('consequenceProofUses', {
+        reverificationId: 'rev_123',
+        actorPrincipalRef: 'prn_owner',
+        activeAccountRef: 'acc_owner',
+        commandDigest: 'sha256:command',
+        proofPreset: 'strict',
+        factorEvidence: { firstFactorAgeMinutes: 0, secondFactorAgeMinutes: -1 },
+        verifiedAt: 10,
+        expiresAt: 310,
+        correlationRef: 'corr:proof',
+        idempotencyRef: 'idem:proof',
+      })
+      await ctx.db.insert('auditEvents', {
+        eventId: 'audit:agent.created:1',
+        eventType: 'agent.created',
+        actorKind: 'owner',
+        actorRef: 'prn_owner',
+        activeAccountRef: 'acc_owner',
+        sourceSystem: 'ae_recorded',
+        observedAt: 11,
+        authorityGeneration: 2,
+        targetType: 'agent',
+        targetRef: 'prn_agent',
+        beforeState: 'missing',
+        afterState: 'active',
+        idempotencyKey: 'idem:proof',
+        correlationId: 'corr:proof',
+        evidenceRefs: ['ref:proof'],
+        redactedPayloadJson: '{}',
+        payloadHash: 'sha256:command',
+        createdAt: 11,
+      })
+
+      return {
+        proof: await ctx.db.query('consequenceProofUses')
+          .withIndex('by_reverificationId', (query) => query.eq('reverificationId', 'rev_123'))
+          .unique(),
+        audit: await ctx.db.query('auditEvents')
+          .withIndex('by_eventId', (query) => query.eq('eventId', 'audit:agent.created:1'))
+          .unique(),
+      }
+    })
+
+    expect(result.proof).toMatchObject({ proofPreset: 'strict', activeAccountRef: 'acc_owner' })
+    expect(result.audit).toMatchObject({ sourceSystem: 'ae_recorded', authorityGeneration: 2 })
   })
   it('pins the new ledger and payout index field order', () => {
     const index = (tableName: string, indexDescriptor: string) =>
