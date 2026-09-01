@@ -20,7 +20,11 @@ const requestedAccess = v.object({
 })
 const connectionTarget = v.union(
   v.object({ kind: v.literal('new_agent'), displayName: v.string() }),
-  v.object({ kind: v.literal('replace_credential'), principalRef: v.string() }),
+  v.object({
+    kind: v.literal('replace_credential'),
+    principalRef: v.string(),
+    replacementMode: v.union(v.literal('planned'), v.literal('compromise')),
+  }),
 )
 const replacement = v.object({
   principalRef: v.string(),
@@ -75,6 +79,7 @@ export const agentAccessOAuthTables = {
     redirectUri: v.optional(v.string()),
     requestedScopes: v.array(v.string()),
     requestedAccess,
+    approvedAccess: requestedAccess,
     codeChallenge: v.optional(v.string()),
     codeChallengeMethod: v.optional(v.literal('S256')),
     deviceCodeHash: v.optional(v.string()),

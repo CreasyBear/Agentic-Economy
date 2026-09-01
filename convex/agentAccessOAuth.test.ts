@@ -73,6 +73,18 @@ const grant = {
     maximumCallsPerHour: 100,
     expiresInSeconds: 86_400,
   },
+  approvedAccess: {
+    environment: 'production' as const,
+    operationAccess: 'all_admitted' as const,
+    operationRefs: [],
+    maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+    maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
+    maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
+    maximumConcurrentInvocations: 2,
+    maximumCallsPerMinute: 10,
+    maximumCallsPerHour: 100,
+    expiresInSeconds: 86_400,
+  },
   deviceCodeHash: 'device-hash',
   userCodeHash: 'user-hash',
   authorizationCodeHash: 'authorization-hash',
@@ -123,6 +135,8 @@ const reservationCommand = (input: Readonly<{
     expectedGrantRevision: 1,
     expectedTargetRevision: input.expectedTargetRevision ?? 1,
     authorityMode: 'inspect_only' as const,
+    approvedOperationAccess: 'all_admitted' as const,
+    approvedOperationRefs: [],
     connectionTarget: { kind: 'new_agent' as const },
     ...(input.reverificationId === undefined ? {} : {
       proof: proofEvidence(
@@ -141,6 +155,7 @@ const replacementReservationCommand = (input: Readonly<{
   principalRef: string
   targetRevision: number
   reverificationId: string
+  replacementMode?: 'planned' | 'compromise'
 }>) => {
   const operationKey = reservationRef(input.grantRef)
   return {
@@ -148,9 +163,12 @@ const replacementReservationCommand = (input: Readonly<{
     expectedGrantRevision: 1,
     expectedTargetRevision: input.targetRevision,
     authorityMode: 'inspect_only' as const,
+    approvedOperationAccess: 'all_admitted' as const,
+    approvedOperationRefs: [],
     connectionTarget: {
       kind: 'replace_credential' as const,
       principalRef: input.principalRef,
+      replacementMode: input.replacementMode ?? 'planned',
     },
     proof: proofEvidence(input.reverificationId),
     operationKey,
@@ -851,6 +869,93 @@ describe('Agent Access consequence proof reservation', () => {
     })).resolves.toMatchObject({ kind: 'rate_limited' })
   })
 
+  it('preserves requested Operation access and atomically records the owner-approved narrowing', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    registerRateLimiter(backend)
+    const owner = await materializeReservationOwner(backend, 'operation-narrowing')
+    const operationRefs = [
+      `operation:v1:${'a'.repeat(64)}`,
+      `operation:v1:${'b'.repeat(64)}`,
+    ]
+    await insertCurrentOperations(backend, operationRefs)
+    const oauthGrant = await insertReservableGrant(backend, 'device:reserve-operation-narrowing')
+    const command = {
+      ...reservationCommand({
+        grantRef: oauthGrant.grantRef,
+        reverificationId: 'rev_operation_narrowing',
+      }),
+      approvedOperationAccess: 'selected_operations' as const,
+      approvedOperationRefs: operationRefs,
+    }
+
+    const first = await owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...command,
+      ...(await sourceArgs(command, 'nonce:reserve:operation-narrowing:first')),
+    })
+    expect(first).toMatchObject({ kind: 'reserved' })
+    if (first.kind !== 'reserved') throw new Error('operation narrowing reservation missing')
+    const facts = await reservationFacts(backend)
+    expect(facts.grants.find((row) => row.grantRef === oauthGrant.grantRef)).toMatchObject({
+      status: 'issuing',
+      requestedAccess: { operationAccess: 'all_admitted', operationRefs: [] },
+      approvedAccess: { operationAccess: 'selected_operations', operationRefs },
+      consequenceReservation: { commandDigest: first.commandDigest },
+    })
+    expect(facts.proofs.find((row) => row.reverificationId === 'rev_operation_narrowing'))
+      .toMatchObject({ commandDigest: first.commandDigest })
+
+    await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...command,
+      ...(await sourceArgs(command, 'nonce:reserve:operation-narrowing:replay')),
+    })).resolves.toEqual({ ...first, kind: 'replayed' })
+
+    const changedSelection = { ...command, approvedOperationRefs: [operationRefs[0]!] }
+    await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...changedSelection,
+      ...(await sourceArgs(changedSelection, 'nonce:reserve:operation-narrowing:changed')),
+    })).resolves.toEqual({ kind: 'conflict', code: 'stale_target' })
+  })
+
+  it('allows only a non-empty subset of selected requested Operations and refuses foreign references', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    registerRateLimiter(backend)
+    const owner = await materializeReservationOwner(backend, 'operation-subset')
+    const requestedRefs = [
+      `operation:v1:${'c'.repeat(64)}`,
+      `operation:v1:${'d'.repeat(64)}`,
+    ]
+    const foreignRef = `operation:v1:${'e'.repeat(64)}`
+    await insertCurrentOperations(backend, [...requestedRefs, foreignRef])
+    const subsetGrant = await insertReservableGrant(backend, 'device:reserve-operation-subset')
+    await patchRequestedOperationAccess(backend, subsetGrant.grantRef, requestedRefs)
+    const subset = {
+      ...reservationCommand({ grantRef: subsetGrant.grantRef, reverificationId: 'rev_operation_subset' }),
+      approvedOperationAccess: 'selected_operations' as const,
+      approvedOperationRefs: [requestedRefs[0]!],
+    }
+    await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...subset,
+      ...(await sourceArgs(subset, 'nonce:reserve:operation-subset')),
+    })).resolves.toMatchObject({ kind: 'reserved' })
+
+    const foreignGrant = await insertReservableGrant(backend, 'device:reserve-operation-foreign')
+    await patchRequestedOperationAccess(backend, foreignGrant.grantRef, requestedRefs)
+    const foreign = {
+      ...reservationCommand({ grantRef: foreignGrant.grantRef, reverificationId: 'rev_operation_foreign' }),
+      approvedOperationAccess: 'selected_operations' as const,
+      approvedOperationRefs: [requestedRefs[0]!, foreignRef],
+    }
+    await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...foreign,
+      ...(await sourceArgs(foreign, 'nonce:reserve:operation-foreign')),
+    })).resolves.toEqual({ kind: 'conflict', code: 'stale_target' })
+    expect((await reservationFacts(backend)).proofs.some((row) => (
+      row.reverificationId === 'rev_operation_foreign'
+    ))).toBe(false)
+  })
+
   it.each(consentMaterialMutations)(
     'binds stored $name into the exact consequence digest',
     async ({ id, patch }) => {
@@ -1013,6 +1118,75 @@ describe('Agent Access consequence proof reservation', () => {
     })).resolves.toEqual({ kind: 'conflict', code: 'stale_target' })
     expect((await reservationFacts(backend)).proofs
       .some((row) => row.reverificationId === 'rev_replacement_stale')).toBe(false)
+  })
+
+  it('revokes compromised predecessor authority in the proof transaction and safely replays', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    registerRateLimiter(backend)
+    const owner = await materializeReservationOwner(backend, 'compromise')
+    const target = await insertReplacementTarget(backend, owner.accountRef, 'compromise', 3)
+    const oauthGrant = await insertReservableGrant(backend, 'device:reserve-compromise')
+    const command = replacementReservationCommand({
+      grantRef: oauthGrant.grantRef,
+      principalRef: target.principalRef,
+      targetRevision: target.revision,
+      reverificationId: 'rev_compromise',
+      replacementMode: 'compromise',
+    })
+    const first = await owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...command,
+      ...(await sourceArgs(command, 'nonce:reserve:compromise:first')),
+    })
+    expect(first).toMatchObject({ kind: 'reserved', correlationRef: reservationRef(oauthGrant.grantRef) })
+    if (first.kind !== 'reserved') throw new Error('compromise reservation missing')
+
+    const state = await backend.run(async (ctx) => ({
+      credential: await ctx.db.query('credentials')
+        .withIndex('by_credentialRef', (query) => query.eq('credentialRef', target.predecessor.credentialRef)).unique(),
+      binding: await ctx.db.query('externalIdentityBindings')
+        .withIndex('by_bindingRef', (query) => query.eq('bindingRef', target.predecessor.bindingRef)).unique(),
+      grant: await ctx.db.query('agentAccessGrants')
+        .withIndex('by_grantRef', (query) => query.eq('grantRef', target.predecessor.grantRef)).unique(),
+      providerRevocation: await ctx.db.query('agentAccessProviderRevocations')
+        .withIndex('by_credentialRef', (query) => query.eq('credentialRef', target.predecessor.credentialRef)).unique(),
+      oauthGrant: await ctx.db.query('agentAccessOAuthGrants')
+        .withIndex('by_grantRef', (query) => query.eq('grantRef', oauthGrant.grantRef)).unique(),
+    }))
+    expect(state.credential).toMatchObject({ lifecycle: 'revoked' })
+    expect(state.binding).toMatchObject({
+      lifecycle: 'revoked',
+      providerState: { kind: 'unknown', value: 'suspected_compromise' },
+    })
+    expect(state.grant).toMatchObject({ lifecycle: 'revoked' })
+    expect(state.providerRevocation).toMatchObject({
+      lifecycle: 'pending',
+      correlationRef: first.correlationRef,
+    })
+    expect(state.oauthGrant).toMatchObject({
+      status: 'issuing',
+      connectionTarget: {
+        kind: 'replace_credential',
+        principalRef: target.principalRef,
+        replacementMode: 'compromise',
+      },
+    })
+
+    await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...command,
+      ...(await sourceArgs(command, 'nonce:reserve:compromise:replay')),
+    })).resolves.toEqual({ ...first, kind: 'replayed' })
+    expect((await backend.run((ctx) => ctx.db.query('agentAccessProviderRevocations').collect())))
+      .toHaveLength(1)
+
+    const changedMode = {
+      ...command,
+      connectionTarget: { ...command.connectionTarget, replacementMode: 'planned' as const },
+    }
+    await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
+      ...changedMode,
+      ...(await sourceArgs(changedMode, 'nonce:reserve:compromise:changed-mode')),
+    })).resolves.toEqual({ kind: 'conflict', code: 'stale_target' })
   })
 
   it.each([
@@ -1194,6 +1368,7 @@ describe('Agent Access OAuth grant cleanup', () => {
           clientId: 'cleanup-client',
           requestedScopes: [],
           requestedAccess: cleanupRequestedAccess,
+          approvedAccess: cleanupRequestedAccess,
           status,
           createdAt: 1,
           expiresAt: cutoff - index - 1,
@@ -1207,6 +1382,7 @@ describe('Agent Access OAuth grant cleanup', () => {
         clientId: 'cleanup-client',
         requestedScopes: [],
         requestedAccess: cleanupRequestedAccess,
+        approvedAccess: cleanupRequestedAccess,
         status: 'pending',
         createdAt: 1,
         expiresAt: cutoff + 1,
@@ -1251,6 +1427,7 @@ describe('Agent Access OAuth grant cleanup', () => {
           clientId: 'cleanup-client',
           requestedScopes: [],
           requestedAccess: cleanupRequestedAccess,
+          approvedAccess: cleanupRequestedAccess,
           status: 'pending',
           createdAt: 1,
           expiresAt: cutoff - index - 1,
@@ -1281,6 +1458,7 @@ describe('Agent Access OAuth grant cleanup', () => {
           clientId: 'cleanup-client',
           requestedScopes: [],
           requestedAccess: cleanupRequestedAccess,
+          approvedAccess: cleanupRequestedAccess,
           status: 'pending',
           createdAt: 1,
           expiresAt: cutoff - index - 1,
@@ -1305,6 +1483,7 @@ describe('Agent Access OAuth grant cleanup', () => {
         clientId: 'cleanup-client',
         requestedScopes: [],
         requestedAccess: cleanupRequestedAccess,
+        approvedAccess: cleanupRequestedAccess,
         status: 'pending',
         createdAt: 1,
         expiresAt: cutoff - 1,
@@ -1376,6 +1555,74 @@ async function insertReservableGrant(
     ...(await sourceArgs(command, `nonce:insert:${grantRef}`)),
   })
   return value
+}
+
+async function insertCurrentOperations(
+  backend: TestConvex<typeof schema>,
+  operationRefs: readonly string[],
+): Promise<void> {
+  await backend.run(async (ctx) => {
+    const businessId = await ctx.db.insert('businesses', {
+      owningAccountRef: 'acc_agent_access_operation_fixture',
+      slug: `agent-access-operation-${operationRefs[0]?.slice(-8) ?? 'fixture'}`,
+      name: 'Agent access Operation fixture',
+      normalizedName: 'agent access operation fixture',
+      category: 'professional services',
+      businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
+      publicStatus: 'published',
+      trustTier: 'listed',
+      sourceHash: canonicalDigest({ operationRefs } as never),
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    for (const [index, operationRef] of operationRefs.entries()) {
+      await ctx.db.insert('capabilityPublications', {
+        publicationRef: `publication:agent-access:${operationRef.slice(-8)}`,
+        operationRef,
+        revision: 1,
+        businessId,
+        networkId: 'ae:public',
+        runtimeEnvironment: 'production',
+        capabilityId: `agent-access.operation.${index}`,
+        version: 1,
+        contractDigest: canonicalDigest({ operationRef, kind: 'contract' } as never),
+        sourceKind: 'ae_envelope',
+        sourceRevision: '1',
+        sourceDigest: canonicalDigest({ operationRef, kind: 'source' } as never),
+        publisherRef: 'prn_agent_access_operation_fixture',
+        authorityMode: 'provider_owned',
+        provenanceDigest: canonicalDigest({ operationRef, kind: 'provenance' } as never),
+        offeringId: `offering:agent-access:${index}`,
+        bindingId: `binding:agent-access:${index}`,
+        disposition: 'current',
+        credentialState: 'unobserved',
+        healthState: 'unobserved',
+        readinessEvidenceRefs: [],
+        registrationEvidenceRefs: ['test:agent-access-operation'],
+        createdAt: 1,
+        updatedAt: 1,
+      })
+    }
+  })
+}
+
+async function patchRequestedOperationAccess(
+  backend: TestConvex<typeof schema>,
+  grantRef: string,
+  operationRefs: readonly string[],
+): Promise<void> {
+  await backend.run(async (ctx) => {
+    const row = await ctx.db.query('agentAccessOAuthGrants')
+      .withIndex('by_grantRef', (query) => query.eq('grantRef', grantRef))
+      .unique()
+    if (row === null) throw new Error('operation access grant missing')
+    const selected = {
+      ...row.requestedAccess,
+      operationAccess: 'selected_operations' as const,
+      operationRefs: [...operationRefs],
+    }
+    await ctx.db.patch(row._id, { requestedAccess: selected, approvedAccess: selected })
+  })
 }
 
 async function insertReplacementTarget(

@@ -41,6 +41,7 @@ const grant: AgentAccessOAuthGrant = {
   clientId: 'client-persistence',
   requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
   requestedAccess: { environment: 'sandbox', operationAccess: 'all_admitted', operationRefs: [], expiresInSeconds: 600 },
+  approvedAccess: { environment: 'sandbox', operationAccess: 'all_admitted', operationRefs: [], expiresInSeconds: 600 },
   status: 'delivery_claimed',
   ownerId: 'owner-one',
   keyId: 'key-successor',
@@ -53,7 +54,7 @@ const grant: AgentAccessOAuthGrant = {
   deliveryCredentialHash: 'credential-hash',
   deliveryReplayUntil: 601_000,
   displayName: 'Persistence agent',
-  connectionTarget: { kind: 'replace_credential', principalRef: 'prn_agent_a' },
+  connectionTarget: { kind: 'replace_credential', principalRef: 'prn_agent_a', replacementMode: 'planned' },
   replacement,
 }
 
@@ -125,6 +126,8 @@ describe('Convex Agent Access OAuth store adapter', () => {
       expectedGrantRevision: 1,
       expectedTargetRevision: 1,
       authorityMode: 'inspect_only',
+      approvedOperationAccess: 'all_admitted',
+      approvedOperationRefs: [],
       connectionTarget: { kind: 'new_agent' },
       proof: { reverificationId: 'rev_exact', firstFactorAgeMinutes: 3, secondFactorAgeMinutes: -1 },
     })
@@ -134,6 +137,8 @@ describe('Convex Agent Access OAuth store adapter', () => {
       expectedGrantRevision: 1,
       expectedTargetRevision: 1,
       authorityMode: 'inspect_only',
+      approvedOperationAccess: 'all_admitted',
+      approvedOperationRefs: [],
       connectionTarget: { kind: 'new_agent' },
       proof: { reverificationId: 'rev_exact', firstFactorAgeMinutes: 3, secondFactorAgeMinutes: -1 },
       operationKey: 'oauth:grant:device:proof-bound:reserve:1',

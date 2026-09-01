@@ -480,7 +480,7 @@ describe('Customer Request OAuth state machine', () => {
     const reserved = await reserveForApproval(
       store,
       started.grant,
-      { kind: 'replace_credential', principalRef: 'prn_agent_a' },
+      { kind: 'replace_credential', principalRef: 'prn_agent_a', replacementMode: 'planned' },
       'owner-one',
       1_001,
     )
@@ -577,14 +577,14 @@ describe('Customer Request OAuth state machine', () => {
   it('binds replacement to an explicit principal and carries canonical successor material', async () => {
     const store = storeFixture()
     const started = await deviceGrant(store)
-    await reserveForApproval(store, started.grant, { kind: 'replace_credential', principalRef: 'prn_agent_a' })
+    await reserveForApproval(store, started.grant, { kind: 'replace_credential', principalRef: 'prn_agent_a', replacementMode: 'planned' })
     const approved = await approveGrant(store, {
       grantRef: started.grant.grantRef,
       ownerId: 'owner-one',
       now: 1_001,
-      connectionTarget: { kind: 'replace_credential', principalRef: 'prn_agent_a' },
+      connectionTarget: { kind: 'replace_credential', principalRef: 'prn_agent_a', replacementMode: 'planned' },
       issueKey: async ({ target }) => {
-        expect(target).toEqual({ kind: 'replace_credential', principalRef: 'prn_agent_a' })
+        expect(target).toEqual({ kind: 'replace_credential', principalRef: 'prn_agent_a', replacementMode: 'planned' })
         return {
           keyId: 'key-successor',
           replacement: {
@@ -599,7 +599,7 @@ describe('Customer Request OAuth state machine', () => {
       },
     })
     if (approved.kind !== 'ok') throw new Error('approval failed')
-    expect(approved.value.grant.connectionTarget).toEqual({ kind: 'replace_credential', principalRef: 'prn_agent_a' })
+    expect(approved.value.grant.connectionTarget).toEqual({ kind: 'replace_credential', principalRef: 'prn_agent_a', replacementMode: 'planned' })
     expect(approved.value.grant.replacement).toEqual({
       principalRef: 'prn_agent_a',
       generation: 2,
@@ -613,13 +613,13 @@ describe('Customer Request OAuth state machine', () => {
   it('refuses a replacement without a concrete principal before issuing a key', async () => {
     const store = storeFixture()
     const started = await deviceGrant(store)
-    await reserveForApproval(store, started.grant, { kind: 'replace_credential', principalRef: '   ' })
+    await reserveForApproval(store, started.grant, { kind: 'replace_credential', principalRef: '   ', replacementMode: 'planned' })
     let issued = false
     await expect(approveGrant(store, {
       grantRef: started.grant.grantRef,
       ownerId: 'owner-one',
       now: 1_001,
-      connectionTarget: { kind: 'replace_credential', principalRef: '   ' },
+      connectionTarget: { kind: 'replace_credential', principalRef: '   ', replacementMode: 'planned' },
       issueKey: async () => {
         issued = true
         return { keyId: 'should-not-exist' }

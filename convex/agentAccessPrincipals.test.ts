@@ -334,6 +334,7 @@ describe('issued agent binding', () => {
     if (access === null) throw new Error('selected_agent_access_missing')
     const replacement: AgentCredentialReplacementRegistration = {
       principalRef: access.principalId,
+      replacementMode: 'planned',
       issuanceKey: 'selected-replacement-12345678',
       grantRef: issuedAgentGrantRef('user_owner', 'selected-replacement-12345678'),
       credentialId: 'key_selected_replacement',
@@ -436,6 +437,7 @@ describe('issued agent binding', () => {
     if (access === null) throw new Error('agent_access_missing')
     const replacement: AgentCredentialReplacementRegistration = {
       principalRef: access.principalId,
+      replacementMode: 'planned',
       issuanceKey: 'replacement-device-12345678',
       grantRef: issuedAgentGrantRef('user_owner', 'replacement-device-12345678'),
       credentialId: 'key_replacement_2',
@@ -530,6 +532,101 @@ describe('issued agent binding', () => {
     expect(JSON.stringify(auditEvents)).not.toContain(cancelledInput.credentialId)
   })
 
+  it('prepares a compromise successor only from revoked predecessor authority and never reactivates it', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const first = bindingInput()
+    await owner.mutation(registerIssuedBinding, { ...first, serviceAuth: await assertion(first) })
+    const access = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_credentialId', (query) => query.eq('credentialId', first.credentialId)).unique())
+    if (access === null) throw new Error('compromise_agent_access_missing')
+    const predecessorRefs = await backend.run(async (ctx) => {
+      const binding = await ctx.db.query('externalIdentityBindings')
+        .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+          .eq('providerNamespace', 'clerk/api-key').eq('providerIdentifier', first.credentialId))
+        .unique()
+      const credential = binding === null ? null : await ctx.db.query('credentials')
+        .withIndex('by_bindingRef_and_generation_and_lifecycle', (query) => query
+          .eq('bindingRef', binding.bindingRef).eq('generation', binding.credentialGeneration).eq('lifecycle', 'active'))
+        .unique()
+      const grant = await ctx.db.query('agentAccessGrants')
+        .withIndex('by_grantRef', (query) => query.eq('grantRef', first.grantRef)).unique()
+      if (binding === null || credential === null || grant === null) throw new Error('compromise_predecessor_missing')
+      await Promise.all([
+        ctx.db.patch(binding._id, {
+          lifecycle: 'revoked',
+          providerState: { kind: 'unknown', value: 'suspected_compromise' },
+          revokedAt: NOW,
+          updatedAt: NOW,
+          revision: binding.revision + 1,
+        }),
+        ctx.db.patch(credential._id, {
+          lifecycle: 'revoked', revokedAt: NOW, updatedAt: NOW, revision: credential.revision + 1,
+        }),
+        ctx.db.patch(grant._id, { lifecycle: 'revoked', updatedAt: NOW }),
+      ])
+      return { bindingRef: binding.bindingRef, credentialRef: credential.credentialRef }
+    })
+    const replacement: AgentCredentialReplacementRegistration = {
+      principalRef: access.principalId,
+      replacementMode: 'compromise',
+      issuanceKey: 'compromise-replacement-12345678',
+      grantRef: issuedAgentGrantRef('user_owner', 'compromise-replacement-12345678'),
+      credentialId: 'key_compromise_successor',
+      applicationRef: first.applicationRef,
+      environment: first.environment,
+      scopes: first.scopes,
+      authorityMode: first.authorityMode,
+      operationAccess: first.operationAccess,
+      operationRefs: first.operationRefs,
+      policy: first.policy,
+      createdAt: NOW,
+      expiresAt: NOW + 600_000,
+    }
+    const prepared = await owner.mutation(prepareReplacement, {
+      ...replacement,
+      serviceAuth: await operationAssertion(
+        'agentAccessPrincipals.prepareCredentialReplacementForServer',
+        { ...replacement, scopes: [...replacement.scopes], operationRefs: [...replacement.operationRefs] },
+      ),
+    })
+    expect(prepared).toMatchObject({
+      kind: 'recorded',
+      principalRef: access.principalId,
+      generation: 2,
+      predecessorKeyId: first.credentialId,
+    })
+    const transition = {
+      principalRef: access.principalId,
+      successorCredentialRef: String(prepared.successorCredentialRef),
+      successorGrantRef: replacement.grantRef,
+    }
+    const promoteAuth = await operationAssertion(
+      'agentAccessPrincipals.promoteCredentialReplacementForServer',
+      transition,
+    )
+    await expect(owner.mutation(promoteReplacement, { ...transition, serviceAuth: promoteAuth }))
+      .resolves.toEqual({ kind: 'completed', providerCredentialId: first.credentialId })
+    await expect(owner.mutation(promoteReplacement, { ...transition, serviceAuth: promoteAuth }))
+      .resolves.toEqual({ kind: 'replayed', providerCredentialId: first.credentialId })
+
+    const state = await backend.run(async (ctx) => ({
+      current: await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query.eq('principalId', access.principalId)).unique(),
+      predecessorBinding: await ctx.db.query('externalIdentityBindings')
+        .withIndex('by_bindingRef', (query) => query.eq('bindingRef', predecessorRefs.bindingRef)).unique(),
+      predecessorCredential: await ctx.db.query('credentials')
+        .withIndex('by_credentialRef', (query) => query.eq('credentialRef', predecessorRefs.credentialRef)).unique(),
+      successorCredential: await ctx.db.query('credentials')
+        .withIndex('by_credentialRef', (query) => query.eq('credentialRef', transition.successorCredentialRef)).unique(),
+    }))
+    expect(state.current).toMatchObject({ credentialId: replacement.credentialId, lifecycle: 'active' })
+    expect(state.predecessorBinding).toMatchObject({ lifecycle: 'revoked' })
+    expect(state.predecessorCredential).toMatchObject({ lifecycle: 'revoked' })
+    expect(state.successorCredential).toMatchObject({ lifecycle: 'active' })
+  })
+
   it('admits only one pending successor for a credential generation', async () => {
     const backend = convexTest(schema, modules)
     const owner = backend.withIdentity(identity('user_owner'))
@@ -542,6 +639,7 @@ describe('issued agent binding', () => {
 
     const replacement = (issuanceKey: string, credentialId: string): AgentCredentialReplacementRegistration => ({
       principalRef: access.principalId,
+      replacementMode: 'planned',
       issuanceKey,
       grantRef: issuedAgentGrantRef('user_owner', issuanceKey),
       credentialId,
@@ -618,6 +716,7 @@ describe('issued agent binding', () => {
     const replacementIssuance = 'agent-a-platform-replacement-12345678'
     const replacement: AgentCredentialReplacementRegistration = {
       principalRef: principalA,
+      replacementMode: 'planned',
       issuanceKey: replacementIssuance,
       grantRef: issuedAgentGrantRef('user_owner', replacementIssuance),
       credentialId: 'key_agent_a_platform_replacement',
@@ -800,6 +899,7 @@ describe('issued agent binding', () => {
     const extraIssuance = 'agent-a-extra-credential-12345678'
     const extra: AgentCredentialReplacementRegistration = {
       principalRef: principalA,
+      replacementMode: 'planned',
       issuanceKey: extraIssuance,
       grantRef: issuedAgentGrantRef('user_owner', extraIssuance),
       credentialId: 'key_agent_a_extra',

@@ -144,7 +144,8 @@ const replacementTransitionResult = v.union(
   v.object({ kind: v.literal('refused'), code: v.literal('authentication_required') }),
 )
 const replacementRegistrationArgs = {
-  principalRef: v.string(), issuanceKey: v.string(), grantRef: v.string(), credentialId: v.string(),
+  principalRef: v.string(), replacementMode: v.union(v.literal('planned'), v.literal('compromise')),
+  issuanceKey: v.string(), grantRef: v.string(), credentialId: v.string(),
   applicationRef: v.string(), environment, scopes: v.array(v.string()), authorityMode,
   operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
   operationRefs: v.array(v.string()),
@@ -752,12 +753,17 @@ export const prepareCredentialReplacementForServer = mutation({
       .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
         .eq('providerNamespace', 'clerk/api-key').eq('providerIdentifier', current.credentialId))
       .unique()
-    if (currentBinding === null || currentBinding.principalRef !== input.principalRef || currentBinding.lifecycle !== 'active') {
+    const expectedPredecessorLifecycle = input.replacementMode === 'compromise' ? 'revoked' : 'active'
+    if (currentBinding === null
+      || currentBinding.principalRef !== input.principalRef
+      || currentBinding.lifecycle !== expectedPredecessorLifecycle) {
       return { kind: 'conflict' as const }
     }
     const predecessor = await ctx.db.query('credentials')
       .withIndex('by_bindingRef_and_generation_and_lifecycle', (query) => query
-        .eq('bindingRef', currentBinding.bindingRef).eq('generation', currentBinding.credentialGeneration).eq('lifecycle', 'active'))
+        .eq('bindingRef', currentBinding.bindingRef)
+        .eq('generation', currentBinding.credentialGeneration)
+        .eq('lifecycle', expectedPredecessorLifecycle))
       .unique()
     if (predecessor === null || predecessor.principalRef !== input.principalRef) return { kind: 'conflict' as const }
     const generation = predecessor.generation + 1
@@ -982,15 +988,22 @@ async function predecessorMaterial(ctx: MutationCtx, successor: Doc<'credentials
   const predecessor = await predecessorCredentialBinding(ctx, successor)
   if (predecessor === null) return null
   const { credential, binding } = predecessor
-  const [grants, production] = await Promise.all([
+  const [sandboxActive, productionActive, sandboxRevoked, productionRevoked] = await Promise.all([
     ctx.db.query('agentAccessGrants')
       .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
         .eq('credentialId', binding.providerIdentifier).eq('environment', 'sandbox').eq('lifecycle', 'active')).take(2),
     ctx.db.query('agentAccessGrants')
       .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
         .eq('credentialId', binding.providerIdentifier).eq('environment', 'production').eq('lifecycle', 'active')).take(2),
+    ctx.db.query('agentAccessGrants')
+      .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+        .eq('credentialId', binding.providerIdentifier).eq('environment', 'sandbox').eq('lifecycle', 'revoked')).take(2),
+    ctx.db.query('agentAccessGrants')
+      .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+        .eq('credentialId', binding.providerIdentifier).eq('environment', 'production').eq('lifecycle', 'revoked')).take(2),
   ])
-  const grant = [...grants, ...production].find((candidate) => candidate.principalId === successor.principalRef)
+  const grant = [...sandboxActive, ...productionActive, ...sandboxRevoked, ...productionRevoked]
+    .find((candidate) => candidate.principalId === successor.principalRef)
   return grant === undefined ? null : { credential, binding, grant }
 }
 
@@ -1005,7 +1018,7 @@ async function predecessorCredentialBinding(ctx: MutationCtx, successor: Doc<'cr
   return binding === null ? null : { credential, binding }
 }
 
-async function revokeReplacementMaterial(
+export async function revokeReplacementMaterial(
   ctx: MutationCtx,
   credential: Doc<'credentials'>,
   binding: Doc<'externalIdentityBindings'>,
@@ -1013,6 +1026,10 @@ async function revokeReplacementMaterial(
   owner: NonNullable<Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>>,
   now: number,
   reason: string,
+  correlationRef: string = canonicalDigest({
+    format: 'agent-provider-revocation:v1',
+    credentialRef: credential.credentialRef,
+  } as never),
 ) {
   if (credential.lifecycle !== 'revoked') await ctx.db.patch(credential._id, {
     lifecycle: 'revoked', revokedAt: now, updatedAt: now, revision: credential.revision + 1,
@@ -1040,7 +1057,7 @@ async function revokeReplacementMaterial(
     principalRef: credential.principalRef,
     credentialRef: credential.credentialRef,
     providerCredentialId: binding.providerIdentifier,
-    correlationRef: canonicalDigest({ format: 'agent-provider-revocation:v1', credentialRef: credential.credentialRef } as never),
+    correlationRef,
     now,
   })
 }

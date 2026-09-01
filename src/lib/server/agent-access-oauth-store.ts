@@ -37,6 +37,7 @@ type GrantArgs = SourceWriteArgs & {
     clientId: string
     requestedScopes: string[]
     requestedAccess: AgentAccessOAuthRequestedAccess
+    approvedAccess: AgentAccessOAuthRequestedAccess
     status: AgentAccessOAuthGrantStatus
     createdAt: number
     expiresAt: number
@@ -72,6 +73,7 @@ type GrantUpdateArgs = SourceWriteArgs & {
   expectedIssuanceStartedAt?: number
   patch: {
     status?: AgentAccessOAuthGrantStatus
+    approvedAccess?: AgentAccessOAuthRequestedAccess
     redirectUri?: string
     requestedScopes?: string[]
     codeChallenge?: string
@@ -125,7 +127,13 @@ type ReserveConsentCommand = Readonly<{
   expectedGrantRevision: number
   expectedTargetRevision: number
   authorityMode: 'inspect_only' | 'approve_each' | 'bounded_mandate' | 'full_yolo'
-  connectionTarget: Readonly<{ kind: 'new_agent' }> | Readonly<{ kind: 'replace_credential'; principalRef: string }>
+  approvedOperationAccess: 'all_admitted' | 'selected_operations'
+  approvedOperationRefs: readonly string[]
+  connectionTarget: Readonly<{ kind: 'new_agent' }> | Readonly<{
+    kind: 'replace_credential'
+    principalRef: string
+    replacementMode: 'planned' | 'compromise'
+  }>
   proof: Readonly<{
     reverificationId: string
     firstFactorAgeMinutes: number
@@ -147,6 +155,8 @@ export async function reserveAgentAccessConsentForOwner(input: Readonly<{
   expectedGrantRevision: number
   expectedTargetRevision: number
   authorityMode: ReserveConsentCommand['authorityMode']
+  approvedOperationAccess: ReserveConsentCommand['approvedOperationAccess']
+  approvedOperationRefs: readonly string[]
   connectionTarget: ReserveConsentCommand['connectionTarget']
   proof: ReserveConsentCommand['proof']
 }>): Promise<AgentAccessConsentReservationResult> {
@@ -156,6 +166,8 @@ export async function reserveAgentAccessConsentForOwner(input: Readonly<{
     expectedGrantRevision: input.expectedGrantRevision,
     expectedTargetRevision: input.expectedTargetRevision,
     authorityMode: input.authorityMode,
+    approvedOperationAccess: input.approvedOperationAccess,
+    approvedOperationRefs: [...input.approvedOperationRefs],
     connectionTarget: input.connectionTarget,
     proof: input.proof,
     operationKey,
@@ -252,6 +264,7 @@ function grantForConvex(grant: AgentAccessOAuthGrant): GrantArgs['grant'] {
     clientId: grant.clientId,
     requestedScopes: [...grant.requestedScopes],
     requestedAccess: requestedAccessForConvex(grant.requestedAccess),
+    approvedAccess: requestedAccessForConvex(grant.approvedAccess),
     status: grant.status,
     createdAt: grant.createdAt,
     expiresAt: grant.expiresAt,
@@ -310,6 +323,7 @@ function requestedAccessForConvex(
 function patchForConvex(patch: AgentAccessOAuthGrantPatch): GrantUpdateArgs['patch'] {
   return {
     ...(patch.status === undefined ? {} : { status: patch.status }),
+    ...(patch.approvedAccess === undefined ? {} : { approvedAccess: requestedAccessForConvex(patch.approvedAccess) }),
     ...(patch.redirectUri === undefined ? {} : { redirectUri: patch.redirectUri }),
     ...(patch.requestedScopes === undefined ? {} : { requestedScopes: [...patch.requestedScopes] }),
     ...(patch.codeChallenge === undefined ? {} : { codeChallenge: patch.codeChallenge }),

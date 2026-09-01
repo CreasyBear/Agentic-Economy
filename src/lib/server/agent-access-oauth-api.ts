@@ -59,7 +59,12 @@ import {
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
 import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
 import { buildProductionAgentAccessPolicy, defaultProductionAgentAccessPolicy } from '@/modules/agent-access/production-policy'
-import { agentAccessPolicySchema, type AgentAccessPolicy } from '@/modules/agent-access/policy'
+import {
+  agentAccessPolicySchema,
+  normalizeAgentAccessOperationSelection,
+  type AgentAccessOperationAccess,
+  type AgentAccessPolicy,
+} from '@/modules/agent-access/policy'
 import {
   createClerkAgentAccessKeyApi,
   cancelAgentCredentialReplacement,
@@ -99,7 +104,7 @@ type OAuthApiOptions = Readonly<{
     scopes: readonly string[]
     grantRef: string
     authorityMode: AgentAccessAuthorityMode
-    requestedAccess: AgentAccessOAuthRequestedAccess
+    approvedAccess: AgentAccessOAuthRequestedAccess
     policy: AgentAccessPolicy
     target: AgentConnectionTarget
   }>) => Promise<Readonly<{ keyId: string; secret?: string; replacement?: AgentCredentialReplacement }>>
@@ -437,15 +442,23 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   const expectedTargetRevision = positiveFormInteger(form.get('expected_target_revision'))
   const targetKind = form.get('connection_target')
   const principalRef = form.get('principal_ref')
+  const replacementMode = form.get('replacement_mode')
+  const approvedOperationSelection = parseApprovedOperationSelection(form)
   const state = form.get('state')
   if (expectedGrantRevision === undefined
     || expectedTargetRevision === undefined
+    || approvedOperationSelection === undefined
     || (targetKind !== 'new_agent' && targetKind !== 'replace_credential')
     || (targetKind === 'replace_credential' && (principalRef === null || principalRef.trim().length === 0))
+    || (targetKind === 'replace_credential' && replacementMode !== 'planned' && replacementMode !== 'compromise')
     || (state !== null && state.length > 2_048)) return oauthError('invalid_request', 400)
   const reservationTarget = targetKind === 'new_agent'
     ? { kind: 'new_agent' as const }
-    : { kind: 'replace_credential' as const, principalRef: principalRef! }
+    : {
+        kind: 'replace_credential' as const,
+        principalRef: principalRef!,
+        replacementMode: replacementMode as 'planned' | 'compromise',
+      }
   return await reserveAndFinalizeConsent({
     request,
     sourceBody,
@@ -456,6 +469,8 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
     expectedGrantRevision,
     expectedTargetRevision,
     authorityMode,
+    approvedOperationAccess: approvedOperationSelection.operationAccess,
+    approvedOperationRefs: approvedOperationSelection.operationRefs,
     reservationTarget,
     connectionTarget: parseConnectionTarget(form),
     state,
@@ -489,6 +504,8 @@ async function reserveAndFinalizeConsent(input: Readonly<{
   expectedGrantRevision: number
   expectedTargetRevision: number
   authorityMode: AgentAccessAuthorityMode
+  approvedOperationAccess: AgentAccessOperationAccess
+  approvedOperationRefs: readonly string[]
   reservationTarget: Parameters<typeof reserveAgentAccessConsentForOwner>[0]['connectionTarget']
   connectionTarget: AgentConnectionTarget | undefined
   state: string | null
@@ -503,12 +520,16 @@ async function reserveAndFinalizeConsent(input: Readonly<{
     expectedGrantRevision: input.expectedGrantRevision,
     expectedTargetRevision: input.expectedTargetRevision,
     authorityMode: input.authorityMode,
+    approvedOperationAccess: input.approvedOperationAccess,
+    approvedOperationRefs: input.approvedOperationRefs,
     connectionTarget: input.reservationTarget,
     proof: input.proof,
   })
   if (reservation.kind !== 'reserved' && reservation.kind !== 'replayed') {
     return reservationJson(reservation)
   }
+  let reservedGrant = await input.store.getGrantByRef(input.grantRef)
+  if (reservedGrant === null) return oauthError('server_error', 503)
   if (reservation.kind === 'replayed') {
     const replay = await readGrantForConsent(input.store, {
       grantRef: input.grantRef,
@@ -516,12 +537,9 @@ async function reserveAndFinalizeConsent(input: Readonly<{
       now: currentNow(input.options),
     })
     if (replay.kind === 'outcome_unknown') {
-      return consentJson({
-        kind: 'outcome_unknown',
-        grantRef: input.grantRef,
-        readbackRef: `agent-access/oauth/${input.grantRef}`,
-        correlationRef: reservation.correlationRef,
-      }, 202)
+      const dispatchNotStarted = replay.grant.issuanceStartedAt === replay.grant.consequenceReservation?.reservedAt
+      if (!dispatchNotStarted) return consentOutcomeUnknown(input.grantRef, reservation.correlationRef)
+      reservedGrant = replay.grant
     }
     if (replay.kind === 'completed') {
       return consentJson({
@@ -530,6 +548,11 @@ async function reserveAndFinalizeConsent(input: Readonly<{
         readbackRef: `agent-access/oauth/${input.grantRef}`,
       }, 200)
     }
+  }
+  if (reservedGrant.connectionTarget?.kind === 'replace_credential'
+    && reservedGrant.connectionTarget.replacementMode === 'compromise'
+    && !await confirmCompromisedPredecessorRevocation(reservedGrant, reservation.correlationRef, input.options)) {
+    return consentOutcomeUnknown(input.grantRef, reservation.correlationRef)
   }
   const approved = await approveGrant(input.store, {
     grantRef: input.grantRef,
@@ -555,6 +578,49 @@ async function reserveAndFinalizeConsent(input: Readonly<{
     return consentJson({ kind: 'approved', grantRef: input.grantRef, redirectTo: location.toString() }, 200)
   }
   return consentJson({ kind: 'approved', grantRef: input.grantRef, readbackRef: `agent-access/oauth/${input.grantRef}` }, 200)
+}
+
+function consentOutcomeUnknown(grantRef: string, correlationRef: string): Response {
+  return consentJson({
+    kind: 'outcome_unknown',
+    grantRef,
+    readbackRef: `agent-access/oauth/${grantRef}`,
+    correlationRef,
+  }, 202)
+}
+
+async function confirmCompromisedPredecessorRevocation(
+  grant: AgentAccessOAuthGrant,
+  correlationRef: string,
+  options: OAuthApiOptions,
+): Promise<boolean> {
+  const predecessor = grant.consequenceReservation?.predecessor
+  if (grant.connectionTarget?.kind !== 'replace_credential' || predecessor === undefined) return false
+  try {
+    const reason = 'Revoked before successor issuance because compromise was reported.'
+    await revokeProviderCredentialIfCurrent(predecessor.credentialId, reason, options)
+    let provider: Readonly<{ revoked: boolean }>
+    if (options.getProviderCredential !== undefined) {
+      provider = await options.getProviderCredential(predecessor.credentialId)
+    } else if (isLocalE2EAuthBypassEnabled()) {
+      const local = createLocalE2EAgentAccessKeyApi()
+      if (local.get === undefined) return false
+      provider = await local.get(predecessor.credentialId)
+    } else {
+      provider = await clerkClient().apiKeys.get(predecessor.credentialId)
+    }
+    if (!provider.revoked) return false
+    const recorded = await (options.recordProviderRevocation ?? recordAgentProviderRevocation)({
+      principalRef: grant.connectionTarget.principalRef,
+      credentialRef: predecessor.credentialRef,
+      providerCredentialId: predecessor.credentialId,
+      correlationRef,
+      outcome: 'revoked',
+    })
+    return recorded.kind === 'completed' || recorded.kind === 'replayed'
+  } catch {
+    return false
+  }
 }
 
 export function oauthAuthorizationServerMetadata(canonicalBaseUrl: string): Readonly<Record<string, unknown>> {
@@ -706,7 +772,7 @@ async function deliverClaimedGrant(
       access_token: secret.secret,
       token_type: 'Bearer',
       scope: claimed.value.grant.requestedScopes.join(' '),
-      expires_in: claimed.value.grant.requestedAccess.expiresInSeconds,
+      expires_in: claimed.value.grant.approvedAccess.expiresInSeconds,
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch {
     try {
@@ -773,7 +839,7 @@ async function issueReplacementGrantKey(input: Readonly<{
     subject: input.ownerId,
     createdBy: input.ownerId,
     scopes: [...input.grant.requestedScopes],
-    secondsUntilExpiration: input.grant.requestedAccess.expiresInSeconds,
+    secondsUntilExpiration: input.grant.approvedAccess.expiresInSeconds,
     claims: {
       aePurpose: AGENT_ACCESS_PURPOSE,
       aeGrantRef: successorGrantRef,
@@ -781,7 +847,7 @@ async function issueReplacementGrantKey(input: Readonly<{
       aeAuthorityMode: input.authorityMode,
       aeIssuanceKey: input.idempotencyKey,
       aeApplicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
-      aeEnvironment: input.grant.requestedAccess.environment,
+      aeEnvironment: input.grant.approvedAccess.environment,
       aeScopes: JSON.stringify(input.grant.requestedScopes),
       aePrincipalRef: input.target.principalRef,
       aeConnectionTarget: 'replace_credential',
@@ -796,18 +862,19 @@ async function issueReplacementGrantKey(input: Readonly<{
   const createdAt = Date.now()
   const prepared = await (input.options.prepareReplacement ?? prepareAgentCredentialReplacement)({
     principalRef: input.target.principalRef,
+    replacementMode: input.target.replacementMode,
     issuanceKey: input.idempotencyKey,
     grantRef: successorGrantRef,
     credentialId: key.id,
     applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
-    environment: input.grant.requestedAccess.environment,
+    environment: input.grant.approvedAccess.environment,
     scopes: input.grant.requestedScopes,
     authorityMode: input.authorityMode,
     operationAccess: input.policy.operationAccess,
     operationRefs: input.policy.operationRefs,
     policy: input.policy,
     createdAt: existing?.createdAt ?? createdAt,
-    expiresAt: existing?.expiresAt ?? existing?.expiration ?? createdAt + input.grant.requestedAccess.expiresInSeconds * 1_000,
+    expiresAt: existing?.expiresAt ?? existing?.expiration ?? createdAt + input.grant.approvedAccess.expiresInSeconds * 1_000,
   })
   if (prepared.kind !== 'recorded' && prepared.kind !== 'replayed') {
     if (createdHere) {
@@ -841,12 +908,12 @@ async function issueGrantKey(
   const issue: AgentAccessOAuthIssueKey = async ({ ownerId: inputOwnerId, grant: inputGrant, target: inputTarget }) => {
     const idempotencyKey = inputGrant.issuanceKey ?? `oauth-${inputGrant.grantRef.replaceAll(':', '-')}`
     const authorityMode = modeForGrant(inputGrant)
-    if (authorityMode === undefined || (inputGrant.requestedAccess.environment === 'production' && authorityMode === 'full_yolo')) {
+    if (authorityMode === undefined || (inputGrant.approvedAccess.environment === 'production' && authorityMode === 'full_yolo')) {
       throw new AgentAccessOAuthIssueRefusal('invalid_scope')
     }
     let policy: AgentAccessPolicy
     try {
-      policy = deriveOAuthGrantPolicy(inputGrant.requestedAccess)
+      policy = deriveOAuthGrantPolicy(inputGrant.approvedAccess)
     } catch {
       throw new AgentAccessOAuthIssueRefusal('invalid_grant')
     }
@@ -858,7 +925,7 @@ async function issueGrantKey(
         scopes: inputGrant.requestedScopes,
         grantRef: inputGrant.grantRef,
         authorityMode,
-        requestedAccess: inputGrant.requestedAccess,
+        approvedAccess: inputGrant.approvedAccess,
         policy,
         target: inputTarget,
       })
@@ -883,16 +950,16 @@ async function issueGrantKey(
         idempotencyKey,
         scopes: inputGrant.requestedScopes,
         grantRef: issuedAgentGrantRef(inputOwnerId, idempotencyKey),
-        environment: inputGrant.requestedAccess.environment,
-        operationAccess: inputGrant.requestedAccess.operationAccess,
-        operationRefs: inputGrant.requestedAccess.operationRefs,
-        expiresInSeconds: inputGrant.requestedAccess.expiresInSeconds,
-        ...(inputGrant.requestedAccess.maximumSpendPerInvocation === undefined ? {} : { maximumSpendPerInvocation: inputGrant.requestedAccess.maximumSpendPerInvocation }),
-        ...(inputGrant.requestedAccess.maximumDailySpend === undefined ? {} : { maximumDailySpend: inputGrant.requestedAccess.maximumDailySpend }),
-        ...(inputGrant.requestedAccess.maximumMonthlySpend === undefined ? {} : { maximumMonthlySpend: inputGrant.requestedAccess.maximumMonthlySpend }),
-        ...(inputGrant.requestedAccess.maximumConcurrentInvocations === undefined ? {} : { maximumConcurrentInvocations: inputGrant.requestedAccess.maximumConcurrentInvocations }),
-        ...(inputGrant.requestedAccess.maximumCallsPerMinute === undefined ? {} : { maximumCallsPerMinute: inputGrant.requestedAccess.maximumCallsPerMinute }),
-        ...(inputGrant.requestedAccess.maximumCallsPerHour === undefined ? {} : { maximumCallsPerHour: inputGrant.requestedAccess.maximumCallsPerHour }),
+        environment: inputGrant.approvedAccess.environment,
+        operationAccess: inputGrant.approvedAccess.operationAccess,
+        operationRefs: inputGrant.approvedAccess.operationRefs,
+        expiresInSeconds: inputGrant.approvedAccess.expiresInSeconds,
+        ...(inputGrant.approvedAccess.maximumSpendPerInvocation === undefined ? {} : { maximumSpendPerInvocation: inputGrant.approvedAccess.maximumSpendPerInvocation }),
+        ...(inputGrant.approvedAccess.maximumDailySpend === undefined ? {} : { maximumDailySpend: inputGrant.approvedAccess.maximumDailySpend }),
+        ...(inputGrant.approvedAccess.maximumMonthlySpend === undefined ? {} : { maximumMonthlySpend: inputGrant.approvedAccess.maximumMonthlySpend }),
+        ...(inputGrant.approvedAccess.maximumConcurrentInvocations === undefined ? {} : { maximumConcurrentInvocations: inputGrant.approvedAccess.maximumConcurrentInvocations }),
+        ...(inputGrant.approvedAccess.maximumCallsPerMinute === undefined ? {} : { maximumCallsPerMinute: inputGrant.approvedAccess.maximumCallsPerMinute }),
+        ...(inputGrant.approvedAccess.maximumCallsPerHour === undefined ? {} : { maximumCallsPerHour: inputGrant.approvedAccess.maximumCallsPerHour }),
       },
       policy,
       returnSecret: false,
@@ -914,7 +981,25 @@ async function issueGrantKey(
 function parseConnectionTarget(form: URLSearchParams): AgentConnectionTarget | undefined {
   const kind = form.get('connection_target')
   if (kind !== 'replace_credential') return undefined
-  return { kind: 'replace_credential', principalRef: form.get('principal_ref') ?? '' }
+  const replacementMode = form.get('replacement_mode')
+  if (replacementMode !== 'planned' && replacementMode !== 'compromise') return undefined
+  return {
+    kind: 'replace_credential',
+    principalRef: form.get('principal_ref') ?? '',
+    replacementMode,
+  }
+}
+
+function parseApprovedOperationSelection(form: URLSearchParams): Readonly<{
+  operationAccess: AgentAccessOperationAccess
+  operationRefs: readonly string[]
+}> | undefined {
+  const operationAccess = form.get('approved_operation_access')
+  if (operationAccess !== 'all_admitted' && operationAccess !== 'selected_operations') return undefined
+  return normalizeAgentAccessOperationSelection({
+    operationAccess,
+    operationRefs: form.getAll('approved_operation_ref'),
+  })
 }
 
 async function consentAgentTargets(options: OAuthApiOptions, cursor: string | null): Promise<ConsentAgentTargets> {

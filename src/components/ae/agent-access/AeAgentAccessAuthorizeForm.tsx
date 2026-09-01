@@ -8,10 +8,15 @@ import { AeSection, AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
+import {
+  searchMarketOperations,
+  type OperationChoiceSearchResult,
+} from '@/components/ae/command-panel/market-operations-client'
 import {
   readAgentConsentDetails,
   type AgentConsentDetails,
@@ -37,6 +42,7 @@ type ConsentFormState = Readonly<{
   pending: boolean
   selectedMode: PublicAuthorityMode
   connectionTarget: 'new_agent' | 'replace_credential'
+  replacementMode: 'planned' | 'compromise'
   agentTargets: readonly AgentConsentTarget[]
   agentTargetsNextCursor?: string
   agentTargetsLoading: boolean
@@ -48,6 +54,7 @@ type ConsentFormState = Readonly<{
 type ConsentFormAction =
   | Readonly<{ kind: 'select_mode'; value: PublicAuthorityMode }>
   | Readonly<{ kind: 'select_connection'; value: 'new_agent' | 'replace_credential' }>
+  | Readonly<{ kind: 'select_replacement_mode'; value: 'planned' | 'compromise' }>
   | Readonly<{ kind: 'select_replacement'; value: string }>
   | Readonly<{ kind: 'page_started' }>
   | Readonly<{ kind: 'page_loaded'; targets: readonly AgentConsentTarget[]; nextCursor?: string }>
@@ -69,6 +76,7 @@ function initialConsentFormState(details: AgentConsentDetails): ConsentFormState
         ? 'bounded_mandate'
         : 'approve_each',
     connectionTarget: 'new_agent',
+    replacementMode: 'planned',
     agentTargets: details.agentTargets,
     ...(details.agentTargetsNextCursor === undefined ? {} : { agentTargetsNextCursor: details.agentTargetsNextCursor }),
     agentTargetsLoading: false,
@@ -81,6 +89,7 @@ function initialConsentFormState(details: AgentConsentDetails): ConsentFormState
 function consentFormReducer(state: ConsentFormState, action: ConsentFormAction): ConsentFormState {
   if (action.kind === 'select_mode') return { ...state, selectedMode: action.value }
   if (action.kind === 'select_connection') return { ...state, connectionTarget: action.value }
+  if (action.kind === 'select_replacement_mode') return { ...state, replacementMode: action.value }
   if (action.kind === 'select_replacement') return { ...state, replacementPrincipalRef: action.value }
   if (action.kind === 'page_started') return { ...state, agentTargetsLoading: true }
   if (action.kind === 'page_failed') return {
@@ -175,18 +184,47 @@ function LocalAgentAccessAuthorizeForm(props: AgentAccessAuthorizeFormProps) {
 function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval }: AgentAccessAuthorizeFormProps & Readonly<{
   submitApproval: SubmitApproval
 }>) {
+  const { grantRef, grantRevision, clientName, mode, environment, operationAccess, operationRefs, expiresInSeconds, accessSummary } = details
   const [state, dispatch] = useReducer(consentFormReducer, details, initialConsentFormState)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [approvedOperationAccess, setApprovedOperationAccess] = useState(operationAccess)
+  const [approvedOperationRefs, setApprovedOperationRefs] = useState<readonly string[]>(operationRefs)
+  const [operationQuery, setOperationQuery] = useState('')
+  const [operationSearch, setOperationSearch] = useState<Readonly<{
+    pending: boolean
+    result?: OperationChoiceSearchResult
+    error?: string
+  }>>({ pending: false })
   const approveButtonRef = useRef<HTMLButtonElement>(null)
-  const { grantRef, grantRevision, clientName, mode, environment, operationAccess, operationRefs, expiresInSeconds, accessSummary } = details
-  const operationSelection = operationAccess === 'all_admitted'
+  const operationSelection = approvedOperationAccess === 'all_admitted'
     ? 'All admitted Operations, including future admitted Operations'
-    : operationRefs.join(', ')
+    : approvedOperationRefs.join(', ')
+  const approvedOperationRefSet = new Set(approvedOperationRefs)
   const accessProfile = details.accessProfile ?? 'market'
   const {
     status, pending, selectedMode, connectionTarget, agentTargets, agentTargetsNextCursor,
-    agentTargetsLoading, agentTargetsError, replacementPrincipalRef,
+    agentTargetsLoading, agentTargetsError, replacementPrincipalRef, replacementMode,
   } = state
+
+  async function findOperations() {
+    const query = operationQuery.trim()
+    if (query.length === 0 || operationSearch.pending) return
+    setOperationSearch({ pending: true })
+    try {
+      setOperationSearch({ pending: false, result: await searchMarketOperations({ query, limit: 8 }) })
+    } catch {
+      setOperationSearch({ pending: false, error: 'Operation search is temporarily unavailable. Try again.' })
+    }
+  }
+
+  function addApprovedOperation(operationRef: string) {
+    setApprovedOperationAccess('selected_operations')
+    setApprovedOperationRefs((current) => [...new Set([...current, operationRef])].sort())
+  }
+
+  function removeApprovedOperation(operationRef: string) {
+    setApprovedOperationRefs((current) => current.filter((value) => value !== operationRef))
+  }
 
   async function loadAgentTargets() {
     if (agentTargetsLoading) return
@@ -216,18 +254,23 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
       ? grantRevision
       : replacement?.principalRevision
     if (expectedTargetRevision === undefined) return undefined
-    return new URLSearchParams({
+    if (approvedOperationAccess === 'selected_operations' && approvedOperationRefs.length === 0) return undefined
+    const params = new URLSearchParams({
       grant_ref: grantRef,
       expected_grant_revision: String(grantRevision),
       expected_target_revision: String(expectedTargetRevision),
       decision: 'approve',
       authority_mode: selectedMode,
+      approved_operation_access: approvedOperationAccess,
       connection_target: connectionTarget,
       ...(replacementPrincipalRef === undefined || connectionTarget !== 'replace_credential'
         ? {}
         : { principal_ref: replacementPrincipalRef }),
+      ...(connectionTarget === 'replace_credential' ? { replacement_mode: replacementMode } : {}),
       ...(oauthState === undefined ? {} : { state: oauthState }),
-    }).toString()
+    })
+    for (const operationRef of approvedOperationRefs) params.append('approved_operation_ref', operationRef)
+    return params.toString()
   }
 
   async function approve() {
@@ -316,7 +359,24 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                         {agentTargets.map((agent) => <SelectItem key={agent.principalRef} value={agent.principalRef}>{agent.displayName}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <p className="text-sm text-muted-foreground">The agent identity, activity, and credit history stay attached. Its current credential remains usable until the new one is delivered.</p>
+                    <fieldset className="grid gap-2">
+                      <legend className="text-sm font-medium text-foreground">Replacement reason</legend>
+                      <RadioGroup
+                        value={replacementMode}
+                        onValueChange={(value) => dispatch({ kind: 'select_replacement_mode', value: value as 'planned' | 'compromise' })}
+                        className="grid gap-2 sm:grid-cols-2"
+                      >
+                        <Label htmlFor="replacement-planned" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                          <RadioGroupItem id="replacement-planned" value="planned" className="mt-1" />
+                          <span><span className="block font-medium">Planned rotation</span><span className="text-sm font-normal text-muted-foreground">Keep the current credential usable until the successor is delivered.</span></span>
+                        </Label>
+                        <Label htmlFor="replacement-compromise" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                          <RadioGroupItem id="replacement-compromise" value="compromise" className="mt-1" />
+                          <span><span className="block font-medium">Suspected compromise</span><span className="text-sm font-normal text-muted-foreground">Revoke the current credential before issuing its successor.</span></span>
+                        </Label>
+                      </RadioGroup>
+                    </fieldset>
+                    <p className="text-sm text-muted-foreground">The agent identity, activity, and credit history stay attached. {replacementMode === 'planned' ? 'Its current credential remains usable until the new one is delivered.' : 'Its current authority is revoked first and is never reactivated.'}</p>
                   </div>
                 ) : null}
                 {agentTargetsError !== undefined || agentTargetsNextCursor !== undefined ? (
@@ -353,6 +413,69 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                   })}
                 </RadioGroup>
               </fieldset>}
+              {accessProfile === 'market' ? (
+                <fieldset className="grid gap-3" disabled={pending}>
+                  <legend className="text-sm font-medium text-foreground">Operations</legend>
+                  {operationAccess === 'all_admitted' ? (
+                    <RadioGroup
+                      value={approvedOperationAccess}
+                      onValueChange={(value) => setApprovedOperationAccess(value as 'all_admitted' | 'selected_operations')}
+                      className="grid gap-2 sm:grid-cols-2"
+                    >
+                      <Label htmlFor="operations-all" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                        <RadioGroupItem id="operations-all" value="all_admitted" className="mt-1" />
+                        <span><span className="block font-medium">All admitted Operations</span><span className="text-sm font-normal text-muted-foreground">Includes Operations admitted later.</span></span>
+                      </Label>
+                      <Label htmlFor="operations-selected" className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-foreground">
+                        <RadioGroupItem id="operations-selected" value="selected_operations" className="mt-1" />
+                        <span><span className="block font-medium">Selected Operations</span><span className="text-sm font-normal text-muted-foreground">Limit this Agent to exact current Operation references.</span></span>
+                      </Label>
+                    </RadioGroup>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">The caller requested selected Operations. You may approve a non-empty subset, but cannot broaden it.</p>
+                  )}
+                  {approvedOperationAccess === 'selected_operations' ? (
+                    <div className="grid gap-3">
+                      {approvedOperationRefs.length === 0 ? (
+                        <Alert variant="destructive"><AlertTitle>Select at least one Operation</AlertTitle><AlertDescription>Selected access cannot be empty.</AlertDescription></Alert>
+                      ) : (
+                        <ul className="grid gap-2" aria-label="Approved Operations">
+                          {approvedOperationRefs.map((operationRef) => (
+                            <li key={operationRef} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2">
+                              <span className="truncate font-mono text-sm">{operationRef}</span>
+                              <Button type="button" variant="secondary" onClick={() => removeApprovedOperation(operationRef)}>Remove</Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {operationAccess === 'all_admitted' ? (
+                        <div className="grid gap-2">
+                          <Label htmlFor="operation-search">Find an admitted Operation</Label>
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <Input id="operation-search" value={operationQuery} onChange={(event) => setOperationQuery(event.target.value)} />
+                            <Button type="button" variant="secondary" disabled={operationSearch.pending || operationQuery.trim().length === 0} onClick={() => void findOperations()}>
+                              {operationSearch.pending ? 'Searching…' : 'Search Operations'}
+                            </Button>
+                          </div>
+                          {operationSearch.error === undefined ? null : <p role="alert" className="text-sm text-destructive">{operationSearch.error}</p>}
+                          {operationSearch.result?.kind === 'ok' ? (
+                            <ul className="grid gap-2" aria-label="Operation search results">
+                              {operationSearch.result.items.map((item) => (
+                                <li key={item.operationRef} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2">
+                                  <span className="min-w-0"><span className="block truncate font-medium">{item.title}</span><span className="block truncate font-mono text-xs text-muted-foreground">{item.operationRef}</span></span>
+                                  <Button type="button" variant="secondary" disabled={approvedOperationRefSet.has(item.operationRef)} onClick={() => addApprovedOperation(item.operationRef)}>
+                                    {approvedOperationRefSet.has(item.operationRef) ? 'Added' : 'Add'}
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </fieldset>
+              ) : null}
               <AeFactList facts={[
                 { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
                 { label: 'Request revision', value: String(grantRevision) },
@@ -363,7 +486,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
               <p id="consent-expiry" className="sr-only">Access expires {formatConsentDuration(expiresInSeconds)} after issue. You can revoke it at any time from Agents.</p>
             </AeSection>
             <div className="flex flex-wrap gap-3">
-              <Button ref={approveButtonRef} aria-describedby="consent-expiry" onClick={() => setConfirmOpen(true)} disabled={pending || (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined)}>{pending ? 'Approving…' : 'Approve access'}</Button>
+              <Button ref={approveButtonRef} aria-describedby="consent-expiry" onClick={() => setConfirmOpen(true)} disabled={pending || (approvedOperationAccess === 'selected_operations' && approvedOperationRefs.length === 0) || (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined)}>{pending ? 'Approving…' : 'Approve access'}</Button>
               <Button aria-describedby="consent-expiry" variant="secondary" onClick={() => void deny()} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
             </div>
             <AeConfirmDialog
@@ -371,7 +494,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
               onOpenChange={setConfirmOpen}
               title="Confirm agent access"
               description={connectionTarget === 'replace_credential'
-                ? `Replace the credential for ${agentTargets.find((target) => target.principalRef === replacementPrincipalRef)?.displayName ?? 'the selected agent'} and grant ${clientName} ${authorityLabel(selectedMode).toLowerCase()} authority for ${operationSelection}. The current credential remains usable until replacement delivery succeeds.`
+                ? `${replacementMode === 'planned' ? 'Replace' : 'Revoke and replace'} the credential for ${agentTargets.find((target) => target.principalRef === replacementPrincipalRef)?.displayName ?? 'the selected agent'} and grant ${clientName} ${authorityLabel(selectedMode).toLowerCase()} authority for ${operationSelection}. ${replacementMode === 'planned' ? 'The current credential remains usable until replacement delivery succeeds.' : 'The current credential is revoked before successor issuance and cannot be reactivated.'}`
                 : `Create a new agent identity for ${clientName} with ${authorityLabel(selectedMode).toLowerCase()} authority for ${operationSelection} and the exact limits shown on this page. You can revoke it from Agents.`}
               confirmLabel="Confirm and approve"
               pending={pending}

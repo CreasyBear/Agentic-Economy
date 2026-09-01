@@ -16,12 +16,14 @@ import {
   normalizeRequestedScopes,
   requestedScopesForMode,
 } from '../src/modules/agent-access/oauth-state'
+import { normalizeAgentAccessOperationSelection } from '../src/modules/agent-access/policy'
 import { agentAccessConsentReservationValue } from '../src/modules/agent-access/public'
 import { createPackage3AuditEvent } from '../src/modules/observability/public'
 import { internal } from './_generated/api'
 import { internalMutation, mutation, query, type MutationCtx } from './_generated/server'
 import { resolveInteractiveAuthorityContext } from './interactiveAuthority'
 import { persistAuditEvent } from './securityShared'
+import { revokeReplacementMaterial } from './agentAccessPrincipals'
 import { admitAuthorityCredentialChangeRate } from './lib/rateLimit'
 import {
   consumeConsequenceProof,
@@ -63,11 +65,19 @@ const requestedAccess = v.object({
 })
 const connectionTarget = v.union(
   v.object({ kind: v.literal('new_agent'), displayName: v.string() }),
-  v.object({ kind: v.literal('replace_credential'), principalRef: v.string() }),
+  v.object({
+    kind: v.literal('replace_credential'),
+    principalRef: v.string(),
+    replacementMode: v.union(v.literal('planned'), v.literal('compromise')),
+  }),
 )
 const consentConnectionTarget = v.union(
   v.object({ kind: v.literal('new_agent') }),
-  v.object({ kind: v.literal('replace_credential'), principalRef: v.string() }),
+  v.object({
+    kind: v.literal('replace_credential'),
+    principalRef: v.string(),
+    replacementMode: v.union(v.literal('planned'), v.literal('compromise')),
+  }),
 )
 const replacement = v.object({
   principalRef: v.string(), generation: v.number(), successorCredentialRef: v.string(),
@@ -86,7 +96,7 @@ const clerkProofEvidence = v.object({
 })
 const grant = v.object({
   grantRef: v.string(), revision: v.number(), flow, clientId: v.string(), redirectUri: v.optional(v.string()),
-  requestedScopes: v.array(v.string()), requestedAccess, codeChallenge: v.optional(v.string()), codeChallengeMethod: v.optional(v.literal('S256')),
+  requestedScopes: v.array(v.string()), requestedAccess, approvedAccess: requestedAccess, codeChallenge: v.optional(v.string()), codeChallengeMethod: v.optional(v.literal('S256')),
   deviceCodeHash: v.optional(v.string()), userCodeHash: v.optional(v.string()), authorizationCodeHash: v.optional(v.string()),
   status, ownerId: v.optional(v.string()), keyId: v.optional(v.string()), createdAt: v.number(), expiresAt: v.number(),
   approvedAt: v.optional(v.number()), issuanceKey: v.optional(v.string()), issuanceStartedAt: v.optional(v.number()), consumedAt: v.optional(v.number()), nextPollAt: v.optional(v.number()),
@@ -95,7 +105,7 @@ const grant = v.object({
   consequenceReservation: v.optional(agentAccessConsentReservationValue),
 })
 const grantPatch = v.object({
-  status: v.optional(status), redirectUri: v.optional(v.string()), requestedScopes: v.optional(v.array(v.string())),
+  status: v.optional(status), redirectUri: v.optional(v.string()), requestedScopes: v.optional(v.array(v.string())), approvedAccess: v.optional(requestedAccess),
   codeChallenge: v.optional(v.string()), codeChallengeMethod: v.optional(v.literal('S256')),
   deviceCodeHash: v.optional(v.string()), userCodeHash: v.optional(v.string()), authorizationCodeHash: v.optional(v.string()),
   ownerId: v.optional(v.string()), keyId: v.optional(v.string()), createdAt: v.optional(v.number()), expiresAt: v.optional(v.number()),
@@ -301,6 +311,8 @@ export const reserveAgentAccessConsent = mutation({
     expectedGrantRevision: v.number(),
     expectedTargetRevision: v.number(),
     authorityMode,
+    approvedOperationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
+    approvedOperationRefs: v.array(v.string()),
     connectionTarget: consentConnectionTarget,
     proof: v.optional(clerkProofEvidence),
     operationKey: v.string(),
@@ -443,11 +455,24 @@ export const reserveAgentAccessConsent = mutation({
       || current.revision !== args.expectedGrantRevision) {
       throw new Error('agent_access_oauth_reservation_cas_lost')
     }
+    if (consent.resolvedConnectionTarget.kind === 'replace_credential'
+      && consent.resolvedConnectionTarget.replacementMode === 'compromise') {
+      if (consent.predecessor === undefined) throw new Error('agent_access_compromise_predecessor_missing')
+      const revoked = await revokeCompromisedPredecessor(
+        ctx,
+        consent.predecessor,
+        owner,
+        now,
+        admission.correlationRef,
+      )
+      if (!revoked) throw new Error('agent_access_compromise_predecessor_stale')
+    }
     await ctx.db.patch(current._id, {
       status: 'issuing',
       revision: current.revision + 1,
       ownerId: identity.subject,
       requestedScopes: [...consent.selectedScopes],
+      approvedAccess: consent.issuanceMaterial.approvedAccess,
       connectionTarget: consent.resolvedConnectionTarget,
       issuanceKey: `oauth-${current.grantRef.replaceAll(':', '-')}`,
       issuanceStartedAt: now,
@@ -516,9 +541,15 @@ type ConsentReservationArgs = Readonly<{
   expectedGrantRevision: number
   expectedTargetRevision: number
   authorityMode: AgentAccessAuthorityMode
+  approvedOperationAccess: 'all_admitted' | 'selected_operations'
+  approvedOperationRefs: readonly string[]
   connectionTarget:
     | Readonly<{ kind: 'new_agent' }>
-    | Readonly<{ kind: 'replace_credential'; principalRef: string }>
+    | Readonly<{
+        kind: 'replace_credential'
+        principalRef: string
+        replacementMode: 'planned' | 'compromise'
+      }>
 }>
 
 type ConsentCommand = Readonly<{
@@ -529,13 +560,18 @@ type ConsentCommand = Readonly<{
   connectionTarget: ConsentReservationArgs['connectionTarget']
   resolvedConnectionTarget:
     | Readonly<{ kind: 'new_agent'; displayName: string }>
-    | Readonly<{ kind: 'replace_credential'; principalRef: string }>
+    | Readonly<{
+        kind: 'replace_credential'
+        principalRef: string
+        replacementMode: 'planned' | 'compromise'
+      }>
   selectedScopes: readonly string[]
   issuanceMaterial: Readonly<{
     clientId: string
     flow: Doc<'agentAccessOAuthGrants'>['flow']
     displayName: string
     requestedAccess: Doc<'agentAccessOAuthGrants'>['requestedAccess']
+    approvedAccess: Doc<'agentAccessOAuthGrants'>['approvedAccess']
   }>
   predecessor?: AgentAccessPredecessorSnapshot
   target: Readonly<{ targetType: string; targetRef: string; targetRevision: number }>
@@ -572,11 +608,31 @@ async function deriveConsentCommand(
   const selectedScopes = requested.profile === 'supplier'
     ? requested.scopes
     : requestedScopesForMode(args.authorityMode)
+  const approvedSelection = normalizeAgentAccessOperationSelection({
+    operationAccess: args.approvedOperationAccess,
+    operationRefs: args.approvedOperationRefs,
+  })
+  if (approvedSelection === undefined
+    || (requested.profile === 'supplier' && approvedSelection.operationAccess !== 'all_admitted')) return null
+  let approvedAccess: Doc<'agentAccessOAuthGrants'>['approvedAccess']
+  if (oauthGrant.status === 'pending') {
+    if (!operationSelectionNarrows(oauthGrant.requestedAccess, approvedSelection)) return null
+    if (!await allSelectedOperationsAreCurrent(ctx, approvedSelection.operationRefs)) return null
+    approvedAccess = {
+      ...oauthGrant.requestedAccess,
+      operationAccess: approvedSelection.operationAccess,
+      operationRefs: approvedSelection.operationRefs,
+    }
+  } else {
+    if (!sameOperationSelection(oauthGrant.approvedAccess, approvedSelection)) return null
+    approvedAccess = oauthGrant.approvedAccess
+  }
   const issuanceMaterial = {
     clientId: oauthGrant.clientId,
     flow: oauthGrant.flow,
     displayName: oauthGrant.displayName,
     requestedAccess: oauthGrant.requestedAccess,
+    approvedAccess,
   } as const
 
   if (args.connectionTarget.kind === 'new_agent') {
@@ -612,23 +668,43 @@ async function deriveConsentCommand(
   } catch {
     return null
   }
-  if (isCompletedConsentGrant(oauthGrant.status)) {
+  if (oauthGrant.status !== 'pending') {
     const reservation = oauthGrant.consequenceReservation
     if (reservation?.action !== 'agent_access.replace_credential'
       || reservation.predecessor === undefined
       || reservation.targetRevision !== args.expectedTargetRevision
       || oauthGrant.connectionTarget?.kind !== 'replace_credential'
-      || oauthGrant.connectionTarget.principalRef !== canonicalPrincipalRef) return null
+      || oauthGrant.connectionTarget.principalRef !== canonicalPrincipalRef
+      || oauthGrant.connectionTarget.replacementMode !== args.connectionTarget.replacementMode) return null
+    let predecessor = reservation.predecessor
+    if (oauthGrant.status === 'issuing' && args.connectionTarget.replacementMode === 'planned') {
+      const currentPredecessor = await resolveReplacementPredecessor(
+        ctx,
+        canonicalPrincipalRef,
+        activeAccountRef,
+      )
+      if (currentPredecessor === null
+        || !samePredecessorSnapshot(reservation.predecessor, currentPredecessor)) return null
+      predecessor = currentPredecessor
+    }
     return {
       action: 'agent_access.replace_credential',
       grantRef: oauthGrant.grantRef,
       expectedGrantRevision: args.expectedGrantRevision,
       authorityMode: args.authorityMode,
-      connectionTarget: { kind: 'replace_credential', principalRef: canonicalPrincipalRef },
-      resolvedConnectionTarget: { kind: 'replace_credential', principalRef: canonicalPrincipalRef },
+      connectionTarget: {
+        kind: 'replace_credential',
+        principalRef: canonicalPrincipalRef,
+        replacementMode: args.connectionTarget.replacementMode,
+      },
+      resolvedConnectionTarget: {
+        kind: 'replace_credential',
+        principalRef: canonicalPrincipalRef,
+        replacementMode: args.connectionTarget.replacementMode,
+      },
       selectedScopes,
       issuanceMaterial,
-      predecessor: reservation.predecessor,
+      predecessor,
       target: {
         targetType: 'agent',
         targetRef: canonicalPrincipalRef,
@@ -660,8 +736,16 @@ async function deriveConsentCommand(
     grantRef: oauthGrant.grantRef,
     expectedGrantRevision: args.expectedGrantRevision,
     authorityMode: args.authorityMode,
-    connectionTarget: { kind: 'replace_credential', principalRef: canonicalPrincipalRef },
-    resolvedConnectionTarget: { kind: 'replace_credential', principalRef: canonicalPrincipalRef },
+    connectionTarget: {
+      kind: 'replace_credential',
+      principalRef: canonicalPrincipalRef,
+      replacementMode: args.connectionTarget.replacementMode,
+    },
+    resolvedConnectionTarget: {
+      kind: 'replace_credential',
+      principalRef: canonicalPrincipalRef,
+      replacementMode: args.connectionTarget.replacementMode,
+    },
     selectedScopes,
     issuanceMaterial,
     predecessor,
@@ -673,6 +757,38 @@ async function deriveConsentCommand(
     targetRevision: targetPrincipal.revision,
     consequenceSummary: 'Replace the selected Agent credential while preserving its canonical identity.',
   }
+}
+
+function operationSelectionNarrows(
+  requested: Pick<Doc<'agentAccessOAuthGrants'>['requestedAccess'], 'operationAccess' | 'operationRefs'>,
+  approved: Readonly<{ operationAccess: 'all_admitted' | 'selected_operations'; operationRefs: readonly string[] }>,
+): boolean {
+  if (requested.operationAccess === 'all_admitted') return true
+  const requestedRefs = new Set(requested.operationRefs)
+  return approved.operationAccess === 'selected_operations'
+    && approved.operationRefs.every((operationRef) => requestedRefs.has(operationRef))
+}
+
+async function allSelectedOperationsAreCurrent(
+  ctx: Pick<MutationCtx, 'db'>,
+  operationRefs: readonly string[],
+): Promise<boolean> {
+  const rows = await Promise.all(operationRefs.map(async (operationRef) => await ctx.db
+    .query('capabilityPublications')
+    .withIndex('by_operationRef_and_disposition', (query) => (
+      query.eq('operationRef', operationRef).eq('disposition', 'current')
+    ))
+    .unique()))
+  return rows.every((row) => row !== null)
+}
+
+function sameOperationSelection(
+  left: Pick<Doc<'agentAccessOAuthGrants'>['approvedAccess'], 'operationAccess' | 'operationRefs'>,
+  right: Readonly<{ operationAccess: 'all_admitted' | 'selected_operations'; operationRefs: readonly string[] }>,
+): boolean {
+  return left.operationAccess === right.operationAccess
+    && left.operationRefs.length === right.operationRefs.length
+    && left.operationRefs.every((operationRef, index) => operationRef === right.operationRefs[index])
 }
 
 async function resolveReplacementPredecessor(
@@ -733,6 +849,50 @@ async function resolveReplacementPredecessor(
     credentialRevision: credential.revision,
     credentialGeneration: credential.generation,
   }
+}
+
+async function revokeCompromisedPredecessor(
+  ctx: MutationCtx,
+  snapshot: AgentAccessPredecessorSnapshot,
+  owner: Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>,
+  now: number,
+  correlationRef: string,
+): Promise<boolean> {
+  const [credential, binding, grant] = await Promise.all([
+    ctx.db.query('credentials')
+      .withIndex('by_credentialRef', (query) => query.eq('credentialRef', snapshot.credentialRef))
+      .unique(),
+    ctx.db.query('externalIdentityBindings')
+      .withIndex('by_bindingRef', (query) => query.eq('bindingRef', snapshot.bindingRef))
+      .unique(),
+    ctx.db.query('agentAccessGrants')
+      .withIndex('by_grantRef', (query) => query.eq('grantRef', snapshot.grantRef))
+      .unique(),
+  ])
+  if (credential === null || binding === null || grant === null
+    || credential.lifecycle !== 'active'
+    || credential.revision !== snapshot.credentialRevision
+    || credential.generation !== snapshot.credentialGeneration
+    || binding.lifecycle !== 'active'
+    || binding.revision !== snapshot.bindingRevision
+    || binding.credentialGeneration !== snapshot.bindingCredentialGeneration
+    || binding.providerIdentifier !== snapshot.credentialId
+    || grant.lifecycle !== 'active'
+    || grant.generation !== snapshot.grantGeneration
+    || grant.policyDigest !== snapshot.policyDigest
+    || credential.principalRef !== grant.principalId
+    || binding.principalRef !== grant.principalId) return false
+  await revokeReplacementMaterial(
+    ctx,
+    credential,
+    binding,
+    grant,
+    owner,
+    now,
+    'suspected_compromise',
+    correlationRef,
+  )
+  return true
 }
 
 async function currentOwnerAuthority(
@@ -980,6 +1140,7 @@ function sameGrantMaterial(left: OAuthGrantMaterial, right: OAuthGrantMaterial):
     && left.redirectUri === right.redirectUri
     && sameStringArray(left.requestedScopes, right.requestedScopes)
     && sameRequestedAccess(left.requestedAccess, right.requestedAccess)
+    && sameRequestedAccess(left.approvedAccess, right.approvedAccess)
     && left.codeChallenge === right.codeChallenge
     && left.codeChallengeMethod === right.codeChallengeMethod
     && left.deviceCodeHash === right.deviceCodeHash

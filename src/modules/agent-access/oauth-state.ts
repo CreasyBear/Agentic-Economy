@@ -70,9 +70,14 @@ export const AGENT_ACCESS_OAUTH_ERROR_DESCRIPTIONS: Readonly<Record<AgentAccessO
 
 export type AgentAccessOAuthFlow = 'device_code' | 'authorization_code'
 export type AgentAccessOAuthGrantStatus = 'pending' | 'issuing' | 'approved' | 'denied' | 'delivery_claimed' | 'consumed' | 'expired'
+export type AgentCredentialReplacementMode = 'planned' | 'compromise'
 export type AgentConnectionTarget =
   | Readonly<{ kind: 'new_agent'; displayName: string }>
-  | Readonly<{ kind: 'replace_credential'; principalRef: string }>
+  | Readonly<{
+      kind: 'replace_credential'
+      principalRef: string
+      replacementMode: AgentCredentialReplacementMode
+    }>
 
 export type AgentCredentialReplacement = Readonly<{
   principalRef: string
@@ -103,6 +108,7 @@ export type AgentAccessOAuthGrant = Readonly<{
   redirectUri?: string
   requestedScopes: readonly string[]
   requestedAccess: AgentAccessOAuthRequestedAccess
+  approvedAccess: AgentAccessOAuthRequestedAccess
   codeChallenge?: string
   codeChallengeMethod?: 'S256'
   deviceCodeHash?: string
@@ -130,6 +136,10 @@ export type AgentAccessOAuthGrant = Readonly<{
     commandDigest: string
     targetRevision: number
     reservedAt: number
+    predecessor?: Readonly<{
+      credentialId: string
+      credentialRef: string
+    }>
   }>
 }>
 
@@ -292,6 +302,7 @@ export async function beginDeviceGrant(
     clientId: input.client.clientId,
     requestedScopes: [...scopes.scopes],
     requestedAccess,
+    approvedAccess: requestedAccess,
     deviceCodeHash: await hashOAuthValue(deviceCode),
     userCodeHash: await hashOAuthValue(userCode),
     status: 'pending',
@@ -336,6 +347,7 @@ export async function beginAuthorizationCodeGrant(
     redirectUri: input.redirectUri,
     requestedScopes: [...scopes.scopes],
     requestedAccess,
+    approvedAccess: requestedAccess,
     codeChallenge: input.codeChallenge,
     codeChallengeMethod: 'S256',
     status: 'pending',
@@ -473,7 +485,9 @@ function sameConnectionTarget(left: AgentConnectionTarget, right: AgentConnectio
   return left.kind === right.kind
     && (left.kind === 'new_agent'
       ? right.kind === 'new_agent' && left.displayName === right.displayName
-      : right.kind === 'replace_credential' && left.principalRef === right.principalRef)
+      : right.kind === 'replace_credential'
+        && left.principalRef === right.principalRef
+        && left.replacementMode === right.replacementMode)
 }
 
 export async function denyGrant(

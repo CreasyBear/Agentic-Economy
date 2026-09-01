@@ -232,11 +232,12 @@ describe('/agent-access/authorize consent loading', () => {
     expect(String(request?.body)).toContain('expected_target_revision=1')
     expect(String(request?.body)).toContain('authority_mode=bounded_mandate')
     expect(String(request?.body)).toContain('connection_target=new_agent')
-    expect(String(request?.body)).not.toContain('operation')
+    expect(String(request?.body)).toContain('approved_operation_access=all_admitted')
+    expect(String(request?.body)).not.toContain('approved_operation_ref=')
     expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
   })
 
-  it('shows and confirms the caller-requested exact Operations without posting them back', async () => {
+  it('lets the owner narrow caller-requested Operations and posts the exact approved subset', async () => {
     const refs = [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`]
     mockConsent({
       userCode: 'SELE-CTED', grantRef: 'grant-selected', clientName: 'Selected CLI', mode: 'inspect_only',
@@ -247,11 +248,17 @@ describe('/agent-access/authorize consent loading', () => {
 
     renderComponent()
     expect(screen.getByText(refs.join(', '))).toBeTruthy()
+    const removeButtons = screen.getAllByRole('button', { name: 'Remove' })
+    fireEvent.click(removeButtons[0]!)
     fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
-    expect((await screen.findAllByText(new RegExp(refs[0]!))).length).toBeGreaterThan(1)
+    expect((await screen.findAllByText(new RegExp(refs[1]!))).length).toBeGreaterThan(1)
+    expect(screen.queryByText(new RegExp(refs[0]!))).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and approve' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
-    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain('operation')
+    const body = String(fetchMock.mock.calls[0]?.[1]?.body)
+    expect(body).toContain('approved_operation_access=selected_operations')
+    expect(body).toContain(`approved_operation_ref=${encodeURIComponent(refs[1]!)}`)
+    expect(body).not.toContain(encodeURIComponent(refs[0]!))
   })
 
   it('shows a fixed, separate supplier permission instead of buyer authority choices', async () => {
@@ -301,6 +308,30 @@ describe('/agent-access/authorize consent loading', () => {
     expect(String(request?.body)).toContain('connection_target=replace_credential')
     expect(String(request?.body)).toContain('principal_ref=prn_agent_a')
     expect(String(request?.body)).toContain('expected_target_revision=3')
+    expect(String(request?.body)).toContain('replacement_mode=planned')
+  })
+
+  it('makes compromise replacement explicit and binds it into the approval request', async () => {
+    const targets = [
+      { principalRef: 'prn_agent_a', principalRevision: 3, displayName: 'Research agent' },
+    ]
+    mockConsent({ userCode: 'COMP-ROMI', grantRef: 'grant-compromise', clientName: 'Agent CLI', mode: 'approve_each', agentTargets: targets })
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ kind: 'approved', grantRef: 'grant-compromise' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderComponent()
+    fireEvent.click(await screen.findByRole('radio', { name: /Replace credential/ }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Agent' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Research agent' }))
+    fireEvent.click(screen.getByRole('radio', { name: /Suspected compromise/ }))
+    expect(screen.getByText(/current authority is revoked first and is never reactivated/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
+    expect(await screen.findByText(/revoked before successor issuance and cannot be reactivated/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and approve' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('replacement_mode=compromise')
   })
 
   it('retains the exact choice and restores focus when Clerk reverification is cancelled', async () => {

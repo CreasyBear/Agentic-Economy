@@ -114,6 +114,7 @@ export type IssuedAgentBindingRegistration = Readonly<{
 
 export type AgentCredentialReplacementRegistration = Readonly<{
   principalRef: string
+  replacementMode: 'planned' | 'compromise'
   issuanceKey: string
   grantRef: string
   credentialId: string
