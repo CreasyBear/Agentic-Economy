@@ -20,6 +20,11 @@ import {
   type AuthorityConsequenceAdmission,
 } from '../../../src/modules/authority/context/public'
 import {
+  DelegationService,
+  delegationGrantRef,
+} from '../../../src/modules/authority/delegation/public'
+import type { BusinessActor } from '../../../src/modules/business/public'
+import {
   canonicalEvmAddress,
   validPublicHttpsEndpoint,
 } from '../../../src/modules/capability-supply/convex'
@@ -48,6 +53,11 @@ import {
 import { requireSourceWrite, sourceWriteArgs } from '../../sourceWriteAdmission'
 import { persistAuditEvent } from '../../securityShared'
 import { admitAuthorityCredentialChangeRate } from '../rateLimit'
+import { admitInteractiveOwnerConsequence } from '../ownerConsequence'
+import {
+  createConvexDelegationContextPort,
+  createConvexDelegationStore,
+} from '../delegationPersistence'
 import {
   consumeConsequenceProof,
   deriveStrictConsequenceProof,
@@ -254,9 +264,13 @@ async function verifiedConnectionSellerClaim(
     : { kind: 'refused', code: 'invalid_digest' }
 }
 
+type AuthenticatedBusinessActor = Extract<BusinessActor, { kind: 'authenticated_owner' }>
+
 export type ProviderConnectionActor = Readonly<{
   canonicalPrincipalRef: string
   canonicalAccountRef: string
+  authorityRevision?: AuthenticatedBusinessActor['authorityRevision']
+  authorityProvenance?: AuthenticatedBusinessActor['authorityProvenance']
   authorityGrantRef?: string
 }>
 
@@ -467,9 +481,159 @@ export async function revokeProviderConnectionForActor(
   const now = Date.now()
   const result = beginProviderConnectionRevocation(owned === null ? undefined : toDomain(owned.row), args, now)
   if (result.kind === 'applied' && owned !== null) {
+    const consequenceAdmitted = await admitProviderConnectionRevocationConsequence(ctx, {
+      args,
+      actor,
+      current: toDomain(owned.row),
+      result,
+      now,
+    })
+    if (!consequenceAdmitted) {
+      return { kind: 'refused' as const, code: 'invalid_transition' as const }
+    }
     return await applyProviderConnectionRevocation(ctx, args, actor, owned.row, result, now)
   }
   return projectOwnerResult(result, now)
+}
+
+type ProviderConnectionRevocationConsequenceInput = Readonly<{
+  args: RevokeOwnerArgs
+  actor: ProviderConnectionActor
+  current: ProviderConnection
+  result: Extract<ProviderConnectionCommandResult, { kind: 'applied' }>
+  now: number
+}>
+
+function providerConnectionRevocationConsequence(
+  input: ProviderConnectionRevocationConsequenceInput,
+) {
+  return {
+    action: 'connection.revoke' as const,
+    target: {
+      targetType: 'provider_connection',
+      targetRef: input.current.connectionRef,
+      targetRevision: input.current.authorityGeneration,
+    },
+    requiredScopes: ['connection:revoke'],
+    resourceRefs: [`connection:${input.current.connectionRef}`],
+    budgetAmount: 0,
+    consequenceSummary: 'Revoke this exact supplier connection authority and begin bounded cleanup.',
+    statusReadbackRef: `provider-connections/${input.current.connectionRef}`,
+    correlationRef: input.args.commandId,
+    idempotencyRef: input.args.commandId,
+    command: {
+      version: 'ae.provider-connection-revoke-consequence:v1',
+      commandId: input.args.commandId,
+      connectionRef: input.current.connectionRef,
+      expectedAuthorityGeneration: input.args.expectedAuthorityGeneration,
+      expectedAuthorityDigest: input.args.expectedAuthorityDigest,
+      currentAuthorityGeneration: input.current.authorityGeneration,
+      currentAuthorityDigest: input.current.authorityDigest,
+      revocationCommandDigest: input.result.commandDigest,
+      reasonCode: input.args.reasonCode ?? null,
+      evidenceRefs: [...input.args.evidenceRefs].sort(),
+    },
+  } as const
+}
+
+async function admitInteractiveProviderConnectionRevocation(
+  ctx: MutationCtx,
+  input: ProviderConnectionRevocationConsequenceInput & Required<Pick<ProviderConnectionActor, 'authorityRevision' | 'authorityProvenance'>>,
+  consequence: ReturnType<typeof providerConnectionRevocationConsequence>,
+): Promise<boolean> {
+  const admitted = await admitInteractiveOwnerConsequence(ctx, {
+    actor: {
+      kind: 'authenticated_owner',
+      canonicalPrincipalRef: principalRef(input.actor.canonicalPrincipalRef),
+      canonicalAccountRef: accountRef(input.actor.canonicalAccountRef),
+      authorityRevision: input.authorityRevision,
+      authorityProvenance: input.authorityProvenance,
+    },
+    ...consequence,
+    now: input.now,
+  })
+  return admitted.kind === 'admitted'
+    && admitted.admission.consequenceAction === 'connection.revoke'
+    && admitted.admission.descriptor !== undefined
+    && admitted.admission.proofPolicy?.kind === 'none'
+}
+
+function delegatedRevocationGrantIsCurrent(
+  grant: Doc<'authorityDelegationGrants'> | undefined,
+  input: ProviderConnectionRevocationConsequenceInput,
+): grant is Doc<'authorityDelegationGrants'> {
+  return grant !== undefined
+    && grant.lifecycle === 'active'
+    && grant.accountRef === input.actor.canonicalAccountRef
+    && grant.subjectPrincipalRef === input.actor.canonicalPrincipalRef
+    && grant.expiresAt > input.now
+}
+
+async function admitDelegatedProviderConnectionRevocation(
+  ctx: MutationCtx,
+  input: ProviderConnectionRevocationConsequenceInput,
+  consequence: ReturnType<typeof providerConnectionRevocationConsequence>,
+): Promise<boolean> {
+  const authorityGrantRef = input.actor.authorityGrantRef
+  if (authorityGrantRef === undefined) return false
+  const grantRows = await ctx.db.query('authorityDelegationGrants')
+    .withIndex('by_grantRef', (query) => query.eq('grantRef', authorityGrantRef))
+    .take(2)
+  const grant = grantRows.length === 1 ? grantRows[0] : undefined
+  if (!delegatedRevocationGrantIsCurrent(grant, input)) return false
+
+  try {
+    const actor = principalRef(input.actor.canonicalPrincipalRef)
+    const boundary = new ConsequenceAuthorityBoundary(new DelegationService(
+      createConvexDelegationStore(ctx),
+      createConvexDelegationContextPort(ctx, actor),
+      { now: () => input.now },
+    ))
+    const admission = await boundary.forSurface('convex', {
+      resolveCanonicalBinding: async () => ({
+        principalClass: 'interactive',
+        actorPrincipalRef: actor,
+        activeAccountRef: accountRef(input.actor.canonicalAccountRef),
+        grantRef: delegationGrantRef(grant.grantRef),
+        grantGeneration: grant.generation,
+      }),
+    }).withCurrentAuthority({
+      requiredScopes: consequence.requiredScopes,
+      resourceRefs: consequence.resourceRefs,
+      budgetAmount: consequence.budgetAmount,
+      correlationRef: consequence.correlationRef,
+      idempotencyRef: consequence.idempotencyRef,
+      consequence: {
+        action: consequence.action,
+        target: consequence.target,
+        consequenceSummary: consequence.consequenceSummary,
+        statusReadbackRef: consequence.statusReadbackRef,
+        command: consequence.command,
+      },
+    }, async (current) => current)
+    return admission.consequenceAction === 'connection.revoke'
+      && admission.descriptor !== undefined
+      && admission.proofPolicy?.kind === 'none'
+  } catch {
+    return false
+  }
+}
+
+async function admitProviderConnectionRevocationConsequence(
+  ctx: MutationCtx,
+  input: ProviderConnectionRevocationConsequenceInput,
+): Promise<boolean> {
+  const consequence = providerConnectionRevocationConsequence(input)
+  const authorityRevision = input.actor.authorityRevision
+  const authorityProvenance = input.actor.authorityProvenance
+  if (authorityRevision !== undefined && authorityProvenance !== undefined) {
+    return await admitInteractiveProviderConnectionRevocation(ctx, {
+      ...input,
+      authorityRevision,
+      authorityProvenance,
+    }, consequence)
+  }
+  return await admitDelegatedProviderConnectionRevocation(ctx, input, consequence)
 }
 
 async function applyProviderConnectionRevocation(
@@ -882,14 +1046,7 @@ async function persistX402ConnectionResult(
   else await ctx.db.replace(existing._id, row)
 }
 
-type X402OwnerAuthorityActor = ProviderConnectionActor & Readonly<{
-  authorityRevision?: Readonly<{ account: number; currentOwnership: number }>
-  authorityProvenance?: Readonly<{
-    accessKind: string
-    accessRef: string
-    currentOwnershipRef: string
-  }>
-}>
+type X402OwnerAuthorityActor = ProviderConnectionActor
 
 function strictX402AdmissionIsValid(
   admission: AuthorityConsequenceAdmission | null,

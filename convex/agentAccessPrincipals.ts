@@ -52,6 +52,7 @@ import { createConvexDelegationContextPort, createConvexDelegationStore } from '
 import { serviceAssertion } from './serviceAssertion'
 import { internal } from './_generated/api'
 import { persistAuditEvent } from './securityShared'
+import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 
 
 const environment = v.union(v.literal('sandbox'), v.literal('production'))
@@ -1156,6 +1157,57 @@ async function lifecycleMembership(ctx: MutationCtx, owner: LifecycleOwner, agen
     .unique()
 }
 
+async function admitAgentLifecycleReduction(
+  ctx: MutationCtx,
+  owner: LifecycleOwner,
+  input: Readonly<{
+    action: 'agent_access.revoke_credential' | 'agent_access.disconnect'
+    targetType: 'agent_credential' | 'agent'
+    targetRef: string
+    targetRevision: number
+    resourceRefs: readonly string[]
+    consequenceSummary: string
+    statusReadbackRef: string
+    correlationRef: string
+    idempotencyRef: string
+    command: StableHashValue
+    now: number
+  }>,
+): Promise<boolean> {
+  try {
+    const admitted = await admitInteractiveOwnerConsequence(ctx, {
+      actor: {
+        kind: 'authenticated_owner',
+        canonicalPrincipalRef: owner.principalRef,
+        canonicalAccountRef: owner.accountRef,
+        authorityRevision: owner.revision,
+        authorityProvenance: owner.provenance,
+      },
+      action: input.action,
+      target: {
+        targetType: input.targetType,
+        targetRef: input.targetRef,
+        targetRevision: input.targetRevision,
+      },
+      requiredScopes: ['agent:manage'],
+      resourceRefs: input.resourceRefs,
+      budgetAmount: 0,
+      consequenceSummary: input.consequenceSummary,
+      statusReadbackRef: input.statusReadbackRef,
+      command: input.command,
+      correlationRef: input.correlationRef,
+      idempotencyRef: input.idempotencyRef,
+      now: input.now,
+    })
+    return admitted.kind === 'admitted'
+      && admitted.admission.consequenceAction === input.action
+      && admitted.admission.descriptor !== undefined
+      && admitted.admission.proofPolicy?.kind === 'none'
+  } catch {
+    return false
+  }
+}
+
 async function revokeGrantLifecycle(
   ctx: MutationCtx,
   grant: Doc<'agentAccessGrants'>,
@@ -1300,6 +1352,31 @@ export const revokeCredentialForServer = mutation({
     if (admission === null || admission.ownerId !== owner.accountRef) {
       return { kind: 'conflict' as const, code: 'agent_not_found' as const, correlationRef: args.correlationRef }
     }
+    const consequenceAdmitted = await admitAgentLifecycleReduction(ctx, owner, {
+      action: 'agent_access.revoke_credential',
+      targetType: 'agent_credential',
+      targetRef: credential.credentialRef,
+      targetRevision: credential.revision,
+      resourceRefs: [
+        `agent:${credential.principalRef}`,
+        `credential:${credential.credentialRef}`,
+      ],
+      consequenceSummary: 'Revoke this exact Agent credential generation and its current grants.',
+      statusReadbackRef: `agent-access/${credential.principalRef}`,
+      correlationRef: args.correlationRef,
+      idempotencyRef: `agent-credential-revoke:${credential.credentialRef}:${credential.generation}`,
+      command: {
+        version: 'ae.agent-credential-revoke-consequence:v1',
+        principalRef: credential.principalRef,
+        credentialRef: credential.credentialRef,
+        credentialGeneration: credential.generation,
+        credentialRevision: credential.revision,
+      },
+      now,
+    })
+    if (!consequenceAdmitted) {
+      return { kind: 'conflict' as const, code: 'authority_mismatch' as const, correlationRef: args.correlationRef }
+    }
     const revoked = await revokeCanonicalCredential(ctx, credential, owner, args.correlationRef, now)
     if (revoked === null) return { kind: 'conflict' as const, code: 'credential_binding_invalid' as const, correlationRef: args.correlationRef }
     if (admission.credentialId === revoked.providerCredentialId && admission.lifecycle === 'active') {
@@ -1387,6 +1464,29 @@ export const disconnectAgentForServer = mutation({
       return { kind: 'conflict' as const, code: 'credential_binding_invalid' as const, correlationRef: args.correlationRef }
     }
     const now = Date.now()
+    const consequenceAdmitted = await admitAgentLifecycleReduction(ctx, owner, {
+      action: 'agent_access.disconnect',
+      targetType: 'agent',
+      targetRef: admission.principalId,
+      targetRevision: Math.max(1, admission.grantGeneration),
+      resourceRefs: [`agent:${admission.principalId}`],
+      consequenceSummary: 'Disconnect this Agent and revoke every remaining credential generation.',
+      statusReadbackRef: `agent-access/${admission.principalId}`,
+      correlationRef: args.correlationRef,
+      idempotencyRef: `agent-disconnect:${admission.principalId}:${Math.max(1, admission.grantGeneration)}`,
+      command: {
+        version: 'ae.agent-disconnect-consequence:v1',
+        principalRef: admission.principalId,
+        grantGeneration: admission.grantGeneration,
+        lifecycle: admission.lifecycle,
+        credentialRefs: credentials.map((credential) => credential.credentialRef).sort(),
+        hasMore,
+      },
+      now,
+    })
+    if (!consequenceAdmitted) {
+      return { kind: 'conflict' as const, code: 'authority_mismatch' as const, correlationRef: args.correlationRef }
+    }
     const revokedCredentials = await Promise.all(credentials.map(
       async (credential) => ({
         credential,
