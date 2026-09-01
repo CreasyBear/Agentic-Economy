@@ -480,8 +480,10 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   const grantRef = form.get('grant_ref')
   const decision = form.get('decision')
   const authObject = await consentAuthObject(form, grantRef, options)
-  const owner = await ownerIdentity(options, authObject)
-  const limited = await oauthAdmissionResponse(request, options, `consent:${grantRef ?? 'missing'}`)
+  const [owner, limited] = await Promise.all([
+    ownerIdentity(options, authObject),
+    oauthAdmissionResponse(request, options, `consent:${grantRef ?? 'missing'}`),
+  ])
   if (limited !== undefined) return limited
   if (!owner.isAuthenticated || owner.userId === null || grantRef === null) return oauthError('access_denied', 403)
   const store = requireStore(options)
