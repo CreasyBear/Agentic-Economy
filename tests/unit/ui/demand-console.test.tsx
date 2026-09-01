@@ -18,6 +18,12 @@ import type { CreditTopupBeginInput } from '@/modules/money/server'
 
 const stripeTestState = vi.hoisted(() => ({ confirm: vi.fn() }))
 
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: ReactNode }) => (
+    <a href={params?.operationRef === undefined ? to : to.replace('$operationRef', encodeURIComponent(params.operationRef))} {...props}>{children}</a>
+  ),
+}))
+
 vi.mock('@stripe/stripe-js', () => ({
   loadStripe: vi.fn(() => Promise.resolve({})),
 }))
@@ -337,7 +343,7 @@ describe('assistant access components', () => {
     )
 
     expect(screen.getByRole('heading', { name: 'Waiting for approval' })).toBeTruthy()
-    expect(screen.getByText('market.email.send:v1')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'market.email.send:v1' }).getAttribute('href')).toBe('/operations/market.email.send%3Av1')
     expect(screen.getByText('Sends a communication')).toBeTruthy()
     expect(screen.getByText('USD 1.25')).toBeTruthy()
     expect(screen.getByText('recipient.email, message.subject')).toBeTruthy()

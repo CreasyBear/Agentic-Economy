@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
+import { Link } from '@tanstack/react-router'
 
 import { AeFactList, type AeFact } from '@/components/ae/data/AeFactList'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
@@ -315,6 +316,7 @@ export function AeAgentOperatorConsole({
         {selected === undefined ? null : (
           <div className="mt-4 grid gap-3">
             <p className="text-sm text-muted-foreground">{agentRecoveryCopy(selected)}</p>
+            <AuthorizedOperations detail={selected} />
             <CredentialHistory
               detail={selected}
               {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
@@ -413,7 +415,13 @@ function WaitingApprovalsSection({
                 <div className="grid min-w-0 gap-3">
                   <div className="grid gap-1">
                     <p className="text-sm font-medium text-muted-foreground">Operation</p>
-                    <p className="break-all font-medium text-foreground">{approval.operationRef}</p>
+                    <Link
+                      to="/operations/$operationRef"
+                      params={{ operationRef: approval.operationRef }}
+                      className="break-all font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {approval.operationRef}
+                    </Link>
                   </div>
                   <AeFactList
                     density="compact"
@@ -641,7 +649,31 @@ function operationAccessLabel(detail: AgentDetail): string {
   if (detail.grant.operationAccess === 'all_admitted') return 'All admitted Operations'
   return detail.grant.operationRefs.length === 0
     ? 'None'
-    : detail.grant.operationRefs.join(', ')
+    : `${detail.grant.operationRefs.length} selected ${detail.grant.operationRefs.length === 1 ? 'Operation' : 'Operations'}`
+}
+
+function AuthorizedOperations({ detail }: Readonly<{ detail: AgentDetail }>) {
+  if (detail.grant?.operationAccess !== 'selected_operations' || detail.grant.operationRefs.length === 0) {
+    return null
+  }
+  return (
+    <div className="grid gap-2">
+      <h3 className="text-sm font-medium text-foreground">Authorized Operations</h3>
+      <ul className="m-0 grid list-none gap-2 p-0">
+        {detail.grant.operationRefs.map((operationRef) => (
+          <li key={operationRef} className="min-w-0 rounded-md border px-3 py-2">
+            <Link
+              to="/operations/$operationRef"
+              params={{ operationRef }}
+              className="block truncate font-mono text-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {operationRef}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 }
 
 function redactedKeyId(keyId: string): string {

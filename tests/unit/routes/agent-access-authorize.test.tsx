@@ -247,7 +247,9 @@ describe('/agent-access/authorize consent loading', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     renderComponent()
-    expect(screen.getByText(refs.join(', '))).toBeTruthy()
+    for (const operationRef of refs) {
+      expect(screen.getByRole('link', { name: operationRef }).getAttribute('href')).toContain(encodeURIComponent(operationRef))
+    }
     const removeButtons = screen.getAllByRole('button', { name: 'Remove' })
     fireEvent.click(removeButtons[0]!)
     fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))

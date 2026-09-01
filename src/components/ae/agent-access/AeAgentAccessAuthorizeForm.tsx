@@ -1,6 +1,7 @@
 import { useReducer, useRef, useState } from 'react'
 import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
 import { useReverification } from '@clerk/tanstack-react-start'
+import { Link } from '@tanstack/react-router'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
@@ -199,6 +200,9 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
   const operationSelection = approvedOperationAccess === 'all_admitted'
     ? 'All admitted Operations, including future admitted Operations'
     : approvedOperationRefs.join(', ')
+  const operationSelectionSummary = approvedOperationAccess === 'all_admitted'
+    ? operationSelection
+    : `${approvedOperationRefs.length} selected ${approvedOperationRefs.length === 1 ? 'Operation' : 'Operations'}`
   const approvedOperationRefSet = new Set(approvedOperationRefs)
   const accessProfile = details.accessProfile ?? 'market'
   const {
@@ -442,7 +446,13 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                         <ul className="grid gap-2" aria-label="Approved Operations">
                           {approvedOperationRefs.map((operationRef) => (
                             <li key={operationRef} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2">
-                              <span className="truncate font-mono text-sm">{operationRef}</span>
+                              <Link
+                                to="/operations/$operationRef"
+                                params={{ operationRef }}
+                                className="truncate font-mono text-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              >
+                                {operationRef}
+                              </Link>
                               <Button type="button" variant="secondary" onClick={() => removeApprovedOperation(operationRef)}>Remove</Button>
                             </li>
                           ))}
@@ -479,7 +489,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
               <AeFactList facts={[
                 { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
                 { label: 'Request revision', value: String(grantRevision) },
-                { label: 'Operations', value: operationSelection },
+                { label: 'Operations', value: operationSelectionSummary },
                 { label: 'Approved limits', value: accessSummary },
                 { label: 'Expiry', value: `Access expires ${formatConsentDuration(expiresInSeconds)} after issue. You can revoke it at any time from Agents.` },
               ]} />

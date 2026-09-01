@@ -15,8 +15,8 @@ const routerNavigate = vi.hoisted(() => vi.fn())
 
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ navigate: routerNavigate }),
-  Link: ({ to, children, ...props }: { to: string; children: ReactNode }) => (
-    <a href={to} {...props}>{children}</a>
+  Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: ReactNode }) => (
+    <a href={params?.operationRef === undefined ? to : to.replace('$operationRef', encodeURIComponent(params.operationRef))} {...props}>{children}</a>
   ),
 }))
 
@@ -244,7 +244,10 @@ describe('assistant access owner continuation anchors', () => {
     )
 
     const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
-    for (const operationRef of operationRefs) expect(dialog.textContent).toContain(operationRef)
+    for (const operationRef of operationRefs) {
+      const link = within(dialog).getByRole('link', { name: operationRef })
+      expect(link.getAttribute('href')).toBe(`/operations/${encodeURIComponent(operationRef)}`)
+    }
     expect(dialog.textContent).not.toContain('All admitted Operations')
   })
 
