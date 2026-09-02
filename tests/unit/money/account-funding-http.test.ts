@@ -185,13 +185,15 @@ describe('Account AUD funding HTTP boundary', () => {
       readCreditPayment: vi.fn(async () => ({ evidence, clientSecret: 'cs_secret_redacted' })),
     })
     sourceMocks.sourceWriteAdmissionFromRequest.mockResolvedValueOnce({
+      version: 'source-write:v2',
       keyId: 'test', scope: 'billing', operationKey: 'moneyAccountFunding:applyVerifiedEvent',
       correlationId: event.stripeEventId, commandDigest: `sha256:${'a'.repeat(64)}`,
       nonce: 'test', issuedAt: 100, method: 'POST', initiatorOrigin: 'https://stripe.test',
       targetOrigin: 'https://ae.test', targetPath: '/api/stripe/webhook', targetQuery: '',
       bodyDigest: `sha256:${'b'.repeat(64)}`, signature: 'redacted',
+      signatureInput: 'test-signature-input',
     })
-    sourceMocks.callPublicSourceMutation.mockResolvedValueOnce({
+    sourceMocks.callPublicSourceAction.mockResolvedValueOnce({
       kind: 'accepted', status: 'applied', appliedRef: 'journal:funding:one',
     })
 
@@ -210,7 +212,7 @@ describe('Account AUD funding HTTP boundary', () => {
       operation: 'moneyAccountFunding:readWebhookCommand',
       scope: 'money:funding_webhook_read',
     }))
-    expect(sourceMocks.callPublicSourceMutation).toHaveBeenCalledWith(
+    expect(sourceMocks.callPublicSourceAction).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         event,

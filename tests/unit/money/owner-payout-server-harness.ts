@@ -6,6 +6,7 @@ import type * as TanstackReactStartModule from '@tanstack/react-start'
 import type { OwnerMoneyServerRuntime } from '@/modules/money/server'
 
 export const sourceMocks = {
+  callPublicSourceAction: vi.fn(),
   callPublicSourceQuery: vi.fn(),
   callPublicSourceMutation: vi.fn(),
   callSourceQuery: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
 }))
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof ConvexSourceModule>()),
+  callPublicSourceAction: sourceMocks.callPublicSourceAction,
   callPublicSourceQuery: sourceMocks.callPublicSourceQuery,
   callPublicSourceMutation: sourceMocks.callPublicSourceMutation,
   callSourceQuery: sourceMocks.callSourceQuery,

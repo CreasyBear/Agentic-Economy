@@ -8,12 +8,14 @@ import {
   installPackage4FormanceSchema,
   readFormanceAccount,
   readFormanceHealth,
+  readFormanceStatementPage,
   readFormanceTransactionByReference,
   type FormanceConfiguration,
 } from '@/modules/money/formance'
 import {
   bookFormanceFundingReversal,
   bookFormanceFundingSettlement,
+  bookFormanceBuyerAdjustment,
   canRebindFormanceLegalCustomer,
   prepareFormanceManagedCallReservation,
   readFormanceDisplayBalance,
@@ -457,6 +459,39 @@ describe.runIf(integrationEnabled)('Package 4 real Formance boundary', () => {
       booking: settledBooking,
       externalEvidenceDigest: `sha256:${digest('verified-x402-settlement')}`,
     })).toMatchObject({ kind: 'completed', replayed: false })
+
+    const statementEndAt = Date.now()
+    let statementCursor: string | undefined
+    let statementTotal = 0n
+    const statementRefs: string[] = []
+    do {
+      const page = await readFormanceStatementPage(context, {
+        accountDigest: accountSegmentDigest('account', settledBooking.accountRef),
+        periodStartAt: statementEndAt - 60_000,
+        periodEndAt: statementEndAt,
+        snapshotCutoffAt: statementEndAt,
+        ...(statementCursor === undefined ? {} : { cursor: statementCursor }),
+      })
+      expect(page.kind).toBe('available')
+      if (page.kind !== 'available') throw new Error(page.code)
+      statementTotal += BigInt(page.exactAmountUnits)
+      statementRefs.push(...page.transactionRefs)
+      statementCursor = page.isDone ? undefined : page.continueCursor
+    } while (statementCursor !== undefined)
+    expect(statementTotal.toString()).toBe(settledBooking.buyerAmountUnits)
+    expect(statementRefs).toHaveLength(1)
+
+    const adjustment = {
+      documentRef: 'document:contention:statement',
+      accountRef: settledBooking.accountRef,
+      residualUnits: '1',
+      policyDigest,
+      snapshotDigest: `sha256:${digest('statement-snapshot')}`,
+    }
+    expect(await bookFormanceBuyerAdjustment(context, adjustment))
+      .toMatchObject({ kind: 'completed', replayed: false })
+    expect(await bookFormanceBuyerAdjustment(context, adjustment))
+      .toMatchObject({ kind: 'completed', replayed: true })
 
     expect(await readFormanceDisplayBalance(context, {
       balanceKind: 'account_aud',

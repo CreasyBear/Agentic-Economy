@@ -388,6 +388,7 @@ async function reserveFormanceBackedInvocation(
   const material = await ctx.runQuery(internal.moneyManagedCall.readBooking, {
     invocationRef: result.reservation.invocationRef,
   })
+  if (material.kind === 'not_required') return result
   if (material.kind === 'not_found' || material.entryRefusalCode === 'financial_scope_locked') {
     return await abandonFinancialReservation(ctx, principal, result.reservation, false)
   }

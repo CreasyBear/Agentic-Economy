@@ -45,18 +45,21 @@ function service(): OperationInvokeService {
     readInvocationStatus: vi.fn().mockResolvedValue({
       kind: 'found',
       invocationRef,
+      version: 1,
       operationRef,
       state: 'in_progress',
     }),
     cancelInvocation: vi.fn().mockResolvedValue({
       kind: 'found',
       invocationRef,
+      version: 2,
       operationRef,
       state: 'cancelled',
     }),
     reconcileInvocation: vi.fn().mockResolvedValue({
       kind: 'found',
       invocationRef,
+      version: 3,
       operationRef,
       state: 'terminal',
     }),
@@ -110,9 +113,9 @@ describe('operation recovery HTTP adapters', () => {
     installTestSourceWriteSecret()
     const calls: Array<{ path: string; args: [Record<string, unknown>] }> = []
     const results = [
-      { kind: 'found', invocationRef, operationRef, state: 'in_progress' },
-      { kind: 'found', invocationRef, operationRef, state: 'cancelled' },
-      { kind: 'found', invocationRef, operationRef, state: 'terminal' },
+      { kind: 'found', invocationRef, version: 1, operationRef, state: 'in_progress' },
+      { kind: 'found', invocationRef, version: 2, operationRef, state: 'cancelled' },
+      { kind: 'found', invocationRef, version: 3, operationRef, state: 'terminal' },
     ]
     const transport = createPublicSourceTransport({
       env: { CONVEX_URL: convexUrl },

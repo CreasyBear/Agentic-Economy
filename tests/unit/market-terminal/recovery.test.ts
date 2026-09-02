@@ -24,10 +24,38 @@ const baseOptions: CliOptions = {
   apply: false,
 }
 
+const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
+const COMMITMENT_REF = `operation-commitment:v1:${'b'.repeat(64)}`
+const inspection = {
+  kind: 'committed' as const,
+  commitmentRef: COMMITMENT_REF,
+  operationRef: OPERATION_REF,
+  operationRevision: 1,
+  expiresAt: 1_000,
+  normalizedInput: {},
+  price: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+  account: {
+    accountRef: 'account:one',
+    available: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+  },
+  budget: {
+    principalRef: 'principal:one',
+    maximumPerInvocation: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+  },
+  policyRefs: ['policy:sandbox'],
+  evidenceDigest: 'sha256:evidence',
+  continuation: {
+    action: 'operation.invoke' as const,
+    method: 'POST' as const,
+    path: '/api/v1/operations/call' as const,
+    input: { commitmentRef: COMMITMENT_REF, idempotencyKey: `invoke:${COMMITMENT_REF}` },
+  },
+}
+
 const completed = {
   kind: 'completed' as const,
   invocationRef: 'invocation:one',
-  operationRef: 'operation:v1:test',
+  operationRef: OPERATION_REF,
   output: { value: 1 },
   evidenceHash: 'sha256:evidence',
   usage: {
@@ -195,28 +223,32 @@ describe('CLI operation recovery projections', () => {
     const output = capture(process.stdout)
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...inspection,
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
         kind: 'pending',
         invocationRef: 'invocation:one',
-        operationRef: 'operation:v1:test',
+        operationRef: OPERATION_REF,
         retryAfterMs: 100,
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         kind: 'found',
         invocationRef: 'invocation:one',
-        operationRef: 'operation:v1:test',
+        version: 1,
+        operationRef: OPERATION_REF,
         state: 'terminal',
         result: completed,
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
-      await runInvokeCommand(['operation:v1:test'], { ...baseOptions, input: '{}', idempotencyKey: 'idem:one', wait: true })
+      await runInvokeCommand([OPERATION_REF], { ...baseOptions, input: '{}', idempotencyKey: 'idem:one', wait: true })
     } finally {
       output.restore()
     }
 
     expect(JSON.parse(output.read())).toEqual(completed)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('projects cancel over the canonical route and keeps the recovery output schema', async () => {
@@ -225,7 +257,8 @@ describe('CLI operation recovery projections', () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
       invocationRef: 'invocation:one',
-      operationRef: 'operation:v1:test',
+      version: 1,
+      operationRef: OPERATION_REF,
       state: 'cancelled',
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
@@ -253,7 +286,8 @@ describe('CLI operation recovery projections', () => {
       const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
         kind: 'found',
         invocationRef: 'invocation:one',
-        operationRef: 'operation:v1:test',
+        version: 1,
+        operationRef: OPERATION_REF,
         state,
         ...(state === 'terminal' ? { result: completed } : {}),
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
@@ -276,7 +310,8 @@ describe('CLI operation recovery projections', () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
       invocationRef: 'invocation:one',
-      operationRef: 'operation:v1:test',
+      version: 1,
+      operationRef: OPERATION_REF,
       state: 'terminal',
       result: completed,
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
@@ -297,7 +332,8 @@ describe('CLI operation recovery projections', () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
       invocationRef: 'invocation:one',
-      operationRef: 'operation:v1:test',
+      version: 1,
+      operationRef: OPERATION_REF,
       state: 'reconciliation_required',
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
 
@@ -321,7 +357,8 @@ describe('CLI operation recovery projections', () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
       invocationRef: 'invocation:one',
-      operationRef: 'operation:v1:test',
+      version: 1,
+      operationRef: OPERATION_REF,
       state: 'terminal',
       usage: {
         usageRef: 'usage:credit',
@@ -350,7 +387,8 @@ describe('CLI operation recovery projections', () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
       invocationRef: 'invocation:one',
-      operationRef: 'operation:v1:test',
+      version: 1,
+      operationRef: OPERATION_REF,
       state: 'terminal',
       usage: {
         usageRef: 'usage:credit',
@@ -375,14 +413,19 @@ describe('CLI operation recovery projections', () => {
 
   it('returns nonzero recovery detail when transport is uncertain, preserving the same identity', async () => {
     setApiKey('ae-test-caller-key')
-    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error('socket timeout'))
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(inspection), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }))
+      .mockRejectedValueOnce(new Error('socket timeout'))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runInvokeCommand(['operation:v1:test'], { ...baseOptions, input: '{}', idempotencyKey: 'idem:one' })).rejects.toMatchObject({
+    await expect(runInvokeCommand([OPERATION_REF], { ...baseOptions, input: '{}', idempotencyKey: 'idem:one' })).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
       code: 'operation-transport-unknown',
       detail: {
-        operationRef: 'operation:v1:test',
+        operationRef: OPERATION_REF,
         recovery: 'Repeat invoke with the same idempotency identity.',
         identityPreserved: true,
       },
@@ -445,13 +488,18 @@ describe('CLI operation recovery projections', () => {
       detail: 'The provider is unavailable.',
       retryable: true,
     }
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(problem), {
-      status: 503,
-      headers: { 'content-type': 'application/problem+json' },
-    }))
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(inspection), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(problem), {
+        status: 503,
+        headers: { 'content-type': 'application/problem+json' },
+      }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runInvokeCommand(['operation:v1:test'], { ...baseOptions, input: '{}', idempotencyKey: 'idem:503' }))
+    await expect(runInvokeCommand([OPERATION_REF], { ...baseOptions, input: '{}', idempotencyKey: 'idem:503' }))
       .rejects.toMatchObject({
         kind: 'UNAVAILABLE',
         code: 'provider_unavailable',
@@ -463,23 +511,28 @@ describe('CLI operation recovery projections', () => {
 
   it('generates a durable idempotency key when call omits one', async () => {
     setApiKey('ae-test-caller-key')
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(completed), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    }))
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(inspection), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(completed), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }))
     vi.stubGlobal('fetch', fetchMock)
     const output = capture(process.stdout)
     try {
-      await runInvokeCommand(['operation:v1:test'], { ...baseOptions, input: '{}' })
+      await runInvokeCommand([OPERATION_REF], { ...baseOptions, input: '{}' })
     } finally {
       output.restore()
     }
     const result = JSON.parse(output.read()) as Record<string, unknown>
     expect(result).not.toHaveProperty('idempotencyKey')
-    const [, init] = fetchMock.mock.calls[0]!
+    const [, init] = fetchMock.mock.calls[1]!
     const request = JSON.parse(String(init?.body)) as { idempotencyKey: string }
     expect(request.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u)
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('recovers through the canonical root command with positional evidence', async () => {
@@ -488,7 +541,8 @@ describe('CLI operation recovery projections', () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
       invocationRef: 'invocation:one',
-      operationRef: 'operation:v1:test',
+      version: 1,
+      operationRef: OPERATION_REF,
       state: 'terminal',
       result: completed,
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
@@ -527,7 +581,8 @@ describe('CLI operation recovery projections', () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
       invocationRef: 'invocation:one',
-      operationRef: 'operation:v1:test',
+      version: 1,
+      operationRef: OPERATION_REF,
       state: 'terminal',
       result: completed,
     }), { status: 200, headers: { 'content-type': 'application/json' } })))

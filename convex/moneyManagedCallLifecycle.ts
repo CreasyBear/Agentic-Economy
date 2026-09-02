@@ -21,7 +21,7 @@ type ManagedCallMaterial =
       releaseRefs?: string[]
       settlementRefs?: string[]
     }
-  | { kind: 'not_found' }
+  | { kind: 'not_found' | 'not_required' }
 
 const transitionResult = v.union(
   v.object({ kind: v.literal('accepted'), state: v.string(), replayed: v.boolean() }),
@@ -188,7 +188,7 @@ export const releaseBeforeSubmission = internalAction({
     const material: ManagedCallMaterial = await ctx.runQuery(internal.moneyManagedCall.readBooking, {
       invocationRef: args.invocationRef,
     })
-    if (material.kind === 'not_found') {
+    if (material.kind !== 'available') {
       return { kind: 'refused' as const, code: 'managed_call_reservation_not_found' }
     }
     if (material.financialState === 'released') {
@@ -225,7 +225,7 @@ export const settle = internalAction({
     const material: ManagedCallMaterial = await ctx.runQuery(internal.moneyManagedCall.readBooking, {
       invocationRef: args.invocationRef,
     })
-    if (material.kind === 'not_found') {
+    if (material.kind !== 'available') {
       return { kind: 'refused' as const, code: 'managed_call_reservation_not_found' }
     }
     if (material.financialState === 'settled') {

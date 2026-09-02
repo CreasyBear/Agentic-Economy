@@ -28,6 +28,7 @@ import {
 } from './internal/stripe-webhook'
 import {
   fundingPaymentRequest,
+  fundingEvidence,
   fundingWebhookReadbackRefusal,
   readWebhookFundingCommandQuery,
   type FundingProviderEvidence,
@@ -193,7 +194,7 @@ export async function applyVerifiedStripeEventThroughSource(
   const correlationId = input.event.stripeEventId
   const command = {
     event: input.event,
-    readback: payment.evidence,
+    readback: fundingEvidence(payment.evidence),
     operationKey,
     correlationId,
   }

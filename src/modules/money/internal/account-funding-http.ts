@@ -425,7 +425,7 @@ export function fundingWebhookReadbackRefusal(
   return undefined
 }
 
-function fundingEvidence(evidence: CreditPaymentEvidence): FundingProviderEvidence {
+export function fundingEvidence(evidence: CreditPaymentEvidence): FundingProviderEvidence {
   return {
     externalRef: evidence.externalRef,
     amount: evidence.amount,

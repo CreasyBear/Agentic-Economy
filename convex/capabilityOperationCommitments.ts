@@ -123,6 +123,7 @@ const financialSubjectsResult = v.union(
     policyDigest: v.string(),
     policyGeneration: v.number(),
     buyerTaxBps: v.number(),
+    financialMode: v.union(v.literal('none'), v.literal('formance')),
     treasury: v.optional(v.object({
       custodyRef: v.string(),
       custodyGeneration: v.number(),
@@ -195,6 +196,11 @@ async function prepareFinancialSubjectsHandler(
     { kind: 'new_operation', operationRef: args.operationRef },
   )
   if (authority === null) return { kind: 'refused', code: 'grant_not_found' }
+  const operation = await readCurrentPublishedOperation(ctx, args.operationRef, now)
+  if (operation === undefined) return { kind: 'refused', code: 'operation_not_found' }
+  const pricing = operationPricing(operation, now)
+  if (pricing === undefined) return { kind: 'refused', code: 'operation_unsupported' }
+  if (pricing.kind === 'refused') return { kind: 'refused', code: 'pricing_setup_required' }
   const grantRow = await ctx.db.query('agentAccessGrants')
     .withIndex('by_grantRef', (query) => query.eq('grantRef', authority.grantRef))
     .unique()
@@ -244,6 +250,9 @@ async function prepareFinancialSubjectsHandler(
     policyDigest: policy.policyDigest,
     policyGeneration: 1,
     buyerTaxBps: policy.controls.tax.serviceFeeTaxBps,
+    financialMode: pricing.config.kind === 'fixed_aud' && pricing.price.units === '0'
+      ? 'none'
+      : 'formance',
     ...(observation === undefined || treasuryTarget === undefined || BigInt(treasuryTarget) <= 0n
       ? {}
       : {
@@ -263,8 +272,8 @@ async function issueCommitmentHandler(
   ctx: MutationCtx,
   args: InspectArgs & Readonly<{ formance: Infer<typeof formanceFinancialSnapshot> }>,
 ): Promise<InspectResult> {
-  const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
-  if (sourceWrite.kind === 'rejected') return refuse(args.operationRef, 'inspection_unavailable', true)
+  // The coordinating action has already consumed this source-write admission in
+  // prepareFinancialSubjects. Internal mutations must not consume the same nonce twice.
   const now = Date.now()
   const authority = await resolveCurrentAgentAuthority(
     ctx,
@@ -321,7 +330,9 @@ async function issueCommitmentHandler(
   if (pricing.kind === 'refused') {
     return refuse(args.operationRef, 'pricing_setup_required', false)
   }
-  const buyerSale = splitInclusiveAudTax(pricing.price.units, args.formance.buyerTaxBps)
+  const buyerSale = pricing.price.units === '0'
+    ? { revenueUnits: '0', taxUnits: '0' }
+    : splitInclusiveAudTax(pricing.price.units, args.formance.buyerTaxBps)
   if (buyerSale === undefined) return refuse(args.operationRef, 'pricing_setup_required', false)
   if ((pricing.sourceRequirement === undefined) !== (args.liveX402Requirement === undefined)) {
     return refuse(args.operationRef, 'operation_not_ready', true, true)
@@ -559,6 +570,25 @@ export const inspect = action({
       args,
     )
     if (subjects.kind === 'refused') return refuse(args.operationRef, subjects.code, true)
+    if (subjects.financialMode === 'none') {
+      return await ctx.runMutation(internal.capabilityOperationCommitments.issueCommitment, {
+        ...args,
+        formance: {
+          accountRef: subjects.accountRef,
+          accountAvailableUnits: '0',
+          principalRef: subjects.principalRef,
+          budgetGeneration: subjects.budgetGeneration,
+          budgetAvailableUnits: subjects.budgetUnits,
+          legalCustomerRef: subjects.legalCustomerRef,
+          legalCustomerGeneration: subjects.legalCustomerGeneration,
+          legalExposureAvailableUnits: subjects.legalExposureUnits,
+          policyGeneration: subjects.policyGeneration,
+          formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+          buyerTaxBps: subjects.buyerTaxBps,
+          observedAt: Date.now(),
+        },
+      })
+    }
     const capacityCommands = [
       {
         commandRef: `capacity:agent:${subjects.principalRef}:${subjects.budgetGeneration}`,

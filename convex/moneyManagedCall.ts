@@ -107,7 +107,7 @@ export const readBooking = internalQuery({
     releaseRefs: v.optional(transactionRefsValue),
     settlementRefs: v.optional(transactionRefsValue),
     entryRefusalCode: v.optional(v.literal('financial_scope_locked')),
-  }), v.object({ kind: v.literal('not_found') })),
+  }), v.object({ kind: v.literal('not_required') }), v.object({ kind: v.literal('not_found') })),
   handler: async (ctx, args) => {
     const invocation = await ctx.db.query('capabilityOperationInvocations')
       .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
@@ -118,7 +118,11 @@ export const readBooking = internalQuery({
       .unique()
     if (commitment === null) return { kind: 'not_found' as const }
     const booking = bookingFromRows(invocation, commitment)
-    if (booking === null) return { kind: 'not_found' as const }
+    if (booking === null) {
+      return commitment.sourceUsdcUnits === undefined && commitment.decisionAudUnits === '0'
+        ? { kind: 'not_required' as const }
+        : { kind: 'not_found' as const }
+    }
     const scopes = [
       ['account', booking.accountRef],
       ['legal_customer', booking.legalCustomerRef],
