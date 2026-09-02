@@ -8,9 +8,11 @@ import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import { clerkConsequenceProofValue } from './lib/consequenceProof'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+import { commercialPolicyControlValue } from '../src/modules/money/schema'
 import {
   COMMERCIAL_POLICY_FAMILIES,
   evaluateCommercialPolicyGate,
+  validCommercialPolicyControl,
   type CommercialPolicyApproval,
   type CommercialPolicyEnvironment,
   type CommercialPolicyGateResult,
@@ -46,6 +48,7 @@ const commercialPolicyChangeArgsValue = v.object({
   expiresAt: v.number(),
   evidenceRef: v.string(),
   evidenceDigest: v.string(),
+  control: commercialPolicyControlValue,
   operationKey: v.string(),
   correlationId: v.string(),
   proof: v.optional(clerkConsequenceProofValue),
@@ -82,6 +85,8 @@ function validChange(args: CommercialPolicyChangeArgs): boolean {
     && Number.isSafeInteger(args.effectiveAt)
     && Number.isSafeInteger(args.expiresAt)
     && args.effectiveAt < args.expiresAt
+    && args.control.family === args.family
+    && validCommercialPolicyControl(args.control)
 }
 
 function policyAction(changeKind: CommercialPolicyChangeArgs['changeKind']) {
@@ -107,6 +112,7 @@ function policyCommand(args: CommercialPolicyChangeArgs) {
     expiresAt: args.expiresAt,
     evidenceRef: args.evidenceRef,
     evidenceDigest: args.evidenceDigest,
+    control: args.control,
   })
 }
 
@@ -170,6 +176,7 @@ export async function readCommercialPolicyGate(
       expiresAt: row.expiresAt,
       evidenceRef: row.evidenceRef,
       evidenceDigest: row.evidenceDigest,
+      control: row.control,
       approvedByPrincipalRef: row.approvedByPrincipalRef,
       activatedAt: row.activatedAt,
       ...(row.supersededByPolicyRef === undefined
@@ -304,6 +311,7 @@ async function changeCommercialPolicyHandler(
     expiresAt: args.expiresAt,
     evidenceRef: args.evidenceRef,
     evidenceDigest: args.evidenceDigest,
+    control: args.control,
     approvedByPrincipalRef: consequence.admission.actorPrincipalRef,
     activeAccountRef: consequence.admission.activeAccountRef,
     authorityGeneration: consequence.admission.accountRevision,

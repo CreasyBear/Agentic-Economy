@@ -5,7 +5,11 @@ import { describe, expect, it } from 'vitest'
 
 import schema from '../../../convex/schema'
 import { readCommercialPolicyGate } from '../../../convex/moneyCommercialPolicy'
-import { COMMERCIAL_POLICY_FAMILIES } from '../../../src/modules/money/public'
+import {
+  COMMERCIAL_POLICY_FAMILIES,
+  SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+} from '../../../src/modules/money/public'
+import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../../helpers/commercial-policy-fixtures'
 import { ownerAdmin } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
@@ -37,6 +41,7 @@ function command(overrides: Record<string, unknown> = {}) {
     expiresAt: now + 86_400_000,
     evidenceRef: 'legal-approval:commercial-perimeter:1',
     evidenceDigest: `sha256:${'a'.repeat(64)}`,
+    control: SANDBOX_COMMERCIAL_POLICY_CONTROLS.commercial_perimeter,
     operationKey: 'moneyCommercialPolicy:change:commercial-perimeter:1',
     correlationId: 'commercial-policy:commercial-perimeter:1',
     ...overrides,
@@ -59,6 +64,7 @@ describe('commercial policy persistence', () => {
           expiresAt: now + 60_000,
           evidenceRef: `approval:${family}:1`,
           evidenceDigest: `sha256:${String(index).repeat(64)}`,
+          control: PRODUCTION_COMMERCIAL_POLICY_CONTROLS[family],
           approvedByPrincipalRef: 'prn_00000000000040008000000000000021',
           activeAccountRef: 'acc_00000000000040008000000000000021',
           authorityGeneration: 1,
@@ -78,6 +84,7 @@ describe('commercial policy persistence', () => {
       environment: 'production',
       policyRefs: COMMERCIAL_POLICY_FAMILIES.map((family) => `commercial-policy:${family}:1`),
       policyDigest: expect.stringMatching(/^sha256:/u),
+      controls: PRODUCTION_COMMERCIAL_POLICY_CONTROLS,
     })
   })
 

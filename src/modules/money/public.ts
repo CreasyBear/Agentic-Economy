@@ -9,9 +9,14 @@ import {
 export {
   COMMERCIAL_POLICY_FAMILIES,
   evaluateCommercialPolicyGate,
+  PACKAGE4_FORMANCE_REQUIREMENTS,
+  SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+  validCommercialPolicyControl,
 } from './internal/commercial-policy'
 export type {
   CommercialPolicyApproval,
+  CommercialPolicyControl,
+  CommercialPolicyControls,
   CommercialPolicyEnvironment,
   CommercialPolicyFamily,
   CommercialPolicyGateResult,

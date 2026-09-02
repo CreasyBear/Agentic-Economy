@@ -6,6 +6,78 @@ const exponent = v.number()
 const units = v.string()
 const identifier = v.string()
 const evidenceRefs = v.array(v.string())
+export const commercialPolicyControlValue = v.union(
+  v.object({
+    family: v.literal('commercial_perimeter'),
+    sellerModel: v.literal('principal_reseller'),
+    customerSegment: v.literal('business_only'),
+    customerCryptoEntitlement: v.literal(false),
+  }),
+  v.object({
+    family: v.literal('tax'),
+    serviceFeeTaxBps: v.number(),
+    taxInvoiceIssuance: v.union(
+      v.literal('disabled_pending_approval'),
+      v.literal('enabled'),
+    ),
+  }),
+  v.object({
+    family: v.literal('accounting_client_money'),
+    minimumFundingPrincipalUnits: units,
+    maximumFundingPrincipalUnits: units,
+    fundingIncrementUnits: units,
+    legalCustomerMaximumAccessibleUnits: units,
+    balanceClassification: v.literal('customer_contract_liability'),
+  }),
+  v.object({
+    family: v.literal('privacy_retention'),
+    evidenceRetentionDays: v.number(),
+    legalHoldSupported: v.literal(true),
+  }),
+  v.object({
+    family: v.literal('treasury_custody'),
+    treasuryAsset: v.literal('USDC'),
+    treasuryExponent: v.literal(6),
+    minimumBufferUnits: units,
+    ledgerAuthority: v.literal('formance_community'),
+    formanceLedgerVersion: v.string(),
+    formanceGatewayVersion: v.string(),
+    formanceSchemaVersion: v.string(),
+    maximumSdkIntegerUnits: units,
+    architectureReviewCumulativeUnits: units,
+    deploymentClass: v.union(
+      v.literal('local_ci'),
+      v.literal('synthetic_vps_fixture'),
+      v.literal('real_money'),
+    ),
+    postgresProtection: v.union(
+      v.literal('disposable_fixture'),
+      v.literal('managed_pitr'),
+    ),
+    recoveryPointObjectiveMinutes: v.number(),
+    recoveryTimeObjectiveMinutes: v.number(),
+  }),
+  v.object({
+    family: v.literal('operations'),
+    fundingServiceFeeBps: v.number(),
+    buyerPricingMarginBps: v.number(),
+    commitmentTtlMs: v.number(),
+    formanceSdkVersion: v.string(),
+    formanceSdkArtifactDigest: v.string(),
+    backupControl: v.union(
+      v.literal('disposable_fixture'),
+      v.literal('postgres_pitr'),
+    ),
+    restoreControl: v.union(
+      v.literal('disposable_rehearsed'),
+      v.literal('production_rehearsed'),
+    ),
+    dailyCloseControl: v.union(
+      v.literal('not_required_fixture'),
+      v.literal('human_signed'),
+    ),
+  }),
+)
 export const x402PaymentAuthorizationFailureCodeValue = v.union(
   v.literal('custody_configuration_invalid'),
   v.literal('request_fingerprint_context_invalid'),
@@ -77,6 +149,7 @@ export const moneyTables = {
     expiresAt: v.number(),
     evidenceRef: identifier,
     evidenceDigest: identifier,
+    control: commercialPolicyControlValue,
     approvedByPrincipalRef: identifier,
     activeAccountRef: identifier,
     authorityGeneration: v.number(),

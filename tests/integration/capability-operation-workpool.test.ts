@@ -40,6 +40,7 @@ import {
 } from '@/modules/agent-access/contract'
 import { accountRefForOwner } from '@/modules/money/public'
 import { COMMERCIAL_POLICY_FAMILIES } from '@/modules/money/public'
+import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../helpers/commercial-policy-fixtures'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/capabilitySupplyGraphPorts'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/internal/graph/qualify-candidate'
@@ -396,6 +397,7 @@ async function seedCommercialPolicies(backend: ConvexFixtureBackend, now: number
         expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
         evidenceRef: `approval:workpool:${family}:1`,
         evidenceDigest: canonicalDigest({ family, index, kind: 'workpool-approval' }),
+        control: PRODUCTION_COMMERCIAL_POLICY_CONTROLS[family],
         approvedByPrincipalRef: 'principal:workpool-approver',
         activeAccountRef: 'account:workpool-approver',
         authorityGeneration: 1,
