@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 
 import { SDK } from '@formance/formance-sdk'
 
-const LEDGER = 'ae-package4-exactness'
+const LEDGER = `ae-package4-exactness-${Date.now().toString(36)}-${process.pid}`
 const SCHEMA_VERSION = 'v1.0.0'
 const ASSET = 'AUD/6'
 const BOUNDED_MODE = process.env.AE_FORMANCE_RANGE === 'bounded'

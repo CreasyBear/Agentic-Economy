@@ -59,6 +59,9 @@ docker compose -f upstream/docker-compose.yml -f docker-compose.spike.yml \
 npm ci --ignore-scripts
 PATH="$HOME/.nvm/versions/node/v22.22.0/bin:$PATH" \
   npm run test:supported-range
+
+PATH="$HOME/.nvm/versions/node/v22.22.0/bin:$PATH" \
+  npm run test:lifecycle
 ```
 
 The supported-range command exits zero while retaining the out-of-range
@@ -75,7 +78,9 @@ PATH="$HOME/.nvm/versions/node/v22.22.0/bin:$PATH" \
 
 It provisions only an anonymous local deployment. Remove `.convex/`,
 `.env.local`, and `convex/_generated/` after the proof. See `PR1-EVIDENCE.md`
-and `DECISION.md` for the accepted bounded range.
+and `DECISION.md` for the accepted bounded range. `PR2-EVIDENCE.md` records
+the native commercial lifecycle and the intentionally narrow Action mapping
+required by the current official schema and stable interpreter.
 
 ## Scope after a decision
 
