@@ -11,7 +11,15 @@ import {
   readFormanceTransactionByReference,
   type FormanceConfiguration,
 } from '@/modules/money/formance'
+import {
+  bookFormanceFundingReversal,
+  bookFormanceFundingSettlement,
+  canRebindFormanceLegalCustomer,
+  readFormanceDisplayBalance,
+  syncFormanceCapacity,
+} from '@/modules/money/formance-workflows'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const integrationEnabled = process.env.AE_FORMANCE_INTEGRATION === 'true'
 
@@ -57,7 +65,12 @@ describe.runIf(integrationEnabled)('Package 4 real Formance boundary', () => {
       variables: {
         processor: `processor:${processorDigest}:settlement`,
         account: `accounts:${accountDigest}:available`,
-        amount: 'AUD/6 25000000000',
+        revenue: 'platform:revenue:sales',
+        tax: 'platform:tax:gst',
+        principal_amount: 'AUD/6 25000000000',
+        service_fee_amount: 'AUD/6 1250000000',
+        tax_amount: 'AUD/6 125000000',
+        total_amount: 'AUD/6 26375000000',
       },
       metadata: {
         command_digest: commandDigest,
@@ -95,6 +108,14 @@ describe.runIf(integrationEnabled)('Package 4 real Formance boundary', () => {
           balanceUnits: '25000000000',
         },
       },
+    })
+    expect(await readFormanceAccount(context, 'platform:revenue:sales')).toMatchObject({
+      kind: 'completed',
+      volumes: { 'AUD/6': { balanceUnits: '1250000000' } },
+    })
+    expect(await readFormanceAccount(context, 'platform:tax:gst')).toMatchObject({
+      kind: 'completed',
+      volumes: { 'AUD/6': { balanceUnits: '125000000' } },
     })
   })
 
@@ -146,8 +167,218 @@ describe.runIf(integrationEnabled)('Package 4 real Formance boundary', () => {
       reference,
     })
   })
+
+  it('books verified funding and controlled capacities through inert named workflows', async () => {
+    const runDigest = digest(`package4-pr3:${Date.now()}:${process.pid}`)
+    const context = createFormanceContext({
+      environment: 'sandbox',
+      gatewayUrl: process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:8080',
+      ledger: `ae-package4-pr3-${runDigest.slice(0, 16)}`,
+      requestTimeoutMs: 10_000,
+    })
+    expect(await installPackage4FormanceSchema(context)).toMatchObject({ kind: 'completed' })
+
+    const policyDigest = `sha256:${digest('policy')}`
+    const evidenceDigest = `sha256:${digest('stripe-readback')}`
+    const funding = {
+      commandRef: 'account-funding:inert-one',
+      idempotencyKey: 'account-funding:inert-one',
+      accountRef: 'account:one',
+      processorRef: 'stripe:payment-intent:one',
+      principalUnits: '100000000',
+      serviceFeeUnits: '5000000',
+      taxUnits: '500000',
+      totalUnits: '105500000',
+      policyDigest,
+      externalEvidenceDigest: evidenceDigest,
+    }
+    const settled = await bookFormanceFundingSettlement(context, funding)
+    expect(settled).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await bookFormanceFundingSettlement(context, funding))
+      .toMatchObject({ kind: 'completed', replayed: true })
+    expect(await bookFormanceFundingSettlement(context, {
+      ...funding,
+      principalUnits: '99000000',
+      totalUnits: '104500000',
+    })).toEqual({ kind: 'refused', code: 'formance_reference_conflict', retryable: false })
+
+    expect(await readFormanceDisplayBalance(context, {
+      balanceKind: 'account_aud',
+      subjectRef: funding.accountRef,
+      now: 1_000,
+    })).toEqual({
+      kind: 'available',
+      balanceKind: 'account_aud',
+      subjectRef: funding.accountRef,
+      currency: 'AUD',
+      exponent: 6,
+      units: funding.principalUnits,
+      observedAt: 1_000,
+      source: 'formance_live_read',
+      authoritativeForConsequences: false,
+    })
+
+    const capacities = [
+      {
+        commandRef: 'capacity:agent:v1',
+        idempotencyKey: 'capacity:agent:v1',
+        kind: 'agent_budget' as const,
+        subjectRef: 'principal:shared-agent',
+        generation: 1,
+        targetUnits: '50000000',
+      },
+      {
+        commandRef: 'capacity:legal:v1',
+        idempotencyKey: 'capacity:legal:v1',
+        kind: 'legal_customer_exposure' as const,
+        subjectRef: 'legal-customer:one',
+        generation: 1,
+        targetUnits: '75000000',
+      },
+      {
+        commandRef: 'capacity:treasury:v1',
+        idempotencyKey: 'capacity:treasury:v1',
+        kind: 'treasury_usdc' as const,
+        subjectRef: 'custody:corporate',
+        generation: 1,
+        targetUnits: '25000000',
+      },
+    ].map((capacity) => ({ ...capacity, policyDigest, externalEvidenceDigest: evidenceDigest }))
+
+    for (const capacity of capacities) {
+      expect(await syncFormanceCapacity(context, capacity))
+        .toMatchObject({ kind: 'completed', replayed: false })
+      expect(await syncFormanceCapacity(context, capacity))
+        .toMatchObject({ kind: 'completed', replayed: true })
+    }
+    expect(await syncFormanceCapacity(context, {
+      ...capacities[0]!,
+      commandRef: 'capacity:agent:conflicting-command',
+      idempotencyKey: 'capacity:agent:conflicting-command',
+      targetUnits: '49000000',
+    })).toEqual({ kind: 'refused', code: 'formance_reference_conflict', retryable: false })
+    expect(await readFormanceDisplayBalance(context, {
+      balanceKind: 'agent_budget',
+      subjectRef: 'principal:shared-agent',
+      generation: 1,
+      now: 2_000,
+    })).toMatchObject({ kind: 'available', currency: 'AUD', units: '50000000' })
+
+    expect(await syncFormanceCapacity(context, {
+      ...capacities[0]!,
+      commandRef: 'capacity:agent:v2',
+      idempotencyKey: 'capacity:agent:v2',
+      generation: 2,
+      targetUnits: '40000000',
+    })).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await readFormanceDisplayBalance(context, {
+      balanceKind: 'agent_budget',
+      subjectRef: 'principal:shared-agent',
+      generation: 2,
+      now: 3_000,
+    })).toMatchObject({ kind: 'available', units: '40000000' })
+
+    const concurrentCapacity = {
+      ...capacities[0]!,
+      commandRef: 'capacity:agent:v3',
+      idempotencyKey: 'capacity:agent:v3',
+      generation: 3,
+      targetUnits: '30000000',
+    }
+    const concurrentResults = await Promise.all(
+      Array.from({ length: 20 }, async () => await syncFormanceCapacity(context, concurrentCapacity)),
+    )
+    expect(concurrentResults.every((result) => result.kind === 'completed')).toBe(true)
+    expect(await readFormanceDisplayBalance(context, {
+      balanceKind: 'agent_budget',
+      subjectRef: 'principal:shared-agent',
+      generation: 3,
+      now: 3_500,
+    })).toMatchObject({ kind: 'available', units: '30000000' })
+
+    expect(await canRebindFormanceLegalCustomer(context, {
+      legalCustomerRef: 'legal-customer:one',
+      generation: 1,
+      pendingCallCount: 1,
+    })).toEqual({ kind: 'refused', code: 'legal_customer_calls_pending' })
+    expect(await canRebindFormanceLegalCustomer(context, {
+      legalCustomerRef: 'legal-customer:one',
+      generation: 1,
+      pendingCallCount: 0,
+    })).toEqual({ kind: 'allowed' })
+
+    const reservationDigest = digest('legal-customer-reservation')
+    const reservationIdempotency = digest('legal-customer-reservation-idempotency')
+    const reservationVariables = {
+      account_available: `accounts:${accountSegmentDigest('account', funding.accountRef)}:available`,
+      call_reserved: `calls:${digest('call:legal-rebind')}:buyer_reserved`,
+      agent_available: `agents:${accountSegmentDigest('agent_budget', { subjectRef: 'principal:shared-agent', generation: 2 })}:budget_available`,
+      agent_reserved: `agents:${accountSegmentDigest('agent_budget', { subjectRef: 'principal:shared-agent', generation: 2 })}:budget_reserved`,
+      legal_available: `legal_customers:${accountSegmentDigest('legal_customer_exposure', { subjectRef: 'legal-customer:one', generation: 1 })}:exposure_available`,
+      legal_reserved: `legal_customers:${accountSegmentDigest('legal_customer_exposure', { subjectRef: 'legal-customer:one', generation: 1 })}:exposure_reserved`,
+      buyer_amount: 'AUD/6 1000000',
+      budget_amount: 'AUD/6 1000000',
+      exposure_amount: 'AUD/6 1000000',
+    }
+    expect(await executeFormanceMoneyCommand(context, {
+      commandRef: `ae-p4:${reservationDigest}:reserve-aud`,
+      idempotencyKey: reservationIdempotency,
+      schemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+      template: 'CALL_RESERVED_AUD',
+      variables: reservationVariables,
+      metadata: {
+        command_digest: reservationDigest,
+        idempotency_digest: reservationIdempotency,
+      },
+    })).toMatchObject({ kind: 'completed' })
+    expect(await canRebindFormanceLegalCustomer(context, {
+      legalCustomerRef: 'legal-customer:one',
+      generation: 1,
+      pendingCallCount: 0,
+    })).toEqual({ kind: 'refused', code: 'legal_customer_capacity_reserved' })
+
+    const releaseDigest = digest('legal-customer-release')
+    const releaseIdempotency = digest('legal-customer-release-idempotency')
+    expect(await executeFormanceMoneyCommand(context, {
+      commandRef: `ae-p4:${releaseDigest}:release-aud`,
+      idempotencyKey: releaseIdempotency,
+      schemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+      template: 'CALL_RELEASED_AUD',
+      variables: reservationVariables,
+      metadata: {
+        command_digest: releaseDigest,
+        idempotency_digest: releaseIdempotency,
+      },
+    })).toMatchObject({ kind: 'completed' })
+
+    const reversed = await bookFormanceFundingReversal(context, {
+      ...funding,
+      commandRef: 'account-funding-reversal:inert-one',
+      idempotencyKey: 'account-funding-reversal:inert-one',
+      externalEvidenceDigest: `sha256:${digest('stripe-reversal-readback')}`,
+    })
+    expect(reversed).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await bookFormanceFundingReversal(context, {
+      ...funding,
+      commandRef: 'account-funding-reversal:inert-one',
+      idempotencyKey: 'account-funding-reversal:inert-one',
+      externalEvidenceDigest: `sha256:${digest('stripe-reversal-readback')}`,
+    })).toMatchObject({ kind: 'completed', replayed: true })
+    expect(await readFormanceDisplayBalance(context, {
+      balanceKind: 'account_aud',
+      subjectRef: funding.accountRef,
+      now: 4_000,
+    })).toMatchObject({ kind: 'available', units: '0' })
+  })
 })
 
 function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex')
+}
+
+function accountSegmentDigest(kind: string, reference: unknown): string {
+  return canonicalDigest({
+    format: 'ae.formance-account-segment:v1',
+    value: { kind, reference },
+  }).slice('sha256:'.length)
 }

@@ -76,6 +76,9 @@ describe('module surface and dependency manifest', () => {
     expect(sources
       .filter(([, source]) => source.includes('modules/money/formance'))
       .map(([file]) => file)).toEqual(['convex/moneyFormance.ts'])
+    expect(sources
+      .filter(([, source]) => source.includes('modules/money/formance-workflows'))
+      .map(([file]) => file)).toEqual(['convex/moneyFormance.ts'])
 
     const actionSource = readFileSync('convex/moneyFormance.ts', 'utf8')
     expect(actionSource).toContain('internalAction')

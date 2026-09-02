@@ -215,7 +215,7 @@ export const PACKAGE4_FORMANCE_SCHEMA: FormanceSchemaData = Object.freeze({
     providers: digestSegment({ settlement: leaf }),
     adjustments: digestSegment({ buyer: leaf }),
     treasury: fixed({
-      corporate: fixed({ available: leaf, committed: leaf }),
+      corporate: digestSegment({ available: leaf, committed: leaf }),
     }),
     platform: fixed({
       expense: fixed({ providers: leaf }),
@@ -226,35 +226,61 @@ export const PACKAGE4_FORMANCE_SCHEMA: FormanceSchemaData = Object.freeze({
   queries: Object.freeze({}),
   transactions: Object.freeze({
     FUNDING_SETTLED: Object.freeze({
-      description: 'Record processor settlement and credit Account AUD principal',
+      description: 'Record processor settlement, Account AUD principal, service fee, and GST',
       runtime: 'machine' as const,
       script: `vars {
   account $processor
   account $account
-  monetary $amount
+  account $revenue
+  account $tax
+  monetary $principal_amount
+  monetary $service_fee_amount
+  monetary $tax_amount
+  monetary $total_amount
 }
-send $amount (
+send $total_amount (
   source = @world
   destination = $processor
 )
-send $amount (
+send $principal_amount (
   source = $processor
   destination = $account
+)
+send $service_fee_amount (
+  source = $processor
+  destination = $revenue
+)
+send $tax_amount (
+  source = $processor
+  destination = $tax
 )`,
     }),
     FUNDING_REVERSED: Object.freeze({
-      description: 'Append a processor reversal against Account AUD availability',
+      description: 'Append a full processor reversal across principal, fee, and GST',
       runtime: 'machine' as const,
       script: `vars {
   account $processor
   account $account
-  monetary $amount
+  account $revenue
+  account $tax
+  monetary $principal_amount
+  monetary $service_fee_amount
+  monetary $tax_amount
+  monetary $total_amount
 }
-send $amount (
+send $principal_amount (
   source = $account
   destination = $processor
 )
-send $amount (
+send $service_fee_amount (
+  source = $revenue
+  destination = $processor
+)
+send $tax_amount (
+  source = $tax
+  destination = $processor
+)
+send $total_amount (
   source = $processor
   destination = @world
 )`,
@@ -349,7 +375,18 @@ send $exposure_amount (
 )`,
     }),
     BUYER_ADJUSTED: transferTemplate('Append a buyer AUD adjustment'),
-    TREASURY_CAPACITY_SYNCED: transferTemplate('Apply an observed corporate USDC capacity delta'),
+    TREASURY_CAPACITY_SYNCED: Object.freeze({
+      description: 'Establish one immutable controlled-capacity generation',
+      runtime: 'machine' as const,
+      script: `vars {
+  account $capacity
+  monetary $amount
+}
+send $amount (
+  source = @world
+  destination = $capacity
+)`,
+    }),
     PROVIDER_OBLIGATION_ACCRUED: Object.freeze({
       description: 'Accrue Provider USDC expense separately from the buyer AUD sale',
       runtime: 'machine' as const,
@@ -749,9 +786,7 @@ export async function executeFormanceMoneyCommand(
   }
   const existing = await readFormanceTransactionByReference(context, command.commandRef)
   if (existing.kind === 'found') {
-    if (existing.metadata.command_digest !== command.metadata.command_digest
-      || existing.metadata.idempotency_digest !== command.idempotencyKey
-      || existing.template !== command.template) {
+    if (!matchingCommand(existing, command)) {
       return refused('formance_reference_conflict')
     }
     recordMetric('write', 'replayed', startedAt)
@@ -785,10 +820,28 @@ export async function executeFormanceMoneyCommand(
     recordMetric('write', 'completed', startedAt)
     return completed(command.commandRef, false)
   } catch (error) {
-    const result = mapFormanceWriteError(error, command.commandRef)
+    const reconciled = await readFormanceTransactionByReference(context, command.commandRef)
+    const result = reconciled.kind === 'found'
+      ? matchingCommand(reconciled, command)
+        ? completed(command.commandRef, true)
+        : refused('formance_reference_conflict')
+      : reconciled.kind === 'setup_required'
+        ? refused(reconciled.code)
+        : reconciled.kind === 'unavailable'
+          ? unknown(command.commandRef)
+          : mapFormanceWriteError(error, command.commandRef)
     recordMetric('write', result.kind, startedAt)
     return result
   }
+}
+
+function matchingCommand(
+  existing: Extract<FormanceReferenceReadResult, { kind: 'found' }>,
+  command: FormanceMoneyCommand,
+): boolean {
+  return existing.metadata.command_digest === command.metadata.command_digest
+    && existing.metadata.idempotency_digest === command.idempotencyKey
+    && existing.template === command.template
 }
 
 export function mapFormanceWriteError(error: unknown, reference: string): FormanceMoneyResult {

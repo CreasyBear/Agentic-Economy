@@ -9,11 +9,51 @@ import {
   readFormanceConfiguration,
   readFormanceHealth,
   readFormanceTransactionByReference,
+  type FormanceMoneyResult,
 } from '../src/modules/money/formance'
+import {
+  bookFormanceFundingReversal,
+  bookFormanceFundingSettlement,
+  canRebindFormanceLegalCustomer,
+  readFormanceDisplayBalance,
+  syncFormanceCapacity,
+} from '../src/modules/money/formance-workflows'
 import { internalAction } from './_generated/server'
 
 const setupRequired = v.object({ kind: v.literal('setup_required'), code: v.string() })
 const unavailable = v.object({ kind: v.literal('unavailable'), code: v.string() })
+const moneyResult = v.union(
+  v.object({
+    kind: v.literal('completed'),
+    transactionRefs: v.array(v.string()),
+    replayed: v.boolean(),
+  }),
+  v.object({ kind: v.literal('refused'), code: v.string(), retryable: v.literal(false) }),
+  v.object({
+    kind: v.literal('unavailable'),
+    code: v.string(),
+    submissionProvenAbsent: v.literal(true),
+  }),
+  v.object({ kind: v.literal('outcome_unknown'), reference: v.string(), statusRef: v.string() }),
+)
+const fundingBookingArgs = {
+  commandRef: v.string(),
+  idempotencyKey: v.string(),
+  accountRef: v.string(),
+  processorRef: v.string(),
+  principalUnits: v.string(),
+  serviceFeeUnits: v.string(),
+  taxUnits: v.string(),
+  totalUnits: v.string(),
+  policyDigest: v.string(),
+  externalEvidenceDigest: v.string(),
+}
+const capacityKind = v.union(
+  v.literal('agent_budget'),
+  v.literal('legal_customer_exposure'),
+  v.literal('treasury_usdc'),
+)
+const balanceKind = v.union(v.literal('account_aud'), capacityKind)
 
 const healthResult = v.union(
   v.object({
@@ -124,9 +164,108 @@ export const readTransactionByReference = internalAction({
   },
 })
 
+/** Inert until the Package 4 no-user cutover switches the existing funding caller. */
+export const bookFundingSettlement = internalAction({
+  args: fundingBookingArgs,
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await bookFormanceFundingSettlement(context.context, args))
+  },
+})
+
+/** Inert until processor reversals are switched at the Package 4 cutover. */
+export const bookFundingReversal = internalAction({
+  args: fundingBookingArgs,
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await bookFormanceFundingReversal(context.context, args))
+  },
+})
+
+/** Inert capacity replacement. It is not called by a product route before cutover. */
+export const syncCapacity = internalAction({
+  args: {
+    commandRef: v.string(),
+    idempotencyKey: v.string(),
+    kind: capacityKind,
+    subjectRef: v.string(),
+    generation: v.number(),
+    targetUnits: v.string(),
+    policyDigest: v.string(),
+    externalEvidenceDigest: v.string(),
+  },
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await syncFormanceCapacity(context.context, args))
+  },
+})
+
+export const readDisplayBalance = internalAction({
+  args: { balanceKind, subjectRef: v.string(), generation: v.optional(v.number()) },
+  returns: v.union(
+    v.object({
+      kind: v.literal('available'),
+      balanceKind,
+      subjectRef: v.string(),
+      generation: v.optional(v.number()),
+      currency: v.union(v.literal('AUD'), v.literal('USDC')),
+      exponent: v.literal(6),
+      units: v.string(),
+      observedAt: v.number(),
+      source: v.literal('formance_live_read'),
+      authoritativeForConsequences: v.literal(false),
+    }),
+    setupRequired,
+    unavailable,
+  ),
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? context
+      : await readFormanceDisplayBalance(context.context, args)
+  },
+})
+
+export const canRebindLegalCustomer = internalAction({
+  args: { legalCustomerRef: v.string(), generation: v.number(), pendingCallCount: v.number() },
+  returns: v.union(
+    v.object({ kind: v.literal('allowed') }),
+    v.object({
+      kind: v.literal('refused'),
+      code: v.union(
+        v.literal('legal_customer_capacity_reserved'),
+        v.literal('legal_customer_calls_pending'),
+      ),
+    }),
+    setupRequired,
+    unavailable,
+  ),
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? context
+      : await canRebindFormanceLegalCustomer(context.context, args)
+  },
+})
+
 function configuredContext() {
   const result = readFormanceConfiguration()
   return result.kind === 'setup_required'
     ? result
     : Object.freeze({ kind: 'configured' as const, context: createFormanceContext(result.configuration) })
+}
+
+function convexMoneyResult(result: FormanceMoneyResult) {
+  return result.kind === 'completed'
+    ? { ...result, transactionRefs: [...result.transactionRefs] }
+    : result
 }

@@ -14,6 +14,10 @@ import {
   validateFormanceMoneyCommand,
   validFormanceMetadata,
 } from '@/modules/money/formance'
+import {
+  prepareFormanceFundingReversal,
+  prepareFormanceFundingSettlement,
+} from '@/modules/money/formance-workflows'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 
 const DIGEST_A = 'a'.repeat(64)
@@ -26,6 +30,7 @@ afterEach(() => {
 
 describe('Package 4 official Formance boundary', () => {
   it('locks the immutable schema to the approved named machine templates', () => {
+    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.1.0')
     expect(PACKAGE4_FORMANCE_SCHEMA_DIGEST).toMatch(/^sha256:[a-f0-9]{64}$/u)
     expect(Object.keys(PACKAGE4_FORMANCE_SCHEMA.transactions ?? {})).toEqual(
       PACKAGE4_FORMANCE_TEMPLATE_NAMES,
@@ -33,6 +38,79 @@ describe('Package 4 official Formance boundary', () => {
     expect(Object.values(PACKAGE4_FORMANCE_SCHEMA.transactions ?? {})
       .every((template) => template.runtime === 'machine')).toBe(true)
     expect(JSON.stringify(PACKAGE4_FORMANCE_SCHEMA)).not.toContain('experimental')
+    expect(PACKAGE4_FORMANCE_SCHEMA.transactions?.FUNDING_SETTLED?.script)
+      .toContain('monetary $total_amount')
+    expect(PACKAGE4_FORMANCE_SCHEMA.transactions?.FUNDING_SETTLED?.script)
+      .toContain('destination = $tax')
+    expect(PACKAGE4_FORMANCE_SCHEMA.transactions?.TREASURY_CAPACITY_SYNCED?.script)
+      .toContain('source = @world')
+    expect(PACKAGE4_FORMANCE_SCHEMA.transactions?.TREASURY_CAPACITY_SYNCED?.script)
+      .toContain('destination = $capacity')
+  })
+
+  it('maps one verified funding command to principal, fee, GST, and processor-total facts', () => {
+    const input = {
+      commandRef: 'account-funding:command-one',
+      idempotencyKey: 'account-funding:idempotency-one',
+      accountRef: 'account:one',
+      processorRef: 'stripe:payment-intent:one',
+      principalUnits: '100000000',
+      serviceFeeUnits: '5000000',
+      taxUnits: '500000',
+      totalUnits: '105500000',
+      policyDigest: `sha256:${DIGEST_A}`,
+      externalEvidenceDigest: `sha256:${DIGEST_B}`,
+    }
+    const settlement = prepareFormanceFundingSettlement(input)
+    expect(settlement).toMatchObject({
+      kind: 'prepared',
+      command: {
+        schemaVersion: 'v1.1.0',
+        template: 'FUNDING_SETTLED',
+        variables: {
+          principal_amount: 'AUD/6 100000000',
+          service_fee_amount: 'AUD/6 5000000',
+          tax_amount: 'AUD/6 500000',
+          total_amount: 'AUD/6 105500000',
+          revenue: 'platform:revenue:sales',
+          tax: 'platform:tax:gst',
+        },
+        metadata: {
+          external_evidence_digest: DIGEST_B,
+          policy_digest: DIGEST_A,
+        },
+      },
+    })
+    if (settlement.kind !== 'prepared') throw new Error(settlement.code)
+    expect(settlement.command.variables.account).not.toContain(input.accountRef)
+    expect(settlement.command.variables.processor).not.toContain(input.processorRef)
+    expect(settlement.command.metadata).not.toHaveProperty('principalUnits')
+
+    expect(prepareFormanceFundingReversal(input)).toMatchObject({
+      kind: 'prepared',
+      command: { template: 'FUNDING_REVERSED' },
+    })
+  })
+
+  it('refuses inconsistent, unsafe, or zero required funding amounts before the SDK', () => {
+    const valid = {
+      commandRef: 'account-funding:command-two',
+      idempotencyKey: 'account-funding:idempotency-two',
+      accountRef: 'account:two',
+      processorRef: 'stripe:payment-intent:two',
+      principalUnits: '100000000',
+      serviceFeeUnits: '5000000',
+      taxUnits: '500000',
+      totalUnits: '105500000',
+      policyDigest: `sha256:${DIGEST_A}`,
+      externalEvidenceDigest: `sha256:${DIGEST_B}`,
+    }
+    expect(prepareFormanceFundingSettlement({ ...valid, totalUnits: '105500001' }))
+      .toEqual({ kind: 'refused', code: 'formance_funding_input_invalid', retryable: false })
+    expect(prepareFormanceFundingSettlement({ ...valid, principalUnits: '9007199254740992' }))
+      .toEqual({ kind: 'refused', code: 'formance_funding_input_invalid', retryable: false })
+    expect(prepareFormanceFundingSettlement({ ...valid, taxUnits: '0' }))
+      .toEqual({ kind: 'refused', code: 'formance_funding_input_invalid', retryable: false })
   })
 
   it('accepts loopback only for sandbox and requires Cloudflare Access for remote Gateway use', () => {
