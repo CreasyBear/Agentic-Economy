@@ -15,7 +15,11 @@ import {
   bookFormanceFundingReversal,
   bookFormanceFundingSettlement,
   canRebindFormanceLegalCustomer,
+  prepareFormanceManagedCallReservation,
   readFormanceDisplayBalance,
+  releaseFormanceManagedCall,
+  reserveFormanceManagedCall,
+  settleFormanceManagedCall,
   syncFormanceCapacity,
 } from '@/modules/money/formance-workflows'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
@@ -370,6 +374,108 @@ describe.runIf(integrationEnabled)('Package 4 real Formance boundary', () => {
       now: 4_000,
     })).toMatchObject({ kind: 'available', units: '0' })
   })
+
+  it('lets native atomic bulk choose managed-call winners and preserves exact recovery refs', async () => {
+    const runDigest = digest(`package4-pr4:${Date.now()}:${process.pid}`)
+    const context = createFormanceContext({
+      environment: 'sandbox',
+      gatewayUrl: process.env.AE_FORMANCE_GATEWAY_URL ?? 'http://127.0.0.1:8080',
+      ledger: `ae-package4-pr4-${runDigest.slice(0, 16)}`,
+      requestTimeoutMs: 30_000,
+    })
+    expect(await installPackage4FormanceSchema(context)).toMatchObject({ kind: 'completed' })
+    const policyDigest = `sha256:${digest('pr4-policy')}`
+    const externalEvidenceDigest = `sha256:${digest('pr4-external-evidence')}`
+    expect(await bookFormanceFundingSettlement(context, {
+      commandRef: 'pr4:funding',
+      idempotencyKey: 'pr4:funding',
+      accountRef: 'account:contention',
+      processorRef: 'stripe:pr4',
+      principalUnits: '1000',
+      serviceFeeUnits: '1',
+      taxUnits: '1',
+      totalUnits: '1002',
+      policyDigest,
+      externalEvidenceDigest,
+    })).toMatchObject({ kind: 'completed' })
+    for (const capacity of [
+      { kind: 'agent_budget' as const, subjectRef: 'principal:shared', targetUnits: '20' },
+      { kind: 'legal_customer_exposure' as const, subjectRef: 'legal:shared', targetUnits: '1000' },
+      { kind: 'treasury_usdc' as const, subjectRef: 'custody:shared', targetUnits: '1000' },
+    ]) {
+      expect(await syncFormanceCapacity(context, {
+        commandRef: `pr4:capacity:${capacity.kind}`,
+        idempotencyKey: `pr4:capacity:${capacity.kind}`,
+        ...capacity,
+        generation: 1,
+        policyDigest,
+        externalEvidenceDigest,
+      })).toMatchObject({ kind: 'completed' })
+    }
+
+    const bookings = Array.from({ length: 100 }, (_, index) => managedCallBooking(index, policyDigest))
+    const results = await Promise.all(
+      bookings.map(async (booking) => await reserveFormanceManagedCall(context, booking)),
+    )
+    const winnerIndexes = results
+      .map((result, index) => ({ result, index }))
+      .filter(({ result }) => result.kind === 'completed')
+      .map(({ index }) => index)
+    const loserIndexes = results
+      .map((result, index) => ({ result, index }))
+      .filter(({ result }) => result.kind !== 'completed')
+      .map(({ index }) => index)
+    expect(winnerIndexes).toHaveLength(10)
+    expect(loserIndexes).toHaveLength(90)
+
+    for (const index of loserIndexes) {
+      const prepared = prepareFormanceManagedCallReservation(bookings[index]!)
+      if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+      const reads = await Promise.all(prepared.bulk.commands.map(
+        async ({ commandRef }) => await readFormanceTransactionByReference(context, commandRef),
+      ))
+      expect(reads.every((read) => read.kind === 'absent')).toBe(true)
+    }
+
+    const releasedBooking = bookings[winnerIndexes[0]!]!
+    const settledBooking = bookings[winnerIndexes[1]!]!
+    expect(await reserveFormanceManagedCall(context, releasedBooking))
+      .toMatchObject({ kind: 'completed', replayed: true })
+    expect(await reserveFormanceManagedCall(context, {
+      ...releasedBooking,
+      buyerAmountUnits: '4',
+      buyerRevenueUnits: '3',
+      buyerTaxUnits: '1',
+    })).toEqual({ kind: 'refused', code: 'formance_reference_conflict', retryable: false })
+
+    expect(await releaseFormanceManagedCall(context, {
+      booking: releasedBooking,
+      externalEvidenceDigest: `sha256:${digest('proven-pre-submit-failure')}`,
+      submissionProvenAbsent: true,
+    })).toMatchObject({ kind: 'completed', replayed: false })
+    expect(await settleFormanceManagedCall(context, {
+      booking: settledBooking,
+      externalEvidenceDigest: `sha256:${digest('verified-x402-settlement')}`,
+    })).toMatchObject({ kind: 'completed', replayed: false })
+
+    expect(await readFormanceDisplayBalance(context, {
+      balanceKind: 'account_aud',
+      subjectRef: 'account:contention',
+      now: 5_000,
+    })).toMatchObject({ kind: 'available', units: '982' })
+    expect(await readFormanceDisplayBalance(context, {
+      balanceKind: 'agent_budget',
+      subjectRef: 'principal:shared',
+      generation: 1,
+      now: 5_000,
+    })).toMatchObject({ kind: 'available', units: '2' })
+    expect(await readFormanceDisplayBalance(context, {
+      balanceKind: 'treasury_usdc',
+      subjectRef: 'custody:shared',
+      generation: 1,
+      now: 5_000,
+    })).toMatchObject({ kind: 'available', units: '991' })
+  })
 })
 
 function digest(value: string): string {
@@ -381,4 +487,33 @@ function accountSegmentDigest(kind: string, reference: unknown): string {
     format: 'ae.formance-account-segment:v1',
     value: { kind, reference },
   }).slice('sha256:'.length)
+}
+
+function managedCallBooking(index: number, policyDigest: string) {
+  return {
+    invocationRef: `invocation:contention:${index}`,
+    commitmentRef: `commitment:contention:${index}`,
+    idempotencyKey: `invoke:contention:${index}`,
+    accountRef: 'account:contention',
+    principalRef: 'principal:shared',
+    agentBudgetGeneration: 1,
+    legalCustomerRef: 'legal:shared',
+    legalCustomerGeneration: 1,
+    treasuryRef: 'custody:shared',
+    treasuryGeneration: 1,
+    operationRef: 'operation:managed-x402',
+    providerRef: 'provider:sandbox',
+    authorityGeneration: 1,
+    policyGeneration: 1,
+    buyerAmountUnits: '2',
+    buyerRevenueUnits: '1',
+    buyerTaxUnits: '1',
+    providerAmountUnits: '1',
+    commitmentDigest: `sha256:${digest(`commitment:${index}`)}`,
+    inputDigest: `sha256:${digest(`input:${index}`)}`,
+    policyDigest,
+    rateEvidenceDigest: `sha256:${digest('sandbox-rate')}`,
+    treasuryEvidenceDigest: `sha256:${digest('sandbox-custody')}`,
+    x402RequirementDigest: `sha256:${digest('sandbox-x402-requirement')}`,
+  }
 }

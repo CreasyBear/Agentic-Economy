@@ -16,6 +16,9 @@ import {
   bookFormanceFundingSettlement,
   canRebindFormanceLegalCustomer,
   readFormanceDisplayBalance,
+  releaseFormanceManagedCall,
+  reserveFormanceManagedCall,
+  settleFormanceManagedCall,
   syncFormanceCapacity,
 } from '../src/modules/money/formance-workflows'
 import { internalAction } from './_generated/server'
@@ -54,6 +57,32 @@ const capacityKind = v.union(
   v.literal('treasury_usdc'),
 )
 const balanceKind = v.union(v.literal('account_aud'), capacityKind)
+const managedCallBookingArgs = {
+  invocationRef: v.string(),
+  commitmentRef: v.string(),
+  idempotencyKey: v.string(),
+  accountRef: v.string(),
+  principalRef: v.string(),
+  agentBudgetGeneration: v.number(),
+  legalCustomerRef: v.string(),
+  legalCustomerGeneration: v.number(),
+  treasuryRef: v.string(),
+  treasuryGeneration: v.number(),
+  operationRef: v.string(),
+  providerRef: v.string(),
+  authorityGeneration: v.number(),
+  policyGeneration: v.number(),
+  buyerAmountUnits: v.string(),
+  buyerRevenueUnits: v.string(),
+  buyerTaxUnits: v.string(),
+  providerAmountUnits: v.string(),
+  commitmentDigest: v.string(),
+  inputDigest: v.string(),
+  policyDigest: v.string(),
+  rateEvidenceDigest: v.string(),
+  treasuryEvidenceDigest: v.string(),
+  x402RequirementDigest: v.string(),
+}
 
 const healthResult = v.union(
   v.object({
@@ -254,6 +283,46 @@ export const canRebindLegalCustomer = internalAction({
     return context.kind === 'setup_required'
       ? context
       : await canRebindFormanceLegalCustomer(context.context, args)
+  },
+})
+
+/** Inert until the Package 4 cutover switches the managed-call worker. */
+export const reserveManagedCall = internalAction({
+  args: managedCallBookingArgs,
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await reserveFormanceManagedCall(context.context, args))
+  },
+})
+
+/** Proven pre-submission release only. Possible submission must not call this action. */
+export const releaseManagedCall = internalAction({
+  args: {
+    booking: v.object(managedCallBookingArgs),
+    externalEvidenceDigest: v.string(),
+    submissionProvenAbsent: v.literal(true),
+  },
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await releaseFormanceManagedCall(context.context, args))
+  },
+})
+
+/** Inert settlement finalizer; x402 evidence is still owned by the existing worker. */
+export const settleManagedCall = internalAction({
+  args: { booking: v.object(managedCallBookingArgs), externalEvidenceDigest: v.string() },
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await settleFormanceManagedCall(context.context, args))
   },
 })
 

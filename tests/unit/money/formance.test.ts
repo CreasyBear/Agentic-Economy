@@ -6,6 +6,7 @@ import {
   PACKAGE4_FORMANCE_TEMPLATE_NAMES,
   canonicalFormanceUnits,
   createFormanceContext,
+  executeFormanceMoneyBulk,
   formanceMonetaryVariable,
   formanceSafeUnitsFromSdk,
   mapFormanceWriteError,
@@ -13,10 +14,14 @@ import {
   readFormanceHealth,
   validateFormanceMoneyCommand,
   validFormanceMetadata,
+  type FormanceContext,
 } from '@/modules/money/formance'
 import {
   prepareFormanceFundingReversal,
   prepareFormanceFundingSettlement,
+  prepareFormanceManagedCallRelease,
+  prepareFormanceManagedCallReservation,
+  prepareFormanceManagedCallSettlement,
 } from '@/modules/money/formance-workflows'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 
@@ -30,7 +35,7 @@ afterEach(() => {
 
 describe('Package 4 official Formance boundary', () => {
   it('locks the immutable schema to the approved named machine templates', () => {
-    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.1.0')
+    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.2.0')
     expect(PACKAGE4_FORMANCE_SCHEMA_DIGEST).toMatch(/^sha256:[a-f0-9]{64}$/u)
     expect(Object.keys(PACKAGE4_FORMANCE_SCHEMA.transactions ?? {})).toEqual(
       PACKAGE4_FORMANCE_TEMPLATE_NAMES,
@@ -65,7 +70,7 @@ describe('Package 4 official Formance boundary', () => {
     expect(settlement).toMatchObject({
       kind: 'prepared',
       command: {
-        schemaVersion: 'v1.1.0',
+        schemaVersion: 'v1.2.0',
         template: 'FUNDING_SETTLED',
         variables: {
           principal_amount: 'AUD/6 100000000',
@@ -111,6 +116,117 @@ describe('Package 4 official Formance boundary', () => {
       .toEqual({ kind: 'refused', code: 'formance_funding_input_invalid', retryable: false })
     expect(prepareFormanceFundingSettlement({ ...valid, taxUnits: '0' }))
       .toEqual({ kind: 'refused', code: 'formance_funding_input_invalid', retryable: false })
+  })
+
+  it('maps managed reservation, release, and settlement to fixed atomic template sets', () => {
+    const booking = managedCallBooking()
+    const reserved = prepareFormanceManagedCallReservation(booking)
+    expect(reserved).toMatchObject({
+      kind: 'prepared',
+      bulk: {
+        commands: [
+          { template: 'CALL_RESERVED_AUD' },
+          { template: 'CALL_RESERVED_USDC' },
+          { template: 'PROVIDER_OBLIGATION_ACCRUED' },
+        ],
+      },
+    })
+    if (reserved.kind !== 'prepared') throw new Error(reserved.code)
+    expect(new Set(reserved.bulk.commands.map(({ commandRef }) => commandRef)).size).toBe(3)
+    expect(JSON.stringify(reserved)).not.toContain(booking.accountRef)
+    expect(JSON.stringify(reserved)).not.toContain(booking.providerRef)
+
+    expect(prepareFormanceManagedCallRelease({
+      booking,
+      externalEvidenceDigest: `sha256:${'c'.repeat(64)}`,
+      submissionProvenAbsent: true,
+    })).toMatchObject({
+      kind: 'prepared',
+      bulk: { commands: [{ template: 'CALL_RELEASED_AUD' }, { template: 'CALL_RELEASED_USDC' }] },
+    })
+    expect(prepareFormanceManagedCallRelease({
+      booking,
+      externalEvidenceDigest: `sha256:${'c'.repeat(64)}`,
+      submissionProvenAbsent: false,
+    } as never)).toEqual({
+      kind: 'refused',
+      code: 'formance_managed_call_input_invalid',
+      retryable: false,
+    })
+    expect(prepareFormanceManagedCallSettlement({
+      booking,
+      externalEvidenceDigest: `sha256:${'d'.repeat(64)}`,
+    })).toMatchObject({
+      kind: 'prepared',
+      bulk: { commands: [{ template: 'BUYER_SALE_SETTLED' }, { template: 'PROVIDER_SETTLED' }] },
+    })
+  })
+
+  it('binds changed managed-call terms to the same references but different command digests', () => {
+    const booking = managedCallBooking()
+    const original = prepareFormanceManagedCallReservation(booking)
+    const changed = prepareFormanceManagedCallReservation({
+      ...booking,
+      buyerAmountUnits: '4',
+      buyerRevenueUnits: '3',
+    })
+    if (original.kind !== 'prepared' || changed.kind !== 'prepared') throw new Error('fixture_invalid')
+    expect(changed.bulk.commands.map(({ commandRef }) => commandRef))
+      .toEqual(original.bulk.commands.map(({ commandRef }) => commandRef))
+    expect(changed.bulk.commands.map(({ metadata }) => metadata.command_digest))
+      .not.toEqual(original.bulk.commands.map(({ metadata }) => metadata.command_digest))
+    expect(prepareFormanceManagedCallReservation({
+      ...booking,
+      providerAmountUnits: '9007199254740992',
+    })).toEqual({ kind: 'refused', code: 'formance_managed_call_input_invalid', retryable: false })
+  })
+
+  it('recovers a lost bulk response only when every exact reference matches', async () => {
+    const prepared = prepareFormanceManagedCallReservation(managedCallBooking())
+    if (prepared.kind !== 'prepared') throw new Error(prepared.code)
+    let referenceReads = 0
+    const ledger = {
+      getSchema: vi.fn(async () => ({
+        v2SchemaResponse: { data: { version: 'v1.2.0', ...PACKAGE4_FORMANCE_SCHEMA } },
+      })),
+      listTransactions: vi.fn(async ({ query }: { query: { $match: { reference: string } } }) => {
+        referenceReads += 1
+        const reference = query.$match.reference
+        const command = prepared.bulk.commands.find((candidate) => candidate.commandRef === reference)!
+        return {
+          v2TransactionsCursorResponse: {
+            cursor: {
+              data: referenceReads <= prepared.bulk.commands.length
+                ? []
+                : [{
+                    id: 1n,
+                    reference,
+                    template: command.template,
+                    metadata: command.metadata,
+                    postings: [],
+                  }],
+            },
+          },
+        }
+      }),
+      createBulk: vi.fn(async () => { throw new Error('response_lost') }),
+    }
+    const context = {
+      configuration: {
+        environment: 'sandbox',
+        gatewayUrl: 'http://127.0.0.1:8080',
+        ledger: 'test-ledger',
+        requestTimeoutMs: 1_000,
+      },
+      sdk: { ledger: { v2: ledger } },
+    } as unknown as FormanceContext
+
+    expect(await executeFormanceMoneyBulk(context, prepared.bulk)).toEqual({
+      kind: 'completed',
+      transactionRefs: prepared.bulk.commands.map(({ commandRef }) => commandRef),
+      replayed: true,
+    })
+    expect(ledger.createBulk).toHaveBeenCalledOnce()
   })
 
   it('accepts loopback only for sandbox and requires Cloudflare Access for remote Gateway use', () => {
@@ -278,3 +394,32 @@ describe('Package 4 official Formance boundary', () => {
     })
   })
 })
+
+function managedCallBooking() {
+  return {
+    invocationRef: 'invocation:one',
+    commitmentRef: 'commitment:one',
+    idempotencyKey: 'invoke:one',
+    accountRef: 'account:one',
+    principalRef: 'principal:one',
+    agentBudgetGeneration: 1,
+    legalCustomerRef: 'legal-customer:one',
+    legalCustomerGeneration: 1,
+    treasuryRef: 'custody:one',
+    treasuryGeneration: 1,
+    operationRef: 'operation:one',
+    providerRef: 'provider:one',
+    authorityGeneration: 1,
+    policyGeneration: 1,
+    buyerAmountUnits: '2',
+    buyerRevenueUnits: '1',
+    buyerTaxUnits: '1',
+    providerAmountUnits: '1',
+    commitmentDigest: `sha256:${'1'.repeat(64)}`,
+    inputDigest: `sha256:${'2'.repeat(64)}`,
+    policyDigest: `sha256:${'3'.repeat(64)}`,
+    rateEvidenceDigest: `sha256:${'4'.repeat(64)}`,
+    treasuryEvidenceDigest: `sha256:${'5'.repeat(64)}`,
+    x402RequirementDigest: `sha256:${'6'.repeat(64)}`,
+  }
+}

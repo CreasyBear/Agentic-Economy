@@ -62,6 +62,10 @@ export type FormanceMoneyCommand = Readonly<{
   metadata: Readonly<Record<string, string>>
 }>
 
+export type FormanceMoneyBulkCommand = Readonly<{
+  commands: readonly FormanceMoneyCommand[]
+}>
+
 export type FormanceMoneyResult =
   | Readonly<{
       kind: 'completed'
@@ -340,7 +344,25 @@ send $exposure_amount (
   destination = $legal_available
 )`,
     }),
-    CALL_RELEASED_USDC: transferTemplate('Release corporate USDC capacity'),
+    CALL_RELEASED_USDC: Object.freeze({
+      description: 'Release corporate USDC capacity and cancel the pending Provider obligation',
+      runtime: 'machine' as const,
+      script: `vars {
+  account $treasury_committed
+  account $treasury_available
+  account $obligation_accrued
+  account $expense
+  monetary $amount
+}
+send $amount (
+  source = $treasury_committed
+  destination = $treasury_available
+)
+send $amount (
+  source = $obligation_accrued
+  destination = $expense
+)`,
+    }),
     BUYER_SALE_SETTLED: Object.freeze({
       description: 'Settle buyer AUD sale, Agent spend, and legal-customer exposure',
       runtime: 'machine' as const,
@@ -835,6 +857,113 @@ export async function executeFormanceMoneyCommand(
   }
 }
 
+export async function executeFormanceMoneyBulk(
+  context: FormanceContext,
+  bulk: FormanceMoneyBulkCommand,
+): Promise<FormanceMoneyResult> {
+  const startedAt = Date.now()
+  const commands = [...bulk.commands]
+  if (commands.length < 2 || commands.length > 4
+    || new Set(commands.map(({ commandRef }) => commandRef)).size !== commands.length
+    || new Set(commands.map(({ idempotencyKey }) => idempotencyKey)).size !== commands.length) {
+    return refused('formance_bulk_invalid')
+  }
+  for (const command of commands) {
+    const invalid = validateFormanceMoneyCommand(command)
+    if (invalid !== undefined) return refused(invalid)
+  }
+  const schema = await readSchema(context)
+  if (schema.kind !== 'ready') {
+    return schema.kind === 'setup_required'
+      ? refused(schema.code)
+      : unavailable(schema.code)
+  }
+  const before = await readBulkReferences(context, commands)
+  if (before.kind === 'completed') return before.result
+  if (before.kind === 'refused') return refused(before.code)
+  if (before.kind === 'unavailable') return unavailable(before.code)
+
+  try {
+    const response = await context.sdk.ledger.v2.createBulk({
+      atomic: true,
+      continueOnFailure: false,
+      ledger: context.configuration.ledger,
+      parallel: false,
+      requestBody: commands.map((command) => ({
+        action: 'CREATE_TRANSACTION' as const,
+        data: {
+          metadata: command.metadata,
+          reference: command.commandRef,
+          runtime: 'machine' as const,
+          script: { template: command.template, vars: command.variables },
+        },
+        ik: command.idempotencyKey,
+      })),
+      schemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+    }, NO_RETRY)
+    const rows = response.v2BulkResponse?.data
+    if (rows === undefined || rows.length !== commands.length) return unknown(commands[0]!.commandRef)
+    if (rows.every((row) => row.responseType === 'ERROR')) {
+      recordMetric('write_bulk', 'refused', startedAt)
+      return refused('formance_bulk_refused')
+    }
+    if (!rows.every((row, index) => row.responseType === 'CREATE_TRANSACTION'
+      && row.data.reference === commands[index]!.commandRef
+      && row.data.postings.every(({ amount }) => formanceSafeUnitsFromSdk(amount) !== undefined))) {
+      return unknown(commands[0]!.commandRef)
+    }
+    recordMetric('write_bulk', 'completed', startedAt)
+    return completedMany(commands.map(({ commandRef }) => commandRef), false)
+  } catch (error) {
+    if (statusCode(error) === 401 || statusCode(error) === 403) {
+      recordMetric('write_bulk', 'unavailable', startedAt)
+      return unavailable('formance_access_unavailable')
+    }
+    const reconciled = await readBulkReferences(context, commands)
+    const result = reconciled.kind === 'completed'
+      ? reconciled.result
+      : reconciled.kind === 'refused'
+        ? reconciled.code === 'formance_bulk_partial_state'
+          ? unknown(commands[0]!.commandRef)
+          : refused(reconciled.code)
+        : reconciled.kind === 'unavailable'
+          ? unknown(commands[0]!.commandRef)
+          : mapFormanceWriteError(error, commands[0]!.commandRef)
+    recordMetric('write_bulk', result.kind, startedAt)
+    return result
+  }
+}
+
+type BulkReadback =
+  | Readonly<{ kind: 'absent' }>
+  | Readonly<{ kind: 'completed'; result: FormanceMoneyResult }>
+  | Readonly<{ kind: 'refused'; code: string }>
+  | Readonly<{ kind: 'unavailable'; code: string }>
+
+async function readBulkReferences(
+  context: FormanceContext,
+  commands: readonly FormanceMoneyCommand[],
+): Promise<BulkReadback> {
+  const reads = await Promise.all(
+    commands.map(async ({ commandRef }) => await readFormanceTransactionByReference(context, commandRef)),
+  )
+  const unavailableRead = reads.find((read) => read.kind === 'unavailable')
+  if (unavailableRead?.kind === 'unavailable') return unavailableRead
+  const invalidRead = reads.find((read) => read.kind === 'setup_required')
+  if (invalidRead?.kind === 'setup_required') return Object.freeze({ kind: 'refused', code: invalidRead.code })
+  if (reads.every((read) => read.kind === 'absent')) return Object.freeze({ kind: 'absent' })
+  if (reads.every((read, index) => read.kind === 'found' && matchingCommand(read, commands[index]!))) {
+    return Object.freeze({
+      kind: 'completed',
+      result: completedMany(commands.map(({ commandRef }) => commandRef), true),
+    })
+  }
+  if (reads.every((read) => read.kind === 'found')) {
+    return Object.freeze({ kind: 'refused', code: 'formance_reference_conflict' })
+  }
+  return Object.freeze({ kind: 'refused', code: 'formance_bulk_partial_state' })
+}
+
 function matchingCommand(
   existing: Extract<FormanceReferenceReadResult, { kind: 'found' }>,
   command: FormanceMoneyCommand,
@@ -952,6 +1081,14 @@ function errorName(error: unknown): string | undefined {
 
 function completed(reference: string, replayed: boolean): FormanceMoneyResult {
   return Object.freeze({ kind: 'completed', transactionRefs: Object.freeze([reference]), replayed })
+}
+
+function completedMany(references: readonly string[], replayed: boolean): FormanceMoneyResult {
+  return Object.freeze({
+    kind: 'completed',
+    transactionRefs: Object.freeze([...references]),
+    replayed,
+  })
 }
 
 function refused(code: string): FormanceMoneyResult {
