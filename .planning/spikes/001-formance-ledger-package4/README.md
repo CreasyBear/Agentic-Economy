@@ -57,11 +57,25 @@ docker compose -f upstream/docker-compose.yml -f docker-compose.spike.yml \
 
 ```sh
 npm ci --ignore-scripts
-npm run test:exactness
+PATH="$HOME/.nvm/versions/node/v22.22.0/bin:$PATH" \
+  npm run test:supported-range
 ```
 
-The exactness command exits non-zero to preserve the unbounded-range finding.
-See `PR1-EVIDENCE.md` and `DECISION.md` for the accepted bounded range.
+The supported-range command exits zero while retaining the out-of-range
+observations. `npm run test:exactness` retains the original unbounded test and
+exits non-zero.
+
+The isolated Convex Action proof is reproducible with:
+
+```sh
+PATH="$HOME/.nvm/versions/node/v22.22.0/bin:$PATH" \
+  npx convex dev --once --run exactness:run \
+  --typecheck=disable --tail-logs disable
+```
+
+It provisions only an anonymous local deployment. Remove `.convex/`,
+`.env.local`, and `convex/_generated/` after the proof. See `PR1-EVIDENCE.md`
+and `DECISION.md` for the accepted bounded range.
 
 ## Scope after a decision
 

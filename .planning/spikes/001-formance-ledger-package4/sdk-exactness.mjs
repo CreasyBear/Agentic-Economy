@@ -5,6 +5,8 @@ import { SDK } from '@formance/formance-sdk'
 const LEDGER = 'ae-package4-exactness'
 const SCHEMA_VERSION = 'v1.0.0'
 const ASSET = 'AUD/6'
+const BOUNDED_MODE = process.env.AE_FORMANCE_RANGE === 'bounded'
+const MAX_SUPPORTED_UNITS = BigInt(Number.MAX_SAFE_INTEGER)
 
 const sdk = new SDK({
   serverURL: 'http://127.0.0.1:8080',
@@ -194,10 +196,19 @@ try {
   }
 }
 
-const exact = observations.every((observation) => observation.exact)
+const supportedObservations = observations.filter(
+  (observation) => BigInt(observation.expected) <= MAX_SUPPORTED_UNITS,
+)
+const boundedExact = supportedObservations.every(
+  (observation) => observation.exact,
+)
+const unboundedExact = observations.every((observation) => observation.exact)
   && headerObservation.exact
+const exact = BOUNDED_MODE ? boundedExact : unboundedExact
 const evidence = {
   decision: exact ? 'PASS' : 'FAIL',
+  evaluatedRange: BOUNDED_MODE ? 'bounded_package4' : 'unbounded_sdk',
+  maximumSupportedUnits: MAX_SUPPORTED_UNITS.toString(),
   node: process.version,
   sdk: '7.0.0',
   ledger: 'v2.4.12',

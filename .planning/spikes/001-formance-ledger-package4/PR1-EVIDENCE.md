@@ -6,6 +6,8 @@
 
 **Bounded Package 4 result:** `PASS`
 
+**Convex Node Action result:** `PASS`
+
 ## Runtime
 
 | Component | Observed |
@@ -50,6 +52,29 @@ maximum and `Number.MAX_SAFE_INTEGER`, round-tripped exactly. The product owner
 explicitly removed 30-digit support from the Package 4 adoption gate after
 reviewing the practical risk horizon. The failing cases remain committed so a
 future official SDK upgrade can prove that the restriction is removable.
+
+The bounded matrix was rerun under Node `v22.22.0` with
+`AE_FORMANCE_RANGE=bounded` and exited zero. It continued to execute and report
+the out-of-range probes, so the passing result cannot hide the known SDK limit.
+
+## Convex Node Action
+
+An anonymous local Convex deployment bundled and executed `convex/exactness.ts`
+as an official `"use node"` Action. The Action used the same SDK, Gateway,
+stable `machine` template, schema version, no-retry policy, and current funding
+maximum. Convex returned:
+
+```json
+{
+  "exact": true,
+  "expected": "25000000000",
+  "observed": "25000000000"
+}
+```
+
+The probe used Convex `1.45.0`, the repository's existing version. Local
+deployment state, generated functions, and `.env.local` were removed after the
+run; only the reproducible Action source and ignore rules remain.
 
 ## Product risk horizon
 
@@ -108,4 +133,5 @@ these stages were not run before the first decision:
 - pagination, backup/restore, upgrade, and pricing comparison.
 
 On 2026-09-02 the product owner explicitly adopted Formance with a bounded
-startup range. The remaining gates must now run before any application cutover.
+startup range. The Node and Convex runtime gates now pass. Native booking,
+contention, recovery, and operational gates remain before application cutover.

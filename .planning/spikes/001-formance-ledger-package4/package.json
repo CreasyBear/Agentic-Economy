@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:exactness": "node sdk-exactness.mjs"
+    "test:exactness": "node sdk-exactness.mjs",
+    "test:supported-range": "AE_FORMANCE_RANGE=bounded node sdk-exactness.mjs"
   },
   "dependencies": {
-    "@formance/formance-sdk": "file:vendor/formance-formance-sdk-7.0.0.tgz"
+    "@formance/formance-sdk": "file:vendor/formance-formance-sdk-7.0.0.tgz",
+    "convex": "1.45.0"
   },
   "engines": {
     "node": "22.x"
