@@ -6,7 +6,9 @@
   "scripts": {
     "test:exactness": "node sdk-exactness.mjs",
     "test:supported-range": "AE_FORMANCE_RANGE=bounded node sdk-exactness.mjs",
-    "test:lifecycle": "node sdk-commercial-lifecycle.mjs"
+    "test:lifecycle": "node sdk-commercial-lifecycle.mjs",
+    "test:contention": "node sdk-contention-recovery.mjs",
+    "test:recovery": "node sdk-restart-recovery.mjs"
   },
   "dependencies": {
     "@formance/formance-sdk": "file:vendor/formance-formance-sdk-7.0.0.tgz",

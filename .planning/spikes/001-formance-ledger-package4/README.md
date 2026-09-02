@@ -62,6 +62,12 @@ PATH="$HOME/.nvm/versions/node/v22.22.0/bin:$PATH" \
 
 PATH="$HOME/.nvm/versions/node/v22.22.0/bin:$PATH" \
   npm run test:lifecycle
+
+PATH="$HOME/.nvm/versions/node/v22.22.0/bin:$PATH" \
+  npm run test:contention
+
+PATH="$HOME/.nvm/versions/node/v22.22.0/bin:$PATH" \
+  npm run test:recovery
 ```
 
 The supported-range command exits zero while retaining the out-of-range
@@ -81,6 +87,7 @@ It provisions only an anonymous local deployment. Remove `.convex/`,
 and `DECISION.md` for the accepted bounded range. `PR2-EVIDENCE.md` records
 the native commercial lifecycle and the intentionally narrow Action mapping
 required by the current official schema and stable interpreter.
+`PR3-EVIDENCE.md` records the 100-way scarcity test and restart recovery.
 
 ## Scope after a decision
 
