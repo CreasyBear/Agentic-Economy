@@ -17,6 +17,10 @@ import {
   type OperationInvokeResult,
 } from '@/modules/capability-execution/operation-invoke-contracts'
 import {
+  operationInspectResultSchema,
+  type OperationInspectResult,
+} from '@/modules/capability-execution/operation-commitment'
+import {
   suggestContinuation,
   type SuggestedContinuation,
 } from '@/modules/market/suggested-continuation'
@@ -27,6 +31,7 @@ export const CHAT_TOOL_IDS = [
   'registry.operations.detail',
   'registry.operations.compare',
   'registry.operations.inspectPlan',
+  'operation.inspect',
   'operation.invoke',
 ] as const
 
@@ -50,6 +55,7 @@ export const CHAT_TOOL_TITLES: Readonly<Record<ChatToolId, string>> = {
   'registry.operations.detail': 'Tool details',
   'registry.operations.compare': 'Compare tools',
   'registry.operations.inspectPlan': 'Inspect before a call',
+  'operation.inspect': 'Confirm purchase terms',
   'operation.invoke': 'Invoke',
 }
 
@@ -600,6 +606,27 @@ function projectInvokeResult(result: OperationInvokeResult): OperationCardProjec
   }
 }
 
+function projectInspectResult(
+  result: Extract<OperationInspectResult, { kind: 'committed' }>,
+): OperationCardProjection {
+  return {
+    ...chrome('operation.inspect'),
+    kind: 'inspect',
+    state: 'complete',
+    operationRefs: [result.operationRef],
+    facts: [
+      { label: 'Decision price', value: formatCurrencyAmount(result.price) },
+      { label: 'Account available', value: formatCurrencyAmount(result.account.available) },
+      { label: 'Agent maximum', value: formatCurrencyAmount(result.budget.maximumPerInvocation) },
+      ...(result.sourceRequirement === undefined
+        ? []
+        : [{ label: 'Provider requirement', value: formatCurrencyAmount(result.sourceRequirement) }]),
+      { label: 'Expires', value: new Date(result.expiresAt).toISOString() },
+      { label: 'Commitment', value: result.commitmentRef },
+    ],
+  }
+}
+
 function chrome(toolId: ChatToolId): CardChrome {
   return { toolId, title: CHAT_TOOL_TITLES[toolId] }
 }
@@ -670,6 +697,7 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): O
         facts: inspectPlanFacts(output),
         operationRefs: collectOperationRefs(output, []),
       }
+    case 'operation.inspect':
     case 'operation.invoke':
       return statusCard(toolId, 'error', 'Tool unavailable')
     default: {
@@ -773,6 +801,22 @@ export function projectOperationCard(part: unknown): OperationCardProjection | n
     return result.success
       ? projectInvokeResult(result.data)
       : statusCard(toolId, 'error', 'Tool unavailable')
+  }
+  if (toolId === 'operation.inspect') {
+    if (kind === 'chat_tool_refused') {
+      const reason = typeof output?.reason === 'string' ? REFUSAL_SUMMARIES[output.reason] : undefined
+      return statusCard(toolId, 'refused', reason ?? 'Request refused')
+    }
+    if (output === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
+    const result = operationInspectResultSchema.safeParse(output)
+    if (!result.success) return statusCard(toolId, 'error', 'Tool unavailable')
+    return result.data.kind === 'committed'
+      ? projectInspectResult(result.data)
+      : statusCard(
+          toolId,
+          'refused',
+          REFUSAL_SUMMARIES[result.data.code] ?? result.data.code.replaceAll('_', ' '),
+        )
   }
   const refused = kind === 'refused'
     || kind === 'unavailable'

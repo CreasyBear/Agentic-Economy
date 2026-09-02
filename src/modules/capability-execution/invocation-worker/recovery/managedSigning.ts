@@ -192,6 +192,31 @@ async function reconcileManagedSigningMoney(
   replay: ManagedSigningReplay,
   prepared: ManagedSigningPreparedEvidence,
 ): Promise<boolean> {
+  if (work.recovered.sellerOnboardingCanary === undefined) {
+    const reservationRef = attempt.reservationRef
+    if (reservationRef === undefined) return false
+    const money = await ctx.runMutation(
+      internal.moneyManagedCallLifecycle.releaseBeforeSubmissionWithX402Proof,
+      {
+        invocationRef: work.recovered.invocationRef,
+        attemptRef: attempt.attemptRef,
+        effectGeneration: attempt.effectGeneration,
+        operationRef: work.recovered.operationRef,
+        inputDigest: work.recovered.inputDigest,
+        reservationRef,
+        paymentIdentifier: attempt.paymentIdentifier,
+        challengeDigest: attempt.challengeDigest,
+        evidenceRef: prepared.evidenceRef,
+        evidenceDigest: prepared.evidence.digest,
+        paymentResponseDigest: prepared.paymentResponseDigest,
+        transportObservationDigest: prepared.transportObservationDigest,
+        transportRequestDigest: prepared.transportRequestDigest,
+        paymentObservationDigest: prepared.paymentObservationDigest,
+        observedAt,
+      },
+    )
+    return money.kind === 'accepted'
+  }
   const money = await ctx.runMutation(
     internal.capabilityOperationPreSubmissionRecovery.reconcileManagedSigningX402Money,
     {
@@ -269,7 +294,7 @@ async function loadManagedSigningRecoveryWork(
   | { kind: 'terminal'; result: RecoveryResult }
   | { kind: 'ready'; work: RecoveryWorkContext }
 >> {
-  const loaded = await loadReadyRecoveryWork(ctx, args, false)
+  const loaded = await loadReadyRecoveryWork(ctx, args)
   if (loaded.kind === 'not_found') {
     return { kind: 'terminal', result: recoveryNotFound(args.invocationRef) }
   }

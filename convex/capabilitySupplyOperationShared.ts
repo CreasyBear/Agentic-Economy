@@ -19,6 +19,8 @@ import {
 import {
   compareExactAmounts,
   normalizePricingConfig,
+  pricingConfigDecisionAmount,
+  pricingConfigSourceAmount,
   pricingConfigDigest,
 } from '@/modules/money/public'
 
@@ -235,9 +237,6 @@ export async function operationRecordProjection(
   } }
 }
 
-const BASE_X402_NETWORK = 'eip155:8453' as const
-const BASE_USDC_ASSET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
-
 /**
  * Resolve the optional public split from the pinned publication material. A
  * malformed pinned config is refused; old publications without the material
@@ -259,18 +258,24 @@ function priceBreakdownFor(
   }
   const normalized = normalizePricingConfig(rawConfig)
   if (normalized.kind === 'invalid' || pricingConfigDigest(normalized.config) !== publication.priceDigest) return null
-  if (displayedPrice.kind !== 'fixed' || compareExactAmounts(normalized.config.paidAmount, displayedPrice.amount) !== 0) return null
-  if (normalized.config.providerAmount === undefined || normalized.config.platformFee === undefined) return undefined
-  if (publication.sourceKind !== 'x402' || publication.networkId !== BASE_X402_NETWORK) return undefined
-  const payment = parseAdmittedX402CatalogPayment(adapterId, configJson)
-  if (payment === undefined || payment.network !== BASE_X402_NETWORK || payment.asset.toLowerCase() !== BASE_USDC_ASSET.toLowerCase()) return undefined
-  return {
-    providerQuotedAmount: normalized.config.providerAmount,
-    agenticEconomyFee: normalized.config.platformFee,
-    totalBuyerAuthorization: normalized.config.paidAmount,
-    network: BASE_X402_NETWORK,
-    asset: BASE_USDC_ASSET,
+  const decisionAmount = pricingConfigDecisionAmount(normalized.config)
+  if (normalized.config.kind === 'fixed_aud') {
+    return displayedPrice.kind === 'fixed'
+      && decisionAmount !== undefined
+      && compareExactAmounts(decisionAmount, displayedPrice.amount) === 0
+      ? undefined
+      : null
   }
+  if (displayedPrice.kind !== 'on_request') return null
+  if (publication.sourceKind !== 'x402') return null
+  const payment = parseAdmittedX402CatalogPayment(adapterId, configJson)
+  const sourceAmount = pricingConfigSourceAmount(normalized.config)
+  return payment !== undefined
+    && payment.network === normalized.config.sourceRequirement.network
+    && payment.asset.toLowerCase() === normalized.config.sourceRequirement.asset.toLowerCase()
+    && sourceAmount.units === normalized.config.sourceRequirement.atomicUnits
+    ? undefined
+    : null
 }
 
 export function publicAuthenticationFor(

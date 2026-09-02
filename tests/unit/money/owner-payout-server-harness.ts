@@ -7,6 +7,7 @@ import type { OwnerMoneyServerRuntime } from '@/modules/money/server'
 
 export const sourceMocks = {
   callPublicSourceQuery: vi.fn(),
+  callPublicSourceMutation: vi.fn(),
   callSourceQuery: vi.fn(),
   callSourceMutation: vi.fn(),
   createConvexServerFunctionAssertion: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof ConvexSourceModule>()),
   callPublicSourceQuery: sourceMocks.callPublicSourceQuery,
+  callPublicSourceMutation: sourceMocks.callPublicSourceMutation,
   callSourceQuery: sourceMocks.callSourceQuery,
   callSourceMutation: sourceMocks.callSourceMutation,
   createConvexServerFunctionAssertion:

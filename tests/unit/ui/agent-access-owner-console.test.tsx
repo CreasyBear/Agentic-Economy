@@ -91,7 +91,17 @@ afterEach(() => {
 describe('assistant access owner continuation anchors', () => {
   it('keeps funding on Credit and revocation on Keys', () => {
     const { container: credit } = render(
-      <AeOwnerCredit directory={emptyDirectory} loading={false} />,
+      <AeOwnerCredit
+        directory={emptyDirectory}
+        accountBalance={{
+          kind: 'available',
+          accountRef: 'account:test-owner',
+          balance: { currency: 'AUD', units: '0', exponent: 6 },
+          locked: false,
+          version: 0,
+        }}
+        loading={false}
+      />,
     )
     const { container: keys } = render(
       <AeAgentOperatorConsole

@@ -254,7 +254,7 @@ export const invoke = action({
 })
 
 export const readInvocationStatus = action({
-  args: { ...principalAndSourceArgs, invocationRef: v.string() },
+  args: { ...principalAndSourceArgs, invocationRef: v.string(), afterVersion: v.optional(v.number()) },
   returns: statusResultValue,
   handler: canonicalAgentStatusHandler,
 })

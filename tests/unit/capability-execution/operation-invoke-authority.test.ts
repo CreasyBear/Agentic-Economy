@@ -15,6 +15,9 @@ import {
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
+const COMMITMENT_REF = `operation-commitment:v1:${'0'.repeat(64)}`
+const DECISION_PRICE = { currency: 'AUD', exponent: 6, units: '10000' } as const
+
 const principal: AgentAccessPrincipal = {
   principalId: 'principal:authority-continuity',
   ownerId: 'owner:authority-continuity',
@@ -106,13 +109,14 @@ describe('operation.invoke authority continuity', () => {
         operationRef,
         invocationRef: 'operation-invocation:authority-continuity',
         inputDigest,
+        decisionPrice: DECISION_PRICE,
         now,
       })
       expect(persisted).toBeDefined()
       if (persisted === undefined) continue
       expect(persisted.acceptedBasis).toEqual(candidate.basis)
       expect(persisted.expiresAt).toBe(authorityExpiresAt)
-      expect(persisted.limits).toEqual({ amount: descriptor.price.kind === 'fixed' ? descriptor.price.amount : undefined })
+      expect(persisted.limits).toEqual({ amount: DECISION_PRICE })
       expect(validateOperationInvokeAuthority({
         authority: persisted,
         dispatch: {
@@ -126,7 +130,7 @@ describe('operation.invoke authority continuity', () => {
         operation,
         descriptor,
         now,
-      })).toEqual(descriptor.price.kind === 'fixed' ? descriptor.price.amount : undefined)
+      })).toEqual(DECISION_PRICE)
     }
   })
 
@@ -156,6 +160,7 @@ describe('operation.invoke authority continuity', () => {
         operationRef,
         invocationRef: `operation-invocation:expiry-bound:${index}`,
         inputDigest,
+        decisionPrice: DECISION_PRICE,
         now,
       })
       expect(persisted?.expiresAt).toBe(new Date(now + Math.min(
@@ -180,6 +185,7 @@ describe('operation.invoke authority continuity', () => {
       operationRef,
       invocationRef: 'operation-invocation:expiry-bound-now',
       inputDigest,
+      decisionPrice: DECISION_PRICE,
       now,
     })).toBeUndefined()
   })
@@ -222,7 +228,7 @@ describe('operation.invoke authority continuity', () => {
     const result = await createOperationInvokeApplication(runtime).invokeOperation({
       principal: fullYoloPrincipal,
       correlationId: 'correlation:full-yolo-authority',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:full-yolo-authority' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:full-yolo-authority' },
     })
 
     expect(result.kind).toBe('pending')
@@ -254,6 +260,7 @@ describe('operation.invoke authority continuity', () => {
       operationRef,
       invocationRef,
       inputDigest,
+      decisionPrice: DECISION_PRICE,
       now,
     })
     expect(persisted).toBeDefined()
@@ -284,6 +291,6 @@ describe('operation.invoke authority continuity', () => {
       operation,
       descriptor,
       now,
-    })).toEqual(descriptor.price.kind === 'fixed' ? descriptor.price.amount : undefined)
+    })).toEqual(DECISION_PRICE)
   })
 })

@@ -18,6 +18,8 @@ import { projectOperationSearchChoices } from '@/modules/registry/operation-choi
 import { operationSearchOutputSchema } from '@/modules/capability-supply/public'
 
 type OperationDescriptorFixture = Readonly<{ operationRef: string; [key: string]: unknown }>
+const CURRENT_OPERATION_REF = `operation:v1:${'d'.repeat(64)}`
+const CURRENT_COMMITMENT_REF = `operation-commitment:v1:${'e'.repeat(64)}`
 
 const SEARCH_ITEM_NAVIGATION = [
   { relation: 'detail', pathTemplate: '/api/v1/market-operations/detail', method: 'POST', actionId: 'registry.operations.detail', authentication: 'none' },
@@ -91,6 +93,38 @@ function responseJson(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json' },
   })
+}
+
+function operationInspection(
+  operationRef: string,
+  input: Record<string, unknown>,
+  commitmentRef = CURRENT_COMMITMENT_REF,
+) {
+  return {
+    kind: 'committed',
+    commitmentRef,
+    operationRef,
+    operationRevision: 1,
+    expiresAt: 1_900_000_000_000,
+    normalizedInput: input,
+    price: { currency: 'AUD', units: '1000000', exponent: 6 },
+    account: {
+      accountRef: 'account:cold-loop',
+      available: { currency: 'AUD', units: '10000000', exponent: 6 },
+    },
+    budget: {
+      principalRef: 'principal:cold-loop',
+      maximumPerInvocation: { currency: 'AUD', units: '5000000', exponent: 6 },
+    },
+    policyRefs: ['commercial-policy:sandbox'],
+    evidenceDigest: 'sha256:inspection',
+    continuation: {
+      action: 'operation.invoke',
+      method: 'POST',
+      path: '/api/v1/operations/call',
+      input: { commitmentRef, idempotencyKey: 'replace-at-invocation' },
+    },
+  }
 }
 const options: CliOptions = {
   baseUrl: 'https://market.example',
@@ -298,10 +332,7 @@ describe('external-agent Market Operation cold loop', () => {
       navigation: SEARCH_ITEM_NAVIGATION,
     })))
     if (projectedResult.kind !== 'ok') throw new Error('Expected a successful search fixture')
-    const result = {
-      ...projectedResult,
-      navigation: [SEARCH_ITEM_NAVIGATION[0]],
-    }
+    const result = projectedResult
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(result), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -317,13 +348,11 @@ describe('external-agent Market Operation cold loop', () => {
     const defaultResult = JSON.parse(defaultSerialized) as typeof result
     const expectedDefault = {
       ...result,
-      items: result.items.map(({ navigation: _navigation, ...item }) => item),
       nextCommand: `ae compare ${operationRefs.join(' ')} --json`,
     }
 
     expect(defaultSerialized).toBe(`${JSON.stringify(expectedDefault, undefined, 2)}\n`)
     expect(defaultResult.items.map((item) => item.operationRef)).toEqual(operationRefs)
-    expect(defaultResult.navigation).toEqual(result.navigation)
     expect(defaultResult.items.every((item) => !('navigation' in item))).toBe(true)
 
     const technicalOutput = captureStdout()
@@ -341,8 +370,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(technicalSerialized).toBe(`${JSON.stringify(expectedTechnical, undefined, 2)}\n`)
     expect(JSON.parse(technicalSerialized)).toEqual(expectedTechnical)
     const defaultBytes = new TextEncoder().encode(defaultSerialized).length
-    const technicalBytes = new TextEncoder().encode(technicalSerialized).length
-    expect(defaultBytes).toBeLessThan(technicalBytes * 0.65)
+    expect(defaultBytes).toBeLessThanOrEqual(3 * 1024)
   })
   it('rejects an out-of-range search limit before network work', async () => {
     const fetchMock = vi.fn<typeof fetch>()
@@ -781,6 +809,10 @@ describe('external-agent Market Operation cold loop', () => {
       input: Record<string, unknown>
       result: typeof completedResult
     }>()
+    const commitments = new Map<string, {
+      operationRef: string
+      input: Record<string, unknown>
+    }>()
     let providerEffects = 0
     const jsonResponse = (body: unknown, status = 200, contentType = 'application/json') => (
       new Response(JSON.stringify(body), { status, headers: { 'content-type': contentType } })
@@ -808,20 +840,32 @@ describe('external-agent Market Operation cold loop', () => {
       ) {
         return jsonResponse(unavailableRead)
       }
+      if (route === '/api/v1/operations/inspect') {
+        if (authorization !== 'Bearer ae-test-caller-key') {
+          throw new Error('inspect must be authenticated')
+        }
+        const request = body as { operationRef: string; input: Record<string, unknown> }
+        const commitmentRef = JSON.stringify(request.input) === JSON.stringify(initialInput)
+          ? `operation-commitment:v1:${'1'.repeat(64)}`
+          : `operation-commitment:v1:${'2'.repeat(64)}`
+        commitments.set(commitmentRef, request)
+        return jsonResponse(operationInspection(request.operationRef, request.input, commitmentRef))
+      }
       if (route === '/api/v1/operations/call') {
         if (authorization !== 'Bearer ae-test-caller-key') {
           throw new Error('invoke must be authenticated')
         }
         const request = body as {
-          operationRef: string
-          input: Record<string, unknown>
+          commitmentRef: string
           idempotencyKey: string
         }
+        const committed = commitments.get(request.commitmentRef)
+        if (committed === undefined) throw new Error('invoke without inspection commitment')
         const existing = durableInvocations.get(request.idempotencyKey)
         if (existing !== undefined) {
           if (
-            existing.operationRef !== request.operationRef
-            || JSON.stringify(existing.input) !== JSON.stringify(request.input)
+            existing.operationRef !== committed.operationRef
+            || JSON.stringify(existing.input) !== JSON.stringify(committed.input)
           ) {
             return jsonResponse({
               type: 'about:blank',
@@ -838,14 +882,14 @@ describe('external-agent Market Operation cold loop', () => {
 
         providerEffects += 1
         durableInvocations.set(request.idempotencyKey, {
-          operationRef: request.operationRef,
-          input: request.input,
+          operationRef: committed.operationRef,
+          input: committed.input,
           result: completedResult,
         })
         return jsonResponse({
           kind: 'pending',
           invocationRef,
-          operationRef: request.operationRef,
+          operationRef: committed.operationRef,
           retryAfterMs: 100,
         })
       }
@@ -858,6 +902,7 @@ describe('external-agent Market Operation cold loop', () => {
         return jsonResponse({
           kind: 'found',
           invocationRef,
+          version: 1,
           operationRef,
           state: 'terminal',
           evidenceHash: existing.result.evidenceHash,
@@ -934,9 +979,12 @@ describe('external-agent Market Operation cold loop', () => {
       { method: 'POST', url: 'https://market.example/api/v1/market-operations/detail' },
       { method: 'POST', url: 'https://market.example/api/v1/market-operations/compare' },
       { method: 'POST', url: 'https://market.example/api/v1/market-operations/inspect-plan' },
+      { method: 'POST', url: 'https://market.example/api/v1/operations/inspect' },
       { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
       { method: 'GET', url: `https://market.example/api/v1/operations/${encodeURIComponent(invocationRef)}` },
+      { method: 'POST', url: 'https://market.example/api/v1/operations/inspect' },
       { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
+      { method: 'POST', url: 'https://market.example/api/v1/operations/inspect' },
       { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
     ])
     expect(requests.map(({ authorization }) => authorization)).toEqual([
@@ -948,53 +996,63 @@ describe('external-agent Market Operation cold loop', () => {
       'Bearer ae-test-caller-key',
       'Bearer ae-test-caller-key',
       'Bearer ae-test-caller-key',
+      'Bearer ae-test-caller-key',
+      'Bearer ae-test-caller-key',
+      'Bearer ae-test-caller-key',
     ])
     expect(requests.map(({ body }) => body)).toEqual([
       { query: 'bitcoin price' },
       { operationRef },
       { operationRefs: [operationRef, comparisonRef] },
       { operationRefs: [operationRef, comparisonRef] },
-      { operationRef, input: initialInput, idempotencyKey },
+      { operationRef, input: initialInput },
+      { commitmentRef: `operation-commitment:v1:${'1'.repeat(64)}`, idempotencyKey },
       undefined,
-      { operationRef, input: initialInput, idempotencyKey },
-      { operationRef, input: changedInput, idempotencyKey },
+      { operationRef, input: initialInput },
+      { commitmentRef: `operation-commitment:v1:${'1'.repeat(64)}`, idempotencyKey },
+      { operationRef, input: changedInput },
+      { commitmentRef: `operation-commitment:v1:${'2'.repeat(64)}`, idempotencyKey },
     ])
   })
 
   it('generates a durable idempotency key when call omits one', async () => {
     setApiKey('ae-test-caller-key')
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'pending', invocationRef: 'invocation:generated', operationRef: 'operation:v1:current', retryAfterMs: 100,
-    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(responseJson(operationInspection(CURRENT_OPERATION_REF, {})))
+      .mockResolvedValueOnce(responseJson({
+        kind: 'pending', invocationRef: 'invocation:generated', operationRef: CURRENT_OPERATION_REF, retryAfterMs: 100,
+      }))
     vi.stubGlobal('fetch', fetchMock)
 
     const output = captureStdout()
     try {
-      await runInvokeCommand(['operation:v1:current'], { ...options, input: '{}' })
+      await runInvokeCommand([CURRENT_OPERATION_REF], { ...options, input: '{}' })
     } finally {
       output.restore()
     }
     const result = JSON.parse(output.read()) as Record<string, unknown>
     expect(result).not.toHaveProperty('idempotencyKey')
-    const [, init] = fetchMock.mock.calls[0]!
+    const [, init] = fetchMock.mock.calls[1]!
     const request = JSON.parse(String(init?.body)) as { idempotencyKey: string }
     expect(request.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u)
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('returns pending with a reusable key and status continuation without --wait', async () => {
     setApiKey('ae-test-caller-key')
     const output = captureStdout()
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(responseJson(operationInspection(CURRENT_OPERATION_REF, {})))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
       kind: 'pending',
       invocationRef: 'invocation:current',
-      operationRef: 'operation:v1:current',
+      operationRef: CURRENT_OPERATION_REF,
       retryAfterMs: 100,
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
-      await runInvokeCommand(['operation:v1:current'], {
+      await runInvokeCommand([CURRENT_OPERATION_REF], {
         ...options,
         baseUrlSource: 'flag',
         input: '{}',
@@ -1014,12 +1072,12 @@ describe('external-agent Market Operation cold loop', () => {
     expect(printed).toEqual({
       kind: 'pending',
       invocationRef: 'invocation:current',
-      operationRef: 'operation:v1:current',
+      operationRef: CURRENT_OPERATION_REF,
       retryAfterMs: 100,
       nextCommand: 'ae status invocation:current --base-url https://market.example --json',
     })
     expect(output.read()).not.toContain('idem-stable')
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('reads status through the authenticated canonical route', async () => {
@@ -1028,7 +1086,8 @@ describe('external-agent Market Operation cold loop', () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
       invocationRef: 'invocation:current',
-      operationRef: 'operation:v1:current',
+      version: 1,
+      operationRef: CURRENT_OPERATION_REF,
       state: 'in_progress',
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
@@ -1083,7 +1142,8 @@ describe('external-agent Market Operation cold loop', () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'found',
       invocationRef: 'invocation:current',
-      operationRef: 'operation:v1:current',
+      version: 1,
+      operationRef: CURRENT_OPERATION_REF,
       state: 'in_progress',
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)

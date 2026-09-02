@@ -211,9 +211,11 @@ const SOURCE_MATERIAL = {
   },
   evidenceRefs: ['source:owner'],
   pricingConfigJson: JSON.stringify({
-    version: 'pricing:v2',
-    unit: 'call',
-    paidAmount: { currency: 'AUD', units: '100', exponent: 2 },
+    version: 'pricing:v3',
+    kind: 'fixed_aud',
+    currency: 'AUD',
+    exponent: 6,
+    amountUnits: '1000000',
   }),
   priceDigest: `sha256:${'e'.repeat(64)}`,
 }

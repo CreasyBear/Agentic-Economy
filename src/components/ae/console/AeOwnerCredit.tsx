@@ -14,17 +14,24 @@ import {
 import { Button } from '@/components/ui/button'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { Skeleton } from '@/components/ui/skeleton'
-import { addExactAmounts, formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
+import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
+import type { AccountFundingBalance } from '@/modules/money/server'
 import type { AgentActivityView, AgentDetail, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { formatTimestamp } from '@/lib/ui/format-time'
+import type { MoneyDocumentView, MoneyReconciliationCaseView } from '@/lib/server/money-documents.functions'
 import { suggestContinuation } from '@/modules/market/suggested-continuation'
-import { AeCreditTopUpPanel, type CreditTopupPort, type CreditTopupTarget } from './AeCreditTopUpPanel'
+import { AeAccountFundingPanel, type AccountFundingPort } from './AeCreditTopUpPanel'
 
 export type AeOwnerCreditProps = Readonly<{
   directory: AgentDirectoryProjection
+  accountBalance: AccountFundingBalance
   loading: boolean
-  creditTopupPort?: CreditTopupPort
+  accountFundingPort?: AccountFundingPort
   onCreditRefresh?: () => void | Promise<void>
+  documents?: readonly MoneyDocumentView[]
+  reconciliationCases?: readonly MoneyReconciliationCaseView[]
+  onCreateStatement?: () => Promise<void>
+  onOpenDocument?: (documentRef: string) => Promise<void>
 }>
 
 type CreditChargeRow = Readonly<{
@@ -32,51 +39,28 @@ type CreditChargeRow = Readonly<{
   entry: AgentActivityView
 }>
 
-export function creditTopupTargetFromItems(
-  items: readonly AgentDetail[],
-): CreditTopupTarget | undefined {
-  const funded = items.find(({ account }) => account?.evidence === 'source')
-  if (funded?.account !== undefined) {
-    return {
-      principalId: funded.agent.principalRef,
-      currency: funded.account.balance.currency,
-      exponent: funded.account.balance.exponent,
-    }
-  }
-  const unfunded = items.find(({ dataState, grant, currentCredentialRef }) => dataState === 'empty'
-    && grant?.lifecycle === 'active'
-    && currentCredentialRef !== undefined)
-  const amount = unfunded?.grant?.budget.maximumSpendPerInvocation
-  return unfunded === undefined || amount === undefined
-    ? undefined
-    : { principalId: unfunded.agent.principalRef, currency: amount.currency, exponent: amount.exponent }
-}
-
-export function creditBalanceFromItems(
-  items: readonly AgentDetail[],
-): ExactAmount | undefined {
-  const amounts = items.flatMap(({ account }) => (account === undefined ? [] : [account.balance]))
-  return amounts.reduce<ExactAmount | undefined>((total, amount, index) => (
-    index === 0 ? amount : total === undefined ? undefined : addExactAmounts(total, amount)
-  ), undefined)
-}
-
 export function AeOwnerCredit({
   directory,
+  accountBalance,
   loading,
-  creditTopupPort,
+  accountFundingPort,
   onCreditRefresh,
+  documents = [],
+  reconciliationCases = [],
+  onCreateStatement,
+  onOpenDocument,
 }: AeOwnerCreditProps) {
   const items = directory.details
-  const balance = creditBalanceFromItems(items)
-  const hasUnavailableData = items.some((item) => item.dataState === 'unavailable')
-  const creditTopupTarget = creditTopupTargetFromItems(items)
+  const balance = accountBalance.kind === 'available' ? accountBalance.balance : undefined
+  const balanceUnavailable = accountBalance.kind === 'refused'
+  const balanceLocked = accountBalance.kind === 'available' && accountBalance.locked
   const activity = items
     .flatMap((item) => item.activity.map((entry) => ({ item, entry })))
     .sort((left, right) => right.entry.observedAt - left.entry.observedAt)
   const firstLoadPending = useFirstLoadPending(loading)
   const chargesPhase = stagedListPhase({ firstLoadPending, rows: activity })
   const [selected, setSelected] = useState<CreditChargeRow>()
+  const [documentAction, setDocumentAction] = useState<'idle' | 'creating' | 'opening' | 'saved' | 'failed'>('idle')
   const insufficientCreditContinuation = suggestContinuation({ subject: 'credit', state: 'insufficient' })
   const columns = useMemo<ColumnDef<CreditChargeRow, unknown>[]>(
     () => [
@@ -122,8 +106,8 @@ export function AeOwnerCredit({
     <div className="grid gap-8">
       <AeSection
         id="fund"
-        title="Balance"
-        description="Browsing is free. Paid calls use the credit assigned to each agent."
+        title="Account balance"
+        description="Browsing is free. Paid Calls reserve AUD from this Account and the durable Agent budget."
       >
         <AeFactList
           facts={[
@@ -131,25 +115,116 @@ export function AeOwnerCredit({
               label: 'Available credit',
               value: firstLoadPending
                 ? 'Checking…'
-                : hasUnavailableData
+                : balanceUnavailable
                   ? 'Balance unavailable'
                   : formatCreditAmount(balance),
               mono: true,
             },
             {
-              label: 'Assignment',
-              value: hasUnavailableData
-                ? 'Some balance details are temporarily unavailable.'
-                : 'Keep credit separate for each agent.',
+              label: 'State',
+              value: balanceUnavailable
+                ? 'Account balance is temporarily unavailable.'
+                : balanceLocked
+                  ? 'Locked for reconciliation; new paid Calls are refused.'
+                  : 'Available for admitted paid Calls.',
               muted: true,
             },
           ]}
         />
-        <AeCreditTopUpPanel
-          {...(creditTopupTarget === undefined ? {} : { target: creditTopupTarget })}
-          {...(creditTopupPort === undefined ? {} : { port: creditTopupPort })}
+        <AeAccountFundingPanel
+          {...(accountFundingPort === undefined ? {} : { port: accountFundingPort })}
           {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
         />
+      </AeSection>
+
+      <AeSection
+        title="Documents"
+        description="Immutable funding receipts, fee documents, statements, and adjustments retain their source transactions and policy version."
+      >
+        {onCreateStatement === undefined ? null : (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={documentAction === 'creating' || documentAction === 'opening'}
+            onClick={() => {
+              setDocumentAction('creating')
+              void onCreateStatement()
+                .then(() => setDocumentAction('saved'))
+                .catch(() => setDocumentAction('failed'))
+            }}
+          >
+            {documentAction === 'creating' ? 'Creating…' : 'Create current statement'}
+          </Button>
+        )}
+        <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
+          {documentAction === 'creating'
+            ? 'Creating statement…'
+            : documentAction === 'opening'
+              ? 'Preparing document…'
+              : documentAction === 'saved'
+                ? 'Document ready.'
+                : documentAction === 'failed'
+                  ? 'The document could not be prepared. Existing records were not changed.'
+                  : 'Documents are generated from immutable Account postings.'}
+        </p>
+        {documents.length === 0 ? (
+          <AeEmptyState
+            title="No documents yet"
+            description="Funding receipts appear after confirmed settlement. Statements include settled Calls in the selected period."
+          />
+        ) : (
+          <div className="grid gap-intra">
+            {documents.map((document) => (
+              <div key={document.documentRef} className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+                <AeFactList facts={[
+                  { label: 'Document', value: documentKindLabel(document.kind) },
+                  { label: 'Amount', value: formatCreditAmount({ currency: 'AUD', exponent: 6, units: document.amountUnits }), mono: true },
+                  { label: 'Issued', value: formatTimestamp(document.createdAt), mono: true },
+                  { label: 'Reference', value: document.documentRef, mono: true },
+                ]} />
+                {onOpenDocument === undefined ? null : (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={documentAction === 'creating' || documentAction === 'opening'}
+                    onClick={() => {
+                      setDocumentAction('opening')
+                      void onOpenDocument(document.documentRef)
+                        .then(() => setDocumentAction('saved'))
+                        .catch(() => setDocumentAction('failed'))
+                    }}
+                  >
+                    Open document
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </AeSection>
+
+      <AeSection
+        title="Reconciliation"
+        description="Every detected processor, treasury, settlement, projection, or document difference remains an owned case until evidence closes it."
+      >
+        {reconciliationCases.length === 0 ? (
+          <AeEmptyState
+            title="No reconciliation differences"
+            description="New paid Calls remain blocked only when their affected Account is locked for a proven mismatch."
+          />
+        ) : (
+          <div className="grid gap-intra">
+            {reconciliationCases.map((item) => (
+              <AeFactList key={item.caseRef} facts={[
+                { label: 'Difference', value: item.kind.replaceAll('_', ' ') },
+                { label: 'Status', value: item.status },
+                { label: 'Owner', value: item.ownerPrincipalRef ?? 'Unassigned' },
+                { label: 'Reason', value: item.reasonCode.replaceAll('_', ' ') },
+                { label: 'Reference', value: item.caseRef, mono: true },
+              ]} />
+            ))}
+          </div>
+        )}
       </AeSection>
 
       <AeSection
@@ -217,6 +292,16 @@ export function AeOwnerCredit({
       />
     </div>
   )
+}
+
+function documentKindLabel(kind: MoneyDocumentView['kind']): string {
+  switch (kind) {
+    case 'funding_receipt': return 'Funding receipt'
+    case 'service_fee_document': return 'Service fee document'
+    case 'statement': return 'Statement'
+    case 'adjustment': return 'Adjustment document'
+    case 'tax_invoice': return 'Tax invoice'
+  }
 }
 
 function chargeFacts(row: CreditChargeRow): readonly { label: string; value: string; muted?: boolean; mono?: boolean }[] {

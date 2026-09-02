@@ -157,7 +157,7 @@ function setHappyPublishResponses() {
   mocks.ownerPublicationImport.mockReturnValue({
     source: validSource,
     sourceRevision: 'owner-api/2026-08-09',
-    pricingConfig: { version: 'pricing:v2' },
+    pricingConfig: { version: 'pricing:v3' },
   })
   mocks.ownerPublicationWithCatalogOrigin.mockImplementation((source: unknown) => ({
     ...(source as Record<string, unknown>),

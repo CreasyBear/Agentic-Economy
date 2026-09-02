@@ -41,6 +41,7 @@ const chatActionIds = [
   'registry.operations.detail',
   'registry.operations.compare',
   'registry.operations.inspectPlan',
+  'operation.inspect',
   'operation.invoke',
 ] as const
 

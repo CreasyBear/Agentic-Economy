@@ -15,6 +15,9 @@ import {
   runtime,
 } from './operation-invoke-harness'
 
+const COMMITMENT_REF = `operation-commitment:v1:${'0'.repeat(64)}`
+const DECISION_PRICE = { currency: 'AUD', exponent: 6, units: '10000' } as const
+
 describe('operation.invoke dispatch', () => {
   it('keeps authority-needed reservations pending and replayable', async () => {
     const { operationRef, descriptor, operation } = fixture()
@@ -42,7 +45,7 @@ describe('operation.invoke dispatch', () => {
 
     const request = {
       principal,
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:authority' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:authority' },
     }
     const first = await service.invokeOperation({ ...request, correlationId: 'correlation:authority-first' })
     const replay = await service.invokeOperation({ ...request, correlationId: 'correlation:authority-replay' })
@@ -74,7 +77,7 @@ describe('operation.invoke dispatch', () => {
     const result = await service.invokeOperation({
       principal,
       correlationId: 'correlation:authority-reader-failure',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:authority-reader-failure' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:authority-reader-failure' },
     })
 
     expect(result).toMatchObject({ kind: 'refused', operationRef, code: 'authority_reader_unavailable', retryable: true })
@@ -105,7 +108,7 @@ describe('operation.invoke dispatch', () => {
     const result = await service.invokeOperation({
       principal,
       correlationId: 'correlation:fallback-failure',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:fallback-failure' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:fallback-failure' },
     })
 
     expect(result).toMatchObject({ kind: 'refused', operationRef, code: 'invocation_runtime_unavailable', retryable: true })
@@ -134,7 +137,7 @@ describe('operation.invoke dispatch', () => {
     const result = await service.invokeOperation({
       principal,
       correlationId: 'correlation:dispatch-race',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:dispatch-race' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:dispatch-race' },
     })
 
     expect(result).toMatchObject({ kind: 'reconciliation_required', operationRef })
@@ -193,7 +196,7 @@ describe('operation.invoke dispatch', () => {
     const request = {
       principal,
       correlationId: 'correlation:replayed-workless',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:replayed-workless' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:replayed-workless' },
     }
     const first = await service.invokeOperation(request)
     expect(first).toMatchObject({ kind: 'refused', operationRef, code: 'invocation_runtime_unavailable', retryable: true })
@@ -228,7 +231,7 @@ describe('operation.invoke dispatch', () => {
     const result = await service.invokeOperation({
       principal,
       correlationId: 'correlation:replay-readback-unavailable',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:replay-readback-unavailable' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:replay-readback-unavailable' },
     })
 
     expect(result).toMatchObject({ kind: 'refused', operationRef, code: 'invocation_runtime_unavailable', retryable: true })
@@ -275,7 +278,7 @@ describe('operation.invoke dispatch', () => {
     const request = {
       principal,
       correlationId: 'correlation:durable-dispatch',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:durable-dispatch' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:durable-dispatch' },
     }
     const result = await service.invokeOperation(request)
     persistedResult = result
@@ -313,7 +316,7 @@ describe('operation.invoke dispatch', () => {
     const result = await service.invokeOperation({
       principal,
       correlationId: 'correlation:dispatch-ambiguity',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:dispatch-ambiguity' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:dispatch-ambiguity' },
     })
 
     expect(result).toMatchObject({
@@ -357,7 +360,7 @@ describe('operation.invoke dispatch', () => {
     const result = await service.invokeOperation({
       principal,
       correlationId: 'correlation:enqueue-failure',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:enqueue-failure' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:enqueue-failure' },
     })
 
     expect(result).toMatchObject({
@@ -401,7 +404,7 @@ describe('operation.invoke dispatch', () => {
     const request = {
       principal,
       correlationId: 'correlation:empty-replay',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:empty-replay' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:empty-replay' },
     }
 
     const first = await service.invokeOperation(request)
@@ -436,18 +439,18 @@ describe('operation.invoke dispatch', () => {
     const first = await service.invokeOperation({
       principal,
       correlationId: 'correlation:idempotency-1',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:stable' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:stable' },
     })
     persistedResult = first
     const replay = await service.invokeOperation({
       principal,
       correlationId: 'correlation:idempotency-2',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:stable' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:stable' },
     })
     const conflict = await service.invokeOperation({
       principal,
       correlationId: 'correlation:idempotency-3',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'EUR' }, idempotencyKey: 'idem:stable' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'EUR' }, idempotencyKey: 'idem:stable' },
     })
 
     expect(replay).toEqual(first)
@@ -477,7 +480,7 @@ describe('operation.invoke dispatch', () => {
     const result = await service.invokeOperation({
       principal: productionPrincipal,
       correlationId: 'correlation:production-production',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:production-production' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:production-production' },
     })
 
     expect(result).toMatchObject({ kind: 'pending', operationRef })

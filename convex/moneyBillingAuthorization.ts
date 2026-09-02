@@ -120,44 +120,6 @@ export async function canonicalBillingPrincipalContext<
   } as Context
 }
 
-export async function canonicalBillingTopupContext<
-  Context extends MutationCtx | QueryCtx,
->(
-  ctx: Context,
-  locator: Readonly<{
-    commandRef?: string
-    externalRef?: string
-    idempotencyKey?: string
-  }>,
-): Promise<Context | null> {
-  const commandRef = locator.commandRef
-  const externalRef = locator.externalRef
-  const command =
-    commandRef !== undefined
-      ? await ctx.db
-          .query('moneyTopupCommands')
-          .withIndex('by_commandRef', (query) =>
-            query.eq('commandRef', commandRef),
-          )
-          .unique()
-      : externalRef !== undefined
-        ? await ctx.db
-            .query('moneyTopupCommands')
-            .withIndex('by_externalRef', (query) =>
-              query.eq('externalRef', externalRef),
-            )
-            .unique()
-        : null
-  if (
-    command === null ||
-    (locator.idempotencyKey !== undefined &&
-      command.idempotencyKey !== locator.idempotencyKey)
-  ) {
-    return null
-  }
-  return await canonicalBillingPrincipalContext(ctx, command.principalId)
-}
-
 export type PersistedInvocationAuthorityExpectation = Readonly<{
   invocationRef: string
   principalId?: string

@@ -818,7 +818,7 @@ function canaryObservation(
     outputContractValid,
     outputUsable: outputContractValid && outputDeterministic,
     ...(row.evidenceHash === undefined ? {} : { evidenceHash: row.evidenceHash }),
-    ...(receipt === undefined ? {} : {
+    ...(receipt === undefined || receipt.commercialModel !== 'seller_canary_x402' ? {} : {
       payment: {
         state: paymentState,
         amount: receipt.providerQuotedAmount,

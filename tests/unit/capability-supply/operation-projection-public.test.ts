@@ -174,31 +174,31 @@ describe('public operation read contract', () => {
     expect(wire.commercial.priceBreakdown).toEqual(operation.commercial.priceBreakdown)
     expect(deserializeOperationDescriptor(wire).commercial.priceBreakdown).toEqual(operation.commercial.priceBreakdown)
   })
-  it('preserves backward absence and pinned fee rounding cases', () => {
+  it('preserves backward absence and canonical AUD unit boundaries', () => {
     expect(serializeOperationDescriptor(projectCapabilityOperation(operationRecord, 2_000)).commercial).not.toHaveProperty('priceBreakdown')
     const cases = [
-      { provider: '1000', fee: '100', total: '1100' },
-      { provider: '1', fee: '1', total: '2' },
-      { provider: '0', fee: '0', total: '0' },
-      { provider: '9223372036854775807', fee: '922337203685477581', total: '10145709240540253388' },
+      { total: '1100' },
+      { total: '2' },
+      { total: '0' },
+      { total: '10145709240540253388' },
     ] as const
     for (const value of cases) {
       const config = {
-        version: 'pricing:v2' as const,
-        unit: 'call' as const,
-        providerAmount: { currency: 'USD', units: value.provider, exponent: 2 },
-        platformFee: { currency: 'USD', units: value.fee, exponent: 2 },
-        paidAmount: { currency: 'USD', units: value.total, exponent: 2 },
+        version: 'pricing:v3' as const,
+        kind: 'fixed_aud' as const,
+        currency: 'AUD' as const,
+        exponent: 6 as const,
+        amountUnits: value.total,
       }
       expect(normalizePricingConfig(config).kind).toBe('valid')
       expect(pricingConfigDigest(config)).not.toBe('invalid')
     }
     const corrupted = {
-      version: 'pricing:v2' as const,
-      unit: 'call' as const,
-      providerAmount: { currency: 'USD', units: '1000', exponent: 2 },
-      platformFee: { currency: 'USD', units: '99', exponent: 2 },
-      paidAmount: { currency: 'USD', units: '1099', exponent: 2 },
+      version: 'pricing:v3' as const,
+      kind: 'fixed_aud' as const,
+      currency: 'AUD' as const,
+      exponent: 6 as const,
+      amountUnits: '01099',
     }
     expect(normalizePricingConfig(corrupted)).toEqual({ kind: 'invalid', code: 'pricing_config_invalid' })
   })

@@ -151,6 +151,7 @@ describe('MCP host adapter operation recovery', () => {
   it('delegates authenticated status once and returns a structured found reconciliation state', async () => {
     const statusResult: OperationInvokeStatusResult = {
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef: currentOperationRef,
       state: 'reconciliation_required',
@@ -244,6 +245,7 @@ describe('MCP host adapter operation recovery', () => {
   it('delegates canonical reconciliation evidence once per request and repeats the same terminal result', async () => {
     const reconcileResult: OperationInvokeRecoveryResult = {
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef: currentOperationRef,
       state: 'terminal',

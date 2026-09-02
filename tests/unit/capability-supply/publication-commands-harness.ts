@@ -28,9 +28,11 @@ import {
 } from '@/modules/capability-supply/public'
 
 const currentPricingConfig = {
-  version: 'pricing:v2' as const,
-  unit: 'call' as const,
-  paidAmount: { currency: 'AUD' as const, units: '1200', exponent: 2 },
+  version: 'pricing:v3' as const,
+  kind: 'fixed_aud' as const,
+  currency: 'AUD' as const,
+  exponent: 6 as const,
+  amountUnits: '12000000',
 }
 
 export const digest = `sha256:${'a'.repeat(64)}`
@@ -105,9 +107,11 @@ export async function preparedPublication(
     source: publicationSource(capabilityId, version),
     sourceRevision: 'source-revision:demo',
     pricingConfig: {
-      version: 'pricing:v2',
-      unit: 'call',
-      paidAmount: { currency: 'AUD', units: '1200', exponent: 2 },
+      version: 'pricing:v3',
+      kind: 'fixed_aud',
+      currency: 'AUD',
+      exponent: 6,
+      amountUnits: '12000000',
     },
     evidenceRefs: context.evidenceRefs,
   })

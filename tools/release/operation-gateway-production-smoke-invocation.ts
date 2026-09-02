@@ -153,6 +153,12 @@ function gatewayInvocationObservationFromStatusResult(
       code: result.code,
       retryable: result.retryable,
     };
+  if (result.kind === "unchanged")
+    return {
+      kind: "unknown",
+      code: "status_unchanged",
+      retryable: true,
+    };
   if (result.result !== undefined) return result.result;
   return {
     kind: "pending",
@@ -291,6 +297,13 @@ export async function readGatewayStatus(
       code: parsed.data.code,
       status: response.status,
       retryable: parsed.data.retryable,
+    };
+  if (parsed.data.kind === "unchanged")
+    return {
+      kind: "unknown",
+      code: "status_unchanged",
+      status: response.status,
+      retryable: true,
     };
   if (parsed.data.result !== undefined) return parsed.data.result;
   return {

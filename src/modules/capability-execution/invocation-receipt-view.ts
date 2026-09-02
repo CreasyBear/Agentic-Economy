@@ -103,6 +103,17 @@ export function projectInvocationReceipt(input: PublicInvocationStatusRead): Inv
     }
   }
 
+  if (input.kind === 'unchanged') {
+    return {
+      version: 'ae.public-invocation-receipt:v1',
+      invocationRef: input.invocationRef,
+      statusLabel: 'No status change',
+      statusDetail: 'The authoritative invocation record has not changed since the supplied version.',
+      stages: pendingStages('No new stage is claimed by this unchanged response.'),
+      complete: false,
+    }
+  }
+
   const result = input.result
   const resultReceipt = result !== undefined && 'receipt' in result ? result.receipt : undefined
   const receipt = input.receipt ?? resultReceipt

@@ -28,6 +28,7 @@ import {
   x402PaymentProfileForEnvironment,
   type PublishPreparedCapabilityCommandResult,
 } from '@/modules/capability-supply/public'
+import { pricingConfigSourceAmount } from '@/modules/money/public'
 import {
   bindingIntegrityIsValid,
   offeringIntegrityIsValid,
@@ -189,11 +190,12 @@ function exactSandboxX402Material(
   if (
     pricing.kind !== 'valid'
     || pricingConfigDigest(pricing.config) !== prepared.priceDigest
-    || pricing.config.paidAmount.currency !== config.currency
-    || pricing.config.paidAmount.exponent !== config.routeAmountExponent
+    || pricing.config.kind !== 'managed_x402'
+    || pricing.config.sourceRequirement.network !== config.network
+    || pricing.config.sourceRequirement.asset.toLowerCase() !== config.asset.toLowerCase()
   ) return false
   const atomicAmount = rescaleExactAmount(
-    pricing.config.paidAmount,
+    pricingConfigSourceAmount(pricing.config),
     config.assetAmountExponent,
   )
   return atomicAmount !== undefined && matching[0]?.amount === atomicAmount.units

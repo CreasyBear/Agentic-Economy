@@ -74,6 +74,7 @@ const externalSpendRefusalCode = v.union(
   v.literal('external_spend_already_reversed'),
   v.literal('external_spend_custody_policy_invalid'),
   v.literal('external_spend_custody_daily_limit_exceeded'),
+  v.literal('external_spend_commercial_policy_required'),
 )
 export const externalSpendPaymentFactsArgs = {
   principalId: identifier,

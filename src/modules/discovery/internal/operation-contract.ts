@@ -9,6 +9,10 @@ import type { JsonValue } from '@/modules/capability-contract/public'
 import {
   OPERATION_INVOKE_ROUTE_CONTRACT,
 } from '@/modules/capability-execution/operation-invoke-entry'
+import {
+  OPERATION_INSPECT_ACTION_ID,
+  OPERATION_INSPECT_PATH,
+} from '@/modules/capability-execution/operation-commitment'
 
 export const PUBLIC_OPERATION_REF_EXAMPLE = `operation:v1:${'a'.repeat(64)}` as const
 export const PUBLIC_INVOCATION_REF_EXAMPLE = 'invocation:v1:example' as const
@@ -42,10 +46,24 @@ export type PublicOperationRouteExample = Readonly<{
 
 export function operationRouteExample(route: PublicOperationRouteDescriptor): PublicOperationRouteExample {
   const authorization = 'Bearer $AE_API_KEY'
+  if (route.actionId === OPERATION_INSPECT_ACTION_ID) {
+    const actionInput = { operationRef: PUBLIC_OPERATION_REF_EXAMPLE, input: {} }
+    return {
+      actionInput,
+      http: {
+        path: OPERATION_INSPECT_PATH,
+        headers: {
+          Authorization: authorization,
+          'Content-Type': OPERATION_INVOKE_ROUTE_CONTRACT.media.request,
+          Accept: OPERATION_INVOKE_ROUTE_CONTRACT.media.response,
+        },
+        body: actionInput,
+      },
+    }
+  }
   if (route.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId) {
     const actionInput = {
-      operationRef: PUBLIC_OPERATION_REF_EXAMPLE,
-      input: {},
+      commitmentRef: `operation-commitment:v1:${'b'.repeat(64)}`,
       idempotencyKey: PUBLIC_IDEMPOTENCY_KEY_EXAMPLE,
     }
     return {
@@ -57,11 +75,7 @@ export function operationRouteExample(route: PublicOperationRouteDescriptor): Pu
           'Content-Type': OPERATION_INVOKE_ROUTE_CONTRACT.media.request,
           Accept: OPERATION_INVOKE_ROUTE_CONTRACT.media.response,
         },
-        body: {
-          operationRef: PUBLIC_OPERATION_REF_EXAMPLE,
-          input: {},
-          idempotencyKey: PUBLIC_IDEMPOTENCY_KEY_EXAMPLE,
-        },
+        body: actionInput,
       },
     }
   }

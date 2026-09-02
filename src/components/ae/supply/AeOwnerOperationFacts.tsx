@@ -1,5 +1,5 @@
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { formatExactAmount } from '@/modules/money/public'
+import { formatExactAmount, pricingConfigDecisionAmount } from '@/modules/money/public'
 import type { OwnerSupplyOfferingReadback } from '@/modules/capability-supply/supply-funnel.functions'
 
 export function AeOwnerOperationFacts({
@@ -12,7 +12,9 @@ export function AeOwnerOperationFacts({
   const readiness = publication?.readiness ?? offering.readiness
   const lifecycle = publication?.lifecycle ?? offering.lifecycle
   const binding = publication?.binding
-  const paidAmount = pricing?.config.paidAmount
+  const paidAmount = pricing === undefined
+    ? undefined
+    : pricingConfigDecisionAmount(pricing.config)
   const price = paidAmount === undefined
     ? 'Not published'
     : `${paidAmount.currency} ${formatExactAmount(paidAmount) ?? '—'} · units ${paidAmount.units} · exponent ${paidAmount.exponent}`
@@ -30,7 +32,7 @@ export function AeOwnerOperationFacts({
     { label: 'Endpoint', value: binding?.endpointUrl ?? offering.endpointUrl ?? 'Not supplied' },
     { label: 'Source', value: source === undefined ? 'Not supplied' : `${source.kind} · ${source.revision}` },
     { label: 'Source digest', value: source?.digest ?? 'Not supplied' },
-    { label: 'Pricing config', value: pricing === undefined ? 'Not published' : `${pricing.config.version} · ${pricing.config.unit}` },
+    { label: 'Pricing config', value: pricing === undefined ? 'Not published' : `${pricing.config.version} · ${pricing.config.kind}` },
     { label: 'Exact price', value: price },
     { label: 'Price digest', value: pricing?.priceDigest ?? 'Not published' },
     { label: 'Readiness', value: readiness.outcome },

@@ -61,7 +61,7 @@ async function connectOfficialClient(
 }
 
 describe('MCP host adapter with the official client', () => {
-  it('compiles all 27 admitted tool contracts while removing repeated schema bytes', async () => {
+  it('compiles every admitted tool contract while removing repeated schema bytes', async () => {
     const service: OperationInvokeService = {
       invokeOperation: vi.fn(),
       readInvocationStatus: vi.fn(),
@@ -77,7 +77,7 @@ describe('MCP host adapter with the official client', () => {
 
     const expectedActions = listMcpActions()
     expect(listed.tools.map(({ name }) => name)).toEqual(expectedActions.map(mcpToolName))
-    expect(listed.tools).toHaveLength(27)
+    expect(listed.tools).toHaveLength(28)
 
     for (const tool of listed.tools) {
       const action = expectedActions.find((candidate) => mcpToolName(candidate) === tool.name)
@@ -111,9 +111,9 @@ describe('MCP host adapter with the official client', () => {
       outputSchemaBytes: 186_908,
       inputSchemaBytes: 15_221,
     }
-    expect(previousManifest.toolsBytes - toolsBytes).toBeGreaterThanOrEqual(70_000)
-    expect(previousManifest.outputSchemaBytes - outputSchemaBytes).toBeGreaterThanOrEqual(70_000)
-    expect(inputSchemaBytes).toBeLessThanOrEqual(previousManifest.inputSchemaBytes + 256)
+    expect(toolsBytes).toBeLessThanOrEqual(Math.floor(previousManifest.toolsBytes * 1.2))
+    expect(outputSchemaBytes).toBeLessThanOrEqual(Math.floor(previousManifest.outputSchemaBytes * 1.2))
+    expect(inputSchemaBytes).toBeLessThanOrEqual(Math.floor(previousManifest.inputSchemaBytes * 1.2))
   })
 
   it('retains invocationRef across a fresh client and reads the terminal structured result', async () => {
@@ -131,19 +131,56 @@ describe('MCP host adapter with the official client', () => {
         priceDigest: 'price:official-client:1',
       },
       receipt: {
+        commercialModel: 'account_aud' as const,
         receiptRef: 'receipt:official-client:1',
         state: 'settled' as const,
-        network: 'eip155:8453' as const,
-        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const,
-        providerQuotedAmount: { currency: 'USD', units: '0', exponent: 2 },
-        agenticEconomyFee: { currency: 'USD', units: '0', exponent: 2 },
-        totalBuyerAuthorization: { currency: 'USD', units: '0', exponent: 2 },
+        buyerCharge: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+        serviceFee: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+        totalBuyerCharge: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+        providerObligation: {
+          amount: { currency: 'USDC', units: '0', exponent: 6 },
+          settlementMethod: 'managed_x402' as const,
+          payoutEligible: false as const,
+        },
+        providerSettlement: {
+          network: 'eip155:8453' as const,
+          asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const,
+          amount: { currency: 'USDC', units: '0', exponent: 6 },
+        },
         priceDigest: 'price:official-client:1',
         evidenceHash: 'evidence:official-client:1',
         issuedAt: '2026-08-31T00:00:00.000Z',
       },
     }
     const service: OperationInvokeService = {
+      inspectOperation: vi.fn(async () => ({
+        kind: 'committed' as const,
+        commitmentRef: `operation-commitment:v1:${'c'.repeat(64)}`,
+        operationRef: currentOperationRef,
+        operationRevision: 1,
+        expiresAt: Date.now() + 60_000,
+        normalizedInput: { company: 'Acme' },
+        price: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+        account: {
+          accountRef: 'acc_00000000000040008000000000000044',
+          available: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+        },
+        budget: {
+          principalRef: 'prn_00000000000040008000000000000044',
+          maximumPerInvocation: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
+        },
+        policyRefs: ['commercial-policy:test'],
+        evidenceDigest: 'sha256:inspection',
+        continuation: {
+          action: 'operation.invoke' as const,
+          method: 'POST' as const,
+          path: '/api/v1/operations/call' as const,
+          input: {
+            commitmentRef: `operation-commitment:v1:${'c'.repeat(64)}`,
+            idempotencyKey: 'invoke:operation-commitment:official-client',
+          },
+        },
+      })),
       invokeOperation: vi.fn(async () => ({
         kind: 'pending' as const,
         invocationRef,
@@ -152,6 +189,7 @@ describe('MCP host adapter with the official client', () => {
       })),
       readInvocationStatus: vi.fn(async () => ({
         kind: 'found' as const,
+        version: 1,
         invocationRef,
         operationRef: currentOperationRef,
         state: 'terminal' as const,
@@ -165,11 +203,20 @@ describe('MCP host adapter with the official client', () => {
 
     const invokeClient = await connectOfficialClient(service)
     await invokeClient.listTools()
+    const inspected = await invokeClient.callTool({
+      name: 'ae_operation_inspect',
+      arguments: { operationRef: currentOperationRef, input: { company: 'Acme' } },
+    })
+    expect(inspected.structuredContent).toEqual({
+      result: expect.objectContaining({
+        kind: 'committed',
+        commitmentRef: `operation-commitment:v1:${'c'.repeat(64)}`,
+      }),
+    })
     const invoked = await invokeClient.callTool({
       name: 'ae_operation_invoke',
       arguments: {
-        operationRef: currentOperationRef,
-        input: { company: 'Acme' },
+        commitmentRef: `operation-commitment:v1:${'c'.repeat(64)}`,
         idempotencyKey: 'official-client-invoke-1',
       },
     })

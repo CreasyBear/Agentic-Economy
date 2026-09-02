@@ -11,9 +11,8 @@ import {
   accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
-  normalizePricingConfig,
+  fixedAudPricingConfig,
   pricingConfigDigest,
-  readExactAmount,
   type ExactAmount,
 } from '@/modules/money/public'
 import type { ActionCtx } from '../../../../convex/_generated/server'
@@ -26,7 +25,6 @@ import {
   type OpenDispatch,
   type WorkerAcceptedCharge,
 } from '../../../../convex/capabilityOperationInvocationProjection'
-import type { AuthorizeInvocationChargeArgs } from '../../../../convex/moneyChargeAdmission'
 
 export type WorkerResult =
   | Readonly<{ kind: 'recorded' }>
@@ -299,6 +297,10 @@ export async function authorizeAeInternalCharge(
   // A first-time owner has no money account yet. Passing expectedAccountVersion
   // 0 lets moneyChargeAdmission's prepareCanonicalMoneyAccount create it; price
   // zero then settles as free_tier usage without any transaction movement.
+  const pricingConfig = fixedAudPricingConfig(input.authorityMaximumSpend)
+  if (pricingConfig === undefined) {
+    return { kind: 'refused', code: 'price_unavailable', retryable: false }
+  }
 
   const authorizedCharge = await ctx.runMutation(internal.moneyLedger.authorizeInvocationCharge, {
     principalId: input.principal.principalId,
@@ -311,8 +313,8 @@ export async function authorizeAeInternalCharge(
     inputDigest: input.dispatch.inputDigest,
     expectedAccountVersion: operatorAccountVersion ?? 0,
     rakeBps: 1_000,
-    priceDigest: pricingConfigDigest({ version: 'pricing:v2', unit: 'call', paidAmount: input.authorityMaximumSpend }),
-    priceSourceDigest: pricingConfigDigest({ version: 'pricing:v2', unit: 'call', paidAmount: input.authorityMaximumSpend }),
+    priceDigest: pricingConfigDigest(pricingConfig),
+    priceSourceDigest: pricingConfigDigest(pricingConfig),
     authorityMaximumSpend: input.authorityMaximumSpend,
     credentialId: input.principal.credentialId,
     credentialBudgetGrantRef: input.dispatch.grantRef,
@@ -333,253 +335,4 @@ export async function authorizeAeInternalCharge(
     return { kind: 'refused', code: authorizedCharge.code, retryable: authorizedCharge.retryable }
   }
   return { kind: 'accepted', charge: authorizedCharge }
-}
-
-type BrokeredChargeArgs = AuthorizeInvocationChargeArgs
-type BrokeredChargeDispatch = Pick<
-  OpenDispatch,
-  | 'invocationRef'
-  | 'principalId'
-  | 'ownerId'
-  | 'credentialId'
-  | 'applicationRef'
-  | 'grantRef'
-  | 'grantGeneration'
-  | 'inputDigest'
-  | 'operationRef'
->
-
-export type BrokeredChargeReservation = Readonly<{
-  charge: WorkerAcceptedCharge
-  args: BrokeredChargeArgs
-  expectedAccountVersion: number
-}>
-
-export async function brokeredChargeReservationForRecovery(
-  ctx: ActionCtx,
-  input: Readonly<{
-    operation: PublishedOperation
-    dispatch: BrokeredChargeDispatch
-    durableAttemptRef: string
-  }>,
-): Promise<BrokeredChargeReservation | undefined> {
-  const normalized = normalizePricingConfig(input.operation.identity.pricingConfig)
-  if (normalized.kind === 'invalid') return undefined
-  const amount = readExactAmount(normalized.config.paidAmount)
-  if (amount === undefined) return undefined
-  const transactionRef = `operation-money:${input.dispatch.invocationRef}:${input.durableAttemptRef}:1`
-  const expectedAccountVersion = await ctx.runQuery(
-    internal.moneyLedger.readInvocationChargeExpectedAccountVersion,
-    { transactionRef },
-  )
-  if (expectedAccountVersion === null) return undefined
-  const args = brokeredChargeArgs({
-    principal: {
-      principalId: input.dispatch.principalId,
-      ownerId: input.dispatch.ownerId,
-      credentialId: input.dispatch.credentialId,
-      applicationRef: input.dispatch.applicationRef,
-    } as AgentAccessPrincipal,
-    operation: input.operation,
-    dispatch: input.dispatch,
-    authorityMaximumSpend: amount,
-    durableAttemptRef: input.durableAttemptRef,
-    expectedAccountVersion,
-  })
-  if (args === undefined) return undefined
-  return {
-    args,
-    expectedAccountVersion,
-    charge: {
-      kind: 'accepted',
-      chargeState: 'paid',
-      amount,
-      priceDigest: args.priceDigest,
-      transactionRef: args.transactionRef,
-      providerNet: normalized.config.providerAmount,
-      rake: normalized.config.platformFee,
-      usageRef: `${input.dispatch.invocationRef}:${input.durableAttemptRef}:${input.dispatch.operationRef}`,
-      observedAt: args.observedAt,
-    },
-  }
-}
-
-function brokeredChargeArgs(
-  input: Readonly<{
-    principal: AgentAccessPrincipal
-    operation: PublishedOperation
-    dispatch: BrokeredChargeDispatch
-    authorityMaximumSpend: ExactAmount
-    durableAttemptRef: string
-    expectedAccountVersion: number
-  }>,
-): BrokeredChargeArgs | undefined {
-  const normalized = normalizePricingConfig(input.operation.identity.pricingConfig)
-  if (normalized.kind === 'invalid') return undefined
-  const amount = readExactAmount(normalized.config.paidAmount)
-  if (amount === undefined) return undefined
-  const priceDigest = pricingConfigDigest(normalized.config)
-  return {
-    principalId: input.principal.principalId,
-    amount,
-    operatorAccountRef: accountRefForOwner(input.principal.ownerId, amount.currency),
-    providerAccountRef: accountRefForProvider(input.operation.identity.businessId, amount.currency),
-    rakeAccountRef: accountRefForRake(amount.currency),
-    transactionRef: `operation-money:${input.dispatch.invocationRef}:${input.durableAttemptRef}:1`,
-    idempotencyKey: `operation-money:${input.dispatch.invocationRef}:${input.durableAttemptRef}:1`,
-    inputDigest: input.dispatch.inputDigest,
-    expectedAccountVersion: input.expectedAccountVersion,
-    rakeBps: 1_000,
-    priceDigest,
-    priceSourceDigest: priceDigest,
-    authorityMaximumSpend: input.authorityMaximumSpend,
-    credentialId: input.principal.credentialId,
-    applicationRef: input.principal.applicationRef,
-    serviceRef: input.operation.operationId,
-    offeringRef: input.operation.identity.offeringId,
-    businessId: input.operation.identity.businessId,
-    invocationRef: input.dispatch.invocationRef,
-    attemptRef: input.durableAttemptRef,
-    operationKey: input.dispatch.operationRef,
-    sourceDigest: input.operation.materialDigest,
-    evidenceRefs: [...input.operation.readiness.evidenceRefs],
-    observedAt: Date.now(),
-    freeTier: false,
-    credentialBudgetGrantRef: input.dispatch.grantRef,
-    credentialBudgetGeneration: input.dispatch.grantGeneration,
-  }
-}
-
-export async function reserveBrokeredInvocationCharge(
-  ctx: ActionCtx,
-  input: Readonly<{
-    principal: AgentAccessPrincipal
-    operation: PublishedOperation
-    dispatch: OpenDispatch
-    authorityMaximumSpend: ExactAmount
-    durableAttemptRef: string
-  }>,
-): Promise<
-  | Readonly<{ kind: 'accepted'; reservation: BrokeredChargeReservation }>
-  | Readonly<{ kind: 'missing_billing_identity' }>
-  | Readonly<{ kind: 'refused'; code: string; retryable: boolean }>
-> {
-  const normalized = normalizePricingConfig(input.operation.identity.pricingConfig)
-  if (normalized.kind === 'invalid') {
-    return { kind: 'refused', code: normalized.code, retryable: false }
-  }
-  const amount = readExactAmount(normalized.config.paidAmount)
-  if (amount === undefined) return { kind: 'refused', code: 'price_unavailable', retryable: false }
-  const operatorAccountVersion = await ctx.runQuery(internal.moneyLedger.readOperatorAccountVersion, {
-    ownerId: input.principal.ownerId,
-    currency: amount.currency,
-  })
-  if (operatorAccountVersion === null) return { kind: 'missing_billing_identity' }
-  const args = brokeredChargeArgs({ ...input, expectedAccountVersion: operatorAccountVersion })
-  if (args === undefined) return { kind: 'refused', code: 'price_unavailable', retryable: false }
-  const result = await ctx.runMutation(internal.moneyLedger.reserveBrokeredInvocationCharge, args)
-  if (result.kind !== 'accepted') {
-    return { kind: 'refused', code: result.code, retryable: result.retryable }
-  }
-  return {
-    kind: 'accepted',
-    reservation: {
-      charge: result,
-      args,
-      expectedAccountVersion: operatorAccountVersion,
-    },
-  }
-}
-
-export async function releaseBrokeredInvocationCharge(
-  ctx: ActionCtx,
-  reservation: BrokeredChargeReservation,
-  reconciliationEvidenceRefs?: readonly string[],
-): Promise<ChargeSettlementResult> {
-  try {
-    const result = await ctx.runMutation(internal.moneyLedger.releaseBrokeredInvocationCharge, {
-      ...reservation.args,
-      ...(reconciliationEvidenceRefs === undefined
-        ? {}
-        : { reconciliationEvidenceRefs: [...reconciliationEvidenceRefs] }),
-    })
-    return result.kind === 'released'
-      ? { kind: 'settled', outcome: 'not_released' }
-      : { kind: 'reconciliation_required' }
-  } catch {
-    return { kind: 'reconciliation_required' }
-  }
-}
-
-export async function recordBrokeredInvalidOutputLoss(
-  ctx: ActionCtx,
-  reservation: BrokeredChargeReservation,
-  input: Readonly<{
-    externalRef: string
-    invalidOutputEvidenceRef: string
-    invalidOutputEvidenceDigest: string
-    reconciliationEvidenceRefs: readonly string[]
-  }>,
-): Promise<
-  | Readonly<{ kind: 'settled'; lossTransactionRef: string }>
-  | Readonly<{ kind: 'reconciliation_required' }>
-> {
-  if (
-    input.externalRef.trim().length === 0
-    || input.invalidOutputEvidenceRef.trim().length === 0
-    || input.invalidOutputEvidenceDigest.trim().length === 0
-    || input.reconciliationEvidenceRefs.length === 0
-    || input.reconciliationEvidenceRefs.some((ref) => ref.trim().length === 0)
-  ) return { kind: 'reconciliation_required' }
-  try {
-    const result = await ctx.runMutation(internal.moneyLedger.recordBrokeredInvalidOutputLoss, {
-      ...reservation.args,
-      externalRef: input.externalRef,
-      invalidOutputEvidenceRef: input.invalidOutputEvidenceRef,
-      invalidOutputEvidenceDigest: input.invalidOutputEvidenceDigest,
-      reconciliationEvidenceRefs: [...input.reconciliationEvidenceRefs],
-    })
-    return result.kind === 'settled'
-      ? { kind: 'settled', lossTransactionRef: result.lossTransactionRef }
-      : { kind: 'reconciliation_required' }
-  } catch {
-    return { kind: 'reconciliation_required' }
-  }
-}
-
-export async function markBrokeredInvocationChargeOutcomeUnknown(
-  ctx: ActionCtx,
-  reservation: BrokeredChargeReservation,
-): Promise<ChargeSettlementResult> {
-  try {
-    const result = await ctx.runMutation(internal.moneyLedger.markBrokeredInvocationChargeOutcomeUnknown, reservation.args)
-    return result.kind === 'outcome_unknown'
-      ? { kind: 'reconciliation_required' }
-      : { kind: 'reconciliation_required' }
-  } catch {
-    return { kind: 'reconciliation_required' }
-  }
-}
-
-export async function finalizeBrokeredInvocationCharge(
-  ctx: ActionCtx,
-  reservation: BrokeredChargeReservation,
-  externalRef: string,
-  reconciliationEvidenceRefs?: readonly string[],
-): Promise<ChargeSettlementResult> {
-  if (externalRef.trim().length === 0) return { kind: 'reconciliation_required' }
-  try {
-    const result = await ctx.runMutation(internal.moneyLedger.finalizeBrokeredInvocationCharge, {
-      ...reservation.args,
-      externalRef,
-      ...(reconciliationEvidenceRefs === undefined
-        ? {}
-        : { reconciliationEvidenceRefs: [...reconciliationEvidenceRefs] }),
-    })
-    return result.kind === 'accepted'
-      ? { kind: 'settled', outcome: 'released' }
-      : { kind: 'reconciliation_required' }
-  } catch {
-    return { kind: 'reconciliation_required' }
-  }
 }

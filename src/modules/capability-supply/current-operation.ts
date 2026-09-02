@@ -2,7 +2,7 @@ import type { CapabilityContractRef } from '@/modules/capability-contract/public
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { deepFreeze } from '@/modules/common/deep-freeze'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { compareExactAmounts, exactAmountSchema, pricingConfigDigest } from '@/modules/money/public'
+import { compareExactAmounts, exactAmountSchema, pricingConfigDecisionAmount, pricingConfigDigest } from '@/modules/money/public'
 
 import type { PublicCapabilityUnavailableReason, PublicOperationPrice } from './operation-projection'
 import type { PublishedOperation } from './published-operation'
@@ -181,6 +181,13 @@ export function createCurrentOperationCommitment(input: Readonly<{
   const expectedOfferingDigest = capabilityOfferingRegistrationHash(operation.offering)
   const expectedBindingDigest = capabilityBindingRegistrationHash(operation.binding, operation.transport)
   const providerAuthority = currentProviderAuthority(operation, expectedOperationRef)
+  const operationPricingMatches = operation.pricingConfig.kind === 'managed_x402'
+    ? operation.identity.price.kind === 'on_request'
+    : operation.identity.price.kind === 'fixed'
+      && compareExactAmounts(
+        operation.identity.price.amount,
+        pricingConfigDecisionAmount(operation.pricingConfig),
+      ) === 0
 
   if (!isPublicOperationRef(input.operationRef)
     || input.operationRef !== expectedOperationRef
@@ -211,8 +218,7 @@ export function createCurrentOperationCommitment(input: Readonly<{
     || !transportConfigIsExact(operation)
     || operation.priceDigest !== operation.identity.priceDigest
     || operation.priceDigest !== pricingConfigDigest(operation.pricingConfig)
-    || operation.identity.price.kind !== 'fixed'
-    || compareExactAmounts(operation.identity.price.amount, operation.pricingConfig.paidAmount) !== 0
+    || !operationPricingMatches
     || !sameStableValue(operation.pricingConfig, operation.identity.pricingConfig)
     || !sameStableValue(operation.identity.price, operation.offering.presentation.price)
     || !sameStableValue(operation.identity.materialTerms, operation.offering.presentation.materialTerms)

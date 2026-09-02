@@ -2,7 +2,6 @@ import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
 import {
-  action,
   internalMutation,
   internalQuery,
   mutation,
@@ -13,13 +12,6 @@ import {
   readInvocationChargeExpectedAccountVersionHandler,
   readOperatorAccountVersionHandler,
 } from './moneyChargeAuthorize'
-import {
-  finalizeBrokeredInvocationChargeHandler,
-  markBrokeredInvocationChargeOutcomeUnknownHandler,
-  releaseBrokeredInvocationChargeHandler,
-  reserveBrokeredInvocationChargeHandler,
-} from './moneyChargeBrokered'
-import { recordBrokeredInvalidOutputLossHandler } from './moneyBrokeredInvalidOutputLoss'
 import {
   chargeOutcomeUnknownResultValue,
   invocationChargeReconciliationResult,
@@ -55,23 +47,6 @@ import {
   readKeyUsageHandler,
 } from './moneyCreditReads'
 import {
-  applyCreditTopupArgs,
-  applyCreditTopupHandler,
-  applyVerifiedStripeEventHandler,
-  bindCreditPaymentSessionArgs,
-  bindCreditPaymentSessionHandler,
-  markCreditTopupOutcomeUnknownArgs,
-  markCreditTopupOutcomeUnknownHandler,
-  readCreditTopupCommandHandler,
-  readCreditTopupWebhookCommandArgs,
-  readCreditTopupWebhookCommandHandler,
-  reserveCreditTopupArgs,
-  reserveCreditTopupHandler,
-  topupCommandResultValue,
-  topupReadInputArg,
-  topupWebhookResultValue,
-} from './moneyCreditTopup'
-import {
   externalSpendMutationResultValue,
   finalizeExternalInvocationSpendArgs,
   finalizeExternalInvocationSpendHandler,
@@ -88,10 +63,8 @@ import { exactAmount, identifier, moneyArgs } from './moneyLedgerValues'
 import {
   canonicalBillingPrincipalContext,
   canonicalBillingTransactionContext,
-  canonicalBillingTopupContext,
   persistedInvocationAuthorityIsCurrent,
 } from './moneyBillingAuthorization'
-import { resolveBusinessActor } from './authz'
 import {
   beginPayoutTransferHandler,
   payoutBeginArgs,
@@ -223,182 +196,6 @@ export const authorizeInvocationCharge = internalMutation({
   handler: authorizeInvocationChargeHandler,
 })
 
-const brokeredInvocationChargeArgs = {
-  principalId: identifier,
-  amount: exactAmount,
-  operatorAccountRef: identifier,
-  providerAccountRef: identifier,
-  rakeAccountRef: identifier,
-  transactionRef: identifier,
-  idempotencyKey: identifier,
-  inputDigest: identifier,
-  expectedAccountVersion: v.number(),
-  rakeBps: v.number(),
-  priceDigest: identifier,
-  priceSourceDigest: identifier,
-  authorityMaximumSpend: exactAmount,
-  credentialId: identifier,
-  applicationRef: v.optional(identifier),
-  serviceRef: identifier,
-  offeringRef: identifier,
-  businessId: identifier,
-  invocationRef: identifier,
-  attemptRef: identifier,
-  operationKey: identifier,
-  sourceDigest: identifier,
-  evidenceRefs: v.array(v.string()),
-  observedAt: v.number(),
-  freeTier: v.boolean(),
-  credentialBudgetGrantRef: v.optional(identifier),
-  credentialBudgetGeneration: v.optional(v.number()),
-} as const
-
-const brokeredInvalidOutputLossResult = v.union(
-  v.object({
-    kind: v.literal('settled'),
-    chargeTransactionRef: identifier,
-    lossTransactionRef: identifier,
-  }),
-  v.object({
-    kind: v.literal('refused'),
-    code: v.string(),
-    retryable: v.boolean(),
-    requiredAmount: v.optional(exactAmount),
-    availableAmount: v.optional(exactAmount),
-    nextAction: v.optional(v.literal('credit_topup_required')),
-  }),
-)
-
-export const reserveBrokeredInvocationCharge = internalMutation({
-  args: brokeredInvocationChargeArgs,
-  handler: reserveBrokeredInvocationChargeHandler,
-})
-
-export const finalizeBrokeredInvocationCharge = internalMutation({
-  args: {
-    ...brokeredInvocationChargeArgs,
-    externalRef: identifier,
-    reconciliationEvidenceRefs: v.optional(v.array(v.string())),
-  },
-  handler: finalizeBrokeredInvocationChargeHandler,
-})
-
-export const releaseBrokeredInvocationCharge = internalMutation({
-  args: {
-    ...brokeredInvocationChargeArgs,
-    reconciliationEvidenceRefs: v.optional(v.array(v.string())),
-  },
-  handler: releaseBrokeredInvocationChargeHandler,
-})
-
-export const markBrokeredInvocationChargeOutcomeUnknown = internalMutation({
-  args: brokeredInvocationChargeArgs,
-  handler: markBrokeredInvocationChargeOutcomeUnknownHandler,
-})
-
-export const recordBrokeredInvalidOutputLoss = internalMutation({
-  args: {
-    ...brokeredInvocationChargeArgs,
-    externalRef: identifier,
-    invalidOutputEvidenceRef: identifier,
-    invalidOutputEvidenceDigest: identifier,
-    reconciliationEvidenceRefs: v.array(identifier),
-  },
-  returns: brokeredInvalidOutputLossResult,
-  handler: recordBrokeredInvalidOutputLossHandler,
-})
-
-export const reserveCreditTopup = mutation({
-  args: reserveCreditTopupArgs.fields,
-  returns: topupCommandResultValue,
-  handler: async (ctx, args) => {
-    const actor = await resolveBusinessActor(ctx)
-    if (actor.kind !== 'authenticated_owner') {
-      return {
-        kind: 'refused' as const,
-        code: 'billing_identity_missing',
-        retryable: false,
-      }
-    }
-    const canonicalCtx = await canonicalBillingPrincipalContext(
-      ctx,
-      args.principalId,
-    )
-    return canonicalCtx === null
-      ? {
-          kind: 'refused' as const,
-          code: 'billing_identity_missing',
-          retryable: false,
-        }
-      : await reserveCreditTopupHandler(canonicalCtx, args, actor)
-  },
-})
-export const markCreditTopupOutcomeUnknown = mutation({
-  args: markCreditTopupOutcomeUnknownArgs.fields,
-  returns: topupCommandResultValue,
-  handler: async (ctx, args) => {
-    const canonicalCtx = await canonicalBillingTopupContext(ctx, {
-      commandRef: args.commandRef,
-      idempotencyKey: args.idempotencyKey,
-    })
-    return canonicalCtx === null
-      ? {
-          kind: 'refused' as const,
-          code: 'billing_identity_missing',
-          retryable: false,
-        }
-      : await markCreditTopupOutcomeUnknownHandler(canonicalCtx, args)
-  },
-})
-
-export const bindCreditPaymentSession = mutation({
-  args: bindCreditPaymentSessionArgs.fields,
-  returns: topupCommandResultValue,
-  handler: async (ctx, args) => {
-    const canonicalCtx = await canonicalBillingTopupContext(ctx, {
-      commandRef: args.commandRef,
-    })
-    return canonicalCtx === null
-      ? {
-          kind: 'refused' as const,
-          code: 'billing_identity_missing',
-          retryable: false,
-        }
-      : await bindCreditPaymentSessionHandler(canonicalCtx, args)
-  },
-})
-export const readCreditTopupCommand = query({
-  args: topupReadInputArg.fields,
-  returns: topupCommandResultValue,
-  handler: async (ctx, args) => {
-    const canonicalCtx = await canonicalBillingTopupContext(ctx, args)
-    return canonicalCtx === null
-      ? {
-          kind: 'refused' as const,
-          code: 'billing_identity_missing',
-          retryable: false,
-        }
-      : await readCreditTopupCommandHandler(canonicalCtx, args)
-  },
-})
-
-export const readCreditTopupWebhookCommand = query({
-  args: readCreditTopupWebhookCommandArgs.fields,
-  returns: topupCommandResultValue,
-  handler: readCreditTopupWebhookCommandHandler,
-})
-
-export const applyCreditTopup = internalMutation({
-  args: applyCreditTopupArgs.fields,
-  returns: topupWebhookResultValue,
-  handler: applyCreditTopupHandler,
-})
-
-export const applyVerifiedStripeEvent = action({
-  args: applyCreditTopupArgs.fields,
-  returns: topupWebhookResultValue,
-  handler: applyVerifiedStripeEventHandler,
-})
 
 export const reserveConnectAccount = mutation({
   args: reserveConnectAccountArgs,

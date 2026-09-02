@@ -6,8 +6,8 @@ import {
   accountRefForProvider,
   accountRefForRake,
   compareExactAmounts,
-  computeProviderFeeBreakdown,
   normalizePricingConfig,
+  pricingConfigDecisionAmount,
   pricingConfigDigest,
   readExactAmount,
   validateChargeAccounts,
@@ -141,8 +141,11 @@ export async function admitInvocationCharge(
       retryable: false,
     }
   const pricingConfig = normalizedPricing.config
+  if (pricingConfig.kind !== 'fixed_aud') {
+    return { kind: 'refused' as const, code: 'price_unavailable' as const, retryable: false }
+  }
   const operationAmount = readExactAmount(operation.identity.price.amount)
-  const pricingAmount = readExactAmount(pricingConfig.paidAmount)
+  const pricingAmount = pricingConfigDecisionAmount(pricingConfig)
   if (
     operationAmount === undefined
     || pricingAmount === undefined
@@ -169,25 +172,10 @@ export async function admitInvocationCharge(
       code: 'price_changed' as const,
       retryable: false,
     }
-  if (operationAmount.units !== '0') {
-    const providerAmount = pricingConfig.providerAmount
-    const platformFee = pricingConfig.platformFee
-    const breakdown = providerAmount === undefined || platformFee === undefined
-      ? undefined
-      : computeProviderFeeBreakdown(providerAmount)
-    if (
-      providerAmount === undefined
-      || platformFee === undefined
-      || breakdown === undefined
-      || 'kind' in breakdown
-      || compareExactAmounts(breakdown.totalAmount, operationAmount) !== 0
-      || compareExactAmounts(breakdown.platformFee, platformFee) !== 0
-    )
-      return {
-        kind: 'refused' as const,
-        code: 'rake_not_configured' as const,
-        retryable: false,
-      }
+  if (operationAmount.units !== '0') return {
+    kind: 'refused' as const,
+    code: 'rake_not_configured' as const,
+    retryable: false,
   }
   const offering = await ctx.db
     .query('capabilityOfferings')
@@ -506,11 +494,5 @@ export async function admitInvocationCharge(
     prior,
     existingUsage,
     priorEntryRows,
-    ...(pricingConfig.providerAmount === undefined
-      ? {}
-      : { providerAmount: pricingConfig.providerAmount }),
-    ...(pricingConfig.platformFee === undefined
-      ? {}
-      : { platformFee: pricingConfig.platformFee }),
   }
 }

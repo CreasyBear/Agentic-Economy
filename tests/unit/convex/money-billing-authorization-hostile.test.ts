@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   canonicalBillingPrincipalContext,
-  canonicalBillingTopupContext,
   canonicalBillingTransactionContext,
   ownerPrincipalAllowed,
   persistedInvocationAuthorityIsCurrent,
@@ -229,36 +228,6 @@ describe('money billing authorization hostile boundaries', () => {
       .resolves.not.toBeNull()
     await expect(canonicalBillingPrincipalContext(mutationContext(db) as never, principalId))
       .resolves.toBeNull()
-  })
-
-  it('resolves top-ups by either durable locator and rejects absent or conflicting locators', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(now)
-    const db = authorityDb()
-    db.seed('moneyTopupCommands', {
-      _id: 'topup:one',
-      commandRef: 'topup-command:one',
-      externalRef: 'topup-external:one',
-      idempotencyKey: 'topup-idempotency:one',
-      principalId,
-    })
-    const ctx = queryContext(db) as never
-
-    await expect(canonicalBillingTopupContext(ctx, { commandRef: 'topup-command:one' }))
-      .resolves.not.toBeNull()
-    await expect(canonicalBillingTopupContext(ctx, { externalRef: 'topup-external:one' }))
-      .resolves.not.toBeNull()
-    await expect(canonicalBillingTopupContext(ctx, {})).resolves.toBeNull()
-    await expect(canonicalBillingTopupContext(ctx, { commandRef: 'topup-command:missing' }))
-      .resolves.toBeNull()
-    await expect(canonicalBillingTopupContext(ctx, {
-      commandRef: 'topup-command:one',
-      idempotencyKey: 'topup-idempotency:wrong',
-    })).resolves.toBeNull()
-    await expect(canonicalBillingTopupContext(ctx, {
-      commandRef: 'topup-command:one',
-      externalRef: 'topup-external:wrong',
-      idempotencyKey: 'topup-idempotency:one',
-    })).resolves.not.toBeNull()
   })
 
   it('denies missing, caller-mismatched, refused, and cancelled durable invocations', async () => {

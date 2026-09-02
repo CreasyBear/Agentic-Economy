@@ -24,7 +24,13 @@ const contractDocument = capabilityContractV2({ capabilityId: 'test.lookup' })
 const contract = defineCapabilityContract(contractDocument)
 const durableContract = encodeCapabilityContractDocument(contractDocument)
 const exactPrice = { currency: 'AUD', units: '100', exponent: 2 } as const
-const pricingConfig = { version: 'pricing:v2' as const, unit: 'call' as const, paidAmount: exactPrice }
+const pricingConfig = {
+  version: 'pricing:v3' as const,
+  kind: 'fixed_aud' as const,
+  currency: 'AUD' as const,
+  exponent: 6 as const,
+  amountUnits: '1000000',
+}
 const priceDigest = pricingConfigDigest(pricingConfig)
 const catalogOfferingSourceHash = canonicalDigest({ offeringRef: 'offering:1', revision: 1 })
 const catalogAccessPathSourceHash = canonicalDigest({ accessPathRef: 'access:1', revision: 1 })

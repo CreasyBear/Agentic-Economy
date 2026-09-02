@@ -50,6 +50,10 @@ import {
   operationStatusAction,
 } from '@/modules/capability-execution/operation-recovery.actions'
 import { operationInvokeAction } from '@/modules/capability-execution/operation-invoke.actions'
+import {
+  operationInspectAction,
+  OPERATION_INSPECT_ROUTE_CONTRACT,
+} from '@/modules/capability-execution/operation-commitment.actions'
 import { operationListAction } from '@/modules/capability-execution/operation-history.actions'
 import {
   marketRequestCreateAction,
@@ -74,6 +78,7 @@ const registeredActions: readonly AnyAction[] = [
   marketRequestCreateAction,
   marketRequestListAction,
   marketRequestStatusAction,
+  operationInspectAction,
   operationInvokeAction,
   operationListAction,
   operationStatusAction,
@@ -133,6 +138,7 @@ export function listMcpActionDescriptors(): readonly PublicMcpActionDescriptor[]
 }
 
 const operationRouteContracts = [
+  OPERATION_INSPECT_ROUTE_CONTRACT,
   OPERATION_INVOKE_ROUTE_CONTRACT.invoke,
   OPERATION_INVOKE_ROUTE_CONTRACT.list,
   OPERATION_INVOKE_ROUTE_CONTRACT.status,

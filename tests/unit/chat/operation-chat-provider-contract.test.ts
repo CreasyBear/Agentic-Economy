@@ -40,7 +40,7 @@ const AUTHORITY = {
 } as unknown as InteractiveBusinessAuthorityContext
 
 describe('Operation chat OpenRouter contract', () => {
-  it('sends exactly five provider-safe names that round-trip to canonical IDs', async () => {
+  it('sends exactly six provider-safe names that round-trip to canonical IDs', async () => {
     const server = await startOpenRouterContractServer([
       openRouterProseResponse({
         oneLine: 'Done.',
@@ -67,7 +67,7 @@ describe('Operation chat OpenRouter contract', () => {
       expect(names).toEqual(
         CHAT_TOOL_IDS.map((toolId) => CHAT_TOOL_NAME_MAP.canonicalToProvider[toolId]),
       )
-      expect(names).toHaveLength(5)
+      expect(names).toHaveLength(6)
       for (const name of names ?? []) {
         expect(name).not.toContain('.')
         expect(name).toMatch(/^[A-Za-z0-9_-]{1,128}$/)
@@ -100,8 +100,7 @@ describe('Operation chat OpenRouter contract', () => {
     }
     const server = await startOpenRouterContractServer([
       openRouterToolCallResponse(invokeToolName, {
-        operationRef: OPERATION_REF,
-        input: { company: 'Acme' },
+        commitmentRef: `operation-commitment:v1:${'b'.repeat(64)}`,
       }),
       openRouterProseResponse({
         oneLine: `Continued with ${freshValue}.`,

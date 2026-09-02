@@ -600,16 +600,20 @@ export function seedAuthorizationFixture(db: MemoryDb): void {
 
 export function seedPaidAuthorizationFixture(db: MemoryDb): Record<string, unknown> {
   seedAuthorizationFixture(db)
-  const amount = { currency: 'USD', units: '100', exponent: 2 }
+  const amount = { currency: 'AUD', units: '1000000', exponent: 6 }
   const priceDigest = canonicalDigest({
-    version: 'pricing:v2',
-    unit: 'call',
-    paidAmount: amount,
+    version: 'pricing:v3',
+    kind: 'fixed_aud',
+    currency: 'AUD',
+    exponent: 6,
+    amountUnits: amount.units,
   })
   const pricingConfig = {
-    version: 'pricing:v2' as const,
-    unit: 'call' as const,
-    paidAmount: amount,
+    version: 'pricing:v3' as const,
+    kind: 'fixed_aud' as const,
+    currency: 'AUD' as const,
+    exponent: 6 as const,
+    amountUnits: amount.units,
   }
   const identity = {
     ...authorizationOperation.identity,

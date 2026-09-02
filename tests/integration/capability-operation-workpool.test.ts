@@ -39,6 +39,7 @@ import {
   MARKET_OPERATIONS_INVOKE_SCOPE,
 } from '@/modules/agent-access/contract'
 import { accountRefForOwner } from '@/modules/money/public'
+import { COMMERCIAL_POLICY_FAMILIES } from '@/modules/money/public'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/capabilitySupplyGraphPorts'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/internal/graph/qualify-candidate'
@@ -51,6 +52,7 @@ import { handleMarketOperationDetailRequest } from '@/routes/api.v1.market-opera
 import { handleMarketOperationCompareRequest } from '@/routes/api.v1.market-operations.compare'
 import { handleMarketOperationInspectPlanRequest } from '@/routes/api.v1.market-operations.inspect-plan'
 import {
+  handleOperationInspectPost,
   handleOperationInvokePost,
   handleOperationInvokeStatusGet,
 } from '@/lib/server/operation-invoke-api'
@@ -58,6 +60,7 @@ import { projectInvocationReceipt } from '@/modules/capability-execution/invocat
 import { operationInvokeStatusResultSchema } from '@/modules/capability-execution/operation-recovery.actions'
 
 const INPUT = { request: 'lookup' } as const
+const commitmentByInvocationKey = new Map<string, string>()
 
 type TestPrincipal = Readonly<{
   principalId: string
@@ -73,15 +76,25 @@ function publicReceipt(
   state: 'settled' | 'refunded' | 'reconciliation_required',
   suffix: string,
 ) {
-  const amount = { currency: 'USD', units: '100', exponent: 2 }
+  const buyerAmount = { currency: 'AUD', units: '1100000', exponent: 6 }
+  const providerAmount = { currency: 'USDC', units: '1000000', exponent: 6 }
   return {
+    commercialModel: 'account_aud' as const,
     receiptRef: `receipt:operation-workpool:${suffix}`,
     state,
-    network: 'eip155:8453' as const,
-    asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const,
-    providerQuotedAmount: amount,
-    agenticEconomyFee: { currency: 'USD', units: '10', exponent: 2 },
-    totalBuyerAuthorization: { currency: 'USD', units: '110', exponent: 2 },
+    buyerCharge: buyerAmount,
+    serviceFee: { currency: 'AUD', units: '0', exponent: 6 },
+    totalBuyerCharge: buyerAmount,
+    providerObligation: {
+      amount: providerAmount,
+      settlementMethod: 'managed_x402' as const,
+      payoutEligible: false as const,
+    },
+    providerSettlement: {
+      network: 'eip155:8453' as const,
+      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const,
+      amount: providerAmount,
+    },
     priceDigest: `price:operation-workpool:${suffix}`,
     transactionRef: `transaction:operation-workpool:${suffix}`,
     ...(state === 'refunded'
@@ -109,7 +122,7 @@ async function seedKeylessLookup(
         ...source.offering.presentation,
         price: {
           kind: 'fixed',
-          amount: { currency: 'USD', units: '0', exponent: 2 },
+          amount: { currency: 'AUD', units: '0', exponent: 6 },
         },
       },
     },
@@ -208,7 +221,7 @@ async function seedPrincipal(
     scopes: [...(scopesOverride ?? [MARKET_OPERATIONS_INVOKE_SCOPE])],
     authorityMode: 'bounded_mandate' as const,
   }
-  const amount = { currency: 'USD', units: '0', exponent: 2 }
+  const amount = { currency: 'AUD', units: '0', exponent: 6 }
   const policy = {
     format: 'ae.agent-access-policy:v2' as const,
     operationAccess: 'all_admitted' as const,
@@ -217,8 +230,8 @@ async function seedPrincipal(
     budget: {
       budgetPolicyRef: `budget-policy:operation-workpool:${suffix}`,
       generation: 1,
-      currency: 'USD',
-      exponent: 2,
+      currency: 'AUD',
+      exponent: 6,
       maximumSpendPerInvocation: amount,
       maximumDailySpend: amount,
       maximumMonthlySpend: amount,
@@ -370,6 +383,32 @@ async function seedPrincipal(
   return { principal, grantRef }
 }
 
+async function seedCommercialPolicies(backend: ConvexFixtureBackend, now: number): Promise<void> {
+  await backend.run(async (ctx) => {
+    for (const [index, family] of COMMERCIAL_POLICY_FAMILIES.entries()) {
+      await ctx.db.insert('moneyCommercialPolicies', {
+        policyRef: `commercial-policy:workpool:${family}:1`,
+        family,
+        environment: 'production',
+        revision: 1,
+        lifecycle: 'active',
+        effectiveAt: now - 1,
+        expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
+        evidenceRef: `approval:workpool:${family}:1`,
+        evidenceDigest: canonicalDigest({ family, index, kind: 'workpool-approval' }),
+        approvedByPrincipalRef: 'principal:workpool-approver',
+        activeAccountRef: 'account:workpool-approver',
+        authorityGeneration: 1,
+        correlationRef: `correlation:workpool:${family}:1`,
+        idempotencyRef: `idempotency:workpool:${family}:1`,
+        commandDigest: canonicalDigest({ family, index, kind: 'workpool-policy-command' }),
+        activatedAt: now - 1,
+        updatedAt: now - 1,
+      })
+    }
+  })
+}
+
 const execFileAsync = promisify(execFile)
 
 async function serveOperationRoutes(input: Readonly<{
@@ -410,6 +449,8 @@ async function serveOperationRoutes(input: Readonly<{
         response = await handleMarketOperationCompareRequest(request)
       } else if (url.pathname === '/api/v1/market-operations/inspect-plan') {
         response = await handleMarketOperationInspectPlanRequest(request)
+      } else if (url.pathname === '/api/v1/operations/inspect') {
+        response = await handleOperationInspectPost(request, { authenticate, resolvePrincipal })
       } else if (url.pathname === '/api/v1/operations/call') {
         response = await handleOperationInvokePost(request, { authenticate, resolvePrincipal })
       } else if (url.pathname.startsWith('/api/v1/operations/')) {
@@ -474,12 +515,29 @@ async function invokeOperation(
   suffix: string,
   sourcePrincipal: TestPrincipal = principal,
 ) {
+  const invocationKey = `${principal.credentialId}:${idempotencyKey}`
+  let commitmentRef = commitmentByInvocationKey.get(invocationKey)
+  if (commitmentRef === undefined) {
+    const inspectionCommand = {
+      operationKey: `test:operation-workpool:inspect:${suffix}`,
+      correlationId: `test:operation-workpool:inspect:${suffix}`,
+      principal: { ...principal, scopes: [...principal.scopes] },
+      operationRef,
+      input: INPUT,
+    }
+    const inspected = await backend.action(
+      api.capabilityOperationCommitments.inspect,
+      await withSourceWrite('protected_action', inspectionCommand),
+    )
+    if (inspected.kind !== 'committed') throw new Error(`operation_inspection_refused:${inspected.code}`)
+    commitmentRef = inspected.commitmentRef
+    commitmentByInvocationKey.set(invocationKey, commitmentRef)
+  }
   const command = {
     operationKey: `test:operation-workpool:invoke:${suffix}`,
     correlationId: `test:operation-workpool:${suffix}`,
     principal: { ...principal, scopes: [...principal.scopes] },
-    operationRef,
-    input: INPUT,
+    commitmentRef,
     idempotencyKey,
   }
   const signed = await withSourceWrite('protected_action', {
@@ -488,7 +546,7 @@ async function invokeOperation(
   })
   return await backend.action(
     api.capabilityOperationInvocations.invoke,
-    { ...signed, principal: command.principal },
+    { ...signed, principal: command.principal } as never,
   )
 }
 
@@ -554,6 +612,7 @@ async function readEvidence(
 }
 
 afterEach(() => {
+  commitmentByInvocationKey.clear()
   providerFetch.mockReset()
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
@@ -569,6 +628,7 @@ describe('capability operation Workpool lifecycle', () => {
     vi.setSystemTime(new Date('2026-08-12T00:00:00Z'))
 
     const backend = convexTestWithWorkers()
+    await seedCommercialPolicies(backend, Date.now())
     const operationRef = await seedKeylessLookup(backend)
     const now = Date.now()
     const first = await seedPrincipal(backend, 'success', now, operationRef)
@@ -621,9 +681,10 @@ describe('capability operation Workpool lifecycle', () => {
       principalId: revoked.principal.principalId,
       ownerId: revoked.principal.ownerId,
       },
-    )).rejects.toThrow(
-      'operation_invoke_source_write_rejected:source_write_command_mismatch',
-    )
+    )).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'invocation_runtime_unavailable',
+    })
     expect(providerFetch).not.toHaveBeenCalled()
 
     const pending = await invokeOperation(backend, first.principal, operationRef, 'operation-workpool-success', 'success')
@@ -767,7 +828,7 @@ describe('capability operation Workpool lifecycle', () => {
           usageRef: `usage:operation-workpool:${variant.suffix}`,
           observedAt: Date.now(),
           chargeState: variant.suffix === 'refunded' ? 'refunded' as const : 'paid' as const,
-          amount: variant.receipt.totalBuyerAuthorization,
+          amount: variant.receipt.totalBuyerCharge,
           priceDigest: variant.receipt.priceDigest,
           transactionRef: variant.receipt.transactionRef,
         }
@@ -922,6 +983,7 @@ describe('capability operation Workpool lifecycle', () => {
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
 
     const backend = convexTestWithWorkers()
+    await seedCommercialPolicies(backend, Date.now())
     const operationRef = await seedKeylessLookup(backend, 'workpool-lookup-primary')
     const alternativeOperationRef = await seedKeylessLookup(backend, 'workpool-lookup-alternative')
     const scopes = [CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, MARKET_OPERATIONS_INVOKE_SCOPE] as const

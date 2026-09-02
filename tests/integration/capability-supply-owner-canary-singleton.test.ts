@@ -624,7 +624,7 @@ async function projectManagedUnsignedRefundAfterReconciledAttempt(
         nextDigest: canonicalDigest('managed-unsigned-refund:terminal:next'),
       },
     })
-    const zero = { currency: 'USD', units: '0', exponent: 2 }
+    const zero = { currency: 'USD', units: '0', exponent: 6 }
     await ctx.db.patch(row._id, {
       attemptRef: attemptThreeRef,
       evidenceHash,
@@ -634,6 +634,7 @@ async function projectManagedUnsignedRefundAfterReconciledAttempt(
         code: 'payment_signature_unavailable',
         retryable: false,
         receipt: {
+          commercialModel: 'seller_canary_x402',
           receiptRef: `seller-canary-receipt:${canary.canaryRef}:${attemptThreeRef}`,
           state: 'refunded',
           network: BASE_SEPOLIA_NETWORK,
@@ -1317,6 +1318,7 @@ describe('owner seller canary singleton admission', () => {
       if (variant === 'settlement_transaction') {
         const result = row.result
         if (result?.kind !== 'refused' || result.receipt === undefined) throw new Error('managed_unsigned_receipt_missing')
+        if (result.receipt.commercialModel !== 'seller_canary_x402') throw new Error('managed_unsigned_canary_receipt_expected')
         await ctx.db.patch(row._id, {
           result: { ...result, receipt: { ...result.receipt, settlementTransactionHash: `0x${'1'.repeat(64)}` } },
         })
@@ -1367,7 +1369,7 @@ describe('owner seller canary singleton admission', () => {
     const first = await request('canary:safe-before-release-attempt-two:first')
     if (first.kind === 'refused') throw new Error(`canary_safe_before_release_attempt_two_refused:${first.code}`)
     await projectSafeBeforeReleaseRefusal(backend)
-    await request('canary:safe-before-release-attempt-two:retry')
+    await expect(request('canary:safe-before-release-attempt-two:retry')).resolves.toMatchObject({ kind: 'enqueued' })
 
     vi.stubEnv('CDP_API_KEY_ID', 'test-key-id')
     vi.stubEnv('CDP_API_KEY_SECRET', 'test-key-secret')
@@ -1650,6 +1652,7 @@ describe('owner seller canary singleton admission', () => {
         result: {
           ...result,
           receipt: {
+            commercialModel: 'seller_canary_x402',
             receiptRef: 'receipt:legacy-provider-refusal',
             state: 'settled',
             network: BASE_SEPOLIA_NETWORK,

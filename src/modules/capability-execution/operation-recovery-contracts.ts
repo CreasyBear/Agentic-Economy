@@ -40,6 +40,7 @@ export type OperationInvokeStatusResult =
   | Readonly<{
       kind: 'found'
       invocationRef: string
+      version: number
       operationRef: string
       previousInput?: Readonly<Record<string, JsonValue>>
       state: OperationInvokeStatusState
@@ -49,6 +50,12 @@ export type OperationInvokeStatusResult =
       effectGeneration?: number
       result?: OperationInvokeResult
       receipt?: OperationInvokeReceipt
+    }>
+  | Readonly<{
+      kind: 'unchanged'
+      invocationRef: string
+      version: number
+      retryAfterMs: number
     }>
   | Readonly<{
       kind: 'refused'

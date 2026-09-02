@@ -24,6 +24,7 @@ export const operationInvokeStatusResultSchema: z.ZodType<OperationInvokeStatusR
   z.strictObject({
     kind: z.literal('found'),
     invocationRef: boundedText(300),
+    version: z.number().int().nonnegative(),
     operationRef: boundedText(300),
     previousInput: z.record(z.string(), jsonValueSchema).exactOptional(),
     state: operationInvokeStatusStateSchema,
@@ -33,6 +34,12 @@ export const operationInvokeStatusResultSchema: z.ZodType<OperationInvokeStatusR
     effectGeneration: z.number().int().positive().exactOptional(),
     result: operationInvokeResultSchema.exactOptional(),
     receipt: operationInvokeReceiptSchema.exactOptional(),
+  }),
+  z.strictObject({
+    kind: z.literal('unchanged'),
+    invocationRef: boundedText(300),
+    version: z.number().int().nonnegative(),
+    retryAfterMs: z.number().int().positive(),
   }),
   z.strictObject({
     kind: z.literal('refused'),
@@ -65,6 +72,7 @@ export const operationInvokeRecoveryResultSchema: z.ZodType<OperationInvokeRecov
 
 export type OperationStatusActionInput = Readonly<{
   invocationRef: string
+  afterVersion?: number
 }>
 
 export type OperationCancelActionInput = Readonly<{
@@ -143,6 +151,7 @@ export type OperationReconcileActionInput = Readonly<{
 
 export const operationStatusInputSchema: z.ZodType<OperationStatusActionInput> = z.strictObject({
   invocationRef: boundedText(300),
+  afterVersion: z.number().int().nonnegative().exactOptional(),
 })
 
 export const operationCancelInputSchema: z.ZodType<OperationCancelActionInput> = z.strictObject({
@@ -168,6 +177,12 @@ const statusParameters: readonly ActionParameter[] = [
     type: 'string',
     description: 'Opaque invocation reference returned by operation.invoke.',
     required: true,
+  },
+  {
+    name: 'afterVersion',
+    type: 'number',
+    description: 'Return an unchanged response when no newer invocation version is available.',
+    required: false,
   },
 ]
 
@@ -234,6 +249,7 @@ export const operationStatusAction = defineAction<OperationStatusActionInput, Op
     if (context.operationInvokeService === undefined) throw new Error('operation_invoke_service_unavailable')
     return await context.operationInvokeService.readInvocationStatus({
       invocationRef: data.invocationRef,
+      ...(data.afterVersion === undefined ? {} : { afterVersion: data.afterVersion }),
       principal: context.agentAccessPrincipal,
       correlationId: correlationId(context),
     })

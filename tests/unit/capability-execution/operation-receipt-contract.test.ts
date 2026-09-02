@@ -19,20 +19,43 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { PublishedOperation } from '@/modules/capability-supply/public'
 import type { PricingConfig } from '@/modules/money/public'
 
-const amount = (units: string) => ({ currency: 'USD', units, exponent: 2 })
+const amount = (units: string) => ({ currency: 'USDC', units, exponent: 6 })
 
-const receipt = (): OperationInvokeReceipt => ({
+const managedPricing = (
+  atomicUnits: string,
+  network = 'eip155:8453',
+  asset: string = operationInvokeReceiptAsset,
+): PricingConfig => ({
+  version: 'pricing:v3',
+  kind: 'managed_x402',
+  sourceRequirement: { network, asset, atomicUnits },
+  pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
+  publicDisplay: 'on_request',
+})
+
+type AccountAudReceipt = Extract<OperationInvokeReceipt, { commercialModel: 'account_aud' }>
+
+const receipt = (): AccountAudReceipt => ({
+  commercialModel: 'account_aud',
   receiptRef: 'receipt:opaque-digest',
   state: 'settled',
-  network: 'eip155:8453',
-  asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-  providerQuotedAmount: amount('100'),
-  agenticEconomyFee: amount('10'),
-  totalBuyerAuthorization: amount('110'),
+  buyerCharge: { currency: 'AUD', units: '2500000', exponent: 6 },
+  serviceFee: { currency: 'AUD', units: '0', exponent: 6 },
+  totalBuyerCharge: { currency: 'AUD', units: '2500000', exponent: 6 },
+  providerObligation: {
+    amount: amount('100'),
+    settlementMethod: 'managed_x402',
+    payoutEligible: false,
+  },
+  providerSettlement: {
+    network: 'eip155:8453',
+    asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    amount: amount('100'),
+    transactionHash: '0xsettlement',
+    paymentIdentifier: 'payment:opaque',
+  },
   priceDigest: 'sha256:price',
   transactionRef: 'operation-money:opaque',
-  settlementTransactionHash: '0xsettlement',
-  paymentIdentifier: 'payment:opaque',
   accountingTransactionRefs: ['operation-money:opaque'],
   refundState: 'not_applicable',
   lossState: 'none',
@@ -54,7 +77,9 @@ function pricedOperation(
   },
 ): PublishedOperation {
   const fixture = buildDevelopmentPublishedOperationEvidence().operation
-  const price = { kind: 'fixed' as const, amount: pricingConfig.paidAmount }
+  const price = pricingConfig.kind === 'fixed_aud'
+    ? { kind: 'fixed' as const, amount: { currency: 'AUD', units: pricingConfig.amountUnits, exponent: 6 as const } }
+    : { kind: 'on_request' as const }
   const priceDigest = canonicalDigest(pricingConfig as StableHashValue)
   const identity = {
     ...fixture.identity,
@@ -110,22 +135,25 @@ describe('operation invocation receipts', () => {
   it('accepts only the two exact network and USDC receipt pairs', () => {
     const baseSepolia = {
       ...receipt(),
-      network: 'eip155:84532' as const,
-      asset: operationInvokeReceiptBaseSepoliaAsset,
+      providerSettlement: {
+        ...receipt().providerSettlement,
+        network: 'eip155:84532' as const,
+        asset: operationInvokeReceiptBaseSepoliaAsset,
+      },
     }
     expect(operationInvokeReceiptSchema.parse(baseSepolia)).toEqual(baseSepolia)
     expect(operationInvokeReceiptSchema.safeParse({
       ...baseSepolia,
-      asset: operationInvokeReceiptAsset,
+      providerSettlement: { ...baseSepolia.providerSettlement, asset: operationInvokeReceiptAsset },
     }).success).toBe(false)
     expect(operationInvokeReceiptSchema.safeParse({
       ...receipt(),
-      asset: operationInvokeReceiptBaseSepoliaAsset,
+      providerSettlement: { ...receipt().providerSettlement, asset: operationInvokeReceiptBaseSepoliaAsset },
     }).success).toBe(false)
     expect(operationInvokeReceiptPaymentProfile(
       'production',
-      baseSepolia.network,
-      baseSepolia.asset,
+      baseSepolia.providerSettlement.network,
+      baseSepolia.providerSettlement.asset,
     )).toBeUndefined()
     expect(operationInvokeReceiptPaymentProfile(
       'sandbox',
@@ -146,7 +174,7 @@ describe('operation invocation receipts', () => {
         usageRef: 'usage:opaque',
         observedAt: 1,
         chargeState: 'paid',
-        amount: candidate.totalBuyerAuthorization,
+        amount: candidate.totalBuyerCharge,
         priceDigest: candidate.priceDigest,
         transactionRef: candidate.transactionRef,
       },
@@ -192,13 +220,7 @@ describe('operation invocation receipts', () => {
   })
 
   it('builds a stable receipt only for pinned explicit brokered pricing', () => {
-    const operation = pricedOperation({
-      version: 'pricing:v2',
-      unit: 'call',
-      paidAmount: amount('110'),
-      providerAmount: amount('100'),
-      platformFee: amount('10'),
-    })
+    const operation = pricedOperation(managedPricing('100'))
     const input = {
       operation,
       invocationRef: 'invocation:opaque',
@@ -209,6 +231,7 @@ describe('operation invocation receipts', () => {
       transactionRef: 'operation-money:opaque',
       settlementTransactionHash: '0xsettlement',
       paymentIdentifier: 'payment:opaque',
+      buyerCharge: { currency: 'AUD' as const, units: '2500000', exponent: 6 as const },
       accountingTransactionRefs: ['operation-money:opaque'],
       refundState: 'not_applicable' as const,
       lossState: 'none' as const,
@@ -219,29 +242,32 @@ describe('operation invocation receipts', () => {
     expect(first).toBeDefined()
     expect(second).toMatchObject({ receiptRef: first?.receiptRef })
     expect(first).toMatchObject({
+      commercialModel: 'account_aud',
       state: 'settled',
-      providerQuotedAmount: amount('100'),
-      agenticEconomyFee: amount('10'),
-      totalBuyerAuthorization: amount('110'),
-      network: 'eip155:8453',
-      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-      settlementTransactionHash: '0xsettlement',
-      paymentIdentifier: 'payment:opaque',
+      buyerCharge: { currency: 'AUD', units: '2500000', exponent: 6 },
+      serviceFee: { currency: 'AUD', units: '0', exponent: 6 },
+      totalBuyerCharge: { currency: 'AUD', units: '2500000', exponent: 6 },
+      providerObligation: { amount: amount('100'), settlementMethod: 'managed_x402', payoutEligible: false },
+      providerSettlement: {
+        network: 'eip155:8453',
+        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        amount: amount('100'),
+        transactionHash: '0xsettlement',
+        paymentIdentifier: 'payment:opaque',
+      },
       accountingTransactionRefs: ['operation-money:opaque'],
     })
-    const legacy = pricedOperation({ version: 'pricing:v2', unit: 'call', paidAmount: amount('110') })
-    expect(buildBrokeredX402Receipt({ ...input, operation: legacy })).toBeUndefined()
+    const fixed = pricedOperation({ version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '110' })
+    expect(buildBrokeredX402Receipt({ ...input, operation: fixed })).toBeUndefined()
     expect(buildBrokeredX402Receipt({ ...input, operation: { ...operation, priceDigest: 'sha256:wrong' } })).toBeUndefined()
   })
 
   it('builds Base Sepolia receipts only for sandbox operations', () => {
-    const pricingConfig: PricingConfig = {
-      version: 'pricing:v2',
-      unit: 'call',
-      paidAmount: amount('110'),
-      providerAmount: amount('100'),
-      platformFee: amount('10'),
-    }
+    const pricingConfig = managedPricing(
+      '100',
+      'eip155:84532',
+      operationInvokeReceiptBaseSepoliaAsset,
+    )
     const sandboxOperation = pricedOperation(pricingConfig, {
       environment: 'sandbox',
       network: 'eip155:84532',
@@ -254,10 +280,13 @@ describe('operation invocation receipts', () => {
       state: 'settled' as const,
       evidenceHash: 'sha256:sandbox-evidence',
       issuedAt: '2026-08-30T00:00:00.000Z',
+      buyerCharge: { currency: 'AUD' as const, units: '2500000', exponent: 6 as const },
     }
     expect(buildBrokeredX402Receipt(receiptInput)).toMatchObject({
-      network: 'eip155:84532',
-      asset: operationInvokeReceiptBaseSepoliaAsset,
+      providerSettlement: {
+        network: 'eip155:84532',
+        asset: operationInvokeReceiptBaseSepoliaAsset,
+      },
     })
     expect(buildBrokeredX402Receipt({
       ...receiptInput,
@@ -295,6 +324,7 @@ describe('operation invocation receipts', () => {
       grantGeneration: 1,
       operationJson: '{}',
       inputJson: '{}',
+      updatedAt: 1_700_000_000_000,
       result: {
         kind: 'refused',
         operationRef: 'operation:opaque',

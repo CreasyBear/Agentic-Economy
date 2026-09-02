@@ -22,11 +22,6 @@ import type { Infer } from 'convex/values'
 
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
-import {
-  finalizeBrokeredInvocationCharge,
-  markBrokeredInvocationChargeOutcomeUnknown,
-  releaseBrokeredInvocationCharge,
-} from '../charge'
 import { externalSpendPaymentFactsFromDispatch, readX402EvmReceipt } from '../x402Route'
 import type { RecoveryWorkContext } from './loading'
 
@@ -125,9 +120,7 @@ function recordX402RecoveryStage(
 
 function x402EvidenceFacts(work: RecoveryWorkContext, submitted: X402Evidence) {
   const { recovered, operation, x402Attempt } = work
-  const providerRef = operation.binding.authority.kind === 'provider_connection'
-    ? operation.binding.authority.providerRef
-    : undefined
+  const providerRef = recoveryProviderRef(operation)
   if (
     x402Attempt === null
     || providerRef === undefined
@@ -161,12 +154,18 @@ function x402EvidenceFacts(work: RecoveryWorkContext, submitted: X402Evidence) {
     amount: amount.data,
     ...custody,
   })
-  const externalIdentity = externalSpendIdentityMatchingReservationRef(
-    paymentFacts,
-    x402Attempt.reservationRef,
-  )
+  const externalIdentity = work.recovered.sellerOnboardingCanary === undefined
+    ? undefined
+    : externalSpendIdentityMatchingReservationRef(paymentFacts, x402Attempt.reservationRef)
   const observedAt = Date.parse(submitted.observedAt)
-  return externalIdentity === undefined ? undefined : { providerRef, externalIdentity, observedAt }
+  if (work.recovered.sellerOnboardingCanary !== undefined && externalIdentity === undefined) return undefined
+  return { providerRef, externalIdentity, observedAt }
+}
+
+function recoveryProviderRef(operation: RecoveryWorkContext['operation']): string | undefined {
+  return operation.binding.authority.kind === 'provider_connection'
+    ? operation.binding.authority.providerRef
+    : undefined
 }
 
 function persistedCustodyFacts(
@@ -384,10 +383,11 @@ async function persistX402Money(
   ctx: ActionCtx,
   work: RecoveryWorkContext,
   submitted: X402Evidence,
-  externalIdentity: NonNullable<ReturnType<typeof externalSpendIdentityMatchingReservationRef>>,
+  externalIdentity: ReturnType<typeof externalSpendIdentityMatchingReservationRef>,
   observedAt: number,
 ): Promise<boolean> {
   if (work.recovered.sellerOnboardingCanary !== undefined) {
+    if (externalIdentity === undefined) return false
     const reconciled = await ctx.runMutation(
       internal.capabilityOperationPreSubmissionRecovery.reconcilePostSubmissionX402Money,
       {
@@ -426,51 +426,35 @@ async function persistX402Money(
     paymentObservationDigest: submitted.paymentObservationDigest,
     observedAt,
   })
-  const external = payment.kind === 'settled'
-    ? await ctx.runMutation(internal.moneyLedger.reconcileExternalInvocationSpend, {
-        ...externalIdentity,
-        settlementStatus: submitted.settlementStatus,
-        paymentResponseDigest: submitted.paymentResponseDigest,
-        evidenceRef: submitted.evidenceRef,
-        evidenceDigest: submitted.digest,
-        observedAt,
-      })
-    : { kind: 'refused' as const }
-  const brokered = await reconcileBrokeredMoney(ctx, work, submitted, payment.kind, external.kind)
-  if (
-    payment.kind !== 'settled'
-    || external.kind !== 'accepted'
-    || brokered.kind === 'reconciliation_required'
-  ) {
+  if (payment.kind !== 'settled') {
+    await ctx.runMutation(internal.moneyManagedCallLifecycle.markOutcomeUnknown, {
+      invocationRef: submitted.invocationRef,
+      evidenceDigest: submitted.digest,
+      now: observedAt,
+    }).catch(() => undefined)
     console.warn('x402_payment_recovery_money', {
       invocationRef: submitted.invocationRef,
       attemptRef: submitted.attemptRef,
       effectGeneration: submitted.effectGeneration,
       payment: payment.kind,
-      external: external.kind,
-      brokered: brokered.kind,
+      managedCall: 'outcome_unknown',
     })
+    return false
   }
-  return payment.kind === 'settled'
-    && external.kind === 'accepted'
-    && brokered.kind !== 'reconciliation_required'
-}
-
-async function reconcileBrokeredMoney(
-  ctx: ActionCtx,
-  work: RecoveryWorkContext,
-  submitted: X402Evidence,
-  paymentKind: string,
-  externalKind: string,
-) {
-  if (work.brokeredReservation === undefined) return { kind: 'settled' as const }
-  if (paymentKind !== 'settled' || externalKind !== 'accepted') {
-    return await markBrokeredInvocationChargeOutcomeUnknown(ctx, work.brokeredReservation)
+  if (submitted.settlementStatus !== 'settled') {
+    await ctx.runMutation(internal.moneyManagedCallLifecycle.markOutcomeUnknown, {
+      invocationRef: submitted.invocationRef,
+      evidenceDigest: submitted.digest,
+      now: observedAt,
+    })
+    return false
   }
-  const refs = [submitted.evidenceRef, submitted.digest]
-  return submitted.settlementStatus === 'settled'
-    ? await finalizeBrokeredInvocationCharge(ctx, work.brokeredReservation, submitted.transactionHash, refs)
-    : await releaseBrokeredInvocationCharge(ctx, work.brokeredReservation, refs)
+  const settled = await ctx.runMutation(internal.moneyManagedCallLifecycle.settle, {
+    invocationRef: submitted.invocationRef,
+    evidenceDigest: submitted.digest,
+    now: observedAt,
+  })
+  return settled.kind === 'accepted'
 }
 
 function canonicalRecoveryEvidence(submitted: X402Evidence): ReconciliationEvidence {

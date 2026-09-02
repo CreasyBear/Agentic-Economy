@@ -3,22 +3,17 @@ import { defineAction, type ActionParameter } from '@/modules/common/action'
 import { executeOperationInvoke } from './operation-invoke'
 import {
   operationInvokeInputSchema,
-  operationInvokeResultSchema,
+  operationInvokeMachineResultSchema,
+  projectOperationInvokeMachineResult,
   type OperationInvokeInput,
-  type OperationInvokeResult,
+  type OperationInvokeMachineResult,
 } from './operation-invoke-contracts'
 
 const operationInvokeParameters: readonly ActionParameter[] = [
   {
-    name: 'operationRef',
+    name: 'commitmentRef',
     type: 'string',
-    description: 'Current opaque operation reference returned by operation discovery.',
-    required: true,
-  },
-  {
-    name: 'input',
-    type: 'object',
-    description: 'Inputs keyed exactly as the current operation contract publishes them.',
+    description: 'Unexpired caller-bound Commitment returned by operation.inspect.',
     required: true,
   },
   {
@@ -36,13 +31,13 @@ const operationInvokeBoundaries = [
   'Supplier credentials and internal connection references remain server-side and are never returned in action output, MCP content, HTTP problems, usage, or evidence.',
 ] as const
 
-export const operationInvokeAction = defineAction<OperationInvokeInput, OperationInvokeResult>({
+export const operationInvokeAction = defineAction<OperationInvokeInput, OperationInvokeMachineResult>({
   id: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
   name: 'Invoke an admitted Market Operation',
   summary: 'Run one current admitted Market Operation through AE policy, provider authority, durable invocation, and evidence controls.',
   boundaries: operationInvokeBoundaries,
   schema: operationInvokeInputSchema,
-  outputSchema: operationInvokeResultSchema,
+  outputSchema: operationInvokeMachineResultSchema,
   parameters: operationInvokeParameters,
   readOnly: false,
   effect: {
@@ -61,28 +56,26 @@ export const operationInvokeAction = defineAction<OperationInvokeInput, Operatio
   invocationContract: {
     version: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.contractVersion,
     consequenceClass: 'external_effect',
-    materialInputPaths: ['operationRef', 'input', 'idempotencyKey'],
+    materialInputPaths: ['commitmentRef', 'idempotencyKey'],
     authorityRequirement: 'principal',
     retryClass: 'reconcile_before_retry',
     expectedEvidence: ['operation_invocation_result', 'operation_invocation_evidence_hash', 'operation_usage'],
     safeContinuations: ['inspect_invocation', 'reconcile_invocation'],
     invalidationConditions: [
       'action_contract_version_changed',
-      'operation_ref_changed',
-      'operation_revision_changed',
-      'policy_generation_changed',
-      'provider_connection_generation_changed',
-      'input_changed',
+      'commitment_ref_changed',
+      'commitment_expired',
+      'commitment_material_changed',
       'idempotency_key_changed',
     ],
   },
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.operationInvokeService === undefined) throw new Error('operation_invoke_service_unavailable')
-    return await executeOperationInvoke({
+    return projectOperationInvokeMachineResult(await executeOperationInvoke({
       input: data,
       principal: context.agentAccessPrincipal,
       correlationId: context.correlationId ?? globalThis.crypto.randomUUID(),
-    }, context.operationInvokeService)
+    }, context.operationInvokeService))
   },
 })

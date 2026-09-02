@@ -11,9 +11,9 @@ import {
   ProviderEarningsViewSchema,
   StrictLivePayoutReceiptSchema,
   addExactAmounts,
-  calculateCreditTopupFinancials,
+  AUD_EXPONENT,
+  quoteAudAccountFunding,
   compareExactAmounts,
-  productionCreditTopupConfig,
   subtractExactAmounts,
   type ExactAmount,
 } from "../../src/modules/money/public";
@@ -397,18 +397,22 @@ export const GatewayProductionSmokeReceiptSchema =
         `${receipt.smokeOwnership.runId}:payout`
     )
       issue(["money"], "money idempotency namespace mismatch");
-    const expectedTopup = calculateCreditTopupFinancials({
-      amount: receipt.money.topup.creditAmount,
-      accountCurrency: receipt.money.topup.creditAmount.currency,
-      accountExponent: receipt.money.topup.creditAmount.exponent,
-      config: productionCreditTopupConfig(),
-    });
-    const expectedTopupFee = expectedTopup?.processingFee;
+    const topupAmount = receipt.money.topup.creditAmount;
+    const expectedTopup = topupAmount.currency === "AUD" && topupAmount.exponent === AUD_EXPONENT
+      ? quoteAudAccountFunding(BigInt(topupAmount.units))
+      : undefined;
+    const expectedTopupFee = expectedTopup === undefined
+      ? undefined
+      : { currency: "AUD", units: expectedTopup.serviceFeeUnits.toString(), exponent: AUD_EXPONENT } as const;
+    const expectedTopupTotal = expectedTopup === undefined
+      ? undefined
+      : { currency: "AUD", units: expectedTopup.totalUnits.toString(), exponent: AUD_EXPONENT } as const;
     if (
       expectedTopup === undefined ||
       expectedTopupFee === undefined ||
       !sameAmount(expectedTopupFee, receipt.money.topup.processingFee) ||
-      !sameAmount(expectedTopup.chargeAmount, receipt.money.topup.chargeAmount)
+      expectedTopupTotal === undefined ||
+      !sameAmount(expectedTopupTotal, receipt.money.topup.chargeAmount)
     )
       issue(["money", "topup"], "top-up financials mismatch");
     const assertApprovedCap = (

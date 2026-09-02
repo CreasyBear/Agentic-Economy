@@ -12,20 +12,19 @@ import {
 } from '../../../src/modules/money/public'
 
 describe('money pricing configuration', () => {
-  it('resolves zero-price and free-tier calls before paid calls', () => {
-    const zero: PricingConfig = { version: 'pricing:v2', unit: 'call', paidAmount: amount('USD', '0', 2) }
+  it('resolves zero-price and paid AUD calls', () => {
+    const zero: PricingConfig = { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '0' }
     expect(resolveInvocationPrice({ config: zero, freeCallsUsed: 99, priceDigest: 'price:zero' })).toEqual({
       kind: 'free',
       reason: 'zero_price',
-      amount: amount('USD', '0', 2),
+      amount: amount('AUD', '0', 6),
       priceDigest: 'price:zero',
     })
-    const capped: PricingConfig = { version: 'pricing:v2', unit: 'call', paidAmount: amount('USD', '500', 2), freeTier: { maxCalls: 2, window: 'day' } }
-    expect(resolveInvocationPrice({ config: capped, freeCallsUsed: 0, priceDigest: 'price:cap' }).kind).toBe('free')
-    expect(resolveInvocationPrice({ config: capped, freeCallsUsed: 2, priceDigest: 'price:cap' })).toEqual({
+    const paid: PricingConfig = { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '5000000' }
+    expect(resolveInvocationPrice({ config: paid, freeCallsUsed: 0, priceDigest: 'price:paid' })).toEqual({
       kind: 'paid',
-      amount: amount('USD', '500', 2),
-      priceDigest: 'price:cap',
+      amount: amount('AUD', '5000000', 6),
+      priceDigest: 'price:paid',
     })
   })
 
@@ -36,17 +35,17 @@ describe('money pricing configuration', () => {
 
   it('rejects invalid configuration and currency mismatch', () => {
     expect(resolveInvocationPrice({
-      config: { version: 'pricing:v2', unit: 'call', paidAmount: amount('usd', '500', 2) },
+      config: { version: 'pricing:v3', kind: 'fixed_aud', currency: 'usd', exponent: 6, amountUnits: '500' },
       freeCallsUsed: 0,
       priceDigest: 'price:bad',
     })).toEqual({ kind: 'refused', code: 'pricing_config_invalid' })
-    const config: PricingConfig = { version: 'pricing:v2', unit: 'call', paidAmount: amount('USD', '500', 2) }
-    expect(resolveInvocationPrice({ config, freeCallsUsed: 0, expectedCurrency: 'AUD', priceDigest: 'price:bad' })).toEqual({ kind: 'refused', code: 'currency_mismatch' })
+    const config: PricingConfig = { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '500' }
+    expect(resolveInvocationPrice({ config, freeCallsUsed: 0, expectedCurrency: 'USD', priceDigest: 'price:bad' })).toEqual({ kind: 'refused', code: 'currency_mismatch' })
   })
 
   it('changes digest when pricing changes and splits exact units', () => {
-    const one: PricingConfig = { version: 'pricing:v2', unit: 'call', paidAmount: amount('USD', '501', 2) }
-    const two: PricingConfig = { ...one, paidAmount: amount('USD', '502', 2) }
+    const one: PricingConfig = { version: 'pricing:v3', kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '501' }
+    const two: PricingConfig = { ...one, amountUnits: '502' }
     expect(pricingConfigDigest(one)).not.toBe(pricingConfigDigest(two))
     expect(computeRakeSplit(amount('USDC', '7000', 6), { rakeBps: 1000 })).toEqual({
       grossAmount: amount('USDC', '7000', 6),
@@ -95,18 +94,20 @@ describe('money pricing configuration', () => {
     })
   })
 
-  it('accepts and digests an exact provider/platform fee pair', () => {
+  it('accepts and digests a managed x402 source requirement without publishing an AUD price', () => {
     const config: PricingConfig = {
-      version: 'pricing:v2',
-      unit: 'call',
-      paidAmount: amount('USD', '11', 2),
-      providerAmount: amount('USD', '10', 2),
-      platformFee: amount('USD', '1', 2),
+      version: 'pricing:v3',
+      kind: 'managed_x402',
+      sourceRequirement: { network: 'eip155:8453', asset: 'usdc', atomicUnits: '10000' },
+      pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
+      publicDisplay: 'on_request',
     }
     expect(normalizePricingConfig(config)).toEqual({ kind: 'valid', config })
-    expect(pricingConfigDigest(config)).not.toBe(pricingConfigDigest({ ...config, platformFee: amount('USD', '2', 2) }))
-    expect(normalizePricingConfig({ ...config, providerAmount: undefined })).toEqual({ kind: 'invalid', code: 'pricing_config_invalid' })
-    expect(normalizePricingConfig({ ...config, platformFee: amount('USD', '2', 2) })).toEqual({ kind: 'invalid', code: 'pricing_config_invalid' })
+    expect(pricingConfigDigest(config)).not.toBe(pricingConfigDigest({
+      ...config,
+      sourceRequirement: { ...config.sourceRequirement, atomicUnits: '20000' },
+    }))
+    expect(normalizePricingConfig({ ...config, publicDisplay: 'fixed' })).toEqual({ kind: 'invalid', code: 'pricing_config_invalid' })
   })
 })
 

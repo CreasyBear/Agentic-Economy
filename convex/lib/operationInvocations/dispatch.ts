@@ -484,7 +484,12 @@ function exactAmountMatches(
 function managedUnsignedRefundOuterMatches(row: OperationInvocationRow): boolean {
   const canary = row.sellerOnboardingCanary
   const result = row.result
-  if (canary === undefined || result?.kind !== 'refused' || result.receipt === undefined) return false
+  if (
+    canary === undefined
+    || result?.kind !== 'refused'
+    || result.receipt === undefined
+    || result.receipt.commercialModel !== 'seller_canary_x402'
+  ) return false
   const receipt = result.receipt
   const operation = parsePublishedOperationSnapshot(row.operationJson ?? '')
   const payment = operation?.identity.payment
@@ -703,6 +708,7 @@ function managedCurrentLedgerMatches(input: Readonly<{
   reservationCount: number
 }>): boolean {
   const { row, receipt, payment, reservation, reservationCount } = input
+  if (receipt.commercialModel !== 'seller_canary_x402') return false
   return [
     reservationCount === 1,
     row.evidenceHash !== undefined,
@@ -1481,6 +1487,110 @@ async function recordFinalizationEvidence(
   }
 }
 
+function callProjectionOperation(row: OperationInvocationRow) {
+  if (row.operationJson === undefined) return undefined
+  return parsePublishedOperationSnapshot(row.operationJson)
+}
+
+function accountReceiptFromProjection(projection: OperationDispatchProjectionShape) {
+  const result = projection.result
+  const receipt = result !== undefined && 'receipt' in result ? result.receipt : undefined
+  return {
+    receipt,
+    accountReceipt: receipt?.commercialModel === 'account_aud' ? receipt : undefined,
+  }
+}
+
+function projectedAudAmountUnits(
+  projection: OperationDispatchProjectionShape,
+  accountReceipt: ReturnType<typeof accountReceiptFromProjection>['accountReceipt'],
+): string | undefined {
+  if (accountReceipt?.buyerCharge.currency === 'AUD' && accountReceipt.buyerCharge.exponent === 6) {
+    return accountReceipt.buyerCharge.units
+  }
+  const amount = projection.usage?.amount
+  return amount?.currency === 'AUD' && amount.exponent === 6 ? amount.units : undefined
+}
+
+function projectedPaymentState(
+  accountReceipt: ReturnType<typeof accountReceiptFromProjection>['accountReceipt'],
+): 'settled' | 'released' | 'unknown' | 'not_applicable' {
+  if (accountReceipt?.state === 'settled') return 'settled'
+  if (accountReceipt?.state === 'refunded') return 'released'
+  if (accountReceipt?.state === 'reconciliation_required') return 'unknown'
+  return 'not_applicable'
+}
+
+function projectedDeliveryState(
+  state: OperationDispatchProjectionShape['state'],
+): 'delivered' | 'not_delivered' | 'unknown' {
+  if (state === 'completed') return 'delivered'
+  return state === 'reconciliation_required' ? 'unknown' : 'not_delivered'
+}
+
+async function providerObligationProjectionFields(
+  ctx: MutationCtx,
+  invocationRef: string,
+) {
+  const obligation = await ctx.db.query('moneyProviderObligations')
+    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+    .unique()
+  return obligation === null
+    ? {}
+    : {
+        providerObligationState: obligation.state,
+        providerAmountUnits: obligation.providerAmountUnits,
+      }
+}
+
+export async function upsertCallProjection(
+  ctx: MutationCtx,
+  row: OperationInvocationRow,
+  projection: OperationDispatchProjectionShape,
+  now: number,
+): Promise<void> {
+  if (row.sellerOnboardingCanary !== undefined) return
+  const operation = callProjectionOperation(row)
+  if (operation === undefined) throw new Error('call_projection_operation_invalid')
+  const { receipt, accountReceipt } = accountReceiptFromProjection(projection)
+  const audAmountUnits = projectedAudAmountUnits(projection, accountReceipt)
+  const callState = projection.state === 'reconciliation_required'
+    ? 'outcome_unknown' as const
+    : projection.state
+  const providerFields = await providerObligationProjectionFields(ctx, row.invocationRef)
+  const fields = {
+    accountRef: row.ownerId,
+    principalRef: row.principalId,
+    credentialRef: row.credentialId,
+    operationRef: row.operationRef,
+    providerRef: operation.identity.businessId,
+    operationLabel: operation.contract.name,
+    state: callState,
+    deliveryState: projectedDeliveryState(projection.state),
+    paymentState: projectedPaymentState(accountReceipt),
+    ...providerFields,
+    ...(audAmountUnits === undefined ? {} : { audAmountUnits }),
+    ...(receipt?.receiptRef === undefined ? {} : { receiptRef: receipt.receiptRef }),
+    ...(projection.state !== 'reconciliation_required'
+      ? {}
+      : { recoveryRef: row.invocationRef }),
+    latencyMs: Math.max(0, now - row.createdAt),
+    updatedAt: now,
+  }
+  const existing = await ctx.db.query('capabilityOperationCallProjections')
+    .withIndex('by_callRef', (query) => query.eq('callRef', row.invocationRef))
+    .unique()
+  if (existing === null) {
+    await ctx.db.insert('capabilityOperationCallProjections', {
+      callRef: row.invocationRef,
+      ...fields,
+      createdAt: row.createdAt,
+    })
+  } else {
+    await ctx.db.patch(existing._id, fields)
+  }
+}
+
 export async function finalizeDispatchHandler(
   ctx: MutationCtx,
   { dispatch, command, projection }: {
@@ -1510,6 +1620,7 @@ export async function finalizeDispatchHandler(
     return { kind: 'refused', code: 'command_identity_conflict' }
   }
   const attempt = command.currentAttemptWrite as { attemptRef: string; effectGeneration: number }
+  const finalizedAt = Date.now()
   await ctx.db.patch(row._id, {
     state: normalizedProjection.state,
     result: normalizedProjection.result,
@@ -1517,8 +1628,9 @@ export async function finalizeDispatchHandler(
     evidenceHash: normalizedProjection.evidenceHash,
     attemptRef: normalizedProjection.attemptRef,
     dispatchState: normalizedProjection.dispatchState,
-    updatedAt: Date.now(),
+    updatedAt: finalizedAt,
   })
+  await upsertCallProjection(ctx, row, normalizedProjection, finalizedAt)
   await recordFinalizationEvidence(ctx, row, normalizedProjection.state)
   return {
     kind: canonicalResult.kind,
@@ -1662,6 +1774,7 @@ export async function openDispatchHandler(
     || row.inputJson === undefined
   ) return null
   return {
+    ...(row.commitmentRef === undefined ? {} : { commitmentRef: row.commitmentRef }),
     invocationRef: row.invocationRef,
     principalId: row.principalId,
     ownerId: row.ownerId,

@@ -357,13 +357,18 @@ export async function requestSellerOnboardingCanaryHandler(
   ))?.input
   if (
     canaryInput === undefined
-    || descriptor.price.kind !== 'fixed'
+    || operation.pricingConfig.kind !== 'managed_x402'
+    || operation.identity.payment.kind !== 'x402'
     || (args.input !== undefined
       && canonicalDigest(args.input) !== canonicalDigest(canaryInput))
   ) {
     return { kind: 'refused', code: 'input_invalid' }
   }
-  const requestedSpend = descriptor.price.amount
+  const requestedSpend = {
+    currency: operation.identity.payment.currency,
+    units: operation.pricingConfig.sourceRequirement.atomicUnits,
+    exponent: operation.identity.payment.assetAmountExponent,
+  }
 
   const now = Date.now()
   const grant = await readExactSellerOnboardingCanaryPlatformGrantHandler(
@@ -372,8 +377,8 @@ export async function requestSellerOnboardingCanaryHandler(
   )
   if (grant === null) return { kind: 'refused', code: 'canary_grant_missing' }
   const maximumSpend = grant.policy.budget.maximumSpendPerInvocation
-  if (compareExactAmounts(descriptor.price.amount, maximumSpend) !== -1
-    && compareExactAmounts(descriptor.price.amount, maximumSpend) !== 0) {
+  if (compareExactAmounts(requestedSpend, maximumSpend) !== -1
+    && compareExactAmounts(requestedSpend, maximumSpend) !== 0) {
     return { kind: 'refused', code: 'canary_budget_exceeded' }
   }
   const inputDigest = canonicalDigest(canaryInput)
@@ -442,6 +447,7 @@ export async function requestSellerOnboardingCanaryHandler(
     operationRef: snapshot.operationRef,
     invocationRef: target.invocationRef,
     inputDigest,
+    decisionPrice: target.funding.requestedSpend,
     now,
   })
   const existingRows = await ctx.db.query('capabilityOperationInvocations')
@@ -533,6 +539,7 @@ export async function requestSellerOnboardingCanaryHandler(
   const authority = authorityForEnvelope(envelope)
   if (authority === undefined) return { kind: 'refused', code: 'canary_identity_conflict' }
   const reserved = await reserveHandler(ctx, {
+    commitmentRef: envelope.canaryRef,
     invocationRef: envelope.invocationRef,
     principalId: grant.principalId,
     ownerId: grant.ownerId,
@@ -690,7 +697,7 @@ export const readOwnerSellerOnboardingCanaryStatus = query({
       ...(result === undefined ? {} : { resultKind: result.kind }),
       ...(row.evidenceHash === undefined ? {} : { evidenceHash: row.evidenceHash }),
       ...(row.attemptRef === undefined ? {} : { attemptRef: row.attemptRef }),
-      ...(receipt === undefined
+      ...(receipt === undefined || receipt.commercialModel !== 'seller_canary_x402'
         ? {}
         : {
             receipt: {

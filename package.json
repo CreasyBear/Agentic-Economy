@@ -106,6 +106,7 @@
     "cmdk": "^1.1.1",
     "convex": "1.45.0",
     "convex-helpers": "^0.1.123",
+    "decimal.js": "10.6.0",
     "es-toolkit": "^1.50.0",
     "http-message-sig": "0.2.0",
     "lucide-react": "^1.21.0",

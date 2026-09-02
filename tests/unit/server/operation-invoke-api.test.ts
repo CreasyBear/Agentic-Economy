@@ -5,8 +5,12 @@ import {
   type OperationInvokeHandlerOptions,
 } from '@/lib/server/operation-invoke-api'
 import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
+import { operationInspectResultSchema } from '@/modules/capability-execution/operation-commitment'
+import { operationInvokeMachineResultSchema } from '@/modules/capability-execution/operation-invoke-contracts'
+import { operationInvokeStatusResultSchema } from '@/modules/capability-execution/operation-recovery.actions'
 
 const operationRef = `operation:v1:${'a'.repeat(64)}`
+const commitmentRef = `operation-commitment:v1:${'b'.repeat(64)}`
 const authenticate = async (scopes: readonly string[] = ['market_operations:invoke']) => ({
   isAuthenticated: true as const,
   tokenType: 'api_key' as const,
@@ -49,6 +53,10 @@ function post(body: unknown, path = '/api/v1/operations/call'): Request {
   })
 }
 
+function invokeBody(idempotencyKey = 'key-1') {
+  return { commitmentRef, idempotencyKey }
+}
+
 describe('operation.invoke HTTP adapter', () => {
   it('passes the protected operation scope into canonical production-style resolution', async () => {
     const executor = service({
@@ -67,11 +75,7 @@ describe('operation.invoke HTTP adapter', () => {
     })
     const resolvedScopes: Array<readonly string[]> = []
     const resolvedResources: string[] = []
-    const response = await handleOperationInvokePost(post({
-      operationRef,
-      input: {},
-      idempotencyKey: 'canonical-scope',
-    }), {
+    const response = await handleOperationInvokePost(post(invokeBody('canonical-scope')), {
       authenticate,
       resolvePrincipal: async (projection, requiredScopes, consequenceResource) => {
         resolvedScopes.push(requiredScopes)
@@ -98,7 +102,7 @@ describe('operation.invoke HTTP adapter', () => {
 
   it('returns a canonical bearer challenge for missing authentication', async () => {
     const executor = service({ kind: 'completed' })
-    const response = await handleOperationInvokePost(post({ operationRef, input: {}, idempotencyKey: 'key-1' }), {
+    const response = await handleOperationInvokePost(post(invokeBody()), {
       authenticate: async () => ({ isAuthenticated: false, tokenType: null, id: null, subject: null, scopes: null }),
       operationInvokeService: executor,
     })
@@ -109,7 +113,7 @@ describe('operation.invoke HTTP adapter', () => {
 
   it('refuses insufficient scope before invoking the service', async () => {
     const executor = service({ kind: 'completed' })
-    const response = await handleOperationInvokePost(post({ operationRef, input: {}, idempotencyKey: 'key-1' }), {
+    const response = await handleOperationInvokePost(post(invokeBody()), {
       authenticate: async () => await authenticate([]),
       operationInvokeService: executor,
     })
@@ -120,9 +124,7 @@ describe('operation.invoke HTTP adapter', () => {
   it('rejects transport and credential injection through the shared action schema', async () => {
     const executor = service({ kind: 'completed' })
     const response = await handleOperationInvokePost(post({
-      operationRef,
-      input: {},
-      idempotencyKey: 'key-1',
+      ...invokeBody(),
       endpointUrl: 'https://attacker.example',
       credentialRef: 'secret',
       method: 'POST',
@@ -145,12 +147,12 @@ describe('operation.invoke HTTP adapter', () => {
         amount: { currency: 'USD', units: '0', exponent: 2 },
       },
     })
-    const missingBodyResponse = await handleOperationInvokePost(post({ operationRef, input: {} }), { authenticate, operationInvokeService: executor })
+    const missingBodyResponse = await handleOperationInvokePost(post({ commitmentRef }), { authenticate, operationInvokeService: executor })
 
     expect(missingBodyResponse.status).toBe(400)
     expect(executor.invokeOperation).not.toHaveBeenCalled()
 
-    const bodyIdentityResponse = await handleOperationInvokePost(post({ operationRef, input: {}, idempotencyKey: 'body:two' }), { authenticate, operationInvokeService: executor })
+    const bodyIdentityResponse = await handleOperationInvokePost(post(invokeBody('body:two')), { authenticate, operationInvokeService: executor })
 
     expect(bodyIdentityResponse.status).toBe(200)
     expect(executor.invokeOperation).toHaveBeenCalledWith(expect.objectContaining({
@@ -165,12 +167,26 @@ describe('operation.invoke HTTP adapter', () => {
     { kind: 'refused', operationRef, code: 'authority_required', retryable: false },
   ] as const)('keeps $kind as a typed domain response', async (result) => {
     const executor = service(result)
-    const response = await handleOperationInvokePost(post({ operationRef, input: {}, idempotencyKey: 'key-1' }), {
+    const response = await handleOperationInvokePost(post(invokeBody()), {
       authenticate,
       operationInvokeService: executor,
     })
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ kind: result.kind })
+    const body = await response.json() as Record<string, unknown>
+    expect(body).toMatchObject({
+      kind: result.kind === 'needs_authority'
+        ? 'refused'
+        : result.kind === 'reconciliation_required'
+          ? 'outcome_unknown'
+          : result.kind,
+    })
+    if (result.kind === 'needs_authority') {
+      expect(body).toMatchObject({
+        code: 'authority_required',
+        retryable: false,
+        ownerHandoff: { kind: 'authorize', invocationRef: 'invocation:test', operationRef },
+      })
+    }
   })
   it('projects one bounded timing event when an invocation result returns', async () => {
     const executor = service({
@@ -188,7 +204,7 @@ describe('operation.invoke HTTP adapter', () => {
       },
     })
     const record = vi.fn()
-    const response = await handleOperationInvokePost(post({ operationRef, input: {}, idempotencyKey: 'key-1' }), {
+    const response = await handleOperationInvokePost(post(invokeBody()), {
       authenticate,
       operationInvokeService: executor,
       timing: { record },
@@ -202,5 +218,73 @@ describe('operation.invoke HTTP adapter', () => {
       pricing: 'free',
       costUnits: '0',
     }))
+  })
+
+  it('keeps inspection, unchanged status, refusal, and uncertainty payloads within machine budgets', () => {
+    const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength
+    const committed = operationInspectResultSchema.parse({
+      kind: 'committed',
+      commitmentRef,
+      operationRef,
+      operationRevision: 42,
+      expiresAt: 1_900_000_000_000,
+      normalizedInput: { query: 'bounded current input' },
+      price: { currency: 'AUD', units: '1234567', exponent: 6 },
+      sourceRequirement: { currency: 'USDC', units: '765432', exponent: 6 },
+      account: {
+        accountRef: 'account:machine-budget',
+        available: { currency: 'AUD', units: '9000000', exponent: 6 },
+      },
+      budget: {
+        principalRef: 'principal:machine-budget',
+        maximumPerInvocation: { currency: 'AUD', units: '5000000', exponent: 6 },
+      },
+      treasury: { spendable: { currency: 'USDC', units: '8000000', exponent: 6 } },
+      policyRefs: [
+        'policy:commercial',
+        'policy:tax',
+        'policy:accounting',
+        'policy:privacy',
+        'policy:treasury',
+        'policy:operations',
+      ],
+      evidenceDigest: `sha256:${'c'.repeat(64)}`,
+      continuation: {
+        action: 'operation.invoke',
+        method: 'POST',
+        path: '/api/v1/operations/call',
+        input: { commitmentRef, idempotencyKey: 'replace-with-stable-command-id' },
+      },
+    })
+    const unchanged = operationInvokeStatusResultSchema.parse({
+      kind: 'unchanged',
+      invocationRef: 'invocation:machine-budget',
+      version: 42,
+      retryAfterMs: 1_000,
+    })
+    const refused = operationInvokeMachineResultSchema.parse({
+      kind: 'refused',
+      operationRef,
+      code: 'commercial_policy_unavailable',
+      retryable: false,
+      nextAction: 'Ask the Account owner to review current commercial approvals.',
+    })
+    const outcomeUnknown = operationInvokeMachineResultSchema.parse({
+      kind: 'outcome_unknown',
+      invocationRef: 'invocation:machine-budget',
+      operationRef,
+      evidence: {
+        attemptRef: 'attempt:machine-budget',
+        effectGeneration: 1,
+        requiredAt: '2026-09-02T00:00:00.000Z',
+        retry: 'reconcile_before_retry',
+        evidenceSource: 'transport_outcome_unknown',
+      },
+    })
+
+    expect(bytes(committed)).toBeLessThanOrEqual(4 * 1024)
+    expect(bytes(unchanged)).toBeLessThanOrEqual(512)
+    expect(bytes(refused)).toBeLessThanOrEqual(1024)
+    expect(bytes(outcomeUnknown)).toBeLessThanOrEqual(1024)
   })
 })

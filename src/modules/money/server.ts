@@ -1,8 +1,8 @@
 import {
-  callPublicSourceAction,
+  callPublicSourceMutation,
   callPublicSourceQuery,
   createConvexServerFunctionAssertion,
-  sourceAction,
+  sourceMutation,
   type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
@@ -27,18 +27,30 @@ import {
   type StripeWebhookVerifier,
 } from './internal/stripe-webhook'
 import {
-  checkoutWebhookReadbackRefusal,
-  creditPaymentRequestFromCommand,
-  readWebhookTopupCommandQuery,
-  type BindTopupArgs,
-} from './internal/credit-topup-http'
+  fundingPaymentRequest,
+  fundingWebhookReadbackRefusal,
+  readWebhookFundingCommandQuery,
+  type FundingProviderEvidence,
+} from './internal/account-funding-http'
 import { applyVerifiedConnectAccountEvent } from './internal/payout-connect-http'
 import type { Environment } from './internal/payout-http-runtime'
 
 export {
+  beginAccountFundingThroughSource,
+  readAccountFundingThroughSource,
+} from './internal/account-funding-http'
+export {
   paymentBindingSchema,
   validatePaymentBinding,
 } from './internal/payment-binding'
+export type {
+  AccountFundingBeginInput,
+  AccountFundingBalance,
+  AccountFundingOutcomeUnknownResult,
+  AccountFundingReadInput,
+  AccountFundingServerRuntime,
+  AccountFundingStartResult,
+} from './internal/account-funding-http'
 export type {
   PaymentBinding,
   PaymentBindingValidation,
@@ -67,17 +79,6 @@ export type {
   StripeWebhookApplication,
   StripeWebhookVerifier,
 } from './internal/stripe-webhook'
-export {
-  beginCreditTopupThroughSource,
-  readCreditPaymentThroughSource,
-} from './internal/credit-topup-http'
-export type {
-  CreditTopupBeginInput,
-  CreditTopupOutcomeUnknownResult,
-  CreditTopupReadInput,
-  CreditTopupServerRuntime,
-  CreditTopupStartResult,
-} from './internal/credit-topup-http'
 export type { OwnerMoneyServerRuntime } from './internal/payout-http-runtime'
 export {
   createOwnerConnectAccountServer,
@@ -114,17 +115,17 @@ type SourceWriteBoundArgs = Readonly<{
 }>
 type ApplyVerifiedStripeEventArgs = Readonly<{
   event: StripeMoneyWebhookEvent
-  readback: BindTopupArgs['evidence']
+  readback: FundingProviderEvidence
   operationKey: string
   correlationId: string
 }> &
   SourceWriteBoundArgs
 type ApplyVerifiedStripeEventResult = StripeWebhookApplication | MoneyRefusal
 
-const applyVerifiedStripeEventAction = sourceAction<
+const applyVerifiedStripeEventMutation = sourceMutation<
   ApplyVerifiedStripeEventArgs,
   ApplyVerifiedStripeEventResult
->('moneyLedger:applyVerifiedStripeEvent')
+>('moneyAccountFunding:applyVerifiedEvent')
 
 export async function applyVerifiedStripeEventThroughSource(
   input: Readonly<{
@@ -150,8 +151,8 @@ export async function applyVerifiedStripeEventThroughSource(
   let serviceAuth: ConvexServerFunctionAssertion
   try {
     serviceAuth = await createConvexServerFunctionAssertion({
-      operation: 'moneyLedger:readCreditTopupWebhookCommand',
-      scope: 'money:topup_webhook_read',
+      operation: 'moneyAccountFunding:readWebhookCommand',
+      scope: 'money:funding_webhook_read',
       command: {
         commandRef: input.event.commandRef,
         externalRef: input.event.sessionId,
@@ -162,7 +163,7 @@ export async function applyVerifiedStripeEventThroughSource(
     return { kind: 'refused', code: 'credit_topup_pending', retryable: true }
   }
   const durableCommand = await callPublicSourceQuery(
-    readWebhookTopupCommandQuery,
+    readWebhookFundingCommandQuery,
     {
       commandRef: input.event.commandRef,
       externalRef: input.event.sessionId,
@@ -178,17 +179,17 @@ export async function applyVerifiedStripeEventThroughSource(
     ...(input.client === undefined ? {} : { client: input.client }),
   })
   const payment = await provider.readCreditPayment({
-    ...creditPaymentRequestFromCommand(durableCommand.command),
+    ...fundingPaymentRequest(durableCommand.command),
     externalRef: input.event.sessionId,
   })
   if (isMoneyRefusal(payment)) return payment
-  const readbackRefusal = checkoutWebhookReadbackRefusal(
+  const readbackRefusal = fundingWebhookReadbackRefusal(
     durableCommand.command,
     input.event,
     payment.evidence,
   )
   if (readbackRefusal !== undefined) return readbackRefusal
-  const operationKey = 'moneyLedger:applyVerifiedStripeEvent'
+  const operationKey = 'moneyAccountFunding:applyVerifiedEvent'
   const correlationId = input.event.stripeEventId
   const command = {
     event: input.event,
@@ -205,7 +206,7 @@ export async function applyVerifiedStripeEventThroughSource(
     correlationId,
     ...(input.env === undefined ? {} : { env: input.env }),
   })
-  return await callPublicSourceAction(applyVerifiedStripeEventAction, {
+  return await callPublicSourceMutation(applyVerifiedStripeEventMutation, {
     ...command,
     sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
     sourceWrite,

@@ -7,11 +7,64 @@ import {
 } from "./internal/pricing-contract";
 
 export {
+  COMMERCIAL_POLICY_FAMILIES,
+  evaluateCommercialPolicyGate,
+} from './internal/commercial-policy'
+export type {
+  CommercialPolicyApproval,
+  CommercialPolicyEnvironment,
+  CommercialPolicyFamily,
+  CommercialPolicyGateResult,
+  CommercialPolicyLifecycle,
+  CommercialPolicySandboxFixture,
+} from './internal/commercial-policy'
+export {
+  AUD_EXPONENT,
+  ACCOUNT_FUNDING_POLICY_V1,
+  applyJournalTransaction,
+  calculateAudFundingFinancials,
+  canonicalAudUnits,
+  prepareBalancedJournalTransaction,
+  projectionChecksum,
+  quoteAudAccountFunding,
+  rebuildJournalProjections,
+  roundAudStatementTotal,
+  roundAudUnitsToCent,
+} from './internal/balanced-journal'
+export {
+  createExecutableRatePort,
+  quoteExecutableAudToUsdc,
+  quoteManagedX402BuyerAud,
+  validateExecutableRateEvidence,
+} from './internal/executable-rate'
+export type {
+  ExecutableRateEnvironment,
+  ExecutableRateEvidence,
+  ExecutableRatePort,
+  ExecutableRateQuoteResult,
+} from './internal/executable-rate'
+export type {
+  MoneyBalanceProjection,
+  MoneyJournalAccount,
+  MoneyJournalAccountKind,
+  MoneyJournalNormalBalance,
+  MoneyJournalPosting,
+  MoneyJournalPostingInput,
+  MoneyJournalPostingSide,
+  MoneyJournalTransaction,
+} from './internal/balanced-journal'
+
+export {
   moneyRefSchema,
   currencySchema,
   exactAmountSchema,
   pricingConfigSchema,
 } from "./internal/pricing-contract";
+export {
+  pricingConfigDecisionAmount,
+  pricingConfigSourceAmount,
+  fixedAudPricingConfig,
+} from './internal/pricing-config'
 export {
   addExactAmounts,
   amountAtScale,
@@ -57,6 +110,8 @@ export type MoneyRefusalCode =
   | "billing_identity_mismatch"
   | "price_unavailable"
   | "pricing_config_invalid"
+  | "pricing_setup_required"
+  | "pricing_source_amount_invalid"
   | "currency_mismatch"
   | "price_changed"
   | "rake_not_configured"
@@ -68,6 +123,15 @@ export type MoneyRefusalCode =
   | "credit_topup_required"
   | "credit_topup_pending"
   | "credit_topup_outcome_unknown"
+  | "funding_amount_invalid"
+  | "funding_pending"
+  | "funding_outcome_unknown"
+  | "funding_idempotency_conflict"
+  | "commercial_policy_required"
+  | "source_write_denied"
+  | "journal_invalid"
+  | "journal_idempotency_conflict"
+  | "journal_reconciliation_required"
   | "stripe_setup_required"
   | "payout_not_ready"
   | "payout_below_threshold"
@@ -719,25 +783,6 @@ export type {
   StripeMoneyWebhookEvent,
 } from "./internal/stripe-webhook";
 export {
-  createTopupState,
-  beginCreditTopup,
-  applyCreditTopup,
-  markCreditTopupOutcomeUnknown,
-  setAutoRecharge,
-  productionCreditTopupConfig,
-  calculateCreditTopupFinancials,
-  STRIPE_CREDIT_RECOVERY_WINDOW_MS,
-  fixtureUsdTopupConfig,
-} from "./internal/topup";
-export type {
-  CreditTopupConfig,
-  CreditTopupFinancials,
-  AutoRechargeSettings,
-  CreditTopupCommand,
-  TopupState,
-  BeginTopupResult,
-} from "./internal/topup";
-export {
   FUNDING_QUOTE_CONTRACT_VERSION,
   FUNDING_QUOTE_VALIDITY_MS,
   FUNDING_CONSTRAINTS_PATH,
@@ -831,16 +876,3 @@ export type {
   QualifiedUseReceipt,
   QualifiedUseWriteDecision,
 } from "./internal/delivery";
-export {
-  calculateTopupBonusAmount,
-  OWNER_TRIAL_PROMO_EVIDENCE_REF,
-  OWNER_TRIAL_PROMO_GRANT,
-  ownerTrialPromoInputDigest,
-  ownerTrialPromoTransactionRef,
-  resolveTopupBonusBps,
-  TOPUP_BONUS_EVIDENCE_REF,
-  topupBonusInputDigest,
-  topupBonusTransactionRef,
-  TOPUP_BONUS_LADDER,
-} from "./internal/promotions";
-export type { TopupBonusTier } from "./internal/promotions";

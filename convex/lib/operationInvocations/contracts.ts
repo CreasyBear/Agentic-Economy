@@ -4,7 +4,6 @@ import { vOnCompleteArgs } from '@convex-dev/workpool'
 import { sourceWriteArgs } from '../../sourceWriteAdmission'
 import { actionInvocationTransactArgs } from '../../actionInvocationControl'
 import {
-  jsonObject,
   operationInvokeAuthorityValue,
   operationResultValue,
   sellerOnboardingCanaryExecutionEnvelopeValue,
@@ -104,6 +103,7 @@ export const dispatchArgs = {
   now: v.number(),
 } as const
 export const openDispatchValue = v.object({
+  commitmentRef: v.optional(v.string()),
   invocationRef: v.string(),
   principalId: v.string(),
   ownerId: v.string(),
@@ -172,6 +172,7 @@ export const replayValue = v.object({
   attemptRef: v.optional(v.string()),
 })
 export const recoveryValue = v.object({
+  commitmentRef: v.optional(v.string()),
   invocationRef: v.string(),
   principalId: v.string(),
   ownerId: v.string(),
@@ -197,6 +198,7 @@ export const recoveryValue = v.object({
   usage: v.optional(usageValue),
   evidenceHash: v.optional(v.string()),
   attemptRef: v.optional(v.string()),
+  updatedAt: v.number(),
 })
 export const projectRecoveryArgs = {
   invocationRef: v.string(),
@@ -252,18 +254,18 @@ export const invocationSummaryValue = v.object({
 export const invocationSummaryPageValue = paginationResultValidator(invocationSummaryValue)
 export const invokeArgs = {
   ...principalAndSourceArgs,
-  operationRef: v.string(),
-  input: jsonObject,
+  commitmentRef: v.string(),
   idempotencyKey: v.string(),
 } as const
 export const reserveArgs = {
-  invocationRef: v.string(), principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
+  commitmentRef: v.string(), invocationRef: v.string(), principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
   applicationRef: v.string(), grantRef: v.string(), environment, operationRef: v.string(), idempotencyKey: v.string(),
   inputDigest: v.string(), requestDigest: v.string(), grantGeneration: v.number(), policyDigest: v.string(), grantExpiresAt: v.number(),
   operationJson: v.optional(v.string()), inputJson: v.optional(v.string()), now: v.number(),
   sellerOnboardingCanary: v.optional(sellerOnboardingCanaryExecutionEnvelopeValue),
 } as const
 export const reservationValue = v.object({
+  commitmentRef: v.string(),
   principalId: v.string(),
   credentialId: v.string(),
   applicationRef: v.string(),
@@ -286,6 +288,10 @@ export const reserveRefusalCode = v.union(
   v.literal('environment_mismatch'),
   v.literal('rate_limited'),
   v.literal('concurrency_limited'),
+  v.literal('budget_exceeded'),
+  v.literal('insufficient_balance'),
+  v.literal('treasury_capacity_unavailable'),
+  v.literal('commercial_policy_unavailable'),
 )
 export const reserveResult = v.union(
   v.object({ kind: v.literal('reserved'), reservation: reservationValue }),
@@ -294,7 +300,7 @@ export const reserveResult = v.union(
   v.object({ kind: v.literal('refused'), code: reserveRefusalCode, retryable: v.boolean(), nextAction: v.optional(v.string()) }),
 )
 export const abandonArgs = {
-  invocationRef: v.string(), principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
+  commitmentRef: v.string(), invocationRef: v.string(), principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
   applicationRef: v.string(), grantRef: v.string(), environment, operationRef: v.string(), idempotencyKey: v.string(),
   inputDigest: v.string(), requestDigest: v.string(), grantGeneration: v.number(), policyDigest: v.string(), grantExpiresAt: v.number(),
 } as const

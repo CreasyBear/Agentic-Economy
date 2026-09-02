@@ -5,9 +5,14 @@ import type { Readable } from 'node:stream'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   operationInvokeInputSchema,
-  operationInvokeResultSchema,
-  type OperationInvokeResult,
+  operationInvokeMachineResultSchema,
+  type OperationInvokeMachineResult,
 } from '@/modules/capability-execution/operation-invoke-contracts'
+import {
+  OPERATION_INSPECT_PATH,
+  operationInspectInputSchema,
+  operationInspectResultSchema,
+} from '@/modules/capability-execution/operation-commitment'
 import type { OperationInvokeStatusResult } from '@/modules/capability-execution/operation-recovery-contracts'
 import { operationDetailOutputSchema } from '@/modules/capability-supply/public'
 import { OPERATION_MARKET_DETAIL_PATH } from '@/modules/registry/operation-entry'
@@ -51,8 +56,8 @@ async function readBoundedStdin(stdin: Readable): Promise<string> {
 }
 
 
-function parseInvokeResult(value: unknown): OperationInvokeResult {
-  const parsed = invokeCommandDescriptor.outputSchema.safeParse(value)
+function parseInvokeResult(value: unknown): OperationInvokeMachineResult {
+  const parsed = operationInvokeMachineResultSchema.safeParse(value)
   if (parsed.success) return parsed.data
   throw new CliFailure('The gateway returned an invalid operation invocation result.', {
     kind: 'UNAVAILABLE',
@@ -135,7 +140,7 @@ async function requireOperationCanBenefitFromBuyerConnection(
 }
 
 function invokeOutput(
-  result: OperationInvokeResult | OperationInvokeStatusResult,
+  result: OperationInvokeMachineResult | OperationInvokeStatusResult,
   options: CliOptions,
 ): Record<string, unknown> {
   const invocationRef = 'invocationRef' in result ? result.invocationRef : undefined
@@ -143,7 +148,7 @@ function invokeOutput(
     ? creditContinuationForCli()
     : result.kind === 'completed' || invocationRef === undefined
       ? undefined
-      : result.kind === 'reconciliation_required'
+      : result.kind === 'outcome_unknown'
         ? invocationContinuationForCli({ kind: 'found', invocationRef, state: 'reconciliation_required' })
         : invocationContinuationForCli({ kind: 'found', invocationRef, state: 'in_progress' })
   const continuationSuffix = continuationCommand([
@@ -167,8 +172,8 @@ async function waitForOperationResult(
   options: CliOptions,
   operationRef: string,
   idempotencyKey: string,
-  pending: OperationInvokeResult,
-): Promise<OperationInvokeResult | OperationInvokeStatusResult> {
+  pending: OperationInvokeMachineResult,
+): Promise<OperationInvokeMachineResult | OperationInvokeStatusResult> {
   if (pending.kind !== 'pending' || pending.invocationRef.length === 0) {
     throw new CliFailure('The gateway returned a pending result without an invocationRef.', {
       kind: 'UNAVAILABLE',
@@ -230,9 +235,9 @@ export async function runInvokeCommand(
   if (!isRecord(input)) {
     throw new CliFailure('Operation input must be a JSON object.', { kind: 'INVALID_ARGUMENT', code: 'invoke-input' })
   }
-  const parsedInput = invokeCommandDescriptor.inputSchema.safeParse({ operationRef, input, idempotencyKey: resolveIdempotencyKey(options) })
-  if (!parsedInput.success) {
-    throw new CliFailure('Operation input or identity does not match operation.invoke:v1.', {
+  const inspectionInput = operationInspectInputSchema.safeParse({ operationRef, input })
+  if (!inspectionInput.success) {
+    throw new CliFailure('Operation input or identity does not match operation.inspect:v1.', {
       kind: 'INVALID_ARGUMENT',
       code: 'invoke-input',
     })
@@ -250,10 +255,34 @@ export async function runInvokeCommand(
     })
   }
 
-  const idempotencyKey = parsedInput.data.idempotencyKey
-  if (!options.json) process.stderr.write(`Call prepared: operationRef=${operationRef}. A durable retry identity has been retained.\n`)
-
   const apiKey = requireAgentAccessKey('invoke', options)
+
+  const inspectionOutcome = await callJson(options.baseUrl, OPERATION_INSPECT_PATH, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(inspectionInput.data),
+  })
+  const inspection = operationInspectResultSchema.safeParse(requireOk(inspectionOutcome, OPERATION_INSPECT_PATH))
+  if (!inspection.success) {
+    throw new CliFailure('The gateway returned an invalid Operation inspection.', {
+      kind: 'UNAVAILABLE',
+      code: 'operation-inspect-result-invalid',
+    })
+  }
+  if (inspection.data.kind === 'refused') {
+    throw new CliFailure(`Operation inspection refused: ${inspection.data.code}.`, {
+      kind: 'FAILED_PRECONDITION',
+      code: inspection.data.code,
+      detail: inspection.data,
+    })
+  }
+  const idempotencyKey = resolveIdempotencyKey(options)
+  const parsedInput = invokeCommandDescriptor.inputSchema.safeParse({
+    commitmentRef: inspection.data.commitmentRef,
+    idempotencyKey,
+  })
+  if (!parsedInput.success) throw new Error('operation_commitment_projection_invalid')
+  if (!options.json) process.stderr.write(`Call committed: operationRef=${operationRef}. A durable retry identity has been retained.\n`)
 
   const path = invokeCommandDescriptor.path
   let outcome
@@ -263,11 +292,7 @@ export async function runInvokeCommand(
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        operationRef: parsedInput.data.operationRef,
-        input: parsedInput.data.input,
-        idempotencyKey: parsedInput.data.idempotencyKey,
-      }),
+      body: JSON.stringify(parsedInput.data),
     })
   } catch (error) {
     if (error instanceof CliFailure) throw error
@@ -304,6 +329,6 @@ export const invokeCommandDescriptor = {
   path: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
   method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
   inputSchema: operationInvokeInputSchema,
-  outputSchema: operationInvokeResultSchema,
+  outputSchema: operationInvokeMachineResultSchema,
   run: runInvokeCommand,
 } as const

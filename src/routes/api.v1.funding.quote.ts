@@ -59,7 +59,7 @@ export async function handleFundingQuoteRequest(
             status: 400,
             kind: 'INVALID_ARGUMENT',
             code: 'funding_amount_out_of_range',
-            detail: 'The requested credit amount does not meet the current funding constraints.',
+            detail: 'The requested AUD principal does not meet the current funding constraints.',
           })
         }
         return Response.json(quote, { headers: { 'Cache-Control': 'no-store' } })

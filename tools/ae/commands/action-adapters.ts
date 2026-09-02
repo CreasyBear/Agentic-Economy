@@ -1,5 +1,6 @@
 import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT } from '@/modules/agent-access/account.actions'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { OPERATION_INSPECT_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-commitment.actions'
 
 import { ACCOUNT_COMMAND_DESCRIPTORS, accountCommandDescriptor } from './account'
 import { invokeCommandDescriptor } from './invoke'
@@ -48,6 +49,12 @@ export const CLI_ACTION_ADAPTERS: readonly CliActionAdapterDescriptor[] = Object
     method,
     path,
   })),
+  {
+    actionId: OPERATION_INSPECT_ROUTE_CONTRACT.actionId,
+    command: 'call',
+    method: OPERATION_INSPECT_ROUTE_CONTRACT.method,
+    path: OPERATION_INSPECT_ROUTE_CONTRACT.path,
+  },
   {
     actionId: invokeCommandDescriptor.actionId,
     command: invokeCommandDescriptor.command,

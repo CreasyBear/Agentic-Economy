@@ -5,6 +5,8 @@ import {
 } from './mcp-api-harness'
 import { describe, expect, it, vi } from 'vitest'
 
+const commitmentRef = `operation-commitment:v1:${'b'.repeat(64)}`
+
 describe('MCP host adapter operation.invoke', () => {
   it('authenticates operation.invoke and delegates the same registered action', async () => {
     const resolvedScopes: Array<readonly string[]> = []
@@ -35,8 +37,7 @@ describe('MCP host adapter operation.invoke', () => {
       params: {
         name: 'ae_operation_invoke',
         arguments: {
-          operationRef: currentOperationRef,
-          input: {},
+          commitmentRef,
           idempotencyKey: 'mcp-key-1',
         },
       },

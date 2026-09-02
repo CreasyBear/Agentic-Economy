@@ -89,6 +89,11 @@ class MemoryDb {
     }
     return null
   }
+  async patch(id: string, value: Record<string, unknown>): Promise<void> {
+    const row = await this.get(id)
+    if (row === null) throw new Error('row_not_found')
+    Object.assign(row, value)
+  }
   async delete(id: string): Promise<void> {
     for (const [table, rows] of this.tables) {
       const remaining = rows.filter((row) => row._id !== id)
@@ -184,6 +189,7 @@ const grant = (overrides: Record<string, unknown> = {}): Row => {
 }
 
 const args = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+  commitmentRef: 'operation-commitment:v1:one',
   invocationRef: 'operation-invocation:v1:one',
   principalId: 'principal:one',
   ownerId: 'owner:one',
@@ -203,6 +209,46 @@ const args = (overrides: Record<string, unknown> = {}): Record<string, unknown> 
   now,
   ...overrides,
 })
+
+function commitment(policyDigest: string = BASE_POLICY_DIGEST): Row {
+  return {
+    _id: 'capabilityOperationCommitments:one',
+    commitmentRef: 'operation-commitment:v1:one',
+    principalId: 'principal:one',
+    accountRef: 'owner:one',
+    credentialId: 'credential:one',
+    applicationRef: 'application:one',
+    environment: 'sandbox',
+    grantRef: 'grant:one',
+    grantGeneration: 1,
+    grantPolicyDigest: policyDigest,
+    grantExpiresAt: now + 60_000,
+    operationRef: OPERATION_REF,
+    operationRevision: 1,
+    operationMaterialDigest: baseOperation.materialDigest,
+    currentOperationDigest: 'sha256:current-operation',
+    operationJson: baseOperationJson,
+    normalizedInputJson: '{}',
+    inputDigest: 'sha256:input-one',
+    pricingJson: JSON.stringify({ kind: 'fixed_aud', currency: 'AUD', exponent: 6, amountUnits: '0' }),
+    pricingDigest: 'sha256:pricing',
+    decisionAudUnits: '0',
+    budgetPolicyRef: 'budget:reservation',
+    budgetGeneration: 1,
+    maximumSpendPerInvocationUnits: '0',
+    balanceLedgerAccountRef: 'ledger:aud:customer-prepayment:owner:one',
+    balanceVersion: 0,
+    balanceChecksum: 'sha256:balance',
+    balanceUnits: '0',
+    commercialPolicyRefs: ['sandbox-fixture:managed_x402_deterministic_v1'],
+    commercialPolicyDigest: 'sha256:sandbox-commercial-policy',
+    evidenceDigest: 'sha256:commitment-evidence',
+    state: 'issued',
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    createdAt: now - 1,
+    updatedAt: now - 1,
+  }
+}
 const canaryEnvelope = (overrides: Record<string, unknown> = {}) => ({
   executionPurpose: 'seller_onboarding_canary',
   canaryRef: 'seller-canary:one',
@@ -264,13 +310,35 @@ const abandonmentArgs = (overrides: Record<string, unknown> = {}): Record<string
 
 function context(grantOverrides: Record<string, unknown> = {}): HandlerContext {
   const db = new MemoryDb()
-  db.seed('agentAccessGrants', grant(grantOverrides))
+  const grantRow = grant(grantOverrides)
+  db.seed('agentAccessGrants', grantRow)
+  db.seed('capabilityOperationCommitments', commitment(String(grantRow.policyDigest)))
   return { db, runMutation: vi.fn(async () => undefined) }
 }
 
 function argsFor(ctx: HandlerContext, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const storedGrant = ctx.db.rows('agentAccessGrants')[0]
-  return args({ policyDigest: storedGrant?.policyDigest, ...overrides })
+  const value = args({ policyDigest: storedGrant?.policyDigest, ...overrides })
+  const storedCommitment = ctx.db.rows('capabilityOperationCommitments')[0]
+  if (storedCommitment !== undefined) {
+    Object.assign(storedCommitment, {
+      commitmentRef: value.commitmentRef,
+      principalId: value.principalId,
+      accountRef: value.ownerId,
+      credentialId: value.credentialId,
+      applicationRef: value.applicationRef,
+      environment: value.environment,
+      grantRef: value.grantRef,
+      grantGeneration: value.grantGeneration,
+      grantPolicyDigest: value.policyDigest,
+      operationRef: value.operationRef,
+      operationJson: value.operationJson,
+      normalizedInputJson: value.inputJson,
+      inputDigest: value.inputDigest,
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    })
+  }
+  return value
 }
 
 let seedSequence = 0
@@ -349,6 +417,10 @@ describe('capability operation reservation admission', () => {
       reservation: expect.objectContaining({ invocationRef: 'operation-invocation:v1:one' }),
     })
     expect(ctx.db.rows('capabilityOperationInvocations')).toHaveLength(1)
+    expect(ctx.db.rows('capabilityOperationCommitments')[0]).toMatchObject({
+      state: 'consumed',
+      consumedInvocationRef: 'operation-invocation:v1:one',
+    })
     expect(mocks.assertAgentAccessRateAdmission).toHaveBeenCalledTimes(1)
   })
 
@@ -496,6 +568,7 @@ describe('capability operation reservation admission', () => {
 
     await expect(abandonHandler(ctx, abandonmentArgs())).resolves.toEqual({ kind: 'abandoned' })
     expect(ctx.db.rows('capabilityOperationInvocations')).toHaveLength(0)
+    expect(ctx.db.rows('capabilityOperationCommitments')[0]).toMatchObject({ state: 'issued' })
   })
   it('does not let a different principal or request identity abandon another reservation', async () => {
     const ctx = context()

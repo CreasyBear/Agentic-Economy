@@ -117,9 +117,11 @@ const admitted = {
   configDigest: canonicalDigest({}),
 }
 const pricingConfig: PricingConfig = {
-  version: 'pricing:v2',
-  unit: 'call',
-  paidAmount: { currency: 'AUD', units: '1200', exponent: 2 },
+  version: 'pricing:v3',
+  kind: 'fixed_aud',
+  currency: 'AUD',
+  exponent: 6,
+  amountUnits: '12000000',
 }
 const priceDigest = pricingConfigDigest(pricingConfig)
 

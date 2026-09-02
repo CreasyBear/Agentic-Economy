@@ -5,44 +5,34 @@ import {
   type RouteTransportObservation,
   type RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
-import type { PublishedOperation } from '@/modules/capability-supply/public'
+import type { PublishedOperation, RuntimePublishedOperationDescriptor } from '@/modules/capability-supply/public'
 import {
   normalizePricingConfig,
   pricingConfigDigest,
+  pricingConfigSourceAmount,
+  type ExactAmount,
 } from '@/modules/money/public'
 import {
   operationInvokeReceiptPaymentProfile,
   type OperationInvokeReceipt,
 } from '@/modules/capability-execution/operation-invoke-contracts'
 import type { ActionCtx } from '../../../../convex/_generated/server'
+import { internal } from '../../../../convex/_generated/api'
 import type { CanonicalClaimSnapshot } from '@/modules/action-invocation/runtime'
 import {
   canonicalTerminalOutcome,
   finalizeOperationDispatch,
-  type ChargeSettlementResult,
-  type ContractOutputValidation,
   type OpenDispatch,
-  type WorkerAcceptedCharge,
   parseContractOutput,
 } from '../../../../convex/capabilityOperationInvocationProjection'
-import {
-  finalizeBrokeredInvocationCharge,
-  markBrokeredInvocationChargeOutcomeUnknown,
-  recordBrokeredInvalidOutputLoss,
-  releaseBrokeredInvocationCharge,
-  type BrokeredChargeReservation,
-} from './charge'
-import {
-  finalizeX402ExternalSpend,
-  recordX402TransportObservation,
-  reverseX402ExternalSpendForInvalidOutput,
-} from './x402Route'
+import { recordX402TransportObservation } from './x402Route'
 
 export function buildBrokeredX402Receipt(input: Readonly<{
   operation: PublishedOperation
   invocationRef: string
   operationRef: string
   state: OperationInvokeReceipt['state']
+  buyerCharge: ExactAmount
   evidenceHash: string
   issuedAt: string
   transactionRef?: string
@@ -65,10 +55,8 @@ export function buildBrokeredX402Receipt(input: Readonly<{
   if (
     identityPricing.kind === 'invalid'
     || operationPricing.kind === 'invalid'
-    || identityPricing.config.providerAmount === undefined
-    || identityPricing.config.platformFee === undefined
-    || operationPricing.config.providerAmount === undefined
-    || operationPricing.config.platformFee === undefined
+    || identityPricing.config.kind !== 'managed_x402'
+    || operationPricing.config.kind !== 'managed_x402'
     || pricingConfigDigest(identityPricing.config) !== input.operation.identity.priceDigest
     || pricingConfigDigest(operationPricing.config) !== input.operation.priceDigest
     || input.operation.identity.priceDigest !== input.operation.priceDigest
@@ -78,31 +66,44 @@ export function buildBrokeredX402Receipt(input: Readonly<{
     || input.evidenceHash.trim().length === 0
     || input.issuedAt.trim().length === 0
   ) return undefined
-  const providerQuotedAmount = identityPricing.config.providerAmount
-  const agenticEconomyFee = identityPricing.config.platformFee
-  const totalBuyerAuthorization = identityPricing.config.paidAmount
+  const providerQuotedAmount = pricingConfigSourceAmount(identityPricing.config)
+  if (input.buyerCharge.currency !== 'AUD' || input.buyerCharge.exponent !== 6) return undefined
+  const serviceFee = { currency: 'AUD' as const, units: '0', exponent: 6 as const }
   const receiptIdentity = {
-    format: 'operation-invoke-receipt:v1',
+    format: 'operation-invoke-receipt:v2',
     invocationRef: input.invocationRef,
     operationRef: input.operationRef,
     priceDigest: input.operation.priceDigest,
-    providerQuotedAmount,
-    agenticEconomyFee,
-    totalBuyerAuthorization,
+    buyerCharge: input.buyerCharge,
+    serviceFee,
+    providerObligation: providerQuotedAmount,
     network: paymentProfile.network,
     asset: paymentProfile.asset,
   } as StableHashValue
   return {
+    commercialModel: 'account_aud',
     receiptRef: `receipt:${canonicalDigest(receiptIdentity)}`,
     state: input.state,
-    ...paymentProfile,
-    providerQuotedAmount,
-    agenticEconomyFee,
-    totalBuyerAuthorization,
+    buyerCharge: input.buyerCharge,
+    serviceFee,
+    totalBuyerCharge: input.buyerCharge,
+    providerObligation: {
+      amount: providerQuotedAmount,
+      settlementMethod: 'managed_x402',
+      payoutEligible: false,
+    },
+    providerSettlement: {
+      ...paymentProfile,
+      amount: providerQuotedAmount,
+      ...(input.settlementTransactionHash === undefined
+        ? {}
+        : { transactionHash: input.settlementTransactionHash }),
+      ...(input.paymentIdentifier === undefined
+        ? {}
+        : { paymentIdentifier: input.paymentIdentifier }),
+    },
     priceDigest: input.operation.priceDigest,
     ...(input.transactionRef === undefined ? {} : { transactionRef: input.transactionRef }),
-    ...(input.settlementTransactionHash === undefined ? {} : { settlementTransactionHash: input.settlementTransactionHash }),
-    ...(input.paymentIdentifier === undefined ? {} : { paymentIdentifier: input.paymentIdentifier }),
     ...(input.accountingTransactionRefs === undefined ? {} : { accountingTransactionRefs: [...input.accountingTransactionRefs] }),
     ...(input.refundState === undefined ? {} : { refundState: input.refundState }),
     ...(input.lossState === undefined ? {} : { lossState: input.lossState }),
@@ -112,359 +113,218 @@ export function buildBrokeredX402Receipt(input: Readonly<{
   }
 }
 
-export async function runBrokeredX402Transport(
+export async function runCommittedManagedX402Transport(
   ctx: ActionCtx,
   input: Readonly<{
     dispatch: OpenDispatch
     operation: PublishedOperation
-    descriptor: Parameters<typeof parseContractOutput>[1]
+    descriptor: RuntimePublishedOperationDescriptor
     prepared: Parameters<typeof invokePreparedRouteTransport>[0]
     runtime: RouteTransportRuntime
     durableAttemptRef: string
     durableEffectGeneration: number
     operationKeyDigest: string
-    reservation: BrokeredChargeReservation
-    money: WorkerAcceptedCharge
     fenced: CanonicalClaimSnapshot
   }>,
 ): Promise<RouteTransportObservation> {
-  let observation: RouteTransportObservation
+  const observation = await invokePreparedRouteTransport(input.prepared, input.runtime)
+  const recordedAt = new Date().toISOString()
+  const output = parseContractOutput(observation, input.descriptor)
+  const reservation = await ctx.runQuery(internal.moneyManagedCallLifecycle.readReservation, {
+    invocationRef: input.dispatch.invocationRef,
+  })
+  if (reservation === null) throw new Error('managed_call_reservation_missing')
+
+  let recorded
   try {
-    observation = await invokePreparedRouteTransport(input.prepared, input.runtime)
-  } catch (error) {
-    observation = {
-      transport: 'unknown',
-      disposition: 'unknown',
-      releaseStarted: true,
-      requestDigest: input.prepared.requestDigest,
-      failureCode: `operation_transport_${errorName(error)}`,
+    recorded = await recordX402TransportObservation(ctx, {
+      dispatch: input.dispatch,
+      operation: input.operation,
+      observation,
+      durableAttemptRef: input.durableAttemptRef,
+      durableEffectGeneration: input.durableEffectGeneration,
+      operationKeyDigest: input.operationKeyDigest,
+    })
+  } catch {
+    await retainManagedCallUnknown(ctx, input, observation)
+    await projectManagedCall(ctx, input, observation, recordedAt, output, reservation, 'unknown')
+    return observation
+  }
+
+  if (recorded.settlementStatus === 'settled' && recorded.settlementRef !== undefined) {
+    const settled = await ctx.runMutation(internal.moneyManagedCallLifecycle.settle, {
+      invocationRef: input.dispatch.invocationRef,
+      evidenceDigest: recorded.settlementDigest ?? canonicalDigest({
+        format: 'ae.managed-x402-settlement:v1',
+        invocationRef: input.dispatch.invocationRef,
+        settlementRef: recorded.settlementRef,
+      }),
+      now: Date.parse(recordedAt),
+    })
+    if (settled.kind !== 'accepted') {
+      await retainManagedCallUnknown(ctx, input, observation)
+      await projectManagedCall(ctx, input, observation, recordedAt, output, reservation, 'unknown')
+      return observation
+    }
+    await projectManagedCall(
+      ctx,
+      input,
+      observation,
+      recordedAt,
+      output,
+      reservation,
+      'settled',
+      recorded.settlementRef,
+    )
+    return observation
+  }
+
+  const definitelyPreSubmit = recorded.submissionStatus === 'not_submitted'
+    && observation.releaseStarted === false
+  if (definitelyPreSubmit) {
+    const released = await ctx.runMutation(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
+      invocationRef: input.dispatch.invocationRef,
+      now: Date.parse(recordedAt),
+    })
+    if (released.kind === 'accepted') {
+      await projectManagedCall(ctx, input, observation, recordedAt, output, reservation, 'released')
+      return observation
     }
   }
-  const outputValidation = parseContractOutput(observation, input.descriptor)
-  const settlement = await settleBrokeredX402Observation(ctx, {
-    dispatch: input.dispatch,
-    operation: input.operation,
-    observation,
-    durableAttemptRef: input.durableAttemptRef,
-    durableEffectGeneration: input.durableEffectGeneration,
-    operationKeyDigest: input.operationKeyDigest,
-    reservation: input.reservation,
-    outputValidation,
-  })
-  await projectBrokeredX402OuterResult(
-    ctx,
-    input.dispatch,
-    input.operation,
-    observation,
-    new Date().toISOString(),
-    input.money,
-    settlement,
-    input.durableAttemptRef,
-    input.durableEffectGeneration,
-    outputValidation,
-    input.fenced,
-  )
+
+  await retainManagedCallUnknown(ctx, input, observation)
+  await projectManagedCall(ctx, input, observation, recordedAt, output, reservation, 'unknown')
   return observation
 }
 
-export async function settleBrokeredX402Observation(
+async function retainManagedCallUnknown(
   ctx: ActionCtx,
-  input: Readonly<{
-    dispatch: OpenDispatch
-    operation: PublishedOperation
-    observation: RouteTransportObservation
-    durableAttemptRef: string
-    durableEffectGeneration: number
-    operationKeyDigest: string
-    reservation: BrokeredChargeReservation
-    outputValidation: ContractOutputValidation
-  }>,
-): Promise<ChargeSettlementResult> {
-  const recorded = await recordX402TransportObservation(ctx, input)
-  const invalidEvidenceMaterial = {
-    format: 'brokered-x402-provider-output-invalid:v1',
+  input: Parameters<typeof runCommittedManagedX402Transport>[1],
+  observation: RouteTransportObservation,
+): Promise<void> {
+  await ctx.runMutation(internal.moneyManagedCallLifecycle.markOutcomeUnknown, {
     invocationRef: input.dispatch.invocationRef,
-    attemptRef: input.durableAttemptRef,
-    operationRef: input.dispatch.operationRef,
-    observationDigest: recorded.evidenceRefs.at(-1),
-  } as StableHashValue
-  const invalidEvidenceDigest = canonicalDigest(invalidEvidenceMaterial)
-  const invalidEvidenceRef = `provider-output-invalid:${invalidEvidenceDigest}`
-  const accountingTransactionRefs = input.reservation.charge.transactionRef === undefined
-    ? undefined
-    : [input.reservation.charge.transactionRef]
-  const markUnknown = async (): Promise<ChargeSettlementResult> => {
-    await markBrokeredInvocationChargeOutcomeUnknown(ctx, input.reservation)
-    return {
-      kind: 'reconciliation_required',
-      ...(recorded.identity === undefined ? {} : { paymentIdentifier: recorded.identity.paymentIdentifier }),
-      ...(accountingTransactionRefs === undefined ? {} : { accountingTransactionRefs }),
-      refundState: 'unknown',
-      lossState: 'unknown',
-    }
-  }
-  if (recorded.identity === undefined) {
-    return input.observation.paymentSubmissionStatus === 'possibly_submitted'
-      || input.observation.paymentSubmissionStatus === 'unknown'
-      ? await markUnknown()
-      : await releaseBrokeredInvocationCharge(ctx, input.reservation).then((released) => released.kind === 'settled'
-        ? {
-            ...released,
-            ...(accountingTransactionRefs === undefined ? {} : { accountingTransactionRefs }),
-            refundState: 'released' as const,
-            lossState: 'none' as const,
-          }
-        : released)
-  }
-  const identity = recorded.identity
-  if (recorded.settlementStatus === 'unknown') {
-    await finalizeX402ExternalSpend(
-      ctx,
-      identity,
-      recorded.submissionStatus,
-      'unknown',
-      recorded.settlementDigest,
-      recorded.evidenceRefs,
-      recorded.providerReceiptDigest,
-    )
-    return await markUnknown()
-  }
-  if (recorded.settlementStatus === 'settled' && !input.outputValidation.valid) {
-    const reversed = await reverseX402ExternalSpendForInvalidOutput(
-      ctx,
-      identity,
-      {
-        settlementStatus: recorded.settlementStatus,
-        submissionStatus: recorded.submissionStatus,
-        ...(recorded.settlementDigest === undefined
-          ? {}
-          : { paymentResponseDigest: recorded.settlementDigest }),
-        ...(recorded.providerReceiptDigest === undefined
-          ? {}
-          : { providerReceiptDigest: recorded.providerReceiptDigest }),
-        evidenceRefs: recorded.evidenceRefs,
-        invalidOutputEvidenceRef: invalidEvidenceRef,
-        invalidOutputEvidenceDigest: invalidEvidenceDigest,
-      },
-    )
-    if (reversed.kind !== 'settled' || recorded.settlementRef === undefined) return await markUnknown()
-    const loss = await recordBrokeredInvalidOutputLoss(ctx, input.reservation, {
-      externalRef: recorded.settlementRef,
-      invalidOutputEvidenceRef: invalidEvidenceRef,
-      invalidOutputEvidenceDigest: invalidEvidenceDigest,
-      reconciliationEvidenceRefs: recorded.evidenceRefs,
-    })
-    if (loss.kind !== 'settled') return await markUnknown()
-    return {
-      kind: 'settled',
-      outcome: 'not_released',
-      externalSettlementRef: recorded.settlementRef,
-      settlementTransactionHash: recorded.settlementRef,
-      paymentIdentifier: identity.paymentIdentifier,
-      accountingTransactionRefs: accountingTransactionRefs === undefined
-        ? [loss.lossTransactionRef]
-        : [...accountingTransactionRefs, loss.lossTransactionRef],
-      refundState: 'released' as const,
-      lossState: 'provider_output_invalid' as const,
-    }
-  }
-  if (recorded.settlementStatus === 'settled') {
-    const external = await finalizeX402ExternalSpend(
-      ctx,
-      identity,
-      recorded.submissionStatus,
-      'settled',
-      recorded.settlementDigest,
-      recorded.evidenceRefs,
-      recorded.providerReceiptDigest,
-    )
-    return external.kind === 'settled' && recorded.settlementRef !== undefined
-      ? await finalizeBrokeredInvocationCharge(
-          ctx,
-          input.reservation,
-          recorded.settlementRef,
-          recorded.evidenceRefs,
-        ).then((finalized) => finalized.kind === 'settled' && recorded.settlementRef !== undefined
-          ? {
-              ...finalized,
-              externalSettlementRef: recorded.settlementRef,
-              settlementTransactionHash: recorded.settlementRef,
-              paymentIdentifier: identity.paymentIdentifier,
-              ...(accountingTransactionRefs === undefined ? {} : { accountingTransactionRefs }),
-              refundState: 'not_applicable' as const,
-              lossState: 'none' as const,
-            }
-          : finalized)
-      : await markUnknown()
-  }
-  const external = await finalizeX402ExternalSpend(
-    ctx,
-    identity,
-    recorded.submissionStatus,
-    'not_settled',
-    recorded.settlementDigest,
-    recorded.evidenceRefs,
-    recorded.providerReceiptDigest,
-  )
-  return external.kind === 'settled'
-    ? await releaseBrokeredInvocationCharge(ctx, input.reservation, recorded.evidenceRefs).then((released) => released.kind === 'settled'
-      ? {
-          ...released,
-          ...(recorded.settlementRef === undefined ? {} : {
-            externalSettlementRef: recorded.settlementRef,
-            settlementTransactionHash: recorded.settlementRef,
-          }),
-          paymentIdentifier: identity.paymentIdentifier,
-          ...(accountingTransactionRefs === undefined ? {} : { accountingTransactionRefs }),
-          refundState: 'released' as const,
-          lossState: 'none' as const,
-        }
-      : released)
-    : await markUnknown()
+    evidenceDigest: canonicalDigest({
+      format: 'ae.managed-x402-unknown:v1',
+      invocationRef: input.dispatch.invocationRef,
+      attemptRef: input.durableAttemptRef,
+      effectGeneration: input.durableEffectGeneration,
+      observation: observation.requestDigest,
+    }),
+    now: Date.now(),
+  })
 }
 
-export async function projectBrokeredX402OuterResult(
+async function projectManagedCall(
   ctx: ActionCtx,
-  dispatch: OpenDispatch,
-  operation: PublishedOperation,
+  input: Parameters<typeof runCommittedManagedX402Transport>[1],
   observation: RouteTransportObservation,
   recordedAt: string,
-  money: WorkerAcceptedCharge | undefined,
-  settlement: ChargeSettlementResult,
-  attemptRef: string,
-  effectGeneration: number,
-  outputValidation: ContractOutputValidation,
-  retainedSnapshot: CanonicalClaimSnapshot,
+  output: ReturnType<typeof parseContractOutput>,
+  reservation: NonNullable<Awaited<ReturnType<ActionCtx['runQuery']>>>,
+  financialState: 'settled' | 'released' | 'unknown',
+  settlementRef?: string,
 ): Promise<void> {
-  const receiptEvidenceHash = observation.responseDigest ?? canonicalDigest(JSON.stringify(observation))
-  const receipt = (state: OperationInvokeReceipt['state']): OperationInvokeReceipt | undefined => buildBrokeredX402Receipt({
-    operation,
-    invocationRef: dispatch.invocationRef,
-    operationRef: dispatch.operationRef,
-    state,
-    evidenceHash: receiptEvidenceHash,
-    issuedAt: recordedAt,
-    ...(money?.transactionRef === undefined ? {} : { transactionRef: money.transactionRef }),
-    ...(settlement.kind === 'settled' && settlement.settlementTransactionHash !== undefined
-      ? { settlementTransactionHash: settlement.settlementTransactionHash }
-      : {}),
-    ...(settlement.paymentIdentifier === undefined ? {} : { paymentIdentifier: settlement.paymentIdentifier }),
-    ...(settlement.accountingTransactionRefs === undefined ? {} : { accountingTransactionRefs: settlement.accountingTransactionRefs }),
-    ...(settlement.refundState === undefined ? {} : { refundState: settlement.refundState }),
-    ...(settlement.lossState === undefined ? {} : { lossState: settlement.lossState }),
-    ...(settlement.kind === 'settled' && settlement.externalSettlementRef !== undefined
-      ? { externalSettlementRef: settlement.externalSettlementRef }
-      : {}),
-  })
-  const settlementOutcome = settlement.kind === 'settled'
-    ? settlement.outcome
-    : settlement.kind === 'reconciliation_required'
-      ? 'unknown'
-      : undefined
-  const requiresReconciliation = (
-    settlement.kind === 'reconciliation_required'
-    || observation.disposition === 'unknown'
-    || observation.disposition === 'partial'
-    || (outputValidation.valid && observation.releaseStarted && settlementOutcome !== 'released')
-    || (outputValidation.valid && observation.outputJson === undefined)
-    || (observation.releaseStarted && !outputValidation.valid && settlementOutcome !== 'not_released')
-  )
-  if (requiresReconciliation) {
-    const reconciliationReceipt = receipt('reconciliation_required')
-    await finalizeOperationDispatch(
-      ctx,
-      dispatch,
-      retainedSnapshot,
-      canonicalTerminalOutcome(observation, recordedAt, outputValidation.valid, settlementOutcome),
-      {
-        state: 'reconciliation_required',
-        result: {
-          kind: 'reconciliation_required',
-          invocationRef: dispatch.invocationRef,
-          operationRef: dispatch.operationRef,
-          evidence: {
-            attemptRef,
-            effectGeneration,
-            requiredAt: new Date(Date.parse(recordedAt) + 1_000).toISOString(),
-            retry: 'reconcile_before_retry',
-            evidenceSource: `operation:${dispatch.operationRef}`,
-          },
-          ...(reconciliationReceipt === undefined ? {} : { receipt: reconciliationReceipt }),
-        },
-        attemptRef,
-        dispatchState: 'reconciliation_required',
-      },
-      recordedAt,
-    )
-    return
+  const managed = reservation as {
+    decisionAudUnits: string
+    journalTransactionRef: string
   }
-  if (
-    outputValidation.valid
-    && observation.outputJson !== undefined
-    && settlement.kind === 'settled'
-    && settlement.outcome === 'released'
-    && observation.releaseStarted
-    && money !== undefined
-  ) {
-    const evidenceHash = observation.responseDigest ?? canonicalDigest(observation.outputJson)
-    const settledReceipt = receipt('settled')
-    const usage = {
-      usageRef: money.usageRef,
-      observedAt: money.observedAt,
-      chargeState: money.chargeState,
-      amount: money.amount,
-      priceDigest: money.priceDigest,
-      ...(money.transactionRef === undefined ? {} : { transactionRef: money.transactionRef }),
-    }
-    await finalizeOperationDispatch(
-      ctx,
-      dispatch,
-      retainedSnapshot,
-      canonicalTerminalOutcome(observation, recordedAt, true, settlementOutcome),
-      {
+  const evidenceHash = observation.responseDigest
+    ?? (observation.outputJson === undefined
+      ? canonicalDigest({ requestDigest: observation.requestDigest, disposition: observation.disposition })
+      : canonicalDigest(observation.outputJson))
+  const receipt = buildBrokeredX402Receipt({
+    operation: input.operation,
+    invocationRef: input.dispatch.invocationRef,
+    operationRef: input.dispatch.operationRef,
+    state: financialState === 'settled'
+      ? 'settled'
+      : financialState === 'released'
+        ? 'refunded'
+        : 'reconciliation_required',
+    buyerCharge: { currency: 'AUD', exponent: 6, units: managed.decisionAudUnits },
+    evidenceHash,
+    issuedAt: recordedAt,
+    transactionRef: managed.journalTransactionRef,
+    accountingTransactionRefs: [managed.journalTransactionRef],
+    ...(settlementRef === undefined ? {} : {
+      settlementTransactionHash: settlementRef,
+      externalSettlementRef: settlementRef,
+    }),
+    refundState: financialState === 'settled'
+      ? 'not_applicable'
+      : financialState === 'released'
+        ? 'released'
+        : 'unknown',
+    lossState: financialState === 'settled' ? 'none' : financialState === 'released' ? 'none' : 'unknown',
+  })
+  if (receipt === undefined) throw new Error('managed_call_receipt_invalid')
+
+  if (financialState === 'settled' && output.valid && observation.disposition === 'succeeded') {
+    await finalizeOperationDispatch(ctx, input.dispatch, input.fenced,
+      canonicalTerminalOutcome(observation, recordedAt, true, 'released'), {
         state: 'completed',
         result: {
           kind: 'completed',
-          invocationRef: dispatch.invocationRef,
-          operationRef: dispatch.operationRef,
-          output: outputValidation.output,
+          invocationRef: input.dispatch.invocationRef,
+          operationRef: input.dispatch.operationRef,
+          output: output.output,
           evidenceHash,
-          usage,
-          ...(settledReceipt === undefined ? {} : { receipt: settledReceipt }),
+          receipt,
         },
-        usage,
         evidenceHash,
-        attemptRef,
+        attemptRef: input.durableAttemptRef,
         dispatchState: 'completed',
-      },
-      recordedAt,
-    )
+      }, recordedAt)
     return
   }
-  const refundedReceipt = receipt('refunded')
-  await finalizeOperationDispatch(
-    ctx,
-    dispatch,
-    retainedSnapshot,
-    canonicalTerminalOutcome(observation, recordedAt, outputValidation.valid, settlementOutcome),
-    {
+
+  if (financialState === 'unknown') {
+    await finalizeOperationDispatch(ctx, input.dispatch, input.fenced,
+      canonicalTerminalOutcome({ ...observation, disposition: 'unknown', releaseStarted: true }, recordedAt, output.valid, 'unknown'), {
+        state: 'reconciliation_required',
+        result: {
+          kind: 'reconciliation_required',
+          invocationRef: input.dispatch.invocationRef,
+          operationRef: input.dispatch.operationRef,
+          evidence: {
+            attemptRef: input.durableAttemptRef,
+            effectGeneration: input.durableEffectGeneration,
+            requiredAt: new Date(Date.parse(recordedAt) + 1_000).toISOString(),
+            retry: 'reconcile_before_retry',
+            evidenceSource: `operation:${input.dispatch.operationRef}`,
+          },
+          receipt,
+        },
+        evidenceHash,
+        attemptRef: input.durableAttemptRef,
+        dispatchState: 'reconciliation_required',
+      }, recordedAt)
+    return
+  }
+
+  const paidButInvalid = financialState === 'settled' && !output.valid
+  await finalizeOperationDispatch(ctx, input.dispatch, input.fenced,
+    paidButInvalid
+      ? {
+          kind: 'returned',
+          businessOutcome: 'provider_output_invalid',
+          resultRef: `operation-result:v1:${evidenceHash}`,
+          resultDigest: evidenceHash,
+          resultReferenceable: true,
+          release: 'released',
+        }
+      : canonicalTerminalOutcome(observation, recordedAt, false, 'not_released'), {
       state: 'refused',
       result: {
         kind: 'refused',
-        operationRef: dispatch.operationRef,
-        code: outputValidation.valid || observation.outputJson === undefined
-          ? observation.failureCode ?? 'provider_refused'
-          : 'provider_output_invalid',
+        operationRef: input.dispatch.operationRef,
+        code: paidButInvalid ? 'provider_output_invalid' : observation.failureCode ?? 'provider_refused',
         retryable: false,
-        ...(refundedReceipt === undefined ? {} : { receipt: refundedReceipt }),
+        receipt,
       },
-      attemptRef,
+      evidenceHash,
+      attemptRef: input.durableAttemptRef,
       dispatchState: 'failed',
-    },
-    recordedAt,
-  )
-}
-
-function errorName(error: unknown): string {
-  return error instanceof Error && error.name.trim().length > 0 ? error.name : 'unknown'
+    }, recordedAt)
 }

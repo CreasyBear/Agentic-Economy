@@ -314,9 +314,11 @@ describe('owner capability publication admission', () => {
     })
     expect(readbackOffering.pricing).toEqual({
       config: {
-        version: 'pricing:v2',
-        unit: 'call',
-        paidAmount: { currency: 'AUD', units: '100', exponent: 2 },
+        version: 'pricing:v3',
+        kind: 'fixed_aud',
+        currency: 'AUD',
+        exponent: 6,
+        amountUnits: '1000000',
       },
       priceDigest: admitted.priceDigest,
     })
@@ -336,9 +338,11 @@ describe('owner capability publication admission', () => {
     })
     expect(readbackOffering.publication?.pricing).toEqual({
       config: {
-        version: 'pricing:v2',
-        unit: 'call',
-        paidAmount: { currency: 'AUD', units: '100', exponent: 2 },
+        version: 'pricing:v3',
+        kind: 'fixed_aud',
+        currency: 'AUD',
+        exponent: 6,
+        amountUnits: '1000000',
       },
       priceDigest: admitted.priceDigest,
     })

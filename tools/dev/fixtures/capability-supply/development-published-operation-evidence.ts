@@ -40,9 +40,15 @@ const expectedPayment = {
   currency: 'USD',
 } as const
 const pricingConfig = {
-  version: 'pricing:v2' as const,
-  unit: 'call' as const,
-  paidAmount: { currency: 'USD', units: '1', exponent: 2 },
+  version: 'pricing:v3' as const,
+  kind: 'managed_x402' as const,
+  sourceRequirement: {
+    network: expectedPayment.network,
+    asset: expectedPayment.asset,
+    atomicUnits: '10000',
+  },
+  pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
+  publicDisplay: 'on_request' as const,
 }
 function developmentProviderAccountRef(providerRef: string): string {
   return `account:${providerRef.replace(/^provider:/u, '')}`
@@ -348,7 +354,7 @@ export function buildDevelopmentPublishedOperationEvidence() {
     presentation: {
       label: 'Latest cryptocurrency quotes',
       summary: 'MOCK/DEVELOPMENT ONLY published endpoint.',
-      price: { kind: 'fixed', amount: { currency: 'USD', units: '1', exponent: 2 } },
+      price: { kind: 'on_request' },
       materialTerms: [{ termId: 'mock:term:fixture', label: 'Environment', value: 'MOCK/DEVELOPMENT ONLY' }],
       commercialRelationship: {
         kind: 'none', summary: 'Fixture only.', influencesEligibility: false,

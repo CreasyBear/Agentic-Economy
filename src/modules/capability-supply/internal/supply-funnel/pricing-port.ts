@@ -32,9 +32,11 @@ export type PricingConfigPort = Readonly<{
 
 export const DEFAULT_RAKE_BPS = 1000
 export const defaultSupplyPricingConfig: PricingConfig = {
-  version: 'pricing:v2',
-  unit: 'call',
-  paidAmount: { currency: 'AUD', units: '0', exponent: 2 },
+  version: 'pricing:v3',
+  kind: 'fixed_aud',
+  currency: 'AUD',
+  exponent: 6,
+  amountUnits: '0',
 }
 
 export const realPricingConfigPort: PricingConfigPort = {
@@ -63,11 +65,11 @@ export const realPricingConfigPort: PricingConfigPort = {
 export const stubPricingConfigPort: PricingConfigPort = {
   normalize(input) {
     const parsed = pricingConfigSchema.safeParse(input)
-    if (!parsed.success || parsed.data.paidAmount.units !== '0') return { kind: 'refused', reason: parsed.success ? 'price_unavailable' : 'pricing_config_invalid' }
+    if (!parsed.success || parsed.data.kind !== 'fixed_aud' || parsed.data.amountUnits !== '0') return { kind: 'refused', reason: parsed.success ? 'price_unavailable' : 'pricing_config_invalid' }
     return { kind: 'valid', config: parsed.data }
   },
   resolve(input) {
-    if (input.config.paidAmount.units !== '0') return { kind: 'refused', reason: 'price_unavailable' }
+    if (input.config.kind !== 'fixed_aud' || input.config.amountUnits !== '0') return { kind: 'refused', reason: 'price_unavailable' }
     return realPricingConfigPort.resolve(input)
   },
 }

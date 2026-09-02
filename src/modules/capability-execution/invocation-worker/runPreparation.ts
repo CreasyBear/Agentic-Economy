@@ -19,6 +19,7 @@ import {
 import {
   compareExactAmounts,
   normalizePricingConfig,
+  pricingConfigDecisionAmount,
   pricingConfigDigest,
   readExactAmount,
 } from '@/modules/money/public'
@@ -203,6 +204,10 @@ export async function prepareInvocationRun(
   const opened = await ctx.runQuery(internal.capabilityOperationInvocations.openDispatch, args)
   if (opened === null) return { kind: 'none' as const }
   const dispatch = opened as OpenDispatch
+  if (dispatch.state !== 'pending') return { kind: 'none' as const }
+  if (dispatch.dispatchState === 'completed' || dispatch.dispatchState === 'reconciliation_required') {
+    return { kind: 'none' as const }
+  }
   const port = canonicalPort(ctx)
   const initialControl = await port.readControl(dispatch.invocationRef)
   const initialAttempt = initialControl?.currentAttemptRef === undefined
@@ -211,10 +216,6 @@ export async function prepareInvocationRun(
   const initialSnapshot = initialControl === undefined || initialAttempt === undefined
     ? undefined
     : { control: initialControl, attempt: initialAttempt }
-  if (dispatch.state === 'cancelled') return { kind: 'none' as const }
-  if (dispatch.dispatchState === 'completed' || dispatch.dispatchState === 'reconciliation_required') {
-    return { kind: 'none' as const }
-  }
   const initialCanonicalControl = initialControl?.control?.control
   const initialCanonicalState = initialCanonicalControl?.state
   if (initialCanonicalState === 'terminal' || initialCanonicalState === 'reconciliation_required') {
@@ -408,30 +409,43 @@ export async function prepareInvocationRun(
   if (isX402 && operation.binding.authority.kind !== 'provider_connection') {
     return await refuseBeforeClaim(ctx, dispatch, 'provider_refused', false, 'x402 payment requires provider connection custody.')
   }
-  if (descriptor.price.kind !== 'fixed' || operation.readiness.validUntil <= Date.now()) {
-    return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'Only admitted fixed-price operations with current readiness are executable on this worker.')
+  if (operation.readiness.validUntil <= Date.now()) {
+    return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'Only Operations with current readiness are executable on this worker.')
   }
   const normalizedPricing = normalizePricingConfig(operation.identity.pricingConfig)
   if (normalizedPricing.kind === 'invalid') {
     return await refuseBeforeClaim(ctx, dispatch, normalizedPricing.code, false, 'The published pricing configuration is invalid.')
   }
   const pricingConfig = normalizedPricing.config
-  const pricingAmount = readExactAmount(pricingConfig.paidAmount)
-  const descriptorAmount = readExactAmount(descriptor.price.amount)
   const expectedPriceDigest = pricingConfigDigest(pricingConfig)
-  if (
-    pricingAmount === undefined
-    || descriptorAmount === undefined
-    || compareExactAmounts(pricingAmount, descriptorAmount) !== 0
-    || operation.priceDigest !== expectedPriceDigest
-    || operation.identity.priceDigest !== expectedPriceDigest
-  ) {
+  if (operation.priceDigest !== expectedPriceDigest || operation.identity.priceDigest !== expectedPriceDigest) {
     return await refuseBeforeClaim(ctx, dispatch, 'price_changed', false, 'The published price changed; retry discovery.')
+  }
+  const pricingAmount = pricingConfig.kind === 'fixed_aud'
+    ? pricingConfigDecisionAmount(pricingConfig)
+    : sellerCanary?.funding.requestedSpend
+  if (economicRail === 'brokered_x402' || economicRail === 'managed_testnet_canary') {
+    if (pricingConfig.kind !== 'managed_x402'
+      || descriptor.price.kind !== 'on_request'
+      || (economicRail === 'brokered_x402' && dispatch.commitmentRef === undefined)) {
+      return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'Inspect this managed Operation to obtain a current Commitment before invoking it.')
+    }
+  } else {
+    const descriptorAmount = descriptor.price.kind === 'fixed'
+      ? readExactAmount(descriptor.price.amount)
+      : undefined
+    if (pricingConfig.kind !== 'fixed_aud'
+      || pricingAmount === undefined
+      || descriptorAmount === undefined
+      || compareExactAmounts(pricingAmount, descriptorAmount) !== 0) {
+      return await refuseBeforeClaim(ctx, dispatch, 'price_changed', false, 'The published price changed; retry discovery.')
+    }
   }
   if (
     sellerCanary !== undefined
     && (
       sellerCanary.expiresAt <= Date.now()
+      || pricingAmount === undefined
       || compareExactAmounts(pricingAmount, sellerCanary.funding.requestedSpend) !== 0
       || compareExactAmounts(sellerCanary.funding.requestedSpend, sellerCanary.funding.maximumSpend) === undefined
       || compareExactAmounts(sellerCanary.funding.requestedSpend, sellerCanary.funding.maximumSpend)! > 0
@@ -439,13 +453,6 @@ export async function prepareInvocationRun(
   ) {
     return await refuseBeforeClaim(ctx, dispatch, 'price_changed', false, 'The sealed seller canary funding or expiry no longer matches the staged call.')
   }
-  if (
-    economicRail === 'brokered_x402'
-    && (pricingConfig.providerAmount === undefined || pricingConfig.platformFee === undefined)
-  ) {
-    return await refuseBeforeClaim(ctx, dispatch, 'rake_not_configured', false, 'Brokered x402 requires an explicit provider amount and platform fee.')
-  }
-
   const authoritySnapshot = operation.connectionAuthority ?? operation.identity.connectionAuthority
   const connectionAuthority: ConnectionAuthority | undefined = operation.binding.authority.kind === 'provider_connection'
     ? authoritySnapshot

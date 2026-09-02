@@ -93,6 +93,7 @@ export async function listAgentInvocationSummariesHandler(
 }
 
 export type RecoveryRow = Readonly<{
+  commitmentRef?: string
   invocationRef: string
   principalId: string
   ownerId: string
@@ -112,6 +113,7 @@ export type RecoveryRow = Readonly<{
   usage?: Usage
   evidenceHash?: string
   attemptRef?: string
+  updatedAt: number
 }>
 
 type ReplayRow = Readonly<{
@@ -129,6 +131,7 @@ function projectRecoveryRow(row: OperationInvocationRow): RecoveryRow | null {
   if (row.operationJson === undefined || row.inputJson === undefined) return null
   if (row.result !== undefined) assertOperationResultJson(row.result)
   return {
+    ...(row.commitmentRef === undefined ? {} : { commitmentRef: row.commitmentRef }),
     invocationRef: row.invocationRef,
     principalId: row.principalId,
     ownerId: row.ownerId,
@@ -150,6 +153,7 @@ function projectRecoveryRow(row: OperationInvocationRow): RecoveryRow | null {
     ...(row.usage === undefined ? {} : { usage: row.usage }),
     ...(row.evidenceHash === undefined ? {} : { evidenceHash: row.evidenceHash }),
     ...(row.attemptRef === undefined ? {} : { attemptRef: row.attemptRef }),
+    updatedAt: row.updatedAt,
   }
 }
 
@@ -170,7 +174,10 @@ function projectOperationResult(result: OperationInvokeResult): Infer<typeof ope
   }
 }
 
-export type InvokeArgs = AdmitArgs
+export type InvokeArgs = AdmitArgs & Readonly<{
+  commitmentRef: string
+  decisionPrice?: Readonly<{ currency: 'AUD'; exponent: 6; units: string }>
+}>
 
 type InvokePersistenceState = Readonly<{
   reservedInvocationRef?: string
@@ -194,6 +201,7 @@ function projectStatusRecoveryResult(
   return {
     kind: 'found',
     invocationRef: result.invocationRef,
+    version: Date.now(),
     operationRef: result.operationRef,
     state: 'reconciliation_required',
     attemptRef: result.evidence.attemptRef,
@@ -307,8 +315,11 @@ async function persistProjectedInvokeResult(
 export async function invokeHandler(
   ctx: ActionCtx,
   args: InvokeArgs,
+  sourceAlreadyAdmitted = false,
 ): Promise<Infer<typeof operationResultValue>> {
-  await ctx.runMutation(internal.capabilityOperationInvocations.admit, args)
+  if (!sourceAlreadyAdmitted) {
+    await ctx.runMutation(internal.capabilityOperationInvocations.admit, args)
+  }
   const principal: AgentAccessPrincipal = args.principal
   if (!canInvokeOperation(args, principal)) {
     return { kind: 'refused' as const, operationRef: args.operationRef, code: 'grant_not_found', retryable: false }
@@ -484,7 +495,12 @@ export async function invokeHandler(
   }
   const service = createOperationInvokeApplication(runtime)
   const result = await service.invokeOperation({
-    input: { operationRef: args.operationRef, input: args.input, idempotencyKey: args.idempotencyKey },
+    input: {
+      commitmentRef: args.commitmentRef,
+      operationRef: args.operationRef,
+      input: args.input,
+      idempotencyKey: args.idempotencyKey,
+    },
     principal,
     correlationId: args.correlationId,
   })
@@ -506,6 +522,7 @@ type RecoveryActionArgs = {
   sourceWriteRequest?: Infer<typeof sourceWriteRequestArg>
   principal: OperationInvokePrincipal
   invocationRef: string
+  afterVersion?: number
   idempotencyKey?: string
 }
 
@@ -561,7 +578,17 @@ export async function readInvocationStatusHandler(
     credentialId: args.principal.credentialId,
     mode: 'status',
   })
-  return projectStatusRecoveryResult(result)
+  const projected = projectStatusRecoveryResult(result)
+  return projected.kind === 'found'
+    && args.afterVersion !== undefined
+    && projected.version <= args.afterVersion
+    ? {
+        kind: 'unchanged' as const,
+        invocationRef: projected.invocationRef,
+        version: projected.version,
+        retryAfterMs: 1_000,
+      }
+    : projected
 }
 
 export async function cancelInvocationHandler(

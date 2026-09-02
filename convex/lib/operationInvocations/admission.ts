@@ -34,6 +34,10 @@ import {
   normalizeStoredAgentAccessGrantForOperation,
   type NormalizedStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
+import {
+  releaseManagedCallInTransaction,
+  reserveManagedCallInTransaction,
+} from '../../moneyManagedCall'
 
 export function assertJsonObject(value: unknown): asserts value is Record<string, JsonValue> {
   if (!isRecord(value) || !isBoundedJsonValue(value)) throw new Error('operation_invocation_json_invalid')
@@ -79,6 +83,7 @@ export type AdmitArgs = {
 }
 
 export type ReserveArgs = Readonly<{
+  commitmentRef: string
   invocationRef: string
   principalId: string
   ownerId: string
@@ -113,6 +118,10 @@ export type ReserveResult =
         | 'environment_mismatch'
         | 'rate_limited'
         | 'concurrency_limited'
+        | 'budget_exceeded'
+        | 'insufficient_balance'
+        | 'treasury_capacity_unavailable'
+        | 'commercial_policy_unavailable'
       retryable: boolean
       nextAction?: string
     }
@@ -166,6 +175,7 @@ export async function admitHandler(
 
 function reservationFromArgs(args: ReserveArgs): OperationInvokeIdempotencyReservation {
   return {
+    commitmentRef: args.commitmentRef,
     principalId: args.principalId,
     credentialId: args.credentialId,
     applicationRef: args.applicationRef,
@@ -182,6 +192,29 @@ function reservationFromArgs(args: ReserveArgs): OperationInvokeIdempotencyReser
   }
 }
 
+function reservationFromRow(row: InvocationRow): OperationInvokeIdempotencyReservation | undefined {
+  if (row.commitmentRef === undefined
+    || row.grantRef === undefined
+    || row.policyDigest === undefined
+    || row.grantExpiresAt === undefined) return undefined
+  return {
+    commitmentRef: row.commitmentRef,
+    principalId: row.principalId,
+    credentialId: row.credentialId,
+    applicationRef: row.applicationRef,
+    grantRef: row.grantRef,
+    grantGeneration: row.grantGeneration,
+    policyDigest: row.policyDigest,
+    grantExpiresAt: row.grantExpiresAt,
+    environment: row.environment,
+    operationRef: row.operationRef,
+    idempotencyKey: row.idempotencyKey,
+    inputDigest: row.inputDigest,
+    requestDigest: row.requestDigest,
+    invocationRef: row.invocationRef,
+  }
+}
+
 function operationSnapshotMatches(existing: InvocationRow, args: ReserveArgs): boolean {
   if (existing.operationJson === undefined || args.operationJson === undefined) return true
   return publishedOperationMaterialMatches(
@@ -192,6 +225,7 @@ function operationSnapshotMatches(existing: InvocationRow, args: ReserveArgs): b
 
 function existingReservationMatches(existing: InvocationRow, args: ReserveArgs): boolean {
   return [
+    existing.commitmentRef !== undefined,
     existing.grantRef !== undefined,
     existing.policyDigest !== undefined,
     existing.grantExpiresAt !== undefined,
@@ -256,10 +290,12 @@ async function replayExistingReservation(
   args: ReserveArgs,
 ): Promise<ReserveResult> {
   if (!existingReservationMatches(existing, args)) return { kind: 'conflict' }
+  const reservation = reservationFromRow(existing)
+  if (reservation === undefined) return { kind: 'conflict' }
   if (existing.operationJson === undefined && args.operationJson !== undefined) {
     await ctx.db.patch(existing._id, { operationJson: args.operationJson, updatedAt: args.now })
   }
-  return { kind: 'replayed', reservation: reservationFromArgs(args) }
+  return { kind: 'replayed', reservation }
 }
 
 type GrantRefusal = Extract<ReserveResult, { kind: 'refused' }>
@@ -341,26 +377,49 @@ async function concurrencyAdmissionRefusal(
     : null
 }
 
-export async function reserveHandler(
+type CommitmentRow = Doc<'capabilityOperationCommitments'>
+
+async function loadReservationCommitment(
   ctx: MutationCtx,
   args: ReserveArgs,
-): Promise<ReserveResult> {
-  if (!canaryEnvelopeMatchesReservation(args)) return { kind: 'conflict' }
-  const existing = await ctx.db.query('capabilityOperationInvocations')
-    .withIndex('by_credentialId_and_idempotencyKey', (query) => query.eq('credentialId', args.credentialId).eq('idempotencyKey', args.idempotencyKey))
+): Promise<CommitmentRow | null> {
+  if (args.sellerOnboardingCanary !== undefined) return null
+  return await ctx.db.query('capabilityOperationCommitments')
+    .withIndex('by_commitmentRef', (query) => query.eq('commitmentRef', args.commitmentRef))
     .unique()
-  const reservation = reservationFromArgs(args)
-  if (existing !== null) return await replayExistingReservation(ctx, existing, args)
+}
 
-  const grantDecision = await loadReservationGrant(ctx, args)
-  if (grantDecision.kind === 'refused') return grantDecision
-  const normalizedGrant = grantDecision.grant
+function commitmentMatchesReservation(commitment: CommitmentRow | null, args: ReserveArgs): boolean {
+  if (args.sellerOnboardingCanary !== undefined) return commitment === null
+  if (commitment === null) return false
+  return [
+    commitment.state === 'issued',
+    commitment.expiresAt > args.now,
+    commitment.principalId === args.principalId,
+    commitment.accountRef === args.ownerId,
+    commitment.credentialId === args.credentialId,
+    commitment.applicationRef === args.applicationRef,
+    commitment.environment === args.environment,
+    commitment.grantRef === args.grantRef,
+    commitment.grantGeneration === args.grantGeneration,
+    commitment.grantPolicyDigest === args.policyDigest,
+    commitment.operationRef === args.operationRef,
+    commitment.inputDigest === args.inputDigest,
+    args.operationJson === undefined || commitment.operationJson === args.operationJson,
+    args.inputJson === undefined || commitment.normalizedInputJson === args.inputJson,
+  ].every(Boolean)
+}
 
+async function rateAndConcurrencyRefusal(
+  ctx: MutationCtx,
+  args: ReserveArgs,
+  grant: NormalizedStoredAgentAccessGrant,
+): Promise<GrantRefusal | null> {
   const rate = await assertAgentAccessRateAdmission(ctx, {
     applicationRef: args.applicationRef,
     credentialId: args.credentialId,
-    maximumCallsPerMinute: normalizedGrant.policy.rate.maximumCallsPerMinute,
-    maximumCallsPerHour: normalizedGrant.policy.rate.maximumCallsPerHour,
+    maximumCallsPerMinute: grant.policy.rate.maximumCallsPerMinute,
+    maximumCallsPerHour: grant.policy.rate.maximumCallsPerHour,
   })
   if (!rate.ok) {
     return {
@@ -370,15 +429,53 @@ export async function reserveHandler(
       nextAction: 'Retry after the current rate window advances.',
     }
   }
-
-  // Bound queued envelopes before spend admission; budget concurrency is a separate gate.
-  const concurrencyRefusal = await concurrencyAdmissionRefusal(
+  return await concurrencyAdmissionRefusal(
     ctx,
     args,
-    normalizedGrant.policy.budget.maximumConcurrentInvocations,
+    grant.policy.budget.maximumConcurrentInvocations,
   )
-  if (concurrencyRefusal !== null) return concurrencyRefusal
+}
 
+function managedMoneyRefusal(code: string): GrantRefusal {
+  if (code === 'agent_budget_exceeded' || code === 'agent_budget_invalid') {
+    return { kind: 'refused', code: 'budget_exceeded', retryable: false }
+  }
+  if (code === 'account_balance_unavailable') {
+    return { kind: 'refused', code: 'insufficient_balance', retryable: false }
+  }
+  if (code === 'treasury_capacity_unavailable' || code === 'treasury_commitment_missing') {
+    return { kind: 'refused', code: 'treasury_capacity_unavailable', retryable: false }
+  }
+  return { kind: 'refused', code: 'commercial_policy_unavailable', retryable: false }
+}
+
+async function reserveCommittedMoney(
+  ctx: MutationCtx,
+  args: ReserveArgs,
+  commitment: CommitmentRow | null,
+  reservation: OperationInvokeIdempotencyReservation,
+  grant: NormalizedStoredAgentAccessGrant,
+): Promise<GrantRefusal | Extract<ReserveResult, { kind: 'conflict' }> | null> {
+  if (commitment === null) return null
+  const operation = parsePublishedOperationSnapshot(commitment.operationJson)
+  if (operation === undefined) return { kind: 'conflict' }
+  const money = await reserveManagedCallInTransaction(ctx, {
+    commitment,
+    invocationRef: reservation.invocationRef,
+    providerRef: operation.identity.businessId,
+    maximumDailySpend: grant.policy.budget.maximumDailySpend,
+    maximumMonthlySpend: grant.policy.budget.maximumMonthlySpend,
+    now: args.now,
+  })
+  return money.kind === 'refused' ? managedMoneyRefusal(money.code) : null
+}
+
+async function persistReservedInvocation(
+  ctx: MutationCtx,
+  args: ReserveArgs,
+  reservation: OperationInvokeIdempotencyReservation,
+  commitment: CommitmentRow | null,
+): Promise<void> {
   await ctx.db.insert('capabilityOperationInvocations', {
     ...reservation,
     ...(args.operationJson === undefined ? {} : { operationJson: args.operationJson }),
@@ -391,6 +488,38 @@ export async function reserveHandler(
     createdAt: args.now,
     updatedAt: args.now,
   })
+  if (commitment !== null) {
+    await ctx.db.patch(commitment._id, {
+      state: 'consumed',
+      consumedInvocationRef: reservation.invocationRef,
+      updatedAt: args.now,
+    })
+  }
+}
+
+export async function reserveHandler(
+  ctx: MutationCtx,
+  args: ReserveArgs,
+): Promise<ReserveResult> {
+  if (!canaryEnvelopeMatchesReservation(args)) return { kind: 'conflict' }
+  const existing = await ctx.db.query('capabilityOperationInvocations')
+    .withIndex('by_credentialId_and_idempotencyKey', (query) => query.eq('credentialId', args.credentialId).eq('idempotencyKey', args.idempotencyKey))
+    .unique()
+  const reservation = reservationFromArgs(args)
+  if (existing !== null) return await replayExistingReservation(ctx, existing, args)
+
+  const commitment = await loadReservationCommitment(ctx, args)
+  if (!commitmentMatchesReservation(commitment, args)) return { kind: 'conflict' }
+
+  const grantDecision = await loadReservationGrant(ctx, args)
+  if (grantDecision.kind === 'refused') return grantDecision
+  const normalizedGrant = grantDecision.grant
+
+  const admissionRefusal = await rateAndConcurrencyRefusal(ctx, args, normalizedGrant)
+  if (admissionRefusal !== null) return admissionRefusal
+  const moneyRefusal = await reserveCommittedMoney(ctx, args, commitment, reservation, normalizedGrant)
+  if (moneyRefusal !== null) return moneyRefusal
+  await persistReservedInvocation(ctx, args, reservation, commitment)
   await recordMarketEvidenceFact(ctx, 'ae_invocation', reservation.invocationRef, args.now, {
     operationRef: reservation.operationRef,
   })
@@ -407,12 +536,27 @@ export async function abandonHandler(
     .unique()
   if (row === null || !abandonmentIdentityMatches(row, args)) return { kind: 'not_found' as const }
   if (dispatchHasStarted(row)) return { kind: 'dispatch_started' as const }
+  const commitment = await ctx.db.query('capabilityOperationCommitments')
+    .withIndex('by_commitmentRef', (query) => query.eq('commitmentRef', args.commitmentRef))
+    .unique()
+  await releaseManagedCallInTransaction(ctx, row.invocationRef, Date.now())
   await ctx.db.delete(row._id)
+  if (commitment !== null
+    && commitment.state === 'consumed'
+    && commitment.consumedInvocationRef === row.invocationRef
+    && commitment.expiresAt > Date.now()) {
+    await ctx.db.patch(commitment._id, {
+      state: 'issued',
+      consumedInvocationRef: undefined,
+      updatedAt: Date.now(),
+    })
+  }
   return { kind: 'abandoned' as const }
 }
 
 function abandonmentIdentityMatches(row: InvocationRow, args: AbandonArgs): boolean {
   return [
+    row.commitmentRef === args.commitmentRef,
     row.principalId === args.principalId,
     row.ownerId === args.ownerId,
     row.credentialId === args.credentialId,

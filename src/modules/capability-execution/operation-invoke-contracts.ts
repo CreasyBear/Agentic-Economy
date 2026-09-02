@@ -32,6 +32,9 @@ export const operationInvokeRefusalCodeValues = [
   'rate_limited',
   'concurrency_limited',
   'budget_exceeded',
+  'insufficient_balance',
+  'treasury_capacity_unavailable',
+  'commercial_policy_unavailable',
   'idempotency_conflict',
   'invocation_runtime_unavailable',
   'authority_reader_unavailable',
@@ -60,6 +63,13 @@ const operationInvokeChargeStateSchema = z.enum([
 ])
 
 export const operationInvokeInputSchema: z.ZodType<OperationInvokeInput> = z.strictObject({
+  commitmentRef: z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u),
+  idempotencyKey: z.string().trim().min(1).max(200),
+})
+
+export const resolvedOperationInvokeInputSchema: z.ZodType<ResolvedOperationInvokeInput> = z.strictObject({
+  commitmentRef: z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u),
+  decisionPrice: exactAmountSchema.exactOptional(),
   operationRef: z.string().trim().min(1).max(300),
   input: z.record(z.string(), jsonValueSchema),
   idempotencyKey: z.string().trim().min(1).max(200),
@@ -83,6 +93,12 @@ const reconciliationStateSchema = z.strictObject({
 })
 
 export type OperationInvokeInput = Readonly<{
+  commitmentRef: string
+  idempotencyKey: string
+}>
+export type ResolvedOperationInvokeInput = Readonly<{
+  commitmentRef: string
+  decisionPrice?: ExactAmount
   operationRef: string
   input: Record<string, JsonValue>
   idempotencyKey: string
@@ -157,13 +173,8 @@ export function operationInvokeReceiptPaymentProfile(
 type OperationInvokeReceiptFields = Readonly<{
   receiptRef: string
   state: (typeof operationInvokeReceiptStateValues)[number]
-  providerQuotedAmount: ExactAmount
-  agenticEconomyFee: ExactAmount
-  totalBuyerAuthorization: ExactAmount
   priceDigest: string
   transactionRef?: string
-  settlementTransactionHash?: string
-  paymentIdentifier?: string
   accountingTransactionRefs?: string[]
   refundState?: 'released' | 'not_applicable' | 'unknown'
   lossState?: 'none' | 'provider_output_invalid' | 'unknown'
@@ -172,18 +183,38 @@ type OperationInvokeReceiptFields = Readonly<{
   issuedAt: string
 }>
 
-export type OperationInvokeReceipt = OperationInvokeReceiptFields & OperationInvokeReceiptPaymentProfile
+export type OperationInvokeReceipt = OperationInvokeReceiptFields & (
+  | Readonly<{
+      commercialModel: 'account_aud'
+      buyerCharge: ExactAmount
+      serviceFee: ExactAmount
+      totalBuyerCharge: ExactAmount
+      providerObligation: Readonly<{
+        amount: ExactAmount
+        settlementMethod: 'managed_x402'
+        payoutEligible: false
+      }>
+      providerSettlement: OperationInvokeReceiptPaymentProfile & Readonly<{
+        amount: ExactAmount
+        transactionHash?: string
+        paymentIdentifier?: string
+      }>
+    }>
+  | (Readonly<{
+      commercialModel: 'seller_canary_x402'
+      providerQuotedAmount: ExactAmount
+      agenticEconomyFee: ExactAmount
+      totalBuyerAuthorization: ExactAmount
+      settlementTransactionHash?: string
+      paymentIdentifier?: string
+    }> & OperationInvokeReceiptPaymentProfile)
+)
 
 const operationInvokeReceiptFields = {
   receiptRef: z.string().min(1),
   state: operationInvokeReceiptStateSchema,
-  providerQuotedAmount: exactAmountSchema,
-  agenticEconomyFee: exactAmountSchema,
-  totalBuyerAuthorization: exactAmountSchema,
   priceDigest: z.string().min(1),
   transactionRef: z.string().min(1).exactOptional(),
-  settlementTransactionHash: z.string().min(1).exactOptional(),
-  paymentIdentifier: z.string().min(1).exactOptional(),
   accountingTransactionRefs: z.array(z.string().min(1)).min(1).exactOptional(),
   refundState: z.enum(['released', 'not_applicable', 'unknown']).exactOptional(),
   lossState: z.enum(['none', 'provider_output_invalid', 'unknown']).exactOptional(),
@@ -192,14 +223,56 @@ const operationInvokeReceiptFields = {
   issuedAt: z.string().min(1),
 } as const
 
-export const operationInvokeReceiptSchema: z.ZodType<OperationInvokeReceipt> = z.discriminatedUnion('network', [
+const providerSettlementFields = {
+  amount: exactAmountSchema,
+  transactionHash: z.string().min(1).exactOptional(),
+  paymentIdentifier: z.string().min(1).exactOptional(),
+} as const
+
+export const operationInvokeReceiptSchema: z.ZodType<OperationInvokeReceipt> = z.union([
   z.strictObject({
     ...operationInvokeReceiptFields,
+    commercialModel: z.literal('account_aud'),
+    buyerCharge: exactAmountSchema,
+    serviceFee: exactAmountSchema,
+    totalBuyerCharge: exactAmountSchema,
+    providerObligation: z.strictObject({
+      amount: exactAmountSchema,
+      settlementMethod: z.literal('managed_x402'),
+      payoutEligible: z.literal(false),
+    }),
+    providerSettlement: z.union([
+      z.strictObject({
+        ...providerSettlementFields,
+        network: z.literal(BASE_MAINNET_NETWORK),
+        asset: z.literal(operationInvokeReceiptAsset),
+      }),
+      z.strictObject({
+        ...providerSettlementFields,
+        network: z.literal(BASE_SEPOLIA_NETWORK),
+        asset: z.literal(operationInvokeReceiptBaseSepoliaAsset),
+      }),
+    ]),
+  }),
+  z.strictObject({
+    ...operationInvokeReceiptFields,
+    commercialModel: z.literal('seller_canary_x402'),
+    providerQuotedAmount: exactAmountSchema,
+    agenticEconomyFee: exactAmountSchema,
+    totalBuyerAuthorization: exactAmountSchema,
+    settlementTransactionHash: z.string().min(1).exactOptional(),
+    paymentIdentifier: z.string().min(1).exactOptional(),
     network: z.literal(BASE_MAINNET_NETWORK),
     asset: z.literal(operationInvokeReceiptAsset),
   }),
   z.strictObject({
     ...operationInvokeReceiptFields,
+    commercialModel: z.literal('seller_canary_x402'),
+    providerQuotedAmount: exactAmountSchema,
+    agenticEconomyFee: exactAmountSchema,
+    totalBuyerAuthorization: exactAmountSchema,
+    settlementTransactionHash: z.string().min(1).exactOptional(),
+    paymentIdentifier: z.string().min(1).exactOptional(),
     network: z.literal(BASE_SEPOLIA_NETWORK),
     asset: z.literal(operationInvokeReceiptBaseSepoliaAsset),
   }),
@@ -301,6 +374,75 @@ export type OperationInvokeResult =
       receipt?: OperationInvokeReceipt
     }>
 
+const operationInvokeOwnerHandoffSchema = z.strictObject({
+  kind: z.literal('authorize'),
+  invocationRef: z.string(),
+  operationRef: z.string(),
+})
+
+export const operationInvokeMachineResultSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('completed'),
+    invocationRef: z.string(),
+    operationRef: z.string(),
+    output: jsonValueSchema,
+    evidenceHash: z.string(),
+    usage: operationInvokeUsageSchema,
+    receipt: operationInvokeReceiptSchema.exactOptional(),
+  }),
+  z.strictObject({
+    kind: z.literal('pending'),
+    invocationRef: z.string(),
+    operationRef: z.string(),
+    retryAfterMs: z.number().int().positive(),
+  }),
+  z.strictObject({
+    kind: z.literal('outcome_unknown'),
+    invocationRef: z.string(),
+    operationRef: z.string(),
+    evidence: reconciliationStateSchema,
+    receipt: operationInvokeReceiptSchema.exactOptional(),
+  }),
+  z.strictObject({
+    kind: z.literal('refused'),
+    operationRef: z.string().exactOptional(),
+    invocationRef: z.string().exactOptional(),
+    code: operationInvokeRefusalCodeSchema,
+    retryable: z.boolean(),
+    nextAction: z.string().exactOptional(),
+    ownerHandoff: operationInvokeOwnerHandoffSchema.exactOptional(),
+    receipt: operationInvokeReceiptSchema.exactOptional(),
+  }),
+]).meta({ id: 'OperationInvokeMachineResult' })
+
+export type OperationInvokeMachineResult = z.infer<typeof operationInvokeMachineResultSchema>
+
+export function projectOperationInvokeMachineResult(
+  result: OperationInvokeResult,
+): OperationInvokeMachineResult {
+  if (result.kind === 'needs_authority') {
+    return operationInvokeMachineResultSchema.parse({
+      kind: 'refused',
+      invocationRef: result.invocationRef,
+      operationRef: result.operationRef,
+      code: 'authority_required',
+      retryable: false,
+      nextAction: 'Ask the Account owner to authorize this exact invocation.',
+      ownerHandoff: {
+        kind: 'authorize',
+        invocationRef: result.invocationRef,
+        operationRef: result.operationRef,
+      },
+    })
+  }
+  if (result.kind === 'reconciliation_required') {
+    return operationInvokeMachineResultSchema.parse({
+      ...result,
+      kind: 'outcome_unknown',
+    })
+  }
+  return operationInvokeMachineResultSchema.parse(result)
+}
 export const operationEnvironmentMismatchNextAction =
   'Use a grant issued for the operation runtime environment.'
 

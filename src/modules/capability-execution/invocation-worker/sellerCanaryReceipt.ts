@@ -51,6 +51,7 @@ export function buildSellerOnboardingCanaryReceipt(input: Readonly<{
     exponent: input.providerQuotedAmount.exponent,
   }
   return {
+    commercialModel: 'seller_canary_x402',
     receiptRef: `seller-canary-receipt:${input.canary.canaryRef}:${input.attemptRef}`,
     state: input.state,
     providerQuotedAmount: input.providerQuotedAmount,

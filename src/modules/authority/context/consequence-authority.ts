@@ -44,6 +44,9 @@ export const PACKAGE_3_CONSEQUENCE_ACTIONS = Object.freeze([
   'publication.publish',
   'publication.republish',
   'publication.withdraw',
+  'commercial_policy.activate',
+  'commercial_policy.replace',
+  'commercial_policy.suspend',
 ] as const)
 
 export type Package3ConsequenceAction = typeof PACKAGE_3_CONSEQUENCE_ACTIONS[number]
@@ -156,6 +159,9 @@ export const PACKAGE_3_CONSEQUENCE_ACTION_POLICY = Object.freeze({
   'publication.publish': consequencePolicy('publish_or_withdraw', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'operation_revision', 'market_visibility', 'price_and_effects', 'consequence', 'recovery'], 'compensatable'),
   'publication.republish': consequencePolicy('publish_or_withdraw', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'operation_revision', 'market_visibility', 'price_and_effects', 'consequence', 'recovery'], 'compensatable'),
   'publication.withdraw': consequencePolicy('publish_or_withdraw', NO_CONSEQUENCE_PROOF, ['actor', 'account', 'target', 'operation_revision', 'market_visibility', 'consequence', 'recovery'], 'compensatable'),
+  'commercial_policy.activate': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'scope', 'expiry', 'consequence', 'recovery'], 'reversible_before_dispatch'),
+  'commercial_policy.replace': consequencePolicy('authority_increase', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'scope', 'expiry', 'consequence', 'recovery'], 'reversible_before_dispatch'),
+  'commercial_policy.suspend': consequencePolicy('authority_reduction', STRICT_CLERK_REVERIFICATION, ['actor', 'account', 'target', 'scope', 'expiry', 'consequence', 'recovery'], 'reversible_before_dispatch'),
 } as const satisfies Readonly<Record<Package3ConsequenceAction, ConsequenceActionPolicy>>)
 
 export const AUTHORITY_SURFACES = Object.freeze([

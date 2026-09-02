@@ -9,6 +9,7 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -246,7 +247,38 @@ export function InvocationStatusPage({
 }: Readonly<{ result: InvocationStatusPageResult; actions?: InvocationStatusPageActions }>) {
   if (result.kind === 'source_unavailable') return <StatusUnavailable result={result} {...(actions === undefined ? {} : { actions })} />
   if (result.kind === 'refused') return <StatusRefused result={result} {...(actions === undefined ? {} : { actions })} />
+  if (result.kind === 'unchanged') return <StatusUnchanged result={result} {...(actions === undefined ? {} : { actions })} />
   return <StatusFound result={result} {...(actions === undefined ? {} : { actions })} />
+}
+
+function StatusUnchanged({
+  result,
+  actions,
+}: Readonly<{
+  result: Extract<OperationInvokeStatusResult, { kind: 'unchanged' }>
+  actions?: InvocationStatusPageActions
+}>) {
+  return (
+    <AePublicPage>
+      <article className="ae-rail grid gap-section pb-page">
+        <AePageState
+          state="pending"
+          title="No status change"
+          description={`Invocation ${result.invocationRef} remains at version ${result.version}.`}
+          action={actions?.onRefresh === undefined ? undefined : (
+            <Button
+              type="button"
+              className="min-h-touch"
+              disabled={actions.refreshPending === true}
+              onClick={() => { void actions.onRefresh?.() }}
+            >
+              {actions.refreshPending === true ? 'Checking…' : 'Check status'}
+            </Button>
+          )}
+        />
+      </article>
+    </AePublicPage>
+  )
 }
 
 function StatusFound({
@@ -409,12 +441,22 @@ function ReceiptMoneyFacts({ view }: Readonly<{ view: InvocationReceiptView }>) 
 }
 
 function ReceiptAuthorizationFacts({ receipt }: Readonly<{ receipt: OperationInvokeReceipt }>) {
-  return (
-    <AeFactList
-      facts={[
+  const commercialFacts = receipt.commercialModel === 'account_aud'
+    ? [
+        { label: "Buyer charge", value: formatCurrencyAmount(receipt.buyerCharge) },
+        { label: "Service fee", value: formatCurrencyAmount(receipt.serviceFee) },
+        { label: "Total buyer charge", value: formatCurrencyAmount(receipt.totalBuyerCharge) },
+        { label: "Provider obligation", value: formatCurrencyAmount(receipt.providerObligation.amount) },
+      ]
+    : [
         { label: "Provider quote", value: formatCurrencyAmount(receipt.providerQuotedAmount) },
         { label: "Agentic Economy fee", value: formatCurrencyAmount(receipt.agenticEconomyFee) },
         { label: "Buyer authorized up to", value: formatCurrencyAmount(receipt.totalBuyerAuthorization) },
+      ]
+  return (
+    <AeFactList
+      facts={[
+        ...commercialFacts,
         { label: "Price digest", value: <Ref value={receipt.priceDigest} />, mono: true },
       ]}
     />
@@ -425,6 +467,9 @@ function ReceiptSettlementFacts({
   usage,
   receipt,
 }: Readonly<{ usage: OperationInvokeUsageSummary | undefined; receipt: OperationInvokeReceipt | undefined }>) {
+  const settlementTransactionHash = receipt?.commercialModel === 'account_aud'
+    ? receipt.providerSettlement.transactionHash
+    : receipt?.settlementTransactionHash
   return (
     <AeFactList
       facts={[
@@ -441,7 +486,7 @@ function ReceiptSettlementFacts({
           { label: "Receipt reference", value: <Ref value={receipt.receiptRef} />, mono: true },
           { label: "Refund state", value: machineLabel(receipt.refundState ?? 'not recorded') },
           { label: "Loss state", value: machineLabel(receipt.lossState ?? 'not recorded') },
-          ...(receipt.settlementTransactionHash === undefined ? [] : [{ label: "Settlement transaction", value: <Ref value={receipt.settlementTransactionHash} />, mono: true }]),
+          ...(settlementTransactionHash === undefined ? [] : [{ label: "Settlement transaction", value: <Ref value={settlementTransactionHash} />, mono: true }]),
         ]),
       ]}
     />
@@ -659,6 +704,7 @@ function statusFromRecovery(result: OperationInvokeRecoveryResult): InvocationSt
   return {
     kind: 'found',
     invocationRef: result.invocationRef,
+    version: Date.parse(result.evidence.requiredAt),
     operationRef: result.operationRef,
     state: 'reconciliation_required',
     attemptRef: result.evidence.attemptRef,
@@ -669,6 +715,9 @@ function statusFromRecovery(result: OperationInvokeRecoveryResult): InvocationSt
 function refreshFeedback(result: OperationInvokeStatusResult): InvocationStatusPageActions['feedback'] {
   if (result.kind === 'found') {
     return { kind: 'success', message: `Current status refreshed. The current state is ${machineLabel(result.state)}.` }
+  }
+  if (result.kind === 'unchanged') {
+    return { kind: 'success', message: `No status change. The invocation remains at version ${result.version}.` }
   }
   return {
     kind: 'error',
@@ -686,6 +735,9 @@ function cancelFeedback(result: OperationInvokeRecoveryResult): InvocationStatus
   if (result.kind === 'refused') {
     return { kind: 'error', message: recoveryRefusalMessage(result.code) }
   }
+  if (result.kind === 'unchanged') {
+    return { kind: 'success', message: `No status change. The invocation remains at version ${result.version}.` }
+  }
   if (result.state === 'cancelled') {
     return { kind: 'success', message: 'Cancellation was recorded. The current status was refreshed.' }
   }
@@ -694,6 +746,7 @@ function cancelFeedback(result: OperationInvokeRecoveryResult): InvocationStatus
 function reconcileFeedback(result: OperationInvokeRecoveryResult): InvocationStatusPageActions['feedback'] {
   if (result.kind === 'refused') return { kind: 'error', message: `Reconciliation was refused (${machineLabel(result.code)}). No state change is claimed.` }
   if (result.kind === 'reconciliation_required') return { kind: 'error', message: 'Reconciliation remains required. The submitted evidence was not accepted.' }
+  if (result.kind === 'unchanged') return { kind: 'success', message: `No status change. The invocation remains at version ${result.version}.` }
   if (result.state === 'terminal' || result.state === 'retryable') {
     return { kind: 'success', message: `Reconciliation recorded. Current state is ${machineLabel(result.state)} and the status was refreshed.` }
   }
@@ -916,6 +969,7 @@ function Ref({ value }: Readonly<{ value: string }>) {
 function canRefreshStatus(result: InvocationStatusPageResult): boolean {
   if (result.kind === 'source_unavailable') return true
   if (result.kind === 'refused') return result.retryable
+  if (result.kind === 'unchanged') return true
   return result.state !== 'terminal' && result.state !== 'cancelled' && result.state !== 'invalidated'
 }
 

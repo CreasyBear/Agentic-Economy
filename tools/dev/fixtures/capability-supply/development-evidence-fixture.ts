@@ -73,9 +73,11 @@ const catalogOrigin = {
   }),
 }
 const pricingConfig = {
-  version: 'pricing:v2' as const,
-  unit: 'call' as const,
-  paidAmount: { currency: 'USD' as const, units: '1', exponent: 2 },
+  version: 'pricing:v3' as const,
+  kind: 'fixed_aud' as const,
+  currency: 'AUD' as const,
+  exponent: 6 as const,
+  amountUnits: '10000',
 }
 const priceDigest = pricingConfigDigest(pricingConfig)
 
@@ -120,7 +122,10 @@ const offeringRegistration = defineCapabilityOfferingRegistration({
   origin: catalogOrigin,
   presentation: {
     label: 'Mock development provider', summary: 'MOCK/DEVELOPMENT ONLY',
-    price: { kind: 'fixed', amount: pricingConfig.paidAmount }, materialTerms: [],
+    price: {
+      kind: 'fixed',
+      amount: { currency: 'AUD', units: pricingConfig.amountUnits, exponent: 6 },
+    }, materialTerms: [],
     commercialRelationship: {
       kind: 'none', summary: 'Fixture only.', influencesEligibility: false,
       influencesInclusion: false, influencesOrder: false, evidenceRefs: ['mock:commercial'],

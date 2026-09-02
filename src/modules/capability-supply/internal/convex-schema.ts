@@ -38,19 +38,26 @@ export const capabilityPublicationSourceSelectorValue = v.union(
   }),
   v.object({ resourceUrl: v.string() }),
 )
-export const pricingConfigValue = v.object({
-  version: v.literal('pricing:v2'),
-  unit: v.literal('call'),
-  paidAmount: exactAmount,
-  providerAmount: v.optional(exactAmount),
-  platformFee: v.optional(exactAmount),
-  freeTier: v.optional(
-    v.object({
-      maxCalls: v.number(),
-      window: v.union(v.literal('day'), v.literal('month')),
+export const pricingConfigValue = v.union(
+  v.object({
+    version: v.literal('pricing:v3'),
+    kind: v.literal('fixed_aud'),
+    currency: v.literal('AUD'),
+    exponent: v.literal(6),
+    amountUnits: v.string(),
+  }),
+  v.object({
+    version: v.literal('pricing:v3'),
+    kind: v.literal('managed_x402'),
+    sourceRequirement: v.object({
+      network: v.string(),
+      asset: v.string(),
+      atomicUnits: v.string(),
     }),
-  ),
-})
+    pricingPolicyRef: v.string(),
+    publicDisplay: v.literal('on_request'),
+  }),
+)
 export const readinessOutcomeValue = v.union(
   v.literal('healthy'),
   v.literal('credential_unavailable'),

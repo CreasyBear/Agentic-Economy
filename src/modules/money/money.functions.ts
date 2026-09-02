@@ -1,7 +1,8 @@
 export {
-  beginCreditTopupServer,
-  readCreditPaymentServer,
-} from './internal/credit-topup-http'
+  beginAccountFundingServer,
+  readAccountFundingBalanceServer,
+  readAccountFundingServer,
+} from './internal/account-funding-http'
 export {
   createOwnerConnectAccountServer,
   createOwnerOnboardingLinkServer,

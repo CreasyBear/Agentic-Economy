@@ -16,6 +16,7 @@ import {
   readHttpJsonProbeConfiguration,
   validPublicHttpsEndpoint,
 } from '../transport-adapters'
+import { pricingConfigSourceAmount } from '@/modules/money/public'
 
 import type { CapabilityGraphPorts, GraphPublicationRow } from './ports'
 import { probeTargetDigest } from './probe-digest'
@@ -197,8 +198,9 @@ export async function readCapabilityProbeTarget(
 
   let expectedPaymentJson: string | undefined
   if (binding.adapterId === 'x402-fetch:v2') {
-    const routePaymentAmount = publication.pricingConfig?.providerAmount
-      ?? publication.pricingConfig?.paidAmount
+    const routePaymentAmount = publication.pricingConfig === undefined
+      ? undefined
+      : pricingConfigSourceAmount(publication.pricingConfig)
     if (x402Configuration === undefined || routePaymentAmount === undefined) {
       return unavailable('binding_invalid')
     }

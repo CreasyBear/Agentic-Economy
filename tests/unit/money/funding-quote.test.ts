@@ -10,18 +10,19 @@ describe('funding quote contract', () => {
   it('publishes exact constraints and a fee-inclusive quote without side effects', () => {
     expect(readFundingConstraints()).toEqual({
       kind: 'funding_constraints',
-      contractVersion: 'ae-funding-quote:v1',
-      currency: 'USD',
-      minimum: { currency: 'USD', units: '500', exponent: 2 },
-      maximum: { currency: 'USD', units: '2500000', exponent: 2 },
-      increment: { currency: 'USD', units: '1', exponent: 2 },
-      processingFeeBps: 500,
-      amountMeaning: 'buyer_credit_before_processing_fee',
+      contractVersion: 'ae-funding-quote:v2',
+      currency: 'AUD',
+      minimum: { currency: 'AUD', units: '5000000', exponent: 6 },
+      maximum: { currency: 'AUD', units: '25000000000', exponent: 6 },
+      increment: { currency: 'AUD', units: '10000', exponent: 6 },
+      serviceFeeBps: 500,
+      taxOnServiceFeeBps: 1000,
+      amountMeaning: 'account_aud_principal',
       quotePath: '/api/v1/funding/quote',
     })
 
     const quote = quoteFunding({
-      amount: { currency: 'USD', units: '1000', exponent: 2 },
+      amount: { currency: 'AUD', units: '10000000', exponent: 6 },
       now: 1_000,
     })
     expect(quote).toMatchObject({
@@ -29,10 +30,12 @@ describe('funding quote contract', () => {
       binding: false,
       generatedAt: 1_000,
       expiresAt: 1_000 + FUNDING_QUOTE_VALIDITY_MS,
-      creditAmount: { currency: 'USD', units: '1000', exponent: 2 },
-      processingFee: { currency: 'USD', units: '50', exponent: 2 },
-      totalCharge: { currency: 'USD', units: '1050', exponent: 2 },
-      processingFeeBps: 500,
+      principalAmount: { currency: 'AUD', units: '10000000', exponent: 6 },
+      serviceFee: { currency: 'AUD', units: '500000', exponent: 6 },
+      taxOnServiceFee: { currency: 'AUD', units: '50000', exponent: 6 },
+      totalPayment: { currency: 'AUD', units: '10550000', exponent: 6 },
+      serviceFeeBps: 500,
+      taxOnServiceFeeBps: 1000,
       nextActions: [{
         action: 'funding.create',
         kind: 'human_handoff',
@@ -44,9 +47,9 @@ describe('funding quote contract', () => {
   })
 
   it('rejects unsupported currency, sub-cent, and out-of-range amounts', () => {
-    expect(quoteFunding({ amount: { currency: 'EUR', units: '1000', exponent: 2 }, now: 0 })).toBeUndefined()
-    expect(quoteFunding({ amount: { currency: 'USD', units: '5001', exponent: 3 }, now: 0 })).toBeUndefined()
-    expect(quoteFunding({ amount: { currency: 'USD', units: '499', exponent: 2 }, now: 0 })).toBeUndefined()
-    expect(quoteFunding({ amount: { currency: 'USD', units: '2500001', exponent: 2 }, now: 0 })).toBeUndefined()
+    expect(quoteFunding({ amount: { currency: 'EUR', units: '10000000', exponent: 6 }, now: 0 })).toBeUndefined()
+    expect(quoteFunding({ amount: { currency: 'AUD', units: '5000001', exponent: 6 }, now: 0 })).toBeUndefined()
+    expect(quoteFunding({ amount: { currency: 'AUD', units: '4990000', exponent: 6 }, now: 0 })).toBeUndefined()
+    expect(quoteFunding({ amount: { currency: 'AUD', units: '25000010000', exponent: 6 }, now: 0 })).toBeUndefined()
   })
 })

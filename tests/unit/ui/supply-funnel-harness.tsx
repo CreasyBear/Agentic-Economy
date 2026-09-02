@@ -71,9 +71,11 @@ export const operation: OperationCardViewModel = {
 };
 
 export const pricingConfig: PricingConfig = {
-  version: "pricing:v2",
-  unit: "call",
-  paidAmount: { currency: "AUD", units: "125", exponent: 2 },
+  version: "pricing:v3",
+  kind: "fixed_aud",
+  currency: "AUD",
+  exponent: 6,
+  amountUnits: "1250000",
 };
 export const priceDigest = pricingConfigDigest(pricingConfig);
 export const sourceHash = `sha256:${"a".repeat(64)}`;
@@ -96,7 +98,7 @@ export const preparedPublication: PreparedPublicationMaterial = {
     presentation: {
       label: "Quote API",
       summary: "Returns a quote.",
-      price: { kind: "fixed", amount: pricingConfig.paidAmount },
+      price: { kind: "fixed", amount: { currency: "AUD", units: pricingConfig.kind === "fixed_aud" ? pricingConfig.amountUnits : "0", exponent: 6 } },
       materialTerms: [],
       commercialRelationship: {
         kind: "none",
@@ -344,9 +346,15 @@ export function x402OfferingAtTest(): OwnerSupplyOfferingReadback {
     }],
   });
   const canaryPricing: PricingConfig = {
-    version: "pricing:v2",
-    unit: "call",
-    paidAmount: { currency: "USD", units: "1", exponent: 2 },
+    version: "pricing:v3",
+    kind: "managed_x402",
+    sourceRequirement: {
+      network: "eip155:84532",
+      asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      atomicUnits: "10000",
+    },
+    pricingPolicyRef: "pricing-policy:sandbox-managed-x402:v1",
+    publicDisplay: "on_request",
   };
   return {
     ...offering,

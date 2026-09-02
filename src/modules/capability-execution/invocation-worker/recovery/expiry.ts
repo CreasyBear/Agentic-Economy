@@ -20,7 +20,7 @@ export async function expireAuthorizationRecovery(
   ctx: ActionCtx,
   args: RecoveryIdentity,
 ): Promise<InternalRecoveryResult> {
-  const loaded = await loadReadyRecoveryWork(ctx, args, false)
+  const loaded = await loadReadyRecoveryWork(ctx, args)
   if (loaded.kind === 'not_found') return recoveryNotFound(args.invocationRef)
   if (loaded.kind === 'persisted') return projectPersistedRecovery(loaded.recovered)
   const { work } = loaded

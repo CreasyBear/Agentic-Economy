@@ -12,6 +12,43 @@ const options: CliOptions = {
   allowWrite: false,
   apply: false,
 }
+const operationRef = `operation:v1:${'a'.repeat(64)}`
+const commitmentRef = `operation-commitment:v1:${'b'.repeat(64)}`
+
+function inspection(input: Record<string, unknown> = {}) {
+  return {
+    kind: 'committed',
+    commitmentRef,
+    operationRef,
+    operationRevision: 1,
+    expiresAt: 1_900_000_000_000,
+    normalizedInput: input,
+    price: { currency: 'AUD', units: '0', exponent: 6 },
+    account: {
+      accountRef: 'account:test',
+      available: { currency: 'AUD', units: '10000000', exponent: 6 },
+    },
+    budget: {
+      principalRef: 'principal:test',
+      maximumPerInvocation: { currency: 'AUD', units: '10000000', exponent: 6 },
+    },
+    policyRefs: ['commercial-policy:sandbox'],
+    evidenceDigest: 'sha256:inspection',
+    continuation: {
+      action: 'operation.invoke',
+      method: 'POST',
+      path: '/api/v1/operations/call',
+      input: { commitmentRef, idempotencyKey: 'replace-at-invocation' },
+    },
+  }
+}
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
+}
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -27,7 +64,6 @@ function setApiKey(value: string, origin = options.baseUrl): void {
 
 describe('market-terminal authenticated operation invocation', () => {
   it('checks anonymous availability before suggesting buyer connection', async () => {
-    const operationRef = `operation:v1:${'a'.repeat(64)}`
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(
       callableOperationDetail(operationRef),
     ), { status: 200, headers: { 'content-type': 'application/json' } }))
@@ -107,7 +143,9 @@ describe('market-terminal authenticated operation invocation', () => {
     setApiKey('ae-test-caller-key')
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     const writeError = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(inspection({ query: 'hello' })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
       kind: 'completed',
       invocationRef: 'invocation:one',
       operationRef: 'operation:v1:test',
@@ -124,19 +162,21 @@ describe('market-terminal authenticated operation invocation', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await runInvokeCommand(
-      ['operation:v1:test'],
+      [operationRef],
       { ...options, input: '{"query":"hello"}', idempotencyKey: 'idem-cli-one' },
     )
 
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(writeError).not.toHaveBeenCalled()
-    const [url, init] = fetchMock.mock.calls[0]!
+    const [inspectUrl, inspectInit] = fetchMock.mock.calls[0]!
+    expect(inspectUrl).toBe('https://market.example/api/v1/operations/inspect')
+    expect(JSON.parse(String(inspectInit?.body))).toEqual({ operationRef, input: { query: 'hello' } })
+    const [url, init] = fetchMock.mock.calls[1]!
     expect(url).toBe('https://market.example/api/v1/operations/call')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
     expect(init?.redirect).toBe('manual')
     expect(JSON.parse(String(init?.body))).toEqual({
-      operationRef: 'operation:v1:test',
-      input: { query: 'hello' },
+      commitmentRef,
       idempotencyKey: 'idem-cli-one',
     })
     expect(String(init?.body)).not.toMatch(/endpoint|provider|credential|payment/iu)
@@ -148,7 +188,9 @@ describe('market-terminal authenticated operation invocation', () => {
   it('reads piped JSON input and sends the same canonical operation payload', async () => {
     setApiKey('ae-test-caller-key')
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(inspection({ query: 'hello from stdin' })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
       kind: 'completed',
       invocationRef: 'invocation:stdin',
       operationRef: 'operation:v1:test',
@@ -165,15 +207,14 @@ describe('market-terminal authenticated operation invocation', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await runInvokeCommand(
-      ['operation:v1:test'],
+      [operationRef],
       { ...options, input: '-', idempotencyKey: 'idem-cli-stdin' },
       Readable.from(['{"query":"hello from stdin"}']),
     )
 
-    expect(fetchMock).toHaveBeenCalledOnce()
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      operationRef: 'operation:v1:test',
-      input: { query: 'hello from stdin' },
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      commitmentRef,
       idempotencyKey: 'idem-cli-stdin',
     })
   })
@@ -216,14 +257,16 @@ describe('market-terminal authenticated operation invocation', () => {
     setApiKey('ae-test-caller-key')
     const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(inspection()))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
       kind: 'pending',
       invocationRef: 'invocation:one',
       operationRef: 'operation:v1:test',
       retryAfterMs: 100,
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
 
-    await runInvokeCommand(['operation:v1:test'], {
+    await runInvokeCommand([operationRef], {
       ...options,
       json: false,
       input: '{}',
@@ -237,6 +280,7 @@ describe('market-terminal authenticated operation invocation', () => {
     setApiKey('ae-test-caller-key')
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(inspection({ query: 'hello' })))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         kind: 'pending',
         invocationRef: 'invocation:one',
@@ -246,6 +290,7 @@ describe('market-terminal authenticated operation invocation', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         kind: 'found',
         invocationRef: 'invocation:one',
+        version: 1,
         operationRef: 'operation:v1:test',
         state: 'terminal',
         evidenceHash: 'sha256:test',
@@ -267,12 +312,12 @@ describe('market-terminal authenticated operation invocation', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await runInvokeCommand(
-      ['operation:v1:test'],
+      [operationRef],
       { ...options, input: '{"query":"hello"}', idempotencyKey: 'idem-cli-one', wait: true },
     )
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    const [statusUrl, statusInit] = fetchMock.mock.calls[1]!
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    const [statusUrl, statusInit] = fetchMock.mock.calls[2]!
     expect(statusUrl).toBe('https://market.example/api/v1/operations/invocation%3Aone')
     expect(statusInit?.method).toBe('GET')
     expect(new Headers(statusInit?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
@@ -286,6 +331,7 @@ describe('market-terminal authenticated operation invocation', () => {
   it('preserves a structured status refusal while waiting instead of relabelling it as transport unknown', async () => {
     setApiKey('ae-test-caller-key')
     const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(inspection()))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         kind: 'pending',
         invocationRef: 'invocation:one',
@@ -304,20 +350,22 @@ describe('market-terminal authenticated operation invocation', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(runInvokeCommand(
-      ['operation:v1:test'],
+      [operationRef],
       { ...options, input: '{}', idempotencyKey: 'idem-cli-wait-503', wait: true },
     )).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
       code: 'provider_unavailable',
       retryable: true,
     } satisfies Partial<CliFailure>)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('uses the shared insufficient-credit continuation instead of status', async () => {
     setApiKey('ae-test-caller-key')
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(inspection()))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
       kind: 'completed',
       invocationRef: 'invocation:credit',
       operationRef: 'operation:v1:test',
@@ -332,7 +380,7 @@ describe('market-terminal authenticated operation invocation', () => {
       },
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
 
-    await runInvokeCommand(['operation:v1:test'], {
+    await runInvokeCommand([operationRef], {
       ...options,
       input: '{}',
       idempotencyKey: 'idem-credit',

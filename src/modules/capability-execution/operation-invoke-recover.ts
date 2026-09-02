@@ -6,6 +6,7 @@ import type {
 
 export type OperationInvokeRecoveryRequest = Readonly<{
   invocationRef: string
+  afterVersion?: number
   principal: AgentAccessPrincipal
   correlationId: string
 }>

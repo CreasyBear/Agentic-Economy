@@ -9,6 +9,7 @@ describe('public invocation receipt projection', () => {
   it('marks every stage complete only for a canonical completed result', () => {
     const view = projectInvocationReceipt({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'terminal',
@@ -45,6 +46,7 @@ describe('public invocation receipt projection', () => {
   it('does not invent reservation, settlement, validation, or completion for in-progress work', () => {
     const view = projectInvocationReceipt({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'in_progress',
@@ -64,6 +66,7 @@ describe('public invocation receipt projection', () => {
   it('answers the five recovery questions for an uncertain paid outcome', () => {
     const view = projectInvocationReceipt({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'reconciliation_required',
@@ -92,6 +95,7 @@ describe('public invocation receipt projection', () => {
   it('does not turn a bare terminal state into a successful receipt', () => {
     const view = projectInvocationReceipt({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'terminal',

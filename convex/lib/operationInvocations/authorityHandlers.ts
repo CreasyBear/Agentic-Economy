@@ -1,6 +1,7 @@
 import { makeFunctionReference } from 'convex/server'
 import type { Infer } from 'convex/values'
 import type { Doc } from '../../_generated/dataModel'
+import { internal } from '../../_generated/api'
 import type { ActionCtx, MutationCtx, QueryCtx } from '../../_generated/server'
 import { resolveBusinessActor } from '../../authz'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
@@ -494,13 +495,46 @@ export function agentStatusNotFound(invocationRef: string): Infer<typeof statusR
 
 export async function canonicalAgentInvokeHandler(
   ctx: ActionCtx,
-  args: Parameters<typeof invokeHandler>[1],
+  args: Readonly<{
+    operationKey: string
+    correlationId: string
+    sourceWrite?: unknown
+    sourceWriteRequest?: unknown
+    principal: OperationPrincipal
+    commitmentRef: string
+    idempotencyKey: string
+  }>,
 ): Promise<Infer<typeof operationResultValue>> {
-  const principal = await canonicalAgentPrincipal(ctx, args.principal, { operationRef: args.operationRef })
-  if (principal === null) {
-    return { kind: 'refused', operationRef: args.operationRef, code: 'grant_not_found', retryable: false }
+  const sourceAdmitted = await ctx.runMutation(
+    internal.capabilityOperationCommitments.admitInvocation,
+    args as never,
+  )
+  if (!sourceAdmitted) {
+    return { kind: 'refused', code: 'invocation_runtime_unavailable', retryable: true }
   }
-  return await invokeHandler(ctx, { ...args, principal })
+  const material = await ctx.runQuery(internal.capabilityOperationCommitments.readForInvocation, {
+    principal: args.principal,
+    commitmentRef: args.commitmentRef,
+    idempotencyKey: args.idempotencyKey,
+    now: Date.now(),
+  })
+  if (material === null) {
+    return { kind: 'refused', code: 'operation_not_current', retryable: false }
+  }
+  const principal = await canonicalAgentPrincipal(ctx, args.principal, { operationRef: material.operationRef })
+  if (principal === null) {
+    return { kind: 'refused', operationRef: material.operationRef, code: 'grant_not_found', retryable: false }
+  }
+  return await invokeHandler(ctx, {
+    commitmentRef: material.commitmentRef,
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    principal,
+    operationRef: material.operationRef,
+    input: material.input,
+    decisionPrice: material.decisionPrice,
+    idempotencyKey: args.idempotencyKey,
+  }, true)
 }
 
 export async function canonicalAgentListHandler(

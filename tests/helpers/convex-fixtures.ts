@@ -415,12 +415,11 @@ export async function prepareCapabilityPublicationMutation(
     throw new Error('capability_publication_fixture_price_missing')
   }
   const pricingConfig = input.pricingConfig ?? {
-    version: 'pricing:v2' as const,
-    unit: 'call' as const,
-    paidAmount:
-      price.kind === 'fixed'
-        ? price.amount
-        : { currency: 'AUD' as const, units: '0', exponent: 2 },
+    version: 'pricing:v3' as const,
+    kind: 'fixed_aud' as const,
+    currency: 'AUD' as const,
+    exponent: 6 as const,
+    amountUnits: price.kind === 'fixed' ? price.amount.units : '0',
   }
   const catalog = await backend.run(async (ctx) => {
     const offeringRows = await ctx.db

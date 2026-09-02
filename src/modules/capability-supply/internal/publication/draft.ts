@@ -21,6 +21,7 @@ import {
 import {
   compareExactAmounts,
   normalizePricingConfig,
+  pricingConfigDecisionAmount,
   pricingConfigDigest,
   type PricingConfig,
 } from '@/modules/money/public'
@@ -59,8 +60,18 @@ export function pricingConfigForOffering(
   offering: CapabilityPublicationOfferingDraft,
 ): PricingConfig | undefined {
   const price = offering.presentation.price
-  if (price.kind !== 'fixed') return undefined
-  return { version: 'pricing:v2', unit: 'call', paidAmount: price.amount }
+  if (
+    price.kind !== 'fixed'
+    || price.amount.currency !== 'AUD'
+    || price.amount.exponent !== 6
+  ) return undefined
+  return {
+    version: 'pricing:v3',
+    kind: 'fixed_aud',
+    currency: 'AUD',
+    exponent: 6,
+    amountUnits: price.amount.units,
+  }
 }
 
 type PublicationPricingRefusal = 'pricing_config_invalid' | 'price_unavailable'
@@ -147,7 +158,13 @@ export async function preparePublicationDraft(input: Readonly<{
     binding,
   }
   const displayedPrice = draft.offering.presentation.price
-  if (displayedPrice.kind !== 'fixed' || compareExactAmounts(displayedPrice.amount, pricingConfig.paidAmount) !== 0) {
+  const decisionAmount = pricingConfigDecisionAmount(pricingConfig)
+  const pricingMatches = pricingConfig.kind === 'managed_x402'
+    ? displayedPrice.kind === 'on_request'
+    : displayedPrice.kind === 'fixed'
+      && decisionAmount !== undefined
+      && compareExactAmounts(displayedPrice.amount, decisionAmount) === 0
+  if (!pricingMatches) {
     return { kind: 'refused', reason: 'price_unavailable' }
   }
 
@@ -318,4 +335,3 @@ export async function admitPublicationDraft(input: Readonly<{
     admittedTransport,
   }
 }
-

@@ -22,6 +22,7 @@ import {
   externalSpendPaymentFactsArgs,
   externalSpendRefusal,
 } from './moneyExternalSpendShared'
+import { readCommercialPolicyGate } from './moneyCommercialPolicy'
 
 export type ReserveExternalInvocationSpendArgs = ExternalSpendPaymentFacts &
   Readonly<{
@@ -88,6 +89,16 @@ export async function reserveExternalInvocationSpendHandler(
   }
   if (!externalSpendPaymentFactsValid(facts)) {
     return externalSpendRefusal('external_spend_invalid_amount')
+  }
+  const commercialPolicy = await readCommercialPolicyGate(ctx.db, {
+    environment: facts.environment,
+    now: observedAt,
+    ...(facts.environment === 'sandbox'
+      ? { sandboxFixture: 'managed_x402_deterministic_v1' as const }
+      : {}),
+  })
+  if (commercialPolicy.kind === 'refused') {
+    return externalSpendRefusal('external_spend_commercial_policy_required')
   }
   const identity = mintExternalSpendIdentity(facts)
   const priorByAttempt = await ctx.db

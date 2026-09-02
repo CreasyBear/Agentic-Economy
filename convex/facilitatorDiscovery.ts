@@ -262,17 +262,26 @@ async function reconcileDraft(
   now: number,
 ): Promise<'published' | 'skipped'> {
   const sourceImport = parseFacilitatorDiscoverySourceImport(draft.sourceImportJson)
-  if (sourceImport === undefined) return 'skipped'
+  if (sourceImport === undefined || sourceImport.kind !== 'x402') return 'skipped'
   const runtimeEnvironment = facilitatorRuntimeEnvironment(sourceImport)
   if (runtimeEnvironment === undefined) return 'skipped'
   const route = routeIdentity(sourceImport)
   if (route === undefined) return 'skipped'
+  const sourceResource = isRecord(sourceImport.resource) ? sourceImport.resource : undefined
+  if (
+    typeof sourceResource?.network !== 'string'
+    || typeof sourceResource.asset !== 'string'
+  ) return 'skipped'
   const pricingConfig: PricingConfig = {
-    version: 'pricing:v2',
-    unit: 'call',
-    providerAmount: draft.price.provider,
-    platformFee: draft.price.platformFee,
-    paidAmount: draft.price.total,
+    version: 'pricing:v3',
+    kind: 'managed_x402',
+    sourceRequirement: {
+      network: sourceResource.network,
+      asset: sourceResource.asset,
+      atomicUnits: draft.price.provider.units,
+    },
+    pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
+    publicDisplay: 'on_request',
   }
   const sourceRevision = draft.sourceRevision
   const probe = await preparePublicationDraft({

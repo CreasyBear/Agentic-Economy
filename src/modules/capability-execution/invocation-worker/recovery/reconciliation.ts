@@ -5,6 +5,7 @@ import {
 } from '@/modules/action-invocation/runtime'
 import type { OperationInvokeReceipt } from '@/modules/capability-execution/operation-invoke-contracts'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
+import { internal } from '../../../../../convex/_generated/api'
 import {
   projectPersistedRecovery,
   projectPureOperationInvocationStatus,
@@ -13,10 +14,7 @@ import {
   recoveryNotFound,
   retryableRecoveryResult,
 } from '../../../../../convex/capabilityOperationInvocationProjection'
-import {
-  reconcileAcceptedCharge,
-  releaseBrokeredInvocationCharge,
-} from '../charge'
+import { reconcileAcceptedCharge } from '../charge'
 import { prepareX402RecoveryEvidence } from './x402'
 import {
   loadReadyRecoveryWork,
@@ -34,7 +32,19 @@ export async function reconcileRecoveryMoney(
   work: RecoveryWorkContext,
   outcome: 'not_released' | 'released',
 ): Promise<{ kind: 'none' | 'settled' | 'reconciliation_required' }> {
-  const { recovered, control, operation, brokeredReservation } = work
+  const { recovered, control, operation, managedReservation } = work
+  if (managedReservation !== null) {
+    if (outcome !== 'not_released' || managedReservation.state !== 'reserved') {
+      return { kind: 'reconciliation_required' }
+    }
+    const released = await ctx.runMutation(
+      internal.moneyManagedCallLifecycle.releaseBeforeSubmission,
+      { invocationRef: recovered.invocationRef, now: Date.now() },
+    )
+    return released.kind === 'accepted'
+      ? { kind: 'settled' }
+      : { kind: 'reconciliation_required' }
+  }
   const attemptRef = control.currentAttemptRef
     ?? recovered.attemptRef
     ?? `operation-attempt:${recovered.invocationRef}:1`
@@ -55,14 +65,6 @@ export async function reconcileRecoveryMoney(
     outcome,
   )
   if (deterministicBuyerSettlement.kind === 'settled') return { kind: 'settled' }
-  if (brokeredReservation !== undefined) {
-    const settlement = outcome === 'not_released'
-      ? await releaseBrokeredInvocationCharge(ctx, brokeredReservation)
-      : { kind: 'reconciliation_required' as const }
-    return settlement.kind === 'reconciliation_required'
-      ? { kind: 'reconciliation_required' }
-      : { kind: 'settled' }
-  }
   return { kind: 'reconciliation_required' }
 }
 
@@ -97,7 +99,7 @@ export async function reconcileRecovery(
 ): Promise<RecoveryResult> {
   const submittedEvidence = args.evidence
   if (submittedEvidence === undefined) return recoveryNotFound(args.invocationRef)
-  const loaded = await loadReadyRecoveryWork(ctx, args, true)
+  const loaded = await loadReadyRecoveryWork(ctx, args)
   if (loaded.kind === 'not_found') return recoveryNotFound(args.invocationRef)
   if (loaded.kind === 'persisted') return projectPersistedRecovery(loaded.recovered)
   const { work } = loaded

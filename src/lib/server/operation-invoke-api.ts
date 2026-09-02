@@ -17,6 +17,9 @@ import { isRecord } from '@/modules/common/is-record'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { operationInvokeAction } from '@/modules/capability-execution/operation-invoke.actions'
 import {
+  operationInspectAction,
+} from '@/modules/capability-execution/operation-commitment.actions'
+import {
   operationListInputSchema,
   operationListResultSchema,
 } from '@/modules/capability-execution/operation-history.actions'
@@ -34,10 +37,14 @@ import {
   OPERATION_INVOKE_SCOPE,
 } from '@/modules/capability-execution/operation-invoke-entry'
 import type {
-  OperationInvokeRequest,
+  OperationInvokeServiceRequest,
   OperationInvokeService,
 } from '@/modules/capability-execution/operation-invoke'
-import type { OperationInvokeResult } from '@/modules/capability-execution/operation-invoke-contracts'
+import {
+  operationInvokeResultSchema,
+  projectOperationInvokeMachineResult,
+  type OperationInvokeMachineResult,
+} from '@/modules/capability-execution/operation-invoke-contracts'
 import type { ActionTimingSink } from '@/modules/common/action'
 import {
   recordGatewayTelemetry,
@@ -50,6 +57,7 @@ const operationJsonResponseHeaders = {
 } as const
 const MAX_OPERATION_INVOKE_BODY_BYTES = 256 * 1024
 const operationInvokeSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityOperationInvocations:invoke')
+const operationInspectSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityOperationCommitments:inspect')
 const operationListSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityOperationInvocations:listInvocations')
 const operationStatusSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityOperationInvocations:readInvocationStatus')
 const operationCancelSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityOperationInvocations:cancelInvocation')
@@ -78,11 +86,10 @@ export function createOperationInvokeService(
     environment,
     command,
   })
-  const invokeOperation = async (input: OperationInvokeRequest) => {
+  const invokeOperation = async (input: OperationInvokeServiceRequest) => {
     const operationKey = operationKeyFor(input.input, input.principal.principalId, input.principal.credentialId, input.principal.applicationRef, input.principal.environment)
     const command = {
-      operationRef: input.input.operationRef,
-      input: input.input.input,
+      commitmentRef: input.input.commitmentRef,
       idempotencyKey: input.input.idempotencyKey,
       correlationId: input.correlationId,
       operationKey,
@@ -101,7 +108,37 @@ export function createOperationInvokeService(
       sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       sourceWrite,
     })
-    return operationInvokeAction.outputSchema.parse(result)
+    return operationInvokeResultSchema.parse(result)
+  }
+  const inspectOperation: NonNullable<OperationInvokeService['inspectOperation']> = async (input) => {
+    const operationKey = operationKeyFor(
+      input.input,
+      input.principal.principalId,
+      input.principal.credentialId,
+      input.principal.applicationRef,
+      input.principal.environment,
+    )
+    const command = {
+      operationRef: input.input.operationRef,
+      input: input.input.input,
+      correlationId: input.correlationId,
+      operationKey,
+      principal: input.principal,
+    }
+    const sourceWrite = await sourceWriteAdmissionFromRequest({
+      request,
+      command,
+      body: bodyText,
+      scope: 'protected_action',
+      operationKey,
+      correlationId: input.correlationId,
+    })
+    const result = await callPublicSourceAction(operationInspectSourceAction, {
+      ...command,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      sourceWrite,
+    })
+    return operationInspectAction.outputSchema.parse(result)
   }
   const listInvocations: NonNullable<OperationInvokeService['listInvocations']> = async (input) => {
     const operationKey = operationKeyFor(input.input, input.principal.principalId, input.principal.credentialId, input.principal.applicationRef, input.principal.environment)
@@ -163,6 +200,7 @@ export function createOperationInvokeService(
     })
     const result = await callPublicSourceAction(operationStatusSourceAction, {
       invocationRef: input.invocationRef,
+      ...(input.afterVersion === undefined ? {} : { afterVersion: input.afterVersion }),
       correlationId: input.correlationId,
       operationKey,
       sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
@@ -230,10 +268,10 @@ export function createOperationInvokeService(
     })
     return operationInvokeRecoveryResultSchema.parse(result)
   }
-  return { invokeOperation, listInvocations, readInvocationStatus, cancelInvocation, reconcileInvocation }
+  return { invokeOperation, inspectOperation, listInvocations, readInvocationStatus, cancelInvocation, reconcileInvocation }
 }
 function gatewayTelemetryForResult(
-  result: OperationInvokeResult,
+  result: OperationInvokeMachineResult,
 ): Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'> {
   if (result.kind === 'completed') {
     return {
@@ -251,10 +289,7 @@ function gatewayTelemetryForResult(
   if (result.kind === 'pending') {
     return { operationRef: result.operationRef, outcome: 'pending' }
   }
-  if (result.kind === 'needs_authority') {
-    return { operationRef: result.operationRef, outcome: 'needs_authority', approval: 'required' }
-  }
-  if (result.kind === 'reconciliation_required') {
+  if (result.kind === 'outcome_unknown') {
     return { operationRef: result.operationRef, outcome: 'reconciliation_required', unknown: true }
   }
   const code = result.code
@@ -333,6 +368,7 @@ function gatewayDetail(code: string): string {
     case 'source_unavailable':
     case 'invocation_runtime_unavailable':
     case 'operation_invoke_unavailable':
+    case 'operation_inspect_unavailable':
       return 'The operation service is temporarily unavailable.'
     case 'result_invalid':
     case 'operation_invoke_result_invalid':
@@ -346,7 +382,7 @@ function gatewayDetail(code: string): string {
 
 function gatewayErrorCode(
   error: unknown,
-  fallback: 'operation_invoke_unavailable' | 'invocation_runtime_unavailable' | 'source_unavailable',
+  fallback: 'operation_invoke_unavailable' | 'operation_inspect_unavailable' | 'invocation_runtime_unavailable' | 'source_unavailable',
 ): {
   code: string
   retryable: boolean
@@ -364,7 +400,7 @@ function gatewayErrorCode(
 
 function gatewayErrorResponse(
   error: unknown,
-  fallback: 'operation_invoke_unavailable' | 'invocation_runtime_unavailable' | 'source_unavailable',
+  fallback: 'operation_invoke_unavailable' | 'operation_inspect_unavailable' | 'invocation_runtime_unavailable' | 'source_unavailable',
   correlationId: string,
 ): Response {
   const mapped = gatewayErrorCode(error, fallback)
@@ -400,6 +436,58 @@ export async function authenticateOperationGateway(
   }, { Vary: 'Authorization', 'WWW-Authenticate': challenge }), correlationId)
 }
 
+
+export async function handleOperationInspectPost(
+  request: Request,
+  options: OperationInvokeHandlerOptions = {},
+): Promise<Response> {
+  return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    const bounded = await readBoundedRequestText(request, MAX_OPERATION_INVOKE_BODY_BYTES)
+    if (!bounded.ok) {
+      return withRequestCorrelationHeader(problem({
+        status: 413,
+        kind: 'PAYLOAD_TOO_LARGE',
+        code: bounded.code,
+        detail: 'The Operation inspection body is too large.',
+      }), correlationId)
+    }
+    const admitted = await authenticateOperationGateway(request, correlationId, options, bounded.text)
+    if (admitted instanceof Response) return admitted
+    let rawBody: unknown
+    try {
+      rawBody = JSON.parse(bounded.text) as unknown
+    } catch {
+      return withRequestCorrelationHeader(problem({
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_json',
+        detail: 'The request body must be valid JSON.',
+      }), correlationId)
+    }
+    const parsed = operationInspectAction.schema.safeParse(rawBody)
+    if (!parsed.success) {
+      return withRequestCorrelationHeader(problem({
+        status: 400,
+        kind: 'INVALID_ARGUMENT',
+        code: 'invalid_request',
+        detail: 'The request did not match operation.inspect:v1.',
+      }), correlationId)
+    }
+    try {
+      const service = options.operationInvokeService ?? createOperationInvokeService(request, bounded.text)
+      if (service.inspectOperation === undefined) throw new Error('operation_inspect_unavailable')
+      const result = await service.inspectOperation({
+        input: parsed.data,
+        principal: admitted.principal,
+        correlationId,
+      })
+      const projected = operationInspectAction.outputSchema.parse(result)
+      return withRequestCorrelationHeader(response(projected, 200, operationJsonResponseHeaders), correlationId)
+    } catch (error) {
+      return gatewayErrorResponse(error, 'operation_inspect_unavailable', correlationId)
+    }
+  })
+}
 
 export async function handleOperationInvokePost(
   request: Request,
@@ -452,7 +540,9 @@ export async function handleOperationInvokePost(
     try {
       const service = options.operationInvokeService ?? createOperationInvokeService(request, bounded.text)
       const result = await service.invokeOperation({ input: parsed.data, principal: admitted.principal, correlationId })
-      const projected = operationInvokeAction.outputSchema.safeParse(result)
+      const projected = operationInvokeAction.outputSchema.safeParse(
+        projectOperationInvokeMachineResult(result),
+      )
       if (!projected.success) {
         telemetry({ outcome: 'failed', refusalCode: 'operation_invoke_result_invalid' })
         const failure = gatewayFailureToProblem({ kind: 'error', code: 'operation_invoke_result_invalid' })
@@ -578,7 +668,12 @@ export async function handleOperationInvokeStatusGet(
         durationMs: Date.now() - startedAt,
       })
     }
-    const parsed = operationStatusInputSchema.safeParse({ invocationRef })
+    const url = new URL(request.url)
+    const rawAfterVersion = url.searchParams.get('afterVersion')
+    const parsed = operationStatusInputSchema.safeParse({
+      invocationRef,
+      ...(rawAfterVersion === null ? {} : { afterVersion: Number(rawAfterVersion) }),
+    })
     if (!parsed.success) {
       telemetry({ outcome: 'failed', refusalCode: 'invalid_invocation_ref' })
       return withRequestCorrelationHeader(problem({
@@ -592,6 +687,7 @@ export async function handleOperationInvokeStatusGet(
       const service = options.operationInvokeService ?? createOperationInvokeService(request, '')
       const result = await service.readInvocationStatus({
         invocationRef: parsed.data.invocationRef,
+        ...(parsed.data.afterVersion === undefined ? {} : { afterVersion: parsed.data.afterVersion }),
         principal: admitted.principal,
         correlationId,
       })

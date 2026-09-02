@@ -31,7 +31,7 @@ export async function cancelRecovery(
   const loaded = await loadRecoveryControl(ctx, recovered)
   if (loaded.kind === 'not_found') return recoveryNotFound(args.invocationRef)
   if (loaded.kind === 'persisted') return projectPersistedRecovery(recovered)
-  const work = await loadRecoveryWorkContext(ctx, recovered, loaded.port, loaded.control, true)
+  const work = await loadRecoveryWorkContext(ctx, recovered, loaded.port, loaded.control)
   if (work === undefined) return recoveryNotFound(args.invocationRef)
   return await cancelClaimedRecovery(ctx, args, recovered, work)
 }

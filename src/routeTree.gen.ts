@@ -87,6 +87,7 @@ import { Route as ApiV1SupplyPublishRouteImport } from './routes/api.v1.supply.p
 import { Route as ApiV1SupplyEarningsRouteImport } from './routes/api.v1.supply.earnings'
 import { Route as ApiV1ServicesSearchRouteImport } from './routes/api.v1.services.search'
 import { Route as ApiV1ServicesServiceIdRouteImport } from './routes/api.v1.services.$serviceId'
+import { Route as ApiV1OperationsInspectRouteImport } from './routes/api.v1.operations.inspect'
 import { Route as ApiV1OperationsCallRouteImport } from './routes/api.v1.operations.call'
 import { Route as ApiV1OperationsInvocationRefRouteImport } from './routes/api.v1.operations.$invocationRef'
 import { Route as ApiV1MarketRequestsStatusRouteImport } from './routes/api.v1.market-requests.status'
@@ -516,6 +517,11 @@ const ApiV1ServicesServiceIdRoute = ApiV1ServicesServiceIdRouteImport.update({
   path: '/$serviceId',
   getParentRoute: () => ApiV1ServicesRoute,
 } as any)
+const ApiV1OperationsInspectRoute = ApiV1OperationsInspectRouteImport.update({
+  id: '/inspect',
+  path: '/inspect',
+  getParentRoute: () => ApiV1OperationsRoute,
+} as any)
 const ApiV1OperationsCallRoute = ApiV1OperationsCallRouteImport.update({
   id: '/call',
   path: '/call',
@@ -762,6 +768,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
+  '/api/v1/operations/inspect': typeof ApiV1OperationsInspectRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
@@ -868,6 +875,7 @@ export interface FileRoutesByTo {
   '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
+  '/api/v1/operations/inspect': typeof ApiV1OperationsInspectRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
@@ -976,6 +984,7 @@ export interface FileRoutesById {
   '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
+  '/api/v1/operations/inspect': typeof ApiV1OperationsInspectRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
   '/api/v1/supply/earnings': typeof ApiV1SupplyEarningsRoute
@@ -1084,6 +1093,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-requests/status'
     | '/api/v1/operations/$invocationRef'
     | '/api/v1/operations/call'
+    | '/api/v1/operations/inspect'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
     | '/api/v1/supply/earnings'
@@ -1190,6 +1200,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-requests/status'
     | '/api/v1/operations/$invocationRef'
     | '/api/v1/operations/call'
+    | '/api/v1/operations/inspect'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
     | '/api/v1/supply/earnings'
@@ -1297,6 +1308,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-requests/status'
     | '/api/v1/operations/$invocationRef'
     | '/api/v1/operations/call'
+    | '/api/v1/operations/inspect'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
     | '/api/v1/supply/earnings'
@@ -1937,6 +1949,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1ServicesServiceIdRouteImport
       parentRoute: typeof ApiV1ServicesRoute
     }
+    '/api/v1/operations/inspect': {
+      id: '/api/v1/operations/inspect'
+      path: '/inspect'
+      fullPath: '/api/v1/operations/inspect'
+      preLoaderRoute: typeof ApiV1OperationsInspectRouteImport
+      parentRoute: typeof ApiV1OperationsRoute
+    }
     '/api/v1/operations/call': {
       id: '/api/v1/operations/call'
       path: '/call'
@@ -2315,12 +2334,14 @@ const ApiV1OperationsInvocationRefRouteWithChildren =
 interface ApiV1OperationsRouteChildren {
   ApiV1OperationsInvocationRefRoute: typeof ApiV1OperationsInvocationRefRouteWithChildren
   ApiV1OperationsCallRoute: typeof ApiV1OperationsCallRoute
+  ApiV1OperationsInspectRoute: typeof ApiV1OperationsInspectRoute
 }
 
 const ApiV1OperationsRouteChildren: ApiV1OperationsRouteChildren = {
   ApiV1OperationsInvocationRefRoute:
     ApiV1OperationsInvocationRefRouteWithChildren,
   ApiV1OperationsCallRoute: ApiV1OperationsCallRoute,
+  ApiV1OperationsInspectRoute: ApiV1OperationsInspectRoute,
 }
 
 const ApiV1OperationsRouteWithChildren = ApiV1OperationsRoute._addFileChildren(

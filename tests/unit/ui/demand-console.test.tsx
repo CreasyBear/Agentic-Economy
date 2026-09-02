@@ -11,10 +11,10 @@ import type { AgentCredentialSource, AgentDirectoryProjection } from '@/modules/
 import { projectAgentDirectory } from '@/modules/agent-access/agent-access-console'
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
-import { AeCreditTopUpPanel, type CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
-import { AeOwnerCredit, creditTopupTargetFromItems } from '@/components/ae/console/AeOwnerCredit'
+import { AeAccountFundingPanel, type AccountFundingPort } from '@/components/ae/console/AeCreditTopUpPanel'
+import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
 import type { CreditPaymentSession } from '@/modules/money/public'
-import type { CreditTopupBeginInput } from '@/modules/money/server'
+import type { AccountFundingBeginInput, AccountFundingBalance } from '@/modules/money/server'
 
 const stripeTestState = vi.hoisted(() => ({ confirm: vi.fn() }))
 
@@ -88,6 +88,13 @@ const keyReadback: AgentCredentialSource = {
 }
 const keyDirectory = projectAgentDirectory([keyReadback], [canonicalAgentRecord([keyReadback])])
 const emptyDirectory: AgentDirectoryProjection = { items: [], details: [] }
+const accountBalance: AccountFundingBalance = {
+  kind: 'available',
+  accountRef: 'account:owner',
+  balance: { currency: 'AUD', units: '12500000', exponent: 6 },
+  locked: false,
+  version: 1,
+}
 
 
 afterEach(() => {
@@ -97,23 +104,6 @@ afterEach(() => {
 })
 
 describe('owner credit target', () => {
-  it('uses the active grant policy before the first credit account exists', () => {
-    const { account: _fundedAccount, ...unfundedKeyReadback } = keyReadback
-    const unfundedSource = {
-      ...unfundedKeyReadback,
-      principalId: `prn_${'1'.repeat(32)}`,
-      dataState: 'empty',
-    } as const
-    expect(creditTopupTargetFromItems(projectAgentDirectory(
-      [unfundedSource],
-      [canonicalAgentRecord([unfundedSource])],
-    ).details)).toEqual({
-      principalId: `prn_${'1'.repeat(32)}`,
-      currency: 'USD',
-      exponent: 2,
-    })
-  })
-
   it('uses the shared funding continuation after an insufficient-credit call', () => {
     const source = {
         ...keyReadback,
@@ -134,12 +124,64 @@ describe('owner credit target', () => {
       } as const
     render(<AeOwnerCredit
       directory={projectAgentDirectory([source], [canonicalAgentRecord([source])])}
+      accountBalance={accountBalance}
       loading={false}
     />)
 
     fireEvent.click(screen.getByRole('button', { name: 'View Call declined for insufficient credit' }))
     const continuation = screen.getByRole('link', { name: 'Add credit' })
     expect(continuation.getAttribute('href')).toBe('/owner/credit#fund')
+  })
+
+  it('keeps financial documents and owned reconciliation evidence on the Account surface', async () => {
+    const onCreateStatement = vi.fn(async () => undefined)
+    const onOpenDocument = vi.fn(async () => undefined)
+    render(<AeOwnerCredit
+      directory={emptyDirectory}
+      accountBalance={{ ...accountBalance, locked: true }}
+      loading={false}
+      documents={[{
+        documentRef: 'money-document:statement:one',
+        kind: 'statement',
+        amountUnits: '12500000',
+        residualUnits: '0',
+        sourceTransactionRefs: ['journal:call:one'],
+        policyRefs: ['commercial-policy:sandbox:v1'],
+        policyDigest: `sha256:${'a'.repeat(64)}`,
+        templateVersion: 'ae.money-document:text:v1',
+        rendered: false,
+        createdAt: 1_788_120_000_000,
+      }]}
+      reconciliationCases={[{
+        caseRef: 'reconciliation:one',
+        accountRef: 'account:owner',
+        kind: 'projection_mismatch',
+        status: 'open',
+        ownerPrincipalRef: 'system:money-reconciliation',
+        transactionRef: 'journal:call:one',
+        reasonCode: 'projection_checksum_mismatch',
+        evidenceRefs: ['evidence:projection:one'],
+        createdAt: 1_788_120_000_000,
+        updatedAt: 1_788_120_000_000,
+      }]}
+      onCreateStatement={onCreateStatement}
+      onOpenDocument={onOpenDocument}
+    />)
+
+    expect(screen.getByText(/locked for reconciliation/i)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Documents' })).toBeTruthy()
+    expect(screen.getByText('Statement')).toBeTruthy()
+    expect(screen.getByText('money-document:statement:one')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Reconciliation' })).toBeTruthy()
+    expect(screen.getByText('projection checksum mismatch')).toBeTruthy()
+    expect(screen.getByText('reconciliation:one')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create current statement' }))
+    await waitFor(() => expect(onCreateStatement).toHaveBeenCalledOnce())
+    expect(screen.getByRole('status').textContent).toContain('Document ready.')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open document' }))
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('money-document:statement:one'))
   })
 })
 
@@ -186,7 +228,7 @@ describe('assistant access components', () => {
       evidence: {
         provider: 'stripe',
         externalRef: 'cs_test_bound',
-        amount: { currency: 'USD', units: '1050', exponent: 2 },
+        amount: { currency: 'AUD', units: '1055', exponent: 2 },
         status: 'pending',
         requestDigest: 'digest:request',
         metadataDigest: 'digest:metadata',
@@ -197,38 +239,37 @@ describe('assistant access components', () => {
       },
       clientSecret: 'cs_secret_transient_only',
     }
-    const begin = vi.fn(async (_input: CreditTopupBeginInput) => ({ kind: 'ok' as const, commandRef: 'topup:one', session }))
+    const begin = vi.fn(async (_input: AccountFundingBeginInput) => ({ kind: 'ok' as const, commandRef: 'funding:one', session }))
     const read = vi.fn(async () => ({
       ...session,
       evidence: { ...session.evidence, status: 'pending' as const },
     }))
-    const port: CreditTopupPort = { begin, read }
+    const port: AccountFundingPort = { begin, read }
     const onRefresh = vi.fn()
     render(
-      <AeCreditTopUpPanel
-        target={{ principalId: 'clerk_api_key:key_ui_1', currency: 'USD', exponent: 2 }}
+      <AeAccountFundingPanel
         port={port}
         publishableKey="pk_test_ui"
         onRefresh={onRefresh}
       />
     )
 
-    fireEvent.change(screen.getByLabelText(/credit amount/i), { target: { value: '10.00' } })
+    fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
     const quote = screen.getByLabelText('Funding quote')
-    expect(quote.textContent).toContain('Credit amountUSD 10.00')
-    expect(quote.textContent).toContain('Processing feeUSD 0.50')
-    expect(quote.textContent).toContain('Total paymentUSD 10.50')
-    fireEvent.click(screen.getByRole('button', { name: /add credit/i }))
+    expect(quote.textContent).toContain('Account principalAUD 10.00')
+    expect(quote.textContent).toContain('Service feeAUD 0.50')
+    expect(quote.textContent).toContain('Tax on service feeAUD 0.05')
+    expect(quote.textContent).toContain('Total paymentAUD 10.55')
+    fireEvent.click(screen.getByRole('button', { name: /fund account/i }))
 
     expect(await screen.findByTestId('payment-element')).toBeTruthy()
     expect(begin).toHaveBeenCalledWith({
-      principalId: 'clerk_api_key:key_ui_1',
-      amount: { currency: 'USD', units: '1000', exponent: 2 },
+      amount: { currency: 'AUD', units: '10000000', exponent: 6 },
       idempotencyKey: expect.any(String),
     })
     expect(begin.mock.calls[0]?.[0]).not.toHaveProperty('accountRef')
     expect(screen.queryByText('cs_secret_transient_only')).toBeNull()
-    expect(window.sessionStorage.getItem('ae.credit-topup.recovery.v1:clerk_api_key%3Akey_ui_1')).not.toContain('cs_secret_transient_only')
+    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).not.toContain('cs_secret_transient_only')
 
     fireEvent.click(screen.getByRole('button', { name: 'Pay securely' }))
     await waitFor(() => expect(read).toHaveBeenCalledWith(expect.objectContaining({ externalRef: 'cs_test_bound' })))
@@ -239,28 +280,27 @@ describe('assistant access components', () => {
   it('persists and reuses an outcome-unknown command locator without offering a retry', async () => {
     const begin = vi.fn(async (_input: { idempotencyKey: string }) => ({
       kind: 'outcome_unknown' as const,
-      code: 'credit_topup_outcome_unknown' as const,
+      code: 'funding_outcome_unknown' as const,
       retryable: false as const,
       commandRef: 'sha256:topup-command-unknown',
       status: 'outcome_unknown' as const,
     }))
-    const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'credit_topup_outcome_unknown' as const, retryable: true }))
-    const target = { principalId: 'clerk_api_key:key_ui_1', currency: 'USD', exponent: 2 }
-    const port: CreditTopupPort = { begin, read }
-    render(<AeCreditTopUpPanel target={target} port={port} publishableKey="pk_test_ui" />)
+    const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'funding_outcome_unknown' as const, retryable: true }))
+    const port: AccountFundingPort = { begin, read }
+    render(<AeAccountFundingPanel port={port} publishableKey="pk_test_ui" />)
 
-    fireEvent.change(screen.getByLabelText(/credit amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /add credit/i }))
+    fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /fund account/i }))
 
     expect(await screen.findByText(/do not retry with a new payment/i)).toBeTruthy()
-    const raw = window.sessionStorage.getItem('ae.credit-topup.recovery.v1:clerk_api_key%3Akey_ui_1')
+    const raw = window.sessionStorage.getItem('ae.account-funding.recovery.v1')
     const locator = raw === null ? undefined : JSON.parse(raw) as { commandRef: string; idempotencyKey: string }
     expect(locator).toMatchObject({ commandRef: 'sha256:topup-command-unknown' })
     expect(locator?.idempotencyKey).toBe(begin.mock.calls[0]?.[0]?.idempotencyKey)
-    expect(screen.queryByRole('button', { name: /add credit/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /fund account/i })).toBeNull()
 
     cleanup()
-    render(<AeCreditTopUpPanel target={target} port={port} publishableKey="pk_test_ui" />)
+    render(<AeAccountFundingPanel port={port} publishableKey="pk_test_ui" />)
     await waitFor(() => expect(read).toHaveBeenCalledWith(locator))
   })
 
@@ -268,17 +308,16 @@ describe('assistant access components', () => {
     const begin = vi.fn(async () => ({ kind: 'refused' as const, code: 'stripe_setup_required' as const, retryable: false }))
     const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'stripe_setup_required' as const, retryable: false }))
     render(
-      <AeCreditTopUpPanel
-        target={{ principalId: 'clerk_api_key:key_ui_1', currency: 'USD', exponent: 2 }}
+      <AeAccountFundingPanel
         port={{ begin, read }}
         publishableKey="pk_test_ui"
       />
     )
-    fireEvent.change(screen.getByLabelText(/credit amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /add credit/i }))
+    fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /fund account/i }))
 
     expect(begin).toHaveBeenCalledOnce()
-    expect(await screen.findByText(/adding credit is unavailable/i)).toBeTruthy()
+    expect(await screen.findByText(/account funding is unavailable/i)).toBeTruthy()
     expect(screen.getByText(/no payment started.*balance did not change/i)).toBeTruthy()
     expect(screen.queryByText(/payment succeeded|credit added/i)).toBeNull()
   })

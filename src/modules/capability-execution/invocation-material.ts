@@ -6,7 +6,7 @@ import type {
   RuntimePublishedOperationDescriptor,
 } from '@/modules/capability-supply/public'
 import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
-import type { ExactAmount, MoneyAcceptedInvocationCharge } from '@/modules/money/public'
+import { pricingConfigDecisionAmount, type ExactAmount, type MoneyAcceptedInvocationCharge } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 
@@ -40,10 +40,31 @@ export function buildInvocationMaterial(input: Readonly<{
   descriptor: RuntimePublishedOperationDescriptor
   value: StableHashValue
 }>): InvocationMaterialInput {
+  return buildInvocationMaterialForAmount({
+    ...input,
+    decisionAmount: executableFixedPrice(input.operation),
+  })
+}
+
+export function buildCommittedInvocationMaterial(input: Readonly<{
+  operation: PublishedOperation
+  descriptor: RuntimePublishedOperationDescriptor
+  value: StableHashValue
+  decisionAmount: ExactAmount
+}>): InvocationMaterialInput {
+  return buildInvocationMaterialForAmount(input)
+}
+
+function buildInvocationMaterialForAmount(input: Readonly<{
+  operation: PublishedOperation
+  descriptor: RuntimePublishedOperationDescriptor
+  value: StableHashValue
+  decisionAmount: ExactAmount
+}>): InvocationMaterialInput {
   if (!input.descriptor.validateInput(input.value)) {
     throw new Error('published_operation_input_invalid')
   }
-  assertExactDescriptor(input.operation, input.descriptor)
+  assertExactDescriptor(input.operation, input.descriptor, input.decisionAmount)
   const inputDigest = canonicalDigest(input.value)
   const target: StableHashValue = Object.assign(
     {
@@ -61,7 +82,7 @@ export function buildInvocationMaterial(input: Readonly<{
         evidenceRefs: [...input.operation.readiness.evidenceRefs],
       },
       effect: {
-        amount: { ...executableFixedPrice(input.operation) },
+        amount: { ...input.decisionAmount },
         payment: stablePayment(input.operation.identity.payment),
         data: input.descriptor.dataUse.map((use) => ({
           inputPointer: use.inputPointer,
@@ -103,6 +124,7 @@ export function invocationMaterialSourceDigest(
 export function assertExactDescriptor(
   operation: PublishedOperation,
   descriptor: RuntimePublishedOperationDescriptor,
+  decisionAmount?: ExactAmount,
 ): void {
   if (
     descriptor.id !== operation.operationId
@@ -110,12 +132,13 @@ export function assertExactDescriptor(
     || canonicalDigest(descriptor.target)
       !== canonicalDigest(operation.identity)
   ) throw new Error('published_operation_descriptor_not_exact')
-  executableFixedPrice(operation)
+  if (decisionAmount === undefined) executableFixedPrice(operation)
 }
 
 export function createRecoveryControlAction(input: Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
+  decisionAmount: ExactAmount
   now: () => number
   run: (
     value: InvocationMaterialInput,
@@ -127,7 +150,7 @@ export function createRecoveryControlAction(input: Readonly<{
   ) => Promise<RecoveryControlResult | undefined>
 }>): Action<InvocationMaterialInput, RecoveryControlResult> {
   const { operation, descriptor } = input
-  assertExactDescriptor(operation, descriptor)
+  assertExactDescriptor(operation, descriptor, input.decisionAmount)
   const classes = new Set(descriptor.effects.map(({ class: effectClass }) => effectClass))
   const effect = {
     class: classes.has('financial_exposure')
@@ -208,7 +231,9 @@ export function createRecoveryControlAction(input: Readonly<{
 export function executableFixedPrice(
   operation: PublishedOperation,
 ): ExactAmount {
-  return operation.pricingConfig.paidAmount
+  const amount = pricingConfigDecisionAmount(operation.pricingConfig)
+  if (amount === undefined) throw new Error('operation_commitment_required')
+  return amount
 }
 function stablePublishedOperationIdentity(
   identity: PublishedOperation['identity'],
@@ -266,12 +291,21 @@ function stablePayment(payment: PublishedOperation['identity']['payment']): Stab
 }
 
 function stablePricingConfig(config: PublishedOperation['pricingConfig']): StableHashValue {
-  return {
-    version: config.version,
-    unit: config.unit,
-    paidAmount: { ...config.paidAmount },
-    ...(config.freeTier === undefined ? {} : { freeTier: { ...config.freeTier } }),
-  }
+  return config.kind === 'fixed_aud'
+    ? {
+        version: config.version,
+        kind: config.kind,
+        currency: config.currency,
+        exponent: config.exponent,
+        amountUnits: config.amountUnits,
+      }
+    : {
+        version: config.version,
+        kind: config.kind,
+        sourceRequirement: { ...config.sourceRequirement },
+        pricingPolicyRef: config.pricingPolicyRef,
+        publicDisplay: config.publicDisplay,
+      }
 }
 
 function stablePrice(price: PublishedOperation['identity']['price']): StableHashValue {

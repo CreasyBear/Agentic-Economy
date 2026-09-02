@@ -21,6 +21,7 @@ const AdminActionMatrix = {
     register_capability_contract: true,
     register_capability_supply: true,
     control_kernel_incidents: true,
+    manage_commercial_policy: true,
   },
   support: {
     read_admin_readbacks: true,
@@ -32,6 +33,7 @@ const AdminActionMatrix = {
     register_capability_contract: false,
     register_capability_supply: false,
     control_kernel_incidents: false,
+    manage_commercial_policy: false,
   },
   reviewer: {
     read_admin_readbacks: true,
@@ -43,6 +45,7 @@ const AdminActionMatrix = {
     register_capability_contract: false,
     register_capability_supply: false,
     control_kernel_incidents: false,
+    manage_commercial_policy: false,
   },
 } satisfies Record<AdminRole, Record<AdminAction, boolean>>
 

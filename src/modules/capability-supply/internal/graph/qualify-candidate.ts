@@ -8,6 +8,7 @@ import {
 } from '@/modules/capability-supply/public'
 import {
   compareExactAmounts,
+  pricingConfigDecisionAmount,
   pricingConfigDigest,
   pricingConfigSchema,
 } from '@/modules/money/public'
@@ -272,8 +273,11 @@ export async function qualifySuppliedCandidate(
     const displayedPrice = offering?.presentation.price
     pricingCurrent = parsedPricing.success
       && pricingConfigDigest(parsedPricing.data) === publication.priceDigest
-      && displayedPrice?.kind === 'fixed'
-      && compareExactAmounts(displayedPrice.amount, parsedPricing.data.paidAmount) === 0
+      && (parsedPricing.data.kind === 'managed_x402'
+        ? displayedPrice?.kind === 'on_request'
+        : displayedPrice?.kind === 'fixed'
+          && pricingConfigDecisionAmount(parsedPricing.data) !== undefined
+          && compareExactAmounts(displayedPrice.amount, pricingConfigDecisionAmount(parsedPricing.data)) === 0)
     if (!pricingCurrent) reasons.push('pricing_missing_or_invalid')
     else {
       sources.push({

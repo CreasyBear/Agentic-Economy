@@ -9,6 +9,8 @@ import {
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
+import { rescaleExactAmount } from '@/modules/money/public'
 import {
   capabilityContractV2,
   objectSchema,
@@ -41,17 +43,51 @@ export async function prepareOwnerPublicationCommand(
   const offering =
     source.kind === 'ae_envelope' ? source.offering : source.commercial.offering
   const price = offering.presentation.price
-  if (price.kind !== 'fixed')
-    throw new Error('owner_publication_fixture_price_missing')
+  let pricingConfig
+  let preparedOffering: CapabilityPublicationOfferingDraft | undefined
+  if (source.kind === 'x402') {
+    if (!isRecord(source.resource)) throw new Error('owner_publication_fixture_x402_resource_invalid')
+    const paymentRequired = validatePaymentRequired(source.resource.paymentRequired)
+    const requirement = paymentRequired.accepts[0]
+    if (requirement === undefined) throw new Error('owner_publication_fixture_x402_requirement_missing')
+    pricingConfig = {
+      version: 'pricing:v3' as const,
+      kind: 'managed_x402' as const,
+      sourceRequirement: {
+        network: requirement.network,
+        asset: requirement.asset,
+        atomicUnits: 'amount' in requirement ? requirement.amount : requirement.maxAmountRequired,
+      },
+      pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
+      publicDisplay: 'on_request' as const,
+    }
+    preparedOffering = {
+      ...offering,
+      presentation: {
+        ...offering.presentation,
+        price: { kind: 'on_request' as const },
+      },
+    }
+  } else {
+    if (price.kind !== 'fixed') throw new Error('owner_publication_fixture_price_missing')
+    const audPrice = rescaleExactAmount(price.amount, 6)
+    if (audPrice === undefined || audPrice.currency !== 'AUD') {
+      throw new Error('owner_publication_fixture_aud_price_invalid')
+    }
+    pricingConfig = {
+      version: 'pricing:v3' as const,
+      kind: 'fixed_aud' as const,
+      currency: 'AUD' as const,
+      exponent: 6 as const,
+      amountUnits: audPrice.units,
+    }
+  }
   const sourceRevision = 'owner-api/2026-08-09'
   const prepared = await preparePublicationDraft({
     source,
     sourceRevision,
-    pricingConfig: {
-      version: 'pricing:v2',
-      unit: 'call',
-      paidAmount: price.amount,
-    },
+    pricingConfig,
+    ...(preparedOffering === undefined ? {} : { offering: preparedOffering }),
     evidenceRefs: source.evidenceRefs,
     ...(origin === undefined ? {} : { origin }),
   })

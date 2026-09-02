@@ -13,6 +13,9 @@ import {
   runtime,
 } from './operation-invoke-harness'
 
+const COMMITMENT_REF = `operation-commitment:v1:${'0'.repeat(64)}`
+const DECISION_PRICE = { currency: 'AUD', exponent: 6, units: '10000' } as const
+
 describe('operation.invoke admit/preflight', () => {
   it('refuses malformed operation references before grant or source reads', async () => {
     let grants = 0
@@ -34,7 +37,7 @@ describe('operation.invoke admit/preflight', () => {
     const result = await service.invokeOperation({
       principal,
       correlationId: 'correlation:invalid-ref',
-      input: { operationRef: 'not-an-operation-ref', input: {}, idempotencyKey: 'idem:invalid-ref' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef: 'not-an-operation-ref', input: {}, idempotencyKey: 'idem:invalid-ref' },
     })
 
     expect(result).toEqual({ kind: 'refused', code: 'operation_ref_invalid', retryable: false })
@@ -60,7 +63,7 @@ describe('operation.invoke admit/preflight', () => {
     const result = await service.invokeOperation({
       principal,
       correlationId: 'correlation:stale-revision',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:stale-revision' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:stale-revision' },
     })
 
     expect(result).toMatchObject({ kind: 'refused', operationRef, code: 'operation_not_current', retryable: false })
@@ -108,7 +111,7 @@ describe('operation.invoke admit/preflight', () => {
     const invoke = (requestPrincipal: AgentAccessPrincipal, idempotencyKey: string) => service.invokeOperation({
       principal: requestPrincipal,
       correlationId: `correlation:${idempotencyKey}`,
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey },
     })
 
     for (const idempotencyKey of ['idem:stale-one', 'idem:stale-two', 'idem:stale-three']) {
@@ -153,7 +156,7 @@ describe('operation.invoke admit/preflight', () => {
     const result = await service.invokeOperation({
       principal,
       correlationId: 'correlation:input-invalid',
-      input: { operationRef, input: {}, idempotencyKey: 'idem:input-invalid' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: {}, idempotencyKey: 'idem:input-invalid' },
     })
 
     expect(result).toMatchObject({ kind: 'refused', operationRef, code: 'input_invalid', retryable: false })
@@ -179,7 +182,7 @@ describe('operation.invoke admit/preflight', () => {
     const result = await service.invokeOperation({
       principal: productionPrincipal,
       correlationId: 'correlation:production-development-evidence',
-      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:production-development-evidence' },
+      input: { commitmentRef: COMMITMENT_REF, decisionPrice: DECISION_PRICE, operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:production-development-evidence' },
     })
 
     expect(result).toEqual({

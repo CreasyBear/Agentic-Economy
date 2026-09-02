@@ -6,8 +6,8 @@ import {
   type ConvexSourceTransport,
 } from "../../src/lib/server/convex-source";
 import {
-  beginCreditTopupThroughSource,
-  readCreditPaymentThroughSource as readTopupPaymentThroughSource,
+  beginAccountFundingThroughSource,
+  readAccountFundingThroughSource as readTopupPaymentThroughSource,
   readOwnerPayoutTransferThroughSource,
   runOwnerPayoutTransferThroughSource,
 } from "../../src/modules/money/server";
@@ -25,9 +25,9 @@ import {
   StrictLivePayoutReceiptSchema,
   accountRefForOwner,
   accountRefForProvider,
-  calculateCreditTopupFinancials,
+  AUD_EXPONENT,
+  quoteAudAccountFunding,
   compareExactAmounts,
-  productionCreditTopupConfig,
   subtractExactAmounts,
   type ExactAmount,
   type StrictLivePayoutReceipt,
@@ -119,7 +119,7 @@ export function createHostedMoneyRuntime(
   );
   const principalId = `clerk_api_key:${credentialId}`;
   const currency = required(
-    options.env.AE_GATEWAY_SMOKE_CURRENCY ?? "USD",
+    options.env.AE_GATEWAY_SMOKE_CURRENCY ?? "AUD",
     "AE_GATEWAY_SMOKE_CURRENCY",
   );
   const accountRef = accountRefForOwner(ownerUserId, currency);
@@ -147,22 +147,15 @@ export function createHostedMoneyRuntime(
   } catch {
     throw new GatewaySmokeError("gateway_smoke_topup_amount_invalid");
   }
-  const topupConfig = productionCreditTopupConfig();
-  const accountTemplate = topupConfig.minimumByCurrency[currency];
   const parsedAmount = exactAmountSchema.safeParse(parsedTopupAmount);
   const financials =
-    accountTemplate === undefined || !parsedAmount.success
+    !parsedAmount.success || parsedAmount.data.currency !== "AUD" || parsedAmount.data.exponent !== AUD_EXPONENT
       ? undefined
-      : calculateCreditTopupFinancials({
-          amount: parsedAmount.data,
-          accountCurrency: accountTemplate.currency,
-          accountExponent: accountTemplate.exponent,
-          config: topupConfig,
-        });
+      : quoteAudAccountFunding(BigInt(parsedAmount.data.units));
   if (financials === undefined)
     throw new GatewaySmokeError("gateway_smoke_topup_amount_invalid");
-  const topupAmount = financials.amount;
-  const chargeAmount = financials.chargeAmount;
+  const topupAmount = { currency: "AUD", units: financials.principalUnits.toString(), exponent: AUD_EXPONENT } as const;
+  const chargeAmount = { currency: "AUD", units: financials.totalUnits.toString(), exponent: AUD_EXPONENT } as const;
   if (
     compareExactAmounts(chargeAmount, APPROVED_EXTERNAL_MOVEMENT_CAP) ===
       undefined ||
@@ -199,7 +192,7 @@ export function createHostedMoneyRuntime(
     "moneyLedger:readOwnerProviderEarnings",
   );
   const topupQuery = sourceQuery<Record<string, unknown>, unknown>(
-    "moneyLedger:readCreditTopupCommand",
+    "moneyAccountFunding:read",
   );
 
   const readSnapshot = async (): Promise<HostedMoneySnapshot> => {
@@ -358,9 +351,9 @@ export function createHostedMoneyRuntime(
       stripeEventId: readString("appliedStripeEventId"),
       stripePayloadDigest: readString("appliedPayloadDigest"),
       transactionRef: readString("appliedTransactionRef"),
-      creditAmount: amount("amountUnits"),
-      processingFee: amount("processingFeeUnits"),
-      chargeAmount: amount("chargeAmountUnits"),
+      creditAmount: amount("principalUnits"),
+      processingFee: amount("serviceFeeUnits"),
+      chargeAmount: amount("totalUnits"),
       checkoutCreatedAt: Number(checkoutCreatedAt),
       buyerBalanceBefore: exactAmountSchema.parse(command.buyerBalanceBefore),
       buyerBalanceAfter: exactAmountSchema.parse(command.buyerBalanceAfter),
@@ -368,9 +361,8 @@ export function createHostedMoneyRuntime(
   };
 
   const beginTopup = async (): Promise<GatewayTopupPreparationArtifact> => {
-    const begun = await beginCreditTopupThroughSource(
+    const begun = await beginAccountFundingThroughSource(
       {
-        principalId,
         amount: topupAmount,
         idempotencyKey: topupIdempotencyKey,
       },

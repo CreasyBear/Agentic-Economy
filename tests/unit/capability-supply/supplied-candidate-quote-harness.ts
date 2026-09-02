@@ -95,9 +95,11 @@ export const catalogAccessPath: GraphCatalogAccessPath = {
   },
 }
 export const pricingConfig = {
-  version: 'pricing:v2' as const,
-  unit: 'call' as const,
-  paidAmount: { currency: 'USD' as const, units: '1', exponent: 2 },
+  version: 'pricing:v3' as const,
+  kind: 'fixed_aud' as const,
+  currency: 'AUD' as const,
+  exponent: 6 as const,
+  amountUnits: '10000',
 }
 export const priceDigest = pricingConfigDigest(pricingConfig)
 export const providerConnectionCommand: CreateProviderConnectionCommand = {
@@ -137,7 +139,7 @@ export const offeringRegistration = defineCapabilityOfferingRegistration({
   presentation: {
     label: 'Development quote provider',
     summary: 'Labelled fixture supply for quote collection evaluation.',
-    price: { kind: 'fixed', amount: pricingConfig.paidAmount },
+    price: { kind: 'fixed', amount: { currency: 'AUD', units: pricingConfig.amountUnits, exponent: 6 } },
     materialTerms: [],
     commercialRelationship: {
       kind: 'none',

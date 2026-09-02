@@ -182,10 +182,18 @@ function ownerPricingConfig(
   offering: CapabilityPublicationOfferingDraft,
 ): unknown {
   const price = offering.presentation.price;
+  if (
+    price.kind !== "fixed" ||
+    price.amount.currency !== "AUD" ||
+    price.amount.exponent !== 6
+  )
+    return undefined;
   return {
-    version: "pricing:v2",
-    unit: "call",
-    paidAmount: price.kind === "fixed" ? price.amount : undefined,
+    version: "pricing:v3",
+    kind: "fixed_aud",
+    currency: "AUD",
+    exponent: 6,
+    amountUnits: price.amount.units,
   };
 }
 

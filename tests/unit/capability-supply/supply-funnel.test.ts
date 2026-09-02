@@ -76,7 +76,7 @@ describe("supply funnel pricing", () => {
   it("refuses paid pricing through the named stub seam", () => {
     const config = {
       ...defaultSupplyPricingConfig,
-      paidAmount: { ...defaultSupplyPricingConfig.paidAmount, units: "100" },
+      amountUnits: "100",
     };
     expect(stubPricingConfigPort.normalize(config)).toEqual({
       kind: "refused",
@@ -87,7 +87,7 @@ describe("supply funnel pricing", () => {
   it("shows deterministic gross, fee, and provider net through the real port", () => {
     const config = {
       ...defaultSupplyPricingConfig,
-      paidAmount: { ...defaultSupplyPricingConfig.paidAmount, units: "100" },
+      amountUnits: "100",
     };
     const normalized = realPricingConfigPort.normalize(config);
     expect(normalized.kind).toBe("valid");
@@ -99,9 +99,9 @@ describe("supply funnel pricing", () => {
       expect(resolved).toMatchObject({
         kind: "ready",
         preview: {
-          grossAmount: { currency: "AUD", units: "100", exponent: 2 },
-          feeAmount: { currency: "AUD", units: "10", exponent: 2 },
-          providerNetAmount: { currency: "AUD", units: "90", exponent: 2 },
+          grossAmount: { currency: "AUD", units: "100", exponent: 6 },
+          feeAmount: { currency: "AUD", units: "10", exponent: 6 },
+          providerNetAmount: { currency: "AUD", units: "90", exponent: 6 },
         },
       });
     }

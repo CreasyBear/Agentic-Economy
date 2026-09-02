@@ -16,6 +16,7 @@ import type { InteractiveBusinessAuthorityContext } from '@/modules/business/pub
 import { registryOperationsSearchContract } from '@/modules/registry/operation-action-contracts'
 
 const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
+const COMMITMENT_REF = `operation-commitment:v1:${'b'.repeat(64)}`
 const AUTHORITY = {
   principalRef: `prn_${'1'.repeat(32)}`,
   accountRef: `acc_${'2'.repeat(32)}`,
@@ -110,7 +111,7 @@ function nativeReadResult(functionName: string): unknown {
 }
 
 describe('Operation chat Agent tools', () => {
-  it('exports exactly the five canonical tools and bounded Agent defaults', () => {
+  it('exports exactly the six canonical tools and bounded Agent defaults', () => {
     const agent = createChatAgent(mockModel(), AUTHORITY)
 
     expect(Object.keys(agent.options.tools ?? {})).toEqual(
@@ -139,9 +140,9 @@ describe('Operation chat Agent tools', () => {
     ) ?? []
 
     expect(mentionedNames).toContain(
-      CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.detail'],
+      CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.inspect'],
     )
-    expect(mentionedNames).not.toContain('ae_registry_operations_detail')
+    expect(mentionedNames).not.toContain('ae_operation_inspect')
     for (const mentionedName of mentionedNames) {
       expect(offeredNames.has(mentionedName)).toBe(true)
     }
@@ -154,6 +155,56 @@ describe('Operation chat Agent tools', () => {
     )
     expect(agent.options.tools).not.toHaveProperty(
       CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.invoke'],
+    )
+    expect(agent.options.tools).not.toHaveProperty(
+      CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.inspect'],
+    )
+  })
+
+  it('issues a caller-bound Commitment before invocation', async () => {
+    const committed = {
+      kind: 'committed' as const,
+      commitmentRef: COMMITMENT_REF,
+      operationRef: OPERATION_REF,
+      operationRevision: 1,
+      expiresAt: Date.now() + 60_000,
+      normalizedInput: { company: 'Acme' },
+      price: { currency: 'AUD' as const, units: '1250000', exponent: 6 as const },
+      account: {
+        accountRef: AUTHORITY.accountRef,
+        available: { currency: 'AUD' as const, units: '5000000', exponent: 6 as const },
+      },
+      budget: {
+        principalRef: AUTHORITY.principalRef,
+        maximumPerInvocation: { currency: 'AUD' as const, units: '2000000', exponent: 6 as const },
+      },
+      policyRefs: ['commercial-policy:sandbox:v1'],
+      evidenceDigest: `sha256:${'c'.repeat(64)}`,
+      continuation: {
+        action: 'operation.invoke' as const,
+        method: 'POST' as const,
+        path: '/api/v1/operations/call' as const,
+        input: { commitmentRef: COMMITMENT_REF, idempotencyKey: 'chat-commitment-one' },
+      },
+    }
+    const runAction = vi.fn(async () => committed)
+    const agent = createChatAgent(mockModel(), AUTHORITY)
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
+
+    await expect(invokeTool(agent, 'operation.inspect', ctx, {
+      operationRef: OPERATION_REF,
+      input: { company: 'Acme' },
+    })).resolves.toEqual(committed)
+    expect(runAction).toHaveBeenCalledWith(
+      api.capabilityOperationCommitments.inspect,
+      expect.objectContaining({
+        operationRef: OPERATION_REF,
+        input: { company: 'Acme' },
+        principal: expect.objectContaining({
+          principalId: AUTHORITY.principalRef,
+          ownerId: AUTHORITY.accountRef,
+        }),
+      }),
     )
   })
 
@@ -269,8 +320,8 @@ describe('Operation chat Agent tools', () => {
     const agent = createChatAgent(mockModel(), AUTHORITY)
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
 
-    const first = invokeTool(agent, 'operation.invoke', ctx, { operationRef: OPERATION_REF, input: {} })
-    const second = invokeTool(agent, 'operation.invoke', ctx, { operationRef: OPERATION_REF, input: {} })
+    const first = invokeTool(agent, 'operation.invoke', ctx, { commitmentRef: COMMITMENT_REF })
+    const second = invokeTool(agent, 'operation.invoke', ctx, { commitmentRef: COMMITMENT_REF })
 
     await expect(second).resolves.toEqual({
       kind: 'chat_tool_refused',

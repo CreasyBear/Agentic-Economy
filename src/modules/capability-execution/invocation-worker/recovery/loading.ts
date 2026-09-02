@@ -2,7 +2,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
-  buildInvocationMaterial,
+  buildCommittedInvocationMaterial,
   createRecoveryControlAction,
   type InvocationMaterialInput,
 } from '../../invocation-material'
@@ -24,7 +24,6 @@ import { internal } from '../../../../../convex/_generated/api'
 import {
   canonicalPort,
 } from '../../../../../convex/capabilityOperationInvocationProjection'
-import { brokeredChargeReservationForRecovery } from '../charge'
 import { buildBrokeredX402Receipt } from '../brokeredX402'
 import { buildSellerOnboardingCanaryReceipt } from '../sellerCanaryReceipt'
 import type { RecoveredInvocation, RecoveryIdentity } from './contracts'
@@ -83,6 +82,7 @@ export async function loadRecoveryControl(
 function createRecoveryControlOnlyAction(input: Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
+  decisionAmount: ExactAmount
 }>) {
   const refused = (value: InvocationMaterialInput) => ({
     kind: 'published_operation_refused' as const,
@@ -95,6 +95,7 @@ function createRecoveryControlOnlyAction(input: Readonly<{
   return createRecoveryControlAction({
     operation: input.operation,
     descriptor: input.descriptor,
+    decisionAmount: input.decisionAmount,
     now: () => Date.now(),
     run: async (value) => refused(value),
     preReleaseCheck: async (value) => refused(value),
@@ -106,14 +107,20 @@ export async function loadRecoveryWorkContext(
   recovered: RecoveredInvocation,
   port: RecoveryPort,
   control: RecoveryControlRow,
-  includeBrokeredReservation: boolean,
 ) {
   const material = parseRecoveryMaterial(recovered)
   if (material === undefined) return undefined
-  const { operation, descriptor, dynamicInput } = material
-  if (!recoveryMaterialMatches(recovered, control, material)) return undefined
-  const priceAmount = descriptor.price.kind === 'fixed' ? descriptor.price.amount : undefined
+  const { operation, descriptor, parsedInput } = material
+  const managedReservation = await loadManagedReservation(ctx, recovered, operation)
+  const priceAmount = recoveryPriceAmount(recovered, descriptor, managedReservation)
   if (priceAmount === undefined) return undefined
+  const dynamicInput = buildCommittedInvocationMaterial({
+    operation,
+    descriptor,
+    value: parsedInput,
+    decisionAmount: priceAmount,
+  })
+  if (!recoveryMaterialMatches(recovered, control, { operation, descriptor, dynamicInput })) return undefined
 
   const [attemptRows, historyRows] = await Promise.all([
     port.readAttempts(recovered.invocationRef, 100),
@@ -132,22 +139,15 @@ export async function loadRecoveryWorkContext(
     preparedAt: control.authorityDecisionAt ?? control.updatedAt,
     freshUntil: control.control.authority?.expiresAt ?? control.updatedAt,
   }
-  const action = createRecoveryControlOnlyAction({ operation, descriptor })
+  const action = createRecoveryControlOnlyAction({ operation, descriptor, decisionAmount: priceAmount })
   const x402Attempt = await loadX402Attempt(ctx, recovered, control, operation)
-  const brokeredReservation = await loadBrokeredReservation(
-    ctx,
-    recovered,
-    control,
-    operation,
-    includeBrokeredReservation,
-  )
   const brokeredReceipt = recoveryReceiptBuilder({
     recovered,
     control,
     operation,
     priceAmount,
     x402Attempt,
-    brokeredReservation,
+    managedReservation,
   })
   const trustedReconciliationEvidenceDigest: { value?: string } = {}
   const tracer = createDurableActionInvocationTracer({
@@ -201,10 +201,23 @@ export async function loadRecoveryWorkContext(
     attemptRows,
     tracer,
     x402Attempt,
-    brokeredReservation,
+    managedReservation,
     brokeredReceipt,
     trustedReconciliationEvidenceDigest,
   }
+}
+
+function recoveryPriceAmount(
+  recovered: RecoveredInvocation,
+  descriptor: RuntimePublishedOperationDescriptor,
+  managedReservation: Awaited<ReturnType<typeof loadManagedReservation>>,
+): ExactAmount | undefined {
+  if (descriptor.price.kind === 'fixed') return descriptor.price.amount
+  if (recovered.sellerOnboardingCanary !== undefined) {
+    return recovered.sellerOnboardingCanary.funding.requestedSpend
+  }
+  if (managedReservation === null) return undefined
+  return { currency: 'AUD', units: managedReservation.decisionAudUnits, exponent: 6 }
 }
 
 function recoveryReceiptBuilder(input: Readonly<{
@@ -213,7 +226,7 @@ function recoveryReceiptBuilder(input: Readonly<{
   operation: PublishedOperation
   priceAmount: ExactAmount
   x402Attempt: Awaited<ReturnType<typeof loadX402Attempt>>
-  brokeredReservation: Awaited<ReturnType<typeof loadBrokeredReservation>>
+  managedReservation: Awaited<ReturnType<typeof loadManagedReservation>>
 }>) {
   return (
     state: RecoveryReceiptState,
@@ -292,7 +305,10 @@ function retainedReceiptString(
   field: 'paymentIdentifier' | 'settlementTransactionHash' | 'externalSettlementRef',
 ): string | undefined {
   if (supplied !== undefined) return supplied
-  return receipt === undefined ? undefined : receipt[field]
+  if (receipt === undefined) return undefined
+  if (field === 'externalSettlementRef') return receipt.externalSettlementRef
+  if (receipt.commercialModel !== 'seller_canary_x402') return undefined
+  return receipt[field]
 }
 
 function retainedReceiptState<K extends 'refundState' | 'lossState'>(
@@ -311,21 +327,19 @@ function buildBrokeredRecoveryReceipt(
   input: Parameters<typeof recoveryReceiptBuilder>[0],
   args: RecoveryReceiptArgs,
 ): OperationInvokeReceipt | undefined {
-  const { recovered, operation, brokeredReservation } = input
-  if (brokeredReservation === undefined) return undefined
+  const { recovered, operation, managedReservation } = input
+  if (managedReservation === null) return undefined
   const receiptInput: Mutable<Parameters<typeof buildBrokeredX402Receipt>[0]> = {
     operation,
     invocationRef: recovered.invocationRef,
     operationRef: recovered.operationRef,
     state: args.state,
+    buyerCharge: { currency: 'AUD', units: managedReservation.decisionAudUnits, exponent: 6 },
     evidenceHash: args.evidenceHash,
     issuedAt: args.issuedAt,
   }
-  const transactionRef = brokeredReservation.charge.transactionRef
-  if (transactionRef !== undefined) {
-    receiptInput.transactionRef = transactionRef
-    receiptInput.accountingTransactionRefs = [transactionRef]
-  }
+  receiptInput.transactionRef = managedReservation.journalTransactionRef
+  receiptInput.accountingTransactionRefs = [managedReservation.journalTransactionRef]
   if (args.externalSettlementRef !== undefined) receiptInput.externalSettlementRef = args.externalSettlementRef
   if (args.settlementTransactionHash !== undefined) receiptInput.settlementTransactionHash = args.settlementTransactionHash
   if (args.paymentIdentifier !== undefined) receiptInput.paymentIdentifier = args.paymentIdentifier
@@ -337,7 +351,7 @@ function buildBrokeredRecoveryReceipt(
 type RecoveryMaterial = Readonly<{
   operation: PublishedOperation
   descriptor: RuntimePublishedOperationDescriptor
-  dynamicInput: InvocationMaterialInput
+  parsedInput: StableHashValue
 }>
 
 function parseRecoveryMaterial(recovered: RecoveredInvocation): RecoveryMaterial | undefined {
@@ -347,8 +361,7 @@ function parseRecoveryMaterial(recovered: RecoveredInvocation): RecoveryMaterial
     const descriptor = materializeRuntimePublishedOperation(operation)
     const parsedInput: unknown = JSON.parse(recovered.inputJson)
     if (!isBoundedJsonValue(parsedInput)) return undefined
-    const dynamicInput = buildInvocationMaterial({ operation, descriptor, value: parsedInput })
-    return { operation, descriptor, dynamicInput }
+    return { operation, descriptor, parsedInput }
   } catch {
     return undefined
   }
@@ -357,7 +370,11 @@ function parseRecoveryMaterial(recovered: RecoveredInvocation): RecoveryMaterial
 function recoveryMaterialMatches(
   recovered: RecoveredInvocation,
   control: RecoveryControlRow,
-  material: RecoveryMaterial,
+  material: Readonly<{
+    operation: PublishedOperation
+    descriptor: RuntimePublishedOperationDescriptor
+    dynamicInput: InvocationMaterialInput
+  }>,
 ): boolean {
   return operationReference(material.operation) === recovered.operationRef
     && material.dynamicInput.inputDigest === recovered.inputDigest
@@ -401,22 +418,18 @@ async function loadX402Attempt(
   })
 }
 
-async function loadBrokeredReservation(
+async function loadManagedReservation(
   ctx: ActionCtx,
   recovered: RecoveredInvocation,
-  control: RecoveryControlRow,
   operation: PublishedOperation,
-  include: boolean,
 ) {
-  if (!include || operation.identity.adapterId !== 'x402-fetch:v2' || recovered.environment !== 'production') {
-    return undefined
-  }
-  return await brokeredChargeReservationForRecovery(ctx, {
-    operation,
-    dispatch: recovered,
-    durableAttemptRef: control.currentAttemptRef
-      ?? recovered.attemptRef
-      ?? `operation-attempt:${recovered.invocationRef}:1`,
+  if (
+    operation.identity.adapterId !== 'x402-fetch:v2'
+    || recovered.sellerOnboardingCanary !== undefined
+    || recovered.commitmentRef === undefined
+  ) return null
+  return await ctx.runQuery(internal.moneyManagedCallLifecycle.readReservation, {
+    invocationRef: recovered.invocationRef,
   })
 }
 
@@ -425,7 +438,6 @@ export type RecoveryWorkContext = NonNullable<Awaited<ReturnType<typeof loadReco
 export async function loadReadyRecoveryWork(
   ctx: ActionCtx,
   args: RecoveryIdentity,
-  includeBrokeredReservation: boolean,
 ): Promise<
   | Readonly<{ kind: 'not_found' }>
   | Readonly<{ kind: 'persisted'; recovered: RecoveredInvocation }>
@@ -440,7 +452,6 @@ export async function loadReadyRecoveryWork(
     loaded.recovered,
     loaded.port,
     loaded.control,
-    includeBrokeredReservation,
   )
   if (work === undefined) return { kind: 'not_found' }
   return { kind: 'ready', work }

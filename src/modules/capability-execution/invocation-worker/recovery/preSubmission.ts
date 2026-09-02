@@ -42,7 +42,7 @@ export async function reconcilePreSubmissionRecovery(
   ctx: ActionCtx,
   args: RecoveryIdentity,
 ): Promise<RecoveryResult> {
-  const loaded = await loadReadyRecoveryWork(ctx, args, false)
+  const loaded = await loadReadyRecoveryWork(ctx, args)
   if (loaded.kind === 'not_found') return recoveryNotFound(args.invocationRef)
   if (loaded.kind === 'persisted') return projectPersistedRecovery(loaded.recovered)
   const { work } = loaded
@@ -54,23 +54,9 @@ export async function reconcilePreSubmissionRecovery(
     return recoveryNotFound(args.invocationRef)
   }
 
-  let money: { kind: 'accepted' | 'replayed' | 'not_reconciled' }
+  let money: PreSubmissionMoneyResult
   try {
-    money = await ctx.runMutation(
-      internal.capabilityOperationPreSubmissionRecovery.reconcilePreSubmissionX402Money,
-      {
-        ...proof.externalIdentity,
-        inputDigest: work.recovered.inputDigest,
-        authorizationDigest: work.x402Attempt!.authorizationDigest,
-        paymentResponseDigest: proof.paymentResponseDigest,
-        evidenceRef: proof.evidence.evidenceRef,
-        evidenceDigest: proof.evidence.digest,
-        transportObservationDigest: proof.transportObservationDigest,
-        transportRequestDigest: proof.transportRequestDigest,
-        paymentObservationDigest: proof.paymentObservationDigest,
-        observedAt: proof.observedAt,
-      },
-    )
+    money = await reconcilePreSubmissionMoney(ctx, work, proof)
   } catch {
     return projectPersistedRecovery(work.recovered)
   }
@@ -99,6 +85,58 @@ export async function reconcilePreSubmissionRecovery(
     return projectPersistedRecovery(work.recovered)
   }
   return await projectRetryableRecovery(ctx, work)
+}
+
+type PreSubmissionMoneyResult = Readonly<{
+  kind: 'accepted' | 'replayed' | 'not_reconciled'
+}>
+
+async function reconcilePreSubmissionMoney(
+  ctx: ActionCtx,
+  work: RecoveryWorkContext,
+  proof: PreSubmissionProof,
+): Promise<PreSubmissionMoneyResult> {
+  const attempt = work.x402Attempt
+  if (attempt === null) return { kind: 'not_reconciled' }
+  if (work.recovered.sellerOnboardingCanary !== undefined) {
+    return await ctx.runMutation(
+      internal.capabilityOperationPreSubmissionRecovery.reconcilePreSubmissionX402Money,
+      {
+        ...proof.externalIdentity,
+        inputDigest: work.recovered.inputDigest,
+        authorizationDigest: attempt.authorizationDigest,
+        paymentResponseDigest: proof.paymentResponseDigest,
+        evidenceRef: proof.evidence.evidenceRef,
+        evidenceDigest: proof.evidence.digest,
+        transportObservationDigest: proof.transportObservationDigest,
+        transportRequestDigest: proof.transportRequestDigest,
+        paymentObservationDigest: proof.paymentObservationDigest,
+        observedAt: proof.observedAt,
+      },
+    )
+  }
+  const result = await ctx.runMutation(
+    internal.moneyManagedCallLifecycle.releaseBeforeSubmissionWithX402Proof,
+    {
+      invocationRef: work.recovered.invocationRef,
+      attemptRef: proof.evidence.attemptRef,
+      effectGeneration: proof.evidence.effectGeneration,
+      operationRef: work.recovered.operationRef,
+      inputDigest: work.recovered.inputDigest,
+      reservationRef: proof.externalIdentity.reservationRef,
+      paymentIdentifier: attempt.paymentIdentifier,
+      challengeDigest: attempt.challengeDigest,
+      evidenceRef: proof.evidence.evidenceRef,
+      evidenceDigest: proof.evidence.digest,
+      paymentResponseDigest: proof.paymentResponseDigest,
+      transportObservationDigest: proof.transportObservationDigest,
+      transportRequestDigest: proof.transportRequestDigest,
+      paymentObservationDigest: proof.paymentObservationDigest,
+      observedAt: proof.observedAt,
+    },
+  )
+  if (result.kind !== 'accepted') return { kind: 'not_reconciled' }
+  return { kind: result.replayed ? 'replayed' : 'accepted' }
 }
 
 export function recoveryControlCanProceed(
@@ -271,7 +309,7 @@ function recoveryScopeIsEligible(
   providerRef: string | undefined,
 ): boolean {
   const { recovered, operation, x402Attempt, control } = work
-  return invocationIsSandboxSellerCanary(recovered)
+  return (invocationIsSandboxSellerCanary(recovered) || work.managedReservation !== null)
     && operation.identity.adapterId === 'x402-fetch:v2'
     && providerRef !== undefined
     && paymentIdentityMatchesInvocation(x402Attempt, recovered)

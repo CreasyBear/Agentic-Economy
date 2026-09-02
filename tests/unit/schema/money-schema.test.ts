@@ -9,7 +9,13 @@ describe('money schema ownership', () => {
     const tables = JSON.parse(String(exported.call(schema))).tables as readonly { tableName: string; indexes: readonly { indexDescriptor: string; fields: readonly string[] }[] }[]
     const byName = new Map(tables.map((table) => [table.tableName, table]))
     expect([...byName.keys()].filter((name) => name.startsWith('money'))).toEqual(expect.arrayContaining([
-      'moneyAccounts', 'moneyLedgerEntries', 'moneyTransactions', 'moneyCredentialBudgetStates', 'moneyExternalSpendReservations', 'moneyX402PaymentAttempts', 'moneyUsageEvents', 'moneyCredentialUsageSummaries', 'moneyTopupCommands', 'moneyStripeEvents', 'moneyPayoutAccounts', 'moneyPayouts',
+      'moneyCommercialPolicies', 'moneyLedgerAccounts', 'moneyLedgerTransactions',
+      'moneyLedgerPostings', 'moneyBalanceProjections', 'moneyReconciliationCases',
+      'moneyFundingCommands', 'moneyTreasuryObservations', 'moneyTreasuryProjections',
+      'moneyTreasuryReservations', 'moneyAccounts', 'moneyLedgerEntries', 'moneyTransactions',
+      'moneyCredentialBudgetStates', 'moneyExternalSpendReservations',
+      'moneyX402PaymentAttempts', 'moneyUsageEvents', 'moneyCredentialUsageSummaries',
+      'moneyStripeEvents', 'moneyPayoutAccounts', 'moneyPayouts',
     ]))
     expect(byName.get('moneyExternalSpendReservations')?.indexes).toEqual(expect.arrayContaining([
       expect.objectContaining({ indexDescriptor: 'by_reservationRef', fields: ['reservationRef'] }),
@@ -28,6 +34,19 @@ describe('money schema ownership', () => {
       expect.objectContaining({ indexDescriptor: 'by_accountRef_and_createdAt', fields: ['accountRef', 'createdAt'] }),
       expect.objectContaining({ indexDescriptor: 'by_principalId_and_createdAt', fields: ['principalId', 'createdAt'] }),
     ]))
+    expect(byName.get('moneyFundingCommands')?.indexes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ indexDescriptor: 'by_commandRef', fields: ['commandRef'] }),
+      expect.objectContaining({ indexDescriptor: 'by_accountRef_and_createdAt', fields: ['accountRef', 'createdAt'] }),
+    ]))
+    expect(byName.get('moneyTreasuryObservations')?.indexes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ indexDescriptor: 'by_observationRef', fields: ['observationRef'] }),
+      expect.objectContaining({ indexDescriptor: 'by_custody_and_observedAt', fields: ['environment', 'custodyRef', 'custodyGeneration', 'observedAt'] }),
+    ]))
+    expect(byName.get('moneyTreasuryReservations')?.indexes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ indexDescriptor: 'by_reservationRef', fields: ['reservationRef'] }),
+      expect.objectContaining({ indexDescriptor: 'by_idempotencyKey', fields: ['idempotencyKey'] }),
+    ]))
+    expect(byName.has('moneyTopupCommands')).toBe(false)
     expect(byName.get('moneyUsageEvents')?.indexes).toEqual(expect.arrayContaining([
       expect.objectContaining({ indexDescriptor: 'by_principalId_and_credentialId_and_currency_and_observedAt', fields: ['principalId', 'credentialId', 'currency', 'observedAt'] }),
     ]))

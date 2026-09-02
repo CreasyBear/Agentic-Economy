@@ -23,7 +23,6 @@ import {
   sourceWriteAdmissionFromContext,
   sourceWriteRequestFromAdmission,
 } from "../../src/lib/server/source-write-admission";
-import type { ExactAmount } from "../../src/modules/money/public";
 import {
   fixtureSchema,
   selectedOperationSchema,
@@ -196,9 +195,11 @@ function ownerSourceForRun(
   ids: OwnerFixtureIds;
   source: Extract<CapabilityPublicationImport, { kind: "openapi_http" }>;
   pricingConfig: Readonly<{
-    version: "pricing:v2";
-    unit: "call";
-    paidAmount: ExactAmount;
+    version: "pricing:v3";
+    kind: "fixed_aud";
+    currency: "AUD";
+    exponent: 6;
+    amountUnits: string;
   }>;
 }> {
   const ownerOpenApiDocument = ownerOpenApiDocumentForRun(
@@ -217,7 +218,7 @@ function ownerSourceForRun(
       summary: `Run-scoped release smoke operation ${options.runId}`,
       price: {
         kind: "fixed",
-        amount: { currency: "USD", units: "0", exponent: 2 },
+        amount: { currency: "AUD", units: "0", exponent: 6 },
       },
       materialTerms: [],
       commercialRelationship: {
@@ -304,9 +305,11 @@ function ownerSourceForRun(
     ids,
     source,
     pricingConfig: {
-      version: "pricing:v2",
-      unit: "call",
-      paidAmount: { currency: "USD", units: "0", exponent: 2 },
+      version: "pricing:v3",
+      kind: "fixed_aud",
+      currency: "AUD",
+      exponent: 6,
+      amountUnits: "0",
     },
   };
 }
@@ -322,15 +325,21 @@ async function prepareOwnerPublicationMaterial(
     options.source.kind === "ae_envelope"
       ? options.source.offering
       : options.source.commercial.offering;
-  if (offering.presentation.price.kind !== "fixed")
+  if (
+    offering.presentation.price.kind !== "fixed" ||
+    offering.presentation.price.amount.currency !== "AUD" ||
+    offering.presentation.price.amount.exponent !== 6
+  )
     throw new GatewaySmokeError("gateway_smoke_owner_source_price_invalid");
   const prepared = await preparePublicationDraft({
     source: options.source,
     sourceRevision: options.sourceRevision,
     pricingConfig: {
-      version: "pricing:v2",
-      unit: "call",
-      paidAmount: offering.presentation.price.amount,
+      version: "pricing:v3",
+      kind: "fixed_aud",
+      currency: "AUD",
+      exponent: 6,
+      amountUnits: offering.presentation.price.amount.units,
     },
     evidenceRefs: options.evidenceRefs,
   });

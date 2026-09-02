@@ -32,9 +32,15 @@ const expectedPayment = {
   currency: 'USD',
 } as const
 const pricingConfig = {
-  version: 'pricing:v2' as const,
-  unit: 'call' as const,
-  paidAmount: { currency: 'USD', units: '1', exponent: 2 },
+  version: 'pricing:v3' as const,
+  kind: 'managed_x402' as const,
+  sourceRequirement: {
+    network: expectedPayment.network,
+    asset: expectedPayment.asset,
+    atomicUnits: '10000',
+  },
+  pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
+  publicDisplay: 'on_request' as const,
 }
 const priceDigest = pricingConfigDigest(pricingConfig)
 const claimCeiling =
@@ -117,7 +123,7 @@ export function buildDevelopmentAlternatePublishedOperationEvidence() {
     presentation: {
       label: 'BTC/USD spot quote',
       summary: 'MOCK/DEVELOPMENT ONLY alternate published endpoint.',
-      price: { kind: 'fixed', amount: pricingConfig.paidAmount },
+      price: { kind: 'on_request' },
       materialTerms: [
         { termId: 'mock:term:alternate-fixture', label: 'Environment', value: 'MOCK/DEVELOPMENT ONLY' },
       ],

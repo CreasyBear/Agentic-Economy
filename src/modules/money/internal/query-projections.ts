@@ -15,7 +15,6 @@ import type {
   PayoutStatusView,
   ProviderEarningsQuery,
   ProviderEarningsView,
-  TopupState,
 } from '../public'
 import { addExactAmounts, compareExactAmounts, subtractExactAmounts } from './exact-amount'
 import { accountRefForRake, sameEvidenceRefs, usageSummaryKey } from './ledger'
@@ -434,11 +433,9 @@ function projectPayoutPaidOut(input: Readonly<{
 
 export function createInMemoryMoneyQueryPort(input: Readonly<{
   ledger: LedgerState
-  topups?: TopupState
   payoutStatuses?: readonly PayoutStatusView[]
   resolveOwnerId?: (principalId: string) => string | undefined
 }>): MoneyQueryPort {
-  const topups = input.topups
   const payoutStatuses = input.payoutStatuses ?? []
   return {
     readCreditAccount: async (query: CreditAccountQuery): Promise<CreditAccountView> => {
@@ -446,19 +443,15 @@ export function createInMemoryMoneyQueryPort(input: Readonly<{
       if (input.resolveOwnerId !== undefined && ownerId === undefined) throw new Error('billing_identity_missing')
       const account = [...input.ledger.accounts.values()].find((item) => item.accountKind === 'operator_credit' && item.balance.currency === query.currency && (ownerId === undefined || item.accountId === ownerId))
       if (account === undefined) throw new Error('billing_identity_missing')
-      const pending = topups?.commands.find((command) => command.principalId === query.principalId && command.amount.currency === query.currency && (command.state === 'pending' || command.state === 'outcome_unknown'))
-      const accountAutoRecharge = topups?.autoRecharge.get(account.accountRef)
-      if (accountAutoRecharge !== undefined && (accountAutoRecharge.threshold.currency !== account.balance.currency || accountAutoRecharge.rechargeAmount.currency !== account.balance.currency)) throw new Error('currency_mismatch')
       const zero = { currency: account.balance.currency, units: '0', exponent: account.balance.exponent }
       return {
         principalId: query.principalId,
         accountId: account.accountId ?? ownerId ?? query.principalId,
         balance: account.balance,
-        ...(pending === undefined ? {} : { pendingTopup: { amount: pending.amount, state: pending.state === 'pending' ? 'pending' as const : 'outcome_unknown' as const, ...(pending.externalRef === undefined ? {} : { externalRef: pending.externalRef }) } }),
         autoRecharge: {
-          enabled: accountAutoRecharge?.enabled ?? false,
-          threshold: accountAutoRecharge?.threshold ?? zero,
-          rechargeAmount: accountAutoRecharge?.rechargeAmount ?? zero,
+          enabled: false,
+          threshold: zero,
+          rechargeAmount: zero,
         },
         evidence: 'labelled_local_dev',
       }

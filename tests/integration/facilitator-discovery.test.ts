@@ -191,10 +191,10 @@ describe('facilitator discovery reconciliation', () => {
       publisherRef: 'system:facilitator-discovery',
     })
     expect(JSON.parse(persisted.publications[0]?.pricingConfigJson ?? '{}')).toMatchObject({
-      version: 'pricing:v2',
-      providerAmount: { units: '1000' },
-      platformFee: { units: '100' },
-      paidAmount: { units: '1100' },
+      version: 'pricing:v3',
+      kind: 'managed_x402',
+      sourceRequirement: { atomicUnits: '1000' },
+      publicDisplay: 'on_request',
     })
 
     const refreshed = await backend.mutation(internal.facilitatorDiscovery.reconcile, {

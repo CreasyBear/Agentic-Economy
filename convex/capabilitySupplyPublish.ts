@@ -698,9 +698,18 @@ function pricingConfigForBootstrapSource(
       ? source.offering
       : source.commercial.offering)
   const price = sourceOffering.presentation.price
-  return price.kind === 'fixed'
-    ? { version: 'pricing:v2', unit: 'call', paidAmount: price.amount }
-    : undefined
+  if (
+    price.kind !== 'fixed'
+    || price.amount.currency !== 'AUD'
+    || price.amount.exponent !== 6
+  ) return undefined
+  return {
+    version: 'pricing:v3',
+    kind: 'fixed_aud',
+    currency: 'AUD',
+    exponent: 6,
+    amountUnits: price.amount.units,
+  }
 }
 
 function bootstrapSourceRevision(

@@ -39,6 +39,7 @@ import { internal } from './_generated/api'
 import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-execution'
 
 export type OpenDispatch = Readonly<{
+  commitmentRef?: string
   invocationRef: string
   principalId: string
   ownerId: string
@@ -98,6 +99,7 @@ export type CanonicalPort = Pick<
 >
 
 export type RecoveryRow = Readonly<{
+  commitmentRef?: string
   invocationRef: string
   principalId: string
   ownerId: string
@@ -116,6 +118,7 @@ export type RecoveryRow = Readonly<{
   usage?: Infer<typeof usageValue>
   evidenceHash?: string
   attemptRef?: string
+  updatedAt: number
 }>
 
 type WorkerRecoveryResult = Infer<typeof recoveryResultValue>
@@ -213,6 +216,7 @@ export function projectPureOperationInvocationStatus(
   return {
     kind: 'found',
     invocationRef: row.invocationRef,
+    version: row.updatedAt,
     operationRef: row.operationRef,
     state: status.control,
     ...(row.usage === undefined ? {} : { usage: row.usage }),
@@ -228,6 +232,7 @@ export function cancelledRecoveryResult(row: RecoveryRow): WorkerRecoveryResult 
   return {
     kind: 'found',
     invocationRef: row.invocationRef,
+    version: row.updatedAt,
     operationRef: row.operationRef,
     state: 'cancelled',
     ...(row.usage === undefined ? {} : { usage: row.usage }),
@@ -247,6 +252,7 @@ export function retryableRecoveryResult(
   return {
     kind: 'found',
     invocationRef: row.invocationRef,
+    version: row.updatedAt,
     operationRef: row.operationRef,
     state: 'retryable',
     ...(row.usage === undefined ? {} : { usage: row.usage }),
@@ -281,6 +287,7 @@ export function projectPersistedRecovery(
   return {
     kind: 'found',
     invocationRef: row.invocationRef,
+    version: row.updatedAt,
     operationRef: row.operationRef,
     state: publicState,
     ...(effectGeneration === undefined ? {} : { effectGeneration }),
@@ -603,7 +610,13 @@ export async function projectOuterResult(
             observedAt: Date.parse(recordedAt),
             chargeState: 'paid' as const,
             amount: descriptor.price.amount,
-            priceDigest: pricingConfigDigest({ version: 'pricing:v2', unit: 'call', paidAmount: descriptor.price.amount }),
+            priceDigest: pricingConfigDigest({
+              version: 'pricing:v3',
+              kind: 'fixed_aud',
+              currency: 'AUD',
+              exponent: 6,
+              amountUnits: descriptor.price.amount.units,
+            }),
           }
       : {
           usageRef: money.usageRef,
@@ -743,7 +756,7 @@ export async function projectSellerOnboardingCanaryResult(
     || dispatch.environment !== 'sandbox'
     || profile === undefined
     || profile.network !== 'eip155:84532'
-    || descriptor.price.kind !== 'fixed'
+    || descriptor.price.kind !== 'on_request'
   ) throw new Error('seller_canary_projection_identity_invalid')
 
   const evidenceHash = observation.responseDigest
@@ -768,7 +781,7 @@ export async function projectSellerOnboardingCanaryResult(
       : knownNotSettled
         ? 'refunded'
         : 'reconciliation_required',
-    providerQuotedAmount: descriptor.price.amount,
+    providerQuotedAmount: canary.funding.requestedSpend,
     ...(settlement.paymentIdentifier === undefined
       ? {}
       : { paymentIdentifier: settlement.paymentIdentifier }),

@@ -25,6 +25,7 @@ const principal = {
 
 const status = {
   kind: 'found' as const,
+  version: 1,
   invocationRef: 'operation-invocation:v1:one',
   operationRef: 'operation:one',
   state: 'terminal' as const,
@@ -72,6 +73,7 @@ const x402ReconciliationEvidence = {
   digest: canonicalDigest(x402ReconciliationEvidenceMaterial),
 }
 const receipt: OperationInvokeReceipt = {
+  commercialModel: 'seller_canary_x402',
   receiptRef: 'receipt:operation-one',
   state: 'settled',
   network: 'eip155:8453',
@@ -116,6 +118,7 @@ describe('operation recovery actions', () => {
     expect(statusWithGeneration).toMatchObject({ state: 'terminal', effectGeneration: 4 })
     const cancelledStatus = operationCancelAction.outputSchema.parse({
       kind: 'found',
+      version: 1,
       invocationRef: status.invocationRef,
       operationRef: status.operationRef,
       state: 'cancelled',
@@ -195,10 +198,17 @@ describe('operation recovery actions', () => {
 
   it('round-trips additive receipts for success, refund, and reconciliation while preserving absence', () => {
     const settled = operationStatusAction.outputSchema.parse({ ...status, receipt })
-    expect(settled).toMatchObject({ receipt: { state: 'settled', paymentIdentifier: 'payment:opaque' } })
+    expect(settled).toMatchObject({
+      receipt: {
+        state: 'settled',
+        commercialModel: 'seller_canary_x402',
+        paymentIdentifier: 'payment:opaque',
+      },
+    })
 
     const refunded = operationCancelAction.outputSchema.parse({
       kind: 'found',
+      version: 1,
       invocationRef: status.invocationRef,
       operationRef: status.operationRef,
       state: 'terminal',

@@ -4,7 +4,6 @@ import { stepCountIs } from 'ai'
 import type { FunctionArgs } from 'convex/server'
 import { z } from 'zod'
 
-import { jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
@@ -12,6 +11,11 @@ import {
   operationInvokeInputSchema,
   operationInvokeResultSchema,
 } from '@/modules/capability-execution/operation-invoke-contracts'
+import {
+  operationInspectInputSchema,
+  operationInspectResultSchema,
+  type OperationInspectInput,
+} from '@/modules/capability-execution/operation-commitment'
 import type {
   InspectPlanInput,
   OperationCompareInput,
@@ -90,11 +94,25 @@ const chatInvokeContract = {
   outputSchema: operationInvokeResultSchema,
 } as const satisfies ChatContract
 
+const chatOperationInspectContract = {
+  id: 'operation.inspect',
+  summary: 'Resolve the exact caller-specific terms for one Operation into an expiring Commitment.',
+  boundaries: [
+    'Creates no Invocation, reservation, signature, payment, or Provider effect.',
+    'AE resolves the Account, Agent Principal, authority, current Operation revision, normalized input, AUD price, budget, balance, treasury capacity, and policy versions server-side.',
+    'Invoke only with the returned Commitment. Changed or expired material requires a fresh inspection.',
+  ],
+  surfaces: ['http', 'mcp', 'cli', 'chat'],
+  schema: operationInspectInputSchema,
+  outputSchema: operationInspectResultSchema,
+} as const satisfies ChatContract
+
 const chatContracts = {
   'registry.operations.search': registryOperationsSearchContract,
   'registry.operations.detail': registryOperationsDetailContract,
   'registry.operations.compare': registryOperationsCompareContract,
   'registry.operations.inspectPlan': registryOperationsInspectPlanContract,
+  'operation.inspect': chatOperationInspectContract,
   'operation.invoke': chatInvokeContract,
 } as const satisfies Record<ChatToolId, ChatContract>
 
@@ -184,7 +202,17 @@ export function createChatAgent(
   const detailContract = contractFor('registry.operations.detail')
   const compareContract = contractFor('registry.operations.compare')
   const inspectContract = contractFor('registry.operations.inspectPlan')
+  const operationInspectContract = contractFor('operation.inspect')
   const invokeContract = contractFor('operation.invoke')
+  const principal = authority === undefined ? undefined : {
+    principalId: authority.principalRef,
+    ownerId: authority.accountRef,
+    credentialId: authority.principalRef,
+    applicationRef: 'interactive-chat',
+    environment: 'sandbox' as const,
+    scopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
+    authorityMode: 'approve_each' as const,
+  }
 
   const tools = {
     [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.search']]: createTool({
@@ -252,36 +280,50 @@ export function createChatAgent(
         )
       },
     }),
-    ...(authority === undefined ? {} : {
-      [CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.invoke']]: createTool({
-        description: `${descriptionFor(invokeContract)} Inspect the exact current operation first with ${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.detail']}.`,
-        inputSchema: z.strictObject({
-          operationRef: z.string().trim().min(1).max(300),
-          input: z.record(z.string(), jsonValueSchema),
-        }),
-        execute: async (ctx: ToolCtx, input: { operationRef: string; input: Record<string, JsonValue> }) => {
-          const denied = reserve('operation.invoke')
+    ...(authority === undefined || principal === undefined ? {} : {
+      [CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.inspect']]: createTool({
+        description: descriptionFor(operationInspectContract),
+        inputSchema: operationInspectContract.schema as z.ZodType<OperationInspectInput>,
+        execute: async (ctx: ToolCtx, input: OperationInspectInput) => {
+          const denied = reserve('operation.inspect')
           if (denied !== null) return denied
           const commandDigest = canonicalDigest({
             principalId: authority.principalRef,
             operationRef: input.operationRef,
             input: input.input,
           } as StableHashValue)
+          const result = await ctx.runAction(api.capabilityOperationCommitments.inspect, {
+            operationKey: commandDigest,
+            correlationId: `chat-inspect-corr:${commandDigest}`,
+            principal,
+            operationRef: input.operationRef,
+            input: structuredClone(input.input),
+          })
+          return projectedModelFacingOutput(
+            'operation.inspect',
+            operationInspectContract.outputSchema,
+            () => result,
+          )
+        },
+      }),
+      [CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.invoke']]: createTool({
+        description: `${descriptionFor(invokeContract)} Obtain the exact Commitment first with ${CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.inspect']}.`,
+        inputSchema: z.strictObject({
+          commitmentRef: z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u),
+        }),
+        execute: async (ctx: ToolCtx, input: { commitmentRef: string }) => {
+          const denied = reserve('operation.invoke')
+          if (denied !== null) return denied
+          const commandDigest = canonicalDigest({
+            principalId: authority.principalRef,
+            commitmentRef: input.commitmentRef,
+          } as StableHashValue)
           const idempotencyKey = `chat-invoke:${commandDigest}`
           const result = await ctx.runAction(api.capabilityOperationInvocations.invoke, {
-            operationKey: input.operationRef,
+            operationKey: input.commitmentRef,
             correlationId: `chat-invoke-corr:${commandDigest}`,
-            principal: {
-              principalId: authority.principalRef,
-              ownerId: authority.accountRef,
-              credentialId: authority.principalRef,
-              applicationRef: 'interactive-chat',
-              environment: 'sandbox',
-              scopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
-              authorityMode: 'approve_each',
-            },
-            operationRef: input.operationRef,
-            input: input.input,
+            principal,
+            commitmentRef: input.commitmentRef,
             idempotencyKey,
           })
           return projectedModelFacingOutput(

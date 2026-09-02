@@ -11,16 +11,16 @@ import type { StandingMandateAuthorityBasis } from '@/modules/action-invocation/
 import { currentOperationDigest } from './current-operation-commitment'
 import {
   operationEnvironmentMismatchNextAction,
-  operationInvokeInputSchema,
+  resolvedOperationInvokeInputSchema,
   isPrincipalEnvironmentCompatibleWithOperation,
-  type OperationInvokeInput,
+  type ResolvedOperationInvokeInput,
   type OperationInvokeRefusalCode,
   type OperationInvokeResult,
   type PublicAuthorityRequest,
 } from './operation-invoke-contracts'
 
 export type OperationInvokeRequest = Readonly<{
-  input: OperationInvokeInput
+  input: ResolvedOperationInvokeInput
   principal: AgentAccessPrincipal
   correlationId: string
 }>
@@ -101,6 +101,7 @@ export type OperationInvokePolicyReader = Readonly<{
 }>
 
 export type OperationInvokeIdempotencyReservation = Readonly<{
+  commitmentRef: string
   principalId: string
   credentialId: string
   applicationRef: string
@@ -118,7 +119,7 @@ export type OperationInvokeIdempotencyReservation = Readonly<{
 
 export type OperationInvokePortRefusal = Readonly<{
   kind: 'refused'
-  code: Extract<OperationInvokeRefusalCode, 'grant_not_found' | 'grant_revoked' | 'grant_expired' | 'grant_generation_stale' | 'environment_mismatch' | 'rate_limited' | 'concurrency_limited'>
+  code: Extract<OperationInvokeRefusalCode, 'grant_not_found' | 'grant_revoked' | 'grant_expired' | 'grant_generation_stale' | 'environment_mismatch' | 'rate_limited' | 'concurrency_limited' | 'budget_exceeded' | 'insufficient_balance' | 'treasury_capacity_unavailable' | 'commercial_policy_unavailable'>
   retryable: boolean
   nextAction?: string
 }>
@@ -148,7 +149,7 @@ export type OperationInvokeIdempotencyPort = Readonly<{
 }>
 
 export type OperationInvokeAdmitted = Readonly<{
-  command: OperationInvokeInput
+  command: ResolvedOperationInvokeInput
   inputDigest: string
   requestDigest: string
   grant: OperationInvokeGrant
@@ -190,7 +191,7 @@ export async function admitOperationInvoke(input: Readonly<{
   currentOperation: OperationInvokeCurrentOperationReader | undefined
   now: () => number
 }>): Promise<OperationInvokeAdmitOutcome> {
-  const parsedInput = operationInvokeInputSchema.safeParse(input.request.input)
+  const parsedInput = resolvedOperationInvokeInputSchema.safeParse(input.request.input)
   if (!parsedInput.success || !isPublicOperationRef(parsedInput.data.operationRef)) {
     return { kind: 'refused', result: { kind: 'refused', code: 'operation_ref_invalid', retryable: false } }
   }
@@ -365,6 +366,7 @@ export async function reserveOperationInvoke(input: Readonly<{
   let reservation: OperationInvokeIdempotencyReservation
   try {
     const reserved = await input.idempotency.reserve({
+      commitmentRef: command.commitmentRef,
       principalId: input.request.principal.principalId,
       credentialId: input.request.principal.credentialId,
       applicationRef: input.request.principal.applicationRef,

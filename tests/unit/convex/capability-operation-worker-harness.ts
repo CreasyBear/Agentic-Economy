@@ -163,6 +163,7 @@ import {
   externalSpendIdentityDigest,
   mintExternalSpendIdentity,
   pricingConfigDigest,
+  pricingConfigSourceAmount,
   type ExternalSpendPaymentFacts,
   type PricingConfig,
 } from '@/modules/money/public'
@@ -264,7 +265,9 @@ function operationWithPricing(
   operation: PublishedOperation,
   pricingConfig: PricingConfig,
 ): PublishedOperation {
-  const price = { kind: 'fixed' as const, amount: pricingConfig.paidAmount }
+  const price = pricingConfig.kind === 'fixed_aud'
+    ? { kind: 'fixed' as const, amount: { currency: 'AUD', units: pricingConfig.amountUnits, exponent: 6 as const } }
+    : { kind: 'on_request' as const }
   const priceDigest = pricingConfigDigest(pricingConfig)
   const identity = {
     ...operation.identity,
@@ -287,20 +290,24 @@ function operationWithPricing(
 
 function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', brokered = false): PublishedOperation {
   const fixture = buildDevelopmentPublishedOperationEvidence()
-  const priceAmount = { currency: 'USD', units: brokered ? '2' : priceUnits, exponent: 2 } as const
-  const pricedOperation = priceUnits === '1' && !brokered
-    ? fixture.operation
-    : operationWithPricing(fixture.operation, brokered
+  const pricedOperation = operationWithPricing(fixture.operation, brokered
         ? {
-            version: 'pricing:v2',
-            unit: 'call',
-            paidAmount: priceAmount,
-            providerAmount: { currency: 'USD', units: '1', exponent: 2 },
-            platformFee: { currency: 'USD', units: '1', exponent: 2 },
+            version: 'pricing:v3',
+            kind: 'managed_x402',
+            sourceRequirement: {
+              network: 'eip155:8453',
+              asset: '0xmock-usdc',
+              atomicUnits: '1',
+            },
+            pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
+            publicDisplay: 'on_request',
           }
         : {
-            ...fixture.operation.identity.pricingConfig,
-            paidAmount: priceAmount,
+            version: 'pricing:v3',
+            kind: 'fixed_aud',
+            currency: 'AUD',
+            exponent: 6,
+            amountUnits: priceUnits,
           })
   if (kind === 'x402') {
     return {
@@ -491,6 +498,9 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   )
   const inputJson = JSON.stringify(input)
   const dispatch: Record<string, unknown> = {
+    ...(kind === 'x402' && options.sellerCanary !== true
+      ? { commitmentRef: `operation-commitment:v1:${'c'.repeat(64)}` }
+      : {}),
     invocationRef,
     principalId: 'principal:test-worker',
     ownerId: 'owner:test-worker',
@@ -554,12 +564,8 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         fundingGrantRef: grantRef,
         fundingGrantGeneration: 1,
         fundingPolicyDigest: digest('a'),
-        requestedSpend: descriptor.price.kind === 'fixed'
-          ? descriptor.price.amount
-          : { currency: 'USD', units: '1', exponent: 2 },
-        maximumSpend: descriptor.price.kind === 'fixed'
-          ? descriptor.price.amount
-          : { currency: 'USD', units: '1', exponent: 2 },
+        requestedSpend: pricingConfigSourceAmount(operation.pricingConfig),
+        maximumSpend: pricingConfigSourceAmount(operation.pricingConfig),
         expiresAt: now + 60_000,
         now,
       }))
@@ -916,12 +922,14 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           custodyDailyMaximumUnits: '100000',
           authorizationDigest: digest('p'),
         })
-        expect(state.mutationCalls.find(({ path }) => path === 'moneyLedger:reserveExternalInvocationSpend')?.args)
-          .toMatchObject({
-            custodyRef: 'custody:test-worker',
-            custodyGeneration: 7,
-            custodyDailyMaximum: { currency: 'USD', units: '100000', exponent: 2 },
-          })
+        if (sellerCanary !== undefined) {
+          expect(state.mutationCalls.find(({ path }) => path === 'moneyLedger:reserveExternalInvocationSpend')?.args)
+            .toMatchObject({
+              custodyRef: 'custody:test-worker',
+              custodyGeneration: 7,
+              custodyDailyMaximum: { currency: 'USD', units: '100000', exponent: 2 },
+            })
+        }
       }
       if (prepared === undefined) throw new Error('x402 custody preparation failed')
       if (options.failPaymentSignature) {
@@ -1025,6 +1033,14 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   const chargeState: 'free_tier' | 'paid' = chargeAmount.units === '0' ? 'free_tier' : 'paid'
   let activeGrantReads = 0
   let currentOperationReads = 0
+  let managedCallState: 'reserved' | 'possibly_submitted' | 'outcome_unknown' | 'settled' | 'released' = 'reserved'
+  const managedCallReservation = {
+    reservationRef: `call-reservation:${String(dispatch.invocationRef)}`,
+    commitmentRef: String(dispatch.commitmentRef ?? ''),
+    decisionAudUnits: '20000',
+    journalTransactionRef: `journal:call-reservation:${String(dispatch.invocationRef)}`,
+    treasuryReservationRef: `treasury-reservation:${String(dispatch.invocationRef)}`,
+  }
   const sellerCanarySnapshot = (candidate: PublishedOperation) => ({
     operationJson: JSON.stringify(candidate),
     operationRef,
@@ -1076,6 +1092,10 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
                 : authorizationCurrentOperation,
           )
         case 'moneyLedger:readOperatorAccountVersion': return operatorAccountVersion
+        case 'moneyManagedCallLifecycle:readReservation': return {
+          ...managedCallReservation,
+          state: managedCallState,
+        }
         case 'capabilityOperationInvocations:readCurrentProviderConnectionAuthority':
           return sellerCanary === undefined
             ? { kind: 'credentialed' }
@@ -1166,47 +1186,6 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
             observedAt: now - 10,
             ...(chargeState === 'paid' ? { transactionRef: 'transaction:accepted-result' } : {}),
           }
-        case 'moneyLedger:reserveBrokeredInvocationCharge':
-          state.events.push('buyer-reserve')
-          state.money = args
-          if (args.expectedAccountVersion !== actualOperatorAccountVersion) {
-            return { kind: 'refused', code: 'ledger_cas_conflict', retryable: true }
-          }
-          {
-            const amount = args.amount as { currency: string; units: string; exponent: number }
-            return {
-            kind: 'accepted',
-            chargeState: 'paid',
-            amount,
-            priceDigest: args.priceDigest,
-            transactionRef: args.transactionRef,
-            providerNet: { currency: amount.currency, units: '1', exponent: amount.exponent },
-            rake: { currency: amount.currency, units: '1', exponent: amount.exponent },
-            usageRef: 'usage:brokered-result',
-            observedAt: now,
-            }
-          }
-        case 'moneyLedger:finalizeBrokeredInvocationCharge':
-          {
-            const amount = args.amount as { currency: string; units: string; exponent: number }
-            return {
-            kind: 'accepted',
-            chargeState: 'paid',
-            amount,
-            priceDigest: args.priceDigest,
-            transactionRef: args.transactionRef,
-            providerNet: { currency: amount.currency, units: '1', exponent: amount.exponent },
-            rake: { currency: amount.currency, units: '1', exponent: amount.exponent },
-            usageRef: 'usage:brokered-result',
-            observedAt: now,
-            }
-          }
-        case 'moneyLedger:releaseBrokeredInvocationCharge':
-          state.reconciliations.push(args)
-          return { kind: 'released', transactionRef: args.transactionRef }
-        case 'moneyLedger:markBrokeredInvocationChargeOutcomeUnknown':
-          state.unknownCharges.push(args)
-          return { kind: 'outcome_unknown', transactionRef: args.transactionRef }
         case 'moneyLedger:reconcileInvocationCharge':
           state.reconciliations.push(args)
           if (options.reconcileRefused) return { kind: 'reconciliation_required' }
@@ -1215,6 +1194,24 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         case 'moneyLedger:markChargeOutcomeUnknown':
           state.unknownCharges.push(args)
           return { kind: 'outcome_unknown', transactionRef: args.transactionRef }
+        case 'moneyManagedCallLifecycle:markPossiblySubmitted':
+          state.events.push('managed-call-submission-fence')
+          managedCallState = 'possibly_submitted'
+          return { kind: 'accepted', state: managedCallState, replayed: false }
+        case 'moneyManagedCallLifecycle:markOutcomeUnknown':
+          managedCallState = 'outcome_unknown'
+          state.unknownCharges.push(args)
+          return { kind: 'accepted', state: managedCallState, replayed: false }
+        case 'moneyManagedCallLifecycle:settle':
+          managedCallState = 'settled'
+          return { kind: 'accepted', state: managedCallState, replayed: false }
+        case 'moneyManagedCallLifecycle:releaseBeforeSubmission':
+          if (managedCallState !== 'reserved' && managedCallState !== 'released') {
+            throw new Error('managed_call_release_after_submission_refused')
+          }
+          managedCallState = 'released'
+          state.reconciliations.push(args)
+          return { kind: 'accepted', state: managedCallState, replayed: false }
         case 'moneyLedger:reserveExternalInvocationSpend': {
           state.events.push('custody-reserve')
           const { observedAt, ...facts } = args
@@ -1252,18 +1249,6 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
             return { kind: 'refused', code: 'external_spend_reconciliation_required' }
           }
           return { kind: 'accepted', status: 'reversed', replayed: false }
-        case 'moneyLedger:recordBrokeredInvalidOutputLoss':
-          if (options.invalidOutputLossResult === 'throw') {
-            throw new Error('brokered_invalid_output_loss_unavailable')
-          }
-          if (options.invalidOutputLossResult === 'refused') {
-            return { kind: 'refused', code: 'charge_reconciliation_required', retryable: false }
-          }
-          return {
-            kind: 'settled',
-            chargeTransactionRef: String(args.transactionRef),
-            lossTransactionRef: `operation-money-loss:${String(args.invocationRef)}:${String(args.attemptRef)}:1`,
-          }
         case 'moneyX402PaymentAttempts:claimX402PaymentAuthorization': {
           const requestFingerprint = args.requestFingerprint
           const authorization = state.payment.authorization

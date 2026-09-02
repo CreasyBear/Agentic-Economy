@@ -5,8 +5,10 @@ import {
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import type { ExactAmount } from '@/modules/money/public'
 import type { OperationInvokePersistedAuthority } from './internal/convex-schema'
 import {
+  type OperationInvokeInput,
   type OperationInvokeRefusalCode,
   type OperationInvokeResult,
 } from './operation-invoke-contracts'
@@ -15,6 +17,7 @@ import type {
   OperationInvokeStatusResult,
 } from './operation-recovery-contracts'
 import type { OperationListInput, OperationListResult } from './operation-history.actions'
+import type { OperationInspectInput, OperationInspectResult } from './operation-commitment'
 import {
   admitOperationInvoke,
   reserveOperationInvoke,
@@ -67,7 +70,17 @@ export type OperationInvokeDispatchResult =
       nextAction?: string
     }>
 
+export type OperationInvokeServiceRequest = Readonly<{
+  input: OperationInvokeInput
+  principal: AgentAccessPrincipal
+  correlationId: string
+}>
+
 export type OperationInvokeExecutor = Readonly<{
+  invokeOperation(input: OperationInvokeServiceRequest): Promise<OperationInvokeResult>
+}>
+
+type OperationInvokeApplication = Readonly<{
   invokeOperation(input: OperationInvokeRequest): Promise<OperationInvokeResult>
 }>
 
@@ -94,6 +107,7 @@ export type OperationInvokeRuntime = Readonly<{
 }>
 
 export type OperationInvokeService = OperationInvokeExecutor & Readonly<{
+  inspectOperation?(input: Readonly<{ input: OperationInspectInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<OperationInspectResult>
   listInvocations?(input: Readonly<{ input: OperationListInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<OperationListResult>
   readInvocationStatus(input: OperationInvokeRecoveryRequest): Promise<OperationInvokeStatusResult>
   cancelInvocation(input: OperationInvokeRecoveryRequest & Readonly<{ idempotencyKey: string }>): Promise<OperationInvokeRecoveryResult>
@@ -102,7 +116,7 @@ export type OperationInvokeService = OperationInvokeExecutor & Readonly<{
 
 export function createOperationInvokeApplication(
   runtime: OperationInvokeRuntime,
-): OperationInvokeService {
+): OperationInvokeApplication {
   const now = runtime.now ?? Date.now
   const retryAfterMs = runtime.retryAfterMs ?? 1_000
 
@@ -253,6 +267,7 @@ async function invokeReservedOperation(input: Readonly<{
     operationRef: command.operationRef,
     invocationRef: reservation.invocationRef,
     inputDigest,
+    ...(command.decisionPrice === undefined ? {} : { decisionPrice: command.decisionPrice }),
     now: now(),
   })
   if (persistedAuthority === undefined) {
@@ -335,9 +350,13 @@ export function buildOperationInvokeAuthority(input: Readonly<{
   operationRef: string
   invocationRef: string
   inputDigest: string
+  decisionPrice?: ExactAmount
   now: number
 }>): OperationInvokePersistedAuthority | undefined {
-  if (input.descriptor.price.kind !== 'fixed') return undefined
+  const decisionPrice = input.descriptor.price.kind === 'fixed'
+    ? input.descriptor.price.amount
+    : input.decisionPrice
+  if (decisionPrice === undefined) return undefined
   const authorityExpiresAt = Date.parse(input.authority.expiresAt)
   const grantExpiresAt = input.grant.expiresAt
   const readinessExpiresAt = input.operation.readiness.validUntil
@@ -353,7 +372,7 @@ export function buildOperationInvokeAuthority(input: Readonly<{
     ? input.authority.expiresAt
     : new Date(effectiveExpiresAt).toISOString()
   const targetDigest = canonicalDigest(input.operation.identity as StableHashValue)
-  const limits = { amount: input.descriptor.price.amount }
+  const limits = { amount: decisionPrice }
   const reference = input.authority.basis.kind === 'approve_each'
     ? input.authority.basis.authorityRef
     : `operation-authority:${input.invocationRef}`
@@ -380,7 +399,7 @@ export function buildOperationInvokeAuthority(input: Readonly<{
 }
 
 export async function executeOperationInvoke(
-  input: OperationInvokeRequest,
+  input: OperationInvokeServiceRequest,
   executor: OperationInvokeExecutor,
 ): Promise<OperationInvokeResult> {
   return await executor.invokeOperation(input)

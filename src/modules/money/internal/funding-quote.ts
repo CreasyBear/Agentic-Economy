@@ -2,14 +2,14 @@ import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import {
-  calculateCreditTopupFinancials,
-  productionCreditTopupConfig,
-  type CreditTopupConfig,
-} from './topup'
 import { exactAmountSchema, type ExactAmount } from './exact-amount'
+import {
+  ACCOUNT_FUNDING_POLICY_V1,
+  AUD_EXPONENT,
+  quoteAudAccountFunding,
+} from './balanced-journal'
 
-export const FUNDING_QUOTE_CONTRACT_VERSION = 'ae-funding-quote:v1' as const
+export const FUNDING_QUOTE_CONTRACT_VERSION = 'ae-funding-quote:v2' as const
 export const FUNDING_QUOTE_VALIDITY_MS = 5 * 60 * 1_000
 export const FUNDING_CONSTRAINTS_PATH = '/api/v1/funding/constraints' as const
 export const FUNDING_QUOTE_PATH = '/api/v1/funding/quote' as const
@@ -23,12 +23,13 @@ export type FundingQuoteInput = z.infer<typeof fundingQuoteInputSchema>
 export const fundingConstraintsSchema = z.strictObject({
   kind: z.literal('funding_constraints'),
   contractVersion: z.literal(FUNDING_QUOTE_CONTRACT_VERSION),
-  currency: z.string(),
+  currency: z.literal('AUD'),
   minimum: exactAmountSchema,
   maximum: exactAmountSchema,
   increment: exactAmountSchema,
-  processingFeeBps: z.number().int().min(0).max(10_000),
-  amountMeaning: z.literal('buyer_credit_before_processing_fee'),
+  serviceFeeBps: z.number().int().min(0).max(10_000),
+  taxOnServiceFeeBps: z.number().int().min(0).max(10_000),
+  amountMeaning: z.literal('account_aud_principal'),
   quotePath: z.literal(FUNDING_QUOTE_PATH),
 })
 
@@ -41,10 +42,12 @@ export const fundingQuoteSchema = z.strictObject({
   binding: z.literal(false),
   generatedAt: z.number().int().nonnegative(),
   expiresAt: z.number().int().nonnegative(),
-  creditAmount: exactAmountSchema,
-  processingFee: exactAmountSchema,
-  totalCharge: exactAmountSchema,
-  processingFeeBps: z.number().int().min(0).max(10_000),
+  principalAmount: exactAmountSchema,
+  serviceFee: exactAmountSchema,
+  taxOnServiceFee: exactAmountSchema,
+  totalPayment: exactAmountSchema,
+  serviceFeeBps: z.number().int().min(0).max(10_000),
+  taxOnServiceFeeBps: z.number().int().min(0).max(10_000),
   nextActions: z.tuple([z.strictObject({
     action: z.literal('funding.create'),
     kind: z.literal('human_handoff'),
@@ -76,34 +79,17 @@ export const FUNDING_PREFLIGHT_ROUTE_CONTRACTS = Object.freeze([
   },
 ] as const)
 
-export function readFundingConstraints(
-  config: CreditTopupConfig = productionCreditTopupConfig(),
-): FundingConstraints | undefined {
-  const entries = Object.entries(config.minimumByCurrency)
-  if (entries.length !== 1) return undefined
-  const [currency, minimum] = entries[0] ?? []
-  if (currency === undefined || minimum === undefined) return undefined
-  const maximum = config.maximumByCurrency[currency]
-  const processingFeeBps = config.topupFeeBps ?? 500
-  if (
-    maximum === undefined
-    || minimum.currency !== currency
-    || maximum.currency !== currency
-    || minimum.exponent !== maximum.exponent
-    || !Number.isSafeInteger(processingFeeBps)
-    || processingFeeBps < 0
-    || processingFeeBps > 10_000
-  ) return undefined
-
+export function readFundingConstraints(): FundingConstraints {
   return {
     kind: 'funding_constraints',
     contractVersion: FUNDING_QUOTE_CONTRACT_VERSION,
-    currency,
-    minimum,
-    maximum,
-    increment: { currency, units: '1', exponent: minimum.exponent },
-    processingFeeBps,
-    amountMeaning: 'buyer_credit_before_processing_fee',
+    currency: 'AUD',
+    minimum: exactAudAmount(ACCOUNT_FUNDING_POLICY_V1.minimumPrincipalUnits),
+    maximum: exactAudAmount(ACCOUNT_FUNDING_POLICY_V1.maximumPrincipalUnits),
+    increment: exactAudAmount(10_000n),
+    serviceFeeBps: ACCOUNT_FUNDING_POLICY_V1.serviceFeeBps,
+    taxOnServiceFeeBps: ACCOUNT_FUNDING_POLICY_V1.taxOnServiceFeeBps,
+    amountMeaning: 'account_aud_principal',
     quotePath: FUNDING_QUOTE_PATH,
   }
 }
@@ -111,26 +97,24 @@ export function readFundingConstraints(
 export function quoteFunding(input: Readonly<{
   amount: ExactAmount
   now: number
-  config?: CreditTopupConfig
 }>): FundingQuote | undefined {
-  const config = input.config ?? productionCreditTopupConfig()
-  const constraints = readFundingConstraints(config)
-  if (constraints === undefined || !Number.isSafeInteger(input.now) || input.now < 0) return undefined
-  const financials = calculateCreditTopupFinancials({
-    amount: input.amount,
-    accountCurrency: constraints.currency,
-    accountExponent: constraints.minimum.exponent,
-    config,
-  })
+  const constraints = readFundingConstraints()
+  if (!Number.isSafeInteger(input.now)
+    || input.now < 0
+    || input.amount.currency !== 'AUD'
+    || input.amount.exponent !== AUD_EXPONENT) return undefined
+  const financials = quoteAudAccountFunding(BigInt(input.amount.units))
   if (financials === undefined) return undefined
   const generatedAt = input.now
   const expiresAt = generatedAt + FUNDING_QUOTE_VALIDITY_MS
   const quoteMaterial = {
     format: FUNDING_QUOTE_CONTRACT_VERSION,
-    creditAmount: financials.amount,
-    processingFee: financials.processingFee,
-    totalCharge: financials.chargeAmount,
-    processingFeeBps: constraints.processingFeeBps,
+    principalAmount: exactAudAmount(financials.principalUnits),
+    serviceFee: exactAudAmount(financials.serviceFeeUnits),
+    taxOnServiceFee: exactAudAmount(financials.taxUnits),
+    totalPayment: exactAudAmount(financials.totalUnits),
+    serviceFeeBps: constraints.serviceFeeBps,
+    taxOnServiceFeeBps: constraints.taxOnServiceFeeBps,
     generatedAt,
     expiresAt,
   } as const
@@ -142,10 +126,12 @@ export function quoteFunding(input: Readonly<{
     binding: false,
     generatedAt,
     expiresAt,
-    creditAmount: financials.amount,
-    processingFee: financials.processingFee,
-    totalCharge: financials.chargeAmount,
-    processingFeeBps: constraints.processingFeeBps,
+    principalAmount: exactAudAmount(financials.principalUnits),
+    serviceFee: exactAudAmount(financials.serviceFeeUnits),
+    taxOnServiceFee: exactAudAmount(financials.taxUnits),
+    totalPayment: exactAudAmount(financials.totalUnits),
+    serviceFeeBps: constraints.serviceFeeBps,
+    taxOnServiceFeeBps: constraints.taxOnServiceFeeBps,
     nextActions: [{
       action: 'funding.create',
       kind: 'human_handoff',
@@ -156,4 +142,8 @@ export function quoteFunding(input: Readonly<{
       retryClass: 'safe_before_payment_submit',
     }],
   }
+}
+
+function exactAudAmount(units: bigint): ExactAmount {
+  return { currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT }
 }

@@ -117,11 +117,13 @@ export type ExternalSpendRefusalCode =
   | 'external_spend_already_reversed'
   | 'external_spend_custody_policy_invalid'
   | 'external_spend_custody_daily_limit_exceeded'
+  | 'external_spend_commercial_policy_required'
 
 type ExternalSpendHandlerRefusalCode = Exclude<
   ExternalSpendRefusalCode,
   | 'external_spend_custody_policy_invalid'
   | 'external_spend_custody_daily_limit_exceeded'
+  | 'external_spend_commercial_policy_required'
 >
 
 export type ExternalSpendMutationResult =

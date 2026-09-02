@@ -8,7 +8,7 @@ import type {
   ActionConsequenceClass,
   ActionRetryClass,
 } from '@/modules/common/action'
-import { compareExactAmounts, pricingConfigDigest, pricingConfigSchema, type PricingConfig } from '@/modules/money/public'
+import { compareExactAmounts, pricingConfigDecisionAmount, pricingConfigDigest, pricingConfigSchema, type PricingConfig } from '@/modules/money/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { isRecord } from '@/modules/common/is-record'
@@ -193,10 +193,18 @@ export function materializePublishedOperation(input: Readonly<{
     contractRef: contract.ref,
   })
   const parsedPricingConfig = pricingConfigSchema.safeParse(publication.pricingConfig)
+  const pricingMatches = parsedPricingConfig.success && (
+    parsedPricingConfig.data.kind === 'managed_x402'
+      ? offering.presentation.price.kind === 'on_request'
+      : offering.presentation.price.kind === 'fixed'
+        && compareExactAmounts(
+          offering.presentation.price.amount,
+          pricingConfigDecisionAmount(parsedPricingConfig.data),
+        ) === 0
+  )
   if (!parsedPricingConfig.success
     || pricingConfigDigest(parsedPricingConfig.data) !== publication.priceDigest
-    || offering.presentation.price.kind !== 'fixed'
-    || compareExactAmounts(offering.presentation.price.amount, parsedPricingConfig.data.paidAmount) !== 0) {
+    || !pricingMatches) {
     throw new Error('published_operation_pricing_invalid')
   }
   if (!connectionAuthorityIsExact({

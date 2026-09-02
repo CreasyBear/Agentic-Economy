@@ -80,6 +80,7 @@ describe('/operations/invocations/$invocationRef', () => {
   it('renders exact terminal facts and preserves the exact current Operation link', () => {
     renderWithRouter({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'terminal',
@@ -126,6 +127,7 @@ describe('/operations/invocations/$invocationRef', () => {
   it('presents a completed receipt as six recorded stages with money facts and reuse actions', () => {
     renderWithRouter({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'terminal',
@@ -145,13 +147,22 @@ describe('/operations/invocations/$invocationRef', () => {
           transactionRef: 'transaction:settled',
         },
         receipt: {
+          commercialModel: 'account_aud',
           receiptRef: 'receipt:public',
           state: 'settled',
-          network: 'eip155:8453',
-          asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-          providerQuotedAmount: { currency: 'USD', units: '100', exponent: 2 },
-          agenticEconomyFee: { currency: 'USD', units: '25', exponent: 2 },
-          totalBuyerAuthorization: { currency: 'USD', units: '125', exponent: 2 },
+          buyerCharge: { currency: 'AUD', units: '1250000', exponent: 6 },
+          serviceFee: { currency: 'AUD', units: '250000', exponent: 6 },
+          totalBuyerCharge: { currency: 'AUD', units: '1500000', exponent: 6 },
+          providerObligation: {
+            amount: { currency: 'USDC', units: '1000000', exponent: 6 },
+            settlementMethod: 'managed_x402',
+            payoutEligible: false,
+          },
+          providerSettlement: {
+            network: 'eip155:8453',
+            asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+            amount: { currency: 'USDC', units: '1000000', exponent: 6 },
+          },
           priceDigest: 'sha256:price',
           transactionRef: 'transaction:settled',
           evidenceHash: 'sha256:completed',
@@ -164,8 +175,9 @@ describe('/operations/invocations/$invocationRef', () => {
       expect(screen.getByText(new RegExp(`\\d\\. ${stage}`))).toBeTruthy()
     }
     expect(screen.getByRole('heading', { name: 'Money before and after the call' })).toBeTruthy()
-    expect(screen.getByText('Provider quote')).toBeTruthy()
-    expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
+    expect(screen.getByText('Buyer charge')).toBeTruthy()
+    expect(screen.getByText('Provider obligation')).toBeTruthy()
+    expect(screen.getAllByText('AUD 1.250000').length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: 'Run again' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Save capability|Capability saved/ })).toBeNull()
     expect(screen.getByRole('heading', { name: 'Copy as CLI' })).toBeTruthy()
@@ -179,6 +191,7 @@ describe('/operations/invocations/$invocationRef', () => {
   it('keeps a found pending result distinct from completion', () => {
     renderWithRouter({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'in_progress',
@@ -194,7 +207,7 @@ describe('/operations/invocations/$invocationRef', () => {
   })
 
   it('keeps reconciliation required distinct without inventing a result', () => {
-    renderWithRouter({ kind: 'found', invocationRef, operationRef, state: 'reconciliation_required' })
+    renderWithRouter({ kind: 'found', version: 1, invocationRef, operationRef, state: 'reconciliation_required' })
 
     expect(screen.getAllByText('Reconciliation required').length).toBeGreaterThan(0)
     expect(screen.getByText('No canonical result is recorded yet. The state above remains authoritative.')).toBeTruthy()
@@ -211,6 +224,7 @@ describe('/operations/invocations/$invocationRef', () => {
     const onReconcile = vi.fn()
     renderWithRouter({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'reconciliation_required',
@@ -235,6 +249,7 @@ describe('/operations/invocations/$invocationRef', () => {
     const onCancel = vi.fn(async () => undefined)
     const view = renderWithRouter({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'retryable',
@@ -255,6 +270,7 @@ describe('/operations/invocations/$invocationRef', () => {
     view.unmount()
     renderWithRouter({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'in_progress',
@@ -266,6 +282,7 @@ describe('/operations/invocations/$invocationRef', () => {
     const onRefresh = vi.fn()
     const { unmount } = renderWithRouter({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'in_progress',
@@ -277,6 +294,7 @@ describe('/operations/invocations/$invocationRef', () => {
     unmount()
     renderWithRouter({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'in_progress',
@@ -286,6 +304,7 @@ describe('/operations/invocations/$invocationRef', () => {
     cleanup()
     renderWithRouter({
       kind: 'found',
+      version: 2,
       invocationRef,
       operationRef,
       state: 'terminal',
@@ -296,12 +315,13 @@ describe('/operations/invocations/$invocationRef', () => {
   it('replaces a nonterminal displayed state with the current source status after refresh', async () => {
     readStatusMock.mockResolvedValue({
       kind: 'found',
+      version: 2,
       invocationRef,
       operationRef,
       state: 'terminal',
       evidenceHash: 'sha256:refreshed',
     })
-    renderRouteComponent({ kind: 'found', invocationRef, operationRef, state: 'in_progress' })
+    renderRouteComponent({ kind: 'found', version: 1, invocationRef, operationRef, state: 'in_progress' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
 
@@ -313,7 +333,7 @@ describe('/operations/invocations/$invocationRef', () => {
 
   it('keeps the displayed state and makes no newer-state claim when refresh cannot read the source', async () => {
     readStatusMock.mockRejectedValue(new Error('offline'))
-    renderRouteComponent({ kind: 'found', invocationRef, operationRef, state: 'in_progress' })
+    renderRouteComponent({ kind: 'found', version: 1, invocationRef, operationRef, state: 'in_progress' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh current status' }))
 
@@ -325,8 +345,8 @@ describe('/operations/invocations/$invocationRef', () => {
   it('reuses the cancellation key after an unconfirmed transport outcome', async () => {
     cancelMock
       .mockRejectedValueOnce(new Error('transport unavailable'))
-      .mockResolvedValueOnce({ kind: 'found', invocationRef, operationRef, state: 'cancelled' })
-    renderRouteComponent({ kind: 'found', invocationRef, operationRef, state: 'retryable' })
+      .mockResolvedValueOnce({ kind: 'found', version: 2, invocationRef, operationRef, state: 'cancelled' })
+    renderRouteComponent({ kind: 'found', version: 1, invocationRef, operationRef, state: 'retryable' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel invocation' }))
     fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' }))
@@ -343,9 +363,10 @@ describe('/operations/invocations/$invocationRef', () => {
   it('reuses the exact reconciliation attempt after an unconfirmed transport outcome', async () => {
     reconcileMock
       .mockRejectedValueOnce(new Error('transport unavailable'))
-      .mockResolvedValueOnce({ kind: 'found', invocationRef, operationRef, state: 'terminal' })
+      .mockResolvedValueOnce({ kind: 'found', version: 2, invocationRef, operationRef, state: 'terminal' })
     renderRouteComponent({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'reconciliation_required',
@@ -372,9 +393,10 @@ describe('/operations/invocations/$invocationRef', () => {
   it('uses a new reconciliation attempt when the evidence changes', async () => {
     reconcileMock
       .mockRejectedValueOnce(new Error('transport unavailable'))
-      .mockResolvedValueOnce({ kind: 'found', invocationRef, operationRef, state: 'terminal' })
+      .mockResolvedValueOnce({ kind: 'found', version: 2, invocationRef, operationRef, state: 'terminal' })
     renderRouteComponent({
       kind: 'found',
+      version: 1,
       invocationRef,
       operationRef,
       state: 'reconciliation_required',

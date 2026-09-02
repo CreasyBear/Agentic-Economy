@@ -221,19 +221,23 @@ export function reconciliationArgs(
 }
 
 
-export const authorizationAmount = { currency: 'USD', units: '0', exponent: 2 }
-export const authorizationMaximumSpend = { currency: 'USD', units: '0', exponent: 2 }
+export const authorizationAmount = { currency: 'AUD', units: '0', exponent: 6 }
+export const authorizationMaximumSpend = { currency: 'AUD', units: '0', exponent: 6 }
 export const authorizationPriceDigest = canonicalDigest({
-  version: 'pricing:v2',
-  unit: 'call',
-  paidAmount: authorizationAmount,
+  version: 'pricing:v3',
+  kind: 'fixed_aud',
+  currency: 'AUD',
+  exponent: 6,
+  amountUnits: '0',
 })
 export const authorizationOperation: PublishedOperation = (() => {
   const original = buildDevelopmentPublishedOperationEvidence().operation
   const pricingConfig = {
-    version: 'pricing:v2' as const,
-    unit: 'call' as const,
-    paidAmount: authorizationAmount,
+    version: 'pricing:v3' as const,
+    kind: 'fixed_aud' as const,
+    currency: 'AUD' as const,
+    exponent: 6 as const,
+    amountUnits: '0',
   }
   const identity = {
     ...original.identity,

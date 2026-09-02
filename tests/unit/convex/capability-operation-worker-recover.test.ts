@@ -19,7 +19,6 @@ import { eip3009ABI } from '@x402/evm'
 import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, erc20Abi } from 'viem'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { materializeRuntimePublishedOperation } from '@/modules/capability-supply/public'
-import { brokeredChargeReservationForRecovery } from '@/modules/capability-execution/invocation-worker/charge'
 import { recoverCapabilityOperationInvocation, expireAuthorizationRecovery } from '@/modules/capability-execution/invocation-worker/recover'
 import {
   failedX402SettlementAuthorizationDisposition,
@@ -651,37 +650,7 @@ describe('capability operation invocation worker recover', () => {
     expect(paths).not.toContain('moneyLedger:releaseBrokeredInvocationCharge')
   })
 
-  it('recovery-after-unrelated-account-charge', async () => {
-    const worker = createWorker('x402', {
-      environment: 'production',
-      operatorAccountVersion: 2,
-    })
-    const transactionRef = `operation-money:${invocationRef}:${attemptRef}:1`
-    const runQuery = worker.ctx.runQuery as MockCall<QueryCall>
-    const implementation = runQuery.getMockImplementation()
-    if (implementation === undefined) throw new Error('worker_query_implementation_missing')
-    runQuery.mockImplementation(async (reference: unknown, args?: Record<string, unknown>) => {
-      const path = typeof reference === 'string' ? reference : getFunctionName(reference as never)
-      if (path === 'moneyLedger:readInvocationChargeExpectedAccountVersion') {
-        expect(args).toEqual({ transactionRef })
-        return 0
-      }
-      return await implementation(reference, args)
-    })
-
-    const reservation = await brokeredChargeReservationForRecovery(worker.ctx as never, {
-      operation: worker.state.operation,
-      dispatch: worker.state.dispatch as never,
-      durableAttemptRef: attemptRef,
-    })
-
-    expect(reservation).toMatchObject({
-      expectedAccountVersion: 0,
-      args: { expectedAccountVersion: 0, transactionRef },
-    })
-  })
-
-  it('attempt-create-failure-after-external-reserve releases the known reservation without an attempt row', async () => {
+  it('retains the managed reservation when payment-attempt recovery is unavailable', async () => {
     const worker = createWorker('x402', {
       environment: 'production',
       preparePaymentErrorState: 'possibly_submitted',
@@ -702,13 +671,11 @@ describe('capability operation invocation worker recover', () => {
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
 
-    expect(worker.state.mutationCalls).toContainEqual(expect.objectContaining({
-      path: 'moneyLedger:finalizeExternalInvocationSpend',
-      args: expect.objectContaining({
-        submissionStatus: 'not_submitted',
-        settlementStatus: 'not_settled',
-      }),
-    }))
+    const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(paths).not.toContain('moneyLedger:finalizeExternalInvocationSpend')
+    expect(paths).not.toContain('moneyLedger:releaseBrokeredInvocationCharge')
+    expect(paths).toContain('moneyManagedCallLifecycle:markOutcomeUnknown')
+    expect(paths).not.toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'reconciliation_required',
     })
@@ -720,18 +687,11 @@ describe('capability operation invocation worker recover', () => {
     })
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    const finalizations = worker.state.mutationCalls.filter(
-      ({ path }) => path === 'moneyLedger:finalizeExternalInvocationSpend',
-    )
-    expect(finalizations).not.toContainEqual(expect.objectContaining({
-      args: expect.objectContaining({ submissionStatus: 'not_submitted' }),
-    }))
-    expect(finalizations).toContainEqual(expect.objectContaining({
-      args: expect.objectContaining({
-        submissionStatus: 'unknown',
-        settlementStatus: 'unknown',
-      }),
-    }))
+    const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(paths).not.toContain('moneyLedger:finalizeExternalInvocationSpend')
+    expect(paths).not.toContain('moneyLedger:markBrokeredInvocationChargeOutcomeUnknown')
+    expect(paths).toContain('moneyManagedCallLifecycle:markOutcomeUnknown')
+    expect(paths).not.toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'reconciliation_required',
     })
@@ -918,180 +878,6 @@ describe('capability operation invocation worker recover', () => {
       'moneyLedger:finalizeExternalInvocationSpend',
     )
   })
-  it('releases the external and buyer reservations when cancellation follows an external reservation', async () => {
-    const worker = createWorker('x402', { environment: 'production' })
-    const providerRef = worker.state.operation.binding.authority.kind === 'provider_connection'
-      ? worker.state.operation.binding.authority.providerRef
-      : 'provider:test-worker'
-    const externalReservationRef = mintExternalSpendIdentity({
-      principalId: String(worker.state.dispatch.principalId),
-      credentialId: String(worker.state.dispatch.credentialId),
-      grantRef: String(worker.state.dispatch.grantRef),
-      grantGeneration: Number(worker.state.dispatch.grantGeneration),
-      environment: 'production',
-      invocationRef,
-      attemptRef,
-      effectGeneration: 1,
-      operationRef: String(worker.state.dispatch.operationRef),
-      providerRef,
-      paymentIdentifier: 'payment:test-worker',
-      challengeDigest: digest('c'),
-      amount: { currency: 'USD', units: '1', exponent: 2 },
-    }).reservationRef
-    worker.state.payment.prepare = {
-      dispatchRef: invocationRef,
-      operationRef: worker.state.dispatch.operationRef,
-      inputDigest: String(worker.state.dispatch.inputDigest),
-      challengeDigest: digest('c'),
-      attemptRef,
-      effectGeneration: 1,
-      paymentIdentifier: 'payment:test-worker',
-      operationKeyDigest: digest('k'),
-      challengeJson: JSON.stringify({ x402Version: 2 }),
-      selectedRequirementJson: JSON.stringify({
-        scheme: 'exact',
-        network: 'eip155:8453',
-        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-        payTo: '0xmock-provider-recipient',
-      }),
-      scheme: 'exact',
-      network: 'eip155:8453',
-      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-      payTo: '0xmock-provider-recipient',
-      providerEndpoint: 'https://provider.example.test/quote',
-      credentialRef: 'env:AE_X402_CDP_ACCOUNT_NAME',
-      amountUnits: '1',
-      currency: 'USD',
-      exponent: 2,
-      reservationRef: externalReservationRef,
-    }
-    let cancelAfterBuyerReserve = false
-    const runQuery = worker.ctx.runQuery as MockCall<QueryCall>
-    const queryImplementation = runQuery.getMockImplementation()
-    if (queryImplementation === undefined) throw new Error('worker_query_implementation_missing')
-    runQuery.mockImplementation(async (reference: unknown, args?: Record<string, unknown>) => {
-      const path = typeof reference === 'string' ? reference : getFunctionName(reference as never)
-      const result = await queryImplementation(reference, args)
-      if (path !== 'actionInvocationControl:readControl' || !cancelAfterBuyerReserve || result === undefined) return result
-      const control = result as {
-        control: { control: { state: string } }
-      }
-      return {
-        ...control,
-        control: {
-          ...control.control,
-          control: { ...control.control.control, state: 'cancelled' },
-        },
-      }
-    })
-    const runMutation = worker.ctx.runMutation as MockCall<MutationCall>
-    const mutationImplementation = runMutation.getMockImplementation()
-    if (mutationImplementation === undefined) throw new Error('worker_mutation_implementation_missing')
-    runMutation.mockImplementation(async (reference: unknown, args: Record<string, unknown>) => {
-      const path = typeof reference === 'string' ? reference : getFunctionName(reference as never)
-      const result = await mutationImplementation(reference, args)
-      if (path === 'moneyLedger:reserveBrokeredInvocationCharge') cancelAfterBuyerReserve = true
-      return result
-    })
-
-    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'none' })
-
-    const paths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(paths.indexOf('moneyLedger:finalizeExternalInvocationSpend'))
-      .toBeLessThan(paths.indexOf('moneyLedger:releaseBrokeredInvocationCharge'))
-    expect(paths).toContain('moneyLedger:finalizeExternalInvocationSpend')
-    expect(paths).toContain('moneyLedger:releaseBrokeredInvocationCharge')
-    expect(worker.state.unknownCharges).toHaveLength(0)
-  })
-  it('keeps both reservations and projects reconciliation when external release fails', async () => {
-    const worker = createWorker('x402', { environment: 'production' })
-    const providerRef = worker.state.operation.binding.authority.kind === 'provider_connection'
-      ? worker.state.operation.binding.authority.providerRef
-      : 'provider:test-worker'
-    const externalReservationRef = mintExternalSpendIdentity({
-      principalId: String(worker.state.dispatch.principalId),
-      credentialId: String(worker.state.dispatch.credentialId),
-      grantRef: String(worker.state.dispatch.grantRef),
-      grantGeneration: Number(worker.state.dispatch.grantGeneration),
-      environment: 'production',
-      invocationRef,
-      attemptRef,
-      effectGeneration: 1,
-      operationRef: String(worker.state.dispatch.operationRef),
-      providerRef,
-      paymentIdentifier: 'payment:test-worker',
-      challengeDigest: digest('c'),
-      amount: { currency: 'USD', units: '1', exponent: 2 },
-    }).reservationRef
-    worker.state.payment.prepare = {
-      dispatchRef: invocationRef,
-      operationRef: worker.state.dispatch.operationRef,
-      inputDigest: String(worker.state.dispatch.inputDigest),
-      challengeDigest: digest('c'),
-      attemptRef,
-      effectGeneration: 1,
-      paymentIdentifier: 'payment:test-worker',
-      operationKeyDigest: digest('k'),
-      challengeJson: JSON.stringify({ x402Version: 2 }),
-      selectedRequirementJson: JSON.stringify({
-        scheme: 'exact',
-        network: 'eip155:8453',
-        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-        payTo: '0xmock-provider-recipient',
-      }),
-      scheme: 'exact',
-      network: 'eip155:8453',
-      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-      payTo: '0xmock-provider-recipient',
-      providerEndpoint: 'https://provider.example.test/quote',
-      credentialRef: 'env:AE_X402_CDP_ACCOUNT_NAME',
-      amountUnits: '1',
-      currency: 'USD',
-      exponent: 2,
-      reservationRef: externalReservationRef,
-    }
-    let cancelAfterBuyerReserve = false
-    const runQuery = worker.ctx.runQuery as MockCall<QueryCall>
-    const queryImplementation = runQuery.getMockImplementation()
-    if (queryImplementation === undefined) throw new Error('worker_query_implementation_missing')
-    runQuery.mockImplementation(async (reference: unknown, args?: Record<string, unknown>) => {
-      const path = typeof reference === 'string' ? reference : getFunctionName(reference as never)
-      const result = await queryImplementation(reference, args)
-      if (path !== 'actionInvocationControl:readControl' || !cancelAfterBuyerReserve || result === undefined) return result
-      const control = result as {
-        control: { control: { state: string } }
-      }
-      return {
-        ...control,
-        control: {
-          ...control.control,
-          control: { ...control.control.control, state: 'cancelled' },
-        },
-      }
-    })
-    const runMutation = worker.ctx.runMutation as MockCall<MutationCall>
-    const mutationImplementation = runMutation.getMockImplementation()
-    if (mutationImplementation === undefined) throw new Error('worker_mutation_implementation_missing')
-    runMutation.mockImplementation(async (reference: unknown, args: Record<string, unknown>) => {
-      const path = typeof reference === 'string' ? reference : getFunctionName(reference as never)
-      const result = await mutationImplementation(reference, args)
-      if (path === 'moneyLedger:finalizeExternalInvocationSpend') throw new Error('external_finalize_unavailable')
-      if (path === 'moneyLedger:reserveBrokeredInvocationCharge') cancelAfterBuyerReserve = true
-      return result
-    })
-
-    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-
-    const paths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(paths).toContain('moneyLedger:finalizeExternalInvocationSpend')
-    expect(paths).toContain('moneyLedger:markBrokeredInvocationChargeOutcomeUnknown')
-    expect(paths).not.toContain('moneyLedger:releaseBrokeredInvocationCharge')
-    expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'reconciliation_required',
-      dispatchState: 'reconciliation_required',
-      result: { kind: 'reconciliation_required' },
-    })
-  })
   it('replays the canonical terminal effect without a second money entry', async () => {
     const worker = createWorker('http')
     mocks.claimCanonicalInvocation.mockReset()
@@ -1183,23 +969,19 @@ describe('capability operation invocation worker recover', () => {
     expect(worker.state.reconciliations).toHaveLength(0)
   })
 
-  it('keeps brokered x402 reconciliation required when payment evidence persistence fails', async () => {
+  it('keeps managed x402 reconciliation required when payment evidence persistence fails', async () => {
     const worker = createWorker('x402', { failPaymentObservation: true })
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.money).toMatchObject({
-      amount: { currency: 'USD', units: '2', exponent: 2 },
-    })
     expect(worker.state.unknownCharges).toContainEqual(expect.objectContaining({
-      transactionRef: `operation-money:${invocationRef}:${attemptRef}:1`,
-      principalId: 'principal:test-worker',
+      invocationRef,
     }))
     expect(worker.state.reconciliations).toHaveLength(0)
-    const brokeredPaths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(brokeredPaths).toContain('moneyLedger:reserveBrokeredInvocationCharge')
-    expect(brokeredPaths).toContain('moneyLedger:reserveExternalInvocationSpend')
-    expect(brokeredPaths).toContain('moneyLedger:markBrokeredInvocationChargeOutcomeUnknown')
-    expect(brokeredPaths).not.toContain('moneyLedger:finalizeExternalInvocationSpend')
+    const managedPaths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(managedPaths).toContain('moneyManagedCallLifecycle:markPossiblySubmitted')
+    expect(managedPaths).toContain('moneyManagedCallLifecycle:markOutcomeUnknown')
+    expect(managedPaths).not.toContain('moneyLedger:reserveBrokeredInvocationCharge')
+    expect(managedPaths).not.toContain('moneyLedger:reserveExternalInvocationSpend')
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'reconciliation_required',
       dispatchState: 'reconciliation_required',
