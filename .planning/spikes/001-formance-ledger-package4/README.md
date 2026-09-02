@@ -21,8 +21,8 @@ reversals, references, and ledger idempotency to Formance.
   direct PostgreSQL product reads.
 - No custom posting store, balance projection, ledger idempotency, retry
   engine, workflow engine, or free-form production Numscript.
-- Stable Ledger `v2.4.12`, SDK `v7.0.0`, PostgreSQL 16, Node 22, and the
-  SDK's stable `machine` interpreter only.
+- Stack `v3.2.10`, Ledger `v2.4.12`, Gateway `v2.3.1`, SDK `v7.0.0`,
+  PostgreSQL 16, Node 22, and the SDK's stable `machine` interpreter only.
 - The dirty `codex/package4-closure` worktree remains untouched.
 
 ## Ordered gates
