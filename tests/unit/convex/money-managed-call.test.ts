@@ -207,4 +207,26 @@ describe('Formance managed Call evidence', () => {
       obligation: { state: 'reversed' },
     })
   })
+
+  it('blocks only a managed Call whose bound financial scope has an open case', async () => {
+    const backend = convexTest(schema, convexModules)
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('capabilityOperationCommitments', commitment())
+      await ctx.db.insert('capabilityOperationInvocations', invocation())
+      await ctx.db.insert('moneyReconciliationCases', {
+        caseRef: 'money-case:managed-call-operation',
+        accountRef,
+        kind: 'settlement_difference',
+        status: 'open',
+        scopeType: 'operation',
+        scopeRef: operation.operationId,
+        reasonCode: 'settlement_reference_mismatch',
+        evidenceRefs: ['evidence:managed-call-operation'],
+        createdAt: now,
+        updatedAt: now,
+      })
+    })
+    await expect(backend.query(internal.moneyManagedCall.readBooking, { invocationRef }))
+      .resolves.toMatchObject({ kind: 'available', entryRefusalCode: 'financial_scope_locked' })
+  })
 })

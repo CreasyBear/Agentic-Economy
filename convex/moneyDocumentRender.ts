@@ -56,6 +56,7 @@ function titleForKind(kind: string): string {
     case 'funding_receipt': return 'Funding receipt'
     case 'service_fee_document': return 'Service fee document'
     case 'statement': return 'Account statement'
+    case 'daily_close': return 'Signed daily close'
     case 'adjustment': return 'Adjustment document'
     case 'tax_invoice': return 'Tax invoice'
     default: return 'Financial document'

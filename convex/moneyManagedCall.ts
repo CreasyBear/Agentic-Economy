@@ -106,6 +106,7 @@ export const readBooking = internalQuery({
     reservationRefs: v.optional(transactionRefsValue),
     releaseRefs: v.optional(transactionRefsValue),
     settlementRefs: v.optional(transactionRefsValue),
+    entryRefusalCode: v.optional(v.literal('financial_scope_locked')),
   }), v.object({ kind: v.literal('not_found') })),
   handler: async (ctx, args) => {
     const invocation = await ctx.db.query('capabilityOperationInvocations')
@@ -118,9 +119,30 @@ export const readBooking = internalQuery({
     if (commitment === null) return { kind: 'not_found' as const }
     const booking = bookingFromRows(invocation, commitment)
     if (booking === null) return { kind: 'not_found' as const }
+    const scopes = [
+      ['account', booking.accountRef],
+      ['legal_customer', booking.legalCustomerRef],
+      ['treasury_pool', booking.treasuryRef],
+      ['operation', booking.operationRef],
+      ['provider_obligation', `provider-obligation:${booking.invocationRef}`],
+    ] as const
+    let financialScopeLocked = false
+    for (const [scopeType, scopeRef] of scopes) {
+      const openCase = await ctx.db.query('moneyReconciliationCases')
+        .withIndex('by_scopeType_and_scopeRef_and_status', (index) => index
+          .eq('scopeType', scopeType)
+          .eq('scopeRef', scopeRef)
+          .eq('status', 'open'))
+        .first()
+      if (openCase !== null) {
+        financialScopeLocked = true
+        break
+      }
+    }
     return {
       kind: 'available' as const,
       booking,
+      ...(financialScopeLocked ? { entryRefusalCode: 'financial_scope_locked' as const } : {}),
       ...(invocation.formanceFinancialState === undefined
         ? {}
         : { financialState: invocation.formanceFinancialState }),

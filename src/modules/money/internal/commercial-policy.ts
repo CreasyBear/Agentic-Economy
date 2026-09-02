@@ -17,7 +17,7 @@ export type CommercialPolicySandboxFixture = 'managed_x402_deterministic_v1'
 export const PACKAGE4_FORMANCE_REQUIREMENTS = Object.freeze({
   ledgerVersion: 'v2.4.12',
   gatewayVersion: 'v2.3.1',
-  schemaVersion: 'v1.2.0',
+  schemaVersion: 'v1.3.0',
   sdkVersion: '7.0.0',
   sdkArtifactDigest: 'sha256:8caab624bddecebc5fed54dd7a39116279ee7c29e782cb0923e4f9aa00174104',
   maximumSdkIntegerUnits: '9007199254740991',

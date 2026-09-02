@@ -161,6 +161,15 @@ export const moneyTables = {
       v.literal('document_difference'),
     ),
     status: v.union(v.literal('open'), v.literal('resolved')),
+    scopeType: v.optional(v.union(
+      v.literal('account'),
+      v.literal('legal_customer'),
+      v.literal('treasury_pool'),
+      v.literal('operation'),
+      v.literal('provider_obligation'),
+      v.literal('document'),
+    )),
+    scopeRef: v.optional(identifier),
     ownerPrincipalRef: v.optional(identifier),
     transactionRef: v.optional(identifier),
     reasonCode: identifier,
@@ -172,7 +181,8 @@ export const moneyTables = {
   })
     .index('by_caseRef', ['caseRef'])
     .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
-    .index('by_accountRef_and_status_and_createdAt', ['accountRef', 'status', 'createdAt']),
+    .index('by_accountRef_and_status_and_createdAt', ['accountRef', 'status', 'createdAt'])
+    .index('by_scopeType_and_scopeRef_and_status', ['scopeType', 'scopeRef', 'status']),
   moneyDocuments: defineTable({
     documentRef: identifier,
     accountRef: identifier,
@@ -180,6 +190,7 @@ export const moneyTables = {
       v.literal('funding_receipt'),
       v.literal('service_fee_document'),
       v.literal('statement'),
+      v.literal('daily_close'),
       v.literal('adjustment'),
       v.literal('tax_invoice'),
     ),
@@ -193,7 +204,9 @@ export const moneyTables = {
     renderInputDigest: identifier,
     state: v.union(
       v.literal('building'),
+      v.literal('adjusting'),
       v.literal('rendering'),
+      v.literal('awaiting_signature'),
       v.literal('issued'),
       v.literal('failed'),
     ),
@@ -213,6 +226,9 @@ export const moneyTables = {
     csvFileId: v.optional(v.id('_storage')),
     csvFileDigest: v.optional(identifier),
     renderedAt: v.optional(v.number()),
+    signedByPrincipalRef: v.optional(identifier),
+    signedAt: v.optional(v.number()),
+    closeEvidenceDigest: v.optional(identifier),
     createdAt: v.number(),
   })
     .index('by_documentRef', ['documentRef'])

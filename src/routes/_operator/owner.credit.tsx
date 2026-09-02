@@ -14,10 +14,14 @@ import { captureClientExceptionOnClient } from '@/lib/observability/capture-clie
 import { readAgentDirectoryServer } from '@/lib/server/agent-access-console.functions'
 import {
   createOwnerStatementServer,
+  createOwnerDailyCloseServer,
+  readOwnerProviderObligationsServer,
   readOwnerMoneyDocumentsServer,
   readOwnerMoneyReconciliationServer,
   renderOwnerMoneyDocumentServer,
+  signOwnerDailyCloseServer,
   type MoneyDocumentView,
+  type MoneyProviderObligationView,
   type MoneyReconciliationCaseView,
 } from '@/lib/server/money-documents.functions'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
@@ -47,7 +51,10 @@ function OwnerCreditRoute() {
   const readAccountBalance = useServerFn(readAccountFundingBalanceServer)
   const readDocuments = useServerFn(readOwnerMoneyDocumentsServer)
   const readReconciliation = useServerFn(readOwnerMoneyReconciliationServer)
+  const readObligations = useServerFn(readOwnerProviderObligationsServer)
   const createStatement = useServerFn(createOwnerStatementServer)
+  const createDailyClose = useServerFn(createOwnerDailyCloseServer)
+  const signDailyClose = useServerFn(signOwnerDailyCloseServer)
   const renderDocument = useServerFn(renderOwnerMoneyDocumentServer)
   const accountFundingPort = useMemo<AccountFundingPort>(() => ({
     begin: (data) => beginAccountFunding({ data }),
@@ -57,22 +64,25 @@ function OwnerCreditRoute() {
   const [accountBalance, setAccountBalance] = useState<AccountFundingBalance>(emptyAccountBalance)
   const [documents, setDocuments] = useState<readonly MoneyDocumentView[]>([])
   const [reconciliationCases, setReconciliationCases] = useState<readonly MoneyReconciliationCaseView[]>([])
+  const [providerObligations, setProviderObligations] = useState<readonly MoneyProviderObligationView[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [nextDirectory, nextBalance, nextDocuments, nextReconciliation] = await Promise.all([
+      const [nextDirectory, nextBalance, nextDocuments, nextReconciliation, nextObligations] = await Promise.all([
         readDirectory(),
         readAccountBalance(),
         readDocuments({ data: {} }),
         readReconciliation({ data: {} }),
+        readObligations({ data: {} }),
       ])
       setDirectory(nextDirectory)
       setAccountBalance(nextBalance)
       setDocuments(nextDocuments.page)
       setReconciliationCases(nextReconciliation.page)
+      setProviderObligations(nextObligations.page)
       setError(undefined)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
@@ -80,7 +90,7 @@ function OwnerCreditRoute() {
     } finally {
       setLoading(false)
     }
-  }, [readAccountBalance, readDirectory, readDocuments, readReconciliation])
+  }, [readAccountBalance, readDirectory, readDocuments, readObligations, readReconciliation])
 
   useEffect(() => {
     if (localE2E) {
@@ -134,6 +144,7 @@ function OwnerCreditRoute() {
           onCreditRefresh={load}
           documents={documents}
           reconciliationCases={reconciliationCases}
+          providerObligations={providerObligations}
           {...(localE2E
             ? {}
             : {
@@ -142,6 +153,19 @@ function OwnerCreditRoute() {
                   const periodStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
                   const periodEnd = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
                   const result = await createStatement({ data: { periodStart, periodEnd } })
+                  if (result.kind === 'refused') throw new Error(result.code)
+                  await load()
+                },
+                onCreateDailyClose: async () => {
+                  const today = new Date()
+                  const periodEnd = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+                  const periodStart = periodEnd - 24 * 60 * 60 * 1_000
+                  const result = await createDailyClose({ data: { periodStart, periodEnd } })
+                  if (result.kind === 'refused') throw new Error(result.code)
+                  await load()
+                },
+                onSignDailyClose: async (documentRef: string, expectedRenderInputDigest: string) => {
+                  const result = await signDailyClose({ data: { documentRef, expectedRenderInputDigest } })
                   if (result.kind === 'refused') throw new Error(result.code)
                   await load()
                 },

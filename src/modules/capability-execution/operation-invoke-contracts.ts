@@ -14,7 +14,7 @@ import {
 import {
   exactAmountSchema,
   type ExactAmount,
-  type MoneyUsageEvent,
+  type ChargeState,
 } from '@/modules/money/public'
 
 export const operationInvokeRefusalCodeValues = [
@@ -124,7 +124,7 @@ export type PublicReconciliationState = Readonly<{
 export type OperationInvokeUsageSummary = Readonly<{
   usageRef: string
   observedAt: number
-  chargeState: MoneyUsageEvent['chargeState']
+  chargeState: ChargeState
   amount: ExactAmount
   priceDigest: string
   transactionRef?: string

@@ -18,7 +18,7 @@ import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 import type { AccountFundingBalance } from '@/modules/money/server'
 import type { AgentActivityView, AgentDetail, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { formatTimestamp } from '@/lib/ui/format-time'
-import type { MoneyDocumentView, MoneyReconciliationCaseView } from '@/lib/server/money-documents.functions'
+import type { MoneyDocumentView, MoneyProviderObligationView, MoneyReconciliationCaseView } from '@/lib/server/money-documents.functions'
 import { suggestContinuation } from '@/modules/market/suggested-continuation'
 import { AeAccountFundingPanel, type AccountFundingPort } from './AeCreditTopUpPanel'
 
@@ -30,7 +30,10 @@ export type AeOwnerCreditProps = Readonly<{
   onCreditRefresh?: () => void | Promise<void>
   documents?: readonly MoneyDocumentView[]
   reconciliationCases?: readonly MoneyReconciliationCaseView[]
+  providerObligations?: readonly MoneyProviderObligationView[]
   onCreateStatement?: () => Promise<void>
+  onCreateDailyClose?: () => Promise<void>
+  onSignDailyClose?: (documentRef: string, expectedRenderInputDigest: string) => Promise<void>
   onOpenDocument?: (documentRef: string) => Promise<void>
 }>
 
@@ -47,7 +50,10 @@ export function AeOwnerCredit({
   onCreditRefresh,
   documents = [],
   reconciliationCases = [],
+  providerObligations = [],
   onCreateStatement,
+  onCreateDailyClose,
+  onSignDailyClose,
   onOpenDocument,
 }: AeOwnerCreditProps) {
   const items = directory.details
@@ -60,7 +66,7 @@ export function AeOwnerCredit({
   const firstLoadPending = useFirstLoadPending(loading)
   const chargesPhase = stagedListPhase({ firstLoadPending, rows: activity })
   const [selected, setSelected] = useState<CreditChargeRow>()
-  const [documentAction, setDocumentAction] = useState<'idle' | 'creating' | 'opening' | 'saved' | 'failed'>('idle')
+  const [documentAction, setDocumentAction] = useState<'idle' | 'creating' | 'opening' | 'signing' | 'saved' | 'failed'>('idle')
   const insufficientCreditContinuation = suggestContinuation({ subject: 'credit', state: 'insufficient' })
   const columns = useMemo<ColumnDef<CreditChargeRow, unknown>[]>(
     () => [
@@ -142,27 +148,46 @@ export function AeOwnerCredit({
         description="Immutable funding receipts, fee documents, statements, and adjustments retain their source transactions and policy version."
       >
         {onCreateStatement === undefined ? null : (
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={documentAction === 'creating' || documentAction === 'opening'}
-            onClick={() => {
-              setDocumentAction('creating')
-              void onCreateStatement()
-                .then(() => setDocumentAction('saved'))
-                .catch(() => setDocumentAction('failed'))
-            }}
-          >
-            {documentAction === 'creating' ? 'Creating…' : 'Create current statement'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={documentAction === 'creating' || documentAction === 'opening' || documentAction === 'signing'}
+              onClick={() => {
+                setDocumentAction('creating')
+                void onCreateStatement()
+                  .then(() => setDocumentAction('saved'))
+                  .catch(() => setDocumentAction('failed'))
+              }}
+            >
+              {documentAction === 'creating' ? 'Creating…' : 'Create current statement'}
+            </Button>
+            {onCreateDailyClose === undefined ? null : (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={documentAction === 'creating' || documentAction === 'opening' || documentAction === 'signing'}
+                onClick={() => {
+                  setDocumentAction('creating')
+                  void onCreateDailyClose()
+                    .then(() => setDocumentAction('saved'))
+                    .catch(() => setDocumentAction('failed'))
+                }}
+              >
+                Create yesterday’s close
+              </Button>
+            )}
+          </div>
         )}
         <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
           {documentAction === 'creating'
             ? 'Creating statement…'
             : documentAction === 'opening'
               ? 'Preparing document…'
+              : documentAction === 'signing'
+                ? 'Signing daily close…'
               : documentAction === 'saved'
-                ? 'Document ready.'
+                ? 'Document generation started. Its status remains visible below.'
                 : documentAction === 'failed'
                   ? 'The document could not be prepared. Existing records were not changed.'
                   : 'Documents are generated from immutable Account postings.'}
@@ -180,13 +205,30 @@ export function AeOwnerCredit({
                   { label: 'Document', value: documentKindLabel(document.kind) },
                   { label: 'Amount', value: formatCreditAmount({ currency: 'AUD', exponent: 6, units: document.amountUnits }), mono: true },
                   { label: 'Issued', value: formatTimestamp(document.createdAt), mono: true },
+                  { label: 'Status', value: document.state === 'issued' ? 'Ready' : document.state === 'awaiting_signature' ? 'Awaiting owner signature' : document.state === 'failed' ? 'Needs attention' : 'Preparing' },
+                  { label: 'Source records', value: String(document.sourceCount), mono: true },
                   { label: 'Reference', value: document.documentRef, mono: true },
                 ]} />
+                <div className="flex flex-wrap gap-2">
+                {document.kind === 'daily_close' && document.state === 'awaiting_signature' && onSignDailyClose !== undefined ? (
+                  <Button
+                    type="button"
+                    disabled={documentAction !== 'idle' && documentAction !== 'saved'}
+                    onClick={() => {
+                      setDocumentAction('signing')
+                      void onSignDailyClose(document.documentRef, document.renderInputDigest)
+                        .then(() => setDocumentAction('saved'))
+                        .catch(() => setDocumentAction('failed'))
+                    }}
+                  >
+                    Sign close
+                  </Button>
+                ) : null}
                 {onOpenDocument === undefined ? null : (
                   <Button
                     type="button"
                     variant="secondary"
-                    disabled={documentAction === 'creating' || documentAction === 'opening'}
+                    disabled={document.state !== 'issued' || documentAction === 'creating' || documentAction === 'opening'}
                     onClick={() => {
                       setDocumentAction('opening')
                       void onOpenDocument(document.documentRef)
@@ -194,9 +236,10 @@ export function AeOwnerCredit({
                         .catch(() => setDocumentAction('failed'))
                     }}
                   >
-                    Open document
+                    {document.state === 'issued' ? 'Open document' : 'Preparing…'}
                   </Button>
                 )}
+                </div>
               </div>
             ))}
           </div>
@@ -205,7 +248,7 @@ export function AeOwnerCredit({
 
       <AeSection
         title="Reconciliation"
-        description="Every detected processor, treasury, settlement, projection, or document difference remains an owned case until evidence closes it."
+        description="Processor, treasury, settlement, or document differences remain scope-limited cases until an owner closes them with evidence."
       >
         {reconciliationCases.length === 0 ? (
           <AeEmptyState
@@ -219,8 +262,31 @@ export function AeOwnerCredit({
                 { label: 'Difference', value: item.kind.replaceAll('_', ' ') },
                 { label: 'Status', value: item.status },
                 { label: 'Owner', value: item.ownerPrincipalRef ?? 'Unassigned' },
+                { label: 'Affected scope', value: item.scopeType === undefined ? 'Legacy Account case' : `${item.scopeType.replaceAll('_', ' ')} · ${item.scopeRef ?? 'Unknown'}` },
                 { label: 'Reason', value: item.reasonCode.replaceAll('_', ' ') },
                 { label: 'Reference', value: item.caseRef, mono: true },
+              ]} />
+            ))}
+          </div>
+        )}
+      </AeSection>
+
+      <AeSection
+        title="Provider obligations"
+        description="Managed x402 obligations retain distinct buyer AUD and Provider USDC evidence. They are never eligible for a second payout."
+      >
+        {providerObligations.length === 0 ? (
+          <AeEmptyState title="No Provider obligations" description="A managed x402 Call creates one attributable upstream obligation." />
+        ) : (
+          <div className="grid gap-intra">
+            {providerObligations.map((obligation) => (
+              <AeFactList key={obligation.obligationRef} facts={[
+                { label: 'Provider', value: obligation.providerRef },
+                { label: 'Buyer amount', value: formatCreditAmount({ currency: 'AUD', exponent: 6, units: obligation.buyerAmountUnits }), mono: true },
+                { label: 'Provider amount', value: formatCreditAmount({ currency: 'USDC', exponent: 6, units: obligation.providerAmountUnits }), mono: true },
+                { label: 'State', value: obligation.state },
+                { label: 'Payout', value: 'Ineligible — settled by x402' },
+                { label: 'Reference', value: obligation.obligationRef, mono: true },
               ]} />
             ))}
           </div>
@@ -299,6 +365,7 @@ function documentKindLabel(kind: MoneyDocumentView['kind']): string {
     case 'funding_receipt': return 'Funding receipt'
     case 'service_fee_document': return 'Service fee document'
     case 'statement': return 'Statement'
+    case 'daily_close': return 'Daily close'
     case 'adjustment': return 'Adjustment document'
     case 'tax_invoice': return 'Tax invoice'
   }

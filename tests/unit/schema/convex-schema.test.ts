@@ -196,7 +196,7 @@ const requiredIndexes = {
   moneyUsageEvents: ['by_principalId_and_credentialId_and_currency_and_observedAt', 'by_businessId_and_observedAt', 'by_invocationRef', 'by_usageRef'],
   moneyCredentialUsageSummaries: ['by_principalId_and_credentialId_and_currency'],
   moneyCommercialPolicies: ['by_policyRef', 'by_environment_and_family_and_lifecycle'],
-  moneyReconciliationCases: ['by_caseRef', 'by_accountRef_and_createdAt', 'by_accountRef_and_status_and_createdAt'],
+  moneyReconciliationCases: ['by_caseRef', 'by_accountRef_and_createdAt', 'by_accountRef_and_status_and_createdAt', 'by_scopeType_and_scopeRef_and_status'],
   moneyDocuments: ['by_documentRef', 'by_accountRef_and_createdAt'],
   moneyDocumentSnapshotPages: ['by_pageRef', 'by_documentRef_and_position'],
   moneyFundingCommands: ['by_commandRef', 'by_idempotencyKey', 'by_externalRef', 'by_accountRef_and_createdAt'],

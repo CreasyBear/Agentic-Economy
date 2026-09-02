@@ -179,6 +179,17 @@ export type FormancePeriodSpendResult =
   | Readonly<{ kind: 'setup_required'; code: string }>
   | Readonly<{ kind: 'unavailable'; code: string }>
 
+export type FormanceStatementPageResult =
+  | Readonly<{
+      kind: 'available'
+      transactionRefs: readonly string[]
+      exactAmountUnits: string
+      continueCursor: string
+      isDone: boolean
+    }>
+  | Readonly<{ kind: 'setup_required'; code: string }>
+  | Readonly<{ kind: 'unavailable'; code: string }>
+
 const leaf: FormanceChartSegment = { dotSelf: {} }
 
 function fixed(children: Record<string, FormanceChartSegment>): FormanceChartSegment {
@@ -413,7 +424,19 @@ send $exposure_amount (
   destination = $legal_settled
 )`,
     }),
-    BUYER_ADJUSTED: transferTemplate('Append a buyer AUD adjustment'),
+    BUYER_ADJUSTED: Object.freeze({
+      description: 'Append a document-rounding adjustment without changing customer availability',
+      runtime: 'machine' as const,
+      script: `vars {
+  account $source
+  account $destination
+  monetary $amount
+}
+send $amount (
+  source = $source allowing unbounded overdraft
+  destination = $destination
+)`,
+    }),
     TREASURY_CAPACITY_SYNCED: Object.freeze({
       description: 'Establish one immutable controlled-capacity generation',
       runtime: 'machine' as const,
@@ -912,6 +935,96 @@ export async function readFormancePeriodSpend(
     source: 'formance_transaction_cursor',
     authoritativeForConsequences: false,
   })
+}
+
+export async function readFormanceStatementPage(
+  context: FormanceContext,
+  input: Readonly<{
+    accountDigest: string
+    periodStartAt: number
+    periodEndAt: number
+    snapshotCutoffAt: number
+    cursor?: string
+  }>,
+): Promise<FormanceStatementPageResult> {
+  const startedAt = Date.now()
+  if (!DIGEST_PATTERN.test(input.accountDigest)
+    || !Number.isSafeInteger(input.periodStartAt)
+    || !Number.isSafeInteger(input.periodEndAt)
+    || !Number.isSafeInteger(input.snapshotCutoffAt)
+    || input.periodStartAt < 0
+    || input.periodEndAt <= input.periodStartAt
+    || input.snapshotCutoffAt < input.periodEndAt
+    || input.periodEndAt - input.periodStartAt > 366 * 24 * 60 * 60 * 1_000
+    || (input.cursor !== undefined && (input.cursor.length < 1 || input.cursor.length > 2_000))) {
+    return Object.freeze({ kind: 'setup_required', code: 'formance_statement_query_invalid' })
+  }
+  try {
+    const response = await context.sdk.ledger.v2.listTransactions(
+      input.cursor === undefined
+        ? {
+            ledger: context.configuration.ledger,
+            pageSize: 15,
+            pit: new Date(input.snapshotCutoffAt),
+            sort: 'id:asc',
+            query: {
+              $and: [
+                { $match: { 'metadata[account_digest]': input.accountDigest } },
+                { $gte: { timestamp: new Date(input.periodStartAt).toISOString() } },
+                { $lt: { timestamp: new Date(input.periodEndAt).toISOString() } },
+              ],
+            },
+          }
+        : { cursor: input.cursor, ledger: context.configuration.ledger },
+      NO_RETRY,
+    )
+    const page = response.v2TransactionsCursorResponse?.cursor
+    if (page === undefined || page.data.length > 15) {
+      return Object.freeze({ kind: 'unavailable', code: 'formance_statement_response_invalid' })
+    }
+    const transactionRefs: string[] = []
+    let exactAmountUnits = 0n
+    for (const transaction of page.data) {
+      if (transaction.reverted || transaction.template !== 'BUYER_SALE_SETTLED') continue
+      if (transaction.reference === undefined || !COMMAND_REFERENCE_PATTERN.test(transaction.reference)) {
+        return Object.freeze({ kind: 'setup_required', code: 'formance_statement_transaction_invalid' })
+      }
+      let transactionUnits = 0n
+      for (const posting of transaction.postings) {
+        if (posting.asset !== AUD_ASSET
+          || !/^calls:[a-f0-9]{64}:buyer_reserved$/u.test(posting.source)
+          || (posting.destination !== 'platform:revenue:sales'
+            && posting.destination !== 'platform:tax:gst')) continue
+        const units = formanceSafeUnitsFromSdk(posting.amount)
+        if (units === undefined) {
+          return Object.freeze({ kind: 'setup_required', code: 'formance_unsafe_integer' })
+        }
+        transactionUnits += BigInt(units)
+      }
+      if (transactionUnits === 0n) {
+        return Object.freeze({ kind: 'setup_required', code: 'formance_statement_transaction_invalid' })
+      }
+      exactAmountUnits += transactionUnits
+      if (canonicalFormanceUnits(exactAmountUnits.toString(), false) === undefined) {
+        return Object.freeze({ kind: 'setup_required', code: 'formance_unsafe_integer' })
+      }
+      transactionRefs.push(transaction.reference)
+    }
+    if (page.hasMore && (page.next === undefined || page.next.length < 1 || page.next.length > 2_000)) {
+      return Object.freeze({ kind: 'unavailable', code: 'formance_statement_cursor_invalid' })
+    }
+    recordMetric('read_statement_page', 'available', startedAt)
+    return Object.freeze({
+      kind: 'available',
+      transactionRefs: Object.freeze(transactionRefs),
+      exactAmountUnits: exactAmountUnits.toString(),
+      continueCursor: page.hasMore ? page.next! : '',
+      isDone: !page.hasMore,
+    })
+  } catch {
+    recordMetric('read_statement_page', 'unavailable', startedAt)
+    return Object.freeze({ kind: 'unavailable', code: 'formance_read_unavailable' })
+  }
 }
 
 export async function executeFormanceMoneyCommand(

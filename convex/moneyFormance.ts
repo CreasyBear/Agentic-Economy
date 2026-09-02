@@ -9,12 +9,14 @@ import {
   readFormanceConfiguration,
   readFormanceHealth,
   readFormancePeriodSpend,
+  readFormanceStatementPage,
   readFormanceTransactionByReference,
   type FormanceMoneyResult,
 } from '../src/modules/money/formance'
 import {
   bookFormanceFundingReversal,
   bookFormanceFundingSettlement,
+  bookFormanceBuyerAdjustment,
   canRebindFormanceLegalCustomer,
   formanceAccountMetadataDigest,
   readFormanceDisplayBalance,
@@ -165,6 +167,18 @@ const periodSpendResult = v.union(
   unavailable,
 )
 
+const statementPageResult = v.union(
+  v.object({
+    kind: v.literal('available'),
+    transactionRefs: v.array(v.string()),
+    exactAmountUnits: v.string(),
+    continueCursor: v.string(),
+    isDone: v.boolean(),
+  }),
+  setupRequired,
+  unavailable,
+)
+
 export const health = internalAction({
   args: {},
   returns: healthResult,
@@ -236,6 +250,53 @@ export const readPeriodSpend = internalAction({
           periodStartAt: args.periodStartAt,
           periodEndAt: args.periodEndAt,
         })
+  },
+})
+
+export const readStatementPage = internalAction({
+  args: {
+    accountRef: v.string(),
+    periodStartAt: v.number(),
+    periodEndAt: v.number(),
+    snapshotCutoffAt: v.number(),
+    cursor: v.optional(v.string()),
+  },
+  returns: statementPageResult,
+  handler: async (_ctx, args) => {
+    const accountDigest = formanceAccountMetadataDigest(args.accountRef)
+    if (accountDigest === undefined) {
+      return { kind: 'setup_required' as const, code: 'formance_statement_query_invalid' }
+    }
+    const context = configuredContext()
+    const result = context.kind === 'setup_required'
+      ? context
+      : await readFormanceStatementPage(context.context, {
+          accountDigest,
+          periodStartAt: args.periodStartAt,
+          periodEndAt: args.periodEndAt,
+          snapshotCutoffAt: args.snapshotCutoffAt,
+          ...(args.cursor === undefined ? {} : { cursor: args.cursor }),
+        })
+    return result.kind === 'available'
+      ? { ...result, transactionRefs: [...result.transactionRefs] }
+      : result
+  },
+})
+
+export const bookBuyerAdjustment = internalAction({
+  args: {
+    documentRef: v.string(),
+    accountRef: v.string(),
+    residualUnits: v.string(),
+    policyDigest: v.string(),
+    snapshotDigest: v.string(),
+  },
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await bookFormanceBuyerAdjustment(context.context, args))
   },
 })
 

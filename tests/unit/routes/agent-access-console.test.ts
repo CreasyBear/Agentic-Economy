@@ -6,13 +6,7 @@ import {
   readAgentCredentialSources,
 } from '@/modules/agent-access/agent-access-console'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
-import {
-  accountRefForOwner,
-  createInMemoryMoneyQueryPort,
-  createLedgerState,
-  type MoneyAccount,
-  type MoneyUsageEvent,
-} from '@/modules/money/public'
+import type { ChargeState, MoneyQueryPort } from '@/modules/money/public'
 import type { OperationCompareResult } from '@/modules/capability-supply/public'
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
@@ -30,22 +24,20 @@ const key: AgentAccessKeyInventoryItem = {
   expired: false,
 }
 
-const account: MoneyAccount = {
-  accountRef: accountRefForOwner(ownerId, 'USD'),
-  accountKind: 'operator_credit',
-  accountId: ownerId,
-  balance: { currency: 'USD', units: '2500', exponent: 2 },
-  recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
-  version: 1,
-  state: 'active',
-  createdAt: 1,
-  updatedAt: 2,
-}
-
-const usage: MoneyUsageEvent = {
-  usageRef: 'usage-console-1',
+const account = {
   principalId,
   accountId: ownerId,
+  balance: { currency: 'USD', units: '2500', exponent: 2 },
+  autoRecharge: {
+    enabled: false,
+    threshold: { currency: 'USD', units: '0', exponent: 2 },
+    rechargeAmount: { currency: 'USD', units: '0', exponent: 2 },
+  },
+  evidence: 'labelled_local_dev' as const,
+}
+
+const usage = {
+  activityRef: 'usage-console-1',
   credentialId: key.keyId,
   serviceRef: 'service:quote',
   offeringRef: 'offering:quote',
@@ -54,10 +46,28 @@ const usage: MoneyUsageEvent = {
   attemptRef: 'attempt:one',
   operationKey: 'quote.latest',
   priceDigest: 'price:one',
-  chargeState: 'paid',
-  amount: { currency: 'USD', units: '500', exponent: 2 },
+  chargeState: 'paid' as ChargeState,
+  grossAmount: { currency: 'USD', units: '500', exponent: 2 },
   transactionRef: 'transaction:one',
   observedAt: 10,
+}
+
+function moneyPort(operationKey = usage.operationKey): MoneyQueryPort {
+  const activity = { ...usage, operationKey }
+  return {
+    readCreditAccount: async () => account,
+    listCreditActivity: async () => ({ page: [activity], isDone: true, continueCursor: '' }),
+    readKeyUsage: async () => ({
+      credentialId: key.keyId,
+      callCount: 1,
+      paidCallCount: 1,
+      freeCallCount: 0,
+      grossSpend: usage.grossAmount,
+      states: ['paid'] as const,
+    }),
+    readProviderEarnings: async () => { throw new Error('unused') },
+    readPayoutStatus: async () => { throw new Error('unused') },
+  }
 }
 
 const grant = {
@@ -81,11 +91,7 @@ const grant = {
 
 describe('agent access money seam', () => {
   it('reads exact key balance, bounded activity, and per-key spend from the public query port', async () => {
-    const ledger = { ...createLedgerState([account]), usageEvents: [usage], usageSummaries: new Map([[`${usage.principalId}\u0000${usage.credentialId}\u0000${usage.amount.currency}`, { principalId: usage.principalId, credentialId: usage.credentialId, callCount: 1, paidCallCount: 1, freeCallCount: 0, grossSpend: { currency: 'USD', units: '500', exponent: 2 }, states: ['paid'] as const }]]) }
-    const [result] = await readAgentCredentialSources([key], createInMemoryMoneyQueryPort({
-      ledger,
-      resolveOwnerId: (candidate) => candidate === principalId ? ownerId : undefined,
-    }), [grant])
+    const [result] = await readAgentCredentialSources([key], moneyPort(), [grant])
 
     expect(result).toMatchObject({
       principalId,
@@ -99,10 +105,7 @@ describe('agent access money seam', () => {
 
   it('projects canonical Operation and supplier labels onto task activity', async () => {
     const operationRef = `operation:v1:${'a'.repeat(64)}`
-    const [readback] = await readAgentCredentialSources([key], createInMemoryMoneyQueryPort({
-      ledger: { ...createLedgerState([account]), usageEvents: [{ ...usage, operationKey: operationRef }] },
-      resolveOwnerId: () => ownerId,
-    }), [grant])
+    const [readback] = await readAgentCredentialSources([key], moneyPort(operationRef), [grant])
     if (readback === undefined) throw new Error('expected agent readback')
     const enriched = await enrichAgentDirectoryActivity(projectAgentDirectory(
       [readback],

@@ -132,22 +132,6 @@ const applyFundingEventResultValue = v.union(
   }),
   v.object({ kind: v.literal('refused'), code: v.string(), retryable: v.boolean() }),
 )
-const accountBalanceResultValue = v.union(
-  v.object({
-    kind: v.literal('available'),
-    accountRef: v.string(),
-    balance: v.object({
-      currency: v.literal('AUD'),
-      units: v.string(),
-      exponent: v.literal(6),
-    }),
-    locked: v.boolean(),
-    version: v.number(),
-    updatedAt: v.optional(v.number()),
-    lastTransactionRef: v.optional(v.string()),
-  }),
-  v.object({ kind: v.literal('refused'), code: v.string(), retryable: v.boolean() }),
-)
 const fundingBookingValue = v.object({
   commandRef: v.string(),
   idempotencyKey: v.string(),
@@ -476,8 +460,9 @@ async function readAccountBalanceSubjectHandler(ctx: QueryCtx) {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return refused('billing_identity_missing')
   const openCase = await ctx.db.query('moneyReconciliationCases')
-    .withIndex('by_accountRef_and_status_and_createdAt', (builder) => builder
-      .eq('accountRef', actor.canonicalAccountRef)
+    .withIndex('by_scopeType_and_scopeRef_and_status', (builder) => builder
+      .eq('scopeType', 'account')
+      .eq('scopeRef', actor.canonicalAccountRef)
       .eq('status', 'open'))
     .first()
   return {

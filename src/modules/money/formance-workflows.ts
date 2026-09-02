@@ -86,6 +86,14 @@ export type FormanceManagedCallRelease = FormanceManagedCallFinalization & Reado
   submissionProvenAbsent: true
 }>
 
+export type FormanceBuyerAdjustment = Readonly<{
+  documentRef: string
+  accountRef: string
+  residualUnits: string
+  policyDigest: string
+  snapshotDigest: string
+}>
+
 export type FormanceDisplayBalanceResult =
   | Readonly<{
       kind: 'available'
@@ -258,6 +266,53 @@ export async function settleFormanceManagedCall(
   input: FormanceManagedCallFinalization,
 ): Promise<FormanceMoneyResult> {
   return executePreparedBulk(context, prepareFormanceManagedCallSettlement(input))
+}
+
+export function prepareFormanceBuyerAdjustment(input: FormanceBuyerAdjustment): PreparedCommand {
+  if (!boundedReference(input.documentRef)
+    || !boundedReference(input.accountRef)
+    || !/^-?[1-9]\d{0,15}$/u.test(input.residualUnits)
+    || !SHA256.test(input.policyDigest)
+    || !SHA256.test(input.snapshotDigest)) return refused('formance_buyer_adjustment_input_invalid')
+  const signedUnits = BigInt(input.residualUnits)
+  const absoluteUnits = signedUnits < 0n ? -signedUnits : signedUnits
+  const amount = formanceMonetaryVariable('AUD', absoluteUnits.toString())
+  if (amount === undefined) return refused('formance_buyer_adjustment_input_invalid')
+  const accountDigest = digestReference('account', input.accountRef)
+  const adjustmentAccount = `adjustments:${digestReference('document', input.documentRef)}:buyer`
+  const commandIdentity = { documentRef: input.documentRef, kind: 'statement-rounding' }
+  const idempotencyDigest = digestValue('document-adjustment-idempotency', commandIdentity)
+  return Object.freeze({
+    kind: 'prepared',
+    command: Object.freeze({
+      commandRef: formanceReference(commandIdentity, 'buyer-adjustment'),
+      idempotencyKey: idempotencyDigest,
+      schemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+      template: 'BUYER_ADJUSTED',
+      variables: Object.freeze({
+        source: signedUnits > 0n ? adjustmentAccount : 'platform:revenue:sales',
+        destination: signedUnits > 0n ? 'platform:revenue:sales' : adjustmentAccount,
+        amount,
+      }),
+      metadata: Object.freeze({
+        account_digest: accountDigest,
+        command_digest: digestValue('document-adjustment-command', {
+          format: 'ae.formance-document-adjustment:v1',
+          ...input,
+        }),
+        external_evidence_digest: stripDigest(input.snapshotDigest),
+        idempotency_digest: idempotencyDigest,
+        policy_digest: stripDigest(input.policyDigest),
+      }),
+    }),
+  })
+}
+
+export async function bookFormanceBuyerAdjustment(
+  context: FormanceContext,
+  input: FormanceBuyerAdjustment,
+): Promise<FormanceMoneyResult> {
+  return executePrepared(context, prepareFormanceBuyerAdjustment(input))
 }
 
 export async function syncFormanceCapacity(

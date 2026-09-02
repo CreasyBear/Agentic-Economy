@@ -9,6 +9,8 @@ import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contrac
 import { isRecord } from '@/modules/common/is-record'
 import {
   createOperationInvokeApplication,
+  type OperationInvokeIdempotencyReservation,
+  type OperationInvokePortRefusal,
   type OperationInvokeRuntime,
 } from '@/modules/capability-execution/operation-invoke'
 import type { OperationInvokeResult } from '@/modules/capability-execution/operation-invoke-contracts'
@@ -312,6 +314,90 @@ async function persistProjectedInvokeResult(
   await persistProjectedInvocation(ctx, principal, result, state.reservationWasReplayed)
 }
 
+type ReservationResult = Awaited<ReturnType<OperationInvokeRuntime['idempotency']['reserve']>>
+type ReservedInvocation = Extract<ReservationResult, { kind: 'reserved' | 'replayed' }>
+
+async function abandonFinancialReservation(
+  ctx: ActionCtx,
+  principal: AgentAccessPrincipal,
+  reservation: OperationInvokeIdempotencyReservation,
+  retryable: boolean,
+): Promise<OperationInvokePortRefusal> {
+  await ctx.runMutation(internal.capabilityOperationInvocations.abandon, {
+    ...reservation,
+    ownerId: principal.ownerId,
+  })
+  return {
+    kind: 'refused',
+    code: 'commercial_policy_unavailable',
+    retryable,
+  }
+}
+
+async function attachFormanceReservation(
+  ctx: ActionCtx,
+  principal: AgentAccessPrincipal,
+  result: ReservedInvocation,
+  booking: Parameters<typeof ctx.runAction>[1],
+): Promise<ReservationResult> {
+  const booked = await ctx.runAction(internal.moneyFormance.reserveManagedCall, booking)
+  if (booked.kind === 'completed') {
+    const attached = await ctx.runMutation(internal.moneyManagedCall.attachReservation, {
+      invocationRef: result.reservation.invocationRef,
+      transactionRefs: [...booked.transactionRefs],
+    })
+    if (attached.kind !== 'refused') return result
+    await ctx.runMutation(internal.moneyManagedCall.markReservationUnknown, {
+      invocationRef: result.reservation.invocationRef,
+      reference: booked.transactionRefs[0] ?? `formance-reservation:${result.reservation.invocationRef}`,
+      statusRef: `operation-status:${result.reservation.invocationRef}`,
+    })
+    return { kind: 'replayed', reservation: result.reservation }
+  }
+  if (booked.kind === 'outcome_unknown') {
+    await ctx.runMutation(internal.moneyManagedCall.markReservationUnknown, {
+      invocationRef: result.reservation.invocationRef,
+      reference: booked.reference,
+      statusRef: booked.statusRef,
+    })
+    return { kind: 'replayed', reservation: result.reservation }
+  }
+  return await abandonFinancialReservation(
+    ctx,
+    principal,
+    result.reservation,
+    booked.kind === 'unavailable',
+  )
+}
+
+async function reserveFormanceBackedInvocation(
+  ctx: ActionCtx,
+  principal: AgentAccessPrincipal,
+  reservation: OperationInvokeIdempotencyReservation,
+  operationJson: string | undefined,
+  input: Record<string, unknown>,
+): Promise<ReservationResult> {
+  const result = await ctx.runMutation(internal.capabilityOperationInvocations.reserve, {
+    ...reservation,
+    ownerId: principal.ownerId,
+    ...(operationJson === undefined ? {} : { operationJson }),
+    inputJson: JSON.stringify(input),
+    now: Date.now(),
+  })
+  if (result.kind !== 'reserved' && result.kind !== 'replayed') return result
+  const material = await ctx.runQuery(internal.moneyManagedCall.readBooking, {
+    invocationRef: result.reservation.invocationRef,
+  })
+  if (material.kind === 'not_found' || material.entryRefusalCode === 'financial_scope_locked') {
+    return await abandonFinancialReservation(ctx, principal, result.reservation, false)
+  }
+  if (material.financialState === 'outcome_unknown') {
+    return { kind: 'replayed', reservation: result.reservation }
+  }
+  if (material.financialState === 'reserved') return result
+  return await attachFormanceReservation(ctx, principal, result, material.booking)
+}
+
 export async function invokeHandler(
   ctx: ActionCtx,
   args: InvokeArgs,
@@ -428,71 +514,14 @@ export async function invokeHandler(
     idempotency: {
       reserve: async (reservation) => {
         const current = await readCurrentOperation()
-        const result = await ctx.runMutation(internal.capabilityOperationInvocations.reserve, {
-          ...reservation,
-          ownerId: principal.ownerId,
-          ...(current.kind === 'valid' ? { operationJson: current.operationJson } : {}),
-          inputJson: JSON.stringify(args.input),
-          now: Date.now(),
-        })
+        const result = await reserveFormanceBackedInvocation(
+          ctx,
+          principal,
+          reservation,
+          current.kind === 'valid' ? current.operationJson : undefined,
+          args.input,
+        )
         if (result.kind !== 'reserved' && result.kind !== 'replayed') return result
-        const material = await ctx.runQuery(internal.moneyManagedCall.readBooking, {
-          invocationRef: result.reservation.invocationRef,
-        })
-        if (material.kind === 'not_found') {
-          await ctx.runMutation(internal.capabilityOperationInvocations.abandon, {
-            ...result.reservation,
-            ownerId: principal.ownerId,
-          })
-          return {
-            kind: 'refused' as const,
-            code: 'commercial_policy_unavailable' as const,
-            retryable: false,
-          }
-        }
-        if (material.financialState === 'outcome_unknown') {
-          reservedInvocationRef = result.reservation.invocationRef
-          reservationWasReplayed = true
-          return { kind: 'replayed' as const, reservation: result.reservation }
-        }
-        if (material.financialState !== 'reserved') {
-          const booked = await ctx.runAction(internal.moneyFormance.reserveManagedCall, material.booking)
-          if (booked.kind === 'completed') {
-            const attached = await ctx.runMutation(internal.moneyManagedCall.attachReservation, {
-              invocationRef: result.reservation.invocationRef,
-              transactionRefs: [...booked.transactionRefs],
-            })
-            if (attached.kind === 'refused') {
-              await ctx.runMutation(internal.moneyManagedCall.markReservationUnknown, {
-                invocationRef: result.reservation.invocationRef,
-                reference: booked.transactionRefs[0] ?? `formance-reservation:${result.reservation.invocationRef}`,
-                statusRef: `operation-status:${result.reservation.invocationRef}`,
-              })
-              reservedInvocationRef = result.reservation.invocationRef
-              reservationWasReplayed = true
-              return { kind: 'replayed' as const, reservation: result.reservation }
-            }
-          } else if (booked.kind === 'outcome_unknown') {
-            await ctx.runMutation(internal.moneyManagedCall.markReservationUnknown, {
-              invocationRef: result.reservation.invocationRef,
-              reference: booked.reference,
-              statusRef: booked.statusRef,
-            })
-            reservedInvocationRef = result.reservation.invocationRef
-            reservationWasReplayed = true
-            return { kind: 'replayed' as const, reservation: result.reservation }
-          } else {
-            await ctx.runMutation(internal.capabilityOperationInvocations.abandon, {
-              ...result.reservation,
-              ownerId: principal.ownerId,
-            })
-            return {
-              kind: 'refused' as const,
-              code: 'commercial_policy_unavailable' as const,
-              retryable: booked.kind === 'unavailable',
-            }
-          }
-        }
         reservedInvocationRef = result.reservation.invocationRef
         if (result.kind === 'reserved') reservationWasCreated = true
         else reservationWasReplayed = true

@@ -8,7 +8,11 @@ import { withSourceWrite } from '../../helpers/source-write-admission'
 
 const reserve = anyApi.moneyAccountFunding?.reserve
 const bind = anyApi.moneyAccountFunding?.bind
-if (reserve === undefined || bind === undefined) throw new Error('Account funding functions missing')
+const signDailyClose = anyApi.moneyDocuments?.signOwnerDailyClose
+const listCases = anyApi.moneyReconciliationCases?.listOwnerCases
+if (reserve === undefined || bind === undefined || signDailyClose === undefined || listCases === undefined) {
+  throw new Error('Account funding functions missing')
+}
 
 describe('Account AUD funding through Formance', () => {
   it('prepares one exact booking and finalizes only the returned Formance reference', async () => {
@@ -115,5 +119,63 @@ describe('Account AUD funding through Formance', () => {
         readback, operationKey: 'moneyAccountFunding:applyVerifiedEvent', correlationId: 'evt_conflict',
       }))
     expect(result).toEqual({ kind: 'refused', code: 'payment_binding_invalid', retryable: false })
+  })
+
+  it('binds a daily close signature to the authenticated owner and frozen document digest', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'formance-daily-close')
+    const documentRef = 'money-document:daily_close:test'
+    const renderInputDigest = `sha256:${'7'.repeat(64)}`
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('moneyDocuments', {
+        documentRef,
+        accountRef: fixture.canonicalAccountRef,
+        kind: 'daily_close',
+        sourceTransactionRefs: ['ae-p4:test:settle-buyer'],
+        amountUnits: '10000',
+        residualUnits: '0',
+        policyRefs: ['commercial-policy:sandbox'],
+        policyDigest: `sha256:${'8'.repeat(64)}`,
+        templateVersion: 'ae.money-document:html:v1',
+        renderInputJson: '{}',
+        renderInputDigest,
+        state: 'awaiting_signature',
+        environment: 'sandbox',
+        sourceCount: 1,
+        snapshotDigest: `sha256:${'9'.repeat(64)}`,
+        snapshotCutoffAt: 1_800_000_000_000,
+        periodStart: 1_799_913_600_000,
+        periodEnd: 1_800_000_000_000,
+        pageCount: 1,
+        exactAmountUnits: '10000',
+        fileId: await ctx.storage.store(new Blob(['close'])),
+        fileDigest: `sha256:${'a'.repeat(64)}`,
+        csvFileId: await ctx.storage.store(new Blob(['close,csv'])),
+        csvFileDigest: `sha256:${'b'.repeat(64)}`,
+        renderedAt: 1_800_000_000_001,
+        createdAt: 1_800_000_000_000,
+      })
+    })
+
+    await expect(fixture.owner.mutation(signDailyClose, {
+      documentRef,
+      expectedRenderInputDigest: `sha256:${'0'.repeat(64)}`,
+      confirmation: documentRef,
+    })).resolves.toEqual({ kind: 'refused', code: 'daily_close_confirmation_invalid' })
+    const signed = await fixture.owner.mutation(signDailyClose, {
+      documentRef,
+      expectedRenderInputDigest: renderInputDigest,
+      confirmation: documentRef,
+    })
+    expect(signed).toMatchObject({ kind: 'signed', documentRef })
+    if (signed.kind !== 'signed') throw new Error('daily close not signed')
+    await expect(fixture.owner.mutation(signDailyClose, {
+      documentRef,
+      expectedRenderInputDigest: renderInputDigest,
+      confirmation: documentRef,
+    })).resolves.toEqual({ kind: 'replayed', documentRef, evidenceDigest: signed.evidenceDigest })
+    await expect(fixture.owner.query(listCases, {
+      paginationOpts: { numItems: 10, cursor: null },
+    })).resolves.toMatchObject({ page: [] })
   })
 })

@@ -148,7 +148,10 @@ describe('owner credit target', () => {
         sourceTransactionRefs: ['journal:call:one'],
         policyRefs: ['commercial-policy:sandbox:v1'],
         policyDigest: `sha256:${'a'.repeat(64)}`,
-        templateVersion: 'ae.money-document:text:v1',
+        renderInputDigest: `sha256:${'b'.repeat(64)}`,
+        templateVersion: 'ae.money-document:html:v1',
+        state: 'issued',
+        sourceCount: 1,
         rendered: false,
         createdAt: 1_788_120_000_000,
       }]}
@@ -178,7 +181,7 @@ describe('owner credit target', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Create current statement' }))
     await waitFor(() => expect(onCreateStatement).toHaveBeenCalledOnce())
-    expect(screen.getByRole('status').textContent).toContain('Document ready.')
+    expect(screen.getByRole('status').textContent).toContain('Document generation started.')
 
     fireEvent.click(screen.getByRole('button', { name: 'Open document' }))
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('money-document:statement:one'))

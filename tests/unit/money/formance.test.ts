@@ -13,6 +13,7 @@ import {
   readFormanceConfiguration,
   readFormanceHealth,
   readFormancePeriodSpend,
+  readFormanceStatementPage,
   validateFormanceMoneyCommand,
   validFormanceMetadata,
   type FormanceContext,
@@ -20,6 +21,7 @@ import {
 import {
   prepareFormanceFundingReversal,
   prepareFormanceFundingSettlement,
+  prepareFormanceBuyerAdjustment,
   prepareFormanceManagedCallRelease,
   prepareFormanceManagedCallReservation,
   prepareFormanceManagedCallSettlement,
@@ -36,7 +38,7 @@ afterEach(() => {
 
 describe('Package 4 official Formance boundary', () => {
   it('locks the immutable schema to the approved named machine templates', () => {
-    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.2.0')
+    expect(PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion).toBe('v1.3.0')
     expect(PACKAGE4_FORMANCE_SCHEMA_DIGEST).toMatch(/^sha256:[a-f0-9]{64}$/u)
     expect(Object.keys(PACKAGE4_FORMANCE_SCHEMA.transactions ?? {})).toEqual(
       PACKAGE4_FORMANCE_TEMPLATE_NAMES,
@@ -71,7 +73,7 @@ describe('Package 4 official Formance boundary', () => {
     expect(settlement).toMatchObject({
       kind: 'prepared',
       command: {
-        schemaVersion: 'v1.2.0',
+        schemaVersion: 'v1.3.0',
         template: 'FUNDING_SETTLED',
         variables: {
           principal_amount: 'AUD/6 100000000',
@@ -188,7 +190,7 @@ describe('Package 4 official Formance boundary', () => {
     let referenceReads = 0
     const ledger = {
       getSchema: vi.fn(async () => ({
-        v2SchemaResponse: { data: { version: 'v1.2.0', ...PACKAGE4_FORMANCE_SCHEMA } },
+        v2SchemaResponse: { data: { version: 'v1.3.0', ...PACKAGE4_FORMANCE_SCHEMA } },
       })),
       listTransactions: vi.fn(async ({ query }: { query: { $match: { reference: string } } }) => {
         referenceReads += 1
@@ -326,6 +328,99 @@ describe('Package 4 official Formance boundary', () => {
       cursor: 'cursor:two',
       ledger: 'test-ledger',
     })
+  })
+
+  it('freezes statement pages at one Formance point-in-time and continues with the official cursor', async () => {
+    const reference = `ae-p4:${DIGEST_B}:settle-buyer`
+    const listTransactions = vi.fn()
+      .mockResolvedValueOnce({
+        v2TransactionsCursorResponse: { cursor: {
+          data: [{
+            id: 1n,
+            reference,
+            reverted: false,
+            template: 'BUYER_SALE_SETTLED',
+            metadata: { account_digest: DIGEST_A },
+            postings: [
+              { source: `calls:${DIGEST_B}:buyer_reserved`, destination: 'platform:revenue:sales', asset: 'AUD/6', amount: 12_345n },
+              { source: `calls:${DIGEST_B}:buyer_reserved`, destination: 'platform:tax:gst', asset: 'AUD/6', amount: 1_000n },
+            ],
+          }],
+          hasMore: true,
+          next: 'cursor:two',
+          pageSize: 15,
+        } },
+      })
+      .mockResolvedValueOnce({
+        v2TransactionsCursorResponse: { cursor: { data: [], hasMore: false, pageSize: 15 } },
+      })
+    const context = {
+      configuration: { environment: 'sandbox', gatewayUrl: 'http://127.0.0.1:8080', ledger: 'test-ledger', requestTimeoutMs: 1_000 },
+      sdk: { ledger: { v2: { listTransactions } } },
+    } as unknown as FormanceContext
+    const periodStartAt = Date.parse('2026-09-01T00:00:00.000Z')
+    const periodEndAt = Date.parse('2026-09-02T00:00:00.000Z')
+    const snapshotCutoffAt = Date.parse('2026-09-03T00:00:00.000Z')
+
+    await expect(readFormanceStatementPage(context, {
+      accountDigest: DIGEST_A,
+      periodStartAt,
+      periodEndAt,
+      snapshotCutoffAt,
+    })).resolves.toEqual({
+      kind: 'available',
+      transactionRefs: [reference],
+      exactAmountUnits: '13345',
+      continueCursor: 'cursor:two',
+      isDone: false,
+    })
+    await expect(readFormanceStatementPage(context, {
+      accountDigest: DIGEST_A,
+      periodStartAt,
+      periodEndAt,
+      snapshotCutoffAt,
+      cursor: 'cursor:two',
+    })).resolves.toEqual({
+      kind: 'available',
+      transactionRefs: [],
+      exactAmountUnits: '0',
+      continueCursor: '',
+      isDone: true,
+    })
+    expect(listTransactions.mock.calls[0]?.[0]).toMatchObject({
+      ledger: 'test-ledger',
+      pageSize: 15,
+      pit: new Date(snapshotCutoffAt),
+      sort: 'id:asc',
+    })
+    expect(listTransactions.mock.calls[1]?.[0]).toEqual({ cursor: 'cursor:two', ledger: 'test-ledger' })
+  })
+
+  it('maps either sign of a document residual to the one named adjustment template', () => {
+    const base = {
+      documentRef: 'money-document:daily-close:one',
+      accountRef: 'account:one',
+      policyDigest: `sha256:${DIGEST_A}`,
+      snapshotDigest: `sha256:${DIGEST_B}`,
+    }
+    const increase = prepareFormanceBuyerAdjustment({ ...base, residualUnits: '433' })
+    const decrease = prepareFormanceBuyerAdjustment({ ...base, residualUnits: '-4567' })
+    expect(increase).toMatchObject({
+      kind: 'prepared',
+      command: {
+        template: 'BUYER_ADJUSTED',
+        variables: { destination: 'platform:revenue:sales', amount: 'AUD/6 433' },
+      },
+    })
+    expect(decrease).toMatchObject({
+      kind: 'prepared',
+      command: {
+        template: 'BUYER_ADJUSTED',
+        variables: { source: 'platform:revenue:sales', amount: 'AUD/6 4567' },
+      },
+    })
+    expect(PACKAGE4_FORMANCE_SCHEMA.transactions?.BUYER_ADJUSTED?.script)
+      .toContain('allowing unbounded overdraft')
   })
 
   it('accepts loopback only for sandbox and requires Cloudflare Access for remote Gateway use', () => {
