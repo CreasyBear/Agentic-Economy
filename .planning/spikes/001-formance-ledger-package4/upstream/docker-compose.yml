@@ -1,0 +1,61 @@
+name: ae-p4-formance-spike
+
+volumes:
+  postgres:
+    name: ae-p4-formance-spike-postgres
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ledger"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    command:
+      - -c
+      - max_connections=200
+      - -c
+      - log_min_messages=info
+    environment:
+      POSTGRES_USER: ledger
+      POSTGRES_DB: ledger
+      POSTGRES_HOST_AUTH_METHOD: trust
+      PGDATA: /data/postgres
+    volumes:
+      - postgres:/data/postgres
+
+  migrate:
+    image: ghcr.io/formancehq/ledger:v2.4.12
+    command: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_URI: postgresql://ledger@postgres/ledger?sslmode=disable
+
+  worker:
+    image: ghcr.io/formancehq/ledger:v2.4.12
+    command: ["worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_URI: postgresql://ledger@postgres/ledger?sslmode=disable
+      POSTGRES_MAX_OPEN_CONNS: "40"
+      POSTGRES_MAX_IDLE_CONNS: "40"
+      POSTGRES_CONN_MAX_IDLE_TIME: 5m
+
+  ledger:
+    image: ghcr.io/formancehq/ledger:v2.4.12
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_URI: postgresql://ledger@postgres/ledger?sslmode=disable
+      POSTGRES_MAX_OPEN_CONNS: "40"
+      POSTGRES_MAX_IDLE_CONNS: "40"
+      POSTGRES_CONN_MAX_IDLE_TIME: 5m
+      BULK_PARALLEL: "10"
+    ports:
+      - 127.0.0.1:3068:3068

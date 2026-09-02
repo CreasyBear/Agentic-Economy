@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+
+  migrate:
+    image: ghcr.io/formancehq/ledger@sha256:4d72bd5cbf0a83a0cce9b37ea96a376ba33197517e40b97d16c43c36753727df
+
+  worker:
+    image: ghcr.io/formancehq/ledger@sha256:4d72bd5cbf0a83a0cce9b37ea96a376ba33197517e40b97d16c43c36753727df
+    environment:
+      EXPERIMENTAL_FEATURES: "false"
+      EXPERIMENTAL_EXPORTERS: "false"
+
+  ledger:
+    image: ghcr.io/formancehq/ledger@sha256:4d72bd5cbf0a83a0cce9b37ea96a376ba33197517e40b97d16c43c36753727df
+    environment:
+      AUTO_UPGRADE: "false"
+      EXPERIMENTAL_FEATURES: "false"
+      EXPERIMENTAL_EXPORTERS: "false"
+      EXPERIMENTAL_NUMSCRIPT_INTERPRETER: "false"
+      SCHEMA_ENFORCEMENT_MODE: strict
+    healthcheck:
+      test: ["CMD", "/usr/bin/curl", "--fail", "--silent", "http://localhost:3068/_healthcheck"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
