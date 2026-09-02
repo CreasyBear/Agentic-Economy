@@ -1,0 +1,16 @@
+{
+  "name": "ae-package4-formance-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:exactness": "node sdk-exactness.mjs"
+  },
+  "dependencies": {
+    "@formance/formance-sdk": "file:vendor/formance-formance-sdk-7.0.0.tgz"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "packageManager": "npm@11.5.1"
+}

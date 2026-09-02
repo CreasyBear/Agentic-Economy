@@ -25,3 +25,6 @@ services:
       timeout: 5s
       retries: 15
       start_period: 5s
+
+  gateway:
+    image: ghcr.io/formancehq/gateway@sha256:eb05d46f3b33a4802929f60e47e933c61885689b8d7ad114e151036b3432a257

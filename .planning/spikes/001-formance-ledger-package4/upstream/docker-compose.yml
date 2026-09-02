@@ -59,3 +59,13 @@ services:
       BULK_PARALLEL: "10"
     ports:
       - 127.0.0.1:3068:3068
+
+  gateway:
+    image: ghcr.io/formancehq/gateway:v2.0.31
+    depends_on:
+      ledger:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:8080:8080
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro

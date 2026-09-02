@@ -2,9 +2,9 @@
 
 **Idea key:** `formance-package4-ledger`
 
-**Status:** in progress
+**Status:** complete
 
-**Decision:** pending
+**Decision:** `REJECT`
 
 ## Hypothesis
 
@@ -43,16 +43,22 @@ gates are not run after a hard-gate failure.
 ## Reproduction
 
 All commands are run from this directory. The Docker Compose project is
-`ae-p4-formance-spike`; only `postgres`, `migrate`, `ledger`, and `worker` are
-started. The named volume is `ae-p4-formance-spike-postgres` and is disposable.
+`ae-p4-formance-spike`; only `postgres`, `migrate`, `ledger`, `worker`, and
+the user-approved official `gateway` are started. The named volume is
+`ae-p4-formance-spike-postgres` and is disposable.
 
 ```sh
 docker compose -f upstream/docker-compose.yml -f docker-compose.spike.yml \
-  up -d postgres migrate ledger worker
+  up -d postgres migrate ledger worker gateway
 ```
 
-The exact SDK command will be recorded with the gate evidence after the
-isolated manifest and lockfile are installed.
+```sh
+npm ci --ignore-scripts
+npm run test:exactness
+```
+
+The exactness command exits non-zero. See `PR1-EVIDENCE.md` and
+`DECISION.md`.
 
 ## Scope after a decision
 
