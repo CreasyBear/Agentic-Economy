@@ -2,7 +2,7 @@
 
 **Idea key:** `formance-package4-ledger`
 
-**Status:** in progress
+**Status:** complete
 
 **Decision:** `ADOPT`
 
@@ -35,6 +35,9 @@ reversals, references, and ledger idempotency to Formance.
    Node Action runtime.
 4. If and only if both exactness gates pass, test native booking semantics,
    idempotency, contention, recovery, pagination, backup, restore, and upgrade.
+
+All four gates passed. See `PR2-EVIDENCE.md`, `PR3-EVIDENCE.md`, and
+`PR4-EVIDENCE.md`.
 
 Package 4 supports only exact values at or below JavaScript's safe-integer
 ceiling while using SDK v7. Values above that range are unsupported and must
@@ -91,7 +94,6 @@ required by the current official schema and stable interpreter.
 
 ## Scope after a decision
 
-`ADOPT` permits a separate Package 4 cutover only after the remaining native
-booking, contention, recovery, and operational gates pass. The cutover removes
-the paused Convex journal atomically. This spike itself changes neither
-implementation.
+`ADOPT` now permits the separate Package 4 cutover. The cutover removes the
+paused Convex journal atomically. This spike itself changes neither application
+implementation nor the original dirty Package 4 worktree.

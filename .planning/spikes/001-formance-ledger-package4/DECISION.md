@@ -4,6 +4,11 @@
 
 `ADOPT`
 
+All bounded exactness, Convex runtime, native booking, contention, recovery,
+pagination, restart, backup/restore, health/metrics, and v2.4.11-to-v2.4.12
+upgrade gates passed. The Formance cutover is authorized subject to the
+boundaries in this decision.
+
 Formance Ledger v2.4.12 may preserve exact integers internally, but the pinned
 official TypeScript SDK v7.0.0 does not preserve Package 4 amounts at its public
 API boundary:

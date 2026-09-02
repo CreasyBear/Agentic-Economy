@@ -3,6 +3,7 @@
 | Component | Pin | Immutable evidence |
 |---|---|---|
 | Formance Ledger | `v2.4.12` | source commit `f43a7078e7e1b9f6a354307ef994431593bf57e0`; arm64 image `ghcr.io/formancehq/ledger@sha256:4d72bd5cbf0a83a0cce9b37ea96a376ba33197517e40b97d16c43c36753727df` |
+| Formance Ledger upgrade source | `v2.4.11` | arm64 image `ghcr.io/formancehq/ledger@sha256:f6a7955a0a29ecb9890f955fd578d47b4649276dcd6cdb613ad5376fb6c8b43c`; used only for the disposable upgrade rehearsal |
 | Formance Gateway | `v2.0.31` | arm64 image `ghcr.io/formancehq/gateway@sha256:eb05d46f3b33a4802929f60e47e933c61885689b8d7ad114e151036b3432a257` |
 | Formance TypeScript SDK | `@formance/formance-sdk@7.0.0` | official release commit `c3b90dd5134ac91ee221f77b39992d617280098e`; isolated package and lockfile added by gate 1 |
 | PostgreSQL | `16-alpine` | arm64 image `postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685` |
