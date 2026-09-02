@@ -625,6 +625,10 @@ function digestReference(kind: string, reference: unknown): string {
   return digestValue('account-segment', { kind, reference })
 }
 
+export function formanceAccountMetadataDigest(accountRef: string): string | undefined {
+  return boundedReference(accountRef) ? digestReference('account', accountRef) : undefined
+}
+
 function digestValue(kind: string, value: unknown): string {
   return stripDigest(canonicalDigest({ format: `ae.formance-${kind}:v1`, value }))
 }

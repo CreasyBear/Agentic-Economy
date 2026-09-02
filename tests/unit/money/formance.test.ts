@@ -12,6 +12,7 @@ import {
   mapFormanceWriteError,
   readFormanceConfiguration,
   readFormanceHealth,
+  readFormancePeriodSpend,
   validateFormanceMoneyCommand,
   validFormanceMetadata,
   type FormanceContext,
@@ -227,6 +228,104 @@ describe('Package 4 official Formance boundary', () => {
       replayed: true,
     })
     expect(ledger.createBulk).toHaveBeenCalledOnce()
+  })
+
+  it('reads exact Account period spend through official filtered cursors', async () => {
+    const listTransactions = vi.fn()
+      .mockResolvedValueOnce({
+        v2TransactionsCursorResponse: {
+          cursor: {
+            data: [
+              {
+                id: 1n,
+                timestamp: new Date('2026-09-01T01:00:00.000Z'),
+                reverted: false,
+                template: 'BUYER_SALE_SETTLED',
+                metadata: { account_digest: DIGEST_A },
+                postings: [
+                  { source: `calls:${DIGEST_B}:buyer_reserved`, destination: 'platform:revenue:sales', asset: 'AUD/6', amount: 2n },
+                  { source: `calls:${DIGEST_B}:buyer_reserved`, destination: 'platform:tax:gst', asset: 'AUD/6', amount: 1n },
+                ],
+              },
+              {
+                id: 2n,
+                timestamp: new Date('2026-09-01T02:00:00.000Z'),
+                reverted: false,
+                template: 'CALL_RESERVED_AUD',
+                metadata: { account_digest: DIGEST_A },
+                postings: [{ source: 'accounts:a:available', destination: 'calls:b:buyer_reserved', asset: 'AUD/6', amount: 50n }],
+              },
+            ],
+            hasMore: true,
+            next: 'cursor:two',
+            pageSize: 15,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        v2TransactionsCursorResponse: {
+          cursor: {
+            data: [{
+              id: 3n,
+              timestamp: new Date('2026-09-02T01:00:00.000Z'),
+              reverted: false,
+              template: 'BUYER_SALE_SETTLED',
+              metadata: { account_digest: DIGEST_A },
+              postings: [
+                { source: `calls:${DIGEST_A}:buyer_reserved`, destination: 'platform:revenue:sales', asset: 'AUD/6', amount: 4n },
+                { source: `calls:${DIGEST_A}:buyer_reserved`, destination: 'platform:tax:gst', asset: 'AUD/6', amount: 1n },
+              ],
+            }],
+            hasMore: false,
+            pageSize: 15,
+          },
+        },
+      })
+    const context = {
+      configuration: {
+        environment: 'sandbox',
+        gatewayUrl: 'http://127.0.0.1:8080',
+        ledger: 'test-ledger',
+        requestTimeoutMs: 1_000,
+      },
+      sdk: { ledger: { v2: { listTransactions } } },
+    } as unknown as FormanceContext
+    const periodStartAt = Date.parse('2026-09-01T00:00:00.000Z')
+    const periodEndAt = Date.parse('2026-10-01T00:00:00.000Z')
+
+    await expect(readFormancePeriodSpend(context, {
+      accountDigest: DIGEST_A,
+      periodStartAt,
+      periodEndAt,
+      now: 123,
+    })).resolves.toEqual({
+      kind: 'available',
+      currency: 'AUD',
+      exponent: 6,
+      spendUnits: '8',
+      transactionCountUnits: '2',
+      periodStartAt,
+      periodEndAt,
+      observedAt: 123,
+      source: 'formance_transaction_cursor',
+      authoritativeForConsequences: false,
+    })
+    expect(listTransactions.mock.calls[0]?.[0]).toMatchObject({
+      ledger: 'test-ledger',
+      pageSize: 15,
+      sort: 'id:asc',
+      query: {
+        $and: [
+          { $match: { 'metadata[account_digest]': DIGEST_A } },
+          { $gte: { timestamp: '2026-09-01T00:00:00.000Z' } },
+          { $lt: { timestamp: '2026-10-01T00:00:00.000Z' } },
+        ],
+      },
+    })
+    expect(listTransactions.mock.calls[1]?.[0]).toEqual({
+      cursor: 'cursor:two',
+      ledger: 'test-ledger',
+    })
   })
 
   it('accepts loopback only for sandbox and requires Cloudflare Access for remote Gateway use', () => {

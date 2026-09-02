@@ -227,7 +227,14 @@ const requiredIndexes = {
   registrySearchDocuments: ['by_documentId', 'by_business', 'by_offering', 'by_publicStatus_updatedAt'],
   disputes: ['by_business_status'],
   capabilityOperationInvocations: ['by_invocationRef', 'by_credentialId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_invocationRef', 'by_ownerId_and_state_and_createdAt'],
-  capabilityOperationCallProjections: ['by_callRef', 'by_accountRef_and_createdAt', 'by_accountRef_and_principalRef_and_createdAt'],
+  capabilityOperationCallProjections: [
+    'by_callRef',
+    'by_accountRef_and_createdAt',
+    'by_accountRef_and_principalRef_and_createdAt',
+    'by_accountRef_and_operationRef_and_createdAt',
+    'by_accountRef_and_providerRef_and_createdAt',
+    'by_accountRef_and_applicationRef_and_createdAt',
+  ],
   capabilityOperationCommitments: ['by_commitmentRef', 'by_credentialId_and_createdAt', 'by_state_and_expiresAt'],
   sellerOnboardingCanaryRearmAudits: ['by_auditRef', 'by_invocationRef', 'by_canaryRef'],
   providerConsequenceJournal: [

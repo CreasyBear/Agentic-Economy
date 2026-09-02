@@ -176,5 +176,29 @@ describe('Account Call projection', () => {
       call.accountRef === fixture.canonicalAccountRef && call.principalRef === 'principal:selected'
     ))).toBe(true)
 
+    const readOwnerUsage = anyApi.capabilityOperationCalls?.readOwnerUsage
+    if (readOwnerUsage === undefined) throw new Error('Call usage query missing')
+    await expect(fixture.owner.query(readOwnerUsage, {
+      dimensionKind: 'account',
+      periodStartAt: 0,
+      periodEndAt: 10_001,
+    })).resolves.toMatchObject({
+      kind: 'available',
+      dimensionRef: fixture.canonicalAccountRef,
+      callCountUnits: '5000',
+      completedCountUnits: '5000',
+      outcomeUnknownCountUnits: '0',
+      source: 'convex_call_evidence',
+    })
+    await expect(fixture.owner.query(readOwnerUsage, {
+      dimensionKind: 'agent',
+      dimensionRef: 'principal:selected',
+      periodStartAt: 0,
+      periodEndAt: 10_001,
+    })).resolves.toMatchObject({
+      kind: 'available',
+      callCountUnits: '2500',
+    })
+
   }, 30_000)
 })

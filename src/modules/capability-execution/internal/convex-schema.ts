@@ -317,7 +317,10 @@ export const capabilityOperationInvocationTables = {
   })
     .index('by_callRef', ['callRef'])
     .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
-    .index('by_accountRef_and_principalRef_and_createdAt', ['accountRef', 'principalRef', 'createdAt']),
+    .index('by_accountRef_and_principalRef_and_createdAt', ['accountRef', 'principalRef', 'createdAt'])
+    .index('by_accountRef_and_operationRef_and_createdAt', ['accountRef', 'operationRef', 'createdAt'])
+    .index('by_accountRef_and_providerRef_and_createdAt', ['accountRef', 'providerRef', 'createdAt'])
+    .index('by_accountRef_and_applicationRef_and_createdAt', ['accountRef', 'applicationRef', 'createdAt']),
   capabilityOperationCommitments: defineTable({
     commitmentRef: v.string(),
     principalId: v.string(),

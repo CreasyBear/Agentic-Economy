@@ -160,5 +160,6 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { id: 'test-whitebox-62', importers: ['tests/unit/capability-execution/provider-consequence-bridge.test.ts'], to: 'capability-execution', entry: 'invocation-worker/providerConsequenceBridge.ts', owner: 'source-tests' },
     { id: 'test-whitebox-66', importers: ['tests/unit/capability-supply/readiness-probe-quote.test.ts', 'tests/unit/capability-supply/readiness-probe-http-json.test.ts'], to: 'capability-supply', entry: 'internal/readiness-probe-shared.ts', owner: 'source-tests' },
     { id: 'test-whitebox-68', importers: ['tests/unit/money/executable-rate.test.ts'], to: 'money', entry: 'internal/executable-rate.ts', owner: 'source-tests' },
+    { id: 'test-whitebox-69', importers: ['tests/unit/money/owner-payout-transfer-http.test.ts'], to: 'money', entry: 'internal/payout-transfer-http.ts', owner: 'source-tests' },
   ],
 }

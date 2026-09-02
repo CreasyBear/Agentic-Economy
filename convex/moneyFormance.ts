@@ -8,6 +8,7 @@ import {
   readFormanceAccount,
   readFormanceConfiguration,
   readFormanceHealth,
+  readFormancePeriodSpend,
   readFormanceTransactionByReference,
   type FormanceMoneyResult,
 } from '../src/modules/money/formance'
@@ -15,6 +16,7 @@ import {
   bookFormanceFundingReversal,
   bookFormanceFundingSettlement,
   canRebindFormanceLegalCustomer,
+  formanceAccountMetadataDigest,
   readFormanceDisplayBalance,
   releaseFormanceManagedCall,
   reserveFormanceManagedCall,
@@ -145,6 +147,24 @@ const referenceResult = v.union(
   unavailable,
 )
 
+const periodSpendResult = v.union(
+  v.object({
+    kind: v.literal('available'),
+    currency: v.literal('AUD'),
+    exponent: v.literal(6),
+    spendUnits: v.string(),
+    transactionCountUnits: v.string(),
+    periodStartAt: v.number(),
+    periodEndAt: v.number(),
+    observedAt: v.number(),
+    source: v.literal('formance_transaction_cursor'),
+    authoritativeForConsequences: v.literal(false),
+  }),
+  v.object({ kind: v.literal('empty') }),
+  setupRequired,
+  unavailable,
+)
+
 export const health = internalAction({
   args: {},
   returns: healthResult,
@@ -193,6 +213,29 @@ export const readTransactionByReference = internalAction({
           metadata: { ...result.metadata },
           postings: result.postings.map((posting) => ({ ...posting })),
         }
+  },
+})
+
+export const readPeriodSpend = internalAction({
+  args: {
+    accountRef: v.string(),
+    periodStartAt: v.number(),
+    periodEndAt: v.number(),
+  },
+  returns: periodSpendResult,
+  handler: async (_ctx, args) => {
+    const accountDigest = formanceAccountMetadataDigest(args.accountRef)
+    if (accountDigest === undefined) {
+      return { kind: 'setup_required' as const, code: 'formance_spend_query_invalid' }
+    }
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? context
+      : await readFormancePeriodSpend(context.context, {
+          accountDigest,
+          periodStartAt: args.periodStartAt,
+          periodEndAt: args.periodEndAt,
+        })
   },
 })
 
