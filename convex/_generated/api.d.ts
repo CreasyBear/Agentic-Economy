@@ -155,6 +155,7 @@ import type * as moneyExternalSpendReconcile from "../moneyExternalSpendReconcil
 import type * as moneyExternalSpendReserve from "../moneyExternalSpendReserve.js";
 import type * as moneyExternalSpendReverse from "../moneyExternalSpendReverse.js";
 import type * as moneyExternalSpendShared from "../moneyExternalSpendShared.js";
+import type * as moneyFormance from "../moneyFormance.js";
 import type * as moneyJournal from "../moneyJournal.js";
 import type * as moneyLedger from "../moneyLedger.js";
 import type * as moneyLedgerValues from "../moneyLedgerValues.js";
@@ -352,6 +353,7 @@ declare const fullApi: ApiFromModules<{
   moneyExternalSpendReserve: typeof moneyExternalSpendReserve;
   moneyExternalSpendReverse: typeof moneyExternalSpendReverse;
   moneyExternalSpendShared: typeof moneyExternalSpendShared;
+  moneyFormance: typeof moneyFormance;
   moneyJournal: typeof moneyJournal;
   moneyLedger: typeof moneyLedger;
   moneyLedgerValues: typeof moneyLedgerValues;

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -6,6 +8,7 @@ import {
   scanRuntimeModuleConsumers,
   scanTestOnlyModuleBoundaries,
   validateModuleBoundaryManifest,
+  findFiles,
 } from '@/lib/ui/contract-scans'
 import {
   MODULE_BOUNDARY_MANIFEST,
@@ -59,6 +62,24 @@ describe('module surface and dependency manifest', () => {
         ({ from }) => from === 'adapter' || from === 'convex',
       ).length,
     )
+  })
+
+  it('keeps the official Formance SDK behind one inert Node Action boundary', () => {
+    const files = findFiles([
+      { root: 'src', includeExtensions: ['.ts', '.tsx'] },
+      { root: 'convex', includeExtensions: ['.ts'] },
+    ])
+    const sources = files.map((file) => [file, readFileSync(file, 'utf8')] as const)
+    expect(sources
+      .filter(([, source]) => source.includes("from '@formance/formance-sdk'"))
+      .map(([file]) => file)).toEqual(['src/modules/money/formance.ts'])
+    expect(sources
+      .filter(([, source]) => source.includes('modules/money/formance'))
+      .map(([file]) => file)).toEqual(['convex/moneyFormance.ts'])
+
+    const actionSource = readFileSync('convex/moneyFormance.ts', 'utf8')
+    expect(actionSource).toContain('internalAction')
+    expect(actionSource).not.toMatch(/\baction\s*\(/u)
   })
 
   it('rejects an undeclared deep entry and a forbidden reverse edge', () => {

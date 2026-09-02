@@ -80,6 +80,7 @@
     "@fontsource/aleo": "^5.3.0",
     "@fontsource/dm-mono": "^5.3.0",
     "@fontsource/geist-pixel": "^5.3.0",
+    "@formance/formance-sdk": "file:.planning/spikes/001-formance-ledger-package4/vendor/formance-formance-sdk-7.0.0.tgz",
     "@modelcontextprotocol/sdk": "1.30.0",
     "@noble/curves": "1.9.1",
     "@noble/hashes": "1.8.0",
