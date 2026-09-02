@@ -27,7 +27,7 @@ const parameters: readonly ActionParameter[] = [
 export const operationInspectAction = defineAction<OperationInspectInput, OperationInspectResult>({
   id: OPERATION_INSPECT_ACTION_ID,
   name: 'Inspect and commit an Operation purchase',
-  summary: 'Resolve caller-specific authority, AUD price, budget, balance, treasury capacity, and current terms into one expiring Commitment.',
+  summary: 'Resolve caller-specific authority, AUD price, budget, balance, payment readiness, and current terms into one expiring Commitment.',
   boundaries: [
     'Requires an AE-issued Agent key and resolves Account, Agent Principal, Grant, Operation, pricing, and policy facts server-side.',
     'Creates no Invocation, reservation, signature, payment, or Provider effect.',

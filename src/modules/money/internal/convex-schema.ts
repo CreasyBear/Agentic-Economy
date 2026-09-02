@@ -110,23 +110,6 @@ export const x402PaymentAuthorizationFailureDetailValue = v.union(
   v.literal('readiness_mismatch'),
   v.literal('authority_read_failed'),
 )
-const externalSpendExecutionContext = v.union(
-  v.object({
-    kind: v.literal('market'),
-    paymentProfile: v.union(
-      v.literal('base-usdc-exact'),
-      v.literal('base-sepolia-usdc-exact'),
-    ),
-  }),
-  v.object({
-    kind: v.literal('seller_onboarding_canary'),
-    paymentProfile: v.literal('base-sepolia-usdc-exact'),
-    canaryRef: identifier,
-    canaryCommitmentDigest: identifier,
-    fundingBudgetRef: identifier,
-  }),
-)
-
 export const moneyTables = {
   moneyCommercialPolicies: defineTable({
     policyRef: identifier,
@@ -167,91 +150,6 @@ export const moneyTables = {
       'family',
       'lifecycle',
     ]),
-  moneyLedgerAccounts: defineTable({
-    ledgerAccountRef: identifier,
-    accountRef: identifier,
-    asset: v.literal('AUD'),
-    exponent: v.literal(6),
-    accountKind: v.union(
-      v.literal('cash_clearing_asset'),
-      v.literal('customer_prepayment_liability'),
-      v.literal('call_reservation_liability'),
-      v.literal('service_fee_revenue'),
-      v.literal('tax_payable_liability'),
-      v.literal('provider_obligation_liability'),
-      v.literal('corporate_treasury_asset'),
-      v.literal('adjustment_control'),
-    ),
-    normalBalance: v.union(v.literal('debit'), v.literal('credit')),
-    state: v.union(v.literal('active'), v.literal('locked')),
-    version: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_ledgerAccountRef', ['ledgerAccountRef'])
-    .index('by_accountRef_and_asset_and_accountKind', [
-      'accountRef',
-      'asset',
-      'accountKind',
-    ]),
-  moneyLedgerTransactions: defineTable({
-    transactionRef: identifier,
-    accountRef: identifier,
-    kind: v.union(
-      v.literal('funding_settlement'),
-      v.literal('funding_adjustment'),
-      v.literal('call_reservation'),
-      v.literal('call_settlement'),
-      v.literal('call_release'),
-      v.literal('provider_obligation'),
-      v.literal('treasury_movement'),
-    ),
-    asset: v.literal('AUD'),
-    exponent: v.literal(6),
-    idempotencyKey: identifier,
-    inputDigest: identifier,
-    journalDigest: identifier,
-    debitUnits: units,
-    creditUnits: units,
-    state: v.union(v.literal('posted'), v.literal('reversed')),
-    evidenceRefs,
-    externalRef: v.optional(identifier),
-    reversalOf: v.optional(identifier),
-    occurredAt: v.number(),
-    recordedAt: v.number(),
-  })
-    .index('by_transactionRef', ['transactionRef'])
-    .index('by_idempotencyKey', ['idempotencyKey'])
-    .index('by_accountRef_and_recordedAt', ['accountRef', 'recordedAt'])
-    .index('by_externalRef', ['externalRef']),
-  moneyLedgerPostings: defineTable({
-    postingRef: identifier,
-    transactionRef: identifier,
-    position: v.number(),
-    ledgerAccountRef: identifier,
-    side: v.union(v.literal('debit'), v.literal('credit')),
-    amountUnits: units,
-    asset: v.literal('AUD'),
-    exponent: v.literal(6),
-    createdAt: v.number(),
-  })
-    .index('by_postingRef', ['postingRef'])
-    .index('by_transactionRef_and_position', ['transactionRef', 'position'])
-    .index('by_ledgerAccountRef_and_createdAt', ['ledgerAccountRef', 'createdAt']),
-  moneyBalanceProjections: defineTable({
-    ledgerAccountRef: identifier,
-    accountRef: identifier,
-    asset: v.literal('AUD'),
-    exponent: v.literal(6),
-    balanceUnits: units,
-    version: v.number(),
-    checksum: identifier,
-    state: v.union(v.literal('active'), v.literal('locked')),
-    lastTransactionRef: v.optional(identifier),
-    updatedAt: v.number(),
-  })
-    .index('by_ledgerAccountRef', ['ledgerAccountRef'])
-    .index('by_accountRef_and_asset', ['accountRef', 'asset']),
   moneyReconciliationCases: defineTable({
     caseRef: identifier,
     accountRef: identifier,
@@ -293,16 +191,48 @@ export const moneyTables = {
     templateVersion: identifier,
     renderInputJson: v.string(),
     renderInputDigest: identifier,
+    state: v.union(
+      v.literal('building'),
+      v.literal('rendering'),
+      v.literal('issued'),
+      v.literal('failed'),
+    ),
+    environment: v.union(v.literal('sandbox'), v.literal('production')),
+    sourceCount: v.number(),
+    snapshotDigest: identifier,
+    snapshotCutoffAt: v.optional(v.number()),
+    periodStart: v.optional(v.number()),
+    periodEnd: v.optional(v.number()),
+    nextCursor: v.optional(v.string()),
+    pageCount: v.optional(v.number()),
+    exactAmountUnits: v.optional(units),
+    workId: v.optional(identifier),
+    failureCode: v.optional(identifier),
     fileId: v.optional(v.id('_storage')),
     fileDigest: v.optional(identifier),
+    csvFileId: v.optional(v.id('_storage')),
+    csvFileDigest: v.optional(identifier),
     renderedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index('by_documentRef', ['documentRef'])
     .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt']),
+  moneyDocumentSnapshotPages: defineTable({
+    pageRef: identifier,
+    documentRef: identifier,
+    accountRef: identifier,
+    position: v.number(),
+    transactionRefs: evidenceRefs,
+    exactAmountUnits: units,
+    pageDigest: identifier,
+    createdAt: v.number(),
+  })
+    .index('by_pageRef', ['pageRef'])
+    .index('by_documentRef_and_position', ['documentRef', 'position']),
   moneyFundingCommands: defineTable({
     commandRef: identifier,
     accountRef: identifier,
+    legalCustomerRef: identifier,
     actorPrincipalRef: identifier,
     environment: v.union(v.literal('sandbox'), v.literal('production')),
     currency: v.literal('AUD'),
@@ -346,7 +276,22 @@ export const moneyTables = {
     .index('by_commandRef', ['commandRef'])
     .index('by_idempotencyKey', ['idempotencyKey'])
     .index('by_externalRef', ['externalRef'])
-    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt']),
+    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
+    .index('by_accountRef_and_state', ['accountRef', 'state'])
+    .index('by_legalCustomerRef_and_state', ['legalCustomerRef', 'state']),
+  moneyLegalCustomerBindings: defineTable({
+    accountRef: identifier,
+    legalCustomerRef: identifier,
+    ownershipRef: identifier,
+    accountRevision: v.number(),
+    ownershipRevision: v.number(),
+    state: v.union(v.literal('active'), v.literal('locked')),
+    version: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_accountRef', ['accountRef'])
+    .index('by_legalCustomerRef_and_state', ['legalCustomerRef', 'state']),
   moneyTreasuryObservations: defineTable({
     observationRef: identifier,
     environment: v.union(v.literal('sandbox'), v.literal('production')),
@@ -363,141 +308,13 @@ export const moneyTables = {
     recordedAt: v.number(),
   })
     .index('by_observationRef', ['observationRef'])
+    .index('by_environment_and_observedAt', ['environment', 'observedAt'])
     .index('by_custody_and_observedAt', [
       'environment',
       'custodyRef',
       'custodyGeneration',
       'observedAt',
     ]),
-  moneyTreasuryProjections: defineTable({
-    environment: v.union(v.literal('sandbox'), v.literal('production')),
-    custodyRef: identifier,
-    custodyGeneration: v.number(),
-    network: identifier,
-    asset: v.literal('USDC'),
-    exponent: v.literal(6),
-    observedTotalUnits: units,
-    committedUnits: units,
-    pendingOutflowUnits: units,
-    settledOutflowUnits: units,
-    bufferUnits: units,
-    spendableUnits: units,
-    version: v.number(),
-    lastObservationRef: identifier,
-    observedAt: v.number(),
-    updatedAt: v.number(),
-  }).index('by_custody', [
-    'environment',
-    'custodyRef',
-    'custodyGeneration',
-  ]).index('by_environment_and_updatedAt', [
-    'environment',
-    'updatedAt',
-  ]),
-  moneyTreasuryReservations: defineTable({
-    reservationRef: identifier,
-    idempotencyKey: identifier,
-    environment: v.union(v.literal('sandbox'), v.literal('production')),
-    custodyRef: identifier,
-    custodyGeneration: v.number(),
-    network: identifier,
-    asset: v.literal('USDC'),
-    exponent: v.literal(6),
-    commitmentRef: identifier,
-    invocationRef: identifier,
-    amountUnits: units,
-    state: v.union(
-      v.literal('committed'),
-      v.literal('pending_outflow'),
-      v.literal('settled'),
-      v.literal('released'),
-      v.literal('outcome_unknown'),
-    ),
-    identityDigest: identifier,
-    evidenceDigest: identifier,
-    submissionDigest: v.optional(identifier),
-    finalEvidenceDigest: v.optional(identifier),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    submittedAt: v.optional(v.number()),
-    finalizedAt: v.optional(v.number()),
-  })
-    .index('by_reservationRef', ['reservationRef'])
-    .index('by_idempotencyKey', ['idempotencyKey'])
-    .index('by_invocationRef', ['invocationRef'])
-    .index('by_custody_and_state', [
-      'environment',
-      'custodyRef',
-      'custodyGeneration',
-      'state',
-    ]),
-  moneyAgentBudgetProjections: defineTable({
-    principalRef: identifier,
-    environment: v.union(v.literal('sandbox'), v.literal('production')),
-    budgetPolicyRef: identifier,
-    budgetGeneration: v.number(),
-    windowKind: v.union(v.literal('day'), v.literal('month')),
-    windowStart: identifier,
-    asset: v.literal('AUD'),
-    exponent: v.literal(6),
-    settledUnits: units,
-    reservedUnits: units,
-    version: v.number(),
-    updatedAt: v.number(),
-  }).index('by_principal_and_policy_window', [
-    'principalRef',
-    'environment',
-    'budgetPolicyRef',
-    'budgetGeneration',
-    'windowKind',
-    'windowStart',
-  ]),
-  moneyRegulatoryExposureProjections: defineTable({
-    environment: v.union(v.literal('sandbox'), v.literal('production')),
-    asset: v.literal('AUD'),
-    exponent: v.literal(6),
-    reservedUnits: units,
-    pendingUnits: units,
-    settledUnits: units,
-    version: v.number(),
-    updatedAt: v.number(),
-  }).index('by_environment_and_asset', ['environment', 'asset']),
-  moneyCallReservations: defineTable({
-    reservationRef: identifier,
-    commitmentRef: identifier,
-    invocationRef: identifier,
-    accountRef: identifier,
-    principalRef: identifier,
-    operationRef: identifier,
-    providerRef: identifier,
-    environment: v.union(v.literal('sandbox'), v.literal('production')),
-    decisionAudUnits: units,
-    sourceUsdcUnits: v.optional(units),
-    budgetPolicyRef: identifier,
-    budgetGeneration: v.number(),
-    budgetDayStart: identifier,
-    budgetMonthStart: identifier,
-    journalTransactionRef: identifier,
-    treasuryReservationRef: v.optional(identifier),
-    providerObligationRef: identifier,
-    state: v.union(
-      v.literal('reserved'),
-      v.literal('possibly_submitted'),
-      v.literal('settled'),
-      v.literal('released'),
-      v.literal('outcome_unknown'),
-    ),
-    identityDigest: identifier,
-    evidenceRefs,
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    submittedAt: v.optional(v.number()),
-    finalizedAt: v.optional(v.number()),
-  })
-    .index('by_reservationRef', ['reservationRef'])
-    .index('by_commitmentRef', ['commitmentRef'])
-    .index('by_invocationRef', ['invocationRef'])
-    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt']),
   moneyProviderObligations: defineTable({
     obligationRef: identifier,
     invocationRef: identifier,
@@ -528,84 +345,6 @@ export const moneyTables = {
     .index('by_invocationRef', ['invocationRef'])
     .index('by_buyerAccountRef_and_createdAt', ['buyerAccountRef', 'createdAt'])
     .index('by_providerRef_and_createdAt', ['providerRef', 'createdAt']),
-  moneyAccounts: defineTable({
-    accountRef: identifier,
-    accountKind: v.union(v.literal('operator_credit'), v.literal('provider_earnings'), v.literal('ae_rake'), v.literal('ae_external_loss')),
-    accountId: v.optional(identifier),
-    businessId: v.optional(identifier),
-    currency,
-    exponent,
-    balanceUnits: units,
-    heldUnits: units,
-    recoveryDueUnits: units,
-    version: v.number(),
-    state: v.union(v.literal('active'), v.literal('locked')),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_accountRef', ['accountRef'])
-    .index('by_accountId_and_currency', ['accountId', 'currency'])
-    .index('by_businessId_and_currency', ['businessId', 'currency']),
-  moneyLedgerEntries: defineTable({
-    entryRef: identifier,
-    accountRef: identifier,
-    entryType: v.union(v.literal('topup'), v.literal('charge'), v.literal('refund'), v.literal('payout_accrual'), v.literal('rake'), v.literal('external_loss'), v.literal('promo_grant'), v.literal('topup_bonus')),
-    direction: v.union(v.literal('credit'), v.literal('debit')),
-    amountUnits: units,
-    allocationCorrectionUnits: v.optional(units),
-    currency,
-    exponent,
-    transactionRef: identifier,
-    idempotencyKey: identifier,
-    principalId: v.optional(identifier),
-    businessId: v.optional(identifier),
-    invocationRef: v.optional(identifier),
-    attemptRef: v.optional(identifier),
-    payoutRef: v.optional(identifier),
-    allocationRef: v.optional(identifier),
-    sourceDigest: identifier,
-    evidenceRefs,
-    reversalOf: v.optional(identifier),
-    createdAt: v.number(),
-  })
-    .index('by_transactionRef', ['transactionRef'])
-    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
-    .index('by_principalId_and_createdAt', ['principalId', 'createdAt'])
-    .index('by_businessId_and_createdAt', ['businessId', 'createdAt'])
-    .index('by_payoutRef_and_allocationRef', ['payoutRef', 'allocationRef']),
-  moneyTransactions: defineTable({
-    transactionRef: identifier,
-    kind: v.union(v.literal('topup'), v.literal('charge'), v.literal('refund'), v.literal('payout_accrual'), v.literal('rake'), v.literal('external_loss'), v.literal('promo_grant'), v.literal('topup_bonus')),
-    idempotencyKey: identifier,
-    inputDigest: identifier,
-    journalDigest: v.optional(identifier),
-    digestFormat: v.optional(identifier),
-    principalId: identifier,
-    accountId: v.optional(identifier),
-    currency,
-    credentialId: v.optional(identifier),
-    budgetPolicyRef: v.optional(identifier),
-    budgetGeneration: v.optional(v.number()),
-    budgetEnvironment: v.optional(v.union(v.literal('sandbox'), v.literal('production'))),
-    budgetDayStart: v.optional(identifier),
-    budgetMonthStart: v.optional(identifier),
-    budgetState: v.optional(v.union(v.literal('reserved'), v.literal('settled'), v.literal('released'), v.literal('unknown'))),
-    settledAt: v.optional(v.number()),
-    amountUnits: v.optional(units),
-    exponent,
-    state: v.union(v.literal('pending'), v.literal('applied'), v.literal('outcome_unknown'), v.literal('reversed')),
-    expectedAccountVersion: v.number(),
-    externalRef: v.optional(identifier),
-    reversalOf: v.optional(identifier),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_idempotencyKey', ['idempotencyKey'])
-    .index('by_transactionRef', ['transactionRef'])
-    .index('by_principalId_and_createdAt', ['principalId', 'createdAt'])
-    .index('by_credentialId_and_budgetState', ['credentialId', 'budgetState'])
-    .index('by_externalRef', ['externalRef'])
-    .index('by_reversalOf', ['reversalOf']),
   moneyUsageEvents: defineTable({
     usageRef: identifier,
     principalId: identifier,
@@ -629,100 +368,6 @@ export const moneyTables = {
     .index('by_businessId_and_observedAt', ['businessId', 'observedAt'])
     .index('by_invocationRef', ['invocationRef'])
     .index('by_usageRef', ['usageRef']),
-  moneyCredentialBudgetStates: defineTable({
-    principalId: identifier,
-    accountId: v.optional(identifier),
-    credentialId: identifier,
-    budgetPolicyRef: identifier,
-    environment: v.union(v.literal('sandbox'), v.literal('production')),
-    generation: v.number(),
-    windowKind: v.union(v.literal('day'), v.literal('month'), v.literal('concurrency')),
-    windowStart: identifier,
-    currency,
-    exponent,
-    settledUnits: units,
-    reservedUnits: units,
-    reservedCount: v.number(),
-    version: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_principal_credential_env_generation_window', [
-      'principalId', 'credentialId', 'environment', 'generation', 'windowKind', 'windowStart',
-    ])
-    .index('by_credentialId_and_environment_and_generation_and_windowKind', ['credentialId', 'environment', 'generation', 'windowKind']),
-  moneyExternalSpendReservations: defineTable({
-    reservationRef: identifier,
-    principalId: identifier,
-    credentialId: identifier,
-    grantRef: identifier,
-    grantGeneration: v.number(),
-    environment: v.union(v.literal('sandbox'), v.literal('production')),
-    budgetPolicyRef: identifier,
-    budgetDayStart: identifier,
-    budgetMonthStart: identifier,
-    custodyRef: v.optional(identifier),
-    custodyGeneration: v.optional(v.number()),
-    custodyDailyMaximumUnits: v.optional(units),
-    custodyBudgetPolicyRef: v.optional(identifier),
-    custodyBudgetDayStart: v.optional(identifier),
-    invocationRef: identifier,
-    attemptRef: identifier,
-    effectGeneration: v.number(),
-    operationRef: identifier,
-    providerRef: identifier,
-    paymentIdentifier: identifier,
-    challengeDigest: identifier,
-    // Optional only for rows written before execution-context identity binding.
-    executionContext: v.optional(externalSpendExecutionContext),
-    idempotencyDigest: identifier,
-    identityDigest: identifier,
-    currency,
-    amountUnits: units,
-    exponent,
-    state: v.union(
-      v.literal('reserved'),
-      v.literal('settled'),
-      v.literal('released'),
-      v.literal('outcome_unknown'),
-      v.literal('reversed'),
-    ),
-    submissionStatus: v.optional(v.union(
-      v.literal('not_submitted'),
-      v.literal('possibly_submitted'),
-      v.literal('observed'),
-      v.literal('unknown'),
-    )),
-    finalizationDigest: v.optional(identifier),
-    paymentResponseDigest: v.optional(identifier),
-    providerReceiptDigest: v.optional(identifier),
-    evidenceRefs,
-    reconciliationDigest: v.optional(identifier),
-    reconciliationEvidenceRef: v.optional(identifier),
-    reconciliationEvidenceDigest: v.optional(identifier),
-    reversalEvidenceRef: v.optional(identifier),
-    reversalEvidenceDigest: v.optional(identifier),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    finalizedAt: v.optional(v.number()),
-    reconciledAt: v.optional(v.number()),
-    reversedAt: v.optional(v.number()),
-  })
-    .index('by_reservationRef', ['reservationRef'])
-    .index('by_idempotencyDigest', ['idempotencyDigest'])
-    .index('by_identityDigest', ['identityDigest'])
-    .index('by_invocationRef_and_attemptRef_and_effectGeneration', [
-      'invocationRef', 'attemptRef', 'effectGeneration',
-    ])
-    .index('by_paymentIdentifier_and_challengeDigest', [
-      'paymentIdentifier', 'challengeDigest',
-    ])
-    .index('by_principalId_and_state_and_updatedAt', [
-      'principalId', 'state', 'updatedAt',
-    ])
-    .index('by_state_and_updatedAt', ['state', 'updatedAt'])
-    .index('by_grantRef_and_generation_and_environment', [
-      'grantRef', 'grantGeneration', 'environment',
-    ]),
   moneyX402PaymentAttempts: defineTable({
     dispatchRef: identifier,
     attemptRef: identifier,

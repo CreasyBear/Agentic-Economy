@@ -162,19 +162,20 @@ async function readAccountMoney(
       ['account', parsed.data.accountRef],
       ['balance', `${parsed.data.balance.units} × 10^-${parsed.data.balance.exponent} ${parsed.data.balance.currency}`],
       ['state', parsed.data.accountState],
-      ['recovery due', `${parsed.data.recoveryDue.units} × 10^-${parsed.data.recoveryDue.exponent} ${parsed.data.recoveryDue.currency}`],
       ['funding', `${parsed.data.funding.path}#${parsed.data.funding.anchor} (owner browser)`],
     ])
     return
   }
   if ('items' in parsed.data) {
-    line(`${parsed.data.items.length} charge event${parsed.data.items.length === 1 ? '' : 's'}`)
+    line(`${parsed.data.items.length} Call${parsed.data.items.length === 1 ? '' : 's'}`)
     for (const item of parsed.data.items) {
       table([
-        ['invocation', item.invocationRef],
-        ['offering', item.offeringRef],
-        ['state', item.chargeState],
-        ['amount', `${item.grossAmount.units} × 10^-${item.grossAmount.exponent} ${item.grossAmount.currency}`],
+        ['call', item.callRef],
+        ['operation', item.operationRef],
+        ['provider', item.providerRef],
+        ['state', item.state],
+        ['payment', item.paymentState],
+        ['AUD units', item.audAmountUnits ?? 'not applicable'],
         ['observed', new Date(item.observedAt).toISOString()],
       ])
       line()

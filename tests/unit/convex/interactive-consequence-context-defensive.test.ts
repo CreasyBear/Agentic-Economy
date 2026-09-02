@@ -11,7 +11,6 @@ vi.mock('../../../convex/sourceWriteAdmission', () => ({
 }))
 
 import { createBusinessOfferingHandler } from '../../../convex/catalogOfferingMutations'
-import { payoutOwnedByCurrentOwner } from '../../../convex/moneyPayoutTransferShared'
 
 const actor = {
   kind: 'authenticated_owner' as const,
@@ -88,14 +87,4 @@ describe('interactive consequence defensive denials', () => {
     })).resolves.toMatchObject({ kind: 'error', code: 'wrong_owner' })
   })
 
-  it('payout fails closed if the owned business disappears', async () => {
-    await expect(payoutOwnedByCurrentOwner({
-      auth: { getUserIdentity: vi.fn() },
-      db: {
-        normalizeId: vi.fn(() => 'businesses:defensive'),
-        get: vi.fn(async () => null),
-      },
-      scheduler: {},
-    } as never, 'businesses:defensive')).resolves.toBe(false)
-  })
 })

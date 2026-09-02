@@ -39,22 +39,21 @@ describe('account management action service', () => {
   it('reads exact account balance through the signed billing boundary', async () => {
     mocks.callPublicSourceMutation.mockResolvedValue({
       kind: 'available', principalRef: principal.principalId, accountRef: principal.ownerId,
-      balance: { currency: 'USD', units: '2500', exponent: 2 },
-      recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
+      balance: { currency: 'AUD', units: '25000000', exponent: 6 },
       accountState: 'active', version: 3, updatedAt: 10,
       funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
     })
     const service = createAccountManagementService(
       new Request('https://ae.example/api/v1/account/balance', { method: 'POST' }),
-      '{"currency":"USD"}',
+      '{"currency":"AUD"}',
     )
 
-    await expect(service.balance({ input: { currency: 'USD' }, principal, correlationId: 'request:one' }))
-      .resolves.toMatchObject({ kind: 'available', balance: { units: '2500' } })
+    await expect(service.balance({ input: { currency: 'AUD' }, principal, correlationId: 'request:one' }))
+      .resolves.toMatchObject({ kind: 'available', balance: { units: '25000000' } })
     expect(mocks.sourceWriteAdmissionFromRequest).toHaveBeenCalledWith(expect.objectContaining({ scope: 'billing' }))
     expect(mocks.callPublicSourceMutation).toHaveBeenCalledWith(
       { name: 'agentMoneyReads:balance' },
-      expect.objectContaining({ currency: 'USD', agentPrincipal: principal }),
+      expect.objectContaining({ currency: 'AUD', agentPrincipal: principal }),
     )
   })
 
@@ -63,11 +62,10 @@ describe('account management action service', () => {
       kind: 'available',
       activity: {
         page: [{
-          activityRef: 'usage:one', credentialId: principal.credentialId,
-          serviceRef: 'service:one', offeringRef: 'offering:one', businessId: 'business:one',
-          operationKey: 'operation:one', invocationRef: 'invocation:one', attemptRef: 'attempt:one',
-          grossAmount: { currency: 'USD', units: '125', exponent: 2 }, chargeState: 'paid',
-          priceDigest: `sha256:${'a'.repeat(64)}`, observedAt: 10,
+          callRef: 'invocation:one', credentialRef: principal.credentialId,
+          operationRef: 'operation:one', providerRef: 'business:one',
+          state: 'completed', deliveryState: 'delivered', paymentState: 'settled',
+          audAmountUnits: '1250000', observedAt: 10,
         }],
         isDone: false,
         continueCursor: 'cursor:next',
@@ -79,7 +77,7 @@ describe('account management action service', () => {
       '{}',
     )
     const result = await service.activity({
-      input: { currency: 'USD', limit: 20 }, principal, correlationId: 'request:two',
+      input: { currency: 'AUD', limit: 20 }, principal, correlationId: 'request:two',
     })
 
     expect(result).toMatchObject({ kind: 'available', hasMore: true, nextCursor: 'cursor:next' })
@@ -89,8 +87,7 @@ describe('account management action service', () => {
   it('fails closed when the source adds undeclared balance fields', async () => {
     mocks.callPublicSourceMutation.mockResolvedValue({
       kind: 'available', principalRef: principal.principalId, accountRef: principal.ownerId,
-      balance: { currency: 'USD', units: '2500', exponent: 2 },
-      recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
+      balance: { currency: 'AUD', units: '25000000', exponent: 6 },
       accountState: 'active', version: 3, updatedAt: 10,
       funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
       stripeCustomerId: 'cus_secret',
@@ -99,7 +96,7 @@ describe('account management action service', () => {
       new Request('https://ae.example/api/v1/account/balance', { method: 'POST' }),
       '{}',
     )
-    await expect(service.balance({ input: { currency: 'USD' }, principal, correlationId: 'request:three' }))
+    await expect(service.balance({ input: { currency: 'AUD' }, principal, correlationId: 'request:three' }))
       .resolves.toEqual({ kind: 'error', code: 'source_unavailable' })
   })
 })

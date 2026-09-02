@@ -1,5 +1,5 @@
 import { defineTable } from 'convex/server'
-import { v } from 'convex/values'
+import { v, type Infer, type Validator } from 'convex/values'
 
 const identifier = v.string()
 const exactAmount = v.object({ currency: identifier, units: identifier, exponent: v.number() })
@@ -107,9 +107,14 @@ const storedAgentAccessGrantDocumentType = v.object({
     rate: ratePolicy,
   }),
 })
+const storedAgentAccessGrantTableValue = storedAgentAccessGrantValue as Validator<
+  Infer<typeof storedAgentAccessGrantDocumentType>,
+  'required',
+  typeof storedAgentAccessGrantValue.fieldPaths
+>
 
 export const agentAccessPolicyTables = {
-  agentAccessGrants: defineTable(storedAgentAccessGrantValue as unknown as typeof storedAgentAccessGrantDocumentType)
+  agentAccessGrants: defineTable(storedAgentAccessGrantTableValue)
     .index('by_grantRef', ['grantRef'])
     .index('by_principalId', ['principalId'])
     .index('by_credentialId_and_environment_and_generation', ['credentialId', 'environment', 'generation'])

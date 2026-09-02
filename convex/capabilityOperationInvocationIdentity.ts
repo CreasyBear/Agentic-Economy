@@ -60,7 +60,7 @@ export function validateOperationInvokeAuthority(input: Readonly<{
   now: number
 }>): ExactAmount | undefined {
   const authority = input.authority
-  if (authority === undefined || input.descriptor.price.kind !== 'fixed') return undefined
+  if (authority === undefined) return undefined
   try {
     const authorityExpiresAt = Date.parse(authority.expiresAt)
     const amount = exactAmountSchema.safeParse(authority.limits.amount)
@@ -81,10 +81,12 @@ export function validateOperationInvokeAuthority(input: Readonly<{
       || authority.grantDigest !== input.grant.policyDigest
       || authority.consequence !== input.descriptor.consequenceClass
       || authority.targetDigest !== canonicalDigest(input.operation.identity as StableHashValue)
-      || canonicalDigest(authority.limits as StableHashValue)
-        !== canonicalDigest({ amount: input.descriptor.price.amount } as StableHashValue)
-      || canonicalDigest(amount.data as StableHashValue)
-        !== canonicalDigest(input.descriptor.price.amount as StableHashValue)
+      || (input.descriptor.price.kind === 'fixed' && (
+        canonicalDigest(authority.limits as StableHashValue)
+          !== canonicalDigest({ amount: input.descriptor.price.amount } as StableHashValue)
+        || canonicalDigest(amount.data as StableHashValue)
+          !== canonicalDigest(input.descriptor.price.amount as StableHashValue)
+      ))
     ) return undefined
     const basis = authority.acceptedBasis
     switch (basis.kind) {

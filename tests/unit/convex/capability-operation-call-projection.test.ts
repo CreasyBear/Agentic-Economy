@@ -127,6 +127,7 @@ describe('Account Call projection', () => {
       receiptRef: 'receipt:call-projection',
       latencyMs: 250,
     })
+
   })
 
   it('pages a 10,000-Call fixture through the Account index without exposing another Account', async () => {
@@ -141,6 +142,7 @@ describe('Account Call projection', () => {
           accountRef,
           principalRef: index % 4 === 0 ? 'principal:selected' : `principal:${index % 17}`,
           credentialRef: `credential:${index % 23}`,
+          applicationRef: `application:${index % 7}`,
           operationRef: `operation:${index % 31}`,
           providerRef: `provider:${index % 11}`,
           operationLabel: `Operation ${index % 31}`,
@@ -173,5 +175,6 @@ describe('Account Call projection', () => {
     expect(selectedAgentPage.page.every((call: { accountRef: string; principalRef: string }) => (
       call.accountRef === fixture.canonicalAccountRef && call.principalRef === 'principal:selected'
     ))).toBe(true)
+
   }, 30_000)
 })

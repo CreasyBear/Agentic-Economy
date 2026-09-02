@@ -14,7 +14,6 @@ import {
   recoveryNotFound,
   retryableRecoveryResult,
 } from '../../../../../convex/capabilityOperationInvocationProjection'
-import { reconcileAcceptedCharge } from '../charge'
 import { prepareX402RecoveryEvidence } from './x402'
 import {
   loadReadyRecoveryWork,
@@ -32,12 +31,12 @@ export async function reconcileRecoveryMoney(
   work: RecoveryWorkContext,
   outcome: 'not_released' | 'released',
 ): Promise<{ kind: 'none' | 'settled' | 'reconciliation_required' }> {
-  const { recovered, control, operation, managedReservation } = work
+  const { recovered, managedReservation } = work
   if (managedReservation !== null) {
     if (outcome !== 'not_released' || managedReservation.state !== 'reserved') {
       return { kind: 'reconciliation_required' }
     }
-    const released = await ctx.runMutation(
+    const released = await ctx.runAction(
       internal.moneyManagedCallLifecycle.releaseBeforeSubmission,
       { invocationRef: recovered.invocationRef, now: Date.now() },
     )
@@ -45,27 +44,10 @@ export async function reconcileRecoveryMoney(
       ? { kind: 'settled' }
       : { kind: 'reconciliation_required' }
   }
-  const attemptRef = control.currentAttemptRef
-    ?? recovered.attemptRef
-    ?? `operation-attempt:${recovered.invocationRef}:1`
-  // Check the deterministic buyer transaction before reconstructing the
-  // brokered reservation. A claimed invocation can be cancelled in the
-  // window before the buyer reservation is written; in that case the
-  // canonical reconciliation mutation returns `none`, which is a safe
-  // no-effect outcome rather than a reason to manufacture a reservation.
-  const deterministicBuyerSettlement = await reconcileAcceptedCharge(
-    ctx,
-    recovered,
-    operation,
-    {
-      chargeState: 'paid',
-      transactionRef: `operation-money:${recovered.invocationRef}:${attemptRef}:1`,
-    },
-    attemptRef,
-    outcome,
-  )
-  if (deterministicBuyerSettlement.kind === 'settled') return { kind: 'settled' }
-  return { kind: 'reconciliation_required' }
+  // Seller-onboarding canaries carry no customer balance or Provider payable.
+  // If no managed buyer reservation exists, there is no internal money state
+  // to reconstruct here; x402 evidence is reconciled separately below.
+  return { kind: 'settled' }
 }
 
 async function prepareSubmittedRecoveryEvidence(

@@ -378,7 +378,7 @@ describe('owner Base Sepolia staging publication', () => {
     )).resolves.toBeNull()
     const publicSearch = await backend.query(api.capabilitySupplyOperations.search, {
       query: 'paid lookup',
-      limit: 20,
+      limit: 3,
     })
     if (publicStatus === 'unpublished') {
       expect(publicSearch.kind).toBe('no_candidates')

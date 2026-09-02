@@ -153,7 +153,7 @@ export const operationSearchRankingSchema = z.strictObject({ operationRef, rank:
 export const operationSearchPaginationSchema = z.strictObject({ limit: z.number().int(), nextCursor: z.string().optional(), hasMore: z.boolean() })
 
 export const operationSearchInputSchema: z.ZodType<OperationSearchInput> = z.strictObject({
-  query: z.string().max(200), limit: z.number().int().min(1).max(20).optional(), cursor: z.string().max(512).optional(),
+  query: z.string().max(200), limit: z.number().int().min(1).max(3).optional(), cursor: z.string().max(512).optional(),
   filters: operationSearchFiltersSchema.optional(),
 }) as z.ZodType<OperationSearchInput>
 export const operationSearchOutputSchema: z.ZodType<OperationSearchResult> = z.union([

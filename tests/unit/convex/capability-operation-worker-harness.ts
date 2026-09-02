@@ -160,11 +160,8 @@ import {
 import { createX402ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  externalSpendIdentityDigest,
-  mintExternalSpendIdentity,
   pricingConfigDigest,
   pricingConfigSourceAmount,
-  type ExternalSpendPaymentFacts,
   type PricingConfig,
 } from '@/modules/money/public'
 import type { PublishedOperation } from '@/modules/capability-supply/public'
@@ -294,6 +291,7 @@ function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1', br
         ? {
             version: 'pricing:v3',
             kind: 'managed_x402',
+            effectTiming: 'payment_required_before_effect',
             sourceRequirement: {
               network: 'eip155:8453',
               asset: '0xmock-usdc',
@@ -1212,43 +1210,6 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           managedCallState = 'released'
           state.reconciliations.push(args)
           return { kind: 'accepted', state: managedCallState, replayed: false }
-        case 'moneyLedger:reserveExternalInvocationSpend': {
-          state.events.push('custody-reserve')
-          const { observedAt, ...facts } = args
-          const identity = mintExternalSpendIdentity(facts as ExternalSpendPaymentFacts)
-          return {
-            kind: 'accepted',
-            status: 'reserved',
-            replayed: false,
-            reservation: {
-              ...identity,
-              identityDigest: externalSpendIdentityDigest(identity),
-              state: 'reserved',
-              budgetPolicyRef: 'budget:test-worker',
-              budgetDayStart: '1970-01-01',
-              budgetMonthStart: '1970-01',
-              evidenceRefs: [],
-              createdAt: observedAt,
-              updatedAt: observedAt,
-            },
-          }
-        }
-        case 'moneyLedger:finalizeExternalInvocationSpend':
-          return args.settlementStatus === 'unknown'
-            ? { kind: 'reconciliation_required' }
-            : {
-                kind: 'accepted',
-                status: args.settlementStatus === 'settled' ? 'settled' : 'released',
-                replayed: false,
-              }
-        case 'moneyLedger:reverseExternalInvocationSpendForInvalidOutput':
-          if (options.invalidOutputTransitionResult === 'throw') {
-            throw new Error('external_spend_transition_unavailable')
-          }
-          if (options.invalidOutputTransitionResult === 'refused') {
-            return { kind: 'refused', code: 'external_spend_reconciliation_required' }
-          }
-          return { kind: 'accepted', status: 'reversed', replayed: false }
         case 'moneyX402PaymentAttempts:claimX402PaymentAuthorization': {
           const requestFingerprint = args.requestFingerprint
           const authorization = state.payment.authorization
@@ -1387,6 +1348,25 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
             },
           }
         default: throw new Error(`unexpected_mutation:${path}:${JSON.stringify(args)}`)
+      }
+    }),
+    runAction: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+      const path = functionPath(reference)
+      state.mutations.push(path)
+      state.mutationCalls.push({ path, args })
+      switch (path) {
+        case 'moneyManagedCallLifecycle:settle':
+          managedCallState = 'settled'
+          return { kind: 'accepted', state: managedCallState, replayed: false }
+        case 'moneyManagedCallLifecycle:releaseBeforeSubmission':
+        case 'moneyManagedCallLifecycle:releaseBeforeSubmissionWithX402Proof':
+          if (managedCallState !== 'reserved' && managedCallState !== 'released') {
+            return { kind: 'refused', code: 'managed_call_state_conflict' }
+          }
+          managedCallState = 'released'
+          state.reconciliations.push(args)
+          return { kind: 'accepted', state: managedCallState, replayed: false }
+        default: throw new Error(`unexpected_action:${path}:${JSON.stringify(args)}`)
       }
     }),
   }

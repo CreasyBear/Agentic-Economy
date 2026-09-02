@@ -18,10 +18,6 @@ import {
 } from '@/modules/capability-execution/convex'
 import { recordMarketEvidenceFact } from '../../marketEvidence'
 import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
-import type {
-  X402PaymentAuthorizationFailureCode,
-  X402PaymentAuthorizationFailureDetail,
-} from '../../moneyX402PaymentAuthorization'
 
 export const OPERATION_INVOKE_RETRY_AFTER_MS = 1_000
 
@@ -88,19 +84,12 @@ export const SELLER_CANARY_ROUTE_SIGNING_UNAVAILABLE_NEXT_ACTION =
   'Route call signing is unavailable.' as const
 
 export type SafeBeforeReleaseSellerCanaryProof = Readonly<{
-  refusalCode: 'pre_release_failed' | 'payment_signature_unavailable'
+  refusalCode: 'pre_release_failed'
   attemptRef: string
   attemptNumber: number
   effectGeneration: number
   controlDigest: string
   attemptDigest: string
-  authorizationFailureCode?: X402PaymentAuthorizationFailureCode
-  authorizationFailureDetail?: X402PaymentAuthorizationFailureDetail
-  managedUnsignedRefundProof?: Readonly<{
-    paymentAttemptDigest: string
-    reservationDigest: string
-    currentHistoryDigest: string
-  }>
 }>
 
 export type OperationDispatchMutationResult =
@@ -378,17 +367,12 @@ async function sellerCanaryHasNoEffectEvidence(
   ctx: MutationCtx | QueryCtx,
   invocationRef: string,
 ): Promise<boolean> {
-  const [control, attempts, reservations, paymentAttempts, usage, qualifiedUse, providerJournals] = await Promise.all([
+  const [control, attempts, paymentAttempts, usage, qualifiedUse, providerJournals] = await Promise.all([
     ctx.db.query('actionInvocationControls')
       .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
       .take(1),
     ctx.db.query('actionInvocationAttempts')
       .withIndex('by_invocationRef_and_attemptNumber', (query) => query.eq('invocationRef', invocationRef))
-      .take(1),
-    ctx.db.query('moneyExternalSpendReservations')
-      .withIndex('by_invocationRef_and_attemptRef_and_effectGeneration', (query) => (
-        query.eq('invocationRef', invocationRef)
-      ))
       .take(1),
     ctx.db.query('moneyX402PaymentAttempts')
       // Payment attempts are keyed by attemptRef, but dispatchRef is the
@@ -406,7 +390,7 @@ async function sellerCanaryHasNoEffectEvidence(
       .filter((query) => query.eq(query.field('invocationRef'), invocationRef))
       .take(1),
   ])
-  return [control, attempts, reservations, paymentAttempts, usage, qualifiedUse, providerJournals]
+  return [control, attempts, paymentAttempts, usage, qualifiedUse, providerJournals]
     .every((rows) => rows.length === 0)
 }
 
@@ -470,67 +454,11 @@ function exactSafeBeforeReleaseAttemptHistory(
   )) ? current : undefined
 }
 
-type SafeBeforeReleaseOuterKind = 'generic_pre_release' | 'managed_unsigned_refund'
-
-function exactAmountMatches(
-  left: Readonly<{ currency: string; units: string; exponent: number }>,
-  right: Readonly<{ currency: string; units: string; exponent: number }>,
-): boolean {
-  return left.currency === right.currency
-    && left.units === right.units
-    && left.exponent === right.exponent
-}
-
-function managedUnsignedRefundOuterMatches(row: OperationInvocationRow): boolean {
+function isGenericSafeBeforeReleaseRefusal(row: OperationInvocationRow): boolean {
   const canary = row.sellerOnboardingCanary
   const result = row.result
-  if (
-    canary === undefined
-    || result?.kind !== 'refused'
-    || result.receipt === undefined
-    || result.receipt.commercialModel !== 'seller_canary_x402'
-  ) return false
-  const receipt = result.receipt
-  const operation = parsePublishedOperationSnapshot(row.operationJson ?? '')
-  const payment = operation?.identity.payment
-  const zero = {
-    currency: canary.funding.requestedSpend.currency,
-    units: '0',
-    exponent: canary.funding.requestedSpend.exponent,
-  }
-  return payment?.kind === 'x402' && [
-    result.code === 'payment_signature_unavailable',
-    result.retryable === false,
-    result.nextAction === undefined,
-    row.evidenceHash !== undefined,
-    receipt.receiptRef === `seller-canary-receipt:${canary.canaryRef}:${row.attemptRef}`,
-    receipt.state === 'refunded',
-    receipt.network === payment.network,
-    receipt.asset.toLowerCase() === payment.asset.toLowerCase(),
-    exactAmountMatches(receipt.providerQuotedAmount, canary.funding.requestedSpend),
-    exactAmountMatches(receipt.agenticEconomyFee, zero),
-    exactAmountMatches(receipt.totalBuyerAuthorization, zero),
-    receipt.priceDigest === canary.priceDigest,
-    receipt.transactionRef === undefined,
-    receipt.settlementTransactionHash === undefined,
-    receipt.accountingTransactionRefs === undefined,
-    receipt.paymentIdentifier !== undefined,
-    receipt.externalSettlementRef !== undefined,
-    receipt.refundState === 'released',
-    receipt.lossState === 'none',
-    receipt.evidenceHash === row.evidenceHash,
-  ].every(Boolean)
-}
-
-function safeBeforeReleaseOuterKind(
-  row: OperationInvocationRow,
-): SafeBeforeReleaseOuterKind | undefined {
-  const canary = row.sellerOnboardingCanary
-  const result = row.result
-  if (canary === undefined) return undefined
-  if (result === undefined) return undefined
-  if (result.kind !== 'refused') return undefined
-  const common = [
+  if (canary === undefined || result?.kind !== 'refused') return false
+  return [
     row.state === 'refused',
     row.dispatchState === 'failed',
     row.workId !== undefined,
@@ -542,393 +470,12 @@ function safeBeforeReleaseOuterKind(
     canary.operationRef === row.operationRef,
     canary.inputDigest === row.inputDigest,
     canary.idempotencyKey === row.idempotencyKey,
-  ].every(Boolean)
-  if (!common) return undefined
-  const genericPreRelease = [
     row.evidenceHash === undefined,
     result.code === 'pre_release_failed',
     result.retryable === false,
     result.nextAction === SELLER_CANARY_ROUTE_SIGNING_UNAVAILABLE_NEXT_ACTION,
     result.receipt === undefined,
   ].every(Boolean)
-  if (genericPreRelease) return 'generic_pre_release'
-  return managedUnsignedRefundOuterMatches(row)
-    ? 'managed_unsigned_refund'
-    : undefined
-}
-
-const unsignedPaymentFields = [
-  'paymentSignatureDigest',
-  'paymentUnsignedMaterialJson',
-  'paymentUnsignedMaterialDigest',
-  'paymentSigningIdempotencyKey',
-  'paymentPayer',
-  'paymentNonce',
-  'paymentAuthorizationValidBefore',
-  'paymentAuthorizationExpiresAt',
-  'paymentSigningClaimedAt',
-  'submissionStartedAt',
-] as const
-
-function paymentLaneMatches(
-  paymentAttempt: Doc<'actionInvocationAttempts'>,
-  currentAttempt: Doc<'actionInvocationAttempts'>,
-  payment: Doc<'moneyX402PaymentAttempts'>,
-  reservation: Doc<'moneyExternalSpendReservations'>,
-): boolean {
-  const isCurrent = [
-    paymentAttempt.attemptRef === currentAttempt.attemptRef,
-    paymentAttempt.effectGeneration === currentAttempt.effectGeneration,
-  ].every(Boolean)
-  if (isCurrent) return true
-  if (paymentAttempt.attemptNumber >= currentAttempt.attemptNumber) return false
-  if (paymentAttempt.outcome.state === 'reconciled_not_released') {
-    return [
-      paymentAttempt.outcome.retry === 'safe_after_reconciliation',
-      payment.reconciliationEvidenceRef !== undefined,
-      payment.reconciliationEvidenceDigest !== undefined,
-      payment.reconciliationEvidenceRef === reservation.reconciliationEvidenceRef,
-      payment.reconciliationEvidenceDigest === reservation.reconciliationEvidenceDigest,
-      payment.paymentResponseDigest !== undefined,
-      payment.paymentResponseDigest === reservation.paymentResponseDigest,
-      reservation.submissionStatus === 'unknown',
-    ].every(Boolean)
-  }
-  const failedSafeBeforeRelease = paymentAttempt.outcome.state === 'failed'
-    ? paymentAttempt.outcome.retry === 'safe_before_release'
-    : false
-  return [
-    failedSafeBeforeRelease,
-    payment.paymentResponseDigest === undefined,
-    payment.reconciliationEvidenceRef === undefined,
-    payment.reconciliationEvidenceDigest === undefined,
-    reservation.paymentResponseDigest === undefined,
-    reservation.reconciliationEvidenceRef === undefined,
-    reservation.reconciliationEvidenceDigest === undefined,
-    reservation.submissionStatus === 'not_submitted',
-  ].every(Boolean)
-}
-
-function paymentReservationIdentityMatches(input: Readonly<{
-  row: OperationInvocationRow
-  canary: SellerOnboardingCanaryExecutionEnvelope
-  operation: NonNullable<ReturnType<typeof parsePublishedOperationSnapshot>>
-  providerRef: string
-  paymentAttempt: Doc<'actionInvocationAttempts'>
-  payment: Doc<'moneyX402PaymentAttempts'>
-  reservation: Doc<'moneyExternalSpendReservations'>
-}>): boolean {
-  const { row, canary, operation, providerRef, paymentAttempt, payment, reservation } = input
-  const operationPayment = operation.identity.payment
-  if (operationPayment.kind !== 'x402') return false
-  return [
-    payment.dispatchRef === row.invocationRef,
-    payment.operationRef === row.operationRef,
-    payment.inputDigest === row.inputDigest,
-    payment.effectGeneration === paymentAttempt.effectGeneration,
-    payment.operationKeyDigest === payment.paymentIdentifier,
-    payment.providerEndpoint === operation.binding.endpointUrl,
-    payment.credentialRef === 'env:AE_X402_CDP_ACCOUNT_NAME',
-    payment.network === operationPayment.network,
-    payment.asset.toLowerCase() === operationPayment.asset.toLowerCase(),
-    payment.payTo.toLowerCase() === operationPayment.payTo.toLowerCase(),
-    payment.payTo.toLowerCase() === canary.sellerPayTo.toLowerCase(),
-    reservation.invocationRef === row.invocationRef,
-    reservation.operationRef === row.operationRef,
-    reservation.attemptRef === payment.attemptRef,
-    reservation.effectGeneration === payment.effectGeneration,
-    reservation.credentialId === row.credentialId,
-    reservation.principalId === row.principalId,
-    reservation.environment === 'sandbox',
-    reservation.grantRef === row.grantRef,
-    reservation.grantGeneration === row.grantGeneration,
-    reservation.budgetPolicyRef === canary.funding.budgetRef,
-    reservation.providerRef === providerRef,
-    reservation.paymentIdentifier === payment.paymentIdentifier,
-    reservation.challengeDigest === payment.challengeDigest,
-    reservation.amountUnits === payment.amountUnits,
-    reservation.currency === payment.currency,
-    reservation.exponent === payment.exponent,
-    payment.custodyBudgetRef === reservation.custodyRef,
-    payment.custodyGeneration === reservation.custodyGeneration,
-  ].every(Boolean)
-}
-
-function paymentReservationSafetyMatches(
-  canary: SellerOnboardingCanaryExecutionEnvelope,
-  payment: Doc<'moneyX402PaymentAttempts'>,
-  reservation: Doc<'moneyExternalSpendReservations'>,
-): boolean {
-  const executionContext = reservation.executionContext
-  if (executionContext?.kind !== 'seller_onboarding_canary') return false
-  return [
-    payment.state === 'observed',
-    payment.settlementStatus === 'not_settled',
-    unsignedPaymentFields.every((field) => payment[field] === undefined),
-    reservation.state === 'released',
-    reservation.finalizationDigest !== undefined,
-    reservation.finalizedAt !== undefined,
-    reservation.providerReceiptDigest === undefined,
-    reservation.reversalEvidenceRef === undefined,
-    reservation.reversalEvidenceDigest === undefined,
-    executionContext.canaryRef === canary.canaryRef,
-    executionContext.fundingBudgetRef === canary.funding.budgetRef,
-  ].every(Boolean)
-}
-
-function reconciledAttemptHasOnePair(
-  attempt: Doc<'actionInvocationAttempts'>,
-  payments: Doc<'moneyX402PaymentAttempts'>[],
-): boolean {
-  const pairCount = payments.filter((payment) => [
-    payment.attemptRef === attempt.attemptRef,
-    payment.effectGeneration === attempt.effectGeneration,
-  ].every(Boolean)).length
-  return attempt.outcome.state === 'reconciled_not_released'
-    ? pairCount === 1
-      : pairCount <= 1
-}
-
-function currentCanaryCommitmentMatches(
-  row: OperationInvocationRow,
-  reservation: Doc<'moneyExternalSpendReservations'>,
-): boolean {
-  const context = reservation.executionContext
-  const canary = row.sellerOnboardingCanary
-  if (context?.kind !== 'seller_onboarding_canary') return false
-  if (canary === undefined) return false
-  return context.canaryCommitmentDigest === canary.canaryCommitmentDigest
-}
-
-function managedCurrentLedgerMatches(input: Readonly<{
-  row: OperationInvocationRow
-  receipt: NonNullable<Extract<OperationResult, { kind: 'refused' }>['receipt']>
-  payment: Doc<'moneyX402PaymentAttempts'>
-  reservation: Doc<'moneyExternalSpendReservations'>
-  reservationCount: number
-}>): boolean {
-  const { row, receipt, payment, reservation, reservationCount } = input
-  if (receipt.commercialModel !== 'seller_canary_x402') return false
-  return [
-    reservationCount === 1,
-    row.evidenceHash !== undefined,
-    payment.transportObservationDigest === row.evidenceHash,
-    payment.paymentResponseDigest === undefined,
-    payment.reconciliationEvidenceRef === undefined,
-    payment.reconciliationEvidenceDigest === undefined,
-    payment.observedAt !== undefined,
-    payment.evidenceRefs.length === 0,
-    reservation.submissionStatus === 'not_submitted',
-    reservation.paymentResponseDigest === undefined,
-    reservation.providerReceiptDigest === undefined,
-    reservation.reconciliationEvidenceRef === undefined,
-    reservation.reconciliationEvidenceDigest === undefined,
-    reservation.reversalEvidenceRef === undefined,
-    reservation.reversalEvidenceDigest === undefined,
-    currentCanaryCommitmentMatches(row, reservation),
-    row.evidenceHash !== undefined && reservation.evidenceRefs.includes(row.evidenceHash),
-    receipt.externalSettlementRef === reservation.reservationRef,
-    receipt.paymentIdentifier === payment.paymentIdentifier,
-  ].every(Boolean)
-}
-
-function managedCurrentHistoryMatches(
-  row: OperationInvocationRow,
-  attempt: Doc<'actionInvocationAttempts'>,
-  history: Doc<'actionInvocationHistory'>[],
-): boolean {
-  const claim = history.find((entry) => entry.kind === 'claim_before_effect')
-  const fence = history.find((entry) => entry.kind === 'release_fence_before_network')
-  const terminal = history.find((entry) => entry.kind === 'terminal_failed')
-  const fenceTransition = fence === undefined ? undefined : fence.attemptTransition
-  const terminalTransition = terminal === undefined ? undefined : terminal.attemptTransition
-  if (claim === undefined) return false
-  if (fenceTransition === undefined) return false
-  if (terminalTransition === undefined) return false
-  return [
-    history.length === 3,
-    fenceTransition.attemptRef === attempt.attemptRef,
-    fenceTransition.effectGeneration === attempt.effectGeneration,
-    fenceTransition.priorReleaseState === 'not_released',
-    fenceTransition.nextReleaseState === 'possibly_released',
-    fenceTransition.priorOutcomeState === 'running',
-    fenceTransition.nextOutcomeState === 'running',
-    terminalTransition.attemptRef === attempt.attemptRef,
-    terminalTransition.effectGeneration === attempt.effectGeneration,
-    terminalTransition.priorReleaseState === 'possibly_released',
-    terminalTransition.nextReleaseState === 'not_released',
-    terminalTransition.priorOutcomeState === 'running',
-    terminalTransition.nextOutcomeState === 'failed',
-    history.every((entry) => [
-      entry.invocationRef === row.invocationRef,
-      entry.commandResult === 'applied',
-      entry.current,
-      entry.observation === undefined,
-    ].every(Boolean)),
-  ].every(Boolean)
-}
-
-function refusedReceipt(
-  row: OperationInvocationRow,
-): Extract<OperationResult, { kind: 'refused' }>['receipt'] | undefined {
-  if (row.result?.kind !== 'refused') return undefined
-  return row.result.receipt
-}
-
-function managedOuterLedgerShapeMatches(
-  outerKind: SafeBeforeReleaseOuterKind,
-  receipt: Extract<OperationResult, { kind: 'refused' }>['receipt'] | undefined,
-  evidenceHash: string | undefined,
-  reservationCount: number,
-): boolean {
-  if (outerKind === 'generic_pre_release') return true
-  return [
-    receipt !== undefined,
-    evidenceHash !== undefined,
-    reservationCount > 0,
-  ].every(Boolean)
-}
-
-function sellerCanaryProviderRoute(row: OperationInvocationRow): Readonly<{
-  operation: NonNullable<ReturnType<typeof parsePublishedOperationSnapshot>>
-  providerRef: string
-}> | undefined {
-  const operation = parsePublishedOperationSnapshot(row.operationJson ?? '')
-  if (operation === undefined) return undefined
-  if (operation.identity.payment.kind !== 'x402') return undefined
-  if (operation.binding.authority.kind !== 'provider_connection') return undefined
-  return { operation, providerRef: operation.binding.authority.providerRef }
-}
-
-function referencedReservationRefs(
-  payments: Doc<'moneyX402PaymentAttempts'>[],
-): string[] {
-  return payments.flatMap((payment) => {
-    if (payment.reservationRef === undefined) return []
-    return [payment.reservationRef]
-  })
-}
-
-function reservationForPayment(
-  payment: Doc<'moneyX402PaymentAttempts'>,
-  reservationsByRef: Map<string, Doc<'moneyExternalSpendReservations'>>,
-): Doc<'moneyExternalSpendReservations'> | undefined {
-  if (payment.reservationRef === undefined) return undefined
-  return reservationsByRef.get(payment.reservationRef)
-}
-
-function managedCurrentDocuments(input: Readonly<{
-  payment: Doc<'moneyX402PaymentAttempts'> | undefined
-  reservation: Doc<'moneyExternalSpendReservations'> | undefined
-  receipt: Extract<OperationResult, { kind: 'refused' }>['receipt'] | undefined
-}>): Readonly<{
-  payment: Doc<'moneyX402PaymentAttempts'>
-  reservation: Doc<'moneyExternalSpendReservations'>
-  receipt: NonNullable<Extract<OperationResult, { kind: 'refused' }>['receipt']>
-}> | undefined {
-  if (input.payment === undefined) return undefined
-  if (input.reservation === undefined) return undefined
-  if (input.receipt === undefined) return undefined
-  return input as Readonly<{
-    payment: Doc<'moneyX402PaymentAttempts'>
-    reservation: Doc<'moneyExternalSpendReservations'>
-    receipt: NonNullable<Extract<OperationResult, { kind: 'refused' }>['receipt']>
-  }>
-}
-
-function currentLedgerLaneMatches(input: Readonly<{
-  row: OperationInvocationRow
-  outerKind: SafeBeforeReleaseOuterKind
-  attempt: Doc<'actionInvocationAttempts'>
-  payment: Doc<'moneyX402PaymentAttempts'> | undefined
-  reservation: Doc<'moneyExternalSpendReservations'> | undefined
-  receipt: Extract<OperationResult, { kind: 'refused' }>['receipt'] | undefined
-  reservationCount: number
-  history: Doc<'actionInvocationHistory'>[]
-}>): boolean {
-  if (input.outerKind === 'generic_pre_release') {
-    return [
-      input.payment === undefined,
-      input.reservationCount === 0,
-      input.history.every((entry) => entry.observation === undefined),
-    ].every(Boolean)
-  }
-  const managed = managedCurrentDocuments(input)
-  if (managed === undefined) return false
-  return [
-    managedCurrentLedgerMatches({
-      row: input.row,
-      receipt: managed.receipt,
-      payment: managed.payment,
-      reservation: managed.reservation,
-      reservationCount: input.reservationCount,
-    }),
-    managedCurrentHistoryMatches(input.row, input.attempt, input.history),
-  ].every(Boolean)
-}
-
-function sellerCanaryUnpaidLedgersMatch(
-  row: OperationInvocationRow,
-  outerKind: SafeBeforeReleaseOuterKind,
-  attempt: Doc<'actionInvocationAttempts'>,
-  attempts: Doc<'actionInvocationAttempts'>[],
-  reservations: Doc<'moneyExternalSpendReservations'>[],
-  payments: Doc<'moneyX402PaymentAttempts'>[],
-  history: Doc<'actionInvocationHistory'>[],
-): boolean {
-  const canary = row.sellerOnboardingCanary
-  const receipt = refusedReceipt(row)
-  if (canary === undefined) return false
-  if (payments.length !== reservations.length) return false
-  if (!managedOuterLedgerShapeMatches(outerKind, receipt, row.evidenceHash, reservations.length)) return false
-  const route = sellerCanaryProviderRoute(row)
-  if (route === undefined) return false
-  const { operation, providerRef } = route
-  const attemptsByRef = new Map(attempts.map((candidate) => [candidate.attemptRef, candidate]))
-  const reservationsByRef = new Map(reservations.map((reservation) => [reservation.reservationRef, reservation]))
-  const paymentReservationRefs = referencedReservationRefs(payments)
-  const referenceIntegrity = [
-    reservationsByRef.size === reservations.length,
-    paymentReservationRefs.length === payments.length,
-    new Set(paymentReservationRefs).size === payments.length,
-    new Set(payments.map((payment) => payment.attemptRef)).size === payments.length,
-    reservations.every((reservation) => paymentReservationRefs.includes(reservation.reservationRef)),
-  ].every(Boolean)
-  if (!referenceIntegrity) return false
-  const ledgersSafe = payments.every((payment) => {
-    const paymentAttempt = attemptsByRef.get(payment.attemptRef)
-    const reservation = reservationForPayment(payment, reservationsByRef)
-    if (paymentAttempt === undefined || reservation === undefined) return false
-    return [
-      paymentLaneMatches(paymentAttempt, attempt, payment, reservation),
-      paymentReservationIdentityMatches({ row, canary, operation, providerRef, paymentAttempt, payment, reservation }),
-      paymentReservationSafetyMatches(canary, payment, reservation),
-    ].every(Boolean)
-  })
-  if (!ledgersSafe) return false
-  if (!attempts.every((candidate) => reconciledAttemptHasOnePair(candidate, payments))) return false
-  const currentPayment = payments.find((payment) => [
-    payment.attemptRef === attempt.attemptRef,
-    payment.effectGeneration === attempt.effectGeneration,
-  ].every(Boolean))
-  const currentReservation = currentPayment === undefined
-    ? undefined
-    : reservationForPayment(currentPayment, reservationsByRef)
-  const currentReservationCount = reservations.filter((reservation) => [
-    reservation.attemptRef === attempt.attemptRef,
-    reservation.effectGeneration === attempt.effectGeneration,
-  ].every(Boolean)).length
-  const currentHistory = history.filter((entry) => entry.effectGeneration === attempt.effectGeneration)
-  return currentLedgerLaneMatches({
-    row,
-    outerKind,
-    attempt,
-    payment: currentPayment,
-    reservation: currentReservation,
-    receipt,
-    reservationCount: currentReservationCount,
-    history: currentHistory,
-  })
 }
 
 function safeBeforeReleaseCanonicalControlMatches(
@@ -969,91 +516,27 @@ function currentSafeBeforeReleaseAttempt(
   return attempt
 }
 
-type ManagedUnsignedRefundDigestProof = NonNullable<
-  SafeBeforeReleaseSellerCanaryProof['managedUnsignedRefundProof']
->
-type ManagedAuthorizationFailureProof = Pick<
-  SafeBeforeReleaseSellerCanaryProof,
-  'authorizationFailureCode' | 'authorizationFailureDetail'
->
-
-function managedAuthorizationFailureProof(input: Readonly<{
-  outerKind: SafeBeforeReleaseOuterKind
-  attempt: Doc<'actionInvocationAttempts'>
-  payments: Doc<'moneyX402PaymentAttempts'>[]
-}>): ManagedAuthorizationFailureProof {
-  if (input.outerKind !== 'managed_unsigned_refund') return {}
-  const payment = input.payments.find((candidate) => (
-    candidate.attemptRef === input.attempt.attemptRef
-    && candidate.effectGeneration === input.attempt.effectGeneration
-  ))
-  if (payment?.authorizationFailureCode === undefined) return {}
-  return {
-    authorizationFailureCode: payment.authorizationFailureCode,
-    ...(payment.authorizationFailureDetail === undefined
-      ? {}
-      : { authorizationFailureDetail: payment.authorizationFailureDetail }),
-  }
-}
-
-function managedUnsignedRefundDigestProof(input: Readonly<{
-  outerKind: SafeBeforeReleaseOuterKind
-  attempt: Doc<'actionInvocationAttempts'>
-  payments: Doc<'moneyX402PaymentAttempts'>[]
-  reservations: Doc<'moneyExternalSpendReservations'>[]
-  history: Doc<'actionInvocationHistory'>[]
-}>): ManagedUnsignedRefundDigestProof | undefined {
-  if (input.outerKind !== 'managed_unsigned_refund') return undefined
-  const payment = input.payments.find((candidate) => [
-    candidate.attemptRef === input.attempt.attemptRef,
-    candidate.effectGeneration === input.attempt.effectGeneration,
-  ].every(Boolean))
-  if (payment === undefined) return undefined
-  const reservation = input.reservations.find((candidate) => candidate.reservationRef === payment.reservationRef)
-  if (reservation === undefined) return undefined
-  const currentHistory = input.history
-    .filter((entry) => entry.effectGeneration === input.attempt.effectGeneration)
-    .sort((left, right) => left.invocationVersion - right.invocationVersion)
-  return {
-    paymentAttemptDigest: canonicalDigest(withoutSystemFields(payment) as never),
-    reservationDigest: canonicalDigest(withoutSystemFields(reservation) as never),
-    currentHistoryDigest: canonicalDigest(currentHistory.map((entry) => withoutSystemFields(entry)) as never),
-  }
-}
-
-function managedDigestProofRequirementMet(
-  outerKind: SafeBeforeReleaseOuterKind,
-  proof: ManagedUnsignedRefundDigestProof | undefined,
-): boolean {
-  return [outerKind === 'generic_pre_release', proof !== undefined].some(Boolean)
-}
-
 /**
- * Proves a post-claim retry from canonical durable state. The generic lane has
- * no current economic rows. The managed x402 lane may have crossed the local
- * release fence, but must prove every attempt ended unpaid and the current
- * authorization was never signed or submitted before its reservation closed.
+ * Proves that the current seller-canary attempt stopped before any financial,
+ * transport, usage, or provider effect. Managed seller-canary payment retries
+ * were retired by the Formance cutover.
  */
 export async function safeBeforeReleaseSellerCanaryRefusal(
   ctx: MutationCtx | QueryCtx,
   row: OperationInvocationRow,
 ): Promise<SafeBeforeReleaseSellerCanaryProof | undefined> {
-  const outerKind = safeBeforeReleaseOuterKind(row)
-  if (outerKind === undefined) return undefined
+  if (!isGenericSafeBeforeReleaseRefusal(row)) return undefined
 
-  const [control, attempts, reservations, paymentAttempts, usage, qualifiedUse, providerJournals, history] = await Promise.all([
+  const [control, attempts, paymentAttempts, usage, qualifiedUse, providerJournals] = await Promise.all([
     ctx.db.query('actionInvocationControls')
       .withIndex('by_invocationRef', (query) => query.eq('invocationRef', row.invocationRef))
       .unique(),
     ctx.db.query('actionInvocationAttempts')
       .withIndex('by_invocationRef_and_attemptNumber', (query) => query.eq('invocationRef', row.invocationRef))
       .collect(),
-    ctx.db.query('moneyExternalSpendReservations')
-      .withIndex('by_invocationRef_and_attemptRef_and_effectGeneration', (query) => query.eq('invocationRef', row.invocationRef))
-      .collect(),
     ctx.db.query('moneyX402PaymentAttempts')
       .filter((query) => query.eq(query.field('dispatchRef'), row.invocationRef))
-      .collect(),
+      .take(1),
     ctx.db.query('moneyUsageEvents')
       .withIndex('by_invocationRef', (query) => query.eq('invocationRef', row.invocationRef))
       .take(1),
@@ -1063,53 +546,24 @@ export async function safeBeforeReleaseSellerCanaryRefusal(
     ctx.db.query('providerConsequenceJournal')
       .filter((query) => query.eq(query.field('invocationRef'), row.invocationRef))
       .take(1),
-    ctx.db.query('actionInvocationHistory')
-      .withIndex('by_invocationRef_and_invocationVersion', (query) => query.eq('invocationRef', row.invocationRef))
-      .collect(),
   ])
   if (control === null) return undefined
   if (!safeBeforeReleaseCanonicalControlMatches(row, control)) return undefined
   const attempt = currentSafeBeforeReleaseAttempt(row, control, attempts)
   if (attempt === undefined) return undefined
-  if ([usage, qualifiedUse, providerJournals].some((rows) => rows.length > 0)) return undefined
-  const ledgerProofMatches = sellerCanaryUnpaidLedgersMatch(
-    row,
-    outerKind,
-    attempt,
-    attempts,
-    reservations,
-    paymentAttempts,
-    history,
-  )
-  if (!ledgerProofMatches) return undefined
-  const managedUnsignedRefundProof = managedUnsignedRefundDigestProof({
-    outerKind,
-    attempt,
-    payments: paymentAttempts,
-    reservations,
-    history,
-  })
-  if (!managedDigestProofRequirementMet(outerKind, managedUnsignedRefundProof)) return undefined
-  const authorizationFailureProof = managedAuthorizationFailureProof({
-    outerKind,
-    attempt,
-    payments: paymentAttempts,
-  })
-  const refusalCode = {
-    generic_pre_release: 'pre_release_failed',
-    managed_unsigned_refund: 'payment_signature_unavailable',
-  } as const
+  if ([paymentAttempts, usage, qualifiedUse, providerJournals].some((rows) => rows.length > 0)) {
+    return undefined
+  }
   return {
-    refusalCode: refusalCode[outerKind],
+    refusalCode: 'pre_release_failed',
     attemptRef: attempt.attemptRef,
     attemptNumber: attempt.attemptNumber,
     effectGeneration: attempt.effectGeneration,
     controlDigest: canonicalDigest(withoutSystemFields(control) as never),
     attemptDigest: canonicalDigest(withoutSystemFields(attempt) as never),
-    ...authorizationFailureProof,
-    ...(managedUnsignedRefundProof === undefined ? {} : { managedUnsignedRefundProof }),
   }
 }
+
 
 /**
  * Re-arm one seller canary only when the prior worker stopped before claim and
@@ -1239,17 +693,11 @@ export async function enqueueSafeBeforeReleaseSellerCanaryResume(
     controlDigest: proof.controlDigest,
     attemptDigest: proof.attemptDigest,
   }
-  const refusalProvenance = proof.managedUnsignedRefundProof === undefined
-    ? {
-        ...commonRefusalProvenance,
-        source: 'canonical_retryable_attempt' as const,
-        nextAction: SELLER_CANARY_ROUTE_SIGNING_UNAVAILABLE_NEXT_ACTION,
-      }
-    : {
-        ...commonRefusalProvenance,
-        source: 'managed_x402_unsigned_refund' as const,
-        ...proof.managedUnsignedRefundProof,
-      }
+  const refusalProvenance = {
+    ...commonRefusalProvenance,
+    source: 'canonical_retryable_attempt' as const,
+    nextAction: SELLER_CANARY_ROUTE_SIGNING_UNAVAILABLE_NEXT_ACTION,
+  }
   const auditMaterial = {
     format: 'seller-onboarding-canary-rearm-audit:v1',
     canaryRef: canary.canaryRef,
@@ -1562,6 +1010,7 @@ export async function upsertCallProjection(
     accountRef: row.ownerId,
     principalRef: row.principalId,
     credentialRef: row.credentialId,
+    applicationRef: row.applicationRef,
     operationRef: row.operationRef,
     providerRef: operation.identity.businessId,
     operationLabel: operation.contract.name,
@@ -1580,12 +1029,13 @@ export async function upsertCallProjection(
   const existing = await ctx.db.query('capabilityOperationCallProjections')
     .withIndex('by_callRef', (query) => query.eq('callRef', row.invocationRef))
     .unique()
+  const next = {
+    callRef: row.invocationRef,
+    ...fields,
+    createdAt: row.createdAt,
+  }
   if (existing === null) {
-    await ctx.db.insert('capabilityOperationCallProjections', {
-      callRef: row.invocationRef,
-      ...fields,
-      createdAt: row.createdAt,
-    })
+    await ctx.db.insert('capabilityOperationCallProjections', next)
   } else {
     await ctx.db.patch(existing._id, fields)
   }

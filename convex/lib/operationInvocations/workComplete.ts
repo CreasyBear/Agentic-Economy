@@ -1,9 +1,6 @@
 import type { MutationCtx } from '../../_generated/server'
 import type { Doc } from '../../_generated/dataModel'
-import { internal } from '../../_generated/api'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
-import { parsePublishedOperationSnapshot } from '@/modules/capability-supply/public'
 
 type InvocationRow = Doc<'capabilityOperationInvocations'>
 type InvocationControlRow = Doc<'actionInvocationControls'>
@@ -66,56 +63,17 @@ type ChargeSettlement = { kind: 'none' | 'settled' | 'reconciliation_required' }
 
 async function reconcilePreReleaseFailure(
   ctx: MutationCtx,
-  row: InvocationRow,
   invocationRef: string,
 ): Promise<ChargeSettlement> {
-  const attemptRef = `operation-attempt:${invocationRef}:1`
-  const transactionRef = `operation-money:${invocationRef}:${attemptRef}:1`
-  const sourceDigest = parsePublishedOperationSnapshot(row.operationJson ?? '')?.materialDigest
-    ?? canonicalDigest({
-      format: 'operation-money-source:v1',
-      invocationRef,
-      operationRef: row.operationRef,
-      requestDigest: row.requestDigest,
-    } as never)
-  const reconciliationDigest = canonicalDigest({
-    format: 'operation-money-reconciliation:v1',
-    invocationRef,
-    attemptRef,
-    operationRef: row.operationRef,
-    inputDigest: row.inputDigest,
-    transactionRef,
-    outcome: 'not_released',
-    sourceDigest,
-  } as never)
-  const refundTransactionRef = `operation-money-refund:${invocationRef}:${attemptRef}:1`
-  const refundInputDigest = canonicalDigest({
-    format: 'operation-money-refund:v1',
-    invocationRef,
-    attemptRef,
-    inputDigest: row.inputDigest,
-    transactionRef,
-    outcome: 'not_released',
-  } as never)
-  try {
-    return await ctx.runMutation(internal.moneyLedger.reconcileInvocationCharge, {
-      invocationRef,
-      principalId: row.principalId,
-      credentialId: row.credentialId,
-      attemptRef,
-      transactionRef,
-      inputDigest: row.inputDigest,
-      outcome: 'not_released',
-      refundTransactionRef,
-      refundIdempotencyKey: refundTransactionRef,
-      refundInputDigest,
-      sourceDigest,
-      evidenceRefs: [`operation-money-reconciliation:${reconciliationDigest}`],
-      observedAt: Date.now(),
-    })
-  } catch {
-    return { kind: 'reconciliation_required' }
-  }
+  const invocation = await ctx.db.query('capabilityOperationInvocations')
+    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+    .unique()
+  if (invocation?.formanceReservationRefs === undefined
+    || invocation.formanceFinancialState === 'released') return { kind: 'none' }
+  // A mutation callback cannot perform the external Formance release. Keep the
+  // durable reservation and let the existing recovery Action prove and release
+  // it by exact reference before a fresh invocation can be offered.
+  return { kind: 'reconciliation_required' }
 }
 
 async function patchPreReleaseRefusal(ctx: MutationCtx, row: InvocationRow): Promise<void> {
@@ -162,7 +120,7 @@ export async function completeWorkHandler(
     return null
   }
   const attemptRef = `operation-attempt:${context.invocationRef}:1`
-  const settlement = await reconcilePreReleaseFailure(ctx, row, context.invocationRef)
+  const settlement = await reconcilePreReleaseFailure(ctx, context.invocationRef)
   if (settlement.kind === 'reconciliation_required') {
     await patchReconciliationRequired(ctx, row, context.invocationRef, controlAttempt(control, attemptRef))
     return null

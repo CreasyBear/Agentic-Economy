@@ -16,6 +16,7 @@ export const pricingConfigSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     version: z.literal('pricing:v3'),
     kind: z.literal('managed_x402'),
+    effectTiming: z.literal('payment_required_before_effect'),
     sourceRequirement: z.strictObject({
       network: z.string().trim().min(1).max(200),
       asset: z.string().trim().min(1).max(200),

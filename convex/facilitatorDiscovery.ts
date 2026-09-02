@@ -275,6 +275,7 @@ async function reconcileDraft(
   const pricingConfig: PricingConfig = {
     version: 'pricing:v3',
     kind: 'managed_x402',
+    effectTiming: 'payment_required_before_effect',
     sourceRequirement: {
       network: sourceResource.network,
       asset: sourceResource.asset,

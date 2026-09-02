@@ -169,7 +169,7 @@ export type OperationSearchResult =
 const MAX_SOURCE = 256;
 const MAX_QUERY = 200;
 const MAX_CURSOR = 512;
-const MAX_LIMIT = 20;
+const MAX_LIMIT = 3;
 const SEARCH_CURRENCY_CODES = new Set(
   Intl.supportedValuesOf("currency").map((currency) => currency.toLowerCase()),
 );

@@ -215,7 +215,7 @@ export function decideFacilitatorDiscoveryItem(
         presentation: {
           label: offeringLabel,
           summary: offeringSummary,
-          price: { kind: "fixed", amount: providerPrice },
+          price: { kind: "on_request" },
           materialTerms: [],
           commercialRelationship: {
             kind: "none",
@@ -392,7 +392,7 @@ export function admittedFacilitatorDiscoveryDraft(
     origin: { kind: "standalone" },
     presentation: {
       ...normalized.offering.presentation,
-      price: { kind: "fixed", amount: decision.price.total },
+      price: { kind: "on_request" },
       materialTerms,
     },
   };

@@ -24,7 +24,6 @@ import {
   refreshCapabilitySupplyReadiness,
   refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler,
-  runDailySupplierSettlementHandler,
   dispatchWorkloadCronConsequenceHandler,
   reconcile,
   type WorkloadCronActionContext,
@@ -48,7 +47,6 @@ const EXPECTED_BINDINGS = {
   'refresh capability supply readiness': 'workloadCron:refreshCapabilitySupplyReadiness',
   'refresh current market presence': 'workloadCron:refreshCurrentMarketPresence',
   'refresh facilitator discovery': 'workloadCron:refreshFacilitatorDiscovery',
-  'run daily supplier settlement': 'workloadCron:runDailySupplierSettlement',
 } as const
 
 const ACTION_HANDLERS = [
@@ -63,7 +61,6 @@ const MUTATION_HANDLERS = [
   refreshCapabilitySupplyReadinessHandler,
   cleanupExpiredSourceWriteNoncesHandler,
   cleanupExpiredAgentAccessOAuthGrantsHandler,
-  runDailySupplierSettlementHandler,
 ] as const
 
 describe('System workload cron boundary', () => {
@@ -72,7 +69,7 @@ describe('System workload cron boundary', () => {
     vi.setSystemTime(new Date('2026-08-26T00:00:00.000Z'))
   })
 
-  it('binds the exact nine cron registrations only to workload admission wrappers', () => {
+  it('binds the exact eight cron registrations only to workload admission wrappers', () => {
     expect(Object.keys(convexCrons.crons).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
     expect(Object.fromEntries(
       Object.entries(convexCrons.crons).map(([name, job]) => [name, job.name]),
@@ -81,7 +78,7 @@ describe('System workload cron boundary', () => {
   })
 
   it('declares every cron as one canonical workload Principal and Account with no exemption', () => {
-    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(9)
+    expect(WORKLOAD_CRON_DECLARATIONS).toHaveLength(8)
     expect(WORKLOAD_CRON_DECLARATIONS.map(({ name }) => name).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
     expect(WORKLOAD_CRON_DECLARATIONS.every((declaration) => (
       declaration.authority === 'canonical_workload'
@@ -303,16 +300,16 @@ describe('System workload cron boundary', () => {
 
   it('denies missing, ambiguous, or inactive Account facts', async () => {
     const missing = canonicalDb({ includeAccount: false, includeOwnership: false, includeMembership: false })
-    await expect(admitWorkloadCron(queryContext(missing), 'run daily supplier settlement'))
+    await expect(admitWorkloadCron(queryContext(missing), 'cleanup expired agent access oauth grants'))
       .rejects.toMatchObject({ code: 'workload_account_missing' })
 
     const ambiguous = canonicalDb()
     ambiguous.seed('accounts', account())
-    await expect(admitWorkloadCron(queryContext(ambiguous), 'run daily supplier settlement'))
+    await expect(admitWorkloadCron(queryContext(ambiguous), 'cleanup expired agent access oauth grants'))
       .rejects.toThrow('unique query returned more than one row')
 
     const inactive = canonicalDb({ accountLifecycle: 'suspended' })
-    await expect(admitWorkloadCron(queryContext(inactive), 'run daily supplier settlement'))
+    await expect(admitWorkloadCron(queryContext(inactive), 'cleanup expired agent access oauth grants'))
       .rejects.toMatchObject({ code: 'workload_account_inactive' })
   })
 
@@ -338,8 +335,8 @@ describe('System workload cron boundary', () => {
     for (const handler of MUTATION_HANDLERS) await expect(handler(context.mutation())).resolves.toBeNull()
 
     expect(context.admissions).toEqual(WORKLOAD_CRON_DECLARATIONS.slice(0, 4).map(({ name }) => name))
-    expect(context.dispatches).toHaveLength(9)
-    expect(context.db.queries).toEqual(Array.from({ length: 9 }, () => [
+    expect(context.dispatches).toHaveLength(8)
+    expect(context.db.queries).toEqual(Array.from({ length: 8 }, () => [
       'principals',
       'accounts',
       'accountOwnerships',
@@ -352,7 +349,7 @@ describe('System workload cron boundary', () => {
     const context = new FakeRuntimeContext(new FakeDb())
     await expect(reconcileDueFacilitatorInvocationsHandler(context.action()))
       .rejects.toMatchObject({ code: 'workload_principal_missing' })
-    await expect(runDailySupplierSettlementHandler(context.mutation()))
+    await expect(cleanupExpiredAgentAccessOAuthGrantsHandler(context.mutation()))
       .rejects.toMatchObject({ code: 'workload_principal_missing' })
     expect(context.dispatches).toEqual([])
   })
@@ -410,7 +407,7 @@ describe('System workload cron boundary', () => {
 
   it('reconciles same-Account and explicit cross-Account payout attribution from canonical account facts', async () => {
     const db = canonicalDb()
-    const snapshot = await admitWorkloadCron(queryContext(db), 'run daily supplier settlement')
+    const snapshot = await admitWorkloadCron(queryContext(db), 'cleanup expired agent access oauth grants')
     await expect(reconcileWorkloadCronResourceAccount(
       queryContext(db),
       snapshot.name,
@@ -534,7 +531,6 @@ describe('System workload cron boundary', () => {
       'marketExternalRegistry:finalize',
       'marketExternalRegistry:writeBatch',
       'marketExternalSnapshots:upsert',
-      'moneyLedger:reconcileExternalInvocationSpend',
       'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
     ] as const
     const context = new FakeRuntimeContext(canonicalDb())

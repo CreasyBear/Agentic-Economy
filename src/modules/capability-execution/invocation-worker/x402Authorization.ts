@@ -14,7 +14,6 @@ import {
   replayCdpX402PaymentSigningIntent,
   readX402PaymentPayerAndNonce,
   verifyExactEvmX402Settlement,
-  x402PaymentCredentialRefFromEnvironment,
   type CdpX402RequestFingerprintContext,
   type CdpX402PaymentSigningIntent,
   type CdpX402PaymentSignerDependencies,
@@ -26,20 +25,13 @@ import type {
   X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import type { PublishedOperation } from '@/modules/capability-supply/public'
-import {
-  externalSpendIdentityFromReservation,
-} from '@/modules/money/public'
 import { type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
 import type { OpenDispatch } from '../../../../convex/capabilityOperationInvocationProjection'
 import type { ConnectionAuthority, ProviderLeaseAuthority } from './lease'
 import {
-  bestEffortReleaseX402ExternalSpend,
-  externalSpendIdentityFromAttempt,
-  externalSpendPaymentFactsFromDispatch,
   readX402EvmReceipt,
 } from './x402Settlement'
-import type { X402AttemptSnapshotForMoney } from './x402Settlement'
 import { X402_MANAGED_CUSTODY_REF } from './x402Route'
 
 type PreparedX402AuthorizationWithFingerprint = X402PreparedAuthorization & Readonly<{
@@ -58,7 +50,7 @@ type StoredX402Authorization = Readonly<{
   requestFingerprint: string
 }>
 
-export type X402AttemptMaterial = X402AttemptSnapshotForMoney & Readonly<{
+export type X402AttemptMaterial = Readonly<{
   state: string
   dispatchRef: string
   attemptRef: string
@@ -70,6 +62,17 @@ export type X402AttemptMaterial = X402AttemptSnapshotForMoney & Readonly<{
   requestFingerprint?: string
   challengeJson: string
   selectedRequirementJson: string
+  network: string
+  asset: string
+  paymentIdentifier: string
+  challengeDigest: string
+  amountUnits: string
+  currency: string
+  exponent: number
+  reservationRef?: string
+  custodyBudgetRef?: string
+  custodyGeneration?: number
+  custodyDailyMaximumUnits?: string
   paymentUnsignedMaterialJson?: string
   paymentUnsignedMaterialDigest?: string
   paymentSigningIdempotencyKey?: string
@@ -697,6 +700,35 @@ export function createX402PaymentCallbacks(
     onPaymentPossiblySubmitted?: () => void
   }>,
 ): X402PaymentCallbacks {
+  const managedBuyer = input.useCustodySigner === true
+    && input.dispatch.sellerOnboardingCanary === undefined
+
+  const settleManagedPreparationFailure = async (
+    attempt: X402AttemptMaterial | null | undefined,
+    reason: 'authorization_unavailable' | 'preparation_failed',
+  ): Promise<void> => {
+    const observedAt = Date.now()
+    if (attempt === null || attempt?.state === 'prepared') {
+      await ctx.runAction(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
+        invocationRef: input.dispatch.invocationRef,
+        now: observedAt,
+      }).catch(() => undefined)
+      return
+    }
+    await ctx.runMutation(internal.moneyManagedCallLifecycle.markOutcomeUnknown, {
+      invocationRef: input.dispatch.invocationRef,
+      evidenceDigest: canonicalDigest({
+        format: 'ae.managed-x402-preparation-failure:v1',
+        invocationRef: input.dispatch.invocationRef,
+        attemptRef: input.durableAttemptRef,
+        effectGeneration: input.effectGeneration,
+        reason,
+        attemptState: attempt?.state ?? 'read_unavailable',
+      }),
+      now: observedAt,
+    }).catch(() => undefined)
+  }
+
   const recordAuthorizationFailure = async (
     code: X402PaymentAuthorizationFailureCode,
     detail?: X402PaymentAuthorizationFailureDetail,
@@ -718,6 +750,7 @@ export function createX402PaymentCallbacks(
     prepared: X402PreparedAuthorization,
     byDigest: boolean,
   ): Promise<string | undefined> => {
+    if (!managedBuyer) return undefined
     const requestFingerprint = requestFingerprintFromPrepared(prepared)
     const requestFingerprintContext = input.useCustodySigner === true
       ? (() => {
@@ -749,35 +782,14 @@ export function createX402PaymentCallbacks(
             attemptRef: input.durableAttemptRef,
             effectGeneration: input.effectGeneration,
           },
-        ).catch(() => null)
+        ).catch(() => undefined)
       : null
-    const expectedMaterial = material ?? cleanupAttempt
-    const credentialRef = input.useCustodySigner === true
-      ? X402_MANAGED_CUSTODY_REF
-      : x402PaymentCredentialRefFromEnvironment()
-    const expected = expectedMaterial === null
-      ? undefined
-      : externalSpendIdentityFromAttempt(
-          input.dispatch,
-          input.operation,
-          expectedMaterial as X402AttemptSnapshotForMoney,
-          input.durableAttemptRef,
-          input.effectGeneration,
-        )
-    const cleanupState = material?.state ?? (
-      cleanupAttempt !== null && typeof cleanupAttempt === 'object' && 'state' in cleanupAttempt
-        ? cleanupAttempt.state
-        : undefined
-    )
+    const credentialRef = X402_MANAGED_CUSTODY_REF
     const releasePreparedReservation = async (): Promise<void> => {
-      if (expected !== undefined && cleanupState === 'prepared') {
-        const cleanupOutcome = await bestEffortReleaseX402ExternalSpend(
-          ctx,
-          expected,
-          [input.operationKeyDigest],
-        )
-        if (cleanupOutcome === 'failed') return
-      }
+      await settleManagedPreparationFailure(
+        material ?? cleanupAttempt,
+        'authorization_unavailable',
+      )
     }
     if (
       input.useCustodySigner === true
@@ -812,11 +824,6 @@ export function createX402PaymentCallbacks(
       await releasePreparedReservation()
       return undefined
     }
-    if (expected === undefined) {
-      await recordAuthorizationFailure('external_spend_identity_invalid')
-      await releasePreparedReservation()
-      return undefined
-    }
     let validation: Awaited<ReturnType<ProviderConnectionAuthorityValidator>>
     try {
       validation = await input.validateProviderAuthority({
@@ -844,12 +851,7 @@ export function createX402PaymentCallbacks(
     }
     if (validation.kind !== 'valid') {
       await recordAuthorizationFailure('provider_authority_invalid', validation.reason)
-      const cleanupOutcome = await bestEffortReleaseX402ExternalSpend(
-        ctx,
-        expected,
-        [input.operationKeyDigest],
-      )
-      if (cleanupOutcome === 'failed') return undefined
+      await releasePreparedReservation()
       return undefined
     }
     let grantStillValid = false
@@ -860,11 +862,7 @@ export function createX402PaymentCallbacks(
     }
     if (!grantStillValid) {
       await recordAuthorizationFailure('grant_invalid')
-      await bestEffortReleaseX402ExternalSpend(
-        ctx,
-        expected,
-        [input.operationKeyDigest],
-      )
+      await releasePreparedReservation()
       return undefined
     }
     const signature = await readX402Authorization(ctx, prepared, byDigest, {
@@ -885,12 +883,7 @@ export function createX402PaymentCallbacks(
       if (input.useCustodySigner === true) {
         await recordAuthorizationFailure('managed_authorization_unavailable')
       }
-      const cleanupOutcome = await bestEffortReleaseX402ExternalSpend(
-        ctx,
-        expected,
-        [input.operationKeyDigest],
-      )
-      if (cleanupOutcome === 'failed') return undefined
+      await releasePreparedReservation()
       return undefined
     }
     return signature
@@ -927,14 +920,13 @@ export function createX402PaymentCallbacks(
       })
     },
     prepareX402PaymentAuthorization: async (request) => {
+      if (!managedBuyer) return undefined
       if (
         request.attemptRef !== input.durableAttemptRef
         || request.effectGeneration !== input.effectGeneration
         || request.paymentIdentifier !== input.operationKeyDigest
       ) return undefined
-      const paymentCredentialRef = input.useCustodySigner === true
-        ? X402_MANAGED_CUSTODY_REF
-        : x402PaymentCredentialRefFromEnvironment()
+      const paymentCredentialRef = X402_MANAGED_CUSTODY_REF
       if (paymentCredentialRef === undefined || request.credential !== paymentCredentialRef) return undefined
       const method = input.useCustodySigner === true
         ? x402MethodFromOperation(input.operation)
@@ -963,28 +955,13 @@ export function createX402PaymentCallbacks(
               exponent: request.paymentAmount.exponent,
             },
           }
-      const paymentFacts = {
-        attemptRef: request.attemptRef,
-        effectGeneration: request.effectGeneration,
-        providerRef: input.connectionAuthority.providerRef,
-        paymentIdentifier: request.paymentIdentifier,
-        challengeDigest: request.challengeDigest,
-        amount: request.paymentAmount,
-      }
-      const reservationFacts = custody === undefined
-        ? paymentFacts
-        : {
-            ...paymentFacts,
-            custodyRef: custody.budgetRef,
-            custodyGeneration: custody.generation,
-            custodyDailyMaximum: custody.dailyMaximum,
-          }
-      const reserved = await ctx.runMutation(internal.moneyLedger.reserveExternalInvocationSpend, {
-        ...externalSpendPaymentFactsFromDispatch(input.dispatch, reservationFacts),
-        observedAt: Date.now(),
-      })
-      if (reserved.kind !== 'accepted') return undefined
-      const externalIdentity = externalSpendIdentityFromReservation(reserved.reservation)
+      const managedBuyerReservation = await ctx.runQuery(
+        internal.moneyManagedCallLifecycle.readReservation,
+        { invocationRef: input.dispatch.invocationRef },
+      )
+      if (managedBuyerReservation === null || managedBuyerReservation.state !== 'reserved') return undefined
+      const reservationRef = managedBuyerReservation.treasuryReservationRef
+        ?? managedBuyerReservation.reservationRef
       try {
         const prepareBase = {
           dispatchRef: input.dispatch.invocationRef,
@@ -1006,7 +983,7 @@ export function createX402PaymentCallbacks(
           amountUnits: request.paymentAmount.units,
           currency: request.paymentAmount.currency,
           exponent: request.paymentAmount.exponent,
-          reservationRef: externalIdentity.reservationRef,
+          reservationRef,
         }
         const prepareArgs = custody === undefined
           ? {
@@ -1036,19 +1013,7 @@ export function createX402PaymentCallbacks(
             effectGeneration: request.effectGeneration,
           },
         ).catch(() => undefined)
-        if (attempt === undefined && reserved.replayed === false) {
-          await bestEffortReleaseX402ExternalSpend(
-            ctx,
-            externalIdentity,
-            [input.operationKeyDigest],
-          )
-        } else if (attempt === null || attempt?.state === 'prepared') {
-          await bestEffortReleaseX402ExternalSpend(
-            ctx,
-            externalIdentity,
-            [input.operationKeyDigest],
-          )
-        }
+        await settleManagedPreparationFailure(attempt, 'preparation_failed')
         throw error
       }
     },

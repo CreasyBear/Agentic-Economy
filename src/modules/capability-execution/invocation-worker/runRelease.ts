@@ -12,9 +12,9 @@ import { pricingConfigSourceAmount } from '@/modules/money/public'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { internal } from '../../../../convex/_generated/api'
 import type { ActionCtx } from '../../../../convex/_generated/server'
-import { type ChargeSettlementResult, type WorkerAcceptedCharge, parseContractOutput, projectOuterResult, projectSellerOnboardingCanaryResult, readCanonicalSnapshot } from '../../../../convex/capabilityOperationInvocationProjection'
-import { authorizeAeInternalCharge, convergePreRelease, reconcileAcceptedCharge, type WorkerResult } from './charge'
-import { brokeredProviderAuthorityValidator, createBrokeredX402PaymentCallbacks, createManagedX402PaymentCallbacks, createX402PaymentCallbacks, credentiallessX402ConnectionAuthorityValidator, routeInvocation, settleX402TransportObservation, X402_MANAGED_CUSTODY_REF } from './x402Route'
+import { type ChargeSettlementResult, parseContractOutput, projectOuterResult, projectSellerOnboardingCanaryResult, readCanonicalSnapshot } from '../../../../convex/capabilityOperationInvocationProjection'
+import { convergePreRelease, type WorkerResult } from './charge'
+import { brokeredProviderAuthorityValidator, createBrokeredX402PaymentCallbacks, credentiallessX402ConnectionAuthorityValidator, routeInvocation, X402_MANAGED_CUSTODY_REF } from './x402Route'
 import { issueProviderLease, providerCredentialReader, providerLeaseAuthorityValidator, settleProviderLease, type ProviderLeaseAuthority } from './lease'
 import { runCommittedManagedX402Transport } from './brokeredX402'
 import { exactSellerCanarySnapshotMatches, type InvocationPreparation, type SellerCanaryOperationSnapshot } from './runPreparation'
@@ -60,7 +60,6 @@ export async function releaseInvocationRun(
   const {
     dispatch,
     port,
-    principal,
     grant,
     operation,
     descriptor,
@@ -89,6 +88,16 @@ export async function releaseInvocationRun(
   if (beforeLease === undefined) return { kind: 'none' }
   if (beforeLease.control.control.control.state === 'cancelled') return { kind: 'none' }
   if (beforeLease.control.control.control.state === 'reconciliation_required') return { kind: 'none' }
+  if (isManagedCanary || (isX402 && economicRail !== 'brokered_x402')) {
+    return await convergePreRelease(
+      ctx,
+      dispatch,
+      claimed,
+      'operation_unsupported',
+      false,
+      'Inspect a managed x402 Operation before invoking it.',
+    )
+  }
   if (connectionAuthority !== undefined && economicRail !== 'brokered_x402' && !isManagedCanary) {
     const lease = await issueProviderLease(ctx, {
       dispatch,
@@ -290,31 +299,7 @@ export async function releaseInvocationRun(
             brokeredPaymentPossiblySubmitted = true
           },
         })
-      : isManagedCanary
-        ? createManagedX402PaymentCallbacks(ctx, {
-            dispatch,
-            operation,
-            connectionAuthority,
-            durableAttemptRef,
-            effectGeneration: claimed.attempt.effectGeneration,
-            operationKeyDigest,
-            dispatcher,
-            isGrantStillValid,
-            validateProviderAuthority,
-          })
-      : createX402PaymentCallbacks(ctx, {
-          dispatch,
-          operation,
-          connectionAuthority,
-          durableAttemptRef,
-          effectGeneration: claimed.attempt.effectGeneration,
-          operationKeyDigest,
-          ...(leaseRef === undefined ? {} : { leaseRef }),
-          ...(leaseAuthority === undefined ? {} : { leaseAuthority }),
-          validateProviderAuthority,
-          dispatcher,
-          isGrantStillValid,
-        })
+      : undefined
   const runtime: RouteTransportRuntime = {
     send,
     resolveCredential: economicRail === 'brokered_x402' || isManagedCanary
@@ -421,26 +406,19 @@ export async function releaseInvocationRun(
       'The operation publication or price binding changed before release.',
     )
   }
-  let moneyResult: WorkerAcceptedCharge | undefined
   if (economicRail === 'ae_internal') {
-    const authorized = await authorizeAeInternalCharge(ctx, {
-      principal,
-      operation,
-      dispatch,
-      authorityMaximumSpend,
-      durableAttemptRef,
-    })
-    if (authorized.kind === 'missing_billing_identity') {
+    if (authorityMaximumSpend.units !== '0') {
       await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
       await closeDispatcher()
-      return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'billing_identity_missing')
+      return await convergePreRelease(
+        ctx,
+        dispatch,
+        claimed,
+        'operation_unsupported',
+        false,
+        'Inspect a managed x402 Operation before invoking it.',
+      )
     }
-    if (authorized.kind === 'refused') {
-      await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
-      await closeDispatcher()
-      return await convergePreRelease(ctx, dispatch, claimed, authorized.code, authorized.retryable)
-    }
-    moneyResult = authorized.charge
   }
   const releaseBrokeredBuyerBeforeSubmission = async (): Promise<ChargeSettlementResult> => {
     try {
@@ -450,7 +428,7 @@ export async function releaseInvocationRun(
       if (reservation === null || reservation.state !== 'reserved') {
         return { kind: 'reconciliation_required' }
       }
-      const released = await ctx.runMutation(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
+      const released = await ctx.runAction(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
         invocationRef: dispatch.invocationRef,
         now: Date.now(),
       })
@@ -465,13 +443,8 @@ export async function releaseInvocationRun(
     if (economicRail === 'brokered_x402') {
       return await releaseBrokeredBuyerBeforeSubmission()
     }
-    if (moneyResult === undefined) {
-      await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
-      return { kind: 'settled', outcome: 'not_released' }
-    }
-    const settlement = await reconcileAcceptedCharge(ctx, dispatch, operation, moneyResult, durableAttemptRef, 'not_released')
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
-    return settlement
+    return { kind: 'settled', outcome: 'not_released' }
   }
 
   const beforeRelease = await readCanonicalSnapshot(port, dispatch.invocationRef, durableAttemptRef)
@@ -556,7 +529,6 @@ export async function releaseInvocationRun(
     await closeDispatcher()
     return { kind: 'none' }
   }
-  let acceptedChargeReconciled = moneyResult === undefined
   let finalizationStarted = false
   try {
     if (economicRail === 'brokered_x402') {
@@ -571,7 +543,6 @@ export async function releaseInvocationRun(
         operationKeyDigest,
         fenced: fenced ?? claimed,
       })
-      acceptedChargeReconciled = true
       await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, observation.releaseStarted, durableAttemptRef, durableEffectGeneration)
       finalizationStarted = true
       return { kind: 'recorded' }
@@ -595,28 +566,9 @@ export async function releaseInvocationRun(
     }
     const outputValidation = parseContractOutput(observation, descriptor)
     const deliveryOutcome = chargeSettlementOutcome(observation, economicRail, outputValidation.valid)
-    const settlement = isX402
-      ? await settleX402TransportObservation(ctx, {
-          dispatch,
-          operation,
-          observation,
-          durableAttemptRef,
-          durableEffectGeneration,
-          operationKeyDigest,
-        })
-      : moneyResult === undefined
-        ? deliveryOutcome === 'unknown'
-          ? { kind: 'reconciliation_required' as const }
-          : { kind: 'settled' as const, outcome: deliveryOutcome }
-        : await reconcileAcceptedCharge(
-            ctx,
-            dispatch,
-            operation,
-            moneyResult,
-            durableAttemptRef,
-            deliveryOutcome,
-          )
-    acceptedChargeReconciled = true
+    const settlement = deliveryOutcome === 'unknown'
+        ? { kind: 'reconciliation_required' as const }
+        : { kind: 'settled' as const, outcome: deliveryOutcome }
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, observation.releaseStarted, durableAttemptRef, durableEffectGeneration)
     const recordedAt = new Date().toISOString()
     finalizationStarted = true
@@ -645,7 +597,7 @@ export async function releaseInvocationRun(
         descriptor,
         observation,
         recordedAt,
-        moneyResult,
+        undefined,
         settlement,
         durableAttemptRef,
         durableEffectGeneration,
@@ -671,15 +623,6 @@ export async function releaseInvocationRun(
       } else {
         await releaseBrokeredBuyerBeforeSubmission()
       }
-    } else if (moneyResult !== undefined && !acceptedChargeReconciled) {
-        await reconcileAcceptedCharge(
-          ctx,
-          dispatch,
-          operation,
-          moneyResult,
-          durableAttemptRef,
-          'unknown',
-        )
     }
     await settleProviderLease(
       ctx,
@@ -722,7 +665,7 @@ export async function releaseInvocationRun(
         descriptor,
         unknownObservation,
         recordedAt,
-        moneyResult,
+        undefined,
         { kind: 'reconciliation_required' },
         durableAttemptRef,
         durableEffectGeneration,

@@ -28,6 +28,7 @@ const managedPricing = (
 ): PricingConfig => ({
   version: 'pricing:v3',
   kind: 'managed_x402',
+  effectTiming: 'payment_required_before_effect',
   sourceRequirement: { network, asset, atomicUnits },
   pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
   publicDisplay: 'on_request',

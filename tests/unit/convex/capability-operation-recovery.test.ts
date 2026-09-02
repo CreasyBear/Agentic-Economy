@@ -552,13 +552,14 @@ describe('capability operation recovery Convex adapters', () => {
       grant: null,
       workerResult: { kind: 'reconciliation_required', invocationRef, operationRef: row.operationRef, evidence },
     })
-    await expect(handlerFor(readInvocationStatus)(context, recoveryArgs())).resolves.toEqual({
+    await expect(handlerFor(readInvocationStatus)(context, recoveryArgs())).resolves.toMatchObject({
       kind: 'found',
       invocationRef,
       operationRef: row.operationRef,
       state: 'reconciliation_required',
       attemptRef: evidence.attemptRef,
       effectGeneration: evidence.effectGeneration,
+      version: expect.any(Number),
     })
   })
 

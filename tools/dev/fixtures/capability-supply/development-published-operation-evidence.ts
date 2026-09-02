@@ -42,6 +42,7 @@ const expectedPayment = {
 const pricingConfig = {
   version: 'pricing:v3' as const,
   kind: 'managed_x402' as const,
+  effectTiming: 'payment_required_before_effect' as const,
   sourceRequirement: {
     network: expectedPayment.network,
     asset: expectedPayment.asset,

@@ -41,6 +41,7 @@ import {
   type ReconciledInvocationAuthority,
 } from './contracts'
 import { readExactSellerOnboardingCanaryPlatformGrantHandler } from '../../capabilitySupplyCanaryFunding'
+import { inspectLiveX402RequirementRef } from '../liveX402RequirementRef'
 
 export const resolveInvocationAgentAuthorityRef = makeFunctionReference<
   'mutation',
@@ -520,6 +521,22 @@ export async function canonicalAgentInvokeHandler(
   })
   if (material === null) {
     return { kind: 'refused', code: 'operation_not_current', retryable: false }
+  }
+  if (material.x402RequirementDigest !== undefined) {
+    const live = await ctx.runAction(inspectLiveX402RequirementRef, {
+      operationRef: material.operationRef,
+      input: material.input,
+    })
+    if (live.kind !== 'observed'
+      || live.requirement.requirementDigest !== material.x402RequirementDigest) {
+      return {
+        kind: 'refused',
+        operationRef: material.operationRef,
+        code: 'operation_not_current',
+        retryable: false,
+        nextAction: 'operation.inspect',
+      }
+    }
   }
   const principal = await canonicalAgentPrincipal(ctx, args.principal, { operationRef: material.operationRef })
   if (principal === null) {

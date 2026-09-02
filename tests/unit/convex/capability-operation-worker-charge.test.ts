@@ -2,7 +2,6 @@ import {
   attemptRef,
   createWorker,
   digest,
-  grantRef,
   handler,
   invocationRef,
   mocks,
@@ -30,7 +29,7 @@ const invalidPaidOutputObservation = {
 } satisfies RouteTransportObservation
 
 describe('capability operation invocation worker charge/x402', () => {
-  it('runs an exact sealed canary when only the live qualification digest is recomputed', async () => {
+  it('retires the sealed seller canary before signing or transport', async () => {
     const worker = createWorker('x402', {
       sellerCanary: true,
       alreadyLeased: true,
@@ -44,19 +43,11 @@ describe('capability operation invocation worker charge/x402', () => {
     })
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-
     expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'completed',
-      result: {
-        kind: 'completed',
-        receipt: {
-          state: 'settled',
-          settlementTransactionHash: '0xworker-settled',
-        },
-      },
+      state: 'refused', result: { kind: 'refused', code: 'operation_unsupported' },
     })
-    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
-    expect(worker.state.transportCalls).toBe(1)
+    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
+    expect(worker.state.transportCalls).toBe(0)
   })
 
   it('refuses a sealed canary when exact operation material drifts before claim', async () => {
@@ -83,67 +74,18 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.transportCalls).toBe(0)
   })
 
-  it('runs the sealed sandbox seller canary through managed custody with only external-spend accounting', async () => {
+  it('does not preserve a shadow external-spend lane for seller canaries', async () => {
     const worker = createWorker('x402', { sellerCanary: true, alreadyLeased: true })
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
 
-    const paths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(paths).not.toContain('moneyLedger:authorizeInvocationCharge')
-    expect(paths).not.toContain('moneyLedger:reserveBrokeredInvocationCharge')
-    expect(paths).not.toContain('moneyLedger:finalizeBrokeredInvocationCharge')
-    expect(paths).not.toContain('qualifiedUse:recordQualifiedUse')
-    expect(paths).not.toContain('capabilityProviderConnections:issueLease')
-    expect(paths).not.toContain('capabilityProviderConnections:consumeLease')
-    expect(worker.state.queryCalls).not.toContain('capabilityOperationInvocations:readProviderLeaseAuthority')
-    expect(worker.state.queryCalls.filter((path) =>
-      path === 'capabilityOperationInvocations:readCurrentProviderConnectionAuthority')).toHaveLength(5)
-    expect(paths.filter((path) => path === 'moneyLedger:reserveExternalInvocationSpend')).toHaveLength(1)
-    expect(paths.filter((path) => path === 'moneyLedger:finalizeExternalInvocationSpend')).toHaveLength(1)
-    expect(worker.state.money).toBeUndefined()
-    expect(worker.state.qualifiedUse).toEqual([])
-    expect(mocks.invokeProviderConsequenceViaVercel).not.toHaveBeenCalled()
-    expect(mocks.invokePreparedRouteTransport).toHaveBeenCalledTimes(1)
-    expect(worker.state.events.indexOf('fence-callback'))
-      .toBeLessThan(worker.state.events.indexOf('authorization-read'))
-    expect(worker.state.mutationCalls.find(({ path }) => path === 'moneyLedger:reserveExternalInvocationSpend')?.args)
-      .toMatchObject({
-        environment: 'sandbox',
-        executionContext: {
-          kind: 'seller_onboarding_canary',
-          paymentProfile: 'base-sepolia-usdc-exact',
-          canaryRef: expect.any(String),
-          canaryCommitmentDigest: expect.any(String),
-          fundingBudgetRef: 'budget:test-worker',
-        },
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused', result: { kind: 'refused', code: 'operation_unsupported' },
     })
-    const completed = worker.state.records.find((record) => record.state === 'completed')
-    expect(completed).toMatchObject({
-      state: 'completed',
-      evidenceHash: expect.any(String),
-      result: {
-        kind: 'completed',
-        receipt: {
-          state: 'settled',
-          network: 'eip155:84532',
-          asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-          providerQuotedAmount: { currency: 'USD', units: '2', exponent: 2 },
-          agenticEconomyFee: { currency: 'USD', units: '0', exponent: 2 },
-          totalBuyerAuthorization: { currency: 'USD', units: '0', exponent: 2 },
-          paymentIdentifier: expect.any(String),
-          settlementTransactionHash: '0xworker-settled',
-          externalSettlementRef: expect.any(String),
-          refundState: 'not_applicable',
-          lossState: 'none',
-        },
-      },
-    })
-    expect(completed).not.toHaveProperty('usage')
-    expect(completed?.result).not.toHaveProperty('usage')
-
-    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'none' })
-    expect(worker.state.transportCalls).toBe(1)
-    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
+    expect(worker.state.mutationCalls.map(({ path }) => path)
+      .filter((path) => path.includes('moneyLedger'))).toEqual([])
+    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
+    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
   })
 
   it('stops a sealed canary when the staged operation drifts at the authorization boundary', async () => {
@@ -165,8 +107,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(mocks.guardedFetch).not.toHaveBeenCalled()
     expect(worker.state.payment.mark).toBeUndefined()
     expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'reconciliation_required',
-      result: { kind: 'reconciliation_required' },
+      state: 'refused', result: { kind: 'refused', code: 'operation_unsupported' },
     })
   })
 
@@ -187,7 +128,7 @@ describe('capability operation invocation worker charge/x402', () => {
     })
   })
 
-  it('keeps an ambiguous canary payment in reconciliation and never pays again on worker replay', async () => {
+  it('refuses an ambiguous seller canary before any payment can become uncertain', async () => {
     const worker = createWorker('x402', {
       sellerCanary: true,
       alreadyLeased: true,
@@ -202,30 +143,29 @@ describe('capability operation invocation worker charge/x402', () => {
     })
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
-    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
-    expect(worker.state.transportCalls).toBe(1)
-
-    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'none' })
-    expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledTimes(1)
-    expect(worker.state.transportCalls).toBe(1)
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused', result: { kind: 'refused', code: 'operation_unsupported' },
+    })
+    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
+    expect(worker.state.transportCalls).toBe(0)
   })
 
   it('brokers sandbox x402 with buyer and managed Base Sepolia custody reservations', async () => {
     const worker = createWorker('x402')
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.money).toMatchObject({
-      amount: { currency: 'USD', units: '2', exponent: 2 },
-      rakeBps: 1_000,
-    })
+    expect(worker.state.money).toBeUndefined()
     expect(worker.state.reconciliations).toHaveLength(0)
     expect(worker.state.unknownCharges).toHaveLength(0)
     expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({
       state: 'completed',
       result: {
         receipt: {
-          network: 'eip155:84532',
-          settlementTransactionHash: '0xworker-settled',
+          commercialModel: 'account_aud',
+          buyerCharge: { currency: 'AUD', units: '20000', exponent: 6 },
+          providerSettlement: {
+            network: 'eip155:84532',
+            transactionHash: '0xworker-settled',
+          },
         },
       },
     })
@@ -258,10 +198,9 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.events).toEqual([
       'final-grant-revalidation',
       'current-publication-price-revalidation',
-      'buyer-reserve',
-      'custody-reserve',
       'custody-prepare',
       'fence-callback',
+      'managed-call-submission-fence',
       'authorization-read',
       'authorization-sign',
       'mark-possibly-submitted',
@@ -271,29 +210,18 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(mocks.guardedFetch.mock.calls[0]?.[1]).toMatchObject({
       headers: { 'Payment-Signature': 'signed:payment' },
     })
-    expect(worker.state.money).toMatchObject({
-      amount: { currency: 'USD', units: '2', exponent: 2 },
-      rakeBps: 1_000,
-      priceDigest: expect.any(String),
-    })
+    expect(worker.state.money).toBeUndefined()
     const paths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(paths.indexOf('moneyLedger:reserveBrokeredInvocationCharge'))
-      .toBeLessThan(paths.indexOf('moneyLedger:reserveExternalInvocationSpend'))
-    expect(paths.filter((path) => path === 'moneyLedger:finalizeBrokeredInvocationCharge')).toHaveLength(1)
-    expect(paths.filter((path) => path === 'moneyLedger:finalizeExternalInvocationSpend')).toHaveLength(1)
+    expect(paths).toContain('moneyManagedCallLifecycle:markPossiblySubmitted')
+    expect(paths).toContain('moneyManagedCallLifecycle:settle')
+    expect(paths).not.toContain('moneyLedger:reserveBrokeredInvocationCharge')
+    expect(paths).not.toContain('moneyLedger:reserveExternalInvocationSpend')
     expect(paths).not.toContain('qualifiedUse:recordQualifiedUse')
-    expect(worker.state.money).toBeDefined()
     expect(worker.state.payment.prepare).toMatchObject({
       custodyBudgetRef: 'custody:test-worker',
       custodyGeneration: 7,
       custodyDailyMaximumUnits: '100000',
     })
-    expect(worker.state.mutationCalls.find(({ path }) => path === 'moneyLedger:reserveExternalInvocationSpend')?.args)
-      .toMatchObject({
-        custodyRef: 'custody:test-worker',
-        custodyGeneration: 7,
-        custodyDailyMaximum: { currency: 'USD', units: '100000', exponent: 2 },
-      })
     expect(mocks.createCdpEvmX402PaymentSignature).toHaveBeenCalledWith(
       expect.objectContaining({
         credential: 'env:AE_X402_CDP_ACCOUNT_NAME',
@@ -352,7 +280,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(paths).not.toContain('moneyX402PaymentAttempts:prepareX402PaymentAuthorization')
     expect(worker.state.payment.prepare).toBeUndefined()
   })
-  it('releases both reservations when brokered signing fails before submission', async () => {
+  it('releases the managed reservation when signing fails before submission', async () => {
     const worker = createWorker('x402', {
       environment: 'production',
       failPaymentSignature: true,
@@ -360,17 +288,16 @@ describe('capability operation invocation worker charge/x402', () => {
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
     const paths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(paths).toContain('moneyLedger:reserveBrokeredInvocationCharge')
-    expect(paths).toContain('moneyLedger:reserveExternalInvocationSpend')
-    expect(paths).toContain('moneyLedger:finalizeExternalInvocationSpend')
-    expect(paths).toContain('moneyLedger:releaseBrokeredInvocationCharge')
+    expect(paths).toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
+    expect(paths).not.toContain('moneyLedger:reserveBrokeredInvocationCharge')
+    expect(paths).not.toContain('moneyLedger:reserveExternalInvocationSpend')
     expect(worker.state.unknownCharges).toHaveLength(0)
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
       result: { kind: 'refused', code: 'payment_signature_unavailable' },
     })
   })
-  it('releases the prepared spend without signing or paid send when the grant is revoked at the signing boundary', async () => {
+  it('requires proof reconciliation when the grant is revoked after the submission fence', async () => {
     const worker = createWorker('x402', {
       environment: 'production',
       signingBoundaryGrant: null,
@@ -379,24 +306,23 @@ describe('capability operation invocation worker charge/x402', () => {
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
 
     const paths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(paths).toContain('moneyLedger:reserveBrokeredInvocationCharge')
-    expect(paths).toContain('moneyLedger:reserveExternalInvocationSpend')
-    expect(paths).toContain('moneyLedger:finalizeExternalInvocationSpend')
-    expect(paths).toContain('moneyLedger:releaseBrokeredInvocationCharge')
+    expect(paths).toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
+    expect(paths).not.toContain('moneyLedger:reserveBrokeredInvocationCharge')
+    expect(paths).not.toContain('moneyLedger:reserveExternalInvocationSpend')
     expect(paths).not.toContain('moneyX402PaymentAttempts:claimX402PaymentAuthorization')
     expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentSigningIntent')
     expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentSignatureDigest')
     expect(paths).toContain('moneyX402PaymentAttempts:recordX402PaymentAuthorizationFailure')
     expect(paths.indexOf('moneyX402PaymentAttempts:recordX402PaymentAuthorizationFailure'))
-      .toBeLessThan(paths.indexOf('moneyLedger:finalizeExternalInvocationSpend'))
+      .toBeLessThan(paths.indexOf('moneyManagedCallLifecycle:releaseBeforeSubmission'))
     expect(worker.state.payment.authorization).toMatchObject({
       authorizationFailureCode: 'grant_invalid',
     })
     expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
     expect(worker.state.transportCalls).toBe(1)
     expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'refused',
-      result: { kind: 'refused', code: 'payment_signature_unavailable' },
+      state: 'reconciliation_required',
+      result: { kind: 'reconciliation_required' },
     })
   })
 
@@ -413,7 +339,7 @@ describe('capability operation invocation worker charge/x402', () => {
 
     const paths = worker.state.mutationCalls.map(({ path }) => path)
     expect(paths.indexOf('moneyX402PaymentAttempts:recordX402PaymentAuthorizationFailure'))
-      .toBeLessThan(paths.indexOf('moneyLedger:finalizeExternalInvocationSpend'))
+      .toBeLessThan(paths.indexOf('moneyManagedCallLifecycle:releaseBeforeSubmission'))
     expect(paths).not.toContain('moneyX402PaymentAttempts:claimX402PaymentAuthorization')
     expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
     expect(worker.state.payment.authorization).toMatchObject({
@@ -432,13 +358,13 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(paths).toContain('moneyX402PaymentAttempts:claimX402PaymentAuthorization')
     expect(paths).toContain('moneyX402PaymentAttempts:recordX402PaymentAuthorizationFailure')
     expect(paths.indexOf('moneyX402PaymentAttempts:recordX402PaymentAuthorizationFailure'))
-      .toBeLessThan(paths.indexOf('moneyLedger:finalizeExternalInvocationSpend'))
+      .toBeLessThan(paths.indexOf('moneyManagedCallLifecycle:releaseBeforeSubmission'))
     expect(worker.state.payment.authorization).toMatchObject({
       claimed: true,
       authorizationFailureCode: 'managed_authorization_unavailable',
     })
   })
-  it('retains buyer and external reservations after a post-submit timeout', async () => {
+  it('retains the managed reservation after a post-submit timeout', async () => {
     const worker = createWorker('x402', {
       environment: 'production',
       observation: {
@@ -453,19 +379,14 @@ describe('capability operation invocation worker charge/x402', () => {
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
     const paths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(paths).toContain('moneyLedger:reserveBrokeredInvocationCharge')
-    expect(paths).toContain('moneyLedger:reserveExternalInvocationSpend')
-    expect(paths).toContain('moneyLedger:finalizeExternalInvocationSpend')
-    expect(paths).toContain('moneyLedger:markBrokeredInvocationChargeOutcomeUnknown')
-    expect(paths).not.toContain('moneyLedger:releaseBrokeredInvocationCharge')
-    expect(paths).not.toContain('moneyLedger:reverseExternalInvocationSpendForInvalidOutput')
-    expect(paths).not.toContain('moneyLedger:reverseExternalInvocationSpend')
-    expect(worker.state.unknownCharges).toContainEqual(expect.objectContaining({
-      transactionRef: expect.any(String),
-    }))
+    expect(paths).toContain('moneyManagedCallLifecycle:markPossiblySubmitted')
+    expect(paths).toContain('moneyManagedCallLifecycle:markOutcomeUnknown')
+    expect(paths).not.toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
+    expect(paths).not.toContain('moneyLedger:reserveExternalInvocationSpend')
+    expect(worker.state.unknownCharges).toHaveLength(1)
     expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
   })
-  it('reverses external settlement and journals provider loss on invalid paid output', async () => {
+  it('settles the Provider obligation while refusing invalid delivered output', async () => {
     const worker = createWorker('x402', {
       environment: 'production',
       observation: invalidPaidOutputObservation,
@@ -473,36 +394,20 @@ describe('capability operation invocation worker charge/x402', () => {
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
     const paths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(paths).toContain('moneyLedger:reverseExternalInvocationSpendForInvalidOutput')
-    expect(paths).toContain('moneyLedger:recordBrokeredInvalidOutputLoss')
-    expect(paths.indexOf('moneyLedger:reverseExternalInvocationSpendForInvalidOutput'))
-      .toBeLessThan(paths.indexOf('moneyLedger:recordBrokeredInvalidOutputLoss'))
-    expect(paths).not.toContain('moneyLedger:releaseBrokeredInvocationCharge')
-    expect(paths).not.toContain('moneyLedger:finalizeBrokeredInvocationCharge')
-    expect(paths).not.toContain('moneyLedger:reverseExternalInvocationSpend')
+    expect(paths).toContain('moneyManagedCallLifecycle:settle')
+    expect(paths).not.toContain('moneyLedger:reverseExternalInvocationSpendForInvalidOutput')
+    expect(paths).not.toContain('moneyLedger:recordBrokeredInvalidOutputLoss')
     expect(paths).not.toContain('qualifiedUse:recordQualifiedUse')
-    const reversal = worker.state.mutationCalls.find(({ path }) => path === 'moneyLedger:reverseExternalInvocationSpendForInvalidOutput')
-    expect(reversal?.args).toMatchObject({ invalidOutputEvidenceRef: expect.stringContaining('provider-output-invalid:') })
-    const loss = worker.state.mutationCalls.find(({ path }) => path === 'moneyLedger:recordBrokeredInvalidOutputLoss')
-    expect(loss?.args).toMatchObject({
-      externalRef: '0xworker-invalid-output',
-      invalidOutputEvidenceRef: expect.stringContaining('provider-output-invalid:'),
-      invalidOutputEvidenceDigest: expect.any(String),
-      reconciliationEvidenceRefs: expect.arrayContaining([expect.any(String)]),
-    })
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
       result: {
         kind: 'refused',
         code: 'provider_output_invalid',
         receipt: {
-          externalSettlementRef: '0xworker-invalid-output',
-          refundState: 'released',
-          lossState: 'provider_output_invalid',
-          accountingTransactionRefs: [
-            worker.state.money?.transactionRef,
-            expect.stringContaining('operation-money-loss:'),
-          ],
+          commercialModel: 'account_aud',
+          state: 'settled',
+          refundState: 'not_applicable',
+          lossState: 'none',
         },
       },
     })
@@ -518,13 +423,10 @@ describe('capability operation invocation worker charge/x402', () => {
 
       await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
       const paths = worker.state.mutationCalls.map(({ path }) => path)
-      expect(paths).toContain('moneyLedger:reverseExternalInvocationSpendForInvalidOutput')
-      expect(paths).not.toContain('moneyLedger:recordBrokeredInvalidOutputLoss')
-      expect(paths).not.toContain('moneyLedger:releaseBrokeredInvocationCharge')
-      expect(paths).not.toContain('moneyLedger:finalizeBrokeredInvocationCharge')
-      expect(paths).not.toContain('moneyLedger:reverseExternalInvocationSpend')
-      expect(worker.state.unknownCharges).toHaveLength(1)
-      expect(worker.state.records.at(-1)).toMatchObject({ state: 'reconciliation_required' })
+      expect(paths).toContain('moneyManagedCallLifecycle:settle')
+      expect(paths).not.toContain('moneyLedger:reverseExternalInvocationSpendForInvalidOutput')
+      expect(worker.state.unknownCharges).toHaveLength(0)
+      expect(worker.state.records.at(-1)).toMatchObject({ state: 'refused' })
     },
   )
   it.each(['refused', 'throw'] as const)(
@@ -538,18 +440,13 @@ describe('capability operation invocation worker charge/x402', () => {
 
       await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
       const paths = worker.state.mutationCalls.map(({ path }) => path)
-      expect(paths).toContain('moneyLedger:reverseExternalInvocationSpendForInvalidOutput')
-      expect(paths.filter((path) => path === 'moneyLedger:recordBrokeredInvalidOutputLoss')).toHaveLength(1)
-      expect(paths).not.toContain('moneyLedger:releaseBrokeredInvocationCharge')
-      expect(paths).not.toContain('moneyLedger:finalizeBrokeredInvocationCharge')
-      expect(worker.state.unknownCharges).toHaveLength(1)
-      expect(worker.state.records.at(-1)).toMatchObject({
-        state: 'reconciliation_required',
-        result: { kind: 'reconciliation_required' },
-      })
+      expect(paths).toContain('moneyManagedCallLifecycle:settle')
+      expect(paths).not.toContain('moneyLedger:recordBrokeredInvalidOutputLoss')
+      expect(worker.state.unknownCharges).toHaveLength(0)
+      expect(worker.state.records.at(-1)).toMatchObject({ state: 'refused' })
     },
   )
-  it('releases both reservations when independent settlement proves not settled', async () => {
+  it('retains the managed reservation after any possible submission even when the Provider reports not settled', async () => {
     const worker = createWorker('x402', {
       environment: 'production',
       observation: {
@@ -574,12 +471,11 @@ describe('capability operation invocation worker charge/x402', () => {
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
     const paths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(paths).toContain('moneyLedger:finalizeExternalInvocationSpend')
-    expect(paths).toContain('moneyLedger:releaseBrokeredInvocationCharge')
-    expect(paths).not.toContain('moneyLedger:finalizeBrokeredInvocationCharge')
-    expect(worker.state.unknownCharges).toHaveLength(0)
+    expect(paths).toContain('moneyManagedCallLifecycle:markOutcomeUnknown')
+    expect(paths).not.toContain('moneyManagedCallLifecycle:releaseBeforeSubmission')
+    expect(worker.state.unknownCharges).toHaveLength(1)
   })
-  it('replays a brokered retry without a second settlement or buyer charge', async () => {
+  it('replays a managed Call without a second settlement or transport', async () => {
     const worker = createWorker('x402', { environment: 'production' })
     mocks.claimCanonicalInvocation.mockReset()
     mocks.claimCanonicalInvocation
@@ -595,12 +491,11 @@ describe('capability operation invocation worker charge/x402', () => {
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'none' })
     const paths = worker.state.mutationCalls.map(({ path }) => path)
-    expect(paths.filter((path) => path === 'moneyLedger:reserveBrokeredInvocationCharge')).toHaveLength(1)
-    expect(paths.filter((path) => path === 'moneyLedger:finalizeBrokeredInvocationCharge')).toHaveLength(1)
-    expect(paths.filter((path) => path === 'moneyLedger:finalizeExternalInvocationSpend')).toHaveLength(1)
+    expect(paths.filter((path) => path === 'moneyManagedCallLifecycle:settle')).toHaveLength(1)
+    expect(paths).not.toContain('moneyLedger:reserveBrokeredInvocationCharge')
     expect(worker.state.transportCalls).toBe(1)
   })
-  it('retries a successful invalid-output loss effect with one deterministic journal call', async () => {
+  it('replays an invalid-output terminal result without a second managed settlement', async () => {
     const worker = createWorker('x402', {
       environment: 'production',
       observation: invalidPaidOutputObservation,
@@ -617,20 +512,14 @@ describe('capability operation invocation worker charge/x402', () => {
       .mockResolvedValueOnce({ kind: 'terminal_replay' })
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    const lossCalls = worker.state.mutationCalls.filter(({ path }) => path === 'moneyLedger:recordBrokeredInvalidOutputLoss')
-    expect(lossCalls).toHaveLength(1)
-    expect(lossCalls[0]?.args).toMatchObject({
-      invocationRef,
-      attemptRef,
-    })
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'none' })
+    const settlementCalls = worker.state.mutationCalls.filter(({ path }) => path === 'moneyManagedCallLifecycle:settle')
+    expect(settlementCalls).toHaveLength(1)
     expect(worker.state.records[0]).toMatchObject({
       result: {
         receipt: {
-          accountingTransactionRefs: [
-            worker.state.money?.transactionRef,
-            `operation-money-loss:${invocationRef}:${attemptRef}:1`,
-          ],
+          commercialModel: 'account_aud',
+          state: 'settled',
         },
       },
     })
@@ -655,150 +544,32 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(paths).not.toContain('moneyLedger:reserveExternalInvocationSpend')
     expect(worker.state.qualifiedUse).toHaveLength(0)
   })
-  it('settles exactly one AE-internal charge after valid output', async () => {
+  it('refuses paid fixed-AUD execution before Provider I/O', async () => {
     const worker = createWorker('http')
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.money).toMatchObject({
-      amount: { currency: 'USD', units: '1', exponent: 2 },
-      freeTier: false,
-      credentialBudgetGrantRef: grantRef,
-      credentialBudgetGeneration: 1,
-    })
-    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyLedger:authorizeInvocationCharge')).toHaveLength(1)
-    expect(worker.state.reconciliations).toHaveLength(1)
-    expect(worker.state.reconciliations[0]).toMatchObject({
-      transactionRef: 'transaction:accepted-result',
-      outcome: 'released',
-    })
-    expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({
-      usage: {
-        usageRef: 'usage:accepted-result',
-        observedAt: expect.any(Number),
-        chargeState: 'paid',
-        amount: { units: '1', currency: 'USD', exponent: 2 },
-        priceDigest: digest('p'),
-        transactionRef: 'transaction:accepted-result',
-      },
-    })
-    expect(worker.state.transportCalls).toBe(1)
-    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
-    expect(mocks.createSandboxEvmX402PaymentSignature).not.toHaveBeenCalled()
-  })
-  it('reverses an AE-internal charge for schema-invalid output before completion', async () => {
-    const worker = createWorker('http', {
-      observation: {
-        transport: 'http',
-        disposition: 'succeeded',
-        releaseStarted: false,
-        requestDigest: digest('i'),
-        outputJson: JSON.stringify({ unexpected: true }),
-      },
-    })
-    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.reconciliations).toHaveLength(1)
-    expect(worker.state.reconciliations[0]).toMatchObject({
-      transactionRef: 'transaction:accepted-result',
-      outcome: 'not_released',
-    })
-    expect(worker.state.unknownCharges).toHaveLength(0)
-    expect(worker.state.records.some((record) => record.state === 'completed')).toBe(false)
-    expect(worker.state.records.at(-1)).toMatchObject({ state: 'refused' })
-  })
-  it('reverses an AE-internal charge for schema-invalid output after release without uncertainty', async () => {
-    const worker = createWorker('http', {
-      observation: {
-        transport: 'http',
-        disposition: 'succeeded',
-        releaseStarted: true,
-        requestDigest: digest('i'),
-        outputJson: JSON.stringify({ unexpected: true }),
-      },
-    })
-    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.reconciliations).toHaveLength(1)
-    expect(worker.state.reconciliations[0]).toMatchObject({
-      transactionRef: 'transaction:accepted-result',
-      outcome: 'not_released',
-    })
-    expect(worker.state.unknownCharges).toHaveLength(0)
-    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyLedger:markChargeOutcomeUnknown')).toHaveLength(0)
-    expect(worker.state.records.some((record) => record.state === 'completed')).toBe(false)
-    expect(worker.state.records.at(-1)).toMatchObject({
-      state: 'refused',
-      dispatchState: 'failed',
-      result: { kind: 'refused' },
-    })
-  })
-  it('authorizes exactly once after a prior top-up advances the operator account version', async () => {
-    const worker = createWorker('http', { operatorAccountVersion: 1 })
-    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-
-    expect(worker.state.money).toMatchObject({ expectedAccountVersion: 1 })
-    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyLedger:authorizeInvocationCharge')).toHaveLength(1)
-    expect(worker.state.transportCalls).toBe(1)
-  })
-
-  it('fails closed on a stale operator-version read before provider I/O', async () => {
-    const worker = createWorker('http', { operatorAccountVersion: 1, actualOperatorAccountVersion: 2 })
-    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-
-    expect(worker.state.money).toMatchObject({ expectedAccountVersion: 1 })
-    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyLedger:authorizeInvocationCharge')).toHaveLength(1)
+    expect(worker.state.money).toBeUndefined()
     expect(worker.state.transportCalls).toBe(0)
-    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
-    expect(mocks.guardedFetch).not.toHaveBeenCalled()
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
-      result: { kind: 'refused', code: 'ledger_cas_conflict', retryable: true },
+      result: { kind: 'refused', code: 'operation_unsupported' },
     })
   })
 
-  it('settles a zero-price accepted charge and projects free-tier usage', async () => {
+  it('executes a zero-price fixed Operation without creating legacy money state', async () => {
     const worker = createWorker('http', { priceUnits: '0' })
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.money).toMatchObject({
-      amount: { currency: 'USD', units: '0', exponent: 2 },
-      freeTier: false,
-      credentialBudgetGrantRef: grantRef,
-      credentialBudgetGeneration: 1,
-    })
+    expect(worker.state.money).toBeUndefined()
+    expect(worker.state.mutationCalls.map(({ path }) => path)).not.toContain('moneyLedger:authorizeInvocationCharge')
     expect(worker.state.reconciliations).toHaveLength(0)
     expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({
       usage: {
-        usageRef: 'usage:accepted-result',
+        usageRef: `operation-usage:${invocationRef}:${attemptRef}`,
         observedAt: expect.any(Number),
         chargeState: 'free_tier',
-        amount: { units: '0', currency: 'USD', exponent: 2 },
-        priceDigest: digest('p'),
+        amount: { units: '0', currency: 'AUD', exponent: 6 },
+        priceDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
       },
     })
-  })
-
-  it('bootstraps a missing money account on a zero-price authenticated charge with exact replay', async () => {
-    const worker = createWorker('http', { operatorAccountVersion: null, priceUnits: '0' })
-    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.money).toMatchObject({
-      amount: { currency: 'USD', units: '0', exponent: 2 },
-      expectedAccountVersion: 0,
-      freeTier: false,
-    })
-    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyLedger:authorizeInvocationCharge')).toHaveLength(1)
-    expect(worker.state.reconciliations).toHaveLength(0)
-    expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({
-      usage: {
-        chargeState: 'free_tier',
-        amount: { units: '0', currency: 'USD', exponent: 2 },
-        priceDigest: digest('p'),
-      },
-    })
-    const chargeArgs = worker.state.mutationCalls.find(
-      ({ path }) => path === 'moneyLedger:authorizeInvocationCharge',
-    )?.args
-    expect(chargeArgs).toMatchObject({
-      transactionRef: `operation-money:${invocationRef}:${attemptRef}:1`,
-      idempotencyKey: `operation-money:${invocationRef}:${attemptRef}:1`,
-      invocationRef,
-      attemptRef,
-    })
+    expect(worker.state.transportCalls).toBe(1)
   })
 })

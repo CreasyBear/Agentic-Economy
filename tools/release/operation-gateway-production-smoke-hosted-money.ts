@@ -26,7 +26,9 @@ import {
   accountRefForOwner,
   accountRefForProvider,
   AUD_EXPONENT,
+  audFundingPolicyFromCommercialControls,
   quoteAudAccountFunding,
+  SANDBOX_COMMERCIAL_POLICY_CONTROLS,
   compareExactAmounts,
   subtractExactAmounts,
   type ExactAmount,
@@ -151,7 +153,10 @@ export function createHostedMoneyRuntime(
   const financials =
     !parsedAmount.success || parsedAmount.data.currency !== "AUD" || parsedAmount.data.exponent !== AUD_EXPONENT
       ? undefined
-      : quoteAudAccountFunding(BigInt(parsedAmount.data.units));
+      : quoteAudAccountFunding(
+          BigInt(parsedAmount.data.units),
+          audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS),
+        );
   if (financials === undefined)
     throw new GatewaySmokeError("gateway_smoke_topup_amount_invalid");
   const topupAmount = { currency: "AUD", units: financials.principalUnits.toString(), exponent: AUD_EXPONENT } as const;

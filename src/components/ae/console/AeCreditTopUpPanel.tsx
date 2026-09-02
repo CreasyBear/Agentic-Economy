@@ -13,10 +13,12 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import {
   AUD_EXPONENT,
+  audFundingPolicyFromCommercialControls,
   canonicalAudUnits,
   formatExactAmount,
   isMoneyRefusal,
   quoteAudAccountFunding,
+  SANDBOX_COMMERCIAL_POLICY_CONTROLS,
   type CreditPaymentSession,
   type MoneyRefusal,
 } from '@/modules/money/public'
@@ -59,7 +61,12 @@ export function AeAccountFundingPanel({ port, publishableKey, onRefresh }: AeAcc
   const recoveryAttempted = useRef(false)
   const preview = useMemo(() => {
     const units = canonicalAudUnits(amountText)
-    return units === undefined ? undefined : quoteAudAccountFunding(units)
+    return units === undefined
+      ? undefined
+      : quoteAudAccountFunding(
+          units,
+          audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS),
+        )
   }, [amountText])
 
   const stripePromise = useMemo(() => {

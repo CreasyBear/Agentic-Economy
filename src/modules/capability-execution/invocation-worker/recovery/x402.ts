@@ -12,17 +12,12 @@ import {
   verifyExactEvmX402Settlement,
 } from '@/modules/capability-supply/server'
 import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
-import {
-  exactAmountSchema,
-  externalSpendIdentityMatchingReservationRef,
-  type ExactAmount,
-} from '@/modules/money/public'
 import { Agent } from 'undici'
 import type { Infer } from 'convex/values'
 
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
-import { externalSpendPaymentFactsFromDispatch, readX402EvmReceipt } from '../x402Route'
+import { readX402EvmReceipt } from '../x402Route'
 import type { RecoveryWorkContext } from './loading'
 
 type X402Evidence = Infer<typeof x402PaymentReconciliationEvidenceValue>
@@ -76,7 +71,7 @@ export async function prepareX402RecoveryEvidence(
     recordX402RecoveryStage(submitted, 'settlement_verification_failed')
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
-  if (!await persistX402Money(ctx, work, submitted, facts.externalIdentity, facts.observedAt)) {
+  if (!await persistX402Money(ctx, work, submitted, facts.observedAt)) {
     recordX402RecoveryStage(submitted, 'money_reconciliation_failed')
     return { kind: 'required', status, receipt: reconciliationReceipt }
   }
@@ -124,90 +119,23 @@ function x402EvidenceFacts(work: RecoveryWorkContext, submitted: X402Evidence) {
   if (
     x402Attempt === null
     || providerRef === undefined
+    || recovered.sellerOnboardingCanary !== undefined
+    || work.managedReservation === null
     || x402Attempt.reservationRef === undefined
   ) return undefined
-  const amount = exactAmountSchema.safeParse({
-    units: x402Attempt.amountUnits,
-    currency: x402Attempt.currency,
-    exponent: x402Attempt.exponent,
-  })
-  if (!amount.success) return undefined
-  const custody = persistedCustodyFacts(x402Attempt, amount.data)
-  if (custody === undefined) return undefined
-  const paymentFacts = externalSpendPaymentFactsFromDispatch({
-    invocationRef: recovered.invocationRef,
-    principalId: recovered.principalId,
-    credentialId: recovered.credentialId,
-    grantRef: recovered.grantRef,
-    grantGeneration: recovered.grantGeneration,
-    environment: recovered.environment,
-    operationRef: recovered.operationRef,
-    ...(recovered.sellerOnboardingCanary === undefined
-      ? {}
-      : { sellerOnboardingCanary: recovered.sellerOnboardingCanary }),
-  }, {
-    attemptRef: x402Attempt.attemptRef,
-    effectGeneration: x402Attempt.effectGeneration,
-    providerRef,
-    paymentIdentifier: x402Attempt.paymentIdentifier,
-    challengeDigest: x402Attempt.challengeDigest,
-    amount: amount.data,
-    ...custody,
-  })
-  const externalIdentity = work.recovered.sellerOnboardingCanary === undefined
-    ? undefined
-    : externalSpendIdentityMatchingReservationRef(paymentFacts, x402Attempt.reservationRef)
+  const acceptedRefs = [
+    work.managedReservation.reservationRef,
+    work.managedReservation.treasuryReservationRef,
+  ].filter((value): value is string => typeof value === 'string')
+  if (!acceptedRefs.includes(x402Attempt.reservationRef)) return undefined
   const observedAt = Date.parse(submitted.observedAt)
-  if (work.recovered.sellerOnboardingCanary !== undefined && externalIdentity === undefined) return undefined
-  return { providerRef, externalIdentity, observedAt }
+  return { providerRef, observedAt }
 }
 
 function recoveryProviderRef(operation: RecoveryWorkContext['operation']): string | undefined {
   return operation.binding.authority.kind === 'provider_connection'
     ? operation.binding.authority.providerRef
     : undefined
-}
-
-function persistedCustodyFacts(
-  attempt: NonNullable<RecoveryWorkContext['x402Attempt']>,
-  paymentAmount: ExactAmount,
-): Readonly<{
-  custodyRef?: string
-  custodyGeneration?: number
-  custodyDailyMaximum?: ExactAmount
-}> | undefined {
-  const fields = [
-    attempt.custodyBudgetRef,
-    attempt.custodyGeneration,
-    attempt.custodyDailyMaximumUnits,
-  ]
-  const supplied = fields.filter((value) => value !== undefined).length
-  if (supplied === 0) return {}
-  if (supplied !== fields.length) return undefined
-
-  const { custodyBudgetRef, custodyGeneration, custodyDailyMaximumUnits } = attempt
-  if (
-    typeof custodyBudgetRef !== 'string'
-    || custodyBudgetRef.trim().length === 0
-    || typeof custodyGeneration !== 'number'
-    || !Number.isSafeInteger(custodyGeneration)
-    || custodyGeneration <= 0
-    || typeof custodyDailyMaximumUnits !== 'string'
-  ) return undefined
-  const dailyMaximum = exactAmountSchema.safeParse({
-    currency: paymentAmount.currency,
-    units: custodyDailyMaximumUnits,
-    exponent: paymentAmount.exponent,
-  })
-  if (!dailyMaximum.success) return undefined
-
-  // The payment attempt's custodyRef identifies the authorization attempt.
-  // The managed external-spend reservation was minted from custodyBudgetRef.
-  return {
-    custodyRef: custodyBudgetRef,
-    custodyGeneration,
-    custodyDailyMaximum: dailyMaximum.data,
-  }
 }
 
 function validSubmittedEvidence(
@@ -383,28 +311,9 @@ async function persistX402Money(
   ctx: ActionCtx,
   work: RecoveryWorkContext,
   submitted: X402Evidence,
-  externalIdentity: ReturnType<typeof externalSpendIdentityMatchingReservationRef>,
   observedAt: number,
 ): Promise<boolean> {
-  if (work.recovered.sellerOnboardingCanary !== undefined) {
-    if (externalIdentity === undefined) return false
-    const reconciled = await ctx.runMutation(
-      internal.capabilityOperationPreSubmissionRecovery.reconcilePostSubmissionX402Money,
-      {
-        ...externalIdentity,
-        inputDigest: submitted.inputDigest,
-        settlementStatus: submitted.settlementStatus,
-        paymentResponseDigest: submitted.paymentResponseDigest,
-        evidenceRef: submitted.evidenceRef,
-        evidenceDigest: submitted.digest,
-        transportObservationDigest: submitted.transportObservationDigest,
-        transportRequestDigest: submitted.requestDigest,
-        paymentObservationDigest: submitted.paymentObservationDigest,
-        observedAt,
-      },
-    )
-    return reconciled.kind === 'accepted' || reconciled.kind === 'replayed'
-  }
+  if (work.recovered.sellerOnboardingCanary !== undefined) return false
   const payment = await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, {
     dispatchRef: work.recovered.invocationRef,
     attemptRef: submitted.attemptRef,
@@ -449,7 +358,7 @@ async function persistX402Money(
     })
     return false
   }
-  const settled = await ctx.runMutation(internal.moneyManagedCallLifecycle.settle, {
+  const settled = await ctx.runAction(internal.moneyManagedCallLifecycle.settle, {
     invocationRef: submitted.invocationRef,
     evidenceDigest: submitted.digest,
     now: observedAt,

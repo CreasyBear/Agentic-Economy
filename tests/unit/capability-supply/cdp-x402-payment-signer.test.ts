@@ -9,6 +9,7 @@ import {
   cdpX402PolicyRulesDigest,
   cdpX402RequestFingerprint,
   createCdpEvmX402PaymentSignature,
+  observeCdpX402Treasury,
   readCdpX402PaymentAuthorization,
   replayCdpX402PaymentSigningIntent,
   type CdpX402PaymentSignerDependencies,
@@ -209,6 +210,53 @@ function makeDependencies(options: Readonly<{
 }
 
 describe('CDP x402 custody signer', () => {
+  it('reads a bounded USDC treasury observation through the maintained CDP client', async () => {
+    const fixture = makeDependencies({ aeEnvironment: 'sandbox' })
+    const listTokenBalances = vi.fn(async () => ({
+      balances: [{
+        token: { contractAddress: BASE_SEPOLIA_USDC_ADDRESS, network: 'base-sepolia' },
+        amount: { amount: 12_345_678n, decimals: 6 },
+      }, {
+        token: { contractAddress: `0x${'33'.repeat(20)}`, network: 'base-sepolia' },
+        amount: { amount: 999n, decimals: 18 },
+      }],
+    }))
+    const observation = await observeCdpX402Treasury('sandbox', {
+      environment: fixture.dependencies.environment!,
+      now: () => 1_800_000_000_000,
+      createClient: () => ({
+        policies: { getPolicyById: vi.fn() },
+        evm: {
+          getAccount: async (_input: { name: string }) => ({
+            address: account.address,
+            policies: [ACCOUNT_POLICY_ID, PROJECT_POLICY_ID],
+          }),
+          signTypedData: async (_input: SignTypedDataInput) => ({ signature: SIGNATURE }),
+          listTokenBalances,
+        },
+      }),
+    })
+
+    expect(observation).toMatchObject({
+      environment: 'sandbox',
+      custodyGeneration: 7,
+      network: BASE_SEPOLIA_NETWORK,
+      asset: 'USDC',
+      exponent: 6,
+      totalUnits: '12345678',
+      observedAt: 1_800_000_000_000,
+      evidenceRef: expect.stringMatching(/^cdp-balance:[0-9a-f]{64}$/u),
+      evidenceDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
+    })
+    expect(listTokenBalances).toHaveBeenCalledWith({
+      address: account.address,
+      network: 'base-sepolia',
+      pageSize: 100,
+    })
+    expect(JSON.stringify(observation)).not.toContain('key-secret')
+    expect(JSON.stringify(observation)).not.toContain('wallet-secret')
+  })
+
   it('digests only bounded exact account and project rule documents', () => {
     const accountPolicy = {
       id: ACCOUNT_POLICY_ID,

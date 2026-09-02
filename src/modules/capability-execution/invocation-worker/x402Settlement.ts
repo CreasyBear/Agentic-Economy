@@ -12,38 +12,11 @@ import type {
   RouteTransportObservation,
 } from '@/modules/capability-supply/route-transport-runtime'
 import type { PublishedOperation } from '@/modules/capability-supply/public'
-import {
-  exactAmountSchema,
-  externalSpendIdentityMatchingReservationRef,
-  type ExactAmount,
-  type ExternalSpendIdentity,
-  type ExternalSpendPaymentFacts,
-  type ExternalSpendSettlementStatus,
-  type ExternalSpendSubmissionStatus,
-} from '@/modules/money/public'
 import { env, type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
-import type { ChargeSettlementResult, OpenDispatch } from '../../../../convex/capabilityOperationInvocationProjection'
-import type { SellerOnboardingCanaryExecutionEnvelope } from '@/modules/capability-supply/public'
+import type { OpenDispatch } from '../../../../convex/capabilityOperationInvocationProjection'
 
-export type ExternalSpendSettlement =
-  | Readonly<{ kind: 'settled'; settlementStatus: 'settled' | 'not_settled' }>
-  | Readonly<{ kind: 'reconciliation_required' }>
-
-export type X402AttemptSnapshotForMoney = Readonly<{
-  reservationRef?: string
-  selectedRequirementJson: string
-  network: string
-  asset: string
-  paymentIdentifier: string
-  challengeDigest: string
-  amountUnits: string
-  currency: string
-  exponent: number
-  custodyBudgetRef?: string
-  custodyGeneration?: number
-  custodyDailyMaximumUnits?: string
-}>
+type X402SettlementStatus = ReturnType<typeof x402SettlementStatusForObservation>
 
 type X402EvmReceipt = NonNullable<Awaited<ReturnType<typeof readGuardedX402EvmReceipt>>>
 
@@ -204,256 +177,8 @@ function x402EvmReceiptsAgree(left: X402EvmReceipt, right: X402EvmReceipt): bool
   })
 }
 
-export async function finalizeX402ExternalSpend(
-  ctx: ActionCtx,
-  identity: ExternalSpendIdentity,
-  submissionStatus: 'not_submitted' | 'possibly_submitted' | 'observed' | 'unknown',
-  settlementStatus: ExternalSpendSettlementStatus,
-  paymentResponseDigest: string | undefined,
-  evidenceRefs: readonly string[],
-  providerReceiptDigest?: string,
-): Promise<ExternalSpendSettlement> {
-  const result = await ctx.runMutation(internal.moneyLedger.finalizeExternalInvocationSpend, {
-    ...identity,
-    submissionStatus,
-    settlementStatus,
-    ...(paymentResponseDigest === undefined ? {} : { paymentResponseDigest }),
-    ...(providerReceiptDigest === undefined ? {} : { providerReceiptDigest }),
-    evidenceRefs: [...evidenceRefs],
-    observedAt: Date.now(),
-  })
-  if (result.kind !== 'accepted' || settlementStatus === 'unknown') {
-    return { kind: 'reconciliation_required' }
-  }
-  return { kind: 'settled', settlementStatus }
-}
-
-export async function bestEffortReleaseX402ExternalSpend(
-  ctx: ActionCtx,
-  identity: ExternalSpendIdentity,
-  evidenceRefs: readonly string[],
-): Promise<'released' | 'failed'> {
-  try {
-    const result = await finalizeX402ExternalSpend(
-      ctx,
-      identity,
-      'not_submitted',
-      'not_settled',
-      undefined,
-      evidenceRefs,
-    )
-    return result.kind === 'settled'
-      && result.settlementStatus === 'not_settled'
-      ? 'released'
-      : 'failed'
-  } catch {
-    return 'failed'
-  }
-}
-
-export async function releaseX402ExternalSpendBeforeSubmission(
-  ctx: ActionCtx,
-  input: Readonly<{
-    dispatch: OpenDispatch
-    operation: PublishedOperation
-    attemptRef: string
-    effectGeneration: number
-    evidenceRefs: readonly string[]
-  }>,
-): Promise<ChargeSettlementResult> {
-  const attempt = await ctx.runQuery(
-    internal.moneyX402PaymentAttempts.readX402PaymentAttempt,
-    {
-      dispatchRef: input.dispatch.invocationRef,
-      attemptRef: input.attemptRef,
-      effectGeneration: input.effectGeneration,
-    },
-  )
-  if (attempt === null) return { kind: 'settled', outcome: 'not_released' }
-  const identity = externalSpendIdentityFromAttempt(
-    input.dispatch,
-    input.operation,
-    attempt,
-    input.attemptRef,
-    input.effectGeneration,
-  )
-  if (identity === undefined) return { kind: 'reconciliation_required' }
-  const released = await bestEffortReleaseX402ExternalSpend(
-    ctx,
-    identity,
-    input.evidenceRefs,
-  )
-  return released === 'released'
-    ? { kind: 'settled', outcome: 'not_released' }
-    : { kind: 'reconciliation_required' }
-}
-
-export function externalSpendPaymentFactsFromDispatch(
-  dispatch: Readonly<{
-    invocationRef: string
-    principalId: string
-    credentialId: string
-    grantRef: string
-    grantGeneration: number
-    environment: 'sandbox' | 'production'
-    operationRef: string
-    sellerOnboardingCanary?: SellerOnboardingCanaryExecutionEnvelope
-  }>,
-  input: Readonly<{
-    attemptRef: string
-    effectGeneration: number
-    providerRef: string
-    paymentIdentifier: string
-    challengeDigest: string
-    amount: ExactAmount
-    custodyRef?: string
-    custodyGeneration?: number
-    custodyDailyMaximum?: ExactAmount
-  }>,
-): ExternalSpendPaymentFacts {
-  const executionContext = dispatch.sellerOnboardingCanary === undefined
-    ? undefined
-    : {
-        kind: 'seller_onboarding_canary' as const,
-        paymentProfile: 'base-sepolia-usdc-exact' as const,
-        canaryRef: dispatch.sellerOnboardingCanary.canaryRef,
-        canaryCommitmentDigest: dispatch.sellerOnboardingCanary.canaryCommitmentDigest,
-        fundingBudgetRef: dispatch.sellerOnboardingCanary.funding.budgetRef,
-      }
-  return {
-    principalId: dispatch.principalId,
-    credentialId: dispatch.credentialId,
-    grantRef: dispatch.grantRef,
-    grantGeneration: dispatch.grantGeneration,
-    environment: dispatch.environment,
-    invocationRef: dispatch.invocationRef,
-    attemptRef: input.attemptRef,
-    effectGeneration: input.effectGeneration,
-    operationRef: dispatch.operationRef,
-    providerRef: input.providerRef,
-    paymentIdentifier: input.paymentIdentifier,
-    challengeDigest: input.challengeDigest,
-    amount: input.amount,
-    ...(executionContext === undefined ? {} : { executionContext }),
-    ...(input.custodyRef === undefined ? {} : { custodyRef: input.custodyRef }),
-    ...(input.custodyGeneration === undefined ? {} : { custodyGeneration: input.custodyGeneration }),
-    ...(input.custodyDailyMaximum === undefined ? {} : { custodyDailyMaximum: input.custodyDailyMaximum }),
-  }
-}
-
-export function externalSpendIdentityFromAttempt(
-  dispatch: OpenDispatch,
-  operation: PublishedOperation,
-  attempt: X402AttemptSnapshotForMoney,
-  attemptRef: string,
-  effectGeneration: number,
-): ExternalSpendIdentity | undefined {
-  if (
-    operation.binding.authority.kind !== 'provider_connection'
-    || operation.identity.payment.kind !== 'x402'
-    || operationInvokeReceiptPaymentProfile(dispatch.environment, attempt.network, attempt.asset) === undefined
-    || attempt.network !== operation.identity.payment.network
-    || attempt.asset.toLowerCase() !== operation.identity.payment.asset.toLowerCase()
-    || attempt.reservationRef === undefined
-  ) return undefined
-  const amount = exactAmountSchema.safeParse({
-    currency: attempt.currency,
-    units: attempt.amountUnits,
-    exponent: attempt.exponent,
-  })
-  if (!amount.success) return undefined
-  const custodyFields = [
-    attempt.custodyBudgetRef,
-    attempt.custodyGeneration,
-    attempt.custodyDailyMaximumUnits,
-  ]
-  const custodyFieldsSupplied = custodyFields.filter((value) => value !== undefined).length
-  if (custodyFieldsSupplied !== 0 && custodyFieldsSupplied !== custodyFields.length) return undefined
-  const custody = custodyFieldsSupplied === 0
-    ? undefined
-    : (() => {
-        const { custodyBudgetRef, custodyGeneration, custodyDailyMaximumUnits } = attempt
-        if (
-          typeof custodyBudgetRef !== 'string'
-          || custodyBudgetRef.trim().length === 0
-          || typeof custodyGeneration !== 'number'
-          || !Number.isSafeInteger(custodyGeneration)
-          || custodyGeneration <= 0
-          || typeof custodyDailyMaximumUnits !== 'string'
-        ) return undefined
-        const dailyMaximum = exactAmountSchema.safeParse({
-          currency: attempt.currency,
-          units: custodyDailyMaximumUnits,
-          exponent: attempt.exponent,
-        })
-        return dailyMaximum.success
-          ? { custodyRef: custodyBudgetRef, custodyGeneration, custodyDailyMaximum: dailyMaximum.data }
-          : undefined
-      })()
-  if (custodyFieldsSupplied !== 0 && custody === undefined) return undefined
-  return externalSpendIdentityMatchingReservationRef(
-    externalSpendPaymentFactsFromDispatch(dispatch, {
-      attemptRef,
-      effectGeneration,
-      providerRef: operation.binding.authority.providerRef,
-      paymentIdentifier: attempt.paymentIdentifier,
-      challengeDigest: attempt.challengeDigest,
-      amount: amount.data,
-      ...(custody === undefined ? {} : custody),
-    }),
-    attempt.reservationRef,
-  )
-}
-
-export async function settleX402TransportObservation(
-  ctx: ActionCtx,
-  input: Readonly<{
-    dispatch: OpenDispatch
-    operation: PublishedOperation
-    observation: RouteTransportObservation
-    durableAttemptRef: string
-    durableEffectGeneration: number
-    operationKeyDigest: string
-  }>,
-): Promise<ChargeSettlementResult> {
-  const recorded = await recordX402TransportObservation(ctx, input)
-  const external = recorded.identity === undefined
-    ? { kind: 'reconciliation_required' as const }
-    : await finalizeX402ExternalSpend(
-        ctx,
-        recorded.identity,
-        recorded.submissionStatus,
-        recorded.settlementStatus,
-        recorded.settlementDigest,
-        recorded.evidenceRefs,
-        recorded.providerReceiptDigest,
-      )
-  if (external.kind !== 'settled') return external
-  if (
-    input.dispatch.sellerOnboardingCanary !== undefined
-    && external.settlementStatus === 'settled'
-    && (recorded.identity === undefined || recorded.settlementRef === undefined)
-  ) return { kind: 'reconciliation_required' }
-  return {
-    kind: 'settled',
-    outcome: external.settlementStatus === 'settled'
-      ? 'released'
-      : 'not_released',
-    ...(recorded.identity === undefined
-      ? {}
-      : {
-          externalSettlementRef: recorded.identity.reservationRef,
-          paymentIdentifier: recorded.identity.paymentIdentifier,
-        }),
-    ...(recorded.settlementRef === undefined
-      ? {}
-      : { settlementTransactionHash: recorded.settlementRef }),
-  }
-}
-
 export type X402TransportObservationRecord = Readonly<{
-  identity?: ExternalSpendIdentity
-  settlementStatus: ExternalSpendSettlementStatus
+  settlementStatus: X402SettlementStatus
   submissionStatus: 'not_submitted' | 'possibly_submitted' | 'observed' | 'unknown'
   settlementDigest?: string
   providerReceiptDigest?: string
@@ -483,23 +208,6 @@ export async function recordX402TransportObservation(
     || input.observation.settlementEvidence?.kind === 'not_settled'
       ? input.observation.settlementEvidence.digest
       : undefined
-  const attempt = await ctx.runQuery(
-    internal.moneyX402PaymentAttempts.readX402PaymentAttempt,
-    {
-      dispatchRef: input.dispatch.invocationRef,
-      attemptRef: input.durableAttemptRef,
-      effectGeneration: input.durableEffectGeneration,
-    },
-  )
-  const identity = attempt === null
-    ? undefined
-    : externalSpendIdentityFromAttempt(
-        input.dispatch,
-        input.operation,
-        attempt,
-        input.durableAttemptRef,
-        input.durableEffectGeneration,
-      )
   const evidenceRefs = [
     ...input.operation.readiness.evidenceRefs,
     transportObservationDigest(input.observation),
@@ -534,7 +242,6 @@ export async function recordX402TransportObservation(
     observedAt: Date.now(),
   })
   return {
-    ...(identity === undefined ? {} : { identity }),
     settlementStatus: x402SettlementStatus,
     submissionStatus,
     ...(settlementDigest === undefined ? {} : { settlementDigest }),
@@ -546,45 +253,5 @@ export async function recordX402TransportObservation(
       ? { settlementRef: input.observation.settlementEvidence.response.transaction }
       : {}),
     evidenceRefs,
-  }
-}
-
-export async function reverseX402ExternalSpendForInvalidOutput(
-  ctx: ActionCtx,
-  identity: ExternalSpendIdentity,
-  input: Readonly<{
-    settlementStatus: ExternalSpendSettlementStatus
-    submissionStatus: ExternalSpendSubmissionStatus
-    paymentResponseDigest?: string
-    providerReceiptDigest?: string
-    evidenceRefs: readonly string[]
-    invalidOutputEvidenceRef: string
-    invalidOutputEvidenceDigest: string
-  }>,
-): Promise<ExternalSpendSettlement> {
-  try {
-    const result = await ctx.runMutation(
-      internal.moneyLedger.reverseExternalInvocationSpendForInvalidOutput,
-      {
-        ...identity,
-        settlementStatus: input.settlementStatus,
-        submissionStatus: input.submissionStatus,
-        ...(input.paymentResponseDigest === undefined
-          ? {}
-          : { paymentResponseDigest: input.paymentResponseDigest }),
-        ...(input.providerReceiptDigest === undefined
-          ? {}
-          : { providerReceiptDigest: input.providerReceiptDigest }),
-        evidenceRefs: [...input.evidenceRefs],
-        invalidOutputEvidenceRef: input.invalidOutputEvidenceRef,
-        invalidOutputEvidenceDigest: input.invalidOutputEvidenceDigest,
-        observedAt: Date.now(),
-      },
-    )
-    return result.kind === 'accepted'
-      ? { kind: 'settled', settlementStatus: 'not_settled' }
-      : { kind: 'reconciliation_required' }
-  } catch {
-    return { kind: 'reconciliation_required' }
   }
 }

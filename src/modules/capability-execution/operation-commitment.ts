@@ -44,9 +44,6 @@ export const operationInspectResultSchema = z.union([
       principalRef: z.string(),
       maximumPerInvocation: exactAmountSchema,
     }),
-    treasury: z.strictObject({
-      spendable: exactAmountSchema,
-    }).optional(),
     policyRefs: z.array(z.string()),
     evidenceDigest: z.string(),
     continuation: continuationSchema,

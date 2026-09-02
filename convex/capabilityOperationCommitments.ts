@@ -6,6 +6,7 @@ import { readCurrentPublishedOperation } from './capabilitySupplyCurrentOperatio
 import { readCommercialPolicyGate } from './moneyCommercialPolicy'
 import { principalAndSourceArgs, principalValue } from './lib/operationInvocations/contracts'
 import { resolveCurrentAgentAuthority } from './lib/operationInvocations/authorityHandlers'
+import { inspectLiveX402RequirementRef } from './lib/liveX402RequirementRef'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import {
   materializeRuntimePublishedOperation,
@@ -18,10 +19,15 @@ import {
   normalizeStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
 import {
+  audFundingPolicyFromCommercialControls,
   normalizePricingConfig,
+  PACKAGE4_FORMANCE_REQUIREMENTS,
   quoteManagedX402BuyerAud,
+  splitInclusiveAudTax,
 } from '@/modules/money/public'
 import { jsonObject } from '@/modules/capability-execution/convex'
+import type { LiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
+import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
 
 const inspectRefusalCode = v.union(
   v.literal('operation_not_found'),
@@ -51,7 +57,6 @@ const inspectResult = v.union(
     sourceRequirement: v.optional(exactUsdc),
     account: v.object({ accountRef: v.string(), available: exactAud }),
     budget: v.object({ principalRef: v.string(), maximumPerInvocation: exactAud }),
-    treasury: v.optional(v.object({ spendable: exactUsdc })),
     policyRefs: v.array(v.string()),
     evidenceDigest: v.string(),
     continuation: v.object({
@@ -79,7 +84,58 @@ type InspectArgs = Readonly<{
   principal: Infer<typeof principalValue>
   operationRef: string
   input: Record<string, unknown>
+  liveX402Requirement?: LiveX402Requirement
 }>
+
+const formanceFinancialSnapshot = v.object({
+  accountRef: v.string(),
+  accountAvailableUnits: v.string(),
+  principalRef: v.string(),
+  budgetGeneration: v.number(),
+  budgetAvailableUnits: v.string(),
+  legalCustomerRef: v.string(),
+  legalCustomerGeneration: v.number(),
+  legalExposureAvailableUnits: v.string(),
+  policyGeneration: v.number(),
+  formanceSchemaVersion: v.string(),
+  buyerTaxBps: v.number(),
+  observedAt: v.number(),
+  treasury: v.optional(v.object({
+    custodyRef: v.string(),
+    custodyGeneration: v.number(),
+    network: v.string(),
+    availableUnits: v.string(),
+    evidenceRef: v.string(),
+    evidenceDigest: v.string(),
+  })),
+})
+
+const financialSubjectsResult = v.union(
+  v.object({
+    kind: v.literal('prepared'),
+    accountRef: v.string(),
+    principalRef: v.string(),
+    budgetGeneration: v.number(),
+    budgetUnits: v.string(),
+    legalCustomerRef: v.string(),
+    legalCustomerGeneration: v.number(),
+    legalExposureUnits: v.string(),
+    policyDigest: v.string(),
+    policyGeneration: v.number(),
+    buyerTaxBps: v.number(),
+    treasury: v.optional(v.object({
+      custodyRef: v.string(),
+      custodyGeneration: v.number(),
+      network: v.string(),
+      targetUnits: v.string(),
+      evidenceRef: v.string(),
+      evidenceDigest: v.string(),
+    })),
+  }),
+  v.object({ kind: v.literal('refused'), code: inspectRefusalCode }),
+)
+
+type FinancialSubjectsResult = Infer<typeof financialSubjectsResult>
 
 const refuse = (
   operationRef: string,
@@ -125,7 +181,88 @@ function operationPricing(operation: PublishedOperation, now: number) {
       }
 }
 
-async function issueCommitmentHandler(ctx: MutationCtx, args: InspectArgs): Promise<InspectResult> {
+async function prepareFinancialSubjectsHandler(
+  ctx: MutationCtx,
+  args: InspectArgs,
+): Promise<FinancialSubjectsResult> {
+  const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
+  if (sourceWrite.kind === 'rejected') return { kind: 'refused', code: 'inspection_unavailable' }
+  const now = Date.now()
+  const authority = await resolveCurrentAgentAuthority(
+    ctx,
+    args.principal,
+    now,
+    { kind: 'new_operation', operationRef: args.operationRef },
+  )
+  if (authority === null) return { kind: 'refused', code: 'grant_not_found' }
+  const grantRow = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_grantRef', (query) => query.eq('grantRef', authority.grantRef))
+    .unique()
+  const grant = grantRow === null ? undefined : normalizeStoredAgentAccessGrant(grantRow as never)
+  if (grant === undefined || grant.generation !== authority.grantGeneration) {
+    return { kind: 'refused', code: 'grant_not_found' }
+  }
+  const policy = await readCommercialPolicyGate(ctx.db, {
+    environment: authority.principal.environment,
+    now,
+    ...(authority.principal.environment === 'sandbox'
+      ? { sandboxFixture: 'managed_x402_deterministic_v1' as const }
+      : {}),
+  })
+  if (policy.kind === 'refused') return { kind: 'refused', code: 'commercial_policy_unavailable' }
+  const legalCustomer = await resolveAndBindLegalCustomer(ctx, authority.principal.ownerId, now)
+  if (legalCustomer.kind === 'refused') return { kind: 'refused', code: 'commercial_policy_unavailable' }
+  const binding = await ctx.db.query('moneyLegalCustomerBindings')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', authority.principal.ownerId))
+    .unique()
+  if (binding === null || binding.legalCustomerRef !== legalCustomer.legalCustomerRef) {
+    return { kind: 'refused', code: 'commercial_policy_unavailable' }
+  }
+  const observations = await ctx.db.query('moneyTreasuryObservations')
+    .withIndex('by_environment_and_observedAt', (query) => query
+      .eq('environment', authority.principal.environment))
+    .order('desc')
+    .take(2)
+  const observation = observations.length === 1 ? observations[0] : undefined
+  const fundingPolicy = audFundingPolicyFromCommercialControls(policy.controls)
+  const monthly = grant.policy.budget.maximumMonthlySpend
+  if (monthly.currency !== 'AUD' || monthly.exponent !== 6) {
+    return { kind: 'refused', code: 'budget_exceeded' }
+  }
+  const treasuryTarget = observation === undefined
+    ? undefined
+    : (BigInt(observation.totalUnits) - BigInt(observation.bufferUnits)).toString()
+  return {
+    kind: 'prepared',
+    accountRef: authority.principal.ownerId,
+    principalRef: authority.principal.principalId,
+    budgetGeneration: grant.policy.budget.generation,
+    budgetUnits: monthly.units,
+    legalCustomerRef: legalCustomer.legalCustomerRef,
+    legalCustomerGeneration: binding.version,
+    legalExposureUnits: fundingPolicy.legalCustomerMaximumAccessibleUnits.toString(),
+    policyDigest: policy.policyDigest,
+    policyGeneration: 1,
+    buyerTaxBps: policy.controls.tax.serviceFeeTaxBps,
+    ...(observation === undefined || treasuryTarget === undefined || BigInt(treasuryTarget) <= 0n
+      ? {}
+      : {
+          treasury: {
+            custodyRef: observation.custodyRef,
+            custodyGeneration: observation.custodyGeneration,
+            network: observation.network,
+            targetUnits: treasuryTarget,
+            evidenceRef: observation.evidenceRef,
+            evidenceDigest: observation.evidenceDigest,
+          },
+        }),
+  }
+}
+
+async function issueCommitmentHandler(
+  ctx: MutationCtx,
+  args: InspectArgs & Readonly<{ formance: Infer<typeof formanceFinancialSnapshot> }>,
+): Promise<InspectResult> {
   const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
   if (sourceWrite.kind === 'rejected') return refuse(args.operationRef, 'inspection_unavailable', true)
   const now = Date.now()
@@ -169,11 +306,37 @@ async function issueCommitmentHandler(ctx: MutationCtx, args: InspectArgs): Prom
   if (grant === undefined || grant.generation !== authority.grantGeneration) {
     return refuse(args.operationRef, 'grant_not_found', false)
   }
+  if (args.formance.accountRef !== authority.principal.ownerId
+    || args.formance.principalRef !== authority.principal.principalId
+    || args.formance.budgetGeneration !== grant.policy.budget.generation
+    || args.formance.policyGeneration !== 1
+    || args.formance.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
+    || args.formance.observedAt > now
+    || now - args.formance.observedAt > 15_000) {
+    return refuse(args.operationRef, 'inspection_unavailable', true, true)
+  }
 
   const pricing = operationPricing(operation, now)
   if (pricing === undefined) return refuse(args.operationRef, 'operation_unsupported', false)
   if (pricing.kind === 'refused') {
     return refuse(args.operationRef, 'pricing_setup_required', false)
+  }
+  const buyerSale = splitInclusiveAudTax(pricing.price.units, args.formance.buyerTaxBps)
+  if (buyerSale === undefined) return refuse(args.operationRef, 'pricing_setup_required', false)
+  if ((pricing.sourceRequirement === undefined) !== (args.liveX402Requirement === undefined)) {
+    return refuse(args.operationRef, 'operation_not_ready', true, true)
+  }
+  if (args.liveX402Requirement !== undefined) {
+    try {
+      if (args.liveX402Requirement.observedAt > now
+        || now - args.liveX402Requirement.observedAt > 15_000
+        || canonicalDigest(JSON.parse(args.liveX402Requirement.requirementJson) as never)
+          !== args.liveX402Requirement.requirementDigest) {
+        return refuse(args.operationRef, 'operation_not_ready', true, true)
+      }
+    } catch {
+      return refuse(args.operationRef, 'operation_not_ready', true, true)
+    }
   }
   const maximum = grant.policy.budget.maximumSpendPerInvocation
   if (maximum.currency !== 'AUD' || maximum.exponent !== 6
@@ -181,38 +344,26 @@ async function issueCommitmentHandler(ctx: MutationCtx, args: InspectArgs): Prom
     return refuse(args.operationRef, 'budget_exceeded', false)
   }
 
-  const balanceLedgerAccountRef = `ledger:aud:customer-prepayment:${authority.principal.ownerId}`
-  const balance = await ctx.db.query('moneyBalanceProjections')
-    .withIndex('by_accountRef_and_asset', (query) => query
-      .eq('accountRef', authority.principal.ownerId)
-      .eq('asset', 'AUD'))
-    .unique()
-  const balanceUnits = balance?.balanceUnits ?? '0'
-  if ((balance !== null && balance.state !== 'active')
-    || BigInt(balanceUnits) < BigInt(pricing.price.units)) {
+  const balanceUnits = args.formance.accountAvailableUnits
+  if (BigInt(balanceUnits) < BigInt(pricing.price.units)) {
     return refuse(args.operationRef, 'insufficient_balance', false)
   }
-
-  const treasuryRows = pricing.sourceRequirement === undefined
-    ? []
-    : await ctx.db.query('moneyTreasuryProjections')
-        .withIndex('by_environment_and_updatedAt', (query) => query.eq('environment', operation.runtimeEnvironment))
-        .order('desc')
-        .take(2)
-  const treasury = pricing.sourceRequirement === undefined ? undefined : treasuryRows[0]
+  if (BigInt(args.formance.budgetAvailableUnits) < BigInt(pricing.price.units)
+    || BigInt(args.formance.legalExposureAvailableUnits) < BigInt(pricing.price.units)) {
+    return refuse(args.operationRef, 'budget_exceeded', false)
+  }
+  const treasury = args.formance.treasury
   if (pricing.sourceRequirement !== undefined
-    && (treasuryRows.length !== 1
-      || treasury === undefined
+    && (treasury === undefined
       || treasury.network !== pricing.config.sourceRequirement.network
-      || treasury.asset !== 'USDC'
-      || BigInt(treasury.spendableUnits) < BigInt(pricing.sourceRequirement.units))) {
+      || BigInt(treasury.availableUnits) < BigInt(pricing.sourceRequirement.units))) {
     return refuse(args.operationRef, 'treasury_capacity_unavailable', true, true)
   }
 
   const normalizedInput = structuredClone(args.input)
   const inputDigest = canonicalDigest(normalizedInput as never)
   const expiresAt = Math.min(
-    now + 5 * 60 * 1_000,
+    now + policyGate.controls.operations.commitmentTtlMs,
     authority.expiresAt,
     pricing.rateEvidence?.expiresAt ?? Number.MAX_SAFE_INTEGER,
   )
@@ -232,18 +383,27 @@ async function issueCommitmentHandler(ctx: MutationCtx, args: InspectArgs): Prom
     pricingDigest: operation.priceDigest,
     decisionAudUnits: pricing.price.units,
     ...(pricing.sourceRequirement === undefined ? {} : { sourceUsdcUnits: pricing.sourceRequirement.units }),
+    ...(args.liveX402Requirement === undefined ? {} : {
+      x402RequirementDigest: args.liveX402Requirement.requirementDigest,
+      x402RequirementObservedAt: args.liveX402Requirement.observedAt,
+    }),
     ...(pricing.rateEvidence === undefined ? {} : { rateEvidenceDigest: pricing.rateEvidence.evidenceDigest }),
     budgetPolicyRef: grant.policy.budget.budgetPolicyRef,
     budgetGeneration: grant.policy.budget.generation,
     maximumSpendPerInvocationUnits: maximum.units,
-    balanceVersion: balance?.version ?? 0,
-    balanceChecksum: balance?.checksum ?? canonicalDigest({ accountRef: authority.principal.ownerId, balanceUnits: '0' }),
+    formanceSchemaVersion: args.formance.formanceSchemaVersion,
+    legalCustomerRef: args.formance.legalCustomerRef,
+    legalCustomerGeneration: args.formance.legalCustomerGeneration,
+    buyerRevenueUnits: buyerSale.revenueUnits,
+    buyerTaxUnits: buyerSale.taxUnits,
+    accountAvailableUnits: args.formance.accountAvailableUnits,
+    budgetAvailableUnits: args.formance.budgetAvailableUnits,
+    legalExposureAvailableUnits: args.formance.legalExposureAvailableUnits,
     ...(treasury === undefined ? {} : {
       treasuryCustodyRef: treasury.custodyRef,
       treasuryCustodyGeneration: treasury.custodyGeneration,
-      treasuryVersion: treasury.version,
-      treasuryEvidenceRef: treasury.lastObservationRef,
-      treasurySpendableUnits: treasury.spendableUnits,
+      treasuryEvidenceRef: treasury.evidenceRef,
+      treasurySpendableUnits: treasury.availableUnits,
     }),
     commercialPolicyDigest: policyGate.policyDigest,
     expiresAt,
@@ -285,6 +445,11 @@ async function issueCommitmentHandler(ctx: MutationCtx, args: InspectArgs): Prom
     pricingDigest: operation.priceDigest,
     decisionAudUnits: pricing.price.units,
     ...(pricing.sourceRequirement === undefined ? {} : { sourceUsdcUnits: pricing.sourceRequirement.units }),
+    ...(args.liveX402Requirement === undefined ? {} : {
+      x402RequirementDigest: args.liveX402Requirement.requirementDigest,
+      x402RequirementJson: args.liveX402Requirement.requirementJson,
+      x402RequirementObservedAt: args.liveX402Requirement.observedAt,
+    }),
     ...(pricing.rateEvidence === undefined ? {} : {
       rateEvidenceJson: JSON.stringify(pricing.rateEvidence),
       rateEvidenceDigest: pricing.rateEvidence.evidenceDigest,
@@ -292,16 +457,22 @@ async function issueCommitmentHandler(ctx: MutationCtx, args: InspectArgs): Prom
     budgetPolicyRef: grant.policy.budget.budgetPolicyRef,
     budgetGeneration: grant.policy.budget.generation,
     maximumSpendPerInvocationUnits: maximum.units,
-    balanceLedgerAccountRef,
-    balanceVersion: balance?.version ?? 0,
-    balanceChecksum: balance?.checksum ?? canonicalDigest({ accountRef: authority.principal.ownerId, balanceUnits: '0' }),
+    formanceSchemaVersion: args.formance.formanceSchemaVersion,
+    policyGeneration: args.formance.policyGeneration,
+    legalCustomerRef: args.formance.legalCustomerRef,
+    legalCustomerGeneration: args.formance.legalCustomerGeneration,
+    buyerRevenueUnits: buyerSale.revenueUnits,
+    buyerTaxUnits: buyerSale.taxUnits,
+    accountAvailableUnits: args.formance.accountAvailableUnits,
+    budgetAvailableUnits: args.formance.budgetAvailableUnits,
+    legalExposureAvailableUnits: args.formance.legalExposureAvailableUnits,
     balanceUnits,
     ...(treasury === undefined ? {} : {
       treasuryCustodyRef: treasury.custodyRef,
       treasuryCustodyGeneration: treasury.custodyGeneration,
-      treasuryVersion: treasury.version,
-      treasuryEvidenceRef: treasury.lastObservationRef,
-      treasurySpendableUnits: treasury.spendableUnits,
+      treasuryEvidenceRef: treasury.evidenceRef,
+      treasuryEvidenceDigest: treasury.evidenceDigest,
+      treasurySpendableUnits: treasury.availableUnits,
     }),
     commercialPolicyRefs: [...policyGate.policyRefs],
     commercialPolicyDigest: policyGate.policyDigest,
@@ -325,9 +496,6 @@ async function issueCommitmentHandler(ctx: MutationCtx, args: InspectArgs): Prom
       available: { currency: 'AUD', exponent: 6, units: balanceUnits },
     },
     budget: { principalRef: authority.principal.principalId, maximumPerInvocation: maximum as never },
-    ...(treasury === undefined ? {} : {
-      treasury: { spendable: { currency: 'USDC', exponent: 6, units: treasury.spendableUnits } },
-    }),
     policyRefs: [...policyGate.policyRefs],
     evidenceDigest,
     continuation: {
@@ -347,18 +515,158 @@ export const issueCommitment = internalMutation({
     principal: principalValue,
     operationRef: v.string(),
     input: jsonObject,
+    liveX402Requirement: v.optional(v.object({
+      requirementDigest: v.string(),
+      requirementJson: v.string(),
+      observedAt: v.number(),
+    })),
+    formance: formanceFinancialSnapshot,
   },
   returns: inspectResult,
   handler: issueCommitmentHandler,
 })
 
+export const prepareFinancialSubjects = internalMutation({
+  args: {
+    operationKey: v.string(),
+    correlationId: v.string(),
+    ...sourceWriteArgs,
+    principal: principalValue,
+    operationRef: v.string(),
+    input: jsonObject,
+  },
+  returns: financialSubjectsResult,
+  handler: prepareFinancialSubjectsHandler,
+})
+
 export const inspect = action({
   args: { ...principalAndSourceArgs, operationRef: v.string(), input: jsonObject },
   returns: inspectResult,
-  handler: async (ctx, args): Promise<InspectResult> => await ctx.runMutation(
-    internal.capabilityOperationCommitments.issueCommitment,
-    args,
-  ),
+  handler: async (ctx, args): Promise<InspectResult> => {
+    const live = await ctx.runAction(inspectLiveX402RequirementRef, {
+      operationRef: args.operationRef,
+      input: args.input,
+    })
+    if (live.kind === 'operation_not_found') {
+      return refuse(args.operationRef, 'operation_not_found', false)
+    }
+    if (live.kind === 'operation_unsupported') {
+      return refuse(args.operationRef, 'operation_unsupported', false)
+    }
+    if (live.kind === 'refused') return refuse(args.operationRef, 'operation_not_ready', true, true)
+    const subjects: FinancialSubjectsResult = await ctx.runMutation(
+      internal.capabilityOperationCommitments.prepareFinancialSubjects,
+      args,
+    )
+    if (subjects.kind === 'refused') return refuse(args.operationRef, subjects.code, true)
+    const capacityCommands = [
+      {
+        commandRef: `capacity:agent:${subjects.principalRef}:${subjects.budgetGeneration}`,
+        idempotencyKey: `capacity:agent:${subjects.principalRef}:${subjects.budgetGeneration}`,
+        kind: 'agent_budget' as const,
+        subjectRef: subjects.principalRef,
+        generation: subjects.budgetGeneration,
+        targetUnits: subjects.budgetUnits,
+        policyDigest: subjects.policyDigest,
+        externalEvidenceDigest: subjects.policyDigest,
+      },
+      {
+        commandRef: `capacity:legal:${subjects.legalCustomerRef}:${subjects.legalCustomerGeneration}`,
+        idempotencyKey: `capacity:legal:${subjects.legalCustomerRef}:${subjects.legalCustomerGeneration}`,
+        kind: 'legal_customer_exposure' as const,
+        subjectRef: subjects.legalCustomerRef,
+        generation: subjects.legalCustomerGeneration,
+        targetUnits: subjects.legalExposureUnits,
+        policyDigest: subjects.policyDigest,
+        externalEvidenceDigest: subjects.policyDigest,
+      },
+      ...(live.kind === 'observed' && subjects.treasury !== undefined
+        ? [{
+            commandRef: `capacity:treasury:${subjects.treasury.custodyRef}:${subjects.treasury.custodyGeneration}`,
+            idempotencyKey: `capacity:treasury:${subjects.treasury.custodyRef}:${subjects.treasury.custodyGeneration}`,
+            kind: 'treasury_usdc' as const,
+            subjectRef: subjects.treasury.custodyRef,
+            generation: subjects.treasury.custodyGeneration,
+            targetUnits: subjects.treasury.targetUnits,
+            policyDigest: subjects.policyDigest,
+            externalEvidenceDigest: subjects.treasury.evidenceDigest,
+          }]
+        : []),
+    ]
+    if (live.kind === 'observed' && subjects.treasury === undefined) {
+      return refuse(args.operationRef, 'treasury_capacity_unavailable', true, true)
+    }
+    for (const capacity of capacityCommands) {
+      const synced = await ctx.runAction(internal.moneyFormance.syncCapacity, capacity)
+      if (synced.kind !== 'completed') {
+        return refuse(args.operationRef, 'inspection_unavailable', synced.kind !== 'refused', true)
+      }
+    }
+    const [account, budget, exposure, treasury] = await Promise.all([
+      ctx.runAction(internal.moneyFormance.readDisplayBalance, {
+        balanceKind: 'account_aud', subjectRef: subjects.accountRef,
+      }),
+      ctx.runAction(internal.moneyFormance.readDisplayBalance, {
+        balanceKind: 'agent_budget', subjectRef: subjects.principalRef,
+        generation: subjects.budgetGeneration,
+      }),
+      ctx.runAction(internal.moneyFormance.readDisplayBalance, {
+        balanceKind: 'legal_customer_exposure', subjectRef: subjects.legalCustomerRef,
+        generation: subjects.legalCustomerGeneration,
+      }),
+      subjects.treasury === undefined
+        ? Promise.resolve(undefined)
+        : ctx.runAction(internal.moneyFormance.readDisplayBalance, {
+            balanceKind: 'treasury_usdc', subjectRef: subjects.treasury.custodyRef,
+            generation: subjects.treasury.custodyGeneration,
+          }),
+    ])
+    if (account.kind !== 'available'
+      || budget.kind !== 'available'
+      || exposure.kind !== 'available'
+      || (treasury !== undefined && treasury.kind !== 'available')) {
+      return refuse(args.operationRef, 'inspection_unavailable', true, true)
+    }
+    const observedAt = Math.min(
+      account.observedAt,
+      budget.observedAt,
+      exposure.observedAt,
+      treasury?.observedAt ?? Number.MAX_SAFE_INTEGER,
+    )
+    return await ctx.runMutation(
+      internal.capabilityOperationCommitments.issueCommitment,
+      {
+        ...args,
+        ...(live.kind === 'observed' ? { liveX402Requirement: live.requirement } : {}),
+        formance: {
+          accountRef: subjects.accountRef,
+          accountAvailableUnits: account.units,
+          principalRef: subjects.principalRef,
+          budgetGeneration: subjects.budgetGeneration,
+          budgetAvailableUnits: budget.units,
+          legalCustomerRef: subjects.legalCustomerRef,
+          legalCustomerGeneration: subjects.legalCustomerGeneration,
+          legalExposureAvailableUnits: exposure.units,
+          policyGeneration: subjects.policyGeneration,
+          formanceSchemaVersion: PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+          buyerTaxBps: subjects.buyerTaxBps,
+          observedAt,
+          ...(subjects.treasury === undefined || treasury === undefined
+            ? {}
+            : {
+                treasury: {
+                  custodyRef: subjects.treasury.custodyRef,
+                  custodyGeneration: subjects.treasury.custodyGeneration,
+                  network: subjects.treasury.network,
+                  availableUnits: treasury.units,
+                  evidenceRef: subjects.treasury.evidenceRef,
+                  evidenceDigest: subjects.treasury.evidenceDigest,
+                },
+              }),
+        },
+      },
+    )
+  },
 })
 
 const invocationMaterial = v.union(v.object({
@@ -367,6 +675,7 @@ const invocationMaterial = v.union(v.object({
   decisionPrice: exactAud,
   commitmentRef: v.string(),
   evidenceDigest: v.string(),
+  x402RequirementDigest: v.optional(v.string()),
 }), v.null())
 
 export const readForInvocation = internalQuery({
@@ -407,6 +716,9 @@ export const readForInvocation = internalQuery({
             decisionPrice: { currency: 'AUD' as const, exponent: 6 as const, units: row.decisionAudUnits },
             commitmentRef: row.commitmentRef,
             evidenceDigest: row.evidenceDigest,
+            ...(row.x402RequirementDigest === undefined
+              ? {}
+              : { x402RequirementDigest: row.x402RequirementDigest }),
           }
         : null
     } catch {

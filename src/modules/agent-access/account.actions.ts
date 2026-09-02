@@ -1,10 +1,15 @@
 import { z } from 'zod'
 
-import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-source'
+import {
+  callPublicSourceAction,
+  callPublicSourceMutation,
+  sourceAction,
+  sourceMutation,
+} from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { defineAction } from '@/modules/common/action'
-import { CreditActivityViewSchema, exactAmountSchema } from '@/modules/money/public'
+import { exactAmountSchema } from '@/modules/money/public'
 
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
@@ -64,7 +69,7 @@ export const agentAccountSelfResultSchema = z.strictObject({
 export type AgentAccountSelfResult = z.infer<typeof agentAccountSelfResultSchema>
 
 export const agentAccountBalanceInputSchema = z.strictObject({
-  currency: z.string().trim().min(3).max(12).default('USD'),
+  currency: z.literal('AUD').default('AUD'),
 })
 
 const agentAccountFundingContinuationSchema = z.strictObject({
@@ -79,7 +84,6 @@ export const agentAccountBalanceResultSchema = z.discriminatedUnion('kind', [
     principalRef: z.string().min(1),
     accountRef: z.string().min(1),
     balance: exactAmountSchema,
-    recoveryDue: exactAmountSchema,
     accountState: z.enum(['active', 'locked']),
     version: z.number().int().positive(),
     updatedAt: z.number().int().nonnegative(),
@@ -90,7 +94,7 @@ export const agentAccountBalanceResultSchema = z.discriminatedUnion('kind', [
 ])
 
 export const agentAccountActivityInputSchema = z.strictObject({
-  currency: z.string().trim().min(3).max(12).default('USD'),
+  currency: z.literal('AUD').default('AUD'),
   limit: z.number().int().min(1).max(100).default(20),
   cursor: z.string().min(1).max(2_000).optional(),
 })
@@ -98,7 +102,19 @@ export const agentAccountActivityInputSchema = z.strictObject({
 export const agentAccountActivityResultSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('available'),
-    items: z.array(CreditActivityViewSchema).max(100),
+    items: z.array(z.strictObject({
+      callRef: z.string().min(1),
+      credentialRef: z.string().min(1),
+      operationRef: z.string().min(1),
+      providerRef: z.string().min(1),
+      state: z.enum(['completed', 'refused', 'outcome_unknown']),
+      deliveryState: z.enum(['delivered', 'not_delivered', 'unknown']),
+      paymentState: z.enum(['settled', 'released', 'unknown', 'not_applicable']),
+      audAmountUnits: z.string().regex(/^(?:0|[1-9]\d*)$/).optional(),
+      receiptRef: z.string().min(1).optional(),
+      recoveryRef: z.string().min(1).optional(),
+      observedAt: z.number().int().nonnegative(),
+    })).max(100),
     hasMore: z.boolean(),
     nextCursor: z.string().min(1).max(2_000).optional(),
   }),
@@ -121,7 +137,7 @@ export type AccountManagementService = Readonly<{
   activity: (request: AgentMoneyRequest<AgentAccountActivityInput>) => Promise<AgentAccountActivityResult>
 }>
 
-const balanceMutation = sourceMutation<Record<string, unknown>, unknown>('agentMoneyReads:balance')
+const balanceAction = sourceAction<Record<string, unknown>, unknown>('agentMoneyReads:balance')
 const activityMutation = sourceMutation<Record<string, unknown>, unknown>('agentMoneyReads:activity')
 
 export function createAccountManagementService(request: Request, bodyText: string): AccountManagementService {
@@ -154,12 +170,25 @@ export function createAccountManagementService(request: Request, bodyText: strin
         currency: input.currency,
         correlationId,
       })
-      const result = await mutate<unknown>(balanceMutation, {
+      const command = {
         currency: input.currency,
         agentPrincipal: principal,
         operationKey,
         correlationId,
-      }, operationKey, correlationId)
+      }
+      const sourceWrite = await sourceWriteAdmissionFromRequest({
+        request,
+        command,
+        body: bodyText,
+        scope: 'billing',
+        operationKey,
+        correlationId,
+      })
+      const result = await callPublicSourceAction(balanceAction, {
+        ...command,
+        sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+        sourceWrite,
+      })
       const parsed = agentAccountBalanceResultSchema.safeParse(result)
       return parsed.success ? parsed.data : { kind: 'error', code: 'source_unavailable' }
     },

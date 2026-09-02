@@ -3,7 +3,6 @@ import type { Infer } from 'convex/values'
 
 import { internal } from './_generated/api'
 import type { ActionCtx } from './_generated/server'
-import { externalSpendMutationResultValue } from './moneyExternalSpend'
 import { prepareX402PaymentAuthorizationReturns } from './moneyX402PaymentAuthorization'
 import {
   readX402PaymentAuthorizationByDigestReturns,
@@ -178,7 +177,6 @@ export const abortProviderConsequenceJournal = httpActionGeneric(async (ctx, req
 })
 
 const X402_OPERATIONS = new Set([
-  'reserve_external_spend',
   'prepare_authorization',
   'read_authorization',
   'read_authorization_by_digest',
@@ -189,7 +187,6 @@ const X402_OPERATIONS = new Set([
 
 type X402Operation = typeof X402_OPERATIONS extends Set<infer Operation> ? Operation : never
 type X402OperationResult =
-  | Infer<typeof externalSpendMutationResultValue>
   | Infer<typeof prepareX402PaymentAuthorizationReturns>
   | Infer<typeof readX402PaymentAuthorizationReturns>
   | Infer<typeof readX402PaymentAuthorizationByDigestReturns>
@@ -202,8 +199,6 @@ async function runX402Operation(
 ): Promise<X402OperationResult> {
   const checkedArgs = args as never
   switch (operation) {
-    case 'reserve_external_spend':
-      return await ctx.runMutation(internal.moneyLedger.reserveExternalInvocationSpend, checkedArgs)
     case 'prepare_authorization':
       return await ctx.runMutation(internal.moneyX402PaymentAttempts.prepareX402PaymentAuthorization, checkedArgs)
     case 'read_authorization':
@@ -237,24 +232,6 @@ function canonicalX402Args(
     providerRef: string
   }>,
 ): Record<string, unknown> {
-  if (operation === 'reserve_external_spend') {
-    return {
-      principalId: authority.principalId,
-      credentialId: authority.credentialId,
-      grantRef: authority.grantRef,
-      grantGeneration: authority.grantGeneration,
-      environment: authority.environment,
-      invocationRef: authority.invocationRef,
-      attemptRef: authority.attemptRef,
-      effectGeneration: authority.effectGeneration,
-      operationRef: authority.operationRef,
-      providerRef: authority.providerRef,
-      paymentIdentifier: supplied.paymentIdentifier,
-      challengeDigest: supplied.challengeDigest,
-      amount: supplied.amount,
-      observedAt: Date.now(),
-    }
-  }
   if (operation === 'prepare_authorization') {
     const {
       dispatchRef: _dispatchRef,

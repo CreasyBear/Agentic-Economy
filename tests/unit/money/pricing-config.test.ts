@@ -98,6 +98,7 @@ describe('money pricing configuration', () => {
     const config: PricingConfig = {
       version: 'pricing:v3',
       kind: 'managed_x402',
+      effectTiming: 'payment_required_before_effect',
       sourceRequirement: { network: 'eip155:8453', asset: 'usdc', atomicUnits: '10000' },
       pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
       publicDisplay: 'on_request',

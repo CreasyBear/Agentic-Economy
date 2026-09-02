@@ -9,14 +9,8 @@ import {
   runOwnerSupplyTest,
 } from '../../../convex/capabilitySupplyOwnerSupply'
 import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
-import { payoutOwnedByCurrentOwner } from '../../../convex/moneyPayoutTransferShared'
 import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
-import {
-  MemoryDb,
-  identity as payoutIdentity,
-  seedPayout,
-} from './payout-ledger-test-harness'
 
 const facts = {
   name: 'Canonical authority offering',
@@ -167,92 +161,6 @@ describe('interactive consequence authority', () => {
         caller.mutation(api.catalog.createBusinessOffering, lifecycleCommand),
       ).resolves.toMatchObject({ kind: 'error', code: 'unauthenticated' })
     }
-  })
-
-  it('payout resolves the current owner and rejects invalid authority state', async () => {
-    const db = new MemoryDb()
-    const auth = {
-      getUserIdentity: async () => ({
-        subject: 'attacker',
-        issuer: 'https://identity.example',
-        tokenIdentifier: 'forged-request-principal',
-      }),
-    }
-
-    await expect(
-      payoutOwnedByCurrentOwner(
-        { db: db as never, auth: auth as never, scheduler: {} as never },
-        'business-1',
-      ),
-    ).resolves.toBe(false)
-
-    const revokedDb = new MemoryDb()
-    seedPayout(revokedDb)
-    const credential = revokedDb.rows('credentials')[0]
-    if (credential === undefined) throw new Error('payout_credential_fixture_missing')
-    credential.lifecycle = 'revoked'
-    await expect(payoutOwnedByCurrentOwner(
-      { db: revokedDb as never, auth: payoutIdentity as never, scheduler: {} as never },
-      'business-1',
-    )).resolves.toBe(false)
-
-    const crossAccountDb = new MemoryDb()
-    seedPayout(crossAccountDb)
-    crossAccountDb.seed('businesses', {
-      _id: 'businesses:cross-account',
-      owningAccountRef: `acc_${'b'.repeat(32)}`,
-      updatedAt: 1,
-    })
-    await expect(payoutOwnedByCurrentOwner(
-      { db: crossAccountDb as never, auth: payoutIdentity as never, scheduler: {} as never },
-      'businesses:cross-account',
-    )).resolves.toBe(false)
-
-    const expiredDb = new MemoryDb()
-    seedPayout(expiredDb)
-    const expiredCredential = expiredDb.rows('credentials')[0]
-    if (expiredCredential === undefined) throw new Error('payout_expiry_fixture_missing')
-    expiredCredential.issuedAt = 0
-    expiredCredential.expiresAt = 1_000
-    expiredCredential.expiryMaterialization = {
-      state: 'scheduled',
-      credentialGeneration: 1,
-      credentialExpiresAt: 1_000,
-      scheduleNonce: interactiveCredentialExpiryNonce({
-        bindingRef: String(expiredCredential.bindingRef),
-        credentialRef: String(expiredCredential.credentialRef),
-        generation: 1,
-        expiresAt: 1_000,
-      }),
-      scheduleRef: 'scheduled:payout-expired',
-      materializedAt: 1,
-    }
-    await expect(payoutOwnedByCurrentOwner(
-      {
-        db: expiredDb as never,
-        auth: {
-          getUserIdentity: async () => ({
-            subject: 'owner:payout',
-            issuer: 'https://identity.example',
-            tokenIdentifier: 'https://identity.example|owner:payout',
-            exp: 1,
-          }),
-        } as never,
-        scheduler: {} as never,
-      },
-      'business-1',
-    )).resolves.toBe(false)
-  })
-
-  it('payout preserves valid exact-owner behavior', async () => {
-    const db = new MemoryDb()
-    seedPayout(db)
-
-
-    await expect(payoutOwnedByCurrentOwner(
-      { db: db as never, auth: payoutIdentity as never, scheduler: {} as never },
-      'business-1',
-    )).resolves.toBe(true)
   })
 
   it('owner supply denies hostile authority before external calls', async () => {

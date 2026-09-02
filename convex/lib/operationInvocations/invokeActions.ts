@@ -435,12 +435,67 @@ export async function invokeHandler(
           inputJson: JSON.stringify(args.input),
           now: Date.now(),
         })
-        if (result.kind === 'reserved') {
-          reservedInvocationRef = result.reservation.invocationRef
-          reservationWasCreated = true
-        } else if (result.kind === 'replayed') {
-          reservationWasReplayed = true
+        if (result.kind !== 'reserved' && result.kind !== 'replayed') return result
+        const material = await ctx.runQuery(internal.moneyManagedCall.readBooking, {
+          invocationRef: result.reservation.invocationRef,
+        })
+        if (material.kind === 'not_found') {
+          await ctx.runMutation(internal.capabilityOperationInvocations.abandon, {
+            ...result.reservation,
+            ownerId: principal.ownerId,
+          })
+          return {
+            kind: 'refused' as const,
+            code: 'commercial_policy_unavailable' as const,
+            retryable: false,
+          }
         }
+        if (material.financialState === 'outcome_unknown') {
+          reservedInvocationRef = result.reservation.invocationRef
+          reservationWasReplayed = true
+          return { kind: 'replayed' as const, reservation: result.reservation }
+        }
+        if (material.financialState !== 'reserved') {
+          const booked = await ctx.runAction(internal.moneyFormance.reserveManagedCall, material.booking)
+          if (booked.kind === 'completed') {
+            const attached = await ctx.runMutation(internal.moneyManagedCall.attachReservation, {
+              invocationRef: result.reservation.invocationRef,
+              transactionRefs: [...booked.transactionRefs],
+            })
+            if (attached.kind === 'refused') {
+              await ctx.runMutation(internal.moneyManagedCall.markReservationUnknown, {
+                invocationRef: result.reservation.invocationRef,
+                reference: booked.transactionRefs[0] ?? `formance-reservation:${result.reservation.invocationRef}`,
+                statusRef: `operation-status:${result.reservation.invocationRef}`,
+              })
+              reservedInvocationRef = result.reservation.invocationRef
+              reservationWasReplayed = true
+              return { kind: 'replayed' as const, reservation: result.reservation }
+            }
+          } else if (booked.kind === 'outcome_unknown') {
+            await ctx.runMutation(internal.moneyManagedCall.markReservationUnknown, {
+              invocationRef: result.reservation.invocationRef,
+              reference: booked.reference,
+              statusRef: booked.statusRef,
+            })
+            reservedInvocationRef = result.reservation.invocationRef
+            reservationWasReplayed = true
+            return { kind: 'replayed' as const, reservation: result.reservation }
+          } else {
+            await ctx.runMutation(internal.capabilityOperationInvocations.abandon, {
+              ...result.reservation,
+              ownerId: principal.ownerId,
+            })
+            return {
+              kind: 'refused' as const,
+              code: 'commercial_policy_unavailable' as const,
+              retryable: booked.kind === 'unavailable',
+            }
+          }
+        }
+        reservedInvocationRef = result.reservation.invocationRef
+        if (result.kind === 'reserved') reservationWasCreated = true
+        else reservationWasReplayed = true
         return result
       },
       abandon: async (abandonment) => {

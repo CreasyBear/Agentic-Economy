@@ -4,11 +4,6 @@ import {
   reconcilePublicInvocation,
   type ReconciliationEvidence,
 } from '@/modules/action-invocation/runtime'
-import {
-  externalSpendIdentityMatchingReservationRef,
-  exactAmountSchema,
-  type ExternalSpendIdentity,
-} from '@/modules/money/public'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
 import {
@@ -17,7 +12,6 @@ import {
   recoveryNotFound,
   retryableRecoveryResult,
 } from '../../../../../convex/capabilityOperationInvocationProjection'
-import { externalSpendPaymentFactsFromDispatch } from '../x402Route'
 import {
   loadReadyRecoveryWork,
   type RecoveryWorkContext,
@@ -30,7 +24,7 @@ type PaymentAttempt = NonNullable<RecoveryWorkContext['x402Attempt']>
 
 type PreSubmissionProof = Readonly<{
   evidence: ReconciliationEvidence
-  externalIdentity: ExternalSpendIdentity
+  reservationRef: string
   paymentResponseDigest: string
   transportObservationDigest: string
   transportRequestDigest: string
@@ -98,24 +92,8 @@ async function reconcilePreSubmissionMoney(
 ): Promise<PreSubmissionMoneyResult> {
   const attempt = work.x402Attempt
   if (attempt === null) return { kind: 'not_reconciled' }
-  if (work.recovered.sellerOnboardingCanary !== undefined) {
-    return await ctx.runMutation(
-      internal.capabilityOperationPreSubmissionRecovery.reconcilePreSubmissionX402Money,
-      {
-        ...proof.externalIdentity,
-        inputDigest: work.recovered.inputDigest,
-        authorizationDigest: attempt.authorizationDigest,
-        paymentResponseDigest: proof.paymentResponseDigest,
-        evidenceRef: proof.evidence.evidenceRef,
-        evidenceDigest: proof.evidence.digest,
-        transportObservationDigest: proof.transportObservationDigest,
-        transportRequestDigest: proof.transportRequestDigest,
-        paymentObservationDigest: proof.paymentObservationDigest,
-        observedAt: proof.observedAt,
-      },
-    )
-  }
-  const result = await ctx.runMutation(
+  if (work.recovered.sellerOnboardingCanary !== undefined) return { kind: 'not_reconciled' }
+  const result = await ctx.runAction(
     internal.moneyManagedCallLifecycle.releaseBeforeSubmissionWithX402Proof,
     {
       invocationRef: work.recovered.invocationRef,
@@ -123,7 +101,7 @@ async function reconcilePreSubmissionMoney(
       effectGeneration: proof.evidence.effectGeneration,
       operationRef: work.recovered.operationRef,
       inputDigest: work.recovered.inputDigest,
-      reservationRef: proof.externalIdentity.reservationRef,
+      reservationRef: proof.reservationRef,
       paymentIdentifier: attempt.paymentIdentifier,
       challengeDigest: attempt.challengeDigest,
       evidenceRef: proof.evidence.evidenceRef,
@@ -212,8 +190,8 @@ function preparePreSubmissionProof(work: RecoveryWorkContext): PreSubmissionProo
   const providerRef = operationProviderRef(operation)
   if (!recoveryScopeIsEligible(work, providerRef)) return undefined
   if (x402Attempt === null || providerRef === undefined) return undefined
-  const externalIdentity = externalIdentityForAttempt(work, x402Attempt)
-  if (externalIdentity === undefined) return undefined
+  const reservationRef = managedReservationRefForAttempt(work, x402Attempt)
+  if (reservationRef === undefined) return undefined
 
   const observedAt = reconciliationObservedAt(recovered)
   if (observedAt === undefined) return undefined
@@ -270,7 +248,7 @@ function preparePreSubmissionProof(work: RecoveryWorkContext): PreSubmissionProo
   }
   return {
     evidence,
-    externalIdentity,
+    reservationRef,
     paymentResponseDigest,
     transportObservationDigest,
     transportRequestDigest,
@@ -309,7 +287,8 @@ function recoveryScopeIsEligible(
   providerRef: string | undefined,
 ): boolean {
   const { recovered, operation, x402Attempt, control } = work
-  return (invocationIsSandboxSellerCanary(recovered) || work.managedReservation !== null)
+  return work.managedReservation !== null
+    && recovered.sellerOnboardingCanary === undefined
     && operation.identity.adapterId === 'x402-fetch:v2'
     && providerRef !== undefined
     && paymentIdentityMatchesInvocation(x402Attempt, recovered)
@@ -317,10 +296,6 @@ function recoveryScopeIsEligible(
     && control.currentEffectGeneration !== undefined
     && x402Attempt !== null
     && paymentAttemptIsPristineOrExactReplay(x402Attempt)
-}
-
-function invocationIsSandboxSellerCanary(recovered: RecoveryWorkContext['recovered']): boolean {
-  return recovered.environment === 'sandbox' && recovered.sellerOnboardingCanary !== undefined
 }
 
 function paymentIdentityMatchesInvocation(
@@ -370,48 +345,20 @@ function reconciledPaymentAttempt(attempt: PaymentAttempt): boolean {
   ].every(Boolean)
 }
 
-export function externalIdentityForAttempt(
+export function managedReservationRefForAttempt(
   work: RecoveryWorkContext,
   attempt: PaymentAttempt,
-): ExternalSpendIdentity | undefined {
-  const authority = work.operation.binding.authority
-  if (authority.kind !== 'provider_connection') return undefined
-  const amount = exactAmountSchema.safeParse({
-    units: attempt.amountUnits,
-    currency: attempt.currency,
-    exponent: attempt.exponent,
-  })
-  if (!amount.success || attempt.reservationRef === undefined) return undefined
-  const custodyFields = [
-    attempt.custodyBudgetRef,
-    attempt.custodyGeneration,
-    attempt.custodyDailyMaximumUnits,
-  ]
-  if (custodyFields.some((value) => value === undefined)) return undefined
-  const dailyMaximum = exactAmountSchema.safeParse({
-    units: attempt.custodyDailyMaximumUnits,
-    currency: attempt.currency,
-    exponent: attempt.exponent,
-  })
-  if (
-    !dailyMaximum.success
-    || typeof attempt.custodyBudgetRef !== 'string'
-    || typeof attempt.custodyGeneration !== 'number'
-  ) return undefined
-  return externalSpendIdentityMatchingReservationRef(
-    externalSpendPaymentFactsFromDispatch(work.recovered, {
-      attemptRef: attempt.attemptRef,
-      effectGeneration: attempt.effectGeneration,
-      providerRef: authority.providerRef,
-      paymentIdentifier: attempt.paymentIdentifier,
-      challengeDigest: attempt.challengeDigest,
-      amount: amount.data,
-      custodyRef: attempt.custodyBudgetRef,
-      custodyGeneration: attempt.custodyGeneration,
-      custodyDailyMaximum: dailyMaximum.data,
-    }),
-    attempt.reservationRef,
-  )
+): string | undefined {
+  if (work.recovered.sellerOnboardingCanary !== undefined) return undefined
+  const reservation = work.managedReservation
+  if (reservation === null || attempt.reservationRef === undefined) return undefined
+  const acceptedRefs = [
+    reservation.reservationRef,
+    reservation.treasuryReservationRef,
+  ].filter((value): value is string => typeof value === 'string')
+  return acceptedRefs.includes(attempt.reservationRef)
+    ? attempt.reservationRef
+    : undefined
 }
 
 export async function projectRetryableRecovery(

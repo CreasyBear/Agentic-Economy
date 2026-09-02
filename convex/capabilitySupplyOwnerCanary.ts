@@ -3,10 +3,6 @@ import { v, type Infer } from 'convex/values'
 import { internalMutation, internalQuery, query } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
-import {
-  x402PaymentAuthorizationFailureCode,
-  x402PaymentAuthorizationFailureDetail,
-} from './moneyX402PaymentAuthorization'
 import { resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { readExactSellerCanaryOperationSnapshotHandler } from './capabilitySupplyCurrentOperation'
@@ -157,8 +153,6 @@ const ownerSellerCanaryStatusValue = v.union(
     refusal: v.optional(v.object({
       code: v.string(),
       retryable: v.boolean(),
-      authorizationFailureCode: v.optional(x402PaymentAuthorizationFailureCode),
-      authorizationFailureDetail: v.optional(x402PaymentAuthorizationFailureDetail),
       retryKind: v.optional(v.union(
         v.literal('pre_claim_rearm'),
         v.literal('safe_before_release_resume'),
@@ -722,12 +716,6 @@ export const readOwnerSellerOnboardingCanaryStatus = query({
             refusal: {
               code: result.code,
               retryable: knownUnpaidRefusal !== undefined || safeBeforeReleaseRefusal !== undefined,
-              ...(safeBeforeReleaseRefusal?.authorizationFailureCode === undefined
-                ? {}
-                : { authorizationFailureCode: safeBeforeReleaseRefusal.authorizationFailureCode }),
-              ...(safeBeforeReleaseRefusal?.authorizationFailureDetail === undefined
-                ? {}
-                : { authorizationFailureDetail: safeBeforeReleaseRefusal.authorizationFailureDetail }),
               ...(knownUnpaidRefusal !== undefined
                 ? { retryKind: 'pre_claim_rearm' as const }
                 : safeBeforeReleaseRefusal !== undefined

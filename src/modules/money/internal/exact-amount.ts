@@ -1,4 +1,4 @@
-import { convertToTokenAmount } from '@x402/core/utils'
+import Decimal from 'decimal.js'
 import { z } from 'zod'
 
 export type ExactAmount = Readonly<{
@@ -85,7 +85,9 @@ export function parseDecimalExactAmount(currency: unknown, decimalAmount: unknow
   const fractionalDigits = decimalAmount.split('.')[1] ?? ''
   if (/[1-9]/.test(fractionalDigits.slice(targetExponent))) return undefined
   try {
-    const units = convertToTokenAmount(decimalAmount, targetExponent)
+    const scaled = new Decimal(decimalAmount).mul(new Decimal(10).pow(targetExponent))
+    if (!scaled.isInteger() || scaled.isNegative()) return undefined
+    const units = scaled.toFixed(0)
     return exactAmountSchema.parse({ currency: parsedCurrency, units, exponent: targetExponent })
   } catch {
     return undefined

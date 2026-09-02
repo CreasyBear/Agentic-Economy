@@ -14,7 +14,7 @@ import {
 import { loadReadyRecoveryWork, type RecoveryWorkContext } from './loading'
 import type { RecoveryIdentity, RecoveryResult } from './contracts'
 import {
-  externalIdentityForAttempt,
+  managedReservationRefForAttempt,
   projectRetryableRecovery,
   recoveryControlCanProceed,
 } from './preSubmission'
@@ -37,7 +37,7 @@ type ManagedSigningReplay = Extract<
   { kind: 'definitive_rejection' }
 >
 type ManagedSigningPreparedEvidence = Readonly<{
-  externalIdentity: NonNullable<ReturnType<typeof externalIdentityForAttempt>>
+  reservationRef: string
   evidence: ReconciliationEvidence
   evidenceRef: string
   paymentResponseDigest: string
@@ -111,13 +111,13 @@ function prepareManagedSigningEvidence(
   observedAt: number,
   replay: ManagedSigningReplay,
 ): ManagedSigningPreparedEvidence | undefined {
-  const externalIdentity = externalIdentityForAttempt(work, attempt)
+  const reservationRef = managedReservationRefForAttempt(work, attempt)
   const providerIdentity = providerIdentityForRecovery(work)
   const transportObservationDigest = attempt.transportObservationDigest
   const paymentObservationDigest = attempt.paymentObservationDigest
   const transportRequestDigest = attempt.transportRequestDigest
   if (
-    externalIdentity === undefined
+    reservationRef === undefined
     || providerIdentity === undefined
     || transportObservationDigest === undefined
     || paymentObservationDigest === undefined
@@ -174,7 +174,7 @@ function prepareManagedSigningEvidence(
     proofDigest,
   })
   return {
-    externalIdentity,
+    reservationRef,
     evidence,
     evidenceRef,
     paymentResponseDigest,
@@ -192,58 +192,28 @@ async function reconcileManagedSigningMoney(
   replay: ManagedSigningReplay,
   prepared: ManagedSigningPreparedEvidence,
 ): Promise<boolean> {
-  if (work.recovered.sellerOnboardingCanary === undefined) {
-    const reservationRef = attempt.reservationRef
-    if (reservationRef === undefined) return false
-    const money = await ctx.runMutation(
-      internal.moneyManagedCallLifecycle.releaseBeforeSubmissionWithX402Proof,
-      {
-        invocationRef: work.recovered.invocationRef,
-        attemptRef: attempt.attemptRef,
-        effectGeneration: attempt.effectGeneration,
-        operationRef: work.recovered.operationRef,
-        inputDigest: work.recovered.inputDigest,
-        reservationRef,
-        paymentIdentifier: attempt.paymentIdentifier,
-        challengeDigest: attempt.challengeDigest,
-        evidenceRef: prepared.evidenceRef,
-        evidenceDigest: prepared.evidence.digest,
-        paymentResponseDigest: prepared.paymentResponseDigest,
-        transportObservationDigest: prepared.transportObservationDigest,
-        transportRequestDigest: prepared.transportRequestDigest,
-        paymentObservationDigest: prepared.paymentObservationDigest,
-        observedAt,
-      },
-    )
-    return money.kind === 'accepted'
-  }
-  const money = await ctx.runMutation(
-    internal.capabilityOperationPreSubmissionRecovery.reconcileManagedSigningX402Money,
+  if (work.recovered.sellerOnboardingCanary !== undefined) return false
+  const money = await ctx.runAction(
+    internal.moneyManagedCallLifecycle.releaseBeforeSubmissionWithX402Proof,
     {
-      ...prepared.externalIdentity,
+      invocationRef: work.recovered.invocationRef,
       attemptRef: attempt.attemptRef,
       effectGeneration: attempt.effectGeneration,
+      operationRef: work.recovered.operationRef,
       inputDigest: work.recovered.inputDigest,
-      authorizationDigest: attempt.authorizationDigest,
+      reservationRef: prepared.reservationRef,
+      paymentIdentifier: attempt.paymentIdentifier,
+      challengeDigest: attempt.challengeDigest,
       evidenceRef: prepared.evidenceRef,
       evidenceDigest: prepared.evidence.digest,
       paymentResponseDigest: prepared.paymentResponseDigest,
       transportObservationDigest: prepared.transportObservationDigest,
       transportRequestDigest: prepared.transportRequestDigest,
       paymentObservationDigest: prepared.paymentObservationDigest,
-      paymentUnsignedMaterialDigest: attempt.paymentUnsignedMaterialDigest,
-      paymentSigningIdempotencyKey: attempt.paymentSigningIdempotencyKey,
-      paymentPayer: attempt.paymentPayer,
-      paymentNonce: attempt.paymentNonce,
-      paymentAuthorizationValidBefore: attempt.paymentAuthorizationValidBefore,
-      paymentAuthorizationExpiresAt: observedAt,
-      paymentSigningClaimedAt: attempt.paymentSigningClaimedAt,
-      replayKind: replay.kind,
-      replayEvidenceDigest: replay.evidenceDigest,
       observedAt,
     },
   )
-  return money.kind !== 'not_reconciled'
+  return money.kind === 'accepted'
 }
 
 async function advanceManagedSigningControl(

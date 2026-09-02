@@ -38,8 +38,9 @@ import {
   CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE,
   MARKET_OPERATIONS_INVOKE_SCOPE,
 } from '@/modules/agent-access/contract'
-import { accountRefForOwner } from '@/modules/money/public'
-import { COMMERCIAL_POLICY_FAMILIES } from '@/modules/money/public'
+import {
+  COMMERCIAL_POLICY_FAMILIES,
+} from '@/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../helpers/commercial-policy-fixtures'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/capabilitySupplyGraphPorts'
@@ -365,22 +366,6 @@ async function seedPrincipal(
   if (recordedPrincipal.kind !== 'recorded') throw new Error(`principal fixture failed: ${recordedPrincipal.kind}`)
   const recordedGrant = await backend.mutation(internal.agentAccessPolicy.upsertGrant, { grant })
   if (recordedGrant.kind !== 'recorded') throw new Error(`grant fixture failed: ${recordedGrant.kind}`)
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('moneyAccounts', {
-      accountRef: accountRefForOwner(principal.ownerId, 'USD'),
-      accountKind: 'operator_credit',
-      accountId: principal.ownerId,
-      currency: 'USD',
-      exponent: 2,
-      balanceUnits: '0',
-      heldUnits: '0',
-      recoveryDueUnits: '0',
-      version: 1,
-      state: 'active',
-      createdAt: now,
-      updatedAt: now,
-    })
-  })
   return { principal, grantRef }
 }
 
@@ -577,7 +562,6 @@ async function recoveryActionArgs(
 async function readEvidence(
   backend: ConvexFixtureBackend,
   invocationRef: string,
-  principalId: string,
 ) {
   return await backend.run(async (ctx) => {
     const invocation = await ctx.db.query('capabilityOperationInvocations')
@@ -591,13 +575,9 @@ async function readEvidence(
         query.eq('invocationRef', invocationRef).eq('attemptRef', invocation?.attemptRef ?? '')
       ))
       .unique()
-    const transactions = (await ctx.db.query('moneyTransactions')
-      .withIndex('by_principalId_and_createdAt', (query) => query.eq('principalId', principalId))
-      .collect())
-      .filter((transaction) => transaction.transactionRef.startsWith(`operation-money:${invocationRef}:`))
-    const usage = await ctx.db.query('moneyUsageEvents')
-      .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
-      .collect()
+    const call = await ctx.db.query('capabilityOperationCallProjections')
+      .withIndex('by_callRef', (query) => query.eq('callRef', invocationRef))
+      .unique()
     const history = await ctx.db.query('actionInvocationHistory')
       .withIndex('by_invocationRef_and_invocationVersion', (query) => query.eq('invocationRef', invocationRef))
       .order('asc')
@@ -607,8 +587,7 @@ async function readEvidence(
       control,
       attempt,
       history,
-      transactions,
-      usage,
+      call,
     }
   })
 }
@@ -696,7 +675,7 @@ describe('capability operation Workpool lifecycle', () => {
     pendingInvocationRef = successfulInvocationRef
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
 
-    const completed = await readEvidence(backend, successfulInvocationRef, first.principal.principalId)
+    const completed = await readEvidence(backend, successfulInvocationRef)
     const completedResult = completed.invocation?.result
     expect(completedResult).toMatchObject({ kind: 'completed' })
     if (completedResult?.kind !== 'completed') throw new Error('completed operation result missing')
@@ -909,18 +888,13 @@ describe('capability operation Workpool lifecycle', () => {
     })
     expect(canonicalCommandJson).not.toContain(JSON.stringify(providerOutput))
     expect(canonicalCommandJson).not.toContain(signingSecretSentinel)
-    expect(completed.transactions).toHaveLength(1)
-    expect(completed.transactions[0]).toMatchObject({
-      kind: 'charge',
-      state: 'applied',
-      amountUnits: '0',
-      idempotencyKey: `operation-money:${pendingInvocationRef}:${completed.attempt?.attemptRef}:1`,
-    })
-    expect(completed.usage).toHaveLength(1)
-    expect(completed.usage[0]).toMatchObject({
-      invocationRef: pendingInvocationRef,
-      chargeState: 'free_tier',
-      amountUnits: '0',
+    expect(completed.call).toMatchObject({
+      callRef: pendingInvocationRef,
+      accountRef: first.principal.ownerId,
+      principalRef: first.principal.principalId,
+      state: 'completed',
+      deliveryState: 'delivered',
+      paymentState: 'not_applicable',
     })
     expect(historyObservedDuringProvider).toEqual([
       'claim_before_effect',
@@ -932,11 +906,10 @@ describe('capability operation Workpool lifecycle', () => {
     const replay = await invokeOperation(backend, first.principal, operationRef, 'operation-workpool-success', 'replay')
     expect(replay).toEqual(completedResult)
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
-    const replayed = await readEvidence(backend, successfulInvocationRef, first.principal.principalId)
+    const replayed = await readEvidence(backend, successfulInvocationRef)
     expect(replayed.invocation?.workId).toBe(workId)
     expect(replayed.history).toHaveLength(3)
-    expect(replayed.transactions).toHaveLength(1)
-    expect(replayed.usage).toHaveLength(1)
+    expect(replayed.call).toEqual(completed.call)
     expect(providerFetch).toHaveBeenCalledTimes(1)
 
     await backend.run(async (ctx) => {
@@ -959,7 +932,7 @@ describe('capability operation Workpool lifecycle', () => {
     vi.advanceTimersByTime(120_000)
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
 
-    const refused = await readEvidence(backend, revokedPending.invocationRef, revoked.principal.principalId)
+    const refused = await readEvidence(backend, revokedPending.invocationRef)
     expect(refused.invocation).toMatchObject({
       state: 'refused',
       dispatchState: 'failed',
@@ -971,8 +944,7 @@ describe('capability operation Workpool lifecycle', () => {
     })
     expect(refused.control).toBeNull()
     expect(refused.attempt).toBeNull()
-    expect(refused.transactions).toHaveLength(0)
-    expect(refused.usage).toHaveLength(0)
+    expect(refused.call).toBeNull()
     expect(providerFetch).toHaveBeenCalledTimes(1)
   })
 

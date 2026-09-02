@@ -15,11 +15,8 @@ import {
   QUALIFIED_USE_EXCLUSIONS,
   type QualifiedUseReceipt,
 } from '../src/modules/money/public'
-import {
-  recordQualifiedUsePayoutAllocation,
-  resolveCanonicalInvocationAuthority,
-  type CanonicalQualifiedUseAuthority,
-} from './lib/qualifiedUsePayout'
+import { resolveCanonicalInvocationAuthority } from './lib/qualifiedUsePayout/authority'
+import type { CanonicalQualifiedUseAuthority } from './lib/qualifiedUsePayout/contracts'
 import type { Id } from './_generated/dataModel'
 import { recordMarketEvidenceFact } from './marketEvidence'
 
@@ -213,38 +210,8 @@ export const recordQualifiedUse = internalMutation({
       case 'refused':
         return { kind: 'refused' as const, code: decision.code }
       case 'replay':
-        if (
-          decision.receipt.usageRef !== undefined &&
-          decision.receipt.transactionRef !== undefined
-        ) {
-          const allocationResult = await recordQualifiedUsePayoutAllocation(
-            ctx,
-            decision.receipt,
-            args.principalId,
-          )
-          if (allocationResult === 'excluded_refunded_before_delivery')
-            return {
-              kind: 'excluded' as const,
-              reason: 'refunded_before_delivery' as const,
-            }
-        }
         return { kind: 'replayed' as const, receipt: toWire(decision.receipt) }
       case 'write': {
-        if (
-          decision.receipt.usageRef !== undefined &&
-          decision.receipt.transactionRef !== undefined
-        ) {
-          const allocationResult = await recordQualifiedUsePayoutAllocation(
-            ctx,
-            decision.receipt,
-            args.principalId,
-          )
-          if (allocationResult === 'excluded_refunded_before_delivery')
-            return {
-              kind: 'excluded' as const,
-              reason: 'refunded_before_delivery' as const,
-            }
-        }
         await ctx.db.insert('qualifiedUseReceipts', {
           ...toWire(decision.receipt),
           ...authority,

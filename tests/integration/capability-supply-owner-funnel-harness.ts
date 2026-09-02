@@ -53,6 +53,7 @@ export async function prepareOwnerPublicationCommand(
     pricingConfig = {
       version: 'pricing:v3' as const,
       kind: 'managed_x402' as const,
+      effectTiming: 'payment_required_before_effect' as const,
       sourceRequirement: {
         network: requirement.network,
         asset: requirement.asset,

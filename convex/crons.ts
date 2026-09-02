@@ -62,11 +62,4 @@ crons.interval(
   {},
 )
 
-crons.cron(
-  'run daily supplier settlement',
-  '0 0 * * *',
-  internal.workloadCron.runDailySupplierSettlement,
-  {},
-)
-
 export default crons

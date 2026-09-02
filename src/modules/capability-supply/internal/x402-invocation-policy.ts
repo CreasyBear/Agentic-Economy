@@ -1,12 +1,23 @@
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import {
-  externalSpendExecutionContextForFacts,
-  type ExternalSpendExecutionContext,
-  type ExternalSpendSettlementStatus,
-} from '@/modules/money/public'
 
 import type { RouteTransportObservation } from '../route-transport-runtime'
+
+export type X402ExecutionContext =
+  | Readonly<{
+      kind: 'market'
+      paymentProfile: 'base-usdc-exact' | 'base-sepolia-usdc-exact'
+    }>
+  | Readonly<{
+      kind: 'seller_onboarding_canary'
+      paymentProfile: 'base-sepolia-usdc-exact'
+      canaryRef: string
+      canaryCommitmentDigest: string
+      fundingBudgetRef: string
+    }>
+
+export type X402SettlementStatus = 'settled' | 'not_settled' | 'unknown'
 
 export type EconomicRail =
   | 'provider_direct_x402'
@@ -52,7 +63,7 @@ export function paymentLaneAdmission(
   input: Readonly<{
     rail: EconomicRail
     environment: string
-    executionContext?: ExternalSpendExecutionContext
+    executionContext?: X402ExecutionContext
   }>,
 ): PaymentLaneAdmission {
   const explicitContext = input.executionContext
@@ -60,7 +71,7 @@ export function paymentLaneAdmission(
     input.environment === 'sandbox'
     || input.environment === 'production'
   )
-    ? externalSpendExecutionContextForFacts({
+    ? x402ExecutionContextForFacts({
         environment: input.environment,
         ...(explicitContext === undefined
           ? {}
@@ -115,7 +126,7 @@ export function paymentLaneAdmission(
 
 export function x402SettlementStatusForObservation(
   observation: RouteTransportObservation,
-): ExternalSpendSettlementStatus {
+): X402SettlementStatus {
   const evidence = observation.settlementEvidence
   if (evidence === undefined) return 'unknown'
   switch (evidence.kind) {
@@ -132,6 +143,65 @@ export function x402SettlementStatusForObservation(
       return _exhaustive
     }
   }
+}
+
+function x402ExecutionContextForFacts(input: Readonly<{
+  environment: 'sandbox' | 'production'
+  executionContext?: X402ExecutionContext
+}>): X402ExecutionContext | undefined {
+  if (input.executionContext === undefined) {
+    return input.environment === 'production'
+      ? { kind: 'market', paymentProfile: 'base-usdc-exact' }
+      : { kind: 'market', paymentProfile: 'base-sepolia-usdc-exact' }
+  }
+  const context: unknown = input.executionContext
+  if (!isRecord(context)) return undefined
+  if (context.kind === 'market') {
+    const expectedProfile = input.environment === 'production'
+      ? 'base-usdc-exact'
+      : 'base-sepolia-usdc-exact'
+    return hasExactKeys(context, ['kind', 'paymentProfile'])
+      && context.paymentProfile === expectedProfile
+      ? { kind: 'market', paymentProfile: expectedProfile }
+      : undefined
+  }
+  if (
+    context.kind !== 'seller_onboarding_canary'
+    || input.environment !== 'sandbox'
+    || !hasExactKeys(context, [
+      'kind',
+      'paymentProfile',
+      'canaryRef',
+      'canaryCommitmentDigest',
+      'fundingBudgetRef',
+    ])
+    || context.paymentProfile !== 'base-sepolia-usdc-exact'
+    || !boundedRef(context.canaryRef)
+    || typeof context.canaryCommitmentDigest !== 'string'
+    || !isCanonicalDigest(context.canaryCommitmentDigest)
+    || !boundedRef(context.fundingBudgetRef)
+  ) return undefined
+  return {
+    kind: 'seller_onboarding_canary',
+    paymentProfile: 'base-sepolia-usdc-exact',
+    canaryRef: context.canaryRef,
+    canaryCommitmentDigest: context.canaryCommitmentDigest,
+    fundingBudgetRef: context.fundingBudgetRef,
+  }
+}
+
+function boundedRef(value: unknown): value is string {
+  return typeof value === 'string'
+    && value === value.trim()
+    && value.length > 0
+    && value.length <= 512
+}
+
+function hasExactKeys(value: Readonly<Record<string, unknown>>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const sortedExpected = [...expected].sort()
+  return actual.length === sortedExpected.length
+    && actual.every((key, index) => key === sortedExpected[index])
 }
 
 export function x402ActionEffectStatus(

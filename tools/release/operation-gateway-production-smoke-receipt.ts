@@ -12,7 +12,9 @@ import {
   StrictLivePayoutReceiptSchema,
   addExactAmounts,
   AUD_EXPONENT,
+  audFundingPolicyFromCommercialControls,
   quoteAudAccountFunding,
+  SANDBOX_COMMERCIAL_POLICY_CONTROLS,
   compareExactAmounts,
   subtractExactAmounts,
   type ExactAmount,
@@ -399,7 +401,10 @@ export const GatewayProductionSmokeReceiptSchema =
       issue(["money"], "money idempotency namespace mismatch");
     const topupAmount = receipt.money.topup.creditAmount;
     const expectedTopup = topupAmount.currency === "AUD" && topupAmount.exponent === AUD_EXPONENT
-      ? quoteAudAccountFunding(BigInt(topupAmount.units))
+      ? quoteAudAccountFunding(
+          BigInt(topupAmount.units),
+          audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS),
+        )
       : undefined;
     const expectedTopupFee = expectedTopup === undefined
       ? undefined

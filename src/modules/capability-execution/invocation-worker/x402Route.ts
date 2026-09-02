@@ -13,24 +13,17 @@ import { createX402PaymentCallbacks } from './x402Authorization'
 import type { X402PaymentCallbacks } from './x402Authorization'
 
 export {
-  bestEffortReleaseX402ExternalSpend,
   configuredX402RpcUrl,
   configuredX402RpcUrls,
-  externalSpendIdentityFromAttempt,
-  externalSpendPaymentFactsFromDispatch,
-  finalizeX402ExternalSpend,
   readX402EvmReceipt,
   recordX402TransportObservation,
-  releaseX402ExternalSpendBeforeSubmission,
-  reverseX402ExternalSpendForInvalidOutput,
-  settleX402TransportObservation,
 } from './x402Settlement'
 export {
   createX402PaymentCallbacks,
   readX402Authorization,
   replayManagedX402SigningForRecovery,
 } from './x402Authorization'
-export type { ExternalSpendSettlement, X402TransportObservationRecord } from './x402Settlement'
+export type { X402TransportObservationRecord } from './x402Settlement'
 export type { X402PaymentCallbacks } from './x402Authorization'
 
 /** The only production x402 credential locator. It identifies the CDP account name, not a secret. */

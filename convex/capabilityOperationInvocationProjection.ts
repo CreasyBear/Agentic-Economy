@@ -606,9 +606,11 @@ export async function projectOuterResult(
       ? descriptor.price.kind !== 'fixed'
         ? undefined
         : {
-            usageRef: `operation-x402-payment:${dispatch.invocationRef}:${attemptRef}`,
+            usageRef: `operation-usage:${dispatch.invocationRef}:${attemptRef}`,
             observedAt: Date.parse(recordedAt),
-            chargeState: 'paid' as const,
+            chargeState: descriptor.price.amount.units === '0'
+              ? 'free_tier' as const
+              : 'paid' as const,
             amount: descriptor.price.amount,
             priceDigest: pricingConfigDigest({
               version: 'pricing:v3',
@@ -725,9 +727,8 @@ export async function projectOuterResult(
 
 /**
  * Finalize the internal seller-onboarding canary without inventing a buyer
- * usage event. Its only economic record is the separately reserved/finalized
- * external-spend identity; no qualified-use or market-ledger mutation occurs
- * here.
+ * usage event. Package 4 refuses its retired payment lane before financial
+ * submission, so this projector records no qualified use or financial state.
  */
 export async function projectSellerOnboardingCanaryResult(
   ctx: ActionCtx,

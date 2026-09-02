@@ -397,8 +397,6 @@ export async function dispatchWorkloadCronConsequenceHandler(
       return await ctx.runMutation(internal.marketExternalRegistry.writeBatch, args.payload as never)
     case 'marketExternalSnapshots:upsert':
       return await ctx.runMutation(internal.marketExternalSnapshots.upsert, args.payload as never)
-    case 'moneyLedger:reconcileExternalInvocationSpend':
-      return await ctx.runMutation(internal.moneyLedger.reconcileExternalInvocationSpend, args.payload as never)
     case 'moneyX402PaymentAttempts:reconcileX402PaymentAttempt':
       return await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, args.payload as never)
   }
@@ -516,15 +514,6 @@ export async function cleanupExpiredAgentAccessOAuthGrantsHandler(
   )
 }
 
-export async function runDailySupplierSettlementHandler(ctx: WorkloadCronMutationContext): Promise<null> {
-  return await runAdmittedMutation(
-    ctx,
-    'run daily supplier settlement',
-    internal.moneyLedger.runDailySupplierSettlement,
-    {},
-  )
-}
-
 export const reconcileDueFacilitatorInvocations = internalAction({
   args: {},
   returns: v.null(),
@@ -571,10 +560,4 @@ export const cleanupExpiredAgentAccessOAuthGrants = internalMutation({
   args: { now: v.optional(v.number()), batchSize: v.optional(v.number()) },
   returns: v.null(),
   handler: cleanupExpiredAgentAccessOAuthGrantsHandler,
-})
-
-export const runDailySupplierSettlement = internalMutation({
-  args: {},
-  returns: v.null(),
-  handler: runDailySupplierSettlementHandler,
 })

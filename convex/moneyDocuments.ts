@@ -1,8 +1,11 @@
-import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
+import { vOnCompleteArgs, type OnCompleteArgs } from '@convex-dev/workpool'
+import { makeFunctionReference, paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v } from 'convex/values'
 
-import { internalMutation, internalQuery, mutation, query } from './_generated/server'
+import type { Id } from './_generated/dataModel'
+import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
+import { marketDispatchWorkpool } from './marketDispatchWorkpool'
 import { readCommercialPolicyGate } from './moneyCommercialPolicy'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '../src/modules/common/stable-hash'
@@ -25,11 +28,68 @@ const documentValue = v.object({
   policyRefs: v.array(v.string()),
   policyDigest: v.string(),
   templateVersion: v.string(),
+  state: v.union(
+    v.literal('building'),
+    v.literal('rendering'),
+    v.literal('issued'),
+    v.literal('failed'),
+  ),
+  sourceCount: v.number(),
+  failureCode: v.optional(v.string()),
   rendered: v.boolean(),
   createdAt: v.number(),
 })
 
 const documentEnvironment = v.union(v.literal('sandbox'), v.literal('production'))
+const PAGE_SIZE = 100
+
+type StatementPage = Readonly<{
+  documentRef: string
+  expectedCursor: string | null
+  continueCursor: string
+  isDone: boolean
+  transactionRefs: string[]
+  exactAmountUnits: string
+  pageDigest: string
+}>
+
+const readStatementPageRef = makeFunctionReference<'query', { documentRef: string }, StatementPage | null>(
+  'moneyDocuments:readStatementPage',
+)
+const applyStatementPageRef = makeFunctionReference<'mutation', StatementPage, { kind: 'advanced' | 'replayed' | 'refused' }>(
+  'moneyDocuments:applyStatementPage',
+)
+const runStatementPageRef = makeFunctionReference<'action', { documentRef: string }, { kind: 'advanced' | 'unavailable' }>(
+  'moneyDocuments:runStatementPage',
+)
+const completeDocumentWorkRef = makeFunctionReference<'mutation', OnCompleteArgs<{ documentRef: string }, unknown>, null>(
+  'moneyDocuments:completeDocumentWork',
+)
+const renderQueuedDocumentRef = makeFunctionReference<'action', { documentRef: string }, { kind: 'available'; fileId: Id<'_storage'> }>(
+  'moneyDocumentRender:renderQueuedDocument',
+)
+
+async function enqueueStatementPage(
+  ctx: MutationCtx,
+  documentRef: string,
+): Promise<string> {
+  return await marketDispatchWorkpool.enqueueAction(ctx, runStatementPageRef, { documentRef }, {
+    retry: true,
+    onComplete: completeDocumentWorkRef,
+    context: { documentRef },
+  })
+}
+
+async function enqueueDocumentRender(
+  ctx: MutationCtx,
+  documentRef: string,
+): Promise<string> {
+  return await marketDispatchWorkpool.enqueueAction(ctx, renderQueuedDocumentRef, { documentRef }, {
+    retry: true,
+    onComplete: completeDocumentWorkRef,
+    context: { documentRef },
+  })
+}
 
 export const createOwnerStatement = mutation({
   args: {
@@ -60,60 +120,223 @@ export const createOwnerStatement = mutation({
         : {}),
     })
     if (policy.kind === 'refused') return { kind: 'refused' as const, code: policy.code }
-    const transactions = await ctx.db.query('moneyLedgerTransactions')
-      .withIndex('by_accountRef_and_recordedAt', (index) => index
-        .eq('accountRef', actor.canonicalAccountRef)
-        .gte('recordedAt', args.periodStart)
-        .lt('recordedAt', args.periodEnd))
-      .take(501)
-    if (transactions.length > 500) return { kind: 'refused' as const, code: 'statement_period_too_large' }
-    const calls = transactions.filter((transaction) => transaction.kind === 'call_settlement')
-    if (calls.length === 0) return { kind: 'refused' as const, code: 'statement_has_no_calls' }
-    const exactUnits = calls.reduce((sum, transaction) => sum + BigInt(transaction.debitUnits), 0n)
-    const rounded = roundAudStatementTotal(exactUnits)
-    const sourceTransactionRefs = calls.map((transaction) => transaction.transactionRef)
+    const snapshotCutoffAt = Date.now()
     const documentRef = `money-document:statement:${canonicalDigest({
       format: 'ae.money-statement-identity:v1',
       accountRef: actor.canonicalAccountRef,
+      environment: args.environment,
       periodStart: args.periodStart,
       periodEnd: args.periodEnd,
-      sourceTransactionRefs,
     }).slice('sha256:'.length)}`
     const existing = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', documentRef))
       .unique()
     if (existing !== null) return { kind: 'replayed' as const, documentRef }
-    const renderInput = {
-      format: 'ae.money-document-render-input:v1',
+    const initialSnapshot = {
+      format: 'ae.money-statement-snapshot:v1',
       documentRef,
       accountRef: actor.canonicalAccountRef,
+      periodStart: args.periodStart,
+      periodEnd: args.periodEnd,
+      snapshotCutoffAt,
+    } as const satisfies StableHashValue
+    const documentId = await ctx.db.insert('moneyDocuments', {
+      documentRef,
+      accountRef: actor.canonicalAccountRef,
+      kind: 'statement',
+      sourceTransactionRefs: [],
+      amountUnits: '0',
+      residualUnits: '0',
+      policyRefs: [...policy.policyRefs],
+      policyDigest: policy.policyDigest,
+      templateVersion: 'ae.money-document:html:v1',
+      renderInputJson: stableStringify(initialSnapshot),
+      renderInputDigest: canonicalDigest(initialSnapshot),
+      state: 'building',
+      environment: args.environment,
+      sourceCount: 0,
+      snapshotDigest: canonicalDigest(initialSnapshot),
+      snapshotCutoffAt,
+      periodStart: args.periodStart,
+      periodEnd: args.periodEnd,
+      pageCount: 0,
+      exactAmountUnits: '0',
+      createdAt: snapshotCutoffAt,
+    })
+    const workId = await enqueueStatementPage(ctx, documentRef)
+    await ctx.db.patch(documentId, { workId })
+    return { kind: 'created' as const, documentRef }
+  },
+})
+
+export const readStatementPage = internalQuery({
+  args: { documentRef: v.string() },
+  returns: v.union(v.null(), v.object({
+    documentRef: v.string(),
+    expectedCursor: v.union(v.string(), v.null()),
+    continueCursor: v.string(),
+    isDone: v.boolean(),
+    transactionRefs: v.array(v.string()),
+    exactAmountUnits: v.string(),
+    pageDigest: v.string(),
+  })),
+  handler: async (ctx, args): Promise<StatementPage | null> => {
+    const row = await ctx.db.query('moneyDocuments')
+      .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
+      .unique()
+    if (row === null || row.kind !== 'statement' || row.state !== 'building'
+      || row.periodStart === undefined || row.periodEnd === undefined
+      || row.snapshotCutoffAt === undefined) return null
+    // PR 5 deliberately removes the Convex monetary authority before PR 7 installs the
+    // Formance-sourced document reader. No statement may silently fall back to retired rows.
+    return null
+  },
+})
+
+export const applyStatementPage = internalMutation({
+  args: {
+    documentRef: v.string(),
+    expectedCursor: v.union(v.string(), v.null()),
+    continueCursor: v.string(),
+    isDone: v.boolean(),
+    transactionRefs: v.array(v.string()),
+    exactAmountUnits: v.string(),
+    pageDigest: v.string(),
+  },
+  returns: v.object({ kind: v.union(v.literal('advanced'), v.literal('replayed'), v.literal('refused')) }),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('moneyDocuments')
+      .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
+      .unique()
+    if (row === null || row.kind !== 'statement') return { kind: 'refused' as const }
+    if (row.state !== 'building') return { kind: 'replayed' as const }
+    const currentCursor = row.nextCursor ?? null
+    if (currentCursor !== args.expectedCursor) {
+      const prior = await ctx.db.query('moneyDocumentSnapshotPages')
+        .withIndex('by_pageRef', (index) => index.eq('pageRef', `money-document-page:${args.pageDigest}`))
+        .unique()
+      return { kind: prior === null ? 'refused' as const : 'replayed' as const }
+    }
+    if (!/^(0|[1-9]\d{0,77})$/u.test(args.exactAmountUnits)) return { kind: 'refused' as const }
+    const expectedDigest = canonicalDigest({
+      format: 'ae.money-statement-page:v1',
+      documentRef: row.documentRef,
+      expectedCursor: args.expectedCursor ?? 'start',
+      continueCursor: args.continueCursor,
+      isDone: args.isDone,
+      transactionRefs: args.transactionRefs,
+      exactAmountUnits: args.exactAmountUnits,
+    })
+    if (expectedDigest !== args.pageDigest) return { kind: 'refused' as const }
+    const position = row.pageCount ?? 0
+    const pageRef = `money-document-page:${args.pageDigest}`
+    if (args.transactionRefs.length > 0) {
+      await ctx.db.insert('moneyDocumentSnapshotPages', {
+        pageRef,
+        documentRef: row.documentRef,
+        accountRef: row.accountRef,
+        position,
+        transactionRefs: [...args.transactionRefs],
+        exactAmountUnits: args.exactAmountUnits,
+        pageDigest: args.pageDigest,
+        createdAt: Date.now(),
+      })
+    }
+    const nextExactUnits = (BigInt(row.exactAmountUnits ?? '0') + BigInt(args.exactAmountUnits)).toString()
+    const nextSourceCount = row.sourceCount + args.transactionRefs.length
+    const nextSnapshotDigest = canonicalDigest({
+      format: 'ae.money-statement-snapshot-chain:v1',
+      previousDigest: row.snapshotDigest,
+      pageDigest: args.pageDigest,
+    })
+    const sourceTransactionRefs = [...row.sourceTransactionRefs, ...args.transactionRefs].slice(0, 32)
+    if (!args.isDone) {
+      const workId = await enqueueStatementPage(ctx, row.documentRef)
+      await ctx.db.patch(row._id, {
+        sourceTransactionRefs,
+        sourceCount: nextSourceCount,
+        exactAmountUnits: nextExactUnits,
+        snapshotDigest: nextSnapshotDigest,
+        nextCursor: args.continueCursor,
+        pageCount: position + 1,
+        workId,
+      })
+      return { kind: 'advanced' as const }
+    }
+    if (nextSourceCount === 0) {
+      await ctx.db.patch(row._id, {
+        state: 'failed',
+        failureCode: 'statement_has_no_calls',
+        snapshotDigest: nextSnapshotDigest,
+        nextCursor: args.continueCursor,
+        pageCount: position + 1,
+      })
+      return { kind: 'advanced' as const }
+    }
+    const rounded = roundAudStatementTotal(BigInt(nextExactUnits))
+    const renderInput = {
+      format: 'ae.money-document-render-input:v2',
+      documentRef: row.documentRef,
+      accountRef: row.accountRef,
       kind: 'statement',
       currency: 'AUD',
       exponent: 6,
-      periodStart: args.periodStart,
-      periodEnd: args.periodEnd,
-      exactCallUnits: exactUnits.toString(),
+      periodStart: row.periodStart!,
+      periodEnd: row.periodEnd!,
+      snapshotCutoffAt: row.snapshotCutoffAt!,
+      exactCallUnits: nextExactUnits,
       roundedCallUnits: rounded.roundedUnits.toString(),
       residualUnits: rounded.residualUnits.toString(),
-      sourceTransactionRefs,
-      policyRefs: policy.policyRefs,
-      policyDigest: policy.policyDigest,
+      sourceCount: nextSourceCount,
+      snapshotDigest: nextSnapshotDigest,
+      policyRefs: row.policyRefs,
+      policyDigest: row.policyDigest,
     } as const satisfies StableHashValue
-    await ctx.db.insert('moneyDocuments', {
-      documentRef,
-      accountRef: actor.canonicalAccountRef,
-      kind: 'statement',
+    const workId = await enqueueDocumentRender(ctx, row.documentRef)
+    await ctx.db.patch(row._id, {
       sourceTransactionRefs,
+      sourceCount: nextSourceCount,
+      exactAmountUnits: nextExactUnits,
       amountUnits: rounded.roundedUnits.toString(),
       residualUnits: rounded.residualUnits.toString(),
-      policyRefs: [...policy.policyRefs],
-      policyDigest: policy.policyDigest,
-      templateVersion: 'ae.money-document:text:v1',
+      snapshotDigest: nextSnapshotDigest,
+      nextCursor: args.continueCursor,
+      pageCount: position + 1,
       renderInputJson: stableStringify(renderInput),
       renderInputDigest: canonicalDigest(renderInput),
-      createdAt: Date.now(),
+      state: 'rendering',
+      workId,
     })
-    return { kind: 'created' as const, documentRef }
+    return { kind: 'advanced' as const }
+  },
+})
+
+export const runStatementPage = internalAction({
+  args: { documentRef: v.string() },
+  returns: v.object({ kind: v.union(v.literal('advanced'), v.literal('unavailable')) }),
+  handler: async (ctx, args) => {
+    const page = await ctx.runQuery(readStatementPageRef, args)
+    if (page === null) return { kind: 'unavailable' as const }
+    const result = await ctx.runMutation(applyStatementPageRef, page)
+    return { kind: result.kind === 'refused' ? 'unavailable' as const : 'advanced' as const }
+  },
+})
+
+export const completeDocumentWork = internalMutation({
+  args: vOnCompleteArgs(v.object({ documentRef: v.string() })),
+  returns: v.null(),
+  handler: async (ctx, { workId, context, result }) => {
+    const row = await ctx.db.query('moneyDocuments')
+      .withIndex('by_documentRef', (index) => index.eq('documentRef', context.documentRef))
+      .unique()
+    if (row === null || row.workId !== workId || row.state === 'issued') return null
+    if (result.kind !== 'success') {
+      await ctx.db.patch(row._id, {
+        state: 'failed',
+        failureCode: result.kind === 'canceled' ? 'document_work_canceled' : 'document_work_failed',
+      })
+    }
+    return null
   },
 })
 
@@ -141,7 +364,10 @@ export const listOwnerDocuments = query({
         policyRefs: row.policyRefs,
         policyDigest: row.policyDigest,
         templateVersion: row.templateVersion,
-        rendered: row.fileId !== undefined,
+        state: row.state,
+        sourceCount: row.sourceCount,
+        ...(row.failureCode === undefined ? {} : { failureCode: row.failureCode }),
+        rendered: row.state === 'issued' && row.fileId !== undefined,
         createdAt: row.createdAt,
       })),
     }
@@ -155,8 +381,11 @@ export const readForRender = internalQuery({
     renderInputJson: v.string(),
     renderInputDigest: v.string(),
     templateVersion: v.string(),
+    state: v.union(v.literal('rendering'), v.literal('issued')),
     fileId: v.optional(v.id('_storage')),
     fileDigest: v.optional(v.string()),
+    csvFileId: v.optional(v.id('_storage')),
+    csvFileDigest: v.optional(v.string()),
   })),
   handler: async (ctx, args) => {
     const actor = await resolveBusinessActor(ctx)
@@ -164,14 +393,50 @@ export const readForRender = internalQuery({
     const row = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
       .unique()
-    if (row === null || row.accountRef !== actor.canonicalAccountRef) return null
+    if (row === null || row.accountRef !== actor.canonicalAccountRef
+      || (row.state !== 'rendering' && row.state !== 'issued')) return null
     return {
       documentRef: row.documentRef,
       renderInputJson: row.renderInputJson,
       renderInputDigest: row.renderInputDigest,
       templateVersion: row.templateVersion,
+      state: row.state,
       ...(row.fileId === undefined ? {} : { fileId: row.fileId }),
       ...(row.fileDigest === undefined ? {} : { fileDigest: row.fileDigest }),
+      ...(row.csvFileId === undefined ? {} : { csvFileId: row.csvFileId }),
+      ...(row.csvFileDigest === undefined ? {} : { csvFileDigest: row.csvFileDigest }),
+    }
+  },
+})
+
+export const readQueuedForRender = internalQuery({
+  args: { documentRef: v.string() },
+  returns: v.union(v.null(), v.object({
+    documentRef: v.string(),
+    renderInputJson: v.string(),
+    renderInputDigest: v.string(),
+    templateVersion: v.string(),
+    state: v.union(v.literal('rendering'), v.literal('issued')),
+    fileId: v.optional(v.id('_storage')),
+    fileDigest: v.optional(v.string()),
+    csvFileId: v.optional(v.id('_storage')),
+    csvFileDigest: v.optional(v.string()),
+  })),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('moneyDocuments')
+      .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
+      .unique()
+    if (row === null || (row.state !== 'rendering' && row.state !== 'issued')) return null
+    return {
+      documentRef: row.documentRef,
+      renderInputJson: row.renderInputJson,
+      renderInputDigest: row.renderInputDigest,
+      templateVersion: row.templateVersion,
+      state: row.state,
+      ...(row.fileId === undefined ? {} : { fileId: row.fileId }),
+      ...(row.fileDigest === undefined ? {} : { fileDigest: row.fileDigest }),
+      ...(row.csvFileId === undefined ? {} : { csvFileId: row.csvFileId }),
+      ...(row.csvFileDigest === undefined ? {} : { csvFileDigest: row.csvFileDigest }),
     }
   },
 })
@@ -182,25 +447,35 @@ export const attachRenderedFile = internalMutation({
     renderInputDigest: v.string(),
     fileId: v.id('_storage'),
     fileDigest: v.string(),
+    csvFileId: v.id('_storage'),
+    csvFileDigest: v.string(),
     renderedAt: v.number(),
   },
   returns: v.union(
-    v.object({ kind: v.literal('attached'), fileId: v.id('_storage') }),
-    v.object({ kind: v.literal('replayed'), fileId: v.id('_storage') }),
+    v.object({ kind: v.literal('attached'), fileId: v.id('_storage'), csvFileId: v.id('_storage') }),
+    v.object({ kind: v.literal('replayed'), fileId: v.id('_storage'), csvFileId: v.id('_storage') }),
     v.object({ kind: v.literal('refused') }),
   ),
   handler: async (ctx, args) => {
     const row = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
       .unique()
-    if (row === null || row.renderInputDigest !== args.renderInputDigest) return { kind: 'refused' as const }
-    if (row.fileId !== undefined) return { kind: 'replayed' as const, fileId: row.fileId }
+    if (row === null || row.renderInputDigest !== args.renderInputDigest || row.state !== 'rendering') {
+      return { kind: 'refused' as const }
+    }
+    if (row.fileId !== undefined && row.csvFileId !== undefined) {
+      return { kind: 'replayed' as const, fileId: row.fileId, csvFileId: row.csvFileId }
+    }
     await ctx.db.patch(row._id, {
       fileId: args.fileId,
       fileDigest: args.fileDigest,
+      csvFileId: args.csvFileId,
+      csvFileDigest: args.csvFileDigest,
+      state: 'issued',
+      failureCode: undefined,
       renderedAt: args.renderedAt,
     })
-    return { kind: 'attached' as const, fileId: args.fileId }
+    return { kind: 'attached' as const, fileId: args.fileId, csvFileId: args.csvFileId }
   },
 })
 
@@ -213,7 +488,8 @@ export const readOwnerDocumentUrl = query({
     const row = await ctx.db.query('moneyDocuments')
       .withIndex('by_documentRef', (index) => index.eq('documentRef', args.documentRef))
       .unique()
-    if (row === null || row.accountRef !== actor.canonicalAccountRef || row.fileId === undefined) return null
+    if (row === null || row.accountRef !== actor.canonicalAccountRef
+      || row.state !== 'issued' || row.fileId === undefined) return null
     return await ctx.storage.getUrl(row.fileId)
   },
 })

@@ -10,6 +10,7 @@ const callValue = v.object({
   accountRef: v.string(),
   principalRef: v.string(),
   credentialRef: v.string(),
+  applicationRef: v.string(),
   operationRef: v.string(),
   providerRef: v.string(),
   operationLabel: v.string(),
@@ -27,6 +28,7 @@ const callValue = v.object({
   createdAt: v.number(),
   updatedAt: v.number(),
 })
+
 
 export const listOwnerCalls = query({
   args: {

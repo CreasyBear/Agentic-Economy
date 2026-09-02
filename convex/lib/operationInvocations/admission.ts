@@ -34,10 +34,6 @@ import {
   normalizeStoredAgentAccessGrantForOperation,
   type NormalizedStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
-import {
-  releaseManagedCallInTransaction,
-  reserveManagedCallInTransaction,
-} from '../../moneyManagedCall'
 
 export function assertJsonObject(value: unknown): asserts value is Record<string, JsonValue> {
   if (!isRecord(value) || !isBoundedJsonValue(value)) throw new Error('operation_invocation_json_invalid')
@@ -436,40 +432,6 @@ async function rateAndConcurrencyRefusal(
   )
 }
 
-function managedMoneyRefusal(code: string): GrantRefusal {
-  if (code === 'agent_budget_exceeded' || code === 'agent_budget_invalid') {
-    return { kind: 'refused', code: 'budget_exceeded', retryable: false }
-  }
-  if (code === 'account_balance_unavailable') {
-    return { kind: 'refused', code: 'insufficient_balance', retryable: false }
-  }
-  if (code === 'treasury_capacity_unavailable' || code === 'treasury_commitment_missing') {
-    return { kind: 'refused', code: 'treasury_capacity_unavailable', retryable: false }
-  }
-  return { kind: 'refused', code: 'commercial_policy_unavailable', retryable: false }
-}
-
-async function reserveCommittedMoney(
-  ctx: MutationCtx,
-  args: ReserveArgs,
-  commitment: CommitmentRow | null,
-  reservation: OperationInvokeIdempotencyReservation,
-  grant: NormalizedStoredAgentAccessGrant,
-): Promise<GrantRefusal | Extract<ReserveResult, { kind: 'conflict' }> | null> {
-  if (commitment === null) return null
-  const operation = parsePublishedOperationSnapshot(commitment.operationJson)
-  if (operation === undefined) return { kind: 'conflict' }
-  const money = await reserveManagedCallInTransaction(ctx, {
-    commitment,
-    invocationRef: reservation.invocationRef,
-    providerRef: operation.identity.businessId,
-    maximumDailySpend: grant.policy.budget.maximumDailySpend,
-    maximumMonthlySpend: grant.policy.budget.maximumMonthlySpend,
-    now: args.now,
-  })
-  return money.kind === 'refused' ? managedMoneyRefusal(money.code) : null
-}
-
 async function persistReservedInvocation(
   ctx: MutationCtx,
   args: ReserveArgs,
@@ -517,8 +479,6 @@ export async function reserveHandler(
 
   const admissionRefusal = await rateAndConcurrencyRefusal(ctx, args, normalizedGrant)
   if (admissionRefusal !== null) return admissionRefusal
-  const moneyRefusal = await reserveCommittedMoney(ctx, args, commitment, reservation, normalizedGrant)
-  if (moneyRefusal !== null) return moneyRefusal
   await persistReservedInvocation(ctx, args, reservation, commitment)
   await recordMarketEvidenceFact(ctx, 'ae_invocation', reservation.invocationRef, args.now, {
     operationRef: reservation.operationRef,
@@ -539,7 +499,6 @@ export async function abandonHandler(
   const commitment = await ctx.db.query('capabilityOperationCommitments')
     .withIndex('by_commitmentRef', (query) => query.eq('commitmentRef', args.commitmentRef))
     .unique()
-  await releaseManagedCallInTransaction(ctx, row.invocationRef, Date.now())
   await ctx.db.delete(row._id)
   if (commitment !== null
     && commitment.state === 'consumed'

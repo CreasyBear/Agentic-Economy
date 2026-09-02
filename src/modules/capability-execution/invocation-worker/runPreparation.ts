@@ -15,6 +15,7 @@ import {
   signRouteTransportCall,
   validSellerCanaryPayee,
   type EconomicRail,
+  type X402ExecutionContext,
 } from '@/modules/capability-supply/server'
 import {
   compareExactAmounts,
@@ -39,7 +40,6 @@ import {
   sellerOnboardingCanaryExecutionEnvelope,
   type SellerOnboardingCanaryExecutionEnvelope,
 } from '@/modules/capability-supply/public'
-import type { ExternalSpendExecutionContext } from '@/modules/money/public'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
@@ -80,7 +80,7 @@ export type SellerCanaryOperationSnapshot = Readonly<{
 
 export function sellerCanaryExecutionContext(
   envelope: SellerOnboardingCanaryExecutionEnvelope,
-): ExternalSpendExecutionContext {
+): X402ExecutionContext {
   return {
     kind: 'seller_onboarding_canary',
     paymentProfile: 'base-sepolia-usdc-exact',

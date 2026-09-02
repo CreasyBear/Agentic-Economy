@@ -239,7 +239,6 @@ describe('operation.invoke HTTP adapter', () => {
         principalRef: 'principal:machine-budget',
         maximumPerInvocation: { currency: 'AUD', units: '5000000', exponent: 6 },
       },
-      treasury: { spendable: { currency: 'USDC', units: '8000000', exponent: 6 } },
       policyRefs: [
         'policy:commercial',
         'policy:tax',

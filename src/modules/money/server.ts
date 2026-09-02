@@ -1,8 +1,10 @@
 import {
   callPublicSourceMutation,
+  callPublicSourceAction,
   callPublicSourceQuery,
   createConvexServerFunctionAssertion,
   sourceMutation,
+  sourceAction,
   type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
@@ -122,10 +124,10 @@ type ApplyVerifiedStripeEventArgs = Readonly<{
   SourceWriteBoundArgs
 type ApplyVerifiedStripeEventResult = StripeWebhookApplication | MoneyRefusal
 
-const applyVerifiedStripeEventMutation = sourceMutation<
+const applyVerifiedStripeEventAction = sourceAction<
   ApplyVerifiedStripeEventArgs,
   ApplyVerifiedStripeEventResult
->('moneyAccountFunding:applyVerifiedEvent')
+>('moneyAccountFundingFormance:applyVerifiedEvent')
 
 export async function applyVerifiedStripeEventThroughSource(
   input: Readonly<{
@@ -206,7 +208,7 @@ export async function applyVerifiedStripeEventThroughSource(
     correlationId,
     ...(input.env === undefined ? {} : { env: input.env }),
   })
-  return await callPublicSourceMutation(applyVerifiedStripeEventMutation, {
+  return await callPublicSourceAction(applyVerifiedStripeEventAction, {
     ...command,
     sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
     sourceWrite,

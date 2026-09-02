@@ -23,6 +23,9 @@ import {
 } from '../src/modules/money/formance-workflows'
 import { internalAction } from './_generated/server'
 
+export type MoneyFormanceResult = FormanceMoneyResult
+export type MoneyFormanceManagedCallBooking = import('../src/modules/money/formance-workflows').FormanceManagedCallBooking
+
 const setupRequired = v.object({ kind: v.literal('setup_required'), code: v.string() })
 const unavailable = v.object({ kind: v.literal('unavailable'), code: v.string() })
 const moneyResult = v.union(

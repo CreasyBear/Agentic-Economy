@@ -48,7 +48,6 @@ export const WORKLOAD_CRON_DECLARATIONS = [
   declaration('refresh capability supply readiness', 'cron', 'refreshCapabilitySupplyReadiness'),
   declaration('cleanup expired source write nonces', 'cron', 'cleanupExpiredSourceWriteNonces'),
   declaration('cleanup expired agent access oauth grants', 'cron', 'cleanupExpiredAgentAccessOAuthGrants'),
-  declaration('run daily supplier settlement', 'cron', 'runDailySupplierSettlement'),
 ] as const
 
 export type WorkloadCronName = typeof WORKLOAD_CRON_DECLARATIONS[number]['name']
@@ -90,7 +89,6 @@ export const workloadCronNameValue = v.union(
   v.literal('refresh capability supply readiness'),
   v.literal('cleanup expired source write nonces'),
   v.literal('cleanup expired agent access oauth grants'),
-  v.literal('run daily supplier settlement'),
 )
 
 export const workloadCronSnapshotValue = v.object({
@@ -192,7 +190,6 @@ export const CONSEQUENCE_OPERATIONS = [
   'marketExternalRegistry:finalize',
   'marketExternalRegistry:writeBatch',
   'marketExternalSnapshots:upsert',
-  'moneyLedger:reconcileExternalInvocationSpend',
   'moneyX402PaymentAttempts:reconcileX402PaymentAttempt',
 ] as const
 export type ConsequenceOperation = typeof CONSEQUENCE_OPERATIONS[number]
@@ -209,7 +206,6 @@ export const consequenceOperationValue = v.union(
   v.literal('marketExternalRegistry:finalize'),
   v.literal('marketExternalRegistry:writeBatch'),
   v.literal('marketExternalSnapshots:upsert'),
-  v.literal('moneyLedger:reconcileExternalInvocationSpend'),
   v.literal('moneyX402PaymentAttempts:reconcileX402PaymentAttempt'),
 )
 

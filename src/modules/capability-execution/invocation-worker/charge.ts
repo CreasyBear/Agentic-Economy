@@ -1,20 +1,5 @@
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
-import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { CanonicalClaimSnapshot } from '@/modules/action-invocation/runtime'
 import type { RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
-import {
-  parsePublishedOperationSnapshot,
-  type PublishedOperation,
-} from '@/modules/capability-supply/public'
-import {
-  accountRefForOwner,
-  accountRefForProvider,
-  accountRefForRake,
-  fixedAudPricingConfig,
-  pricingConfigDigest,
-  type ExactAmount,
-} from '@/modules/money/public'
 import type { ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
 import {
@@ -23,36 +8,30 @@ import {
   finalizeOperationDispatch,
   type ChargeSettlementResult,
   type OpenDispatch,
-  type WorkerAcceptedCharge,
 } from '../../../../convex/capabilityOperationInvocationProjection'
 
 export type WorkerResult =
   | Readonly<{ kind: 'recorded' }>
   | Readonly<{ kind: 'none' }>
 
-type ChargeDispatch = Pick<
-  OpenDispatch,
-  'invocationRef' | 'principalId' | 'credentialId' | 'inputDigest' | 'operationRef'
->
-
 export async function restoreHoldIfReserved(
   ctx: ActionCtx,
   dispatch: OpenDispatch,
-  attemptRef: string,
 ): Promise<ChargeSettlementResult> {
-  const operation = parsePublishedOperationSnapshot(dispatch.operationJson)
-  if (operation === undefined) return { kind: 'reconciliation_required' }
-  return await reconcileAcceptedCharge(
-    ctx,
-    dispatch,
-    operation,
-    {
-      chargeState: 'paid',
-      transactionRef: `operation-money:${dispatch.invocationRef}:${attemptRef}:1`,
-    },
-    attemptRef,
-    'not_released',
-  )
+  const reservation = await ctx.runQuery(internal.moneyManagedCallLifecycle.readReservation, {
+    invocationRef: dispatch.invocationRef,
+  })
+  if (reservation === null || reservation.state === 'released' || reservation.state === 'settled') {
+    return { kind: 'settled', outcome: 'not_released' }
+  }
+  if (reservation.state !== 'reserved') return { kind: 'reconciliation_required' }
+  const released = await ctx.runAction(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
+    invocationRef: dispatch.invocationRef,
+    now: Date.now(),
+  })
+  return released.kind === 'accepted'
+    ? { kind: 'settled', outcome: 'not_released' }
+    : { kind: 'reconciliation_required' }
 }
 
 export async function refuseBeforeClaim(
@@ -73,7 +52,7 @@ export async function refuseBeforeClaim(
         return await convergeReleaseFenceBeforeGates(ctx, dispatch, snapshot)
       }
       if (control.control.control.state === 'leased') {
-        const settlement = await restoreHoldIfReserved(ctx, dispatch, attemptRef)
+        const settlement = await restoreHoldIfReserved(ctx, dispatch)
         return await convergePreRelease(ctx, dispatch, snapshot, code, retryable, nextAction, settlement)
       }
       if (
@@ -204,135 +183,4 @@ export async function convergePreRelease(
     recordedAt,
   )
   return { kind: 'recorded' }
-}
-
-export async function reconcileAcceptedCharge(
-  ctx: ActionCtx,
-  dispatch: ChargeDispatch,
-  operation: PublishedOperation,
-  charge: Pick<WorkerAcceptedCharge, 'transactionRef' | 'chargeState'>,
-  attemptRef: string,
-  outcome: 'not_released' | 'released' | 'unknown',
-): Promise<ChargeSettlementResult> {
-  const transactionRef = charge.transactionRef
-  if (transactionRef === undefined) {
-    return charge.chargeState === 'free_tier' && outcome !== 'unknown'
-      ? { kind: 'settled', outcome }
-      : { kind: 'reconciliation_required' }
-  }
-  const reconciliationDigest = canonicalDigest({
-    format: 'operation-money-reconciliation:v1',
-    invocationRef: dispatch.invocationRef,
-    attemptRef,
-    operationRef: dispatch.operationRef,
-    inputDigest: dispatch.inputDigest,
-    transactionRef,
-    outcome,
-    sourceDigest: operation.materialDigest,
-  } as StableHashValue)
-  const evidenceRefs = [
-    ...operation.readiness.evidenceRefs,
-    `operation-money-reconciliation:${reconciliationDigest}`,
-  ]
-  const now = Date.now()
-  try {
-    if (outcome === 'unknown') {
-      await ctx.runMutation(internal.moneyLedger.markChargeOutcomeUnknown, {
-        transactionRef,
-        principalId: dispatch.principalId,
-        now,
-      })
-      return { kind: 'reconciliation_required' }
-    }
-    const refundTransactionRef = `operation-money-refund:${dispatch.invocationRef}:${attemptRef}:1`
-    const result = await ctx.runMutation(internal.moneyLedger.reconcileInvocationCharge, {
-      invocationRef: dispatch.invocationRef,
-      principalId: dispatch.principalId,
-      credentialId: dispatch.credentialId,
-      attemptRef,
-      transactionRef,
-      inputDigest: dispatch.inputDigest,
-      outcome,
-      refundTransactionRef,
-      refundIdempotencyKey: refundTransactionRef,
-      refundInputDigest: canonicalDigest({
-        format: 'operation-money-refund:v1',
-        invocationRef: dispatch.invocationRef,
-        attemptRef,
-        inputDigest: dispatch.inputDigest,
-        transactionRef,
-        outcome,
-      } as StableHashValue),
-      sourceDigest: operation.materialDigest,
-      evidenceRefs,
-      observedAt: now,
-    })
-    if (result.kind === 'none' || result.kind === 'settled') {
-      return { kind: 'settled', outcome }
-    }
-    return { kind: 'reconciliation_required' }
-  } catch {
-    return { kind: 'reconciliation_required' }
-  }
-}
-
-export async function authorizeAeInternalCharge(
-  ctx: ActionCtx,
-  input: Readonly<{
-    principal: AgentAccessPrincipal
-    operation: PublishedOperation
-    dispatch: OpenDispatch
-    authorityMaximumSpend: ExactAmount
-    durableAttemptRef: string
-  }>,
-): Promise<
-  | Readonly<{ kind: 'accepted'; charge: WorkerAcceptedCharge }>
-  | Readonly<{ kind: 'missing_billing_identity' }>
-  | Readonly<{ kind: 'refused'; code: string; retryable: boolean }>
-> {
-  const operatorAccountVersion = await ctx.runQuery(internal.moneyLedger.readOperatorAccountVersion, {
-    ownerId: input.principal.ownerId,
-    currency: input.authorityMaximumSpend.currency,
-  })
-  // A first-time owner has no money account yet. Passing expectedAccountVersion
-  // 0 lets moneyChargeAdmission's prepareCanonicalMoneyAccount create it; price
-  // zero then settles as free_tier usage without any transaction movement.
-  const pricingConfig = fixedAudPricingConfig(input.authorityMaximumSpend)
-  if (pricingConfig === undefined) {
-    return { kind: 'refused', code: 'price_unavailable', retryable: false }
-  }
-
-  const authorizedCharge = await ctx.runMutation(internal.moneyLedger.authorizeInvocationCharge, {
-    principalId: input.principal.principalId,
-    amount: input.authorityMaximumSpend,
-    operatorAccountRef: accountRefForOwner(input.principal.ownerId, input.authorityMaximumSpend.currency),
-    providerAccountRef: accountRefForProvider(input.operation.identity.businessId, input.authorityMaximumSpend.currency),
-    rakeAccountRef: accountRefForRake(input.authorityMaximumSpend.currency),
-    transactionRef: `operation-money:${input.dispatch.invocationRef}:${input.durableAttemptRef}:1`,
-    idempotencyKey: `operation-money:${input.dispatch.invocationRef}:${input.durableAttemptRef}:1`,
-    inputDigest: input.dispatch.inputDigest,
-    expectedAccountVersion: operatorAccountVersion ?? 0,
-    rakeBps: 1_000,
-    priceDigest: pricingConfigDigest(pricingConfig),
-    priceSourceDigest: pricingConfigDigest(pricingConfig),
-    authorityMaximumSpend: input.authorityMaximumSpend,
-    credentialId: input.principal.credentialId,
-    credentialBudgetGrantRef: input.dispatch.grantRef,
-    credentialBudgetGeneration: input.dispatch.grantGeneration,
-    applicationRef: input.principal.applicationRef,
-    serviceRef: input.operation.operationId,
-    offeringRef: input.operation.identity.offeringId,
-    businessId: input.operation.identity.businessId,
-    invocationRef: input.dispatch.invocationRef,
-    attemptRef: input.durableAttemptRef,
-    operationKey: input.dispatch.operationRef,
-    sourceDigest: input.operation.materialDigest,
-    evidenceRefs: [...input.operation.readiness.evidenceRefs],
-    observedAt: Date.now(),
-    freeTier: false,
-  })
-  if (authorizedCharge.kind !== 'accepted') {
-    return { kind: 'refused', code: authorizedCharge.code, retryable: authorizedCharge.retryable }
-  }
-  return { kind: 'accepted', charge: authorizedCharge }
 }

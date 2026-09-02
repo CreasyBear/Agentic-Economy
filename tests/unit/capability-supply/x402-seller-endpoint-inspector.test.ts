@@ -16,6 +16,8 @@ import {
   type X402PaymentRequired,
 } from '@/modules/capability-supply/server'
 import syntheticPost from '@/modules/capability-supply/internal/x402-bazaar-fixtures/synthetic-post-payment-required.json'
+import { inspectLiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
+import type { PublishedOperation } from '@/modules/capability-supply/public'
 
 const endpointUrl = 'https://seller.example.test/v1/enrich'
 
@@ -74,6 +76,76 @@ async function inspect(
 }
 
 describe('x402 seller endpoint inspector', () => {
+  it('binds the exact public requirement for a payment-before-effect Operation', async () => {
+    const operation = {
+      runtimeEnvironment: 'production',
+      pricingConfig: {
+        version: 'pricing:v3',
+        kind: 'managed_x402',
+        effectTiming: 'payment_required_before_effect',
+        sourceRequirement: {
+          network: BASE_MAINNET_NETWORK,
+          asset: BASE_MAINNET_USDC_ADDRESS,
+          atomicUnits: '1000',
+        },
+        pricingPolicyRef: 'pricing-policy:managed-x402:v1',
+        publicDisplay: 'on_request',
+      },
+      identity: {
+        endpoint: { method: 'POST', url: endpointUrl },
+        payment: {
+          kind: 'x402',
+          payTo: '0x0000000000000000000000000000000000000002',
+        },
+      },
+    } as unknown as PublishedOperation
+    const dependencies = {
+      now: () => 1_000,
+      validatePublicTarget: async () => true,
+      send: async () => paymentRequiredResponse(),
+    }
+
+    const first = await inspectLiveX402Requirement(operation, { query: 'Ada' }, dependencies)
+    const replay = await inspectLiveX402Requirement(operation, { query: 'Ada' }, dependencies)
+    expect(first).toEqual(replay)
+    expect(first).toMatchObject({
+      kind: 'observed',
+      requirement: { observedAt: 1_000, requirementDigest: expect.stringMatching(/^sha256:/u) },
+    })
+    if (first.kind !== 'observed') throw new Error('live_requirement_fixture_missing')
+    expect(first.requirement.requirementJson).not.toContain('payment-signature')
+  })
+
+  it('refuses requirement drift instead of issuing a stale managed quote', async () => {
+    const operation = {
+      runtimeEnvironment: 'production',
+      pricingConfig: {
+        version: 'pricing:v3',
+        kind: 'managed_x402',
+        effectTiming: 'payment_required_before_effect',
+        sourceRequirement: {
+          network: BASE_MAINNET_NETWORK,
+          asset: BASE_MAINNET_USDC_ADDRESS,
+          atomicUnits: '1000',
+        },
+        pricingPolicyRef: 'pricing-policy:managed-x402:v1',
+        publicDisplay: 'on_request',
+      },
+      identity: {
+        endpoint: { method: 'POST', url: endpointUrl },
+        payment: {
+          kind: 'x402',
+          payTo: '0x0000000000000000000000000000000000000002',
+        },
+      },
+    } as unknown as PublishedOperation
+    await expect(inspectLiveX402Requirement(operation, { query: 'Ada' }, {
+      now: () => 1_000,
+      validatePublicTarget: async () => true,
+      send: async () => paymentRequiredResponse(challenge([supportedAccept({ amount: '1001' })])),
+    })).resolves.toEqual({ kind: 'refused' })
+  })
+
   it.each(['GET', 'POST'] as const)(
     'makes an unpaid %s request, refuses redirects, and records no usage verification',
     async (method) => {

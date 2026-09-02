@@ -7,6 +7,8 @@ import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import {
   callSourceMutation,
   callSourceQuery,
+  callSourceAction,
+  sourceAction,
   sourceMutation,
   sourceQuery,
   type ConvexServerFunctionAssertion,
@@ -183,8 +185,8 @@ const markFundingUnknownMutation = sourceMutation<MarkFundingUnknownArgs, Fundin
 const readFundingQuery = sourceQuery<AccountFundingReadInput, FundingResult>(
   'moneyAccountFunding:read',
 )
-const readFundingBalanceQuery = sourceQuery<Record<string, never>, AccountFundingBalance>(
-  'moneyAccountFunding:readBalance',
+const readFundingBalanceAction = sourceAction<Record<string, never>, AccountFundingBalance>(
+  'moneyAccountFundingFormance:readBalance',
 )
 export const readWebhookFundingCommandQuery = sourceQuery<
   WebhookFundingCommandInput,
@@ -213,7 +215,7 @@ export const readAccountFundingServer = createServerFn({ method: 'POST' })
 export const readAccountFundingBalanceServer = createServerFn({ method: 'GET' })
   .handler(async (): Promise<AccountFundingBalance> => {
     setResponseHeader('cache-control', 'no-store')
-    return await callSourceQuery(readFundingBalanceQuery, {})
+    return await callSourceAction(readFundingBalanceAction, {})
   })
 
 export async function beginAccountFundingThroughSource(

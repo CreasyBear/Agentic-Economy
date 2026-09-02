@@ -152,7 +152,7 @@ export async function runCommittedManagedX402Transport(
   }
 
   if (recorded.settlementStatus === 'settled' && recorded.settlementRef !== undefined) {
-    const settled = await ctx.runMutation(internal.moneyManagedCallLifecycle.settle, {
+    const settled = await ctx.runAction(internal.moneyManagedCallLifecycle.settle, {
       invocationRef: input.dispatch.invocationRef,
       evidenceDigest: recorded.settlementDigest ?? canonicalDigest({
         format: 'ae.managed-x402-settlement:v1',
@@ -182,7 +182,7 @@ export async function runCommittedManagedX402Transport(
   const definitelyPreSubmit = recorded.submissionStatus === 'not_submitted'
     && observation.releaseStarted === false
   if (definitelyPreSubmit) {
-    const released = await ctx.runMutation(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
+    const released = await ctx.runAction(internal.moneyManagedCallLifecycle.releaseBeforeSubmission, {
       invocationRef: input.dispatch.invocationRef,
       now: Date.parse(recordedAt),
     })

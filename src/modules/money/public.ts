@@ -25,21 +25,18 @@ export type {
 } from './internal/commercial-policy'
 export {
   AUD_EXPONENT,
-  ACCOUNT_FUNDING_POLICY_V1,
-  applyJournalTransaction,
+  audFundingPolicyFromCommercialControls,
   calculateAudFundingFinancials,
   canonicalAudUnits,
-  prepareBalancedJournalTransaction,
-  projectionChecksum,
   quoteAudAccountFunding,
-  rebuildJournalProjections,
   roundAudStatementTotal,
   roundAudUnitsToCent,
-} from './internal/balanced-journal'
+} from './internal/aud-funding'
 export {
   createExecutableRatePort,
   quoteExecutableAudToUsdc,
   quoteManagedX402BuyerAud,
+  splitInclusiveAudTax,
   validateExecutableRateEvidence,
 } from './internal/executable-rate'
 export type {
@@ -49,15 +46,8 @@ export type {
   ExecutableRateQuoteResult,
 } from './internal/executable-rate'
 export type {
-  MoneyBalanceProjection,
-  MoneyJournalAccount,
-  MoneyJournalAccountKind,
-  MoneyJournalNormalBalance,
-  MoneyJournalPosting,
-  MoneyJournalPostingInput,
-  MoneyJournalPostingSide,
-  MoneyJournalTransaction,
-} from './internal/balanced-journal'
+  AudFundingPolicy,
+} from './internal/aud-funding'
 
 export {
   moneyRefSchema,
@@ -822,41 +812,6 @@ export type {
   CredentialBudgetAdmission,
 } from "./internal/credential-budget";
 export { reverseCredentialBudget } from "./internal/credential-budget";
-export {
-  decideExternalSpendFinalization,
-  decideExternalSpendReconciliation,
-  decideExternalSpendReversal,
-  externalSpendCustodyPolicyRefusal,
-  externalSpendExecutionContextForFacts,
-  externalSpendFinalizationCommandRefusal,
-  externalSpendIdentityDigest,
-  externalSpendIdentityFromReservation,
-  externalSpendIdentityMatchingReservationRef,
-  externalSpendIdentityMaterialValid,
-  externalSpendFinalizationDigest,
-  externalSpendPaymentFactsValid,
-  externalSpendReconciliationCommandRefusal,
-  externalSpendReconciliationDigest,
-  externalSpendReversalCommandRefusal,
-  externalSpendReversalDigest,
-  mintExternalSpendIdentity,
-  sameExternalSpendIdentity,
-  externalSpendStateForSettlement,
-  EXTERNAL_SPEND_PAYMENT_PROFILES,
-} from "./internal/external-spend";
-export type {
-  ExternalSpendExecutionContext,
-  ExternalSpendFinalizationCommand,
-  ExternalSpendIdentity,
-  ExternalSpendPaymentFacts,
-  ExternalSpendPaymentProfile,
-  ExternalSpendReservation,
-  ExternalSpendReservationState,
-  ExternalSpendSettlementStatus,
-  ExternalSpendSubmissionStatus,
-  ExternalSpendRefusalCode,
-  ExternalSpendMutationResult,
-} from "./internal/external-spend";
 export {
   createInMemoryMoneyQueryPort,
   projectProviderEarnings,

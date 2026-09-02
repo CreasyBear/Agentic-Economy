@@ -348,6 +348,7 @@ export function x402OfferingAtTest(): OwnerSupplyOfferingReadback {
   const canaryPricing: PricingConfig = {
     version: "pricing:v3",
     kind: "managed_x402",
+    effectTiming: "payment_required_before_effect",
     sourceRequirement: {
       network: "eip155:84532",
       asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",

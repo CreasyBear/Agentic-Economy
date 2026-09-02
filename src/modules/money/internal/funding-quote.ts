@@ -4,10 +4,11 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import { exactAmountSchema, type ExactAmount } from './exact-amount'
 import {
-  ACCOUNT_FUNDING_POLICY_V1,
   AUD_EXPONENT,
+  audFundingPolicyFromCommercialControls,
   quoteAudAccountFunding,
-} from './balanced-journal'
+} from './aud-funding'
+import { SANDBOX_COMMERCIAL_POLICY_CONTROLS } from './commercial-policy'
 
 export const FUNDING_QUOTE_CONTRACT_VERSION = 'ae-funding-quote:v2' as const
 export const FUNDING_QUOTE_VALIDITY_MS = 5 * 60 * 1_000
@@ -80,15 +81,16 @@ export const FUNDING_PREFLIGHT_ROUTE_CONTRACTS = Object.freeze([
 ] as const)
 
 export function readFundingConstraints(): FundingConstraints {
+  const policy = audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS)
   return {
     kind: 'funding_constraints',
     contractVersion: FUNDING_QUOTE_CONTRACT_VERSION,
     currency: 'AUD',
-    minimum: exactAudAmount(ACCOUNT_FUNDING_POLICY_V1.minimumPrincipalUnits),
-    maximum: exactAudAmount(ACCOUNT_FUNDING_POLICY_V1.maximumPrincipalUnits),
-    increment: exactAudAmount(10_000n),
-    serviceFeeBps: ACCOUNT_FUNDING_POLICY_V1.serviceFeeBps,
-    taxOnServiceFeeBps: ACCOUNT_FUNDING_POLICY_V1.taxOnServiceFeeBps,
+    minimum: exactAudAmount(policy.minimumPrincipalUnits),
+    maximum: exactAudAmount(policy.maximumPrincipalUnits),
+    increment: exactAudAmount(policy.incrementUnits),
+    serviceFeeBps: policy.serviceFeeBps,
+    taxOnServiceFeeBps: policy.taxOnServiceFeeBps,
     amountMeaning: 'account_aud_principal',
     quotePath: FUNDING_QUOTE_PATH,
   }
@@ -103,7 +105,10 @@ export function quoteFunding(input: Readonly<{
     || input.now < 0
     || input.amount.currency !== 'AUD'
     || input.amount.exponent !== AUD_EXPONENT) return undefined
-  const financials = quoteAudAccountFunding(BigInt(input.amount.units))
+  const financials = quoteAudAccountFunding(
+    BigInt(input.amount.units),
+    audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS),
+  )
   if (financials === undefined) return undefined
   const generatedAt = input.now
   const expiresAt = generatedAt + FUNDING_QUOTE_VALIDITY_MS

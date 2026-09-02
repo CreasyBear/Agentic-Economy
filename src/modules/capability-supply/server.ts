@@ -39,6 +39,7 @@ export type {
 export { createSandboxEvmX402PaymentSignature } from './internal/x402-payment-signer'
 export {
   inspectX402SellerEndpoint,
+  type X402SellerEndpointInspectorDependencies,
   type X402SellerEndpointMethod,
 } from './internal/x402-seller-endpoint-inspector'
 export {
@@ -80,6 +81,8 @@ export {
   x402SettlementStatusForObservation,
   type EconomicRail,
   type PaymentLaneAdmission,
+  type X402ExecutionContext,
+  type X402SettlementStatus,
 } from './internal/x402-invocation-policy'
 
 export {
