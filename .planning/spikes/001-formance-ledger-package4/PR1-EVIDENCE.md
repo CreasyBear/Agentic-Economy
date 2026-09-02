@@ -2,7 +2,9 @@
 
 **Executed:** 2026-09-02
 
-**Result:** `FAIL`
+**Unbounded-range result:** `FAIL`
+
+**Bounded Package 4 result:** `PASS`
 
 ## Runtime
 
@@ -42,6 +44,12 @@ no SDK retry.
 | Cumulative balance above safe integer | `9007199254740993` | `9007199254740992` | **no** |
 
 The default generated SDK silently rounded both failing values.
+
+All values inside the adopted startup range, including the current funding
+maximum and `Number.MAX_SAFE_INTEGER`, round-tripped exactly. The product owner
+explicitly removed 30-digit support from the Package 4 adoption gate after
+reviewing the practical risk horizon. The failing cases remain committed so a
+future official SDK upgrade can prove that the restriction is removable.
 
 ## Product risk horizon
 
@@ -88,10 +96,10 @@ Ledger pull request `#1663` is approved but remained open and unmerged on
 SDK fix. The exactness matrix must be rerun against the first official SDK
 release generated from a Ledger contract that models string bigint responses.
 
-## Stopping rule
+## Original stopping rule and override
 
-The official SDK cannot round-trip every required Package 4 amount exactly.
-That is the plan's hard rejection gate. Consequently these stages were not run:
+The original plan made unbounded exactness a hard rejection gate. Consequently
+these stages were not run before the first decision:
 
 - Convex Node Action bundle/runtime probe;
 - native Package 4 booking semantics;
@@ -99,5 +107,5 @@ That is the plan's hard rejection gate. Consequently these stages were not run:
 - contention and crash recovery;
 - pagination, backup/restore, upgrade, and pricing comparison.
 
-Continuing would only evaluate a candidate already disqualified by the
-authoritative exact-money requirement.
+On 2026-09-02 the product owner explicitly adopted Formance with a bounded
+startup range. The remaining gates must now run before any application cutover.

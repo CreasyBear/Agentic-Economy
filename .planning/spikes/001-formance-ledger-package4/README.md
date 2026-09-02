@@ -2,9 +2,9 @@
 
 **Idea key:** `formance-package4-ledger`
 
-**Status:** complete
+**Status:** in progress
 
-**Decision:** `REJECT`
+**Decision:** `ADOPT`
 
 ## Hypothesis
 
@@ -29,16 +29,19 @@ reversals, references, and ledger idempotency to Formance.
 
 1. Boot the official Ledger API and worker against PostgreSQL with strict
    schema enforcement and no experimental features.
-2. Round-trip every Package 4 amount boundary exactly through the public SDK
-   models on Node 22.
+2. Round-trip the bounded Package 4 startup range exactly through the public
+   SDK models on Node 22. Retain out-of-range probes as known-limit evidence.
 3. If and only if gate 2 passes, run the same SDK use in the supported Convex
    Node Action runtime.
 4. If and only if both exactness gates pass, test native booking semantics,
    idempotency, contention, recovery, pagination, backup, restore, and upgrade.
 
-Silent rounding, missing exact readback, SDK validation failure for bigint
-strings, or inability to run the SDK in Convex is an immediate `REJECT`. Later
-gates are not run after a hard-gate failure.
+Package 4 supports only exact values at or below JavaScript's safe-integer
+ceiling while using SDK v7. Values above that range are unsupported and must
+never reach the SDK. The existing 30-digit probe documents a future SDK limit;
+it is not a startup product requirement. Inability to run the supported range
+in Convex or failure of the remaining semantic and operational gates still
+blocks the implementation cutover.
 
 ## Reproduction
 
@@ -57,12 +60,12 @@ npm ci --ignore-scripts
 npm run test:exactness
 ```
 
-The exactness command exits non-zero. See `PR1-EVIDENCE.md` and
-`DECISION.md`.
+The exactness command exits non-zero to preserve the unbounded-range finding.
+See `PR1-EVIDENCE.md` and `DECISION.md` for the accepted bounded range.
 
 ## Scope after a decision
 
-`ADOPT` permits a separate Package 4 cutover that removes the paused Convex
-journal atomically. `REJECT` permits resuming the Convex ledger only after the
-buyer AUD sale and Provider USDC cost are separated. This spike itself changes
-neither implementation.
+`ADOPT` permits a separate Package 4 cutover only after the remaining native
+booking, contention, recovery, and operational gates pass. The cutover removes
+the paused Convex journal atomically. This spike itself changes neither
+implementation.
