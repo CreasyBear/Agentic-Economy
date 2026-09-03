@@ -76,7 +76,6 @@ resource "aws_instance" "k3s" {
     cloudflare_tunnel_secret_arn = aws_secretsmanager_secret.cloudflare_tunnel.arn
     rds_secret_arn               = aws_db_instance.formance.master_user_secret[0].secret_arn
     rds_endpoint                 = aws_db_instance.formance.address
-    source_revision              = var.source_revision
   })
 
   root_block_device {

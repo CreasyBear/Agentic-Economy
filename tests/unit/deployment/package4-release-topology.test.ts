@@ -39,6 +39,7 @@ describe('Package 4 reusable release topology', () => {
 
   it('pins the official OSS components and deploys only Gateway and Ledger', () => {
     const pins = read('modules/release-environment/locals.tf')
+    const compute = read('modules/release-environment/compute.tf')
     const bootstrap = read('modules/release-environment/templates/bootstrap.sh.tftpl')
 
     for (const pin of ['3.9.6', 'v2.4.12@sha256:', 'v2.3.1@sha256:', 'cloudflared:2026.7.2@sha256:']) {
@@ -66,6 +67,8 @@ describe('Package 4 reusable release topology', () => {
     expect(bootstrap.indexOf('get deployment "$deployment"')).toBeLessThan(
       bootstrap.indexOf('rollout status "deployment/$deployment"'),
     )
+    expect(bootstrap).not.toContain('source-revision')
+    expect(compute).not.toContain('source_revision              = var.source_revision')
     expect(bootstrap.match(/^kind: (Gateway|Ledger)$/gmu)?.sort()).toEqual(['kind: Gateway', 'kind: Ledger'])
     for (const excluded of ['kind: Payments', 'kind: Auth', 'kind: Wallets', 'kind: Reconciliation', 'kind: Webhooks']) {
       expect(bootstrap).not.toContain(excluded)
