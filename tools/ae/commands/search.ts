@@ -1,27 +1,19 @@
-import {
-  operationSearchInputSchema,
-} from '@/modules/capability-supply/public'
-import { operationChoiceSearchOutputSchema } from '@/modules/registry/operation-choice-contracts'
+import { operationCatalogSearchInputSchema, operationChoiceSearchOutputSchema } from '@/modules/registry/operation-choice-contracts'
 import { OPERATION_MARKET_SEARCH_PATH } from '@/modules/registry/operation-entry'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
 import { continuationCommand } from '../lib/continuation-command'
 import {
-  formatOperationAuthentication,
   formatOperationAvailability,
-  formatOperationInputs,
-  formatOperationPaymentNetwork,
-  formatOperationTotalPrice,
-  formatOperationVerification,
-  operationLabel,
+  formatOperationPrice,
 } from '../lib/operation-format'
 import { throwOperationReadFailure } from '../lib/operation-read-failure'
 /** Search current public Market Operations without a caller credential. */
 export async function runSearchCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
   if (!searchCommandDescriptor.inputSchema.safeParse({ query }).success) {
-    throw new CliFailure('Search query must be 200 characters or fewer.', {
+    throw new CliFailure('Search requires a capability phrase from 1 to 256 characters.', {
       kind: 'INVALID_ARGUMENT',
       code: 'search-query-too-long',
     })
@@ -83,7 +75,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   const nextActionCommand = result.kind === 'ok' && result.items.length > 0
     ? result.items.length === 1
       ? continuationCommand([
-          'ae', 'inspect', result.items[0]?.operationRef,
+          'ae', 'describe', result.items[0]?.operationRef,
           ...originContinuation,
           ...outputContinuation,
           ...technicalContinuation,
@@ -96,7 +88,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
         ])
     : undefined
   const browseCommand = continuationCommand([
-    'ae', 'search',
+    'ae', 'list',
     ...(options.limit === undefined ? [] : ['--limit', options.limit]),
     ...originContinuation,
     ...outputContinuation,
@@ -124,12 +116,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     ? new URL('/market', options.baseUrl).toString()
     : undefined
   if (options.json) {
-    const jsonResult = result.kind !== 'ok' || options.technical
-      ? result
-      : {
-          ...result,
-          items: result.items.map(({ navigation: _navigation, ...item }) => item),
-        }
+    const jsonResult = result
     printJson({
       ...jsonResult,
       ...(nextActionCommand === undefined && requestCommand === undefined && broadenSearchCommand === undefined
@@ -142,9 +129,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     return
   }
 
-  heading(result.query.length === 0
-    ? `Current Market Operations (${outcome.durationMs}ms)`
-    : `Market Operations for "${result.query}" (${outcome.durationMs}ms)`)
+  heading(`Market Operations for "${result.query}" (${outcome.durationMs}ms)`)
   if (result.kind === 'no_candidates') {
     line(hasSearchFilters
       ? '  No current Operations match these filters.'
@@ -156,19 +141,13 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     return
   }
 
-  line(`  ${result.matchedCount} match${result.matchedCount === 1 ? '' : 'es'}`)
+  line(`  ${result.count} match${result.count === 1 ? '' : 'es'}`)
   for (const [index, operation] of result.items.entries()) {
-    line(`  ${index + 1}. ${operationLabel(operation)}`)
-    line(`     ${operation.summary}`)
+    line(`  ${index + 1}. ${operation.provider.name} — ${operation.title}`)
     line(`     ref: ${operation.operationRef}`)
     line(
-      `     ${formatOperationAvailability(operation.availability)} · `
-      + `total ${formatOperationTotalPrice(operation)} · `
-      + `${formatOperationAuthentication(operation)}`,
+      `     ${operation.healthStatus} · ${operation.priceLabel}`,
     )
-    line(`     last verified: ${formatOperationVerification(operation)}`)
-    line(`     payment network: ${formatOperationPaymentNetwork(operation)}`)
-    line(`     inputs: ${formatOperationInputs(operation)}`)
   }
   if (nextActionCommand !== undefined) line(`  Next: ${nextActionCommand}`)
   line(result.pagination.hasMore
@@ -203,7 +182,7 @@ export const searchCommandDescriptor = {
   command: 'search',
   actionId: 'registry.operations.search',
   path: OPERATION_MARKET_SEARCH_PATH,
-  inputSchema: operationSearchInputSchema,
+  inputSchema: operationCatalogSearchInputSchema,
   outputSchema: operationChoiceSearchOutputSchema,
   run: runSearchCommand,
 } as const

@@ -54,7 +54,12 @@ export const checkoutEventArg = v.object({
   paymentId: v.optional(identifier),
   checkoutSessionDigest: identifier,
   paymentIntentDigest: v.optional(identifier),
-  status: v.union(v.literal('paid'), v.literal('failed'), v.literal('expired')),
+  status: v.union(
+    v.literal('paid'),
+    v.literal('processing'),
+    v.literal('failed'),
+    v.literal('expired'),
+  ),
   amount: exactAmount,
   metadataDigest: identifier,
   payloadDigest: identifier,

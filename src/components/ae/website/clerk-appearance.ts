@@ -35,7 +35,7 @@ export const clerkAppearance = {
     formFieldInputShowPasswordButton: 'min-h-touch min-w-touch',
     identityPreviewEditButton: '!min-h-touch !min-w-touch',
     formFieldRow__password: 'aria-hidden:!hidden',
-    headerTitle: 'font-display text-xl font-medium tracking-tight',
+    headerTitle: 'font-sans text-xl font-semibold tracking-tight',
     headerSubtitle: 'text-muted-foreground',
     footerActionLink: 'text-foreground underline-offset-4 hover:underline',
     logoBox: 'hidden',

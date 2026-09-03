@@ -1,5 +1,4 @@
 import type {
-  InspectPlanResult,
   OperationCompareResult,
   OperationDetailResult,
   OperationSearchResult,
@@ -8,7 +7,6 @@ import type {
 } from "../operation-projection";
 import { decodePublicSchema } from "./operation-projection-wire-schema";
 import type {
-  InspectPlanWireResult,
   OperationCompareWireResult,
   OperationDetailWireResult,
   OperationSearchWireResult,
@@ -164,33 +162,6 @@ export function deserializeOperationCompareResult(
     kind: "unavailable",
     schemaVersion: result.schemaVersion,
     reason: result.reason,
-    navigation: deserializeNavigation(result.navigation),
-  };
-}
-
-export function deserializeInspectPlanResult(
-  result: InspectPlanWireResult,
-): InspectPlanResult {
-  if (result.kind === "unavailable") {
-    return {
-      kind: "unavailable",
-      schemaVersion: result.schemaVersion,
-      reason: result.reason,
-      navigation: deserializeNavigation(result.navigation),
-    };
-  }
-  return {
-    kind: "ok",
-    schemaVersion: result.schemaVersion,
-    inspectPlanRef: result.inspectPlanRef,
-    operationRefs: result.operationRefs,
-    mappingRefs: result.mappingRefs,
-    summary: {
-      maximumCost: result.summary.maximumCost,
-      dataUse: result.summary.dataUse,
-      effects: result.summary.effects,
-      expiry: result.summary.expiry,
-    },
     navigation: deserializeNavigation(result.navigation),
   };
 }

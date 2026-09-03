@@ -1,5 +1,12 @@
 # Gates: Rationalised module and package architecture
 
+**Status:** archived validation record
+
+**Authority note:** these gates refer to a completed planning exercise and files
+that are no longer active product authority. Preserve them as evidence only.
+Current work follows [PRODUCT.md](./PRODUCT.md), [START_LINE.md](./START_LINE.md)
+and current source and tests.
+
 Scope: Produce an implementation-ready engineering plan for rationalising the current Operation-market codebase before launch, without implementing the refactor or restoring retired product spines.
 
 - [x] G1: The plan explains the current architecture from fresh source evidence and identifies the ownership failures that matter to the golden journey.

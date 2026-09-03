@@ -59,7 +59,7 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'chat-proxy', code: 'required_configuration_missing', names: ['AE_CHAT_PROXY_SECRET'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
   { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_POLICY_RULES_DIGEST', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
-  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY'], mode: 'all' },
+  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], mode: 'all' },
 ]
 
 const liveGatewaySmokeNames = [
@@ -149,7 +149,7 @@ const knownNames = Object.freeze([
   'POSTHOG_KEY', 'VERCEL_ENV', 'VERCEL_DEPLOYMENT_ID', 'VERCEL_URL', 'AE_RELEASE_DEPLOYMENT_ID', 'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
   'AE_DEV_WBA_SMOKE_SECRET', 'AE_DEV_WBA_SIGNATURE_AGENT', 'AE_LOCAL_DEV_VITE_ARGS', 'AE_KERNEL_PROOF_MANIFEST_JSON',
   'AE_KERNEL_PROOF_MANIFEST_PATH', 'AE_CLI_BASE_URL',
-  'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY',
+  'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
 ])
 
 export const DEPLOYMENT_MANIFEST = Object.freeze({
@@ -364,13 +364,13 @@ function validateProductionStripeCredentials(
   if (secretKey !== undefined && !/^sk_live_[A-Za-z0-9_-]+$/u.test(secretKey)) {
     add('malformed', 'stripe_secret_key_invalid', ['STRIPE_SECRET_KEY'], 'stripe-money')
   }
-  const publishableKey = present(environment, 'VITE_STRIPE_PUBLISHABLE_KEY')
-  if (publishableKey !== undefined && !/^pk_live_[A-Za-z0-9_-]+$/u.test(publishableKey)) {
-    add('malformed', 'stripe_publishable_key_invalid', ['VITE_STRIPE_PUBLISHABLE_KEY'], 'stripe-money')
-  }
   const webhookSecret = present(environment, 'STRIPE_WEBHOOK_SECRET')
   if (webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(webhookSecret)) {
     add('malformed', 'stripe_webhook_secret_invalid', ['STRIPE_WEBHOOK_SECRET'], 'stripe-money')
+  }
+  const taxRateId = present(environment, 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID')
+  if (taxRateId !== undefined && !/^txr_[A-Za-z0-9_]+$/u.test(taxRateId)) {
+    add('malformed', 'stripe_tax_rate_invalid', ['STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], 'stripe-money')
   }
 }
 function validateProductionBrowserSecurity(
@@ -462,7 +462,6 @@ function isSecretDeploymentName(name: string): boolean {
     name === 'VITE_CLERK_PUBLISHABLE_KEY'
     || name === 'VITE_SENTRY_DSN'
     || name === 'VITE_POSTHOG_KEY'
-    || name === 'VITE_STRIPE_PUBLISHABLE_KEY'
   ) return false
   if (name === 'AE_X402_RPC_URLS_JSON') return true
   return name === 'STRIPE_WEBHOOK_SECRET'

@@ -6,6 +6,7 @@ import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 
 import { describeActionForAgent, findAction } from '@/modules/actions'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { OPERATION_INSPECT_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-commitment.actions'
 import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { buildSiteDiscoveryManifest, projectCompactSiteDiscoveryManifest } from '@/modules/discovery/public'
@@ -163,7 +164,7 @@ describe('Site discovery manifest', () => {
         operationInvokeTool: 'ae_operation_invoke',
         protocolVersion: LATEST_PROTOCOL_VERSION,
         lifecycle: ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'close'],
-        inputFields: expect.arrayContaining(['operationRef']),
+        inputFields: expect.arrayContaining(['commitmentRef', 'idempotencyKey']),
       },
       executionModes: {
         gateway: { action: 'operation.invoke', requiresOperationRef: true },
@@ -223,6 +224,7 @@ describe('Site discovery manifest', () => {
   })
   it('projects every operation route and schema from the canonical contract', () => {
     const expected = [
+      OPERATION_INSPECT_ROUTE_CONTRACT,
       OPERATION_INVOKE_ROUTE_CONTRACT.invoke,
       OPERATION_INVOKE_ROUTE_CONTRACT.list,
       OPERATION_INVOKE_ROUTE_CONTRACT.status,

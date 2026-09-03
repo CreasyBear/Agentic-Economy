@@ -21,8 +21,6 @@ export type OperationDetailReader = (
   operationRef: string,
 ) => Promise<PublicOperationDetailRouteResult>
 
-export type BuyerCredentialPresenceReader = () => Promise<boolean>
-
 export function readCanonicalOperationDetail(
   operationRef: string,
 ): Promise<PublicOperationDetailRouteResult> {
@@ -31,9 +29,6 @@ export function readCanonicalOperationDetail(
 
 const OperationDetailReaderContext =
   createContext<OperationDetailReader | undefined>(undefined)
-const BuyerCredentialPresenceReaderContext =
-  createContext<BuyerCredentialPresenceReader | undefined>(undefined)
-const missingBuyerCredentialReader: BuyerCredentialPresenceReader = async () => false
 
 /**
  * Resolves the detail reader the current subtree was given, falling back to
@@ -42,11 +37,6 @@ const missingBuyerCredentialReader: BuyerCredentialPresenceReader = async () => 
 export function useOperationDetailReader(): OperationDetailReader {
   const injected = use(OperationDetailReaderContext)
   return injected ?? readCanonicalOperationDetail
-}
-
-export function useBuyerCredentialPresenceReader(): BuyerCredentialPresenceReader {
-  const injected = use(BuyerCredentialPresenceReaderContext)
-  return injected ?? missingBuyerCredentialReader
 }
 
 type CommandPanelContextValue = Readonly<{
@@ -59,6 +49,7 @@ type CommandPanelContextValue = Readonly<{
   toggle(): void
   open(): void
   close(): void
+  completeNavigation(): void
   popPage(): void
   pushInspect(operationRef: string): void
 }>
@@ -79,15 +70,12 @@ export function CommandPanelProvider({
   open,
   onOpenChange,
   readDetail,
-  readBuyerCredentialPresence,
   children,
 }: Readonly<{
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Injectable so harnesses never hit the network for detail reads. */
   readDetail?: OperationDetailReader
-  /** Existing owner-key read projected to the one credential fact the panel needs. */
-  readBuyerCredentialPresence?: BuyerCredentialPresenceReader
   children: ReactNode
 }>) {
   const [pages, setPages] = useState<CommandPanelStack>(initialCommandPanelPages)
@@ -99,6 +87,10 @@ export function CommandPanelProvider({
     onOpenChange(true)
   }, [onOpenChange])
   const closePanel = useCallback(() => {
+    onOpenChange(false)
+  }, [onOpenChange])
+  const completeNavigation = useCallback(() => {
+    setPages(initialCommandPanelPages)
     onOpenChange(false)
   }, [onOpenChange])
 
@@ -123,17 +115,16 @@ export function CommandPanelProvider({
       toggle,
       open: openPanel,
       close: closePanel,
+      completeNavigation,
       popPage,
       pushInspect,
     }),
-    [closePanel, openPanel, open, pages, popPage, pushInspect, toggle],
+    [closePanel, completeNavigation, openPanel, open, pages, popPage, pushInspect, toggle],
   )
 
   return (
-    <BuyerCredentialPresenceReaderContext.Provider value={readBuyerCredentialPresence}>
-      <OperationDetailReaderContext.Provider value={readDetail}>
-        <CommandPanelContext.Provider value={value}>{children}</CommandPanelContext.Provider>
-      </OperationDetailReaderContext.Provider>
-    </BuyerCredentialPresenceReaderContext.Provider>
+    <OperationDetailReaderContext.Provider value={readDetail}>
+      <CommandPanelContext.Provider value={value}>{children}</CommandPanelContext.Provider>
+    </OperationDetailReaderContext.Provider>
   )
 }

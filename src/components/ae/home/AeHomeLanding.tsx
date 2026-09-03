@@ -10,22 +10,16 @@ import {
   AeSiteBody,
   AeSiteBrowser,
   AeSiteButton,
-  AeSiteEntrance,
   AeSiteEyebrow,
   AeSiteHeading,
   AeSiteHeadingPair,
   AeSiteHeroIntro,
   AeSiteIntro,
   AeSiteSection,
-  AeSiteSignoff,
   AeSiteStack,
 } from "@/components/ae/website";
 import { ItemGroup } from "@/components/ui/item";
-import {
-  AGENT_INSTRUCTION,
-  BUSINESS_DOOR,
-  HOME,
-} from "@/content/brand-copy";
+import { HOME } from "@/content/brand-copy";
 import type { HomeCapabilityRead } from "@/modules/market/home-catalogue";
 import { groupOperationCards } from "@/modules/market/operation-view-model";
 
@@ -45,7 +39,6 @@ export function AeHomeLanding({ read }: AeHomeLandingProps) {
     <div className="flex flex-col">
       <HomeHero meta={meta} showMeta={read.kind === "ok" && operationCount > 0} />
       <HomeCapabilityResults read={read} />
-      <HomeClose />
     </div>
   );
 }
@@ -106,16 +99,9 @@ export function HomeCapabilityResults({
       <div className="py-page md:pb-hero">
         <AeSiteStack>
           <AeSiteIntro>
-            <div className="flex flex-col gap-related sm:flex-row sm:items-end sm:justify-between">
-              <AeSiteHeading as="h2" size="md" id="home-catalog-heading">
-                {HOME.catalogHeading}
-              </AeSiteHeading>
-              <AeSiteButton asChild variant="outlined" className="self-start sm:self-auto">
-                <Link to="/market" search={{ window: "30d" }}>
-                  Browse Operations
-                </Link>
-              </AeSiteButton>
-            </div>
+            <AeSiteHeading as="h2" size="md" id="home-catalog-heading">
+              {HOME.catalogHeading}
+            </AeSiteHeading>
           </AeSiteIntro>
           {read.kind === "unavailable" ? (
             <AeEmptyState
@@ -144,42 +130,17 @@ export function HomeCapabilityResults({
           ) : (
             <div className="grid gap-section">
               <AeSiteBody muted>{HOME.catalogBody}</AeSiteBody>
-              <AeSiteEntrance>
-                <ItemGroup className="grid gap-related sm:grid-cols-2">
-                  {groups.map((group) => (
-                    <li key={group.capabilityId}>
-                      <AeCapabilityTile group={group} window="30d" />
-                    </li>
-                  ))}
-                </ItemGroup>
-              </AeSiteEntrance>
+              <ItemGroup className="grid gap-related sm:grid-cols-2">
+                {groups.map((group) => (
+                  <li key={group.capabilityId}>
+                    <AeCapabilityTile group={group} window="30d" />
+                  </li>
+                ))}
+              </ItemGroup>
             </div>
           )}
         </AeSiteStack>
       </div>
     </AeSiteSection>
-  );
-}
-
-function HomeClose() {
-  return (
-    <AeSiteSignoff
-      heading={AGENT_INSTRUCTION.heading}
-      headingId="home-close"
-      body={HOME.closeBody}
-    >
-      <AeSiteButton asChild>
-        <Link to="/market" search={{ window: "30d" }}>Browse Operations</Link>
-      </AeSiteButton>
-      <AeSiteButton asChild variant="outlined">
-        <Link to={BUSINESS_DOOR.href}>{BUSINESS_DOOR.cta}</Link>
-      </AeSiteButton>
-      <a
-        href="/about"
-        className="inline-flex min-h-touch items-center underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {HOME.aboutLink}
-      </a>
-    </AeSiteSignoff>
   );
 }

@@ -1,32 +1,56 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { ArrowLeftIcon } from 'lucide-react'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
 import { AeOperationInspector } from '@/components/ae/market/operation-detail'
 import { operationLabel } from '@/components/ae/market/operation-detail/operation-inspector-model'
+import {
+  FALLBACK_MARKET_RETURN_CONTEXT,
+  readMarketReturnContext,
+  toMarketReturnNavigation,
+  type MarketReturnContext,
+} from '@/components/ae/market/market-return-context'
 import { Button } from '@/components/ui/button'
-import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
-import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
-import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import {
+  isPublicOperationRef,
+  type PublicOperationDescriptor,
+} from '@/modules/capability-supply/public'
+import type { MarketListingEvidenceProjection } from '@/modules/market/listing-evidence'
+import { readOperationListingEvidence } from '@/modules/market/server'
 import {
   readPublicOperationDetailRouteServer,
   type PublicOperationDetailRouteResult,
 } from '@/modules/registry/operation-detail-route.functions'
 
+export type OperationDetailPresentationResult =
+  | PublicOperationDetailRouteResult
+  | Readonly<{ kind: 'invalid_ref'; operationRef: string }>
+
+export function validateOperationDetailSearch(
+  search: Record<string, unknown>,
+): Readonly<{ from?: MarketReturnContext }> {
+  const from = readMarketReturnContext(search.from)
+  return from === undefined ? {} : { from }
+}
+
 export const Route = createFileRoute('/operations/$operationRef')({
+  validateSearch: validateOperationDetailSearch,
   loader: async ({ params }) => {
-    const [result, keys] = await Promise.all([
-      readPublicOperationDetailRouteServer({ data: { operationRef: params.operationRef } })
-        .catch((): PublicOperationDetailRouteResult => ({ kind: 'source_unavailable', operationRef: params.operationRef })),
-      listAgentAccessKeysServer().catch(() => []),
-    ])
+    if (!isPublicOperationRef(params.operationRef)) {
+      return {
+        result: { kind: 'invalid_ref' as const, operationRef: params.operationRef },
+        evidence: undefined,
+      }
+    }
+    const result = await readPublicOperationDetailRouteServer({ data: { operationRef: params.operationRef } })
+      .catch((): PublicOperationDetailRouteResult => ({ kind: 'source_unavailable', operationRef: params.operationRef }))
+    const evidence = result.kind === 'found'
+      ? await readOperationListingEvidence(result.operation)
+      : undefined
     return {
       result,
-      hasBuyerCredential: keys.some((key) => (
-        !key.revoked
-        && !key.expired
-        && key.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
-      )),
+      evidence,
     }
   },
   head: ({ loaderData }) => {
@@ -48,61 +72,87 @@ export const Route = createFileRoute('/operations/$operationRef')({
 
 function OperationDetailRoute() {
   const data = Route.useLoaderData()
+  const search = Route.useSearch()
   return (
     <PublicOperationDetail
       result={data.result}
-      hasBuyerCredential={data.hasBuyerCredential}
+      {...(data.evidence === undefined ? {} : { evidence: data.evidence })}
+      {...(search.from === undefined ? {} : { returnTo: search.from })}
     />
   )
 }
 
 export function PublicOperationDetail({
   result,
-  hasBuyerCredential = false,
+  evidence,
+  returnTo = FALLBACK_MARKET_RETURN_CONTEXT,
 }: Readonly<{
-  result: PublicOperationDetailRouteResult
-  hasBuyerCredential?: boolean
+  result: OperationDetailPresentationResult
+  evidence?: MarketListingEvidenceProjection
+  returnTo?: MarketReturnContext
 }>) {
-  if (result.kind !== 'found') return <OperationUnavailable result={result} />
+  if (result.kind !== 'found') return <OperationUnavailable result={result} returnTo={returnTo} />
   return (
     <CurrentOperationDetail
       operation={result.operation}
-      hasBuyerCredential={hasBuyerCredential}
+      {...(evidence === undefined ? {} : { evidence })}
+      returnTo={returnTo}
     />
   )
 }
 
 function CurrentOperationDetail({
   operation,
-  hasBuyerCredential,
+  evidence,
+  returnTo,
 }: Readonly<{
   operation: PublicOperationDescriptor
-  hasBuyerCredential: boolean
+  evidence?: MarketListingEvidenceProjection
+  returnTo: MarketReturnContext
 }>) {
+  const returnNavigation = toMarketReturnNavigation(returnTo)
   return (
     <AePublicPage
-      kind="tool"
-      eyebrow="Operation"
+      kind="workspace"
       title={operation.offering.label}
-      description={operation.summary}
+      description={`${operation.business.name} · ${operation.contract.capabilityId}`}
       actions={
         <Button asChild variant="ghost" className="min-h-touch">
-          <Link to="/market" search={{ window: '30d' }} hash="operations">Catalog</Link>
+          <Link
+            to="/market"
+            search={returnNavigation.search}
+            {...(returnNavigation.hash === undefined ? {} : { hash: returnNavigation.hash })}
+          >
+            <ArrowLeftIcon aria-hidden="true" />
+            {marketReturnLabel(returnTo, 'Catalog')}
+          </Link>
         </Button>
       }
-      meta={operationLabel(operation.availability.posture)}
     >
       <AeOperationInspector
         operation={operation}
-        hasBuyerCredential={hasBuyerCredential}
+        {...(evidence === undefined ? {} : { evidence })}
         variant="full"
       />
     </AePublicPage>
   )
 }
 
-function OperationUnavailable({ result }: Readonly<{ result: Exclude<PublicOperationDetailRouteResult, { kind: 'found' }> }>) {
-  const presentation = result.kind === 'not_found'
+function OperationUnavailable({
+  result,
+  returnTo = FALLBACK_MARKET_RETURN_CONTEXT,
+}: Readonly<{
+  result: Exclude<OperationDetailPresentationResult, { kind: 'found' }>
+  returnTo?: MarketReturnContext
+}>) {
+  const returnNavigation = toMarketReturnNavigation(returnTo)
+  const presentation = result.kind === 'invalid_ref'
+    ? {
+        tone: 'neutral' as const,
+        title: 'This Operation reference is invalid',
+        description: 'The reference is malformed, so AE did not query the catalog or show commercial facts and invocation steps.',
+      }
+    : result.kind === 'not_found'
     ? {
         tone: 'neutral' as const,
         title: 'This exact Operation is unknown or no longer current',
@@ -126,8 +176,12 @@ function OperationUnavailable({ result }: Readonly<{ result: Exclude<PublicOpera
       description={presentation.description}
       action={
         <Button asChild className="min-h-touch">
-          <Link to="/market" search={{ window: '30d' }} hash="operations">
-            Browse current Operations
+          <Link
+            to="/market"
+            search={returnNavigation.search}
+            {...(returnNavigation.hash === undefined ? {} : { hash: returnNavigation.hash })}
+          >
+            {marketReturnLabel(returnTo, 'Browse current Operations')}
           </Link>
         </Button>
       }
@@ -140,5 +194,20 @@ function OperationDetailPending() {
 }
 
 function OperationDetailError() {
-  return <OperationUnavailable result={{ kind: 'source_unavailable', operationRef: 'Requested reference' }} />
+  const search = Route.useSearch()
+  return (
+    <OperationUnavailable
+      result={{ kind: 'source_unavailable', operationRef: 'Requested reference' }}
+      {...(search.from === undefined ? {} : { returnTo: search.from })}
+    />
+  )
+}
+
+function marketReturnLabel(
+  returnTo: MarketReturnContext,
+  fallback: string,
+): string {
+  const url = new URL(returnTo, 'https://agentic-economy.invalid')
+  if (url.searchParams.has('compare')) return 'Back to comparison'
+  return returnTo === FALLBACK_MARKET_RETURN_CONTEXT ? fallback : 'Back to results'
 }

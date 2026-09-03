@@ -143,10 +143,14 @@ describe('market terminal manifest OAuth contract', () => {
       })
       if (calls.length === 3) return Response.json({ access_token: 'token-test' })
       return Response.json({
-        kind: 'refused',
-        invocationRef: 'invocation:v1:connect-validation',
-        code: 'invocation_not_found',
-        retryable: false,
+        kind: 'authenticated',
+        principalRef: 'principal:test-agent',
+        accountRef: 'account:test-owner',
+        credentialId: 'credential:test-agent',
+        applicationRef: 'agentic-economy',
+        environment: 'sandbox',
+        scopes: ['market_operations:invoke', 'customer_requests:bounded_mandate'],
+        authorityMode: 'bounded_mandate',
       })
     })
     const output = captureStdout()
@@ -171,5 +175,17 @@ describe('market terminal manifest OAuth contract', () => {
     expect(polling.waitOn).toEqual(['authorization_pending'])
     expect(polling.increaseIntervalOn).toEqual(['slow_down'])
     expect(polling.stopOn).toEqual(AGENT_ACCESS_OAUTH_ERROR_VALUES.filter((error) => error !== 'authorization_pending' && error !== 'slow_down'))
+    expect(calls[3]?.input).toBe('https://ae.example/api/v1/account')
+    expect(new Headers(calls[3]?.init?.headers).get('Authorization')).toBe('Bearer token-test')
+    expect(JSON.parse(output.read())).toMatchObject({
+      kind: 'connected',
+      connectionState: 'ready_to_buy',
+      principalRef: 'principal:test-agent',
+      accountRef: 'account:test-owner',
+      credentialId: 'credential:test-agent',
+      authorityMode: 'bounded_mandate',
+      ownerConnectionHref: 'https://ae.example/agent-access?caller=principal%3Atest-agent',
+    })
+    expect(output.read()).not.toContain('token-test')
   })
 })

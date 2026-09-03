@@ -80,6 +80,7 @@ export function capabilitySupplyPublicationPorts(
         ...(publication.readinessOutcome === undefined ? {} : { readinessOutcome: publication.readinessOutcome }),
         ...(publication.readinessObservedAt === undefined ? {} : { readinessObservedAt: publication.readinessObservedAt }),
         ...(publication.readinessValidUntil === undefined ? {} : { readinessValidUntil: publication.readinessValidUntil }),
+        ...(publication.readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt: publication.readinessLastHealthyAt }),
         readinessEvidenceRefs: publication.readinessEvidenceRefs,
         registrationEvidenceRefs: publication.registrationEvidenceRefs,
       }

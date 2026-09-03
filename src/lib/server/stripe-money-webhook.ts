@@ -159,14 +159,14 @@ function mapCheckoutSessionWebhookEvent(
 function checkoutWebhookStatus(
   eventType: CheckoutWebhookEventType,
   session: Stripe.Checkout.Session,
-): "expired" | "failed" | "paid" {
+): "expired" | "failed" | "processing" | "paid" {
   switch (eventType) {
     case "checkout.session.expired":
       return "expired";
     case "checkout.session.async_payment_failed":
       return "failed";
     case "checkout.session.completed":
-      return session.payment_status !== "paid" ? "failed" : "paid";
+      return session.payment_status !== "paid" ? "processing" : "paid";
     case "checkout.session.async_payment_succeeded":
       return "paid";
     default: {

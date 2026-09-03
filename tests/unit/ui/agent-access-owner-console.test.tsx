@@ -7,6 +7,7 @@ import '../../setup/jsdom-platform'
 
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
 import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
+import type { AgentConnectionReadback } from '@/modules/agent-access/public'
 import type { AgentCredentialSource, AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import { projectAgentDirectory } from '@/modules/agent-access/agent-access-console'
 import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
@@ -59,6 +60,38 @@ const caller: AgentCredentialSource = {
 }
 const directory = projectAgentDirectory([caller], [canonicalAgentRecord([caller])])
 const emptyDirectory: AgentDirectoryProjection = { items: [], details: [] }
+const connection: AgentConnectionReadback = {
+  connectionRef: 'connection_safe_reference',
+  revision: 2,
+  principalRef: PRINCIPAL_ID,
+  agentDisplayName: 'Route assistant',
+  connectorDisplayName: 'Codex',
+  environment: 'sandbox' as const,
+  state: 'active' as const,
+  authorityMode: 'inspect_only' as const,
+  operationAccess: 'all_admitted' as const,
+  operationRefs: [],
+  policy: {
+    format: 'ae.agent-access-policy:v2' as const,
+    operationAccess: 'all_admitted' as const,
+    operationRefs: [],
+    environment: 'sandbox' as const,
+    budget: {
+      budgetPolicyRef: 'budget:test', generation: 1, currency: 'USD', exponent: 2,
+      maximumSpendPerInvocation: { currency: 'USD', units: '500', exponent: 2 },
+      maximumDailySpend: { currency: 'USD', units: '2500', exponent: 2 },
+      maximumMonthlySpend: { currency: 'USD', units: '10000', exponent: 2 },
+      maximumConcurrentInvocations: 2,
+    },
+    rate: { ratePolicyRef: 'rate:test', generation: 1, maximumCallsPerMinute: 30, maximumCallsPerHour: 300 },
+  },
+  commercialScopes: ['market_operations:invoke'],
+  connectedAt: 1_000,
+  lastRotatedAt: 2_000,
+  accessExpiresAt: 604_800_000,
+  connectionExpiresAt: 2_592_000_000,
+  credentialGeneration: 1,
+}
 
 function directoryWithLastAuthentication(timestamp: number): AgentDirectoryProjection {
   const canonical = canonicalAgentRecord([caller])
@@ -89,6 +122,31 @@ afterEach(() => {
 })
 
 describe('assistant access owner continuation anchors', () => {
+  it('shows a factual connection receipt and disconnects only that binding', async () => {
+    const onDisconnectConnection = vi.fn()
+    render(
+      <AeAgentOperatorConsole
+        {...consoleProps()}
+        directory={projectAgentDirectory([caller], [canonicalAgentRecord([caller])], [connection])}
+        selectedPrincipalId={PRINCIPAL_ID}
+        getAgentHref={(principalRef) => `/agent-access?caller=${principalRef}`}
+        onDisconnectConnection={onDisconnectConnection}
+      />,
+    )
+
+    expect(screen.getByRole('columnheader', { name: /Connection/u, hidden: true })).toBeDefined()
+    const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    expect(dialog.textContent).toContain('Codex')
+    expect(dialog.textContent).toContain('Connection expires')
+    expect(dialog.textContent).not.toContain('connection_safe_reference')
+    const trigger = within(dialog).getByRole('button', { name: 'Disconnect' })
+    fireEvent.click(trigger)
+    const confirmation = screen.getByRole('alertdialog', { name: 'Disconnect Codex from Route assistant?' })
+    expect(confirmation.textContent).toContain('Other connections for Route assistant remain usable')
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Disconnect' }))
+    await waitFor(() => expect(onDisconnectConnection).toHaveBeenCalledWith('connection_safe_reference', 2))
+  })
+
   it('keeps funding on Credit and revocation on Keys', () => {
     const { container: credit } = render(
       <AeOwnerCredit
@@ -138,6 +196,7 @@ describe('assistant access owner continuation anchors', () => {
     )
 
     const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
     expect(dialog.textContent).toContain('•••• 12345678')
     expect(dialog.textContent).not.toContain(KEY_ID_CANARY)
     expect(dialog.textContent).not.toContain(PRINCIPAL_ID)
@@ -152,10 +211,10 @@ describe('assistant access owner continuation anchors', () => {
     expect(dialog.textContent).toContain('Agent renamed')
     expect(dialog.textContent).toContain('rename:corr-safe')
 
-    const trigger = screen.getByRole('button', { name: 'Disconnect agent' })
+    const trigger = within(dialog).getByRole('button', { name: 'Remove agent everywhere' })
     fireEvent.click(trigger)
     const confirmation = screen.getByRole('alertdialog', {
-      name: 'Disconnect Route assistant?',
+      name: 'Remove Route assistant everywhere?',
     })
     expect(onDisconnect).not.toHaveBeenCalled()
     expect(within(confirmation).getByText(
@@ -227,11 +286,12 @@ describe('assistant access owner continuation anchors', () => {
       dateStyle: 'medium',
       timeStyle: 'short',
     }).format(new Date(authenticatedAt))
-    expect(screen.getByRole('columnheader', { name: /Last authenticated/u, hidden: true })).toBeDefined()
+    expect(screen.getByRole('columnheader', { name: /Last used/u, hidden: true })).toBeDefined()
     const dialog = screen.getByRole('dialog', { name: 'Route assistant' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }))
     expect(screen.getAllByText(expected).length).toBeGreaterThanOrEqual(1)
     expect(dialog.textContent).toContain(expected)
-    expect(dialog.textContent).toContain('Last seen')
+    expect(dialog.textContent).toContain('Last used')
   })
 
   it('shows the exact selected Operation authority', () => {
@@ -290,6 +350,7 @@ describe('assistant access owner continuation anchors', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Technical details' }))
     const trigger = screen.getByRole('button', { name: 'Revoke' })
     fireEvent.click(trigger)
     const confirm = within(screen.getByRole('alertdialog')).getByRole('button', {

@@ -7,11 +7,7 @@ import {
   compareCapabilityOperations,
   deserializeOperationCompareResult,
   deserializeOperationDescriptor,
-  inspectCapabilityOperationPlan,
   isAnonymousKeylessOperationEligible,
-  operationDetailInputSchema,
-  operationDetailOutputSchema,
-  operationSearchInputSchema,
   projectCapabilityOperation as projectCapabilityOperationWithNavigation,
   serializeOperationCompareResult,
   serializeOperationDescriptor,
@@ -21,7 +17,12 @@ import {
 } from '@/modules/capability-supply/public'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { normalizePricingConfig, pricingConfigDigest } from '@/modules/money/public'
-import { registryOperationsDetailAction, registryOperationsSearchAction } from '@/modules/registry/operations.actions'
+import { registryOperationsDescribeAction, registryOperationsSearchAction } from '@/modules/registry/operations.actions'
+import { operationCatalogSearchInputSchema, operationChoiceDescribeOutputSchema, operationDescribeInputSchema } from '@/modules/registry/operation-choice-contracts'
+import {
+  projectOperationHealth,
+  projectProviderManagementStatus,
+} from '@/modules/capability-supply/operation-health'
 
 const operationRecord: CapabilityOperationSourceRecord = {
   operationId: 'capability:reference.lookup',
@@ -98,11 +99,42 @@ const projectCapabilityOperation = (
 )
 
 describe('public operation read contract', () => {
+  it('projects reference-matched catalog and Provider health from the same facts', () => {
+    const now = 2_000
+    expect(projectOperationHealth({
+      posture: 'routeable', observedAt: 1_900, validUntil: 2_100,
+    }, now)).toEqual({
+      healthStatus: 'operational', lastCheckedAt: 1_900, lastHealthyAt: 1_900,
+    })
+    expect(projectOperationHealth({
+      posture: 'unavailable', observedAt: 1_950, validUntil: 2_050, lastHealthyAt: 1_800,
+    }, now)).toEqual({
+      healthStatus: 'degraded', lastCheckedAt: 1_950, lastHealthyAt: 1_800,
+    })
+    expect(projectOperationHealth({
+      posture: 'setup_required', observedAt: 1_950, validUntil: 2_050,
+    }, now)).toEqual({ healthStatus: 'unverified', lastCheckedAt: 1_950 })
+
+    expect(projectProviderManagementStatus({ disposition: 'current' }, now)).toBe('Validating')
+    expect(projectProviderManagementStatus({
+      disposition: 'current', credentialState: 'ready', healthState: 'healthy',
+      readinessObservedAt: 1_900, readinessValidUntil: 2_100,
+    }, now)).toBe('Live')
+    expect(projectProviderManagementStatus({
+      disposition: 'current', credentialState: 'unavailable', healthState: 'unhealthy',
+      readinessObservedAt: 1_950, readinessLastHealthyAt: 1_800,
+    }, now)).toBe('Action needed')
+    expect(projectProviderManagementStatus({
+      disposition: 'current', credentialState: 'ready', healthState: 'unhealthy',
+      readinessObservedAt: 1_950, readinessLastHealthyAt: 1_800,
+    }, now)).toBe('Degraded')
+    expect(projectProviderManagementStatus({ disposition: 'withdrawn' }, now)).toBe('Removed')
+  })
   it('shares canonical input schemas with registry actions', () => {
-    expect(registryOperationsSearchAction.schema).toBe(operationSearchInputSchema)
-    expect(registryOperationsDetailAction.schema).toBe(operationDetailInputSchema)
-    expect(registryOperationsDetailAction.outputSchema).toBe(operationDetailOutputSchema)
-    expect(registryOperationsDetailAction.surfaces).toEqual(expect.arrayContaining(['chat', 'mcp']))
+    expect(registryOperationsSearchAction.schema).toBe(operationCatalogSearchInputSchema)
+    expect(registryOperationsDescribeAction.schema).toBe(operationDescribeInputSchema)
+    expect(registryOperationsDescribeAction.outputSchema).toBe(operationChoiceDescribeOutputSchema)
+    expect(registryOperationsDescribeAction.surfaces).toEqual(expect.arrayContaining(['chat', 'mcp']))
   })
   it('emits only navigation entries backed by registered actions', async () => {
     const projected = [
@@ -110,18 +142,7 @@ describe('public operation read contract', () => {
       projectCapabilityOperation(freeKeylessRecord, 2_000),
       projectCapabilityOperation({ ...operationRecord, routeable: false, integrated: false }, 2_000),
     ]
-    const plan = await inspectCapabilityOperationPlan({
-      navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
-      listCurrent: async () => ({ operations: [operationRecord], sourceCount: 1, snapshotKey: 'snapshot:projection' }),
-      loadCurrent: async () => operationRecord,
-    }, { operationRefs: [projected[0]!.operationRef] }, 2_000)
-    expect(plan.kind).toBe('ok')
-    if (plan.kind !== 'ok') return
-
-    const navigation = [
-      ...projected.flatMap(({ navigation: entries }) => entries),
-      ...plan.navigation,
-    ]
+    const navigation = projected.flatMap(({ navigation: entries }) => entries)
 
     for (const entry of navigation) {
       if (entry.actionId === undefined) continue
@@ -141,10 +162,10 @@ describe('public operation read contract', () => {
     })
     expect(operation).not.toHaveProperty('source')
     expect(operation).not.toHaveProperty('credential')
-    expect(operation.navigation.find(({ relation }) => relation === 'detail')).toMatchObject({
-      pathTemplate: '/api/v1/market-operations/detail',
+    expect(operation.navigation.find(({ relation }) => relation === 'describe')).toMatchObject({
+      pathTemplate: '/api/v1/market-operations/describe',
       method: 'POST',
-      actionId: 'registry.operations.detail',
+      actionId: 'registry.operations.describe',
     })
   })
   it('refuses an injected invoke path that drifts from the descriptor callVia contract', () => {

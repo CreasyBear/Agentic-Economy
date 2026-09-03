@@ -5,7 +5,6 @@ import type {
 import { exactAmountSchema } from "@/modules/money/public";
 import { isRecord } from "@/modules/common/is-record";
 import type {
-  InspectPlanResult,
   OperationCompareResult,
   OperationComparisonFact,
   OperationComparisonValue,
@@ -24,7 +23,6 @@ import type {
 } from "../operation-projection";
 import type {
   DeepWritable,
-  InspectPlanWireResult,
   OperationCompareWireResult,
   OperationDetailWireResult,
   OperationSearchWireFilters,
@@ -326,36 +324,6 @@ export function serializeOperationCompareResult(
     kind: "unavailable",
     schemaVersion: result.schemaVersion,
     reason: result.reason,
-    navigation: serializeNavigation(result.navigation),
-  };
-}
-
-export function serializeInspectPlanResult(
-  result: InspectPlanResult,
-): InspectPlanWireResult {
-  if (result.kind === "unavailable") {
-    return {
-      kind: "unavailable",
-      schemaVersion: result.schemaVersion,
-      reason: result.reason,
-      navigation: serializeNavigation(result.navigation),
-    };
-  }
-  return {
-    kind: "ok",
-    schemaVersion: result.schemaVersion,
-    inspectPlanRef: result.inspectPlanRef,
-    operationRefs: [...result.operationRefs],
-    mappingRefs: [...result.mappingRefs],
-    summary: {
-      maximumCost:
-        result.summary.maximumCost.kind === "known"
-          ? { kind: "known", amount: { ...result.summary.maximumCost.amount } }
-          : { kind: "requires_preparation" },
-      dataUse: result.summary.dataUse.map(serializeDataUse),
-      effects: result.summary.effects.map(serializeEffect),
-      expiry: result.summary.expiry,
-    },
     navigation: serializeNavigation(result.navigation),
   };
 }

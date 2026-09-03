@@ -43,7 +43,7 @@ vi.mock('@/components/ae/layout/AePublicShell', () => ({
   AePublicShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }))
 
-import { ABOUT, HOME } from '@/content/brand-copy'
+import { ABOUT } from '@/content/brand-copy'
 import '@/routes/index'
 import '@/routes/privacy'
 import '@/routes/terms'
@@ -76,12 +76,11 @@ describe('public semantic comfort', () => {
   it('gives homepage actions a comfortable standalone target', () => {
     renderRoute('/')
 
-    for (const name of ['Browse Operations', 'Publish an Operation'] as const) {
+    for (const name of ['Browse Operations'] as const) {
       const links = screen.getAllByRole('link', { name })
       expect(links.length).toBeGreaterThan(0)
       for (const link of links) expect(link.classList.contains('min-h-touch')).toBe(true)
     }
-    expect(screen.getByRole('link', { name: HOME.aboutLink }).classList.contains('min-h-touch')).toBe(true)
   })
 
   it('keeps About sequential and its door actions comfortable', () => {

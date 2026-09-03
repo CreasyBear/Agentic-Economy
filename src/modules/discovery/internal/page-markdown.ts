@@ -1,5 +1,10 @@
 import { ABOUT } from '@/content/brand-copy'
 import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
+import {
+  AE_MCP_WHOAMI_TOOL_NAME,
+  aeMcpAuthenticateInstruction,
+  aeMcpInstallCommand,
+} from '@/lib/cli-distribution'
 import type { BusinessContext } from '@/modules/business/public'
 import { formatOfferingPrice } from '@/modules/catalog/public'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
@@ -13,7 +18,7 @@ import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/
 import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
 import { operationRouteExamples } from './operation-contract'
 import {
-  OPERATION_MARKET_DETAIL_PATH,
+  OPERATION_MARKET_DESCRIBE_PATH,
   OPERATION_MARKET_SEARCH_PATH,
 } from '@/modules/registry/operation-entry'
 
@@ -44,9 +49,9 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
     '# Agentic Economy',
     '',
     `1. Search by outcome: \`${cli} search "<job>" --base-url "${base}" --json\` or \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`.`,
-    `2. Inspect one result: \`${cli} inspect "$AE_OPERATION_REF" --base-url "${base}" --json\` or \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`. Read exact inputs, total price, authentication, readiness, provider, and last verification.`,
-    `3. Call it: \`${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${base}" --wait\`. The compiled CLI uses the official MCP client for eligible free keyless reads.`,
-    `4. Connect only when the call reports \`agent_access_key_required\`: \`ae connect --base-url "${base}"\`, then repeat the same call through \`${invoke.route.method} ${base}${invoke.route.path}\`.`,
+    `2. Describe one result: \`${cli} describe "$AE_OPERATION_REF" --base-url "${base}" --json\` or \`POST ${base}${OPERATION_MARKET_DESCRIBE_PATH}\`. Catalog health and price are indicative.`,
+    `3. Call \`operation.inspect\` with the exact input; complete its one continuation or required action, then inspect again.`,
+    `4. Invoke only with the returned Commitment through \`${invoke.route.method} ${base}${invoke.route.path}\`.`,
     `5. Keep the receipt: \`${cli} status "$AE_INVOCATION_REF" --base-url "${base}" --json\` (\`${status.route.method} ${base}${status.route.path}\`). If the receipt explicitly requires reconciliation, use \`${cli} recover\` against \`${reconcile.route.method} ${base}${reconcile.route.path}\`.`,
     '',
     'Search, inspection, and eligible free keyless read calls are public. Other calls use one owner-approved AE key stored by connect.',
@@ -87,6 +92,28 @@ export function buildForAgentsMarkdown(options: AgentPageMarkdownOptions): strin
   if (invoke === undefined) throw new Error('Operation invoke route is not registered')
   return [
     '# Agentic Economy — machine guide',
+    '',
+    '## Native MCP connection',
+    '',
+    'Codex:',
+    '```sh',
+    aeMcpInstallCommand(base, 'codex'),
+    '```',
+    aeMcpAuthenticateInstruction('codex'),
+    '',
+    'Claude Code:',
+    '```sh',
+    aeMcpInstallCommand(base, 'claude-code'),
+    '```',
+    aeMcpAuthenticateInstruction('claude-code'),
+    '',
+    'Cursor:',
+    '```sh',
+    aeMcpInstallCommand(base, 'cursor'),
+    '```',
+    aeMcpAuthenticateInstruction('cursor'),
+    '',
+    `Public discovery works before authentication. After approval, call \`${AE_MCP_WHOAMI_TOOL_NAME}\` and report the connected Agent Principal and Account. Never ask the human to copy a key.`,
     '',
     '## One-command activation',
     '',
@@ -236,7 +263,7 @@ export function buildUnknownPageMarkdown(
     `- \`GET ${base}/api/businesses\` — every published business`,
     `- \`GET ${base}/market\` — browse the Operation catalogue`,
     `- \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\` — search callable Operations`,
-    `- \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\` — inspect one Operation`,
+    `- \`POST ${base}${OPERATION_MARKET_DESCRIBE_PATH}\` — describe one Operation`,
     `- \`${base}/mcp\` — use the Operation MCP surface`,
     `- \`ae search "<job>" --base-url "${base}" --json\` — use the Operation CLI`,
     '',

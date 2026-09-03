@@ -6,14 +6,16 @@ describe('MCP host adapter account money', () => {
   it('dispatches balance through the exact buyer credential', async () => {
     const balance = vi.fn().mockResolvedValue({
       kind: 'available', principalRef: 'principal:test', accountRef: 'owner:test',
-      balance: { currency: 'USD', units: '2500', exponent: 2 },
-      recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
+      balance: { currency: 'AUD', units: '25000000', exponent: 6 },
       accountState: 'active', version: 1, updatedAt: 10,
-      funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+      funding: {
+        kind: 'agent_funding_handoff', configAction: 'funding.handoff.config',
+        createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status',
+      },
     })
     const response = await postMcp({
       jsonrpc: '2.0', id: 'account-balance', method: 'tools/call',
-      params: { name: 'ae_agentAccess_balance', arguments: { currency: 'USD' } },
+      params: { name: 'ae_agentAccess_balance', arguments: { currency: 'AUD' } },
     }, {
       authenticate: authenticateWithScopes(['market_operations:invoke']),
       accountManagementService: { balance, activity: vi.fn() },
@@ -22,11 +24,11 @@ describe('MCP host adapter account money', () => {
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
     expect((body.result?.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({
-      kind: 'available', balance: { units: '2500' },
-      funding: { kind: 'owner_browser_required' },
+      kind: 'available', balance: { units: '25000000' },
+      funding: { kind: 'agent_funding_handoff' },
     })
     expect(balance).toHaveBeenCalledWith(expect.objectContaining({
-      input: { currency: 'USD' },
+      input: { currency: 'AUD' },
       principal: expect.objectContaining({ scopes: ['market_operations:invoke'] }),
     }))
   })
@@ -35,7 +37,7 @@ describe('MCP host adapter account money', () => {
     const balance = vi.fn()
     const response = await postMcp({
       jsonrpc: '2.0', id: 'supplier-account-balance', method: 'tools/call',
-      params: { name: 'ae_agentAccess_balance', arguments: { currency: 'USD' } },
+      params: { name: 'ae_agentAccess_balance', arguments: { currency: 'AUD' } },
     }, {
       authenticate: authenticateWithScopes(['market_supply:manage']),
       accountManagementService: { balance, activity: vi.fn() },

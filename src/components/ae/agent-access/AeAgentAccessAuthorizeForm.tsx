@@ -6,13 +6,13 @@ import { Link } from '@tanstack/react-router'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeSection, AeSettingsStack } from '@/components/ae/layout/AeSection'
-import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import {
   searchMarketOperations,
@@ -23,6 +23,7 @@ import {
   type AgentConsentDetails,
   type AgentConsentTarget,
 } from '@/modules/agent-access/public'
+import { presentConnectionProblem } from '@/modules/agent-access/public'
 
 type PublicAuthorityMode = 'inspect_only' | 'approve_each' | 'bounded_mandate'
 
@@ -50,6 +51,7 @@ type ConsentFormState = Readonly<{
   agentTargetsError?: string
   replacementPrincipalRef?: string
   errorReference?: string
+  errorCode?: string
 }>
 
 type ConsentFormAction =
@@ -65,9 +67,13 @@ type ConsentFormAction =
       kind: 'decision_finished'
       status: 'idle' | 'approved' | 'denied' | 'error' | 'outcome_unknown'
       errorReference?: string
+      errorCode?: string
     }>
 
 function initialConsentFormState(details: AgentConsentDetails): ConsentFormState {
+  const suggestedReconnect = details.reconnectPrincipalRef === undefined
+    ? undefined
+    : details.agentTargets.find(({ principalRef }) => principalRef === details.reconnectPrincipalRef)
   return {
     status: 'idle',
     pending: false,
@@ -76,11 +82,12 @@ function initialConsentFormState(details: AgentConsentDetails): ConsentFormState
       : details.mode === 'bounded_mandate'
         ? 'bounded_mandate'
         : 'approve_each',
-    connectionTarget: 'new_agent',
+    connectionTarget: suggestedReconnect !== undefined || details.reconnectAmbiguous ? 'replace_credential' : 'new_agent',
     replacementMode: 'planned',
     agentTargets: details.agentTargets,
     ...(details.agentTargetsNextCursor === undefined ? {} : { agentTargetsNextCursor: details.agentTargetsNextCursor }),
     agentTargetsLoading: false,
+    ...(suggestedReconnect === undefined ? {} : { replacementPrincipalRef: suggestedReconnect.principalRef }),
     ...(details.agentTargetsUnavailable
       ? { agentTargetsError: 'Existing agents could not be loaded. Retry before replacing a credential.' }
       : {}),
@@ -119,12 +126,13 @@ function consentFormReducer(state: ConsentFormState, action: ConsentFormAction):
     const { errorReference: _errorReference, ...retained } = state
     return { ...retained, pending: true }
   }
-  const { errorReference: _errorReference, ...retained } = state
+  const { errorReference: _errorReference, errorCode: _errorCode, ...retained } = state
   return {
     ...retained,
     pending: false,
     status: action.status,
     ...(action.errorReference === undefined ? {} : { errorReference: action.errorReference }),
+    ...(action.errorCode === undefined ? {} : { errorCode: action.errorCode }),
   }
 }
 
@@ -187,7 +195,6 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
 }>) {
   const { grantRef, grantRevision, clientName, mode, environment, operationAccess, operationRefs, expiresInSeconds, accessSummary } = details
   const [state, dispatch] = useReducer(consentFormReducer, details, initialConsentFormState)
-  const [confirmOpen, setConfirmOpen] = useState(false)
   const [approvedOperationAccess, setApprovedOperationAccess] = useState(operationAccess)
   const [approvedOperationRefs, setApprovedOperationRefs] = useState<readonly string[]>(operationRefs)
   const [operationQuery, setOperationQuery] = useState('')
@@ -197,11 +204,9 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
     error?: string
   }>>({ pending: false })
   const approveButtonRef = useRef<HTMLButtonElement>(null)
-  const operationSelection = approvedOperationAccess === 'all_admitted'
-    ? 'All admitted Operations, including future admitted Operations'
-    : approvedOperationRefs.join(', ')
+  const approvalInFlightRef = useRef(false)
   const operationSelectionSummary = approvedOperationAccess === 'all_admitted'
-    ? operationSelection
+    ? 'All admitted Operations, including future admitted Operations'
     : `${approvedOperationRefs.length} selected ${approvedOperationRefs.length === 1 ? 'Operation' : 'Operations'}`
   const approvedOperationRefSet = new Set(approvedOperationRefs)
   const accessProfile = details.accessProfile ?? 'market'
@@ -209,6 +214,12 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
     status, pending, selectedMode, connectionTarget, agentTargets, agentTargetsNextCursor,
     agentTargetsLoading, agentTargetsError, replacementPrincipalRef, replacementMode,
   } = state
+  const approvalLabel = connectionTarget === 'new_agent'
+    ? 'Connect agent'
+    : replacementMode === 'compromise'
+      ? 'Revoke and replace credential'
+      : 'Replace credential'
+  const approvalPendingLabel = connectionTarget === 'new_agent' ? 'Connecting…' : 'Replacing…'
 
   async function findOperations() {
     const query = operationQuery.trim()
@@ -278,26 +289,27 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
   }
 
   async function approve() {
+    if (approvalInFlightRef.current) return
     const body = approvalBody()
     if (body === undefined) return
+    approvalInFlightRef.current = true
     dispatch({ kind: 'decision_started' })
     try {
       const result = await submitApproval(body)
       if (result.kind === 'approved') {
         dispatch({ kind: 'decision_finished', status: 'approved' })
-        setConfirmOpen(false)
         if (result.redirectTo !== undefined) window.location.assign(result.redirectTo)
         return
       }
-      setConfirmOpen(false)
       dispatch({
         kind: 'decision_finished',
         status: result.kind === 'outcome_unknown' ? 'outcome_unknown' : 'error',
         ...(result.kind === 'unavailable' ? { errorReference: result.correlationRef } : {}),
+        ...('code' in result ? { errorCode: result.code } : {}),
       })
     } catch (error) {
-      setConfirmOpen(false)
       if (isReverificationCancelledError(error)) {
+        approvalInFlightRef.current = false
         dispatch({ kind: 'decision_finished', status: 'idle' })
         setTimeout(() => approveButtonRef.current?.focus(), 0)
         return
@@ -338,7 +350,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                 ? 'This separate credential can inspect and manage your supplier Operations.'
                 : 'How much may this agent do without asking you?'}
             >
-              <fieldset className="grid gap-3" disabled={pending}>
+              {agentTargets.length === 0 && agentTargetsError === undefined && agentTargetsNextCursor === undefined ? null : <fieldset className="grid gap-3" disabled={pending}>
                 <legend className="text-sm font-medium text-foreground">Connection</legend>
                 <RadioGroup
                   value={connectionTarget}
@@ -394,7 +406,7 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
                     </AlertDescription>
                   </Alert>
                 ) : null}
-              </fieldset>
+              </fieldset>}
               {accessProfile === 'supplier' ? (
                 <Alert>
                   <AlertTitle>Supplier management</AlertTitle>
@@ -488,53 +500,66 @@ function AgentAccessAuthorizeForm({ locator, oauthState, details, submitApproval
               ) : null}
               <AeFactList facts={[
                 { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
-                { label: 'Request revision', value: String(grantRevision) },
                 { label: 'Operations', value: operationSelectionSummary },
                 { label: 'Approved limits', value: accessSummary },
-                { label: 'Expiry', value: `Access expires ${formatConsentDuration(expiresInSeconds)} after issue. You can revoke it at any time from Agents.` },
+                { label: 'Connection', value: `Stays signed in until ${formatConsentDuration(expiresInSeconds)} after approval, unless you disconnect it first.` },
               ]} />
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="ghost" className="w-fit min-h-touch">Technical details</Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <AeFactList density="compact" facts={[
+                    { label: 'Request revision', value: String(grantRevision), mono: true },
+                    { label: 'Requested environment', value: environment === 'sandbox' ? 'Sandbox' : 'Production' },
+                    { label: 'Operation references', value: operationRefs.length === 0 ? 'All admitted Operations' : operationRefs.join(', '), mono: true },
+                    { label: 'Request reference', value: grantRef, mono: true },
+                  ]} />
+                </CollapsibleContent>
+              </Collapsible>
               <p id="consent-expiry" className="sr-only">Access expires {formatConsentDuration(expiresInSeconds)} after issue. You can revoke it at any time from Agents.</p>
             </AeSection>
             <div className="flex flex-wrap gap-3">
-              <Button ref={approveButtonRef} aria-describedby="consent-expiry" onClick={() => setConfirmOpen(true)} disabled={pending || (approvedOperationAccess === 'selected_operations' && approvedOperationRefs.length === 0) || (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined)}>{pending ? 'Approving…' : 'Approve access'}</Button>
+              <Button
+                ref={approveButtonRef}
+                aria-describedby="consent-expiry"
+                variant={connectionTarget === 'replace_credential' && replacementMode === 'compromise' ? 'destructive' : 'default'}
+                onClick={() => void approve()}
+                disabled={pending || (approvedOperationAccess === 'selected_operations' && approvedOperationRefs.length === 0) || (connectionTarget === 'replace_credential' && replacementPrincipalRef === undefined)}
+              >
+                {pending ? approvalPendingLabel : approvalLabel}
+              </Button>
               <Button aria-describedby="consent-expiry" variant="secondary" onClick={() => void deny()} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
             </div>
-            <AeConfirmDialog
-              open={confirmOpen}
-              onOpenChange={setConfirmOpen}
-              title="Confirm agent access"
-              description={connectionTarget === 'replace_credential'
-                ? `${replacementMode === 'planned' ? 'Replace' : 'Revoke and replace'} the credential for ${agentTargets.find((target) => target.principalRef === replacementPrincipalRef)?.displayName ?? 'the selected agent'} and grant ${clientName} ${authorityLabel(selectedMode).toLowerCase()} authority for ${operationSelection}. ${replacementMode === 'planned' ? 'The current credential remains usable until replacement delivery succeeds.' : 'The current credential is revoked before successor issuance and cannot be reactivated.'}`
-                : `Create a new agent identity for ${clientName} with ${authorityLabel(selectedMode).toLowerCase()} authority for ${operationSelection} and the exact limits shown on this page. You can revoke it from Agents.`}
-              confirmLabel="Confirm and approve"
-              pending={pending}
-              onConfirm={approve}
-              returnFocusRef={approveButtonRef}
-            />
           </>
         ) : status === 'approved' ? (
-          <Alert><AlertTitle>Access approved — return to your agent</AlertTitle><AlertDescription>{accessProfile === 'supplier' ? 'Approval is complete. Return to your agent so it can finish the token exchange for its separate supplier access.' : 'Approval is complete. Return to your agent so it can finish the token exchange. Supplier authority is not included.'}</AlertDescription></Alert>
+          <Alert><AlertTitle>Connected to {clientName}</AlertTitle><AlertDescription>Return there to continue. This connection remains signed in until it expires or you disconnect it.</AlertDescription></Alert>
         ) : status === 'denied' ? (
-          <Alert><AlertTitle>Access not approved</AlertTitle><AlertDescription>Your agent can start a new request if you want to try again.</AlertDescription></Alert>
+          <ConnectionProblemAlert code="access_denied" />
         ) : status === 'outcome_unknown' ? (
-          <Alert variant="destructive"><AlertTitle>Check the current access status</AlertTitle><AlertDescription>The approval may have completed. Do not submit it again. Return to your agent and reconcile this request using reference {grantRef}.</AlertDescription></Alert>
+          <ConnectionProblemAlert code="outcome_unknown" technicalReference={grantRef} />
         ) : (
-          <Alert variant="destructive">
-            <AlertTitle>Access request unavailable</AlertTitle>
-            <AlertDescription>
-              {state.errorReference === undefined
-                ? 'It may have expired. Start a new request from your agent.'
-                : `The security control is unavailable, so no access was created. Keep reference ${state.errorReference} and try again after checking system status.`}
-            </AlertDescription>
-          </Alert>
+          <ConnectionProblemAlert code={state.errorCode ?? (state.errorReference === undefined ? 'expired_token' : 'source_unavailable')} {...(state.errorReference === undefined ? {} : { technicalReference: state.errorReference })} />
         )}
       </AeSettingsStack>
     </AeOperatorShell>
   )
 }
 
-function authorityLabel(mode: PublicAuthorityMode): string {
-  return authorityOptions.find((option) => option.value === mode)?.label ?? 'Selected'
+function ConnectionProblemAlert({ code, technicalReference }: Readonly<{ code: string; technicalReference?: string }>) {
+  const presentation = presentConnectionProblem({ code, ...(technicalReference === undefined ? {} : { instance: technicalReference }) })
+  return (
+    <Alert variant="destructive">
+      <AlertTitle>{presentation.heading}</AlertTitle>
+      <AlertDescription className="grid gap-2">
+        <p>{presentation.outcome}</p>
+        <p>{presentation.nextAction}</p>
+        {presentation.technicalReference === undefined ? null : (
+          <p className="font-mono text-xs">Reference: {presentation.technicalReference}</p>
+        )}
+      </AlertDescription>
+    </Alert>
+  )
 }
 
 function formatConsentDuration(seconds: number): string {

@@ -4,11 +4,7 @@ import {
   deserializeOperationCompareResult,
   deserializeOperationDetailResult,
   deserializeOperationSearchResult,
-  deserializeInspectPlanResult,
   type CatalogOfferingOperationMapEntry,
-  type InspectPlanInput,
-  type InspectPlanResult,
-  type InspectPlanWireResult,
   type OperationCompareInput,
   type OperationCompareResult,
   type OperationCompareWireResult,
@@ -23,7 +19,6 @@ import {
 const searchQuery = sourceQuery<OperationSearchInput, OperationSearchWireResult>('capabilitySupplyOperations:search')
 const detailQuery = sourceQuery<OperationDetailInput, OperationDetailWireResult>('capabilitySupplyOperations:detail')
 const compareQuery = sourceQuery<OperationCompareInput, OperationCompareWireResult>('capabilitySupplyOperations:compare')
-const inspectPlanQuery = sourceQuery<InspectPlanInput, InspectPlanWireResult>('capabilitySupplyOperations:inspectPlan')
 const offeringOperationMapQuery = sourceQuery<{ businessIds: string[] }, CatalogOfferingOperationMapEntry[]>('capabilitySupplyOperations:offeringOperationMap')
 
 export function readCapabilityOperationSearch(input: OperationSearchInput): Promise<OperationSearchResult> {
@@ -36,10 +31,6 @@ export function readCapabilityOperationDetail(input: OperationDetailInput): Prom
 
 export function readCapabilityOperationCompare(input: OperationCompareInput): Promise<OperationCompareResult> {
   return callPublicSourceQuery(compareQuery, input).then(deserializeOperationCompareResult)
-}
-
-export function readCapabilityOperationInspectPlan(input: InspectPlanInput): Promise<InspectPlanResult> {
-  return callPublicSourceQuery(inspectPlanQuery, input).then(deserializeInspectPlanResult)
 }
 
 /**

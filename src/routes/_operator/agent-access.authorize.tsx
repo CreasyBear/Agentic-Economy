@@ -27,7 +27,12 @@ export const Route = createFileRoute('/_operator/agent-access/authorize')({
   }),
   ssr: false,
   loader: async ({ deps }) => {
-    if ((deps.userCode === undefined) === (deps.grantRef === undefined)) return { kind: 'missing' as const }
+    const locator = deps.userCode !== undefined && deps.grantRef === undefined
+      ? { kind: 'user_code' as const, value: deps.userCode }
+      : deps.grantRef !== undefined && deps.userCode === undefined
+        ? { kind: 'grant_ref' as const, value: deps.grantRef }
+        : undefined
+    if (locator === undefined) return { kind: 'missing' as const }
     const response = await readAgentAccessConsentServer({ data: {
       ...(deps.userCode === undefined ? {} : { userCode: deps.userCode }),
       ...(deps.grantRef === undefined ? {} : { grantRef: deps.grantRef }),
@@ -54,9 +59,7 @@ export const Route = createFileRoute('/_operator/agent-access/authorize')({
     }
     return {
       kind: 'ready' as const,
-      locator: deps.userCode === undefined
-        ? { kind: 'grant_ref' as const, value: deps.grantRef! }
-        : { kind: 'user_code' as const, value: deps.userCode },
+      locator,
       ...(deps.state === undefined ? {} : { oauthState: deps.state }),
       details: {
         ...details,

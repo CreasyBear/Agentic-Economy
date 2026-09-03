@@ -17,6 +17,9 @@ import type {
   AgentAccessOAuthRequestedAccess,
   AgentAccessOAuthStore,
 } from '@/modules/agent-access/oauth-state'
+import type { AgentAccessEnvironment } from '@/modules/agent-access/agent-access'
+import type { AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
+import type { AgentAccessOperationAccess, AgentAccessPolicy } from '@/modules/agent-access/policy'
 import type {
   SourceWriteAdmission,
   SourceWriteAdmissionRequest,
@@ -36,6 +39,7 @@ type GrantArgs = SourceWriteArgs & {
     flow: 'device_code' | 'authorization_code'
     clientId: string
     requestedScopes: string[]
+    offlineAccess?: true
     requestedAccess: AgentAccessOAuthRequestedAccess
     approvedAccess: AgentAccessOAuthRequestedAccess
     status: AgentAccessOAuthGrantStatus
@@ -76,6 +80,7 @@ type GrantUpdateArgs = SourceWriteArgs & {
     approvedAccess?: AgentAccessOAuthRequestedAccess
     redirectUri?: string
     requestedScopes?: string[]
+    offlineAccess?: true
     codeChallenge?: string
     codeChallengeMethod?: 'S256'
     deviceCodeHash?: string
@@ -103,18 +108,126 @@ type ClientArgs = SourceWriteArgs & { client: {
   clientId: string
   clientName: string
   redirectUris: string[]
-  grantTypes: ('authorization_code' | 'urn:ietf:params:oauth:grant-type:device_code')[]
+  grantTypes: ('authorization_code' | 'urn:ietf:params:oauth:grant-type:device_code' | 'refresh_token')[]
   tokenEndpointAuthMethod: 'none'
   createdAt: number
   lastUsedAt?: number
 } }
 type ClientReadArgs = { clientId: string }
+
+export type AgentAccessOAuthRefreshFamily = Readonly<{
+  familyRef: string
+  revision: number
+  clientId: string
+  ownerId: string
+  ownerPrincipalRef: string
+  providerSubject: string
+  principalRef: string
+  displayName: string
+  applicationRef: string
+  environment: AgentAccessEnvironment
+  scopes: readonly string[]
+  authorityMode: AgentAccessAuthorityMode
+  operationAccess: AgentAccessOperationAccess
+  operationRefs: readonly string[]
+  policy: AgentAccessPolicy
+  currentCredentialRef: string
+  currentProviderCredentialId: string
+  currentGrantRef: string
+  currentGeneration: number
+  currentAccessExpiresAt: number
+  currentTokenHash: string
+  lifecycle: 'active' | 'revoked' | 'expired'
+  createdAt: number
+  expiresAt: number
+  updatedAt: number
+  revokedAt?: number
+  revocationReason?: string
+}>
+
+export type AgentAccessOAuthRefreshCreateResult =
+  | Readonly<{ kind: 'recorded' | 'replayed'; family: AgentAccessOAuthRefreshFamily }>
+  | Readonly<{ kind: 'conflict'; code: string }>
+
+export type AgentAccessOAuthRefreshClaimResult =
+  | Readonly<{ kind: 'claimed' | 'replayed'; family: AgentAccessOAuthRefreshFamily; claimRef: string }>
+  | Readonly<{ kind: 'recovered'; family: AgentAccessOAuthRefreshFamily; invalidatedProviderCredentialId?: string }>
+  | Readonly<{ kind: 'invalid_grant' | 'busy' | 'revoked' }>
+
+export type AgentAccessOAuthRefreshCommitResult =
+  | Readonly<{
+      kind: 'completed' | 'replayed'
+      family: AgentAccessOAuthRefreshFamily
+      providerCleanupTarget?: Readonly<{ credentialRef: string; providerCredentialId: string }>
+    }>
+  | Readonly<{ kind: 'conflict'; code: string }>
+
+export type AgentAccessOAuthRefreshRevokeResult = Readonly<{
+  kind: 'completed' | 'replayed' | 'unknown'
+}>
+
+export type AgentAccessOAuthRefreshStore = Readonly<{
+  createRefreshFamily: (input: Readonly<{
+    grantRef: string
+    keyId: string
+    clientId: string
+    tokenHash: string
+    accessTokenHash: string
+    createdAt: number
+    expiresAt: number
+  }>) => Promise<AgentAccessOAuthRefreshCreateResult>
+  claimRefreshFamily: (input: Readonly<{
+    tokenHash: string
+    clientId: string
+    claimRef: string
+    successorTokenHash: string
+    now: number
+    claimExpiresAt: number
+  }>) => Promise<AgentAccessOAuthRefreshClaimResult>
+  commitRefreshFamilyRotation: (input: Readonly<{
+    familyRef: string
+    expectedRevision: number
+    tokenHash: string
+    claimRef: string
+    successorTokenHash: string
+    issuanceKey: string
+    successorGrantRef: string
+    successorCredentialId: string
+    successorAccessTokenHash: string
+    createdAt: number
+    accessExpiresAt: number
+    replayUntil: number
+  }>) => Promise<AgentAccessOAuthRefreshCommitResult>
+  revokeRefreshFamily: (input: Readonly<{
+    tokenHash: string
+    clientId: string
+    now: number
+    reason: string
+  }>) => Promise<AgentAccessOAuthRefreshRevokeResult>
+  revokeRefreshFamilyByAccessToken: (input: Readonly<{
+    tokenHash: string
+    clientId: string
+    now: number
+    reason: string
+  }>) => Promise<AgentAccessOAuthRefreshRevokeResult>
+}>
+
+type CreateRefreshArgs = SourceWriteArgs & Parameters<AgentAccessOAuthRefreshStore['createRefreshFamily']>[0]
+type ClaimRefreshArgs = SourceWriteArgs & Parameters<AgentAccessOAuthRefreshStore['claimRefreshFamily']>[0]
+type CommitRefreshArgs = SourceWriteArgs & Parameters<AgentAccessOAuthRefreshStore['commitRefreshFamilyRotation']>[0]
+type RevokeRefreshArgs = SourceWriteArgs & Parameters<AgentAccessOAuthRefreshStore['revokeRefreshFamily']>[0]
+type RevokeRefreshByAccessTokenArgs = SourceWriteArgs & Parameters<AgentAccessOAuthRefreshStore['revokeRefreshFamilyByAccessToken']>[0]
 const insertGrant = sourceMutation<GrantArgs, null>('agentAccessOAuth:insertGrant')
 const getGrantByHash = sourceQuery<GrantReadArgs, AgentAccessOAuthGrant | null>('agentAccessOAuth:getGrantByHash')
 const getGrantByRef = sourceQuery<GrantRefArgs, AgentAccessOAuthGrant | null>('agentAccessOAuth:getGrantByRef')
 const updateGrant = sourceMutation<GrantUpdateArgs, AgentAccessOAuthGrant | null>('agentAccessOAuth:updateGrant')
 const insertClient = sourceMutation<ClientArgs, null>('agentAccessOAuth:insertClient')
 const getClient = sourceQuery<ClientReadArgs, AgentAccessOAuthClient | null>('agentAccessOAuth:getClient')
+const createRefreshFamily = sourceMutation<CreateRefreshArgs, AgentAccessOAuthRefreshCreateResult>('agentAccessOAuth:createRefreshFamily')
+const claimRefreshFamily = sourceMutation<ClaimRefreshArgs, AgentAccessOAuthRefreshClaimResult>('agentAccessOAuth:claimRefreshFamily')
+const commitRefreshFamilyRotation = sourceMutation<CommitRefreshArgs, AgentAccessOAuthRefreshCommitResult>('agentAccessOAuth:commitRefreshFamilyRotation')
+const revokeRefreshFamily = sourceMutation<RevokeRefreshArgs, AgentAccessOAuthRefreshRevokeResult>('agentAccessOAuth:revokeRefreshFamily')
+const revokeRefreshFamilyByAccessToken = sourceMutation<RevokeRefreshByAccessTokenArgs, AgentAccessOAuthRefreshRevokeResult>('agentAccessOAuth:revokeRefreshFamilyByAccessToken')
 export type AgentAccessConsentReservationResult =
   | Readonly<{ kind: 'reserved' | 'replayed'; grantRef: string; grantRevision: number; commandDigest: string; correlationRef: string }>
   | Readonly<{ kind: 'refused'; code: 'authentication_required' | 'reauthentication_required' | 'proof_stale' | 'proof_replayed' | 'command_changed' }>
@@ -192,7 +305,7 @@ export async function reserveAgentAccessConsentForOwner(input: Readonly<{
 export function createConvexAgentAccessOAuthStore(
   request: Request,
   body: string | Uint8Array,
-): AgentAccessOAuthStore {
+): AgentAccessOAuthStore & AgentAccessOAuthRefreshStore {
   const transport = createPublicSourceTransport()
   const sourceWriteFor = async (
     command: Readonly<{ operationKey: string; correlationId: string }>,
@@ -253,6 +366,31 @@ export function createConvexAgentAccessOAuthStore(
       await transport.mutation(insertClient, { ...command, ...await sourceWriteFor(command) })
     },
     getClient: async (clientId) => await transport.query(getClient, { clientId }),
+    createRefreshFamily: async (input) => {
+      const operationKey = `oauth:refresh:${input.grantRef}:create`
+      const command = { ...input, operationKey, correlationId: operationKey }
+      return await transport.mutation(createRefreshFamily, { ...command, ...await sourceWriteFor(command) })
+    },
+    claimRefreshFamily: async (input) => {
+      const operationKey = `oauth:refresh:${input.claimRef}:claim`
+      const command = { ...input, operationKey, correlationId: operationKey }
+      return await transport.mutation(claimRefreshFamily, { ...command, ...await sourceWriteFor(command) })
+    },
+    commitRefreshFamilyRotation: async (input) => {
+      const operationKey = `oauth:refresh:${input.familyRef}:commit:${input.expectedRevision}`
+      const command = { ...input, operationKey, correlationId: operationKey }
+      return await transport.mutation(commitRefreshFamilyRotation, { ...command, ...await sourceWriteFor(command) })
+    },
+    revokeRefreshFamily: async (input) => {
+      const operationKey = `oauth:refresh:${input.clientId}:revoke:${input.tokenHash}`
+      const command = { ...input, operationKey, correlationId: operationKey }
+      return await transport.mutation(revokeRefreshFamily, { ...command, ...await sourceWriteFor(command) })
+    },
+    revokeRefreshFamilyByAccessToken: async (input) => {
+      const operationKey = `oauth:refresh:${input.clientId}:revoke-access:${input.tokenHash}`
+      const command = { ...input, operationKey, correlationId: operationKey }
+      return await transport.mutation(revokeRefreshFamilyByAccessToken, { ...command, ...await sourceWriteFor(command) })
+    },
   }
 }
 
@@ -263,6 +401,7 @@ function grantForConvex(grant: AgentAccessOAuthGrant): GrantArgs['grant'] {
     flow: grant.flow,
     clientId: grant.clientId,
     requestedScopes: [...grant.requestedScopes],
+    ...(grant.offlineAccess === undefined ? {} : { offlineAccess: true }),
     requestedAccess: requestedAccessForConvex(grant.requestedAccess),
     approvedAccess: requestedAccessForConvex(grant.approvedAccess),
     status: grant.status,
@@ -326,6 +465,7 @@ function patchForConvex(patch: AgentAccessOAuthGrantPatch): GrantUpdateArgs['pat
     ...(patch.approvedAccess === undefined ? {} : { approvedAccess: requestedAccessForConvex(patch.approvedAccess) }),
     ...(patch.redirectUri === undefined ? {} : { redirectUri: patch.redirectUri }),
     ...(patch.requestedScopes === undefined ? {} : { requestedScopes: [...patch.requestedScopes] }),
+    ...(patch.offlineAccess === undefined ? {} : { offlineAccess: true }),
     ...(patch.codeChallenge === undefined ? {} : { codeChallenge: patch.codeChallenge }),
     ...(patch.codeChallengeMethod === undefined ? {} : { codeChallengeMethod: patch.codeChallengeMethod }),
     ...(patch.deviceCodeHash === undefined ? {} : { deviceCodeHash: patch.deviceCodeHash }),

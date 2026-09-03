@@ -41,6 +41,7 @@ export type CapabilityPublicationLifecycleRow = Readonly<{
   readinessOutcome?: CapabilityReadinessOutcome
   readinessValidUntil?: number | undefined
   readinessObservedAt?: number | undefined
+  readinessLastHealthyAt?: number | undefined
 }>
 
 export type PublicationContractRef = Readonly<{
@@ -126,4 +127,3 @@ export function publicationLifecycle(
   }
   return { state: reasons.length === 0 ? 'active' as const : 'inactive' as const, reasons }
 }
-

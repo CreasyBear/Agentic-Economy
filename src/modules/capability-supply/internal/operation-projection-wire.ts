@@ -1,5 +1,4 @@
 export type {
-  InspectPlanWireResult,
   OperationCompareWireResult,
   OperationDetailWireResult,
   OperationSearchWireResult,
@@ -8,7 +7,6 @@ export type {
 } from "./operation-projection-wire-types";
 
 export {
-  serializeInspectPlanResult,
   serializeOperationCompareResult,
   serializeOperationDescriptor,
   serializeOperationDetailResult,
@@ -16,7 +14,6 @@ export {
 } from "./operation-projection-wire-serialize";
 
 export {
-  deserializeInspectPlanResult,
   deserializeOperationCompareResult,
   deserializeOperationDescriptor,
   deserializeOperationDetailResult,

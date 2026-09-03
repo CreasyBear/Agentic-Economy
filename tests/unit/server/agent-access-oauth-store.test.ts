@@ -40,6 +40,7 @@ const grant: AgentAccessOAuthGrant = {
   flow: 'device_code',
   clientId: 'client-persistence',
   requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
+  offlineAccess: true,
   requestedAccess: { environment: 'sandbox', operationAccess: 'all_admitted', operationRefs: [], expiresInSeconds: 600 },
   approvedAccess: { environment: 'sandbox', operationAccess: 'all_admitted', operationRefs: [], expiresInSeconds: 600 },
   status: 'delivery_claimed',
@@ -83,6 +84,7 @@ describe('Convex Agent Access OAuth store adapter', () => {
         deliveryCredentialHash: grant.deliveryCredentialHash,
         deliveryReplayUntil: grant.deliveryReplayUntil,
         requestedAccess: expect.objectContaining({ operationAccess: 'all_admitted', operationRefs: [] }),
+        offlineAccess: true,
         connectionTarget: grant.connectionTarget,
         replacement,
       }) }),
@@ -100,12 +102,42 @@ describe('Convex Agent Access OAuth store adapter', () => {
           issuanceStartedAt: grant.issuanceStartedAt,
           deliveryCredentialHash: grant.deliveryCredentialHash,
           deliveryReplayUntil: grant.deliveryReplayUntil,
+          offlineAccess: true,
           connectionTarget: grant.connectionTarget,
           replacement,
         }),
       }),
     )
     expect(mocks.mutation.mock.calls[1]?.[1]?.patch).not.toHaveProperty('revision')
+  })
+
+  it('sends only refresh hashes and fixed authority references to the source-signed lifecycle', async () => {
+    mocks.mutation.mockResolvedValue({ kind: 'invalid_grant' })
+    const store = createConvexAgentAccessOAuthStore(
+      new Request('https://ae.example/oauth/token', { method: 'POST' }),
+      'grant_type=refresh_token&refresh_token=redacted-at-transport-boundary',
+    )
+
+    await store.claimRefreshFamily({
+      tokenHash: 'sha256:parent',
+      clientId: 'client-durable',
+      claimRef: 'refresh:claim-1',
+      successorTokenHash: 'sha256:child',
+      now: 1_000,
+      claimExpiresAt: 31_000,
+    })
+
+    expect(mocks.mutation).toHaveBeenCalledWith(
+      { name: 'agentAccessOAuth:claimRefreshFamily' },
+      expect.objectContaining({
+        tokenHash: 'sha256:parent',
+        successorTokenHash: 'sha256:child',
+        clientId: 'client-durable',
+        claimRef: 'refresh:claim-1',
+      }),
+    )
+    const mutationArgs = mocks.mutation.mock.calls[0]?.[1]
+    expect(JSON.stringify(mutationArgs)).not.toContain('redacted-at-transport-boundary')
   })
 
   it('signs and sends only the exact server-derived consent reservation command', async () => {

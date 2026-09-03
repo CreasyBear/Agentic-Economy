@@ -87,7 +87,7 @@ not create a second gateway.
 | Agent identity and authority | AE Principal, credential binding, AgentAccess grant, and Delegation grant | Owner-facing agent projection and lifecycle evidence |
 | Provider authorization | Upstream provider authorization server plus AE provider-connection record | Granted scopes/resources, expiry, authority generation, health, and opaque credential reference |
 | Secret material | Infisical | Opaque `secretRef`, active generation pointer, validation result, and lifecycle evidence |
-| Funding and payout execution | Stripe-hosted or Stripe Elements/Connect flow plus AE money ledger | Intent, actor, Account, amount/destination summary, provider reference, canonical readback, and recovery state |
+| Funding and payout execution | Stripe-hosted Checkout/Connect flow plus AE money ledger | Intent, actor, Account, amount/destination summary, provider reference, canonical readback, and recovery state |
 | Publication | AE catalog and supply source state | Actor, exact Operation revision, consequence, publication receipt, and recovery state |
 | Rate limiting | `@convex-dev/rate-limiter` | Named policy, admitted/refused result, retry-after evidence where safe |
 | Product audit history | Domain commands and canonical readbacks | One redacted, append-only owner security projection plus admin/operator projection |

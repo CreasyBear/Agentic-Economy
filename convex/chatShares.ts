@@ -30,10 +30,11 @@ const MAX_PUBLIC_TEXT_CHARS = 8_000
 const MAX_PUBLIC_SUMMARY_CHARS = 240
 
 const chatToolId = v.union(
+  v.literal('registry.operations.list'),
   v.literal('registry.operations.search'),
-  v.literal('registry.operations.detail'),
+  v.literal('registry.operations.describe'),
   v.literal('registry.operations.compare'),
-  v.literal('registry.operations.inspectPlan'),
+  v.literal('operation.inspect'),
   v.literal('operation.invoke'),
 )
 

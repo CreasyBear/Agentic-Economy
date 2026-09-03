@@ -7,11 +7,8 @@ export {
   deserializeOperationDetailResult,
   serializeOperationCompareResult,
   deserializeOperationCompareResult,
-  serializeInspectPlanResult,
-  deserializeInspectPlanResult,
 } from "./internal/operation-projection-wire";
 export type {
-  InspectPlanWireResult,
   OperationCompareWireResult,
   OperationDetailWireResult,
   OperationSearchWireResult,
@@ -24,8 +21,6 @@ export {
   operationCompareOutputSchema,
   operationDetailInputSchema,
   operationDetailOutputSchema,
-  operationInspectPlanInputSchema,
-  operationInspectPlanOutputSchema,
   operationSearchInputSchema,
   operationSearchOutputSchema,
   publicOperationAuthenticationSchema,
@@ -92,12 +87,6 @@ export type {
   OperationCompareInput,
   OperationCompareResult,
 } from "./internal/operation-detail-compare";
-
-export { inspectCapabilityOperationPlan } from "./internal/operation-inspect-plan";
-export type {
-  InspectPlanInput,
-  InspectPlanResult,
-} from "./internal/operation-inspect-plan";
 
 export {
   noOperationNavigation,

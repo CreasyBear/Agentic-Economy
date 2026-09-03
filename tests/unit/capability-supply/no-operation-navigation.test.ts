@@ -5,7 +5,7 @@ import {
   type OperationProjectionNavigationContract,
 } from '@/modules/capability-supply/operation-projection'
 
-const relation = (name: 'search' | 'detail' | 'compare' | 'inspect_plan' | 'invoke') => ({
+const relation = (name: 'list' | 'search' | 'describe' | 'compare' | 'invoke') => ({
   relation: name,
   pathTemplate: `/api/${name}`,
   method: 'POST' as const,
@@ -14,17 +14,17 @@ const relation = (name: 'search' | 'detail' | 'compare' | 'inspect_plan' | 'invo
 })
 
 describe('no-Operation navigation', () => {
-  it('does not advertise detail navigation when there is no Operation reference', () => {
+  it('advertises only browse and search when there is no Operation reference', () => {
     const navigation: OperationProjectionNavigationContract = {
       market: {
+        list: relation('list') as OperationProjectionNavigationContract['market']['list'],
         search: relation('search') as OperationProjectionNavigationContract['market']['search'],
-        detail: relation('detail') as OperationProjectionNavigationContract['market']['detail'],
+        describe: relation('describe') as OperationProjectionNavigationContract['market']['describe'],
         compare: relation('compare') as OperationProjectionNavigationContract['market']['compare'],
-        inspectPlan: relation('inspect_plan') as OperationProjectionNavigationContract['market']['inspectPlan'],
       },
       invoke: relation('invoke') as OperationProjectionNavigationContract['invoke'],
     }
 
-    expect(noOperationNavigation(navigation).map(({ relation: name }) => name)).toEqual(['search'])
+    expect(noOperationNavigation(navigation).map(({ relation: name }) => name)).toEqual(['list', 'search'])
   })
 })

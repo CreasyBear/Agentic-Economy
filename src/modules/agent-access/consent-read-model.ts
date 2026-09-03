@@ -22,6 +22,8 @@ export type AgentConsentDetails = Readonly<{
   agentTargets: readonly AgentConsentTarget[]
   agentTargetsNextCursor?: string
   agentTargetsUnavailable: boolean
+  reconnectPrincipalRef?: string
+  reconnectAmbiguous?: boolean
 }>
 
 export function readAgentConsentDetails(html: string): AgentConsentDetails {
@@ -62,6 +64,8 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
   let agentTargets: readonly AgentConsentTarget[] = []
   let agentTargetsNextCursor: string | undefined
   let agentTargetsUnavailable = consent?.dataset.agentTargetsUnavailable === 'true'
+  const reconnectPrincipalRefValue = consent?.dataset.reconnectPrincipalRef
+  const reconnectAmbiguous = consent?.dataset.reconnectAmbiguous === 'true'
   try {
     const parsed: unknown = JSON.parse(decodeURIComponent(consent?.dataset.agentTargets ?? '%5B%5D'))
     if (Array.isArray(parsed)) {
@@ -101,5 +105,9 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
     agentTargets,
     ...(agentTargetsNextCursor === undefined ? {} : { agentTargetsNextCursor }),
     agentTargetsUnavailable,
+    ...(reconnectPrincipalRefValue === undefined || reconnectPrincipalRefValue.length === 0
+      ? {}
+      : { reconnectPrincipalRef: reconnectPrincipalRefValue }),
+    ...(reconnectAmbiguous ? { reconnectAmbiguous: true } : {}),
   }
 }

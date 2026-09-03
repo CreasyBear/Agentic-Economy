@@ -7,6 +7,7 @@ import {
   handleOAuthAuthorizeGet,
   handleOAuthConsentPost,
   handleOAuthRegisterPost,
+  handleOAuthRevokePost,
   handleOAuthTokenPost,
   type OAuthApiOptions,
 } from '@/lib/server/agent-access-oauth-api'
@@ -25,6 +26,10 @@ import {
   type AgentAccessOAuthGrant,
   type AgentAccessOAuthStore,
 } from '@/modules/agent-access/oauth-state'
+import type {
+  AgentAccessOAuthRefreshFamily,
+  AgentAccessOAuthRefreshStore,
+} from '@/lib/server/agent-access-oauth-store'
 
 const strictAuthObject: NonNullable<OAuthApiOptions['authObject']> = {
   isAuthenticated: true,
@@ -205,6 +210,51 @@ const productionRequestedAccess = {
 } as const
 
 type OAuthIssueInput = Parameters<NonNullable<OAuthApiOptions['issueKey']>>[0]
+
+function refreshFamilyFixture(input: Partial<AgentAccessOAuthRefreshFamily> = {}): AgentAccessOAuthRefreshFamily {
+  const now = 1_000
+  return {
+    familyRef: 'refresh-family-1',
+    revision: 1,
+    clientId: 'client-durable',
+    ownerId: 'acct_owner',
+    ownerPrincipalRef: 'prn_owner',
+    providerSubject: 'user_local',
+    principalRef: 'prn_agent',
+    displayName: 'Durable agent',
+    applicationRef: 'app_agentic_economy',
+    environment: 'sandbox',
+    scopes: ['market_operations:invoke', 'customer_requests:approve_each'],
+    authorityMode: 'approve_each',
+    operationAccess: 'all_admitted',
+    operationRefs: [],
+    policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
+    currentCredentialRef: 'crd_access_1',
+    currentProviderCredentialId: 'ak_access_1',
+    currentGrantRef: 'grt_access_1',
+    currentGeneration: 1,
+    currentAccessExpiresAt: now + AGENT_ACCESS_KEY_TTL_SECONDS * 1_000,
+    currentTokenHash: 'refresh-hash-1',
+    lifecycle: 'active',
+    createdAt: now,
+    expiresAt: now + 30 * 24 * 60 * 60 * 1_000,
+    updatedAt: now,
+    ...input,
+  }
+}
+
+function refreshStoreFixture(
+  overrides: Partial<AgentAccessOAuthRefreshStore> = {},
+): AgentAccessOAuthRefreshStore {
+  return {
+    createRefreshFamily: async () => ({ kind: 'recorded', family: refreshFamilyFixture() }),
+    claimRefreshFamily: async () => ({ kind: 'invalid_grant' }),
+    commitRefreshFamilyRotation: async () => ({ kind: 'conflict', code: 'not_configured' }),
+    revokeRefreshFamily: async () => ({ kind: 'unknown' }),
+    revokeRefreshFamilyByAccessToken: async () => ({ kind: 'unknown' }),
+    ...overrides,
+  }
+}
 
 describe('Customer Request OAuth HTTP adapter', () => {
   it('normalizes exact Operation selection and rejects partial or malformed authorization details', () => {
@@ -637,6 +687,40 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(authorizationGrant.requestedAccess).toEqual(deviceGrant.requestedAccess)
   })
 
+  it('uses the durable safe MCP scope set when an authorization request omits scope', async () => {
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-native-default',
+      clientName: 'Codex',
+      redirectUris: ['http://localhost/callback'],
+      grantTypes: ['authorization_code', 'refresh_token'],
+      tokenEndpointAuthMethod: 'none',
+      createdAt: 1_000,
+    })
+    const authorizationUrl = new URL('http://localhost/oauth/authorize')
+    authorizationUrl.search = new URLSearchParams({
+      client_id: 'client-native-default',
+      redirect_uri: 'http://localhost/callback',
+      response_type: 'code',
+      state: 'state-native-default',
+      code_challenge: 'challenge-native-default',
+      code_challenge_method: 'S256',
+    }).toString()
+
+    const response = await handleOAuthAuthorizeGet(new Request(authorizationUrl), {
+      store,
+      now: () => 1_000,
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+    })
+
+    expect(response.status).toBe(302)
+    const created = [...store.grants.values()].find(({ clientId }) => clientId === 'client-native-default')
+    expect(created).toMatchObject({
+      requestedScopes: ['market_operations:invoke', 'customer_requests:approve_each'],
+      offlineAccess: true,
+    })
+  })
+
   it('rejects invalid authorization details before inserting a grant', async () => {
     const partialDetails = {
       type: productionAuthorizationDetails.type,
@@ -734,6 +818,284 @@ describe('Customer Request OAuth HTTP adapter', () => {
       scope: AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope,
     })
     expect(store.clients.size).toBe(1)
+  })
+
+  it('registers a public authorization-code client for rotating refresh', async () => {
+    const store = storeFixture()
+    const response = await handleOAuthRegisterPost(new Request('http://localhost/oauth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        client_name: 'Durable MCP client',
+        redirect_uris: ['http://127.0.0.1/callback'],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'none',
+        scope: 'market_operations:invoke customer_requests:approve_each offline_access',
+      }),
+    }), { store, now: () => 1_000 })
+
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      scope: 'market_operations:invoke customer_requests:approve_each offline_access',
+    })
+  })
+
+  it('returns a hash-only refresh credential for approved code+PKCE offline access and never for an online grant', async () => {
+    const now = 1_000
+    const verifier = 'pkce-verifier'
+    const authorizationCode = 'authorization-code'
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-durable', clientName: 'Durable client', redirectUris: ['http://localhost/callback'],
+      grantTypes: ['authorization_code', 'refresh_token'], tokenEndpointAuthMethod: 'none', createdAt: now,
+    })
+    await store.insertGrant({
+      grantRef: 'authorization:offline', revision: 1, flow: 'authorization_code', clientId: 'client-durable',
+      redirectUri: 'http://localhost/callback', requestedScopes: ['market_operations:invoke', 'customer_requests:approve_each'],
+      offlineAccess: true,
+      requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: 30 * 24 * 60 * 60 },
+      approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: 30 * 24 * 60 * 60 },
+      codeChallenge: await hashOAuthValue(verifier), codeChallengeMethod: 'S256',
+      authorizationCodeHash: await hashOAuthValue(authorizationCode), status: 'approved', ownerId: 'user_local',
+      keyId: 'ak_access_1', createdAt: now, expiresAt: now + 60_000, displayName: 'Durable client',
+    })
+    const persisted: Array<Parameters<AgentAccessOAuthRefreshStore['createRefreshFamily']>[0]> = []
+    const refreshStore = refreshStoreFixture({
+      createRefreshFamily: async (input) => {
+        persisted.push(input)
+        return { kind: 'recorded', family: refreshFamilyFixture({ currentTokenHash: input.tokenHash }) }
+      },
+    })
+    const offline = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'authorization_code', code: authorizationCode, client_id: 'client-durable',
+      redirect_uri: 'http://localhost/callback', code_verifier: verifier,
+    }), { store, refreshStore, now: () => now, getSecret: async () => ({ secret: 'access-secret-1' }) })
+    const offlineBody = await offline.json() as Record<string, unknown>
+
+    expect(offline.status).toBe(200)
+    expect(offlineBody).toMatchObject({
+      access_token: 'access-secret-1', token_type: 'Bearer', expires_in: AGENT_ACCESS_KEY_TTL_SECONDS,
+      scope: 'market_operations:invoke customer_requests:approve_each offline_access',
+    })
+    expect(typeof offlineBody.refresh_token).toBe('string')
+    expect(persisted).toHaveLength(1)
+    expect(persisted[0]).toMatchObject({
+      grantRef: 'authorization:offline', keyId: 'ak_access_1', clientId: 'client-durable',
+      createdAt: now, expiresAt: now + 30 * 24 * 60 * 60 * 1_000,
+      tokenHash: await hashOAuthValue(offlineBody.refresh_token as string),
+      accessTokenHash: await hashOAuthValue('access-secret-1'),
+    })
+    expect(JSON.stringify(persisted)).not.toContain(offlineBody.refresh_token as string)
+
+    const offlineReplay = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'authorization_code', code: authorizationCode, client_id: 'client-durable',
+      redirect_uri: 'http://localhost/callback', code_verifier: verifier,
+    }), { store, refreshStore, now: () => now, getSecret: async () => ({ secret: 'access-secret-1' }) })
+    expect(offlineReplay.status).toBe(400)
+    await expect(offlineReplay.json()).resolves.toMatchObject({ error: 'invalid_grant' })
+
+    const onlineCode = 'online-authorization-code'
+    await store.insertGrant({
+      grantRef: 'authorization:online', revision: 1, flow: 'authorization_code', clientId: 'client-durable',
+      redirectUri: 'http://localhost/callback', requestedScopes: ['market_operations:invoke', 'customer_requests:approve_each'],
+      requestedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      approvedAccess: { environment: 'sandbox', ...allOperations, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS },
+      codeChallenge: await hashOAuthValue(verifier), codeChallengeMethod: 'S256',
+      authorizationCodeHash: await hashOAuthValue(onlineCode), status: 'approved', ownerId: 'user_local',
+      keyId: 'ak_access_online', createdAt: now, expiresAt: now + 60_000, displayName: 'Online client',
+    })
+    const online = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'authorization_code', code: onlineCode, client_id: 'client-durable',
+      redirect_uri: 'http://localhost/callback', code_verifier: verifier,
+    }), { store, refreshStore, now: () => now, getSecret: async () => ({ secret: 'access-secret-online' }) })
+    const onlineBody = await online.json() as Record<string, unknown>
+    expect(onlineBody).not.toHaveProperty('refresh_token')
+    expect(persisted).toHaveLength(1)
+  })
+
+  it('rotates access and refresh credentials while preserving the exact approved family authority', async () => {
+    const now = 10_000
+    const oldRefreshToken = 'old-refresh-token'
+    const family = refreshFamilyFixture({
+      currentTokenHash: await hashOAuthValue(oldRefreshToken),
+      createdAt: now - 1_000,
+      updatedAt: now - 1_000,
+      currentAccessExpiresAt: now + 1_000,
+      expiresAt: now + 30 * 24 * 60 * 60 * 1_000,
+    })
+    const rotatedFamily = refreshFamilyFixture({
+      ...family,
+      revision: 2,
+      currentCredentialRef: 'crd_access_2',
+      currentProviderCredentialId: 'ak_access_2',
+      currentGrantRef: 'grt_access_2',
+      currentGeneration: 2,
+      currentAccessExpiresAt: now + AGENT_ACCESS_KEY_TTL_SECONDS * 1_000,
+      updatedAt: now,
+    })
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-durable', clientName: 'Durable client', redirectUris: ['http://localhost/callback'],
+      grantTypes: ['authorization_code', 'refresh_token'], tokenEndpointAuthMethod: 'none', createdAt: now,
+    })
+    const commits: Array<Parameters<AgentAccessOAuthRefreshStore['commitRefreshFamilyRotation']>[0]> = []
+    const revoked: string[] = []
+    const refreshStore = refreshStoreFixture({
+      claimRefreshFamily: async (input) => ({ kind: 'claimed', family, claimRef: input.claimRef }),
+      commitRefreshFamilyRotation: async (input) => {
+        commits.push(input)
+        return {
+          kind: 'completed', family: { ...rotatedFamily, currentTokenHash: input.successorTokenHash },
+          providerCleanupTarget: { credentialRef: 'crd_access_1', providerCredentialId: 'ak_access_1' },
+        }
+      },
+    })
+    const issued: Array<Parameters<NonNullable<OAuthApiOptions['issueRefreshKey']>>[0]> = []
+    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'refresh_token', refresh_token: oldRefreshToken, client_id: 'client-durable',
+    }), {
+      store,
+      refreshStore,
+      now: () => now,
+      issueRefreshKey: async (input) => { issued.push(input); return { keyId: 'ak_access_2' } },
+      getSecret: async (keyId) => ({ secret: `${keyId}-secret` }),
+      getProviderCredential: async () => ({ revoked: false }),
+      revokeProviderCredential: async (keyId) => { revoked.push(keyId) },
+      recordProviderRevocation: async () => ({ kind: 'completed' }),
+    })
+    const body = await response.json() as Record<string, unknown>
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      access_token: 'ak_access_2-secret', token_type: 'Bearer', expires_in: AGENT_ACCESS_KEY_TTL_SECONDS,
+      scope: 'market_operations:invoke customer_requests:approve_each offline_access',
+    })
+    expect(body.refresh_token).not.toBe(oldRefreshToken)
+    expect(issued).toHaveLength(1)
+    expect(issued[0]).toMatchObject({ family, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS })
+    expect(commits).toHaveLength(1)
+    expect(commits[0]).toMatchObject({
+      familyRef: family.familyRef,
+      expectedRevision: family.revision,
+      tokenHash: await hashOAuthValue(oldRefreshToken),
+      successorCredentialId: 'ak_access_2',
+      successorAccessTokenHash: await hashOAuthValue('ak_access_2-secret'),
+      successorTokenHash: await hashOAuthValue(body.refresh_token as string),
+    })
+    expect(revoked).toEqual(['ak_access_1'])
+  })
+
+  it('reconciles a lost commit response without revoking the promoted successor', async () => {
+    const now = 15_000
+    const family = refreshFamilyFixture({
+      createdAt: now - 1_000,
+      updatedAt: now - 1_000,
+      expiresAt: now + 30 * 24 * 60 * 60 * 1_000,
+    })
+    const rotated = refreshFamilyFixture({
+      ...family,
+      revision: family.revision + 1,
+      currentCredentialRef: 'crd_access_2',
+      currentProviderCredentialId: 'ak_access_2',
+      currentGrantRef: 'grt_access_2',
+      currentGeneration: 2,
+      currentAccessExpiresAt: now + AGENT_ACCESS_KEY_TTL_SECONDS * 1_000,
+    })
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: family.clientId, clientName: 'Durable client', redirectUris: ['http://localhost/callback'],
+      grantTypes: ['authorization_code', 'refresh_token'], tokenEndpointAuthMethod: 'none', createdAt: now,
+    })
+    const commit = vi.fn<AgentAccessOAuthRefreshStore['commitRefreshFamilyRotation']>()
+      .mockRejectedValueOnce(new Error('response_lost_after_commit'))
+      .mockResolvedValueOnce({ kind: 'replayed', family: rotated })
+    const revokeProviderCredential = vi.fn()
+    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'refresh_token', refresh_token: 'parent-refresh', client_id: family.clientId,
+    }), {
+      store,
+      refreshStore: refreshStoreFixture({
+        claimRefreshFamily: async (input) => ({ kind: 'claimed', family, claimRef: input.claimRef }),
+        commitRefreshFamilyRotation: commit,
+      }),
+      issueRefreshKey: async () => ({ keyId: 'ak_access_2' }),
+      getSecret: async () => ({ secret: 'ak_access_2-secret' }),
+      revokeProviderCredential,
+      now: () => now,
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ access_token: 'ak_access_2-secret' })
+    expect(commit).toHaveBeenCalledTimes(2)
+    expect(revokeProviderCredential).not.toHaveBeenCalled()
+  })
+
+  it('recovers an immediately retried refresh delivery without another browser ceremony or access-key rotation', async () => {
+    const now = 20_000
+    const family = refreshFamilyFixture({
+      currentProviderCredentialId: 'ak_current',
+      currentAccessExpiresAt: now + 300_000,
+      updatedAt: now,
+    })
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-durable', clientName: 'Durable client', redirectUris: ['http://localhost/callback'],
+      grantTypes: ['authorization_code', 'refresh_token'], tokenEndpointAuthMethod: 'none', createdAt: now,
+    })
+    const issueRefreshKey = vi.fn<NonNullable<OAuthApiOptions['issueRefreshKey']>>()
+    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
+      grant_type: 'refresh_token', refresh_token: 'immediate-parent-token', client_id: 'client-durable',
+    }), {
+      store,
+      refreshStore: refreshStoreFixture({ claimRefreshFamily: async () => ({ kind: 'recovered', family }) }),
+      issueRefreshKey,
+      getSecret: async () => ({ secret: 'current-access-secret' }),
+      now: () => now,
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      access_token: 'current-access-secret', expires_in: 300, refresh_token: expect.any(String),
+    })
+    expect(issueRefreshKey).not.toHaveBeenCalled()
+  })
+
+  it('revokes refresh or access credentials idempotently and returns 200 for an unknown token', async () => {
+    const store = storeFixture()
+    await store.insertClient({
+      clientId: 'client-durable', clientName: 'Durable client', redirectUris: ['http://localhost/callback'],
+      grantTypes: ['authorization_code', 'refresh_token'], tokenEndpointAuthMethod: 'none', createdAt: 1_000,
+    })
+    const byRefresh = vi.fn<AgentAccessOAuthRefreshStore['revokeRefreshFamily']>()
+      .mockResolvedValueOnce({ kind: 'completed' })
+      .mockResolvedValue({ kind: 'unknown' })
+    const byAccess = vi.fn<AgentAccessOAuthRefreshStore['revokeRefreshFamilyByAccessToken']>()
+      .mockResolvedValue({ kind: 'completed' })
+    const refreshStore = refreshStoreFixture({ revokeRefreshFamily: byRefresh, revokeRefreshFamilyByAccessToken: byAccess })
+    const options: OAuthApiOptions = {
+      store, refreshStore, now: () => 1_000,
+    }
+
+    const refresh = await handleOAuthRevokePost(formRequest('http://localhost/oauth/revoke', {
+      token: 'known-refresh', token_type_hint: 'access_token', client_id: 'client-durable',
+    }), options)
+    const access = await handleOAuthRevokePost(formRequest('http://localhost/oauth/revoke', {
+      token: 'known-access', token_type_hint: 'refresh_token', client_id: 'client-durable',
+    }), options)
+    const unknown = await handleOAuthRevokePost(formRequest('http://localhost/oauth/revoke', {
+      token: 'unknown', client_id: 'client-durable',
+    }), options)
+
+    expect(refresh.status).toBe(200)
+    expect(access.status).toBe(200)
+    expect(unknown.status).toBe(200)
+    expect(refresh.headers.get('cache-control')).toBe('no-store')
+    expect(byAccess).toHaveBeenCalledWith(expect.objectContaining({
+      tokenHash: await hashOAuthValue('known-access'), clientId: 'client-durable',
+    }))
   })
 
   it('issues one exact owner-approved supplier credential through device OAuth', async () => {
@@ -834,13 +1196,25 @@ describe('Customer Request OAuth HTTP adapter', () => {
     await store.insertClient({ clientId: 'client-auth', clientName: 'MCP local', redirectUris: ['http://localhost/callback'], grantTypes: ['authorization_code'], tokenEndpointAuthMethod: 'none', createdAt: 1_000 })
     const consentStart = await handleOAuthAuthorizeGet(new Request('http://localhost/oauth/authorize?client_id=client-auth&redirect_uri=http%3A%2F%2Flocalhost%2Fcallback&response_type=code&state=s&scope=market_operations%3Ainvoke%20customer_requests%3Aapprove_each&code_challenge=abc&code_challenge_method=S256'), { store, now: () => 1_000, authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }) })
     expect(consentStart.status).toBe(302)
-    const consent = await handleOAuthAuthorizeGet(new Request(consentStart.headers.get('location')!), { store, now: () => 1_000, authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }) })
+    const consent = await handleOAuthAuthorizeGet(new Request(consentStart.headers.get('location')!), {
+      store,
+      now: () => 1_000,
+      authenticateOwner: async () => ({ isAuthenticated: true, userId: 'user_local' }),
+      listAgents: async () => ({ items: [{ principalRef: 'prn_existing', principalRevision: 4, displayName: 'Existing agent' }] }),
+      listReconnectCandidates: async ({ clientId, principalRefs }) => {
+        expect(clientId).toBe('client-auth')
+        expect(principalRefs).toEqual(['prn_existing'])
+        return [{ principalRef: 'prn_existing', principalRevision: 4 }]
+      },
+    })
     const consentHtml = await consent.text()
     expect(consentHtml).toContain('data-ae-consent')
     expect(consentHtml).toContain('data-authority-mode="approve_each"')
     expect(consentHtml).toContain('<p data-ae-scope>Technical permission: customer_requests:approve_each</p>')
     expect(consentHtml).toContain('You approve each request before it moves forward.')
     expect(consentHtml).toContain('<details>')
+    expect(consentHtml).toContain('data-reconnect-principal-ref="prn_existing"')
+    expect(consentHtml).toContain('data-reconnect-ambiguous="false"')
     expect(consentHtml).not.toContain('Requested mode:')
     expect(consentHtml).not.toContain('Customer Request scope:')
     expect(consentHtml).not.toContain('secret')

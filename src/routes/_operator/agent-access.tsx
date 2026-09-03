@@ -9,6 +9,7 @@ import { AeAgentSecurityHistory } from '@/components/ae/agent-access/AeAgentSecu
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
@@ -18,8 +19,10 @@ import {
   disconnectAgentServer,
   renameAgentServer,
   revokeAgentCredentialServer,
+  revokeOwnerConnectionServer,
 } from '@/modules/agent-access/agent-access.functions'
 import type { AgentLifecycleResult } from '@/modules/agent-access/agent-access'
+import type { OwnerConnectionLifecycleResult } from '@/modules/agent-access/public'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import {
   decideOperationApprovalServer,
@@ -29,7 +32,9 @@ import {
 
 export type AgentAccessSearch = Readonly<{ caller?: string }>
 
-type LifecycleCommand = Readonly<{ kind: 'credential' | 'agent'; ref: string }>
+type LifecycleCommand =
+  | Readonly<{ kind: 'credential' | 'agent'; ref: string }>
+  | Readonly<{ kind: 'connection'; ref: string; expectedRevision: number }>
 
 type LifecycleIssue = Readonly<{
   title: string
@@ -78,6 +83,7 @@ function AgentAccessHome() {
   const localE2E = isLocalE2EAuthBypassEnabled()
   const revokeCredential = useServerFn(revokeAgentCredentialServer)
   const disconnectAgent = useServerFn(disconnectAgentServer)
+  const disconnectConnection = useServerFn(revokeOwnerConnectionServer)
   const renameAgent = useServerFn(renameAgentServer)
   const [directory, setDirectory] = useState<AgentDirectoryProjection>(initialDirectory)
   const [loading, setLoading] = useState(false)
@@ -92,6 +98,7 @@ function AgentAccessHome() {
   const [approvalsError, setApprovalsError] = useState<string>()
   const [approvalDecision, setApprovalDecision] = useState<Readonly<{ invocationRef: string; decision: 'approve' | 'deny' }>>()
   const [approvalStatus, setApprovalStatus] = useState<string>()
+  const [showSetup, setShowSetup] = useState(false)
 
   const load = useCallback(async () => {
       setLoading(true)
@@ -162,10 +169,16 @@ function AgentAccessHome() {
     }
   }, [location.hash, navigate])
 
-  async function finishLifecycle(result: AgentLifecycleResult, command: LifecycleCommand) {
+  async function finishLifecycle(result: AgentLifecycleResult | OwnerConnectionLifecycleResult, command: LifecycleCommand) {
     if (result.kind === 'completed' || result.kind === 'replayed') {
-      setLifecycleIssue(undefined)
       await load()
+      if ('providerCleanupPending' in result && result.providerCleanupPending) {
+        setLifecycleIssue({
+          title: 'Provider cleanup incomplete',
+          message: 'Access is blocked in Agentic Economy, but the external provider still needs cleanup.',
+          correlationRef: result.correlationRef,
+        })
+      } else setLifecycleIssue(undefined)
       return
     }
     if (result.kind === 'partial') {
@@ -205,7 +218,9 @@ function AgentAccessHome() {
     try {
       const result = command.kind === 'credential'
         ? await revokeCredential({ data: { credentialRef: command.ref } })
-        : await disconnectAgent({ data: { principalRef: command.ref } })
+        : command.kind === 'connection'
+          ? await disconnectConnection({ data: { connectionRef: command.ref, expectedRevision: command.expectedRevision } })
+          : await disconnectAgent({ data: { principalRef: command.ref } })
       await finishLifecycle(result, command)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
@@ -225,6 +240,10 @@ function AgentAccessHome() {
 
   function disconnect(principalRef: string) {
     return runLifecycle({ kind: 'agent', ref: principalRef })
+  }
+
+  function disconnectOneConnection(connectionRef: string, expectedRevision: number) {
+    return runLifecycle({ kind: 'connection', ref: connectionRef, expectedRevision })
   }
 
   async function rename(principalRef: string, expectedRevision: number, displayName: string): Promise<boolean> {
@@ -315,7 +334,17 @@ function AgentAccessHome() {
           </AlertDescription>
         </Alert>
       )}
-      <AeAgentOperatorConsole
+      {directory.items.length === 0 ? (
+        <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
+      ) : (
+        <AeSection title="Connections" description="Your agents stay connected until expiry or until you disconnect them.">
+          <Button type="button" variant="secondary" className="w-fit min-h-touch" onClick={() => setShowSetup((value) => !value)}>
+            {showSetup ? 'Hide setup' : 'Add another agent'}
+          </Button>
+          {showSetup ? <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} /> : null}
+        </AeSection>
+      )}
+      {directory.items.length === 0 && search.caller === undefined ? null : <AeAgentOperatorConsole
         directory={directory}
         loading={loading}
         {...(search.caller === undefined ? {} : { selectedPrincipalId: search.caller })}
@@ -325,6 +354,7 @@ function AgentAccessHome() {
         }}
         onRevokeCredential={(credentialRef) => revoke(credentialRef)}
         onDisconnectAgent={(principalRef) => disconnect(principalRef)}
+        onDisconnectConnection={(connectionRef, expectedRevision) => disconnectOneConnection(connectionRef, expectedRevision)}
         onRenameAgent={(principalRef, expectedRevision, displayName) => rename(principalRef, expectedRevision, displayName)}
         {...(search.caller !== undefined
           && directory.details.some(({ agent }) => agent.principalRef === search.caller)
@@ -341,7 +371,7 @@ function AgentAccessHome() {
         onDecideApproval={(invocationRef, operationRef, decision) => {
           void decidePendingApproval(invocationRef, operationRef, decision)
         }}
-      />
+      />}
       {directory.nextCursor === undefined ? null : (
         <Button
           type="button"
@@ -353,7 +383,6 @@ function AgentAccessHome() {
           {loadingMore ? 'Loading more agents…' : 'Load more agents'}
         </Button>
       )}
-      <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
     </AeOperatorShell>
   )
 }

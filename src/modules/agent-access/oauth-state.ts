@@ -9,6 +9,7 @@ import {
 } from './policy'
 
 import {
+  CUSTOMER_REQUEST_APPROVE_EACH_SCOPE,
   CUSTOMER_REQUEST_AGENT_SCOPE,
   MARKET_OPERATIONS_INVOKE_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
@@ -25,6 +26,14 @@ export const AGENT_ACCESS_GRANT_TTL_SECONDS = 600
 export const AGENT_ACCESS_AUTHORIZATION_CODE_TTL_SECONDS = 60
 export const AGENT_ACCESS_POLL_INTERVAL_SECONDS = 5
 export const AGENT_ACCESS_ISSUANCE_LEASE_SECONDS = 30
+export const AGENT_ACCESS_OAUTH_OFFLINE_SCOPE = 'offline_access' as const
+export const AGENT_ACCESS_OAUTH_SAFE_MCP_SCOPES = Object.freeze([
+  MARKET_OPERATIONS_INVOKE_SCOPE,
+  CUSTOMER_REQUEST_APPROVE_EACH_SCOPE,
+  AGENT_ACCESS_OAUTH_OFFLINE_SCOPE,
+] as const)
+export const AGENT_ACCESS_OAUTH_REFRESH_FAMILY_TTL_SECONDS = 30 * 24 * 60 * 60
+export const AGENT_ACCESS_OAUTH_REFRESH_REPLAY_SECONDS = 60
 export const AGENT_ACCESS_OAUTH_PATHS = Object.freeze({
   authorizationServerMetadata: '/.well-known/oauth-authorization-server',
   protectedResourceMetadata: '/.well-known/oauth-protected-resource',
@@ -33,11 +42,13 @@ export const AGENT_ACCESS_OAUTH_PATHS = Object.freeze({
   deviceAuthorization: '/oauth/device_authorization',
   deviceVerification: '/agent-access/authorize',
   token: '/oauth/token',
+  revoke: '/oauth/revoke',
 } as const)
 
 export const AGENT_ACCESS_OAUTH_GRANT_TYPES = Object.freeze([
   'authorization_code',
   'urn:ietf:params:oauth:grant-type:device_code',
+  'refresh_token',
 ] as const)
 export const AGENT_ACCESS_OAUTH_RESPONSE_TYPES = Object.freeze(['code'] as const)
 export const AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS = Object.freeze(['none'] as const)
@@ -107,6 +118,7 @@ export type AgentAccessOAuthGrant = Readonly<{
   clientId: string
   redirectUri?: string
   requestedScopes: readonly string[]
+  offlineAccess?: true
   requestedAccess: AgentAccessOAuthRequestedAccess
   approvedAccess: AgentAccessOAuthRequestedAccess
   codeChallenge?: string
@@ -149,7 +161,7 @@ export type AgentAccessOAuthClient = Readonly<{
   clientId: string
   clientName: string
   redirectUris: readonly string[]
-  grantTypes: readonly ('authorization_code' | 'urn:ietf:params:oauth:grant-type:device_code')[]
+  grantTypes: readonly ('authorization_code' | 'urn:ietf:params:oauth:grant-type:device_code' | 'refresh_token')[]
   tokenEndpointAuthMethod: 'none'
   createdAt: number
   lastUsedAt?: number
@@ -238,23 +250,26 @@ export function normalizeRequestedScopes(scopeText: string | null | undefined): 
   mode: AgentAccessAuthorityMode
   scopes: readonly string[]
   profile: 'market' | 'supplier'
+  offlineAccess: boolean
 }> | undefined {
   if (scopeText === null || scopeText === undefined) return undefined
   const rawScopes = scopeText.split(/\s+/u).filter((scope) => scope.length > 0)
   if (rawScopes.length === 0 || new Set(rawScopes).size !== rawScopes.length) return undefined
-  if (rawScopes.length === 1 && rawScopes[0] === MARKET_SUPPLY_MANAGE_SCOPE) {
-    return { mode: 'bounded_mandate', scopes: [MARKET_SUPPLY_MANAGE_SCOPE], profile: 'supplier' }
+  const offlineAccess = rawScopes.includes(AGENT_ACCESS_OAUTH_OFFLINE_SCOPE)
+  const authorityScopes = rawScopes.filter((scope) => scope !== AGENT_ACCESS_OAUTH_OFFLINE_SCOPE)
+  if (authorityScopes.length === 1 && authorityScopes[0] === MARKET_SUPPLY_MANAGE_SCOPE) {
+    return { mode: 'bounded_mandate', scopes: [MARKET_SUPPLY_MANAGE_SCOPE], profile: 'supplier', offlineAccess }
   }
-  const scopes = rawScopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
-    ? rawScopes
-    : [MARKET_OPERATIONS_INVOKE_SCOPE, ...rawScopes]
+  const scopes = authorityScopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+    ? authorityScopes
+    : [MARKET_OPERATIONS_INVOKE_SCOPE, ...authorityScopes]
   if (scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) return undefined
   const mode = agentAuthorityModeForScopes(scopes)
   if (mode === undefined) return undefined
   const modeScope = agentAuthorityScopeForMode(mode)
   const extras = scopes.filter((scope) => scope !== MARKET_OPERATIONS_INVOKE_SCOPE && scope !== modeScope)
   if (extras.length > 0) return undefined
-  return { mode, scopes: requestedScopesForMode(mode), profile: 'market' }
+  return { mode, scopes: requestedScopesForMode(mode), profile: 'market', offlineAccess }
 }
 
 export async function hashOAuthValue(value: string): Promise<string> {
@@ -287,7 +302,7 @@ export async function beginDeviceGrant(
 ): Promise<AgentAccessOAuthTransition<AgentAccessOAuthCreatedDeviceGrant>> {
   if (!input.client.grantTypes.includes('urn:ietf:params:oauth:grant-type:device_code')) return { kind: 'refused', reason: 'invalid_client' }
   const scopes = normalizeRequestedScopes(input.requestedScopes.join(' '))
-  if (scopes === undefined) return { kind: 'refused', reason: 'invalid_scope' }
+  if (scopes === undefined || scopes.offlineAccess) return { kind: 'refused', reason: 'invalid_scope' }
   const requestedAccess = normalizeOAuthRequestedAccess(input.requestedAccess)
   if (requestedAccess === undefined
     || (scopes.profile === 'supplier' && requestedAccess.operationAccess !== 'all_admitted')) {
@@ -334,7 +349,10 @@ export async function beginAuthorizationCodeGrant(
   if (input.ownerId.trim().length === 0) return { kind: 'refused', reason: 'owner_required' }
   const scopes = normalizeRequestedScopes(input.requestedScopes.join(' '))
   if (scopes === undefined) return { kind: 'refused', reason: 'invalid_scope' }
-  const requestedAccess = normalizeOAuthRequestedAccess(input.requestedAccess)
+  const requestedAccess = normalizeOAuthRequestedAccess(
+    input.requestedAccess,
+    scopes.offlineAccess ? AGENT_ACCESS_OAUTH_REFRESH_FAMILY_TTL_SECONDS : undefined,
+  )
   if (requestedAccess === undefined
     || (scopes.profile === 'supplier' && requestedAccess.operationAccess !== 'all_admitted')) {
     return { kind: 'refused', reason: 'invalid_scope' }
@@ -346,6 +364,7 @@ export async function beginAuthorizationCodeGrant(
     clientId: input.client.clientId,
     redirectUri: input.redirectUri,
     requestedScopes: [...scopes.scopes],
+    ...(scopes.offlineAccess ? { offlineAccess: true as const } : {}),
     requestedAccess,
     approvedAccess: requestedAccess,
     codeChallenge: input.codeChallenge,
@@ -362,12 +381,13 @@ export async function beginAuthorizationCodeGrant(
 
 function normalizeOAuthRequestedAccess(
   requestedAccess: AgentAccessOAuthRequestedAccess | undefined,
+  defaultExpiresInSeconds = AGENT_ACCESS_KEY_TTL_SECONDS,
 ): AgentAccessOAuthRequestedAccess | undefined {
   const source = requestedAccess ?? {
     environment: 'sandbox' as const,
     operationAccess: 'all_admitted' as const,
     operationRefs: [],
-    expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
+    expiresInSeconds: defaultExpiresInSeconds,
   }
   const selection = normalizeAgentAccessOperationSelection(source)
   return selection === undefined ? undefined : {

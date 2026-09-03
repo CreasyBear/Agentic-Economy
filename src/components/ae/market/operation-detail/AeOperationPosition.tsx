@@ -11,13 +11,13 @@ import {
 import { Button } from '@/components/ui/button'
 import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
 
-import { inspectCommand } from './operation-inspector-model'
-
 /** Compact-only actions that locate this Operation in the wider market. */
 export function AeOperationPosition({
   operation,
+  onNavigate,
 }: Readonly<{
   operation: PublicOperationDescriptor
+  onNavigate?: () => void
 }>) {
   return (
     <div className="grid gap-intra">
@@ -26,6 +26,7 @@ export function AeOperationPosition({
           to="/operations/$operationRef"
           params={{ operationRef: operation.operationRef }}
           data-testid="command-panel-open-operation"
+          onClick={onNavigate}
         >
           Open full Operation details
           <ArrowUpRightIcon aria-hidden="true" data-icon="inline-end" />
@@ -39,11 +40,6 @@ export function AeOperationPosition({
           <AccordionContent>
             <div className="grid gap-intra">
               <AeCopyCommand compact label="Operation reference" code={operation.operationRef} />
-              <AeCopyCommand
-                compact
-                label="Inspect command"
-                code={inspectCommand(operation.operationRef)}
-              />
             </div>
           </AccordionContent>
         </AccordionItem>

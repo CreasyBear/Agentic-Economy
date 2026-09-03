@@ -2,7 +2,7 @@ import { postMcp, readMcpBody } from './mcp-api-harness'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  registryOperationsDetailAction,
+  registryOperationsDescribeAction,
   registryOperationsSearchAction,
 } from '@/modules/registry/operations.actions'
 
@@ -10,12 +10,12 @@ describe('MCP host adapter registry', () => {
   it('calls the registered registry search action with MCP attribution', async () => {
     const run = vi.spyOn(registryOperationsSearchAction, 'run').mockResolvedValue({
       kind: 'no_candidates',
-      schemaVersion: 'registry-operations:v1',
+      schemaVersion: 'registry-operations:v3',
       query: 'plumbing',
-      appliedFilters: {},
-      matchedCount: 0,
-      ranking: [],
-      navigation: [],
+      count: 0,
+      items: [],
+      note: 'No operational Operations matched this search.',
+      pagination: { limit: 10, hasMore: false },
     })
 
     const response = await postMcp({
@@ -32,7 +32,7 @@ describe('MCP host adapter registry', () => {
     const body = await readMcpBody(response)
     const result = body.result as Record<string, unknown>
     expect(run).toHaveBeenCalledWith({
-      data: { query: 'plumbing' },
+      data: { query: 'plumbing', limit: 10 },
       context: expect.objectContaining({ caller: 'mcp' }),
     })
     expect((result.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({
@@ -40,14 +40,14 @@ describe('MCP host adapter registry', () => {
     })
   })
 
-  it('returns an input validation error without invoking the detail action', async () => {
-    const run = vi.spyOn(registryOperationsDetailAction, 'run')
+  it('returns an input validation error without invoking the describe action', async () => {
+    const run = vi.spyOn(registryOperationsDescribeAction, 'run')
     const response = await postMcp({
       jsonrpc: '2.0',
       id: 4,
       method: 'tools/call',
       params: {
-        name: 'ae_registry_operations_detail',
+        name: 'ae_registry_operations_describe',
         arguments: {},
       },
     })

@@ -8,10 +8,7 @@ import { Button } from '@/components/ui/button'
 import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
-import {
-  useBuyerCredentialPresenceReader,
-  useOperationDetailReader,
-} from '../CommandPanelProvider'
+import { useOperationDetailReader } from '../CommandPanelProvider'
 import { rememberRecentOperationRef } from '../recent-operations'
 
 type InspectState =
@@ -19,15 +16,19 @@ type InspectState =
   | Readonly<{
       kind: 'found'
       operation: PublicOperationDescriptor
-      hasBuyerCredential: boolean
     }>
   | Readonly<{ kind: 'unavailable'; operationRef: string }>
 
 
 /** Second layer of the command panel: the compact canonical inspector. */
-export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: string }>) {
+export function OperationInspectPage({
+  operationRef,
+  onNavigate,
+}: Readonly<{
+  operationRef: string
+  onNavigate: () => void
+}>) {
   const readDetail = useOperationDetailReader()
-  const readBuyerCredentialPresence = useBuyerCredentialPresenceReader()
   const [state, setState] = useState<InspectState>({ kind: 'loading' })
   const headingRef = useRef<HTMLDivElement>(null)
 
@@ -36,17 +37,11 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
     let current = true
     void (async () => {
       try {
-        const [result, hasBuyerCredential] = await Promise.all([
-          readDetail(operationRef),
-          readBuyerCredentialPresence().catch((cause) => {
-            captureClientExceptionOnClient(cause)
-            return false
-          }),
-        ])
+        const result = await readDetail(operationRef)
         if (!current) return
         if (result.kind === 'found') {
           rememberRecentOperationRef(result.operation.operationRef)
-          setState({ kind: 'found', operation: result.operation, hasBuyerCredential })
+          setState({ kind: 'found', operation: result.operation })
         } else setState({ kind: 'unavailable', operationRef })
       } catch (cause) {
         captureClientExceptionOnClient(cause)
@@ -56,16 +51,18 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
     return () => {
       current = false
     }
-  }, [operationRef, readBuyerCredentialPresence, readDetail])
+  }, [operationRef, readDetail])
 
   useEffect(() => {
     headingRef.current?.focus()
-  }, [])
+  }, [operationRef])
 
   return (
     <div
       ref={headingRef}
       tabIndex={-1}
+      role="region"
+      aria-label="Operation inspection"
       className="flex min-h-0 flex-1 flex-col gap-related overflow-y-auto outline-none"
     >
       {state.kind === 'loading' ? (
@@ -80,7 +77,12 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
             “{state.operationRef}” could not be inspected right now.
           </p>
           <Button asChild size="sm" className="min-h-touch justify-self-start">
-            <Link to="/market" search={{ window: '30d' }} hash="operations">
+            <Link
+              to="/market"
+              search={{ window: '30d' }}
+              hash="operations"
+              onClick={onNavigate}
+            >
               Browse current Operations
             </Link>
           </Button>
@@ -89,8 +91,8 @@ export function OperationInspectPage({ operationRef }: Readonly<{ operationRef: 
       {state.kind === 'found' ? (
         <AeOperationInspector
           operation={state.operation}
-          hasBuyerCredential={state.hasBuyerCredential}
           variant="compact"
+          onNavigate={onNavigate}
         />
       ) : null}
     </div>

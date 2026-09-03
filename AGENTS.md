@@ -2,39 +2,66 @@
 
 ## Read this first
 
-Before product reasoning, planning, documentation, or implementation, read
-`PRODUCT.md`. It is the active product authority.
+Before product reasoning, planning, documentation or implementation, read
+`PRODUCT.md`. It defines the active product and accepted commercial direction.
 
-Use this precedence when sources disagree:
+Use each source for the question it can answer:
 
-1. `PRODUCT.md`
-2. Current executable source and tests
-3. `README.md` for the public and operational introduction
+1. `PRODUCT.md` defines what Agentic Economy is and owns.
+2. `AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md` explains the institutional thesis.
+3. `CONTEXT.md` defines canonical domain language.
+4. Current source and tests define what is implemented.
+5. `README.md` is the public and operational introduction.
 
-Git history, deleted planning ledgers, old gate files, generated codebase maps,
-research scripts, and archived diagrams are not product authority.
+Dated research, comparison papers, execution gates, generated maps and Git
+history are evidence or history. They do not override the product charter.
 
 ## Product boundary
 
-Agentic Economy is a cross-harness market where agents discover, compare, and
-buy bounded outside services while pursuing work owned by their existing
-harness.
+Agentic Economy is a cross-harness Operation market and commercial boundary for
+just-in-time service procurement. Preserve one chain:
 
-The implemented market unit is the Operation. Preserve the single loop:
+```text
+capability gap -> resolution -> commitment -> invocation
+    -> delivery or uncertainty -> remedy if required -> commercial closure
+    -> outcome evidence -> agent continues
+```
 
-capability gap -> search -> compare -> inspect -> controlled call -> usable
-result -> agent continues.
+The Operation is the only unit of supply. Commercial closure is the terminal
+state of its purchase, not a second market object.
 
-Agentic Economy does not own the user's project, planning, memory, orchestration,
-or general-purpose agent runtime.
+The Business Principal owns the larger objective and delegates authority. The
+Agent Principal acts through an Account and Mandate. The Provider performs the
+Operation. For supported principal-reseller purchases, Agentic Economy is the
+fixed buyer-facing Seller. The payment recipient is recorded separately.
 
-Do not infer product capabilities from historical compatibility identifiers,
-deleted documents, negative regression tests, or old names in Git history. A
-concept absent from `PRODUCT.md` is out of scope until the charter deliberately
-adds it.
+Never collapse these distinctions:
 
-Do not confuse the lower-authority external registry with the canonical market.
-Imported metadata becomes an Operation only after admission and publication.
+- Funding is not authority.
+- Authority is not a purchase.
+- Buyer consideration is not the Provider obligation.
+- Settlement is not delivery.
+- Delivery is not commercial closure.
+- A wallet, credential or endpoint does not establish a commercial role.
+
+Agentic Economy does not own the user's project, planning, memory,
+orchestration, final accounting classification or general agent runtime.
+
+Do not confuse the external registry with the canonical market. Imported
+metadata becomes an Operation only after admission and publication.
+
+## Implementation truth
+
+The product charter is forward-looking. Do not represent the complete Australian
+principal-reseller record as implemented until source and tests establish it.
+The current foundation includes brokered Invocation, prepaid credit, Charges,
+Provider earnings, refunds and recovery. Seller identity, separate Provider
+obligation, attributed tax facts, business-document evidence and commercial
+closure remain explicit implementation work.
+
+When source identifiers still use old terms such as `supplier` or protocol
+`seller`, preserve compatibility unless the task authorises a migration. New
+product language must use the definitions in `CONTEXT.md`.
 
 ## Convex
 

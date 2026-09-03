@@ -56,7 +56,7 @@ jobs:
           cache: npm
 
       - name: Pin the repository package manager
-        run: npm install --global npm@11.5.1
+        run: npm install --global npm@11.5.1 --ignore-scripts
 
       - name: Frozen dependency install
         run: npm ci
@@ -118,7 +118,6 @@ jobs:
     env:
       PLAYWRIGHT_BASE_URL: ${{ vars.AE_CHAT_STAGING_BASE_URL }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
-      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
       - uses: actions/checkout@v6
 
@@ -128,7 +127,7 @@ jobs:
           cache: npm
 
       - name: Pin the repository package manager
-        run: npm install --global npm@11.5.1
+        run: npm install --global npm@11.5.1 --ignore-scripts
 
       - name: Frozen dependency install without lifecycle scripts
         run: npm ci --ignore-scripts
@@ -147,6 +146,8 @@ jobs:
           echo "SMOKE_OWNER_STORAGE_STATE=${owner_storage_state}" >> "${GITHUB_ENV}"
 
       - name: Run the exact-revision chat staging smoke
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run smoke:chat:staging
 
       - name: Upload only the sanitized chat staging result
@@ -168,9 +169,6 @@ jobs:
     env:
       AE_AUTHENTICATED_E2E_BASE_URL: ${{ vars.AE_AUTHENTICATED_E2E_BASE_URL }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
-      AE_E2E_OWNER_EMAIL: ${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}
-      CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
-      CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}
     steps:
       - uses: actions/checkout@v6
 
@@ -180,15 +178,19 @@ jobs:
           cache: npm
 
       - name: Pin the repository package manager
-        run: npm install --global npm@11.5.1
+        run: npm install --global npm@11.5.1 --ignore-scripts
 
-      - name: Frozen dependency install
-        run: npm ci
+      - name: Frozen dependency install without lifecycle scripts
+        run: npm ci --ignore-scripts
 
       - name: Install the authenticated Chromium browser
         run: npm exec -- playwright install --with-deps chromium
 
       - name: Prove the authenticated two-agent lifecycle
+        env:
+          AE_E2E_OWNER_EMAIL: ${{ secrets.AE_AUTHENTICATED_E2E_OWNER_EMAIL }}
+          CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY }}
         run: npm run test:release:authenticated
 
   live-gateway-proof:
@@ -235,7 +237,7 @@ jobs:
       AE_SOURCE_WRITE_KEY_SESSION: ${{ secrets.AE_SOURCE_WRITE_KEY_SESSION }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-      VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
+      STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: ${{ secrets.STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID }}
       AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND: 'true'
       AE_GATEWAY_SMOKE_RUN_ID: ${{ inputs.live_gateway_run_id }}
       AE_GATEWAY_SMOKE_BASE_URL: https://agentic-economy-phi.vercel.app
@@ -265,7 +267,7 @@ jobs:
           cache: npm
 
       - name: Pin the repository package manager
-        run: npm install --global npm@11.5.1
+        run: npm install --global npm@11.5.1 --ignore-scripts
 
       - name: Frozen dependency install
         # Job env carries production secrets; skip lifecycle scripts so install

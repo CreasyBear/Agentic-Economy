@@ -459,6 +459,7 @@ export async function observeCapabilityReadinessHandler(
     readinessEvidenceRefs: [...args.evidenceRefs],
     readinessObservedAt: now,
     readinessValidUntil: args.validUntil,
+    ...(args.healthState === 'healthy' ? { readinessLastHealthyAt: now } : {}),
     updatedAt: now,
   })
   await syncMarketOperationPresence(ctx, {
@@ -495,6 +496,11 @@ export async function observeCapabilityReadinessHandler(
           healthState: args.healthState,
           readinessObservedAt: now,
           readinessValidUntil: args.validUntil,
+          ...(args.healthState === 'healthy'
+            ? { readinessLastHealthyAt: now }
+            : publication.readinessLastHealthyAt === undefined
+              ? {}
+              : { readinessLastHealthyAt: publication.readinessLastHealthyAt }),
         },
         offering,
         binding,

@@ -1,11 +1,11 @@
 import { compareCommandDescriptor } from './compare'
-import { inspectCommandDescriptor } from './inspect'
-import { inspectPlanCommandDescriptor } from './inspect-plan'
+import { describeCommandDescriptor } from './describe'
+import { listCommandDescriptor } from './list'
 import { searchCommandDescriptor } from './search'
 
 export const MARKET_OPERATION_COMMAND_DESCRIPTORS = Object.freeze([
+  listCommandDescriptor,
   searchCommandDescriptor,
-  inspectCommandDescriptor,
+  describeCommandDescriptor,
   compareCommandDescriptor,
-  inspectPlanCommandDescriptor,
 ] as const)

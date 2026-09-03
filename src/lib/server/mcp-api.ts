@@ -43,13 +43,16 @@ import { createOperationInvokeService } from '@/lib/server/operation-invoke-api'
 import { createSupplyManagementService, type SupplyManagementService } from '@/modules/capability-supply/supply-actions'
 import { createAccountManagementService, type AccountManagementService } from '@/modules/agent-access/account.actions'
 import { createMarketDemandService, type MarketDemandService } from '@/modules/market-demand/market-demand.actions'
+import { createFundingHandoffService } from '@/lib/server/funding-handoff-api'
+import type { FundingHandoffService } from '@/modules/money/funding-handoff.actions'
 const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
 const AE_MCP_INSTRUCTIONS = [
   'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability.',
   'Search with `ae_registry_operations_search` and a capability phrase.',
-  'If multiple supplier Operations match, compare their price, readiness, data use, and effects with `ae_registry_operations_compare`; choose one supplier, then inspect that exact Operation with `ae_registry_operations_detail`.',
-  'Use `ae_registry_operations_inspectPlan` only for a bounded multi-Operation composition, not to choose a supplier.',
-  'Authenticated clients may use `ae_operation_invoke` only when that tool is admitted and the returned access and authority conditions are satisfied.',
+  'Use `ae_registry_operations_list` to browse, `ae_registry_operations_describe` for one exact input contract, and `ae_registry_operations_compare` for up to four exact references.',
+  'Call `ae_operation_inspect` with the exact Operation and input. Complete its one continuation or required action, then inspect again.',
+  'Invoke only with the Commitment returned by inspection.',
+  'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Operation only after ready.',
   'If effects are uncertain, use `ae_operation_status` or `ae_operation_reconcile` before retrying.',
   'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution.',
 ].join(' ')
@@ -64,6 +67,7 @@ export type McpAccessTier = Readonly<{
   supplyManagementService?: SupplyManagementService
   accountManagementService?: AccountManagementService
   marketDemandService?: MarketDemandService
+  fundingHandoffService?: FundingHandoffService
 }>
 
 type AeServerHandler<T extends AnyObjectSchema> = (
@@ -296,7 +300,6 @@ export function createAeMcpServer(
         title: action.name,
         description: mcpToolDescription(action),
         inputSchema: action.schema,
-        outputSchema: { result: action.outputSchema },
         annotations: {
           readOnlyHint: action.readOnly,
           destructiveHint: !action.readOnly,
@@ -317,6 +320,7 @@ export function createAeMcpServer(
               ...(access.supplyManagementService === undefined ? {} : { supplyManagementService: access.supplyManagementService }),
               ...(access.accountManagementService === undefined ? {} : { accountManagementService: access.accountManagementService }),
               ...(access.marketDemandService === undefined ? {} : { marketDemandService: access.marketDemandService }),
+              ...(access.fundingHandoffService === undefined ? {} : { fundingHandoffService: access.fundingHandoffService }),
               ...(access.operationInvokeService === undefined ? {} : { operationInvokeService: access.operationInvokeService }),
             },
           })
@@ -362,6 +366,7 @@ type McpRequestOptions = Readonly<{
   supplyManagementService?: SupplyManagementService
   accountManagementService?: AccountManagementService
   marketDemandService?: MarketDemandService
+  fundingHandoffService?: FundingHandoffService
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
 }>
@@ -476,6 +481,8 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           ?? createAccountManagementService(boundedRequest, bounded.bodyText),
         marketDemandService: options.marketDemandService
           ?? createMarketDemandService(boundedRequest, bounded.bodyText),
+        fundingHandoffService: options.fundingHandoffService
+          ?? createFundingHandoffService(boundedRequest, bounded.bodyText),
       })
       return withRequestCorrelationHeader(await serveMcp(server, boundedRequest), correlationId)
     }

@@ -5,8 +5,6 @@ import { exactAmountSchema } from '@/modules/money/public'
 import { CURRENT_OPERATION_CALL_VIA } from './internal/operation-projection-types'
 
 import type {
-  InspectPlanInput,
-  InspectPlanResult,
   OperationCompareInput,
   OperationCompareResult,
   OperationDetailInput,
@@ -16,7 +14,6 @@ import type {
 } from './operation-projection'
 
 const operationRef = z.string().regex(/^operation:v1:[0-9a-f]{64}$/)
-const mappingRef = z.string().regex(/^mapping:v1:[0-9a-f]{64}$/)
 const publicSchema = z.record(z.string(), jsonValueSchema)
 const inputExample = z.strictObject({
   label: z.string().trim().min(1).max(160).optional(),
@@ -24,7 +21,7 @@ const inputExample = z.strictObject({
 })
 
 export const publicOperationNavigationSchema = z.strictObject({
-  relation: z.enum(['search', 'detail', 'compare', 'inspect_plan', 'execute', 'invoke', 'authenticate', 'create_customer_request', 'review_route', 'read_status', 'reconcile', 'cancel']),
+  relation: z.enum(['list', 'search', 'describe', 'compare', 'execute', 'invoke', 'authenticate', 'create_customer_request', 'review_route', 'read_status', 'reconcile', 'cancel']),
   pathTemplate: z.string().optional(),
   method: z.enum(['GET', 'POST']),
   actionId: z.string(),
@@ -78,6 +75,7 @@ const catalogPrice = z.strictObject({
 export const publicOperationAvailabilitySchema = z.strictObject({
   posture: z.enum(['setup_required', 'routeable', 'unavailable']),
   observedAt: z.number().optional(), validUntil: z.number().optional(),
+  lastHealthyAt: z.number().optional(),
   reason: z.enum(['setup_required', 'temporarily_unavailable', 'readiness_expired', 'publisher_withdrew', 'under_review', 'updated_terms_require_review', 'not_supported_by_ae']).optional(),
 })
 const provenance = z.strictObject({ publisher: z.enum(['provider_owned', 'ae_curated_external', 'third_party_gateway', 'observed_external']), sourceKind: z.enum(['ae_envelope', 'openapi_http', 'mcp', 'agent_plugin_mcp', 'x402']) })
@@ -139,21 +137,14 @@ export const operationComparisonFactSchema = z.strictObject({
   values: z.array(z.strictObject({
     operationRef, value: comparisonValue,
     source: z.enum(['publication', 'readiness', 'contract', 'catalog']),
-    observedAt: z.number().optional(), validUntil: z.number().optional(),
+    observedAt: z.number().optional(), validUntil: z.number().optional(), lastHealthyAt: z.number().optional(),
   })),
 })
-const maximumCost = z.union([
-  z.strictObject({
-    kind: z.literal('known'),
-    amount: exactAmountSchema.describe('Exact maximum cost: currency, integer units, and decimal exponent'),
-  }),
-  z.strictObject({ kind: z.literal('requires_preparation') }),
-])
 export const operationSearchRankingSchema = z.strictObject({ operationRef, rank: z.number().int().positive(), score: z.number().nonnegative() })
 export const operationSearchPaginationSchema = z.strictObject({ limit: z.number().int(), nextCursor: z.string().optional(), hasMore: z.boolean() })
 
 export const operationSearchInputSchema: z.ZodType<OperationSearchInput> = z.strictObject({
-  query: z.string().max(200), limit: z.number().int().min(1).max(3).optional(), cursor: z.string().max(512).optional(),
+  query: z.string().max(256), limit: z.number().int().min(1).max(100).optional(), cursor: z.string().max(512).optional(),
   filters: operationSearchFiltersSchema.optional(),
 }) as z.ZodType<OperationSearchInput>
 export const operationSearchOutputSchema: z.ZodType<OperationSearchResult> = z.union([
@@ -172,8 +163,3 @@ export const operationCompareOutputSchema: z.ZodType<OperationCompareResult> = z
   z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal('registry-operations:v1'), operations: z.array(descriptor), facts: z.array(operationComparisonFactSchema), navigation: z.array(publicOperationNavigationSchema) }),
   z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal('registry-operations:v1'), reason: z.enum(['query_invalid', 'operation_not_found', 'operation_unavailable']), navigation: z.array(publicOperationNavigationSchema) }),
 ]) as z.ZodType<OperationCompareResult>
-export const operationInspectPlanInputSchema: z.ZodType<InspectPlanInput> = z.strictObject({ operationRefs: z.array(operationRef).min(1).max(4), mappingRefs: z.array(mappingRef).max(32).optional(), expiresInMs: z.number().int().min(1_000).max(86_400_000).optional() }) as z.ZodType<InspectPlanInput>
-export const operationInspectPlanOutputSchema: z.ZodType<InspectPlanResult> = z.union([
-  z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal('registry-operations:v1'), inspectPlanRef: z.string(), operationRefs: z.array(operationRef), mappingRefs: z.array(mappingRef), summary: z.strictObject({ maximumCost, dataUse: z.array(dataUse), effects: z.array(effect), expiry: z.number() }), navigation: z.array(publicOperationNavigationSchema) }),
-  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal('registry-operations:v1'), reason: z.enum(['query_invalid', 'operation_not_found', 'operation_unavailable', 'mapping_unavailable', 'mapping_incompatible', 'mapping_cycle']), operationRef: z.string().optional(), navigation: z.array(publicOperationNavigationSchema) }),
-]) as z.ZodType<InspectPlanResult>

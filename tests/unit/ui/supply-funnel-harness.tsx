@@ -236,6 +236,7 @@ export function offeringAt(step: SupplyFunnelStep): OwnerSupplyOfferingReadback 
     name: "Quote API",
     summary: "Returns a quote.",
     status: "draft",
+    managementStatus: "Validating",
     admission: { state: "not_admitted" },
     lifecycle: { state: "inactive", reasons: [] },
     readiness: { outcome: "unobserved", evidenceRefs: [] },
@@ -278,6 +279,7 @@ export function offeringAt(step: SupplyFunnelStep): OwnerSupplyOfferingReadback 
       : { outcome: "unobserved", evidenceRefs: [] };
   return {
     ...common,
+    managementStatus: step === "test" ? "Live" : "Validating",
     sourceHash,
     source: sourceReadback,
     admission: { state: "admitted" },

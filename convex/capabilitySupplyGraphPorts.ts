@@ -116,6 +116,7 @@ export function capabilitySupplyGraphPorts(
         readinessOutcome: patch.readinessOutcome,
         readinessObservedAt: patch.readinessObservedAt,
         readinessValidUntil: patch.readinessValidUntil,
+        ...(patch.readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt: patch.readinessLastHealthyAt }),
         readinessEvidenceRefs: [...patch.readinessEvidenceRefs],
         updatedAt: patch.updatedAt,
       })
@@ -220,6 +221,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): GraphPublicationR
     registrationEvidenceRefs: doc.registrationEvidenceRefs,
     ...(doc.readinessValidUntil === undefined ? {} : { readinessValidUntil: doc.readinessValidUntil }),
     ...(doc.readinessObservedAt === undefined ? {} : { readinessObservedAt: doc.readinessObservedAt }),
+    ...(doc.readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt: doc.readinessLastHealthyAt }),
   }
 }
 

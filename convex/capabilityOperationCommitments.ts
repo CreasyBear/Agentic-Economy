@@ -12,7 +12,7 @@ import {
   materializeRuntimePublishedOperation,
   type PublishedOperation,
 } from '@/modules/capability-supply/public'
-import { isBoundedJsonValue } from '@/modules/capability-contract/public'
+import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { currentOperationDigest } from '@/modules/capability-execution/current-operation-commitment'
 import {
@@ -27,6 +27,10 @@ import {
 } from '@/modules/money/public'
 import { jsonObject } from '@/modules/capability-execution/convex'
 import type { LiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
+import {
+  projectOperationInspectRefusal,
+  type OperationInspectRefusalCode,
+} from '@/modules/capability-execution/operation-commitment'
 import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
 
 const inspectRefusalCode = v.union(
@@ -45,6 +49,37 @@ const inspectRefusalCode = v.union(
 )
 const exactAud = v.object({ currency: v.literal('AUD'), units: v.string(), exponent: v.literal(6) })
 const exactUsdc = v.object({ currency: v.literal('USDC'), units: v.string(), exponent: v.literal(6) })
+const inspectContinuation = v.union(
+  v.object({
+    action: v.literal('registry.operations.list'), method: v.literal('POST'),
+    path: v.literal('/api/v1/market-operations/list'), input: v.object({ limit: v.literal(10) }),
+  }),
+  v.object({
+    action: v.literal('registry.operations.search'), method: v.literal('POST'),
+    path: v.literal('/api/v1/market-operations/search'), input: v.object({ query: v.string(), limit: v.literal(10) }),
+  }),
+  v.object({
+    action: v.literal('registry.operations.describe'), method: v.literal('POST'),
+    path: v.literal('/api/v1/market-operations/describe'), input: v.object({ operationRef: v.string() }),
+  }),
+  v.object({
+    action: v.literal('operation.inspect'), method: v.literal('POST'),
+    path: v.literal('/api/v1/operations/inspect'), input: v.object({ operationRef: v.string(), input: jsonObject }),
+    retryAfterMs: v.union(v.literal(5000), v.literal(30000)),
+  }),
+  v.object({
+    action: v.literal('funding.handoff.create'), method: v.literal('POST'),
+    path: v.literal('/api/v1/account/funding-sessions'),
+    input: v.object({ principalAmount: exactAud, idempotencyKey: v.string() }),
+  }),
+)
+const requiredAction = v.object({
+  action: v.string(),
+  blockedCapabilities: v.array(v.literal('operation.invoke')),
+  cta: v.union(v.literal('/agent-access'), v.literal('/support'), v.null()),
+  ctaLabel: v.string(), description: v.string(), iconUrl: v.null(),
+  status: v.union(v.literal('required'), v.literal('pending')), title: v.string(),
+})
 const inspectResult = v.union(
   v.object({
     kind: v.literal('committed'),
@@ -70,8 +105,11 @@ const inspectResult = v.union(
     kind: v.literal('refused'),
     operationRef: v.string(),
     code: inspectRefusalCode,
+    reason: v.optional(v.string()),
     retryable: v.boolean(),
-    reinspection: v.optional(v.object({ action: v.literal('operation.inspect'), operationRef: v.string() })),
+    correlationRef: v.string(),
+    continuation: v.optional(inspectContinuation),
+    requiredActions: v.optional(v.array(requiredAction)),
   }),
 )
 
@@ -83,7 +121,7 @@ type InspectArgs = Readonly<{
   sourceWriteRequest?: unknown
   principal: Infer<typeof principalValue>
   operationRef: string
-  input: Record<string, unknown>
+  input: Record<string, JsonValue>
   liveX402Requirement?: LiveX402Requirement
 }>
 
@@ -133,23 +171,31 @@ const financialSubjectsResult = v.union(
       evidenceDigest: v.string(),
     })),
   }),
-  v.object({ kind: v.literal('refused'), code: inspectRefusalCode }),
+  v.object({ kind: v.literal('refused'), code: inspectRefusalCode, reason: v.optional(v.string()) }),
 )
 
 type FinancialSubjectsResult = Infer<typeof financialSubjectsResult>
 
 const refuse = (
-  operationRef: string,
-  code: Extract<InspectResult, { kind: 'refused' }>['code'],
+  args: Pick<InspectArgs, 'operationRef' | 'input' | 'correlationId'>,
+  code: OperationInspectRefusalCode,
   retryable: boolean,
-  reinspection = false,
-): InspectResult => ({
-  kind: 'refused',
-  operationRef,
+  options: Readonly<{
+    reason?: string
+    capabilityId?: string
+    funding?: Readonly<{
+      principalAmount: { currency: 'AUD'; units: string; exponent: 6 }
+      idempotencyKey: string
+    }>
+  }> = {},
+): InspectResult => projectOperationInspectRefusal({
+  operationRef: args.operationRef,
+  input: args.input,
   code,
   retryable,
-  ...(reinspection ? { reinspection: { action: 'operation.inspect', operationRef } } : {}),
-})
+  correlationRef: args.correlationId,
+  ...options,
+}) as unknown as InspectResult
 
 function operationPricing(operation: PublishedOperation, now: number) {
   const normalized = normalizePricingConfig(operation.pricingConfig)
@@ -281,20 +327,22 @@ async function issueCommitmentHandler(
     now,
     { kind: 'new_operation', operationRef: args.operationRef },
   )
-  if (authority === null) return refuse(args.operationRef, 'grant_not_found', false)
+  if (authority === null) return refuse(args, 'grant_not_found', false)
   const operation = await readCurrentPublishedOperation(ctx, args.operationRef, now)
-  if (operation === undefined) return refuse(args.operationRef, 'operation_not_found', false)
+  if (operation === undefined) return refuse(args, 'operation_not_found', false)
   let descriptor
   try {
     descriptor = materializeRuntimePublishedOperation(operation)
   } catch {
-    return refuse(args.operationRef, 'operation_unsupported', false)
+    return refuse(args, 'operation_unsupported', false)
   }
   if (!isBoundedJsonValue(args.input) || !descriptor.validateInput(args.input)) {
-    return refuse(args.operationRef, 'input_invalid', false)
+    return refuse(args, 'input_invalid', false)
   }
   const currentDigest = currentOperationDigest({ operationRef: args.operationRef, operation })
-  if (currentDigest === undefined) return refuse(args.operationRef, 'operation_not_current', false)
+  if (currentDigest === undefined) return refuse(args, 'operation_not_current', false, {
+    capabilityId: operation.contract.ref.capabilityId,
+  })
 
   const policyGate = await readCommercialPolicyGate(ctx.db, {
     environment: operation.runtimeEnvironment,
@@ -304,16 +352,16 @@ async function issueCommitmentHandler(
       : {}),
   })
   if (policyGate.kind === 'refused') {
-    return refuse(args.operationRef, 'commercial_policy_unavailable', false)
+    return refuse(args, 'commercial_policy_unavailable', false)
   }
 
   const grantRow = await ctx.db.query('agentAccessGrants')
     .withIndex('by_grantRef', (query) => query.eq('grantRef', authority.grantRef))
     .unique()
-  if (grantRow === null) return refuse(args.operationRef, 'grant_not_found', false)
+  if (grantRow === null) return refuse(args, 'grant_not_found', false)
   const grant = normalizeStoredAgentAccessGrant(grantRow as never)
   if (grant === undefined || grant.generation !== authority.grantGeneration) {
-    return refuse(args.operationRef, 'grant_not_found', false)
+    return refuse(args, 'grant_not_found', false)
   }
   if (args.formance.accountRef !== authority.principal.ownerId
     || args.formance.principalRef !== authority.principal.principalId
@@ -322,20 +370,22 @@ async function issueCommitmentHandler(
     || args.formance.formanceSchemaVersion !== PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
     || args.formance.observedAt > now
     || now - args.formance.observedAt > 15_000) {
-    return refuse(args.operationRef, 'inspection_unavailable', true, true)
+    return refuse(args, 'inspection_unavailable', true)
   }
 
   const pricing = operationPricing(operation, now)
-  if (pricing === undefined) return refuse(args.operationRef, 'operation_unsupported', false)
+  if (pricing === undefined) return refuse(args, 'operation_unsupported', false, {
+    capabilityId: operation.contract.ref.capabilityId,
+  })
   if (pricing.kind === 'refused') {
-    return refuse(args.operationRef, 'pricing_setup_required', false)
+    return refuse(args, 'pricing_setup_required', false)
   }
   const buyerSale = pricing.price.units === '0'
     ? { revenueUnits: '0', taxUnits: '0' }
     : splitInclusiveAudTax(pricing.price.units, args.formance.buyerTaxBps)
-  if (buyerSale === undefined) return refuse(args.operationRef, 'pricing_setup_required', false)
+  if (buyerSale === undefined) return refuse(args, 'pricing_setup_required', false)
   if ((pricing.sourceRequirement === undefined) !== (args.liveX402Requirement === undefined)) {
-    return refuse(args.operationRef, 'operation_not_ready', true, true)
+    return refuse(args, 'operation_not_ready', true)
   }
   if (args.liveX402Requirement !== undefined) {
     try {
@@ -343,32 +393,55 @@ async function issueCommitmentHandler(
         || now - args.liveX402Requirement.observedAt > 15_000
         || canonicalDigest(JSON.parse(args.liveX402Requirement.requirementJson) as never)
           !== args.liveX402Requirement.requirementDigest) {
-        return refuse(args.operationRef, 'operation_not_ready', true, true)
+        return refuse(args, 'operation_not_ready', true)
       }
     } catch {
-      return refuse(args.operationRef, 'operation_not_ready', true, true)
+      return refuse(args, 'operation_not_ready', true)
     }
   }
   const maximum = grant.policy.budget.maximumSpendPerInvocation
   if (maximum.currency !== 'AUD' || maximum.exponent !== 6
     || BigInt(maximum.units) < BigInt(pricing.price.units)) {
-    return refuse(args.operationRef, 'budget_exceeded', false)
+    return refuse(args, 'budget_exceeded', false, { reason: 'per_invocation_limit' })
   }
 
   const balanceUnits = args.formance.accountAvailableUnits
   if (BigInt(balanceUnits) < BigInt(pricing.price.units)) {
-    return refuse(args.operationRef, 'insufficient_balance', false)
+    const fundingPolicy = audFundingPolicyFromCommercialControls(policyGate.controls)
+    const shortfall = BigInt(pricing.price.units) - BigInt(balanceUnits)
+    const rounded = ((shortfall + fundingPolicy.incrementUnits - 1n) / fundingPolicy.incrementUnits)
+      * fundingPolicy.incrementUnits
+    const principalUnits = rounded < fundingPolicy.minimumPrincipalUnits
+      ? fundingPolicy.minimumPrincipalUnits
+      : rounded
+    const funding = principalUnits > fundingPolicy.maximumPrincipalUnits
+      ? undefined
+      : {
+          principalAmount: { currency: 'AUD' as const, units: principalUnits.toString(), exponent: 6 as const },
+          idempotencyKey: `funding:${canonicalDigest({
+            format: 'ae.operation-inspect-funding:v1',
+            principalRef: authority.principal.principalId,
+            operationRef: args.operationRef,
+            inputDigest: canonicalDigest(args.input as never),
+            exactPriceUnits: pricing.price.units,
+            currentBalanceUnits: balanceUnits,
+            budgetGeneration: grant.policy.budget.generation,
+          }).slice(7)}`,
+        }
+    return refuse(args, 'insufficient_balance', false, { ...(funding === undefined ? {} : { funding }) })
   }
-  if (BigInt(args.formance.budgetAvailableUnits) < BigInt(pricing.price.units)
-    || BigInt(args.formance.legalExposureAvailableUnits) < BigInt(pricing.price.units)) {
-    return refuse(args.operationRef, 'budget_exceeded', false)
+  if (BigInt(args.formance.budgetAvailableUnits) < BigInt(pricing.price.units)) {
+    return refuse(args, 'budget_exceeded', false, { reason: 'period_budget_exhausted' })
+  }
+  if (BigInt(args.formance.legalExposureAvailableUnits) < BigInt(pricing.price.units)) {
+    return refuse(args, 'budget_exceeded', false, { reason: 'account_limit' })
   }
   const treasury = args.formance.treasury
   if (pricing.sourceRequirement !== undefined
     && (treasury === undefined
       || treasury.network !== pricing.config.sourceRequirement.network
       || BigInt(treasury.availableUnits) < BigInt(pricing.sourceRequirement.units))) {
-    return refuse(args.operationRef, 'treasury_capacity_unavailable', true, true)
+    return refuse(args, 'treasury_capacity_unavailable', true)
   }
 
   const normalizedInput = structuredClone(args.input)
@@ -432,7 +505,7 @@ async function issueCommitmentHandler(
     && (existingCommitment.state !== 'issued'
       || existingCommitment.evidenceDigest !== evidenceDigest
       || existingCommitment.expiresAt <= now)) {
-    return refuse(args.operationRef, 'inspection_unavailable', false)
+    return refuse(args, 'inspection_unavailable', false)
   }
   if (existingCommitment === null) await ctx.db.insert('capabilityOperationCommitments', {
     commitmentRef,
@@ -559,17 +632,19 @@ export const inspect = action({
       input: args.input,
     })
     if (live.kind === 'operation_not_found') {
-      return refuse(args.operationRef, 'operation_not_found', false)
+      return refuse(args, 'operation_not_found', false)
     }
     if (live.kind === 'operation_unsupported') {
-      return refuse(args.operationRef, 'operation_unsupported', false)
+      return refuse(args, 'operation_unsupported', false)
     }
-    if (live.kind === 'refused') return refuse(args.operationRef, 'operation_not_ready', true, true)
+    if (live.kind === 'refused') return refuse(args, 'operation_not_ready', true)
     const subjects: FinancialSubjectsResult = await ctx.runMutation(
       internal.capabilityOperationCommitments.prepareFinancialSubjects,
       args,
     )
-    if (subjects.kind === 'refused') return refuse(args.operationRef, subjects.code, true)
+    if (subjects.kind === 'refused') return refuse(args, subjects.code, true, {
+      ...(subjects.reason === undefined ? {} : { reason: subjects.reason }),
+    })
     if (subjects.financialMode === 'none') {
       return await ctx.runMutation(internal.capabilityOperationCommitments.issueCommitment, {
         ...args,
@@ -624,12 +699,12 @@ export const inspect = action({
         : []),
     ]
     if (live.kind === 'observed' && subjects.treasury === undefined) {
-      return refuse(args.operationRef, 'treasury_capacity_unavailable', true, true)
+      return refuse(args, 'treasury_capacity_unavailable', true)
     }
     for (const capacity of capacityCommands) {
       const synced = await ctx.runAction(internal.moneyFormance.syncCapacity, capacity)
       if (synced.kind !== 'completed') {
-        return refuse(args.operationRef, 'inspection_unavailable', synced.kind !== 'refused', true)
+        return refuse(args, 'inspection_unavailable', synced.kind !== 'refused')
       }
     }
     const [account, budget, exposure, treasury] = await Promise.all([
@@ -655,7 +730,7 @@ export const inspect = action({
       || budget.kind !== 'available'
       || exposure.kind !== 'available'
       || (treasury !== undefined && treasury.kind !== 'available')) {
-      return refuse(args.operationRef, 'inspection_unavailable', true, true)
+      return refuse(args, 'inspection_unavailable', true)
     }
     const observedAt = Math.min(
       account.observedAt,

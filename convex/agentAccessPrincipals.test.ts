@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
-import { convexTest } from 'convex-test'
+import { convexTest, type TestConvex } from 'convex-test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '../src/modules/agent-access/service-auth-envelope'
@@ -316,7 +316,8 @@ describe('issued agent binding', () => {
     const backend = convexTest(schema, modules)
     const owner = backend.withIdentity(identity('user_owner'))
     await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
-    const operationRefs = [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`]
+    const firstOperationRef = `operation:v1:${'a'.repeat(64)}`
+    const operationRefs = [firstOperationRef, `operation:v1:${'b'.repeat(64)}`]
     const base = bindingInput()
     const input: IssuedAgentBindingRegistration = {
       ...base,
@@ -360,7 +361,7 @@ describe('issued agent binding', () => {
       .withIndex('by_grantRef', (query) => query.eq('grantRef', replacement.grantRef)).unique())
     expect(replacementDelegation?.resourceRefs).toEqual(operationRefs)
 
-    const mismatched = { ...replacement, issuanceKey: 'selected-mismatch-12345678', grantRef: issuedAgentGrantRef('user_owner', 'selected-mismatch-12345678'), operationRefs: [operationRefs[0]!] }
+    const mismatched = { ...replacement, issuanceKey: 'selected-mismatch-12345678', grantRef: issuedAgentGrantRef('user_owner', 'selected-mismatch-12345678'), operationRefs: [firstOperationRef] }
     await expect(owner.mutation(prepareReplacement, {
       ...mismatched,
       serviceAuth: await operationAssertion(
@@ -427,6 +428,44 @@ describe('issued agent binding', () => {
     ])
   })
 
+  it('fails closed as soon as the Agent Principal loses active Account membership', async () => {
+    const backend = convexTest(schema, modules)
+    const owner = backend.withIdentity(identity('user_owner'))
+    await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})
+    const input = bindingInput()
+    await owner.mutation(registerIssuedBinding, { ...input, serviceAuth: await assertion(input) })
+    const requiredScope = input.scopes[0]
+    if (requiredScope === undefined) throw new Error('membership_scope_fixture_missing')
+
+    const resolve = async (correlationId: string) => await backend.run(async (ctx) => await resolveCanonicalAgentBinding(ctx, {
+      credentialId: input.credentialId,
+      applicationRef: input.applicationRef,
+      environment: input.environment,
+      scopes: input.scopes,
+      requiredScopes: [requiredScope],
+      authorityMode: input.authorityMode,
+      operationKey: 'surface:http:account-self',
+      correlationId,
+    }))
+    await expect(resolve('membership-active')).resolves.toMatchObject({ credentialId: input.credentialId })
+
+    await backend.run(async (ctx) => {
+      const access = await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_credentialId', (query) => query.eq('credentialId', input.credentialId))
+        .unique()
+      if (access === null) throw new Error('membership_access_fixture_missing')
+      const membership = await ctx.db.query('memberships')
+        .withIndex('by_memberPrincipalRef_and_lifecycle', (query) => query
+          .eq('memberPrincipalRef', access.principalId)
+          .eq('lifecycle', 'active'))
+        .unique()
+      if (membership === null) throw new Error('membership_fixture_missing')
+      await ctx.db.patch(membership._id, { lifecycle: 'ended', revision: membership.revision + 1 })
+    })
+
+    await expect(resolve('membership-ended')).resolves.toBeNull()
+  })
+
   it('stages, promotes, replays, and cancels credential replacements without replacing the agent', async () => {
     const backend = convexTest(schema, modules)
     const owner = backend.withIdentity(identity('user_owner'))
@@ -452,6 +491,11 @@ describe('issued agent binding', () => {
       createdAt: NOW,
       expiresAt: NOW + 600_000,
     }
+    const predecessorRequiredScope = first.scopes.at(0)
+    const successorRequiredScope = replacement.scopes.at(0)
+    if (predecessorRequiredScope === undefined || successorRequiredScope === undefined) {
+      throw new Error('replacement_scope_missing')
+    }
     const prepared = await owner.mutation(prepareReplacement, {
       ...replacement,
       serviceAuth: await operationAssertion(
@@ -476,7 +520,7 @@ describe('issued agent binding', () => {
       applicationRef: first.applicationRef,
       environment: first.environment,
       scopes: first.scopes,
-      requiredScopes: [first.scopes[0]!],
+      requiredScopes: [predecessorRequiredScope],
       authorityMode: first.authorityMode,
       operationKey: 'surface:http:account-self',
       correlationId: 'replacement-predecessor-still-current',
@@ -505,7 +549,7 @@ describe('issued agent binding', () => {
       applicationRef: replacement.applicationRef,
       environment: replacement.environment,
       scopes: replacement.scopes,
-      requiredScopes: [replacement.scopes[0]!],
+      requiredScopes: [successorRequiredScope],
       authorityMode: replacement.authorityMode,
       operationKey: 'surface:http:account-self',
       correlationId: 'replacement-successor-promoted',
@@ -519,7 +563,7 @@ describe('issued agent binding', () => {
       applicationRef: first.applicationRef,
       environment: first.environment,
       scopes: first.scopes,
-      requiredScopes: [first.scopes[0]!],
+      requiredScopes: [predecessorRequiredScope],
       authorityMode: first.authorityMode,
       operationKey: 'surface:http:account-self',
       correlationId: 'replacement-predecessor-revoked',
@@ -934,6 +978,7 @@ describe('issued agent binding', () => {
     expect(pagedPrincipals).toEqual(expect.arrayContaining([principalA, principalB]))
     const credentialA = rows.find((row) => row.principalRef === principalA)?.credentials[0]?.credentialRef
     if (credentialA === undefined) throw new Error('credential missing')
+    await insertLifecycleRefreshFamily(backend, principalA, credentialA, agentA.credentialId, 'revoke-a')
 
     const extraIssuance = 'agent-a-extra-credential-12345678'
     const extra: AgentCredentialReplacementRegistration = {
@@ -990,6 +1035,10 @@ describe('issued agent binding', () => {
     const revoked = await owner.mutation(revokeCredentialLifecycle, { ...revokeCommand, serviceAuth: revokeAuth })
     expect(revoked).toMatchObject({ kind: 'completed', principalRef: principalA })
     expect(revoked.providerTargets).toEqual([expect.objectContaining({ providerCredentialId: agentA.credentialId })])
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessOAuthRefreshFamilies')
+      .withIndex('by_currentCredentialRef_and_lifecycle', (query) => query
+        .eq('currentCredentialRef', credentialA).eq('lifecycle', 'revoked')).unique()))
+      .resolves.toMatchObject({ revocationReason: 'owner_credential_revoked' })
     await expect(owner.mutation(revokeCredentialLifecycle, { ...revokeCommand, serviceAuth: revokeAuth }))
       .resolves.toMatchObject({ kind: 'replayed', principalRef: principalA })
 
@@ -1038,12 +1087,19 @@ describe('issued agent binding', () => {
       expect.objectContaining({ principalRef: principalA, status: 'disconnected' }),
     ]))
 
+    const credentialB = rows.find((row) => row.principalRef === principalB)?.credentials[0]?.credentialRef
+    if (credentialB === undefined) throw new Error('agent B credential missing')
+    await insertLifecycleRefreshFamily(backend, principalB, credentialB, agentB.credentialId, 'disconnect-b')
     const disconnectCommand = { principalRef: principalB, correlationRef: 'corr-disconnect-b' }
     const disconnectAuth = await operationAssertion('agentAccessPrincipals.disconnectAgentForServer', disconnectCommand)
     await expect(owner.mutation(disconnectAgentLifecycle, { ...disconnectCommand, serviceAuth: disconnectAuth }))
       .resolves.toMatchObject({ kind: 'completed', principalRef: principalB })
     await expect(owner.mutation(disconnectAgentLifecycle, { ...disconnectCommand, serviceAuth: disconnectAuth }))
       .resolves.toMatchObject({ kind: 'replayed', principalRef: principalB })
+    await expect(backend.run(async (ctx) => await ctx.db.query('agentAccessOAuthRefreshFamilies')
+      .withIndex('by_principalRef_and_lifecycle', (query) => query
+        .eq('principalRef', principalB).eq('lifecycle', 'revoked')).unique()))
+      .resolves.toMatchObject({ revocationReason: 'owner_disconnected' })
     const finalRows = await owner.query(api.agentDirectory.listOwned, { now: NOW })
     expect(finalRows).toEqual(expect.arrayContaining([
       expect.objectContaining({ principalRef: principalA }),
@@ -1165,3 +1221,54 @@ describe('issued agent binding', () => {
       .collect())).resolves.toHaveLength(5)
   })
 })
+
+async function insertLifecycleRefreshFamily(
+  backend: TestConvex<typeof schema>,
+  principalRef: string,
+  credentialRef: string,
+  providerCredentialId: string,
+  suffix: string,
+) {
+  await backend.run(async (ctx) => {
+    const access = await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_principalId', (query) => query.eq('principalId', principalRef)).unique()
+    const credential = await ctx.db.query('credentials')
+      .withIndex('by_credentialRef', (query) => query.eq('credentialRef', credentialRef)).unique()
+    if (access === null || credential === null) throw new Error('refresh lifecycle fixture missing')
+    const grants = await ctx.db.query('agentAccessGrants')
+      .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+        .eq('credentialId', providerCredentialId).eq('environment', access.environment).eq('lifecycle', 'active')).take(2)
+    const grant = grants.find((candidate) => candidate.principalId === principalRef)
+    const ownerships = await ctx.db.query('accountOwnerships')
+      .withIndex('by_accountRef_and_lifecycle', (query) => query.eq('accountRef', access.ownerId).eq('lifecycle', 'active')).take(2)
+    const ownership = ownerships[0]
+    if (grant === undefined || grant.format !== 'ae.agent-access-grant:v2'
+      || grant.operationRefs === undefined || grant.policy.format !== 'ae.agent-access-policy:v2'
+      || grant.policy.operationRefs === undefined || ownerships.length !== 1 || ownership === undefined) {
+      throw new Error('refresh lifecycle authority fixture invalid')
+    }
+    const familyRef = `refresh-family:${suffix}`
+    const tokenHash = `sha256:refresh-family:${suffix}`
+    await ctx.db.insert('agentAccessOAuthRefreshFamilies', {
+      familyRef, revision: 1, clientId: `client:${suffix}`, ownerId: access.ownerId,
+      ownerPrincipalRef: ownership.ownerPrincipalRef, providerSubject: 'user_owner',
+      principalRef, displayName: 'Lifecycle refresh connection', applicationRef: access.applicationRef,
+      environment: access.environment, scopes: [...access.scopes], authorityMode: access.authorityMode,
+      operationAccess: grant.operationAccess, operationRefs: [...grant.operationRefs],
+      policy: {
+        format: 'ae.agent-access-policy:v2', operationAccess: grant.policy.operationAccess,
+        operationRefs: [...grant.policy.operationRefs], environment: grant.policy.environment,
+        budget: { ...grant.policy.budget }, rate: { ...grant.policy.rate },
+      },
+      currentCredentialRef: credentialRef, currentProviderCredentialId: providerCredentialId,
+      currentGrantRef: grant.grantRef, currentGeneration: credential.generation,
+      currentAccessExpiresAt: credential.expiresAt ?? NOW + 600_000,
+      currentTokenHash: tokenHash, lifecycle: 'active', createdAt: NOW,
+      expiresAt: NOW + 2_592_000_000, updatedAt: NOW,
+    })
+    await ctx.db.insert('agentAccessOAuthRefreshTokens', {
+      tokenHash, accessTokenHash: `sha256:access-family:${suffix}`,
+      familyRef, generation: 1, lifecycle: 'active', createdAt: NOW,
+    })
+  })
+}

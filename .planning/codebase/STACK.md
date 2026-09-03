@@ -70,7 +70,6 @@ Include covers `src/**`, `convex/**`, `tests/**`, config files; excludes `node_m
 | @clerk/shared | `4.30.2` | Auth shared |
 | stripe | `^22.5.0` | Server SDK |
 | @stripe/stripe-js | `^9.13.0` | Browser SDK |
-| @stripe/react-stripe-js | `^6.8.1` | React Elements |
 | @coinbase/cdp-sdk | `1.55.0` | x402 payer custody |
 | @x402/core / @x402/evm / @x402/extensions | `2.23.0` | x402 protocol |
 | viem | `2.55.2` | EVM |

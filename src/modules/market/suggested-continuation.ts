@@ -196,7 +196,7 @@ function supplierContinuation(
     return {
       label: 'View live Operation',
       kind: 'navigate',
-      command: `ae inspect ${state.operationRef}`,
+      command: `ae describe ${state.operationRef}`,
       href: `/operations/${state.operationRef}`,
     }
   }

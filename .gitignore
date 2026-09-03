@@ -27,10 +27,10 @@ graphify-out/
 /PAPERCUTS.md
 /CLAUDE.md
 /RULES.MD
-/DESIGN.md
-/INVESTMENT_THESIS.md
 /UBIQUITOUS_LANGUAGE.md
-/docs/
+/docs/*
+!/docs/adr/
+!/docs/adr/*.md
 /convex/README.md
 /tools/ae/README.md
 /eval/**/*.md

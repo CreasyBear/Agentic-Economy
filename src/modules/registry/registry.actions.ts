@@ -423,8 +423,8 @@ export const registryDetailAction = defineAction({
   },
 })
 export {
+  registryOperationsListAction,
   registryOperationsSearchAction,
-  registryOperationsDetailAction,
+  registryOperationsDescribeAction,
   registryOperationsCompareAction,
-  registryOperationsInspectPlanAction,
 } from './operations.actions'

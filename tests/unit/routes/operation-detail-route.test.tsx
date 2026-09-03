@@ -9,24 +9,32 @@ import '../../setup/jsdom-platform'
 import { CURRENT_OPERATION_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import { AeOperationInspector } from '@/components/ae/market/operation-detail'
 import {
+  buildMarketReturnContext,
+  type MarketReturnContext,
+} from '@/components/ae/market/market-return-context'
+import {
   PublicOperationRegistrySchemaVersion,
   projectCapabilityOperation as projectCapabilityOperationWithNavigation,
   type CapabilityOperationSourceRecord,
 } from '@/modules/capability-supply/public'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
-import type { PublicOperationDetailRouteResult } from '@/modules/registry/operation-detail-route.functions'
+import {
+  projectMarketListingEvidence,
+  type MarketListingEvidenceProjection,
+} from '@/modules/market/listing-evidence'
 
 const readDetailMock = vi.hoisted(() => vi.fn())
-const listAgentKeysMock = vi.hoisted(() => vi.fn(async (): Promise<unknown[]> => []))
 
 vi.mock('@/modules/registry/operation-detail-route.functions', () => ({
   readPublicOperationDetailRouteServer: readDetailMock,
 }))
-vi.mock('@/modules/agent-access/agent-access.functions', () => ({
-  listAgentAccessKeysServer: listAgentKeysMock,
-}))
 
-import { PublicOperationDetail, Route } from '@/routes/operations.$operationRef'
+import {
+  PublicOperationDetail,
+  Route,
+  validateOperationDetailSearch,
+  type OperationDetailPresentationResult,
+} from '@/routes/operations.$operationRef'
 
 const sourceRecord = {
   operationId: 'operation:invoice.extract',
@@ -147,8 +155,9 @@ const projectCapabilityOperation = (
 const operation = projectCapabilityOperation(sourceRecord, 2_000)
 
 function renderWithRouter(
-  result: PublicOperationDetailRouteResult,
-  hasBuyerCredential = false,
+  result: OperationDetailPresentationResult,
+  _hasBuyerCredential = false,
+  returnTo?: MarketReturnContext,
 ) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
@@ -160,13 +169,16 @@ function renderWithRouter(
     <RouterContextProvider router={router}>
       <PublicOperationDetail
         result={result}
-        hasBuyerCredential={hasBuyerCredential}
+        {...(returnTo === undefined ? {} : { returnTo })}
       />
     </RouterContextProvider>,
   )
 }
 
-function renderInspectorWithRouter(variant: 'compact' | 'full') {
+function renderInspectorWithRouter(
+  variant: 'compact' | 'full',
+  evidence?: MarketListingEvidenceProjection,
+) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
@@ -177,7 +189,7 @@ function renderInspectorWithRouter(variant: 'compact' | 'full') {
     <RouterContextProvider router={router}>
       <AeOperationInspector
         operation={operation}
-        hasBuyerCredential
+        {...(evidence === undefined ? {} : { evidence })}
         variant={variant}
       />
     </RouterContextProvider>,
@@ -187,19 +199,51 @@ function renderInspectorWithRouter(variant: 'compact' | 'full') {
 afterEach(() => {
   cleanup()
   readDetailMock.mockReset()
-  listAgentKeysMock.mockReset()
-  listAgentKeysMock.mockResolvedValue([])
 })
 
 describe('/operations/$operationRef', () => {
+  it('accepts only bounded local market return contexts', () => {
+    const returnTo = buildMarketReturnContext({
+      window: '7d',
+      query: 'invoice',
+      availability: 'routeable',
+    }, 'operations')
+
+    expect(validateOperationDetailSearch({ from: returnTo })).toEqual({ from: returnTo })
+    expect(validateOperationDetailSearch({ from: 'https://evil.example/market?window=7d' })).toEqual({})
+    expect(validateOperationDetailSearch({ from: '/market?window=7d&next=/admin' })).toEqual({})
+  })
+
+  it('fills the track record from observed market evidence', () => {
+    const evidence = projectMarketListingEvidence({
+      operationRef: operation.operationRef,
+      ratingCount: 2,
+      ratingSum: 9,
+      completedInvocations: 8,
+      latencySamplesMs: [100, 110, 120, 130, 140],
+    }, operation.contract.capabilityId)
+
+    renderInspectorWithRouter('full', evidence)
+
+    const trackRecord = screen.getByRole('region', { name: '30-day track record' })
+    expect(within(trackRecord).getByText('8')).toBeTruthy()
+    expect(within(trackRecord).getByText('4.5')).toBeTruthy()
+    expect(within(trackRecord).getByText('120 ms')).toBeTruthy()
+    expect(within(trackRecord).getByText('140 ms')).toBeTruthy()
+    const latencyChart = within(trackRecord).getByRole('region', { name: 'Latency by completed call' })
+    expect(latencyChart).toBeTruthy()
+    expect(within(latencyChart).getByText('5 timed calls')).toBeTruthy()
+    expect(within(trackRecord).queryByText(/No completed AE calls/)).toBeNull()
+  })
+
   it('keeps compact and full inspectors on the same decision, facts, and continuation', () => {
     renderInspectorWithRouter('compact')
 
     const compact = document.querySelector('[data-operation-inspector="compact"]')
     if (!(compact instanceof HTMLElement)) throw new Error('compact_inspector_missing')
     const compactView = within(compact)
-    const compactDecision = compactView.getByRole('region', { name: 'Ready to call' })
-    expect(within(compactDecision).getByRole('button', { name: 'Copy Call Operation' })).toBeTruthy()
+    const compactDecision = compactView.getByRole('region', { name: 'Operational' })
+    expect(within(compactDecision).getByRole('button', { name: 'Copy Operation reference' })).toBeTruthy()
     expect(compactView.queryByRole('region', { name: 'What you can do next' })).toBeNull()
     for (const fact of ['USD 1.25', 'API key connection', 'Ready now', 'Per accepted extraction']) {
       expect(compactView.getAllByText(fact).length).toBeGreaterThan(0)
@@ -224,18 +268,76 @@ describe('/operations/$operationRef', () => {
     const full = document.querySelector('[data-operation-inspector="full"]')
     if (!(full instanceof HTMLElement)) throw new Error('full_inspector_missing')
     const fullView = within(full)
-    expect(fullView.getByRole('region', { name: 'Ready to call' })).toBeTruthy()
+    expect(fullView.getByRole('region', { name: 'Operational' })).toBeTruthy()
     expect(fullView.getByRole('complementary', { name: 'What you can do next' })).toBeTruthy()
-    expect(fullView.getByRole('button', { name: 'Copy Call Operation' })).toBeTruthy()
-    for (const fact of ['USD 1.25', 'API key connection', 'Ready now', 'Per accepted extraction']) {
+    expect(fullView.getByRole('region', { name: '30-day track record' })).toBeTruthy()
+    expect(fullView.getByText('Waiting for timed calls')).toBeTruthy()
+    expect(fullView.getByText('Up to 48 timed calls')).toBeTruthy()
+    expect(fullView.getByRole('button', { name: 'Copy Operation reference' })).toBeTruthy()
+    for (const fact of ['USD 1.25', 'API key connection', 'Ready now']) {
       expect(fullView.getAllByText(fact).length).toBeGreaterThan(0)
     }
+    const contractTab = fullView.getByRole('tab', { name: 'Contract' })
+    fireEvent.mouseDown(contractTab, { button: 0, ctrlKey: false })
+    fireEvent.click(contractTab)
+    expect(fullView.getByText('Per accepted extraction')).toBeTruthy()
     expect(fullView.getAllByText('documentUrl').length).toBeGreaterThan(0)
     expect(fullView.getByText('reconcile required')).toBeTruthy()
     expect(fullView.getByText(/evidence:line-items/)).toBeTruthy()
   })
 
-  it('projects canonical keyed facts and carries the exact reference through authenticated invoke', () => {
+  it('keeps one safe continuation beside switchable research views and focuses each full record', () => {
+    const rendered = renderInspectorWithRouter('full')
+    const inspector = screen.getByRole('article', {
+      name: 'Invoice line-item extraction Operation details',
+    })
+    expect(within(inspector).getAllByRole('complementary', {
+      name: 'What you can do next',
+    })).toHaveLength(1)
+    expect(within(inspector).getByRole('tabpanel', { name: 'Overview' })).toBeTruthy()
+    const contractTab = within(inspector).getByRole('tab', { name: 'Contract' })
+    fireEvent.mouseDown(contractTab, { button: 0, ctrlKey: false })
+    fireEvent.click(contractTab)
+    expect(within(inspector).getByRole('heading', { name: 'Parameters' })).toBeTruthy()
+    expect(document.activeElement).toBe(inspector)
+
+    const secondOperation = {
+      ...operation,
+      operationRef: `operation:v1:${'c'.repeat(64)}` as typeof operation.operationRef,
+    }
+    const outsideButton = document.createElement('button')
+    document.body.append(outsideButton)
+    outsideButton.focus()
+    rendered.rerender(
+      <AeOperationInspector
+        operation={secondOperation}
+        variant="full"
+      />,
+    )
+    expect(document.activeElement).toBe(screen.getByRole('article', {
+      name: 'Invoice line-item extraction Operation details',
+    }))
+  })
+
+  it('preserves an exact comparison origin in the explicit return action', () => {
+    const second = `operation:v1:${'d'.repeat(64)}` as typeof operation.operationRef
+    const returnTo = buildMarketReturnContext({
+      window: '7d',
+      query: 'invoice',
+      compare: `${operation.operationRef},${second}`,
+    })
+
+    renderWithRouter(
+      { kind: 'found', schemaVersion: PublicOperationRegistrySchemaVersion, operation },
+      false,
+      returnTo,
+    )
+
+    expect(screen.getByRole('link', { name: 'Back to comparison' }).getAttribute('href'))
+      .toBe(returnTo)
+  })
+
+  it('projects canonical public facts and hands the exact reference to the existing agent client', () => {
     renderWithRouter(
       { kind: 'found', schemaVersion: PublicOperationRegistrySchemaVersion, operation },
       true,
@@ -245,15 +347,33 @@ describe('/operations/$operationRef', () => {
     expect(screen.getAllByText('Ledger Labs').length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: 'Ledger Labs' })).toBeNull()
     expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { level: 3, name: 'Example input' })).toBeTruthy()
-    expect(screen.getAllByText(/https:\/\/docs\.example\/invoice\.pdf/).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('heading', { level: 3, name: 'Example output' })).toBeNull()
-    expect(screen.getByRole('link', { name: 'Read the input and output schemas' }).getAttribute('href')).toBe('#technical-contract')
-    expect(screen.getByRole('heading', { level: 3, name: 'Exact price breakdown' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 3, name: 'Price breakdown' })).toBeTruthy()
     expect(screen.getByText('USD 1.00')).toBeTruthy()
     expect(screen.getByText('USD 0.25')).toBeTruthy()
     expect(screen.getByText('eip155:8453', { exact: false })).toBeTruthy()
-    fireEvent.click(screen.getByText('Technical contract, schemas, digests, and references'))
+
+    const contractTab = screen.getByRole('tab', { name: 'Contract' })
+    fireEvent.mouseDown(contractTab, { button: 0, ctrlKey: false })
+    fireEvent.click(contractTab)
+    expect(screen.getByRole('heading', { level: 2, name: 'Example input' })).toBeTruthy()
+    expect(screen.getAllByText(/https:\/\/docs\.example\/invoice\.pdf/).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('heading', { level: 3, name: 'Example output' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Open schemas and references' })).toBeTruthy()
+
+    const execution = screen.getByRole('complementary', { name: 'What you can do next' })
+    expect(within(execution).getByText(/Paste this reference into your existing agent client/i)).toBeTruthy()
+    expect(within(execution).getByRole('button', { name: 'Copy Operation reference' })).toBeTruthy()
+    expect(within(execution).queryByText(/ae connect/)).toBeNull()
+    expect(within(execution).queryByText(/ae call/)).toBeNull()
+    expect(within(execution).queryByText(/https:\/\/docs\.example\/invoice\.pdf/)).toBeNull()
+    expect(within(execution).queryByText(/ae status <invocation-ref>/)).toBeNull()
+    expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
+    expect(within(execution).queryByText(/Save it securely/i)).toBeNull()
+    expect(within(execution).queryByText(/ae_operation_invoke/)).toBeNull()
+    expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open schemas and references' }))
+    expect(screen.getByRole('dialog', { name: 'Schemas and references' })).toBeTruthy()
     expect(screen.getByText('digest:current-price')).toBeTruthy()
     expect(screen.getByText('Per accepted extraction')).toBeTruthy()
     expect(screen.getAllByText('documentUrl').length).toBeGreaterThan(0)
@@ -266,21 +386,9 @@ describe('/operations/$operationRef', () => {
     expect(screen.getByText('pricing:invoice@4')).toBeTruthy()
     expect(screen.getByText('evidence:pricing')).toBeTruthy()
 
-    const execution = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(execution).getByText(/agent access is ready/i)).toBeTruthy()
-    expect(within(execution).getByRole('button', { name: 'Copy Call Operation' })).toBeTruthy()
-    expect(within(execution).queryByText(/ae connect/)).toBeNull()
-    expect(within(execution).getAllByText(/ae call/).length).toBeGreaterThan(0)
-    expect(within(execution).getByText(/https:\/\/docs\.example\/invoice\.pdf/)).toBeTruthy()
-    expect(within(execution).queryByText(/AE_INPUT_JSON/)).toBeNull()
-    expect(within(execution).queryByText(/ae status <invocation-ref>/)).toBeNull()
-    expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
-    expect(within(execution).queryByText(/Save it securely/i)).toBeNull()
-    expect(within(execution).queryByText(/ae_operation_invoke/)).toBeNull()
-    expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
 
-  it('keeps x402 on the authenticated invoke lane and never advertises anonymous execute', () => {
+  it('keeps x402 details public without advertising browser execution', () => {
     const x402Operation = projectCapabilityOperation({
       ...sourceRecord,
       authentication: { kind: 'x402' },
@@ -294,13 +402,13 @@ describe('/operations/$operationRef', () => {
     }, true)
 
     const execution = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(execution).getByRole('button', { name: 'Copy Call Operation' })).toBeTruthy()
-    expect(within(execution).getAllByText(/ae call/).length).toBeGreaterThan(0)
+    expect(within(execution).getByRole('button', { name: 'Copy Operation reference' })).toBeTruthy()
+    expect(within(execution).queryByText(/ae call/)).toBeNull()
     expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
 
-  it('projects missing buyer access to one setup action', () => {
+  it('does not infer caller readiness from browser credentials', () => {
     renderWithRouter({
       kind: 'found',
       schemaVersion: PublicOperationRegistrySchemaVersion,
@@ -308,11 +416,9 @@ describe('/operations/$operationRef', () => {
     })
 
     const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(continuation).getByRole('link', { name: 'Connect agent' }).getAttribute('href'))
-      .toBe('/for-agents')
-    expect(within(continuation).queryByRole('button')).toBeNull()
-    expect(screen.getByRole('region', { name: 'Connection required' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Copy Call Operation' })).toBeNull()
+    expect(within(continuation).getByRole('button', { name: 'Copy Operation reference' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Operational' })).toBeTruthy()
+    expect(screen.queryByText(/connected/i)).toBeNull()
   })
 
   it('keeps a setup-required descriptor inspectable without implying it can be invoked', () => {
@@ -328,12 +434,12 @@ describe('/operations/$operationRef', () => {
     renderWithRouter({ kind: 'found', schemaVersion: PublicOperationRegistrySchemaVersion, operation: setupRequiredOperation })
 
     expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByText('Technical contract, schemas, digests, and references'))
+    const access = screen.getByRole('complementary', { name: 'What you can do next' })
+    expect(within(access).getByText(/not operational/i)).toBeTruthy()
+    expect(within(access).getByRole('link', { name: 'Find operational alternatives' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open schemas and references' }))
     expect(screen.getByText('digest:current-price')).toBeTruthy()
     expect(screen.getByText('provider owned')).toBeTruthy()
-    const access = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(access).getByText(/inspectable but not currently callable/i)).toBeTruthy()
-    expect(within(access).getByRole('link', { name: 'Find callable alternatives' })).toBeTruthy()
     expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
@@ -355,8 +461,29 @@ describe('/operations/$operationRef', () => {
     })
 
     const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
-    expect(within(continuation).getByRole('link', { name: 'Find callable alternatives' })).toBeTruthy()
-    expect(within(continuation).getByText(/not currently callable/i)).toBeTruthy()
+    expect(within(continuation).getByRole('link', { name: 'Find operational alternatives' })).toBeTruthy()
+    expect(within(continuation).getByText(/not operational/i)).toBeTruthy()
+  })
+
+  it('fails closed when a stale source sends a non-canonical availability posture', () => {
+    const staleOperation = {
+      ...operation,
+      availability: {
+        ...operation.availability,
+        posture: 'integrated',
+      },
+    } as unknown as typeof operation
+
+    renderWithRouter({
+      kind: 'found',
+      schemaVersion: PublicOperationRegistrySchemaVersion,
+      operation: staleOperation,
+    })
+
+    const continuation = screen.getByRole('complementary', { name: 'What you can do next' })
+    expect(within(continuation).getByRole('heading', { name: 'Find an operational alternative' })).toBeTruthy()
+    expect(within(continuation).getByRole('link', { name: 'Find operational alternatives' })).toBeTruthy()
+    expect(within(continuation).queryByRole('button', { name: 'Copy Operation reference' })).toBeNull()
   })
 
   it.each([
@@ -393,6 +520,31 @@ describe('/operations/$operationRef', () => {
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
 
+  it('renders malformed references distinctly and preserves a known result origin', () => {
+    const returnTo = buildMarketReturnContext({
+      window: '30d',
+      query: 'invoice',
+      capability: 'invoice.extract',
+    }, 'operations')
+
+    renderWithRouter({ kind: 'invalid_ref', operationRef: 'not-an-operation' }, false, returnTo)
+
+    expect(screen.getByRole('heading', { name: /reference is invalid/i })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to results' }).getAttribute('href')).toBe(returnTo)
+    expect(screen.queryByText('USD 1.25')).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'What you can do next' })).toBeNull()
+  })
+
+  it('rejects malformed references before reading the catalog', async () => {
+    const loader = Route.options.loader as (input: { params: { operationRef: string } }) => Promise<unknown>
+
+    await expect(loader({ params: { operationRef: 'not-an-operation' } })).resolves.toEqual({
+      result: { kind: 'invalid_ref', operationRef: 'not-an-operation' },
+      evidence: undefined,
+    })
+    expect(readDetailMock).not.toHaveBeenCalled()
+  })
+
   it('re-reads the browser parameter through the server seam and fails closed on a thrown read', async () => {
     readDetailMock.mockRejectedValue(new Error('offline'))
     const loader = Route.options.loader as (input: { params: { operationRef: string } }) => Promise<unknown>
@@ -402,52 +554,9 @@ describe('/operations/$operationRef', () => {
         kind: 'source_unavailable',
         operationRef: operation.operationRef,
       },
-      hasBuyerCredential: false,
+      evidence: undefined,
     })
     expect(readDetailMock).toHaveBeenCalledWith({ data: { operationRef: operation.operationRef } })
   })
 
-  it('reads active invoke-scoped buyer access for the browser adapter', async () => {
-    readDetailMock.mockResolvedValue({
-      kind: 'found',
-      schemaVersion: PublicOperationRegistrySchemaVersion,
-      operation,
-    })
-    listAgentKeysMock.mockResolvedValue([{
-      revoked: false,
-      expired: false,
-      scopes: ['market_operations:invoke'],
-    }])
-    const loader = Route.options.loader as (input: { params: { operationRef: string } }) => Promise<unknown>
-
-    await expect(loader({ params: { operationRef: operation.operationRef } })).resolves.toMatchObject({
-      hasBuyerCredential: true,
-      result: { kind: 'found' },
-    })
-  })
-
-  it('fails buyer-access lookup closed and ignores unusable keys', async () => {
-    readDetailMock.mockResolvedValue({
-      kind: 'found',
-      schemaVersion: PublicOperationRegistrySchemaVersion,
-      operation,
-    })
-    const loader = Route.options.loader as (input: { params: { operationRef: string } }) => Promise<unknown>
-
-    listAgentKeysMock.mockRejectedValueOnce(new Error('buyer access unavailable'))
-    await expect(loader({ params: { operationRef: operation.operationRef } })).resolves.toMatchObject({
-      hasBuyerCredential: false,
-      result: { kind: 'found' },
-    })
-
-    listAgentKeysMock.mockResolvedValueOnce([
-      { revoked: true, expired: false, scopes: ['market_operations:invoke'] },
-      { revoked: false, expired: true, scopes: ['market_operations:invoke'] },
-      { revoked: false, expired: false, scopes: ['market_operations:read'] },
-    ])
-    await expect(loader({ params: { operationRef: operation.operationRef } })).resolves.toMatchObject({
-      hasBuyerCredential: false,
-      result: { kind: 'found' },
-    })
-  })
 })

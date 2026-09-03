@@ -9,8 +9,8 @@ import {
 import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
 import { MARKET_OPERATION_COMMAND_DESCRIPTORS } from '../../tools/ae/commands/market-operations'
 import { runCompareCommand } from '../../tools/ae/commands/compare'
-import { runInspectCommand } from '../../tools/ae/commands/inspect'
-import { runInspectPlanCommand } from '../../tools/ae/commands/inspect-plan'
+import { runDescribeCommand } from '../../tools/ae/commands/describe'
+import { runListCommand } from '../../tools/ae/commands/list'
 import { runSearchCommand } from '../../tools/ae/commands/search'
 import { invokeCommandDescriptor, runInvokeCommand } from '../../tools/ae/commands/invoke'
 import { ACCOUNT_COMMAND_DESCRIPTORS, accountCommandDescriptor } from '../../tools/ae/commands/account'
@@ -23,24 +23,24 @@ import { SUPPLY_ACTION_ROUTE_CONTRACTS } from '@/modules/capability-supply/suppl
 import { SUPPLY_COMMAND_DESCRIPTORS } from '../../tools/ae/commands/supply'
 
 const operationMarketCliCommands = [
+  { actionId: 'registry.operations.list', command: 'list', path: '/api/v1/market-operations/list' },
   { actionId: 'registry.operations.search', command: 'search', path: '/api/v1/market-operations/search' },
-  { actionId: 'registry.operations.detail', command: 'inspect', path: '/api/v1/market-operations/detail' },
+  { actionId: 'registry.operations.describe', command: 'describe', path: '/api/v1/market-operations/describe' },
   { actionId: 'registry.operations.compare', command: 'compare', path: '/api/v1/market-operations/compare' },
-  { actionId: 'registry.operations.inspectPlan', command: 'inspect-plan', path: '/api/v1/market-operations/inspect-plan' },
 ] as const
 
 const operationMarketCliRunners = [
+  runListCommand,
   runSearchCommand,
-  runInspectCommand,
+  runDescribeCommand,
   runCompareCommand,
-  runInspectPlanCommand,
 ] as const
 
 const chatActionIds = [
+  'registry.operations.list',
   'registry.operations.search',
-  'registry.operations.detail',
+  'registry.operations.describe',
   'registry.operations.compare',
-  'registry.operations.inspectPlan',
   'operation.inspect',
   'operation.invoke',
 ] as const

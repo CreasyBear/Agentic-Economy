@@ -14,13 +14,13 @@ import {
   operationListResultSchema,
 } from '@/modules/capability-execution/operation-history.actions'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
-import { operationDetailOutputSchema } from '@/modules/capability-supply/public'
+import { operationChoiceDescribeOutputSchema } from '@/modules/registry/operation-choice-contracts'
 import {
   MARKET_REQUEST_ROUTE_CONTRACTS,
   marketRequestListAction,
   marketRequestStatusAction,
 } from '@/modules/market-demand/market-demand.actions'
-import { OPERATION_MARKET_DETAIL_PATH } from '@/modules/registry/operation-entry'
+import { OPERATION_MARKET_DESCRIBE_PATH } from '@/modules/registry/operation-entry'
 import {
   SUPPLY_ACTION_ROUTE_CONTRACTS,
   supplyConnectionListAction,
@@ -411,7 +411,7 @@ async function checkBalance(
     const outcome = await callJson(baseUrl, AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.balance.path, {
       method: AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.balance.method,
       headers,
-      body: JSON.stringify({ currency: 'USD' }),
+      body: JSON.stringify({ currency: 'AUD' }),
     })
     const parsed = agentAccountBalanceAction.outputSchema.safeParse(outcome.body)
     if (!outcome.ok || !parsed.success || parsed.data.kind !== 'available') {
@@ -473,16 +473,16 @@ async function checkInvocation(
 
 async function checkRepeatUse(baseUrl: string, operationRef: string): Promise<DoctorCheck | undefined> {
   try {
-    const outcome = await callJson(baseUrl, OPERATION_MARKET_DETAIL_PATH, {
+    const outcome = await callJson(baseUrl, OPERATION_MARKET_DESCRIBE_PATH, {
       method: 'POST',
       body: JSON.stringify({ operationRef }),
     })
-    const parsed = operationDetailOutputSchema.safeParse(outcome.body)
+    const parsed = operationChoiceDescribeOutputSchema.safeParse(outcome.body)
     if (!outcome.ok || !parsed.success || parsed.data.kind !== 'found') return undefined
     return {
       id: 'repeat_use', state: 'pass',
-      summary: 'A previously successful Operation is still current and ready to inspect.',
-      nextCommand: continuationCommand(['ae', 'inspect', parsed.data.operation.operationRef]),
+      summary: 'A previously successful Operation is still in the current catalog.',
+      nextCommand: continuationCommand(['ae', 'describe', parsed.data.operation.operationRef]),
     }
   } catch {
     return undefined

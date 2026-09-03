@@ -28,9 +28,25 @@ const PANEL_CONTENT_ID = 'ae-command-panel-content'
  */
 export function AeCommandPanel() {
   const panel = useCommandPanel()
-  useCommandPanelHotKeys(panel.toggle)
-
   const [searchQuery, setSearchQuery] = useState('')
+  const updateSearchQuery = (nextQuery: string) => {
+    setSearchQuery(nextQuery)
+  }
+  const completeNavigation = () => {
+    updateSearchQuery('')
+    panel.completeNavigation()
+  }
+  const handleEscape = () => {
+    if (panel.pageCount > 1) panel.popPage()
+    else if (searchQuery.trim() !== '') updateSearchQuery('')
+    else panel.close()
+  }
+  useCommandPanelHotKeys({
+    isOpen: panel.isOpen,
+    onEscape: handleEscape,
+    onOpen: panel.open,
+    onToggle: panel.toggle,
+  })
 
   return (
     <Dialog
@@ -40,15 +56,15 @@ export function AeCommandPanel() {
       <DialogTrigger asChild>
         <Button
           type="button"
-          variant="secondary"
+          variant="outline"
           size="sm"
-          className="min-h-touch"
-          aria-label="Search"
+          className="min-h-touch justify-start rounded-none bg-background px-3 shadow-none sm:min-w-56"
+          aria-label="Find Operations"
           aria-controls={PANEL_CONTENT_ID}
         >
           <SearchIcon aria-hidden="true" />
-          <span>Search</span>
-          <kbd className="ml-1 hidden rounded border border-border px-1.5 py-0.5 font-mono text-[0.6875rem] text-muted-foreground sm:inline">
+          <span className="hidden font-mono text-xs font-medium uppercase tracking-wide sm:inline">Find Operations</span>
+          <kbd className="ms-auto hidden border-s border-border ps-2 font-mono text-[0.6875rem] text-muted-foreground sm:inline">
             ⌘K
           </kbd>
         </Button>
@@ -57,16 +73,6 @@ export function AeCommandPanel() {
         id={PANEL_CONTENT_ID}
         showCloseButton={panel.pageCount === 1}
         className="flex h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-none flex-col gap-0 overflow-hidden rounded-lg p-0 duration-base ease-emphasized motion-reduce:animate-none motion-reduce:duration-0 sm:h-[min(42rem,calc(100dvh-3rem))] sm:w-full sm:max-w-3xl"
-        onEscapeKeyDown={(event) => {
-          // Layered: Escape pops one inspect layer before it may close.
-          if (panel.pageCount > 1) {
-            event.preventDefault()
-            panel.popPage()
-          } else if (searchQuery.trim() !== '') {
-            event.preventDefault()
-            setSearchQuery('')
-          }
-        }}
         onKeyDown={(event) => {
           if (
             event.key === '/' &&
@@ -105,12 +111,15 @@ export function AeCommandPanel() {
             <OperationsSearchPage
               isActive={panel.topPage.kind === 'operations-search'}
               query={searchQuery}
-              onQueryChange={setSearchQuery}
+              onQueryChange={updateSearchQuery}
               onSelectOperation={panel.pushInspect}
             />
           </div>
           {panel.topPage.kind === 'operation-inspect' ? (
-            <OperationInspectPage operationRef={panel.topPage.operationRef} />
+            <OperationInspectPage
+              operationRef={panel.topPage.operationRef}
+              onNavigate={completeNavigation}
+            />
           ) : null}
         </div>
         <p className="shrink-0 border-t border-border px-gutter py-intra text-xs text-muted-foreground">

@@ -19,6 +19,7 @@ const routeHarness = vi.hoisted(() => ({
   readCanonicalBaseUrl: vi.fn(),
   revokeRef: Symbol('revoke'),
   disconnectRef: Symbol('disconnect'),
+  disconnectConnectionRef: Symbol('disconnect-connection'),
   renameRef: Symbol('rename'),
   readApprovalsRef: Symbol('read-approvals'),
   decideApprovalRef: Symbol('decide-approval'),
@@ -80,6 +81,7 @@ vi.mock('@/lib/server/agent-access-console.functions', () => ({
 
 vi.mock('@/modules/agent-access/agent-access.functions', () => ({
   disconnectAgentServer: routeHarness.disconnectRef,
+  revokeOwnerConnectionServer: routeHarness.disconnectConnectionRef,
   renameAgentServer: routeHarness.renameRef,
   revokeAgentCredentialServer: routeHarness.revokeRef,
 }))

@@ -151,10 +151,9 @@ describe('ae doctor', () => {
         if (request.url === '/api/v1/account/balance') {
           respondJson(response, {
             kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            balance: { currency: 'USD', units: '2500', exponent: 2 },
-            recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
+            balance: { currency: 'AUD', units: '25000000', exponent: 6 },
             accountState: 'active', version: 1, updatedAt: 10,
-            funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
           })
           return
         }
@@ -203,7 +202,7 @@ describe('ae doctor', () => {
     expect(observed).toEqual([
       { method: 'GET', path: '/.well-known/ucp' },
       { method: 'GET', path: '/api/v1/account', authorization: `Bearer ${buyerSecret}` },
-      { method: 'POST', path: '/api/v1/account/balance', authorization: `Bearer ${buyerSecret}`, body: '{"currency":"USD"}' },
+      { method: 'POST', path: '/api/v1/account/balance', authorization: `Bearer ${buyerSecret}`, body: '{"currency":"AUD"}' },
       { method: 'GET', path: '/api/v1/operations?limit=100', authorization: `Bearer ${buyerSecret}` },
       { method: 'POST', path: '/api/v1/market-requests/list', authorization: `Bearer ${buyerSecret}`, body: '{"limit":5}' },
     ])
@@ -258,10 +257,9 @@ describe('ae doctor', () => {
         if (request.url === '/api/v1/account/balance') {
           respondJson(response, {
             kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            balance: { currency: 'USD', units: '2500', exponent: 2 },
-            recoveryDue: { currency: 'USD', units: '0', exponent: 2 }, accountState: 'active',
+            balance: { currency: 'AUD', units: '25000000', exponent: 6 }, accountState: 'active',
             version: 1, updatedAt: 10,
-            funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
           })
           return
         }
@@ -365,10 +363,9 @@ describe('ae doctor', () => {
         if (request.url === '/api/v1/account/balance') {
           respondJson(response, {
             kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            balance: { currency: 'USD', units: '2500', exponent: 2 },
-            recoveryDue: { currency: 'USD', units: '0', exponent: 2 }, accountState: 'active',
+            balance: { currency: 'AUD', units: '25000000', exponent: 6 }, accountState: 'active',
             version: 1, updatedAt: 10,
-            funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
           })
           return
         }
@@ -470,10 +467,9 @@ describe('ae doctor', () => {
         if (request.url === '/api/v1/account/balance') {
           respondJson(response, {
             kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            balance: { currency: 'USD', units: '2500', exponent: 2 },
-            recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
+            balance: { currency: 'AUD', units: '25000000', exponent: 6 },
             accountState: 'active', version: 1, updatedAt: 10,
-            funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
           })
           return
         }
@@ -612,10 +608,9 @@ describe('ae doctor', () => {
         } else if (request.url === '/api/v1/account/balance') {
           respondJson(response, {
             kind: 'available', principalRef: 'prn_buyer', accountRef: 'acc_owner',
-            balance: { currency: 'USD', units: '1', exponent: 2 },
-            recoveryDue: { currency: 'USD', units: '0', exponent: 2 }, accountState: 'active',
+            balance: { currency: 'AUD', units: '10000', exponent: 6 }, accountState: 'active',
             version: 1, updatedAt: 10,
-            funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+            funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
           })
         } else if (request.url === '/api/v1/operations?limit=100') {
           respondJson(response, { kind: 'available', items: [], hasMore: false })

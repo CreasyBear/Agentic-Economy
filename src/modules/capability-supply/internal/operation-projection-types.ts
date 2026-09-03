@@ -4,11 +4,7 @@ import type {
   JsonValue,
 } from "@/modules/capability-contract/public";
 import type { ExactAmount } from "@/modules/money/public";
-import type {
-  PublicOperationRef,
-  RegisteredOperationMapping,
-  RegisteredOperationMappingRef,
-} from "../public";
+import type { PublicOperationRef } from "../public";
 import type { X402CatalogPayment } from "./transport-adapters";
 
 export const CURRENT_OPERATION_CALL_VIA = "/api/v1/operations/call" as const;
@@ -171,14 +167,15 @@ export type PublicOperationAvailability = Readonly<{
   posture: "setup_required" | "routeable" | "unavailable";
   observedAt?: number;
   validUntil?: number;
+  lastHealthyAt?: number;
   reason?: PublicCapabilityUnavailableReason;
 }>;
 export type PublicOperationNavigationRelation = Readonly<{
   relation:
     | "search"
-    | "detail"
+    | "list"
+    | "describe"
     | "compare"
-    | "inspect_plan"
     | "invoke"
     | "review_route"
     | "read_status"
@@ -199,10 +196,10 @@ type PublicOperationNavigationFor<
 > = PublicOperationNavigationRelation & Readonly<{ relation: Relation }>;
 export type OperationProjectionNavigationContract = Readonly<{
   market: Readonly<{
+    list: PublicOperationNavigationFor<"list">;
     search: PublicOperationNavigationFor<"search">;
-    detail: PublicOperationNavigationFor<"detail">;
+    describe: PublicOperationNavigationFor<"describe">;
     compare: PublicOperationNavigationFor<"compare">;
-    inspectPlan: PublicOperationNavigationFor<"inspect_plan">;
   }>;
   invoke: PublicOperationNavigationFor<"invoke"> &
     Readonly<{
@@ -300,7 +297,7 @@ export type CapabilityOperationSourceRecord = Readonly<{
   integrated: boolean;
   routeable: boolean;
   unavailableReason?: PublicCapabilityUnavailableReason;
-  readiness: Readonly<{ observedAt?: number; validUntil?: number }>;
+  readiness: Readonly<{ observedAt?: number; validUntil?: number; lastHealthyAt?: number }>;
   searchTerms: readonly string[];
   snapshotKey: string;
 }>;
@@ -318,8 +315,4 @@ export type CapabilityOperationSourcePort = Readonly<{
   loadCurrent: (
     operationRef: PublicOperationRef,
   ) => Promise<CapabilityOperationSourceRecord | null>;
-  resolveMapping?: (
-    mappingRef: RegisteredOperationMappingRef,
-    networkId?: string,
-  ) => Promise<RegisteredOperationMapping | null>;
 }>;

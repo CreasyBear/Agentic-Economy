@@ -11,6 +11,7 @@ import {
 import { AeSiteDrawerNav, AeSiteIconButton, AeSitePrimaryNav } from '@/components/ae/website/AeSiteNav'
 import { AeSiteFooter } from '@/components/ae/website/AeSiteFooter'
 import { AECON_MARK_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { cn } from '@/lib/utils'
 
 function AeFunnelAttributionBoot() {
   useEffect(() => {
@@ -22,6 +23,7 @@ function AeFunnelAttributionBoot() {
 
 type AePublicShellProps = {
   children: ReactNode
+  mode?: 'page' | 'workspace'
 }
 
 /**
@@ -75,7 +77,7 @@ function useHeaderElevated(sentinelRef: RefObject<HTMLDivElement | null>): boole
   return elevated
 }
 
-export function AePublicShell({ children }: AePublicShellProps) {
+export function AePublicShell({ children, mode = 'page' }: AePublicShellProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -87,7 +89,13 @@ export function AePublicShell({ children }: AePublicShellProps) {
   }
 
   return (
-    <div className="relative flex min-h-dvh flex-col">
+    <div
+      data-shell-mode={mode}
+      className={cn(
+        'relative flex flex-col',
+        mode === 'workspace' ? 'h-dvh min-h-0 overflow-hidden' : 'min-h-dvh',
+      )}
+    >
       <AeFunnelAttributionBoot />
       <AeSkipFocusBridge />
       <a
@@ -98,7 +106,7 @@ export function AePublicShell({ children }: AePublicShellProps) {
         Skip to content
       </a>
       <div ref={sentinelRef} aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-2" />
-      <header className="sticky top-0 z-30 pt-3">
+      <header className={cn('z-30 shrink-0 pt-3', mode === 'page' && 'sticky top-0')}>
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <CloseDrawerOnDesktop onClose={setMobileNavOpen} />
           <div
@@ -149,11 +157,19 @@ export function AePublicShell({ children }: AePublicShellProps) {
           </SheetContent>
         </Sheet>
       </header>
-      <div id="ae-app-shell-main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col">
-        <main id="main-content" tabIndex={-1} className="flex-1">
+      <div
+        id="ae-app-shell-main"
+        tabIndex={-1}
+        className={cn('flex min-h-0 flex-1 flex-col', mode === 'workspace' && 'overflow-hidden')}
+      >
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={cn('flex-1', mode === 'workspace' && 'flex min-h-0 flex-col overflow-hidden')}
+        >
           {children}
         </main>
-        <AeSiteFooter />
+        {mode === 'page' ? <AeSiteFooter /> : null}
       </div>
     </div>
   )

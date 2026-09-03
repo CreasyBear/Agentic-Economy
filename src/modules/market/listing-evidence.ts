@@ -87,6 +87,7 @@ export type MarketLatencyProjection =
       medianMs: number;
       p95Ms: number;
       sampleSize: number;
+      samplesMs?: readonly number[];
       display: string;
       definition: string;
     }>
@@ -94,6 +95,7 @@ export type MarketLatencyProjection =
       kind: "insufficient_sample";
       sampleSize: number;
       minimumSampleSize: number;
+      samplesMs?: readonly number[];
       display: "Not enough data";
       definition: string;
     }>;
@@ -210,24 +212,26 @@ function projectRating(count: number, sum: number): MarketRatingProjection {
 function projectLatency(samples: readonly number[]): MarketLatencyProjection {
   const valid = samples
     .filter((sample) => Number.isSafeInteger(sample) && sample >= 0)
-    .slice(0, MARKET_MAX_LATENCY_SAMPLE_SIZE)
-    .sort((left, right) => left - right);
+    .slice(0, MARKET_MAX_LATENCY_SAMPLE_SIZE);
+  const sorted = [...valid].sort((left, right) => left - right);
   if (valid.length < MARKET_MIN_LATENCY_SAMPLE_SIZE)
     return {
       kind: "insufficient_sample",
       sampleSize: valid.length,
       minimumSampleSize: MARKET_MIN_LATENCY_SAMPLE_SIZE,
+      samplesMs: valid,
       display: "Not enough data",
       definition:
         "Median admitted-to-completed latency appears after at least five completed calls in the selected period.",
     };
-  const medianMs = percentile(valid, 0.5);
-  const p95Ms = percentile(valid, 0.95);
+  const medianMs = percentile(sorted, 0.5);
+  const p95Ms = percentile(sorted, 0.95);
   return {
     kind: "measured",
     medianMs,
     p95Ms,
     sampleSize: valid.length,
+    samplesMs: valid,
     display: formatDuration(medianMs),
     definition:
       "Median admitted-to-completed latency for completed calls in the selected period; the detail view also preserves the p95 and sample size.",

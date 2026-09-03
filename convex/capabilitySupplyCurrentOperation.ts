@@ -254,6 +254,9 @@ export async function readExactSellerCanaryOperationSnapshotHandler(
         priceDigest: pricing.priceDigest,
         readinessObservedAt: publication.readinessObservedAt,
         readinessValidUntil: publication.readinessValidUntil,
+        ...(publication.readinessLastHealthyAt === undefined
+          ? {}
+          : { readinessLastHealthyAt: publication.readinessLastHealthyAt }),
         readinessEvidenceRefs: publication.readinessEvidenceRefs,
       },
       contract: contractResult.contract,

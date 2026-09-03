@@ -27,10 +27,10 @@ import {
 import { formatCurrencyAmount, readExactAmount } from '@/modules/money/public'
 
 export const CHAT_TOOL_IDS = [
+  'registry.operations.list',
   'registry.operations.search',
-  'registry.operations.detail',
+  'registry.operations.describe',
   'registry.operations.compare',
-  'registry.operations.inspectPlan',
   'operation.inspect',
   'operation.invoke',
 ] as const
@@ -51,10 +51,10 @@ export const CHAT_TOOL_NAME_MAP = Object.freeze({
 })
 
 export const CHAT_TOOL_TITLES: Readonly<Record<ChatToolId, string>> = {
+  'registry.operations.list': 'Browse Operations',
   'registry.operations.search': 'Search tools',
-  'registry.operations.detail': 'Tool details',
+  'registry.operations.describe': 'Operation details',
   'registry.operations.compare': 'Compare tools',
-  'registry.operations.inspectPlan': 'Inspect before a call',
   'operation.inspect': 'Confirm purchase terms',
   'operation.invoke': 'Invoke',
 }
@@ -224,16 +224,23 @@ function rowFromChoiceFields(value: unknown): OperationChoiceRow | null {
   const operationRef = refs[0]
   const title = stringField(value.title)
   if (operationRef === undefined || title === undefined) return null
-  const supplier = isRecord(value.supplier) ? stringField(value.supplier.name) : undefined
-  const price = readPrice(value.price)
-  const posture = readPosture(value.availability)
+  const supplier = isRecord(value.provider) ? stringField(value.provider.name) : undefined
+  const price = stringField(value.priceLabel)
+  const healthStatus = stringField(value.healthStatus)
+  const readiness = healthStatus === 'operational'
+    ? 'Operational'
+    : healthStatus === 'degraded'
+      ? 'Degraded'
+      : healthStatus === 'unverified'
+        ? 'Unverified'
+        : undefined
   const authentication = readAuthentication(value.authentication)
   return {
     operationRef,
     title,
     ...(supplier === undefined ? {} : { supplier }),
-    ...(price === undefined ? {} : { price: formatOperationPrice(price) }),
-    ...(posture === undefined ? {} : { readiness: formatOperationReadiness(posture) }),
+    ...(price === undefined ? {} : { price }),
+    ...(readiness === undefined ? {} : { readiness }),
     ...(authentication === undefined ? {} : { access: formatOperationAuthentication(authentication) }),
   }
 }
@@ -338,6 +345,9 @@ function collectOperationRefs(output: Record<string, unknown>, choices: readonly
 }
 
 function matchedCount(output: Record<string, unknown>): number | undefined {
+  if (typeof output.count === 'number' && Number.isSafeInteger(output.count)) {
+    return Math.max(0, output.count)
+  }
   if (typeof output.matchedCount === 'number' && Number.isSafeInteger(output.matchedCount)) {
     return Math.max(0, output.matchedCount)
   }
@@ -449,27 +459,6 @@ function projectCompareContrasts(
     facts.push({ label: compareFieldLabel(entry.field), value: parts.join('; ') })
     if (facts.length >= 4) break
   }
-  return facts
-}
-
-function inspectPlanFacts(output: Record<string, unknown>): OperationFact[] {
-  const summary = isRecord(output.summary) ? output.summary : undefined
-  if (summary === undefined) return []
-  const facts: OperationFact[] = []
-  if (isRecord(summary.maximumCost)) {
-    if (summary.maximumCost.kind === 'requires_preparation') {
-      facts.push({ label: FACT.maxCost, value: FACT.requiresPreparation })
-    } else if (summary.maximumCost.kind === 'known') {
-      const amount = readExactAmount(summary.maximumCost.amount)
-      if (amount !== undefined) {
-        facts.push({ label: FACT.maxCost, value: formatOperationPrice({ kind: 'fixed', amount }) })
-      }
-    }
-  }
-  const effects = labelsFromPolicy(summary.effects, effectLabel)
-  if (effects !== undefined) facts.push({ label: FACT.effects, value: effects })
-  const dataUse = labelsFromPolicy(summary.dataUse, dataUseLabel)
-  if (dataUse !== undefined) facts.push({ label: FACT.dataUse, value: dataUse })
   return facts
 }
 
@@ -652,6 +641,7 @@ function statusCard(toolId: ChatToolId, state: 'refused' | 'error', summary: str
 
 function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): OperationCardProjection {
   switch (toolId) {
+    case 'registry.operations.list':
     case 'registry.operations.search': {
       const choices = projectLiveChoices(output.items)
       const count = matchedCount(output)
@@ -678,7 +668,7 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): O
         ...(contrasts.length === 0 ? {} : { contrasts }),
       }
     }
-    case 'registry.operations.detail': {
+    case 'registry.operations.describe': {
       const choice = projectLiveChoice(output.operation ?? output)
       const choices = choice === null ? [] : [choice]
       return {
@@ -689,14 +679,6 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>): O
         operationRefs: collectOperationRefs(output, choices),
       }
     }
-    case 'registry.operations.inspectPlan':
-      return {
-        ...chrome(toolId),
-        kind: 'inspect',
-        state: 'complete',
-        facts: inspectPlanFacts(output),
-        operationRefs: collectOperationRefs(output, []),
-      }
     case 'operation.inspect':
     case 'operation.invoke':
       return statusCard(toolId, 'error', 'Tool unavailable')
@@ -721,7 +703,7 @@ function projectStoredCard(part: Record<string, unknown>): OperationCardProjecti
   }
   const refs: string[] = []
   if (Array.isArray(part.operationRefs)) for (const value of part.operationRefs) addRef(refs, value)
-  if (part.kind === 'inspect' || toolId === 'registry.operations.inspectPlan') {
+  if (part.kind === 'inspect' || toolId === 'operation.inspect') {
     return {
       ...chrome(toolId),
       kind: 'inspect',

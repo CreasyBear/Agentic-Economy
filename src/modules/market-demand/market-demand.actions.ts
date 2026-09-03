@@ -239,7 +239,7 @@ export function createMarketDemandService(request: Request, bodyText: string): M
       const requestRecord = marketRequestSummarySchema.safeParse(raw.request)
       if (!requestRecord.success) return { kind: 'error', code: 'source_unavailable' }
       const search = await registryOperationsSearchAction.run({
-        data: registryOperationsSearchAction.schema.parse({ query: requestRecord.data.query, limit: 5 }),
+        data: registryOperationsSearchAction.schema.parse({ query: requestRecord.data.query, limit: 3 }),
         context: { caller: 'http', request },
       })
       if (search.kind === 'unavailable') return { kind: 'error', code: 'source_unavailable' }
@@ -258,7 +258,7 @@ export function createMarketDemandService(request: Request, bodyText: string): M
         requestRef: requestRecord.data.requestRef,
         query: requestRecord.data.query,
         createdAt: requestRecord.data.createdAt,
-        matchedCount: search.matchedCount,
+        matchedCount: search.count,
         operations,
       })
     },
@@ -359,7 +359,7 @@ export const marketRequestStatusAction = defineAction<MarketRequestStatusInput, 
   invocationContract: {
     version: MARKET_REQUEST_ROUTE_CONTRACTS.status.contractVersion,
     consequenceClass: 'read_only', materialInputPaths: ['requestRef'], authorityRequirement: 'principal',
-    retryClass: 'replayable', expectedEvidence: ['current_operation_matches'], safeContinuations: ['registry.operations.detail'],
+    retryClass: 'replayable', expectedEvidence: ['current_operation_matches'], safeContinuations: ['registry.operations.describe'],
     invalidationConditions: ['request_ref_changed', 'credential_profile_changed', 'market_supply_changed'],
   },
   run: async ({ data, context }) => {

@@ -60,13 +60,6 @@ const compareUnavailable = {
   navigation: [],
 } as const
 
-const inspectUnavailable = {
-  kind: 'unavailable',
-  schemaVersion: 'registry-operations:v1',
-  reason: 'operation_not_found',
-  navigation: [],
-} as const
-
 function toolCtx(input: Readonly<{
   runQuery?: ToolCtx['runQuery']
   runAction?: ToolCtx['runAction']
@@ -103,8 +96,6 @@ function nativeReadResult(functionName: string): unknown {
       return notFound
     case 'capabilitySupplyOperations:compare':
       return compareUnavailable
-    case 'capabilitySupplyOperations:inspectPlan':
-      return inspectUnavailable
     default:
       throw new Error(`Unexpected native query: ${functionName}`)
   }
@@ -237,16 +228,16 @@ describe('Operation chat Agent tools', () => {
     const agent = createChatAgent(mockModel(), AUTHORITY)
     const ctx = toolCtx({ runQuery: runQuery as ToolCtx['runQuery'] })
 
+    await invokeTool(agent, 'registry.operations.list', ctx, {})
     await invokeTool(agent, 'registry.operations.search', ctx, { query: 'weather' })
-    await invokeTool(agent, 'registry.operations.detail', ctx, { operationRef: OPERATION_REF })
+    await invokeTool(agent, 'registry.operations.describe', ctx, { operationRef: OPERATION_REF })
     await invokeTool(agent, 'registry.operations.compare', ctx, { operationRefs: [OPERATION_REF] })
-    await invokeTool(agent, 'registry.operations.inspectPlan', ctx, { operationRefs: [OPERATION_REF] })
 
     expect(runQuery.mock.calls.map(([reference]) => getFunctionName(reference))).toEqual([
       getFunctionName(api.capabilitySupplyOperations.search),
+      getFunctionName(api.capabilitySupplyOperations.search),
       getFunctionName(api.capabilitySupplyOperations.detail),
       getFunctionName(api.capabilitySupplyOperations.compare),
-      getFunctionName(api.capabilitySupplyOperations.inspectPlan),
     ])
   })
 
@@ -433,9 +424,9 @@ describe('Operation chat Agent tools', () => {
       await invokeTool(agent, 'registry.operations.search', ctx, { query: 'weather' })
     }
     for (const [toolId, input] of [
-      ['registry.operations.detail', { operationRef: OPERATION_REF }],
+      ['registry.operations.list', {}],
+      ['registry.operations.describe', { operationRef: OPERATION_REF }],
       ['registry.operations.compare', { operationRefs: [OPERATION_REF] }],
-      ['registry.operations.inspectPlan', { operationRefs: [OPERATION_REF] }],
     ] as const) {
       await expect(invokeTool(agent, toolId, ctx, input)).resolves.toEqual({
         kind: 'chat_tool_refused',

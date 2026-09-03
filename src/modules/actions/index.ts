@@ -40,8 +40,8 @@ import {
 } from '@/modules/registry/registry.actions'
 import {
   registryOperationsCompareAction,
-  registryOperationsDetailAction,
-  registryOperationsInspectPlanAction,
+  registryOperationsDescribeAction,
+  registryOperationsListAction,
   registryOperationsSearchAction,
 } from '@/modules/registry/operations.actions'
 import {
@@ -60,12 +60,17 @@ import {
   marketRequestListAction,
   marketRequestStatusAction,
 } from '@/modules/market-demand/market-demand.actions'
+import {
+  fundingHandoffConfigAction,
+  fundingHandoffCreateAction,
+  fundingHandoffStatusAction,
+} from '@/modules/money/funding-handoff.actions'
 
 const operationMarketReadActions: readonly AnyAction[] = [
+  registryOperationsListAction,
   registryOperationsSearchAction,
-  registryOperationsDetailAction,
+  registryOperationsDescribeAction,
   registryOperationsCompareAction,
-  registryOperationsInspectPlanAction,
 ]
 
 const registeredActions: readonly AnyAction[] = [
@@ -75,6 +80,9 @@ const registeredActions: readonly AnyAction[] = [
   agentAccountSelfAction,
   agentAccountBalanceAction,
   agentAccountActivityAction,
+  fundingHandoffConfigAction,
+  fundingHandoffCreateAction,
+  fundingHandoffStatusAction,
   marketRequestCreateAction,
   marketRequestListAction,
   marketRequestStatusAction,

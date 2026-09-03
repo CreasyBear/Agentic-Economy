@@ -121,6 +121,7 @@ export async function recordCapabilityProbeResult(
     readinessOutcome: args.outcome,
     readinessObservedAt: args.observedAt,
     readinessValidUntil: args.validUntil,
+    ...(args.healthState === 'healthy' ? { readinessLastHealthyAt: args.observedAt } : {}),
     readinessEvidenceRefs: [...args.evidenceRefs],
     updatedAt: now,
   })
@@ -136,6 +137,7 @@ export async function recordCapabilityProbeResult(
     readinessOutcome: args.outcome,
     readinessObservedAt: args.observedAt,
     readinessValidUntil: args.validUntil,
+    ...(args.healthState === 'healthy' ? { readinessLastHealthyAt: args.observedAt } : {}),
   }
   return {
     kind: 'observed',

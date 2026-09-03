@@ -862,6 +862,24 @@ describe('centralized cross-surface consequence authority', () => {
         confirmationFields: ['actor', 'account', 'target', 'operation_revision', 'market_visibility', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
+      'commercial_policy.activate': {
+        actionClass: 'authority_increase',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'scope', 'expiry', 'consequence', 'recovery'],
+        recoveryClass: 'reversible_before_dispatch',
+      },
+      'commercial_policy.replace': {
+        actionClass: 'authority_increase',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'scope', 'expiry', 'consequence', 'recovery'],
+        recoveryClass: 'reversible_before_dispatch',
+      },
+      'commercial_policy.suspend': {
+        actionClass: 'authority_reduction',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'scope', 'expiry', 'consequence', 'recovery'],
+        recoveryClass: 'reversible_before_dispatch',
+      },
     })
 
     for (const action of PACKAGE_3_CONSEQUENCE_ACTIONS) {
@@ -880,7 +898,7 @@ describe('centralized cross-surface consequence authority', () => {
           uniquePerCommand: true,
         })
       }
-      if (policy.actionClass === 'authority_reduction') {
+      if (policy.actionClass === 'authority_reduction' && action !== 'commercial_policy.suspend') {
         expect(policy.proofPolicy).toEqual({ kind: 'none' })
       }
     }
@@ -893,6 +911,12 @@ describe('centralized cross-surface consequence authority', () => {
     expect(PACKAGE_3_CONSEQUENCE_ACTION_POLICY['publication.republish'].proofPolicy.kind)
       .toBe('clerk_reverification')
     expect(PACKAGE_3_CONSEQUENCE_ACTION_POLICY['publication.withdraw'].proofPolicy).toEqual({ kind: 'none' })
+    expect(PACKAGE_3_CONSEQUENCE_ACTION_POLICY['commercial_policy.activate'].proofPolicy.kind)
+      .toBe('clerk_reverification')
+    expect(PACKAGE_3_CONSEQUENCE_ACTION_POLICY['commercial_policy.replace'].proofPolicy.kind)
+      .toBe('clerk_reverification')
+    expect(PACKAGE_3_CONSEQUENCE_ACTION_POLICY['commercial_policy.suspend'].proofPolicy.kind)
+      .toBe('clerk_reverification')
   })
 
   it('rejects actions outside the closed Package 3 policy before resolving authority', async () => {

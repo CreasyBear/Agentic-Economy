@@ -167,9 +167,10 @@ export type OperationSearchResult =
     }>;
 
 const MAX_SOURCE = 256;
-const MAX_QUERY = 200;
+const MAX_QUERY = 256;
 const MAX_CURSOR = 512;
-const MAX_LIMIT = 3;
+const DEFAULT_LIMIT = 3;
+const MAX_LIMIT = 100;
 const SEARCH_CURRENCY_CODES = new Set(
   Intl.supportedValuesOf("currency").map((currency) => currency.toLowerCase()),
 );
@@ -458,7 +459,7 @@ function normalizeSearch(input: OperationSearchInput):
     containsConcreteSensitiveInput(input.query)
   )
     return undefined;
-  const limit = input.limit ?? MAX_LIMIT;
+  const limit = input.limit ?? DEFAULT_LIMIT;
   if (
     !Number.isSafeInteger(limit) ||
     limit < 1 ||

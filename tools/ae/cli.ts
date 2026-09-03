@@ -1,6 +1,6 @@
 /**
  * AE CLI. Exercises AE the way an external agent would through public machine
- * surfaces. Market Operation search/detail/compare are anonymous HTTP reads;
+ * surfaces. Market Operation list/search/describe/compare are anonymous HTTP reads;
  * connect uses the existing OAuth device flow; call/status/wait/cancel/reconcile
  * use the canonical authenticated gateway (the CLI's `recover` command is
  * the `operation.reconcile` action).
@@ -42,7 +42,6 @@ const JSON_HELP_FLAGS = {
   '--state': { type: 'string', description: 'Canonical invocation state filter; history only.' },
   '--filters': { type: 'string', description: 'Canonical JSON search filters; search only.' },
   '--input': { type: 'string', description: 'Schema-valid JSON object for call or supplier lifecycle write; call alone accepts - to read it from standard input.' },
-  '--mcp': { type: 'boolean', description: 'Write a user-only Streamable HTTP MCP connection file after connect.' },
   '--supplier': { type: 'boolean', description: 'Request a separate owner-approved supplier credential with market_supply:manage.' },
   '--json': { type: 'boolean', description: 'Emit exactly one machine-readable JSON value on stdout.' },
   '--help': { type: 'boolean', description: 'Show help without performing command work.' },
@@ -53,15 +52,15 @@ const JSON_HELP_FLAGS = {
 } as const
 
 const COMMON_COMMAND_OPTIONS = ['base-url', 'json'] as const
-const PUBLIC_READ_COMMANDS = new Set(['search', 'inspect', 'compare', 'inspect-plan'])
+const PUBLIC_READ_COMMANDS = new Set(['list', 'search', 'describe', 'compare'])
 const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   manifest: ['technical'],
   config: [],
+  list: ['limit', 'cursor', 'filters'],
   search: ['limit', 'cursor', 'filters', 'technical'],
-  inspect: ['technical'],
+  describe: ['technical'],
   compare: ['technical'],
-  'inspect-plan': [],
-  connect: ['mcp', 'supplier'],
+  connect: ['supplier'],
   doctor: ['supplier'],
   account: [],
   'account activity': ['limit', 'cursor'],
@@ -186,7 +185,6 @@ function jsonHelp(
         guidance: [
           'Open the displayed verification URI and approve the displayed user code.',
           'Connect validates the issued key and stores it for this exact origin with user-only file permissions.',
-          'Pass --mcp to write the matching Streamable HTTP MCP connection at the same time.',
         ],
       },
     } : {}),

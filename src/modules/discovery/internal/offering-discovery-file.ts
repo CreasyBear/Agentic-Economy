@@ -4,8 +4,8 @@ import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   OPERATION_MARKET_COMPARE_PATH,
-  OPERATION_MARKET_DETAIL_PATH,
-  OPERATION_MARKET_INSPECT_PLAN_PATH,
+  OPERATION_MARKET_DESCRIBE_PATH,
+  OPERATION_MARKET_LIST_PATH,
   OPERATION_MARKET_SEARCH_PATH,
 } from '@/modules/registry/operation-paths'
 
@@ -24,9 +24,9 @@ export const DiscoveryPublicSurfacePaths = [
   '/robots.txt',
   '/sitemap.xml',
   OPERATION_MARKET_SEARCH_PATH,
-  OPERATION_MARKET_DETAIL_PATH,
+  OPERATION_MARKET_LIST_PATH,
+  OPERATION_MARKET_DESCRIBE_PATH,
   OPERATION_MARKET_COMPARE_PATH,
-  OPERATION_MARKET_INSPECT_PLAN_PATH,
 ] as const
 
 /** Supporting provider facts never become executable merely because they are published. */
@@ -35,7 +35,7 @@ export const DiscoveryListingBoundaryLine =
 
 /** Public loop copy shared by the machine-readable discovery surfaces. */
 export const OperationMarketAnonymousBoundaryLine =
-  'Public: search, inspect, and eligible free keyless read calls. Connect only when a call reports agent_access_key_required.'
+  'Public: list, search, describe, and compare. Connect only when operation.inspect returns the OAuth challenge.'
 export const OperationMarketIdempotencyLine =
   'The low-level write API requires `idempotencyKey`; the CLI creates and retains it automatically.'
 export const OperationMarketInvokeScopeLine = `Required invoke scope: \`${OPERATION_INVOKE_ROUTE_CONTRACT.scope}\`.`
@@ -48,9 +48,9 @@ export function operationMarketLines(canonicalBaseUrl: string): readonly string[
     '## Capability market loop',
     '',
     `1. Search by outcome: \`${cli} search "weather forecast" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}\`).`,
-    `2. Inspect one exact result: \`${cli} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}\`).`,
-    `3. Call it: \`${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait\`. Eligible free keyless reads use the official MCP client.`,
-    `4. Connect only if the call reports \`agent_access_key_required\`: \`${cli} connect --base-url "${canonicalBaseUrl}"\`, then repeat the same call through \`${invoke.method} ${canonicalBaseUrl}${invoke.path}\`.`,
+    `2. Describe one exact result: \`${cli} describe "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_DESCRIBE_PATH}\`).`,
+    `3. Call \`operation.inspect\` with the exact Operation and input. Complete its continuation or required action, then inspect again.`,
+    `4. Invoke only with the returned Commitment through \`${invoke.method} ${canonicalBaseUrl}${invoke.path}\`.`,
     `5. Keep the receipt: \`${cli} status "$AE_INVOCATION_REF" --base-url "${canonicalBaseUrl}" --json\` (\`${status.method} ${canonicalBaseUrl}${status.path}\`). Use cancel or recover only when that receipt offers the action.`,
     '',
     OperationMarketAnonymousBoundaryLine,
@@ -95,7 +95,8 @@ export function buildOfferingLlmsTxt(
     'Canonical catalogue:',
     `- Human: ${canonicalBaseUrl}/market`,
     `- Machine search: POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}`,
-    `- Exact detail: POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}`,
+    `- Browse: POST ${canonicalBaseUrl}${OPERATION_MARKET_LIST_PATH}`,
+    `- Exact description: POST ${canonicalBaseUrl}${OPERATION_MARKET_DESCRIBE_PATH}`,
     '',
     'Boundary:',
     `- ${DiscoveryListingBoundaryLine}`,

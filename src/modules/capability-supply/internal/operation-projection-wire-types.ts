@@ -1,10 +1,6 @@
 import type { CapabilityInputExample } from "@/modules/capability-contract/public";
+import type { PublicOperationRef } from "../public";
 import type {
-  PublicOperationRef,
-  RegisteredOperationMappingRef,
-} from "../public";
-import type {
-  InspectPlanResult,
   OperationComparisonFact,
   OperationSearchFilters,
   OperationSearchRanking,
@@ -91,7 +87,6 @@ export type OperationSurfaceWireNavigation = DeepWritable<
 > & { inputSchema?: string };
 export type OperationSearchWireFilters = DeepWritable<OperationSearchFilters>;
 type OperationComparisonWireFact = DeepWritable<OperationComparisonFact>;
-type InspectPlanOk = Extract<InspectPlanResult, { kind: "ok" }>;
 export type OperationSearchWireResult =
   | {
       kind: "ok";
@@ -152,35 +147,7 @@ export type OperationCompareWireResult =
       reason: "query_invalid" | "operation_not_found" | "operation_unavailable";
       navigation: OperationSurfaceWireNavigation[];
     };
-export type InspectPlanWireResult =
-  | {
-      kind: "ok";
-      schemaVersion: PublicOperationRegistrySchemaVersion;
-      inspectPlanRef: string;
-      operationRefs: PublicOperationRef[];
-      mappingRefs: RegisteredOperationMappingRef[];
-      summary: {
-        maximumCost: DeepWritable<InspectPlanOk["summary"]["maximumCost"]>;
-        dataUse: DeepWritable<PublicDataUsePolicy[number]>[];
-        effects: DeepWritable<PublicEffectPolicy[number]>[];
-        expiry: number;
-      };
-      navigation: OperationSurfaceWireNavigation[];
-    }
-  | {
-      kind: "unavailable";
-      schemaVersion: PublicOperationRegistrySchemaVersion;
-      reason:
-        | "query_invalid"
-        | "operation_not_found"
-        | "operation_unavailable"
-        | "mapping_unavailable"
-        | "mapping_incompatible"
-        | "mapping_cycle";
-      navigation: OperationSurfaceWireNavigation[];
-    };
 export type OperationSurfaceWireResult =
   | OperationSearchWireResult
   | OperationDetailWireResult
-  | OperationCompareWireResult
-  | InspectPlanWireResult;
+  | OperationCompareWireResult;

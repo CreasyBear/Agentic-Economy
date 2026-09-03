@@ -18,28 +18,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  formatOperationPrice,
-  formatOperationReadiness,
-} from "@/modules/market/operation-view-model";
-import type {
-  PublicOperationAvailability,
-  PublicOperationPrice,
-} from "@/modules/capability-supply/public";
 import { operationChoiceCompareOutputSchema } from "@/modules/registry/operation-choice-contracts";
 
 export type MarketComparison = z.infer<typeof operationChoiceCompareOutputSchema>;
 
-type ComparisonField = "price" | "availability" | "dataUse" | "effects";
+type ComparisonField = "description" | "priceLabel" | "healthStatus";
 
 const comparisonRows: readonly Readonly<{
   field: ComparisonField;
   label: string;
 }>[] = [
-  { field: "price", label: "Price" },
-  { field: "availability", label: "Readiness" },
-  { field: "dataUse", label: "Data use" },
-  { field: "effects", label: "Effects" },
+  { field: "description", label: "Description" },
+  { field: "priceLabel", label: "Indicative price" },
+  { field: "healthStatus", label: "Catalog health" },
 ];
 
 export function AeMarketComparisonView({
@@ -131,15 +122,15 @@ export function AeMarketComparisonView({
                   <TableHead key={operation.operationRef} scope="col" className="min-w-52 whitespace-normal align-top">
                     <div className="grid gap-intra py-intra normal-case tracking-normal">
                       <span className="text-sm font-semibold text-foreground">{operation.title}</span>
-                      <span className="font-sans text-xs font-normal text-muted-foreground">{operation.supplier.name}</span>
+                      <span className="font-sans text-xs font-normal text-muted-foreground">{operation.provider.name}</span>
                       <Button asChild variant="outline" size="sm" className="w-fit min-h-touch">
                         <Link
                           to="/operations/$operationRef"
                           params={{ operationRef: operation.operationRef }}
                           search={{ from: returnTo }}
-                          aria-label={`Inspect ${operation.title} by ${operation.supplier.name}`}
+                          aria-label={`Describe ${operation.title} by ${operation.provider.name}`}
                         >
-                          Inspect
+                          Describe
                         </Link>
                       </Button>
                     </div>
@@ -170,44 +161,11 @@ export function AeMarketComparisonView({
 }
 
 function ComparisonValue({ field, value }: { field: ComparisonField; value: unknown }) {
-  if (field === "price") {
-    return isOperationPrice(value)
-      ? <span className="font-mono tabular-nums">{formatOperationPrice(value)}</span>
-      : <span className="text-muted-foreground">Not reported</span>;
+  if (typeof value !== "string") return <span className="text-muted-foreground">Not reported</span>;
+  if (field === "healthStatus") {
+    return <Badge variant={value === "operational" ? "success" : value === "degraded" ? "warning" : "outline"}>{value}</Badge>;
   }
-  if (field === "availability") {
-    if (!isAvailability(value)) {
-      return <span className="text-muted-foreground">Not reported</span>;
-    }
-    const label = formatOperationReadiness(value.posture);
-    return <Badge variant={value.posture === "routeable" ? "success" : value.posture === "setup_required" ? "warning" : "outline"}>{label}</Badge>;
-  }
-  if (field === "dataUse") {
-    const labels = policyLabels(value, "classification", {
-      public: "Public data",
-      personal: "Personal data",
-      sensitive: "Sensitive data",
-      credential: "Credentials",
-    });
-    return <span>{policyValue(labels, value, "No declared data use")}</span>;
-  }
-  const labels = policyLabels(value, "class", {
-    data_release: "Data release",
-    financial_exposure: "Financial exposure",
-    external_state_change: "External state change",
-  });
-  return <span>{policyValue(labels, value, "No declared effects")}</span>;
-}
-
-function policyValue(
-  labels: string | undefined,
-  rawValue: unknown,
-  emptyLabel: string,
-): string {
-  if (labels !== undefined) return labels;
-  return Array.isArray(rawValue) && rawValue.length === 0
-    ? emptyLabel
-    : "Not reported";
+  return <span className={field === "priceLabel" ? "font-mono tabular-nums" : undefined}>{value}</span>;
 }
 
 function comparisonValue(
@@ -215,39 +173,7 @@ function comparisonValue(
   field: ComparisonField,
   operationRef: string,
 ): unknown {
-  return comparison.facts
-    .find((fact) => fact.field === field)
-    ?.values.find((entry) => entry.operationRef === operationRef)?.value;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isOperationPrice(value: unknown): value is PublicOperationPrice {
-  return isRecord(value) &&
-    (value.kind === "fixed" || value.kind === "range" || value.kind === "on_request");
-}
-
-function isAvailability(
-  value: unknown,
-): value is Pick<PublicOperationAvailability, "posture"> {
-  return isRecord(value) &&
-    (value.posture === "routeable" || value.posture === "setup_required" || value.posture === "unavailable");
-}
-
-function policyLabels(
-  value: unknown,
-  key: "classification" | "class",
-  labels: Readonly<Record<string, string>>,
-): string | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const found = [...new Set(value.flatMap((entry) => {
-    if (!isRecord(entry) || typeof entry[key] !== "string") return [];
-    const label = labels[entry[key]];
-    return label === undefined ? [] : [label];
-  }))];
-  return found.length === 0 ? undefined : found.join(", ");
+  return comparison.operations.find((operation) => operation.operationRef === operationRef)?.[field];
 }
 
 function unavailableTitle(reason: Extract<MarketComparison, { kind: "unavailable" }>["reason"]): string {

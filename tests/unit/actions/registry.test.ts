@@ -10,6 +10,31 @@ import {
 import { projectPublicServicesPage, type PublicBusinessCatalogApiV2Page } from '@/modules/registry/public'
 
 describe('action registry', () => {
+  it('publishes the reference-matched Operation catalog without legacy aliases', () => {
+    const ids = listActions().map((action) => action.id)
+    expect(ids).toEqual(expect.arrayContaining([
+      'registry.operations.list',
+      'registry.operations.search',
+      'registry.operations.describe',
+      'registry.operations.compare',
+      'operation.inspect',
+      'operation.invoke',
+    ]))
+    expect(ids).not.toEqual(expect.arrayContaining([
+      'registry.operations.detail',
+      'registry.operations.inspectPlan',
+    ]))
+
+    const list = findAction('registry.operations.list')
+    const search = findAction('registry.operations.search')
+    expect(list?.schema.safeParse({}).success).toBe(true)
+    expect(list?.schema.safeParse({ limit: 100 }).success).toBe(true)
+    expect(list?.schema.safeParse({ limit: 101 }).success).toBe(false)
+    expect(search?.schema.safeParse({ query: '  ' }).success).toBe(false)
+    expect(search?.schema.safeParse({ query: 'x'.repeat(256), limit: 20 }).success).toBe(true)
+    expect(search?.schema.safeParse({ query: 'x'.repeat(257) }).success).toBe(false)
+    expect(search?.schema.safeParse({ query: 'lookup', limit: 21 }).success).toBe(false)
+  })
   it('does not list deleted public inquiry or customer-request actions', () => {
     const ids = listActions().map((action) => action.id)
     expect(ids).not.toContain('inquiry.submit')
@@ -51,10 +76,11 @@ describe('action registry', () => {
   it('exposes exactly the bounded operation actions to chat', () => {
     const exposed = listActions().filter((action) => action.surfaces.includes('chat')).map((action) => action.id)
     expect(exposed).toEqual([
+      'registry.operations.list',
       'registry.operations.search',
-      'registry.operations.detail',
+      'registry.operations.describe',
       'registry.operations.compare',
-      'registry.operations.inspectPlan',
+      'operation.inspect',
       'operation.invoke',
     ])
   })
@@ -66,12 +92,13 @@ describe('action registry', () => {
   it('exposes MCP actions and keeps the anonymous tier read-only', () => {
     const exposed = listMcpActions()
     expect(exposed.map((action) => action.id)).toEqual([
-      'registry.operations.search', 'registry.operations.detail',
-      'registry.operations.compare', 'registry.operations.inspectPlan',
+      'registry.operations.list', 'registry.operations.search',
+      'registry.operations.describe', 'registry.operations.compare',
       'agentAccess.whoami',
       'agentAccess.balance', 'agentAccess.activity',
+      'funding.handoff.config', 'funding.handoff.create', 'funding.handoff.status',
       'marketDemand.record', 'marketDemand.list', 'marketDemand.status',
-      'operation.invoke', 'operation.list', 'operation.status',
+      'operation.inspect', 'operation.invoke', 'operation.list', 'operation.status',
       'operation.cancel', 'operation.reconcile',
       'supply.status', 'supply.publish', 'supply.withdraw',
       'supply.recheck', 'supply.republish', 'supply.earnings',
@@ -85,8 +112,8 @@ describe('action registry', () => {
     expect(exposed.slice(-12).every((action) => action.surfaces.includes('cli'))).toBe(true)
     const anonymous = exposed.filter((action) => action.readOnly && action.credentialAdmission === undefined)
     expect(anonymous.map((action) => action.id)).toEqual([
-      'registry.operations.search', 'registry.operations.detail',
-      'registry.operations.compare', 'registry.operations.inspectPlan',
+      'registry.operations.list', 'registry.operations.search',
+      'registry.operations.describe', 'registry.operations.compare',
     ])
     for (const action of anonymous) {
       expect(action.readOnly).toBe(true)
@@ -101,12 +128,13 @@ describe('action registry', () => {
       )
     }
     expect(exposed.map((action) => mcpToolName(action))).toEqual([
-      'ae_registry_operations_search', 'ae_registry_operations_detail',
-      'ae_registry_operations_compare', 'ae_registry_operations_inspectPlan',
+      'ae_registry_operations_list', 'ae_registry_operations_search',
+      'ae_registry_operations_describe', 'ae_registry_operations_compare',
       'ae_agentAccess_whoami',
       'ae_agentAccess_balance', 'ae_agentAccess_activity',
+      'ae_funding_handoff_config', 'ae_funding_handoff_create', 'ae_funding_handoff_status',
       'ae_marketDemand_record', 'ae_marketDemand_list', 'ae_marketDemand_status',
-      'ae_operation_invoke', 'ae_operation_list', 'ae_operation_status',
+      'ae_operation_inspect', 'ae_operation_invoke', 'ae_operation_list', 'ae_operation_status',
       'ae_operation_cancel', 'ae_operation_reconcile',
       'ae_supply_status', 'ae_supply_publish', 'ae_supply_withdraw',
       'ae_supply_recheck', 'ae_supply_republish', 'ae_supply_earnings',
@@ -204,35 +232,14 @@ describe('action registry', () => {
     expect(connectionRetryCleanup?.invocationContract.safeContinuations).toEqual(['supply.connection.detail'])
   })
 
-  it('describes operation composition arrays from their canonical schemas', () => {
+  it('describes comparison references from the canonical schema', () => {
     const compare = findAction('registry.operations.compare')
-    const inspectPlan = findAction('registry.operations.inspectPlan')
     expect(compare?.parameters).toEqual([
       {
         name: 'operationRefs',
         type: 'array',
-        description: 'One to four opaque current operation references.',
+        description: 'One to four opaque current Operation references.',
         required: true,
-      },
-    ])
-    expect(inspectPlan?.parameters).toEqual([
-      {
-        name: 'operationRefs',
-        type: 'array',
-        description: 'Required array of 1–4 opaque current operation references. Send { "operationRefs": ["operation:v1:…"] }, never a singular operationRef field.',
-        required: true,
-      },
-      {
-        name: 'mappingRefs',
-        type: 'array',
-        description: 'Registered opaque mapping references.',
-        required: false,
-      },
-      {
-        name: 'expiresInMs',
-        type: 'number',
-        description: 'Ephemeral inspection lifetime, bounded to 24 hours.',
-        required: false,
       },
     ])
   })
@@ -407,8 +414,7 @@ describe('action registry', () => {
     if (action === undefined) throw new Error('operation.invoke missing')
     const descriptor = describeActionForAgent(action)
     expect(descriptor.boundaries.length).toBeGreaterThan(0)
-    expect(descriptor.parameters.map((p) => p.name)).toContain('operationRef')
-    expect(descriptor.parameters.map((p) => p.name)).toContain('input')
+    expect(descriptor.parameters.map((p) => p.name)).toContain('commitmentRef')
     expect(descriptor.parameters.map((p) => p.name)).toContain('idempotencyKey')
   })
 

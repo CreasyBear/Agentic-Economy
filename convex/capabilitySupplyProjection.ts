@@ -375,6 +375,7 @@ type CapabilityPublicationSource = {
   healthState: string
   readinessObservedAt?: number
   readinessValidUntil?: number
+  readinessLastHealthyAt?: number
 }
 
 type CapabilityBindingSource = {
@@ -395,6 +396,7 @@ function readCapabilityOffering(row: Doc<'capabilityOfferings'>): CapabilityOffe
 function readCapabilityPublication(row: Doc<'capabilityPublications'>): CapabilityPublicationSource {
   const readinessObservedAt = optionalNumber(row, 'readinessObservedAt')
   const readinessValidUntil = optionalNumber(row, 'readinessValidUntil')
+  const readinessLastHealthyAt = optionalNumber(row, 'readinessLastHealthyAt')
   return {
     publicationRef: requiredString(row, 'publicationRef'),
     revision: requiredNumber(row, 'revision'),
@@ -409,6 +411,7 @@ function readCapabilityPublication(row: Doc<'capabilityPublications'>): Capabili
     healthState: requiredString(row, 'healthState'),
     ...(readinessObservedAt === undefined ? {} : { readinessObservedAt }),
     ...(readinessValidUntil === undefined ? {} : { readinessValidUntil }),
+    ...(readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt }),
   }
 }
 

@@ -31,7 +31,7 @@ export const operationInspectAction = defineAction<OperationInspectInput, Operat
   boundaries: [
     'Requires an AE-issued Agent key and resolves Account, Agent Principal, Grant, Operation, pricing, and policy facts server-side.',
     'Creates no Invocation, reservation, signature, payment, or Provider effect.',
-    'A Commitment is exact, caller-bound, current-revision-bound, and expires; changed material requires reinspection.',
+    'A Commitment is exact, caller-bound, current-revision-bound, and expires; changed material requires another inspection.',
   ],
   schema: operationInspectInputSchema,
   outputSchema: operationInspectResultSchema,
@@ -51,13 +51,13 @@ export const operationInspectAction = defineAction<OperationInspectInput, Operat
     authority: 'descriptor_classified',
   },
   invocationContract: {
-    version: 'operation.inspect:v1',
+    version: 'operation.inspect:v2',
     consequenceClass: 'read_only',
     materialInputPaths: ['operationRef', 'input'],
     authorityRequirement: 'principal',
     retryClass: 'replayable',
     expectedEvidence: ['operation_commitment'],
-    safeContinuations: ['operation.invoke'],
+    safeContinuations: ['operation.invoke', 'registry.operations.list', 'registry.operations.search', 'registry.operations.describe', 'funding.handoff.create'],
     invalidationConditions: [
       'commitment_expired',
       'operation_revision_changed',
@@ -82,7 +82,7 @@ export const operationInspectAction = defineAction<OperationInspectInput, Operat
 
 export const OPERATION_INSPECT_ROUTE_CONTRACT = Object.freeze({
   actionId: OPERATION_INSPECT_ACTION_ID,
-  contractVersion: 'operation.inspect:v1',
+  contractVersion: 'operation.inspect:v2',
   method: 'POST' as const,
   path: OPERATION_INSPECT_PATH,
   routerPath: OPERATION_INSPECT_PATH,

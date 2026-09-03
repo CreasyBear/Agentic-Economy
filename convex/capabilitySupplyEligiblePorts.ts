@@ -134,5 +134,6 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
     ...(doc.connectionAuthority === undefined ? {} : { connectionAuthority: doc.connectionAuthority }),
     ...(doc.readinessValidUntil === undefined ? {} : { readinessValidUntil: doc.readinessValidUntil }),
     ...(doc.readinessObservedAt === undefined ? {} : { readinessObservedAt: doc.readinessObservedAt }),
+    ...(doc.readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt: doc.readinessLastHealthyAt }),
   }
 }

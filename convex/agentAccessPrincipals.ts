@@ -17,6 +17,7 @@ import {
 } from '@/modules/agent-access/policy'
 import type {
   AgentAccessGrantRegistrationResult,
+  AgentCredentialReplacementRegistration,
   IssuedAgentBindingRegistration,
 } from '@/modules/agent-access/agent-access'
 import {
@@ -40,7 +41,9 @@ import {
   PrincipalRegistry,
   PrincipalRegistryError,
   principalRef,
+  type AccountRef,
   type Principal,
+  type PrincipalRef,
 } from '@/modules/principal-account/public'
 import { createPackage3AuditEvent } from '@/modules/observability/public'
 import {
@@ -718,11 +721,24 @@ export const prepareCredentialReplacementForServer = mutation({
     } catch {
       return { kind: 'refused' as const, code: 'authentication_required' as const }
     }
-    const now = Date.now()
+    if (input.grantRef !== issuedAgentGrantRef(identity.subject, input.issuanceKey)) {
+      return { kind: 'refused' as const, code: 'authentication_required' as const }
+    }
+    return await prepareCredentialReplacementCore(ctx, input, owner, Date.now())
+  },
+})
+
+export type CanonicalCredentialOwner = Readonly<{ principalRef: PrincipalRef; accountRef: AccountRef }>
+
+export async function prepareCredentialReplacementCore(
+  ctx: MutationCtx,
+  input: AgentCredentialReplacementRegistration,
+  owner: CanonicalCredentialOwner,
+  now: number,
+) {
     const scopes = uniqueSorted(input.scopes)
     const operationSelection = normalizeAgentAccessOperationSelection(input)
-    if (input.grantRef !== issuedAgentGrantRef(identity.subject, input.issuanceKey)
-      || input.principalRef.trim().length === 0
+    if (input.principalRef.trim().length === 0
       || input.credentialId.trim().length === 0
       || input.expiresAt <= now
       || input.createdAt > now + 60_000
@@ -890,8 +906,7 @@ export const prepareCredentialReplacementForServer = mutation({
       predecessorKeyId: current.credentialId,
       successorGrantRef: input.grantRef,
     }
-  },
-})
+}
 
 async function replacementOwner(
   ctx: MutationCtx,
@@ -908,13 +923,13 @@ async function replacementOwner(
   }
 }
 
-async function transitionReplacement(
+export async function transitionCredentialReplacementCore(
   ctx: MutationCtx,
   input: Readonly<{ principalRef: string; successorCredentialRef: string; successorGrantRef: string }>,
-  owner: NonNullable<Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>>,
+  owner: CanonicalCredentialOwner,
   mode: 'promote' | 'cancel',
+  now: number,
 ) {
-  const now = Date.now()
   const [successor, successorGrant, current] = await Promise.all([
     ctx.db.query('credentials').withIndex('by_credentialRef', (query) => query.eq('credentialRef', input.successorCredentialRef)).unique(),
     ctx.db.query('agentAccessGrants').withIndex('by_grantRef', (query) => query.eq('grantRef', input.successorGrantRef)).unique(),
@@ -1024,7 +1039,7 @@ export async function revokeReplacementMaterial(
   credential: Doc<'credentials'>,
   binding: Doc<'externalIdentityBindings'>,
   grant: Doc<'agentAccessGrants'>,
-  owner: NonNullable<Awaited<ReturnType<typeof resolveInteractiveAuthorityContext>>>,
+  owner: CanonicalCredentialOwner,
   now: number,
   reason: string,
   correlationRef: string = canonicalDigest({
@@ -1072,7 +1087,7 @@ export const promoteCredentialReplacementForServer = mutation({
     if (identity === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
     const owner = await replacementOwner(ctx, identity, PROMOTE_REPLACEMENT_OPERATION, input, serviceAuth)
     if (owner === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
-    return await transitionReplacement(ctx, input, owner, 'promote')
+    return await transitionCredentialReplacementCore(ctx, input, owner, 'promote', Date.now())
   },
 })
 
@@ -1085,7 +1100,7 @@ export const cancelCredentialReplacementForServer = mutation({
     if (identity === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
     const owner = await replacementOwner(ctx, identity, CANCEL_REPLACEMENT_OPERATION, input, serviceAuth)
     if (owner === null) return { kind: 'refused' as const, code: 'authentication_required' as const }
-    return await transitionReplacement(ctx, input, owner, 'cancel')
+    return await transitionCredentialReplacementCore(ctx, input, owner, 'cancel', Date.now())
   },
 })
 
@@ -1150,7 +1165,7 @@ async function requireLifecycleOwner(
   }
 }
 
-async function lifecycleMembership(ctx: MutationCtx, owner: LifecycleOwner, agentPrincipalRef: string) {
+async function lifecycleMembership(ctx: MutationCtx, owner: CanonicalCredentialOwner, agentPrincipalRef: string) {
   return await ctx.db.query('memberships')
     .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
       .eq('accountRef', owner.accountRef).eq('memberPrincipalRef', agentPrincipalRef).eq('lifecycle', 'active'))
@@ -1211,7 +1226,7 @@ async function admitAgentLifecycleReduction(
 async function revokeGrantLifecycle(
   ctx: MutationCtx,
   grant: Doc<'agentAccessGrants'>,
-  owner: LifecycleOwner,
+  owner: CanonicalCredentialOwner,
   correlationRef: string,
   now: number,
 ) {
@@ -1238,7 +1253,7 @@ async function revokeGrantLifecycle(
 async function revokeCanonicalCredential(
   ctx: MutationCtx,
   credential: Doc<'credentials'>,
-  owner: LifecycleOwner,
+  owner: CanonicalCredentialOwner,
   correlationRef: string,
   now: number,
 ): Promise<{ changed: boolean; providerCredentialId: string; providerRevocationPending: boolean } | null> {
@@ -1281,6 +1296,38 @@ async function revokeCanonicalCredential(
     now,
   })
   return { changed, providerCredentialId: binding.providerIdentifier, providerRevocationPending }
+}
+
+export async function revokeCanonicalCredentialForService(
+  ctx: MutationCtx,
+  credentialRefValue: string,
+  owner: CanonicalCredentialOwner,
+  correlationRef: string,
+  now: number,
+) {
+  const credential = await ctx.db.query('credentials')
+    .withIndex('by_credentialRef', (query) => query.eq('credentialRef', credentialRefValue)).unique()
+  if (credential === null) {
+    return { kind: 'conflict' as const, code: 'credential_not_found' as const, providerTargets: [] }
+  }
+  const admission = await ctx.db.query('agentAccessPrincipals')
+    .withIndex('by_principalId', (query) => query.eq('principalId', credential.principalRef)).unique()
+  if (admission === null || admission.ownerId !== owner.accountRef) {
+    return { kind: 'conflict' as const, code: 'agent_not_found' as const, providerTargets: [] }
+  }
+  const revoked = await revokeCanonicalCredential(ctx, credential, owner, correlationRef, now)
+  if (revoked === null) {
+    return { kind: 'conflict' as const, code: 'credential_binding_invalid' as const, providerTargets: [] }
+  }
+  if (admission.credentialId === revoked.providerCredentialId && admission.lifecycle === 'active') {
+    await promoteRemainingCredential(ctx, admission, credential.credentialRef, now)
+  }
+  return {
+    kind: revoked.changed ? 'completed' as const : 'replayed' as const,
+    providerTargets: revoked.providerRevocationPending
+      ? [{ credentialRef: credential.credentialRef, providerCredentialId: revoked.providerCredentialId }]
+      : [],
+  }
 }
 
 async function credentialProviderBinding(ctx: MutationCtx, credential: Doc<'credentials'>) {
@@ -1334,6 +1381,35 @@ async function promoteRemainingCredential(
   await ctx.db.patch(admission._id, { lifecycle: 'revoked', lastSeenAt: now })
 }
 
+async function invalidateOAuthRefreshFamilies(
+  ctx: MutationCtx,
+  target: Readonly<{ credentialRef?: string; principalRef?: string }>,
+  reason: string,
+  now: number,
+): Promise<void> {
+  let rows: Doc<'agentAccessOAuthRefreshFamilies'>[]
+  if (target.credentialRef !== undefined) {
+    const credentialRef = target.credentialRef
+    rows = await ctx.db.query('agentAccessOAuthRefreshFamilies')
+      .withIndex('by_currentCredentialRef_and_lifecycle', (query) => query
+        .eq('currentCredentialRef', credentialRef).eq('lifecycle', 'active')).collect()
+  } else if (target.principalRef !== undefined) {
+    const principalRef = target.principalRef
+    rows = await ctx.db.query('agentAccessOAuthRefreshFamilies')
+      .withIndex('by_principalRef_and_lifecycle', (query) => query
+        .eq('principalRef', principalRef).eq('lifecycle', 'active')).collect()
+  } else {
+    rows = []
+  }
+  await Promise.all(rows.map(async (row) => await ctx.db.patch(row._id, {
+    lifecycle: 'revoked',
+    revision: row.revision + 1,
+    revokedAt: now,
+    revocationReason: reason,
+    updatedAt: now,
+  })))
+}
+
 export const revokeCredentialForServer = mutation({
   args: { credentialRef: v.string(), correlationRef: v.string(), serviceAuth: serviceAssertion },
   returns: lifecycleCommandResult,
@@ -1382,6 +1458,7 @@ export const revokeCredentialForServer = mutation({
     if (admission.credentialId === revoked.providerCredentialId && admission.lifecycle === 'active') {
       await promoteRemainingCredential(ctx, admission, credential.credentialRef, now)
     }
+    await invalidateOAuthRefreshFamilies(ctx, { credentialRef: credential.credentialRef }, 'owner_credential_revoked', now)
     if (revoked.changed) await persistAgentAudit(ctx, {
       eventType: 'agent.credential.revoked',
       actorPrincipalRef: owner.principalRef,
@@ -1499,6 +1576,7 @@ export const disconnectAgentForServer = mutation({
       ? []
       : [{ credentialRef: credential.credentialRef, providerCredentialId: revoked.providerCredentialId }])
     if (admission.lifecycle !== 'revoked') await ctx.db.patch(admission._id, { lifecycle: 'revoked', lastSeenAt: now })
+    await invalidateOAuthRefreshFamilies(ctx, { principalRef: args.principalRef }, 'owner_disconnected', now)
     if (changed) await persistAgentAudit(ctx, {
       eventType: 'agent.disconnected',
       actorPrincipalRef: owner.principalRef,

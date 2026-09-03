@@ -431,6 +431,7 @@ export async function readOwnerSupplyFunnelProjection(
           stepStates,
           actionableReason,
           sourceMaterial,
+          now,
         })
       }),
     )

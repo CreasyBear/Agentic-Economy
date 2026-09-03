@@ -80,6 +80,7 @@ export type ProbeReadinessPatch = Readonly<{
   readinessOutcome: CapabilityReadinessOutcome
   readinessObservedAt: number
   readinessValidUntil: number
+  readinessLastHealthyAt?: number
   readinessEvidenceRefs: readonly string[]
   updatedAt: number
 }>

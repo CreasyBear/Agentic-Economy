@@ -3,25 +3,25 @@ import type { PublicOperationNavigationRelation } from '@/modules/capability-sup
 import { describeActionForAgent, type ActionSurface } from '@/modules/common/action'
 import {
   registryOperationsCompareContract,
-  registryOperationsDetailContract,
-  registryOperationsInspectPlanContract,
+  registryOperationsDescribeContract,
+  registryOperationsListContract,
   registryOperationsSearchContract,
 } from './operation-action-contracts'
 import {
   OPERATION_MARKET_COMPARE_PATH,
-  OPERATION_MARKET_DETAIL_PATH,
-  OPERATION_MARKET_INSPECT_PLAN_PATH,
+  OPERATION_MARKET_DESCRIBE_PATH,
+  OPERATION_MARKET_LIST_PATH,
   OPERATION_MARKET_SEARCH_PATH,
 } from './operation-paths'
 
 export {
   OPERATION_MARKET_COMPARE_PATH,
-  OPERATION_MARKET_DETAIL_PATH,
-  OPERATION_MARKET_INSPECT_PLAN_PATH,
+  OPERATION_MARKET_DESCRIBE_PATH,
+  OPERATION_MARKET_LIST_PATH,
   OPERATION_MARKET_SEARCH_PATH,
 } from './operation-paths'
 
-type OperationMarketRelation = 'search' | 'detail' | 'compare' | 'inspect_plan'
+type OperationMarketRelation = 'list' | 'search' | 'describe' | 'compare'
 type OperationMarketActionEntry = Readonly<{
   relation: OperationMarketRelation
   pathTemplate: string
@@ -52,10 +52,10 @@ function operationMarketActionEntry(
 }
 
 export const OPERATION_MARKET_ACTION_ENTRIES: readonly OperationMarketActionEntry[] = Object.freeze([
+  operationMarketActionEntry('list', OPERATION_MARKET_LIST_PATH, registryOperationsListContract),
   operationMarketActionEntry('search', OPERATION_MARKET_SEARCH_PATH, registryOperationsSearchContract),
-  operationMarketActionEntry('detail', OPERATION_MARKET_DETAIL_PATH, registryOperationsDetailContract),
+  operationMarketActionEntry('describe', OPERATION_MARKET_DESCRIBE_PATH, registryOperationsDescribeContract),
   operationMarketActionEntry('compare', OPERATION_MARKET_COMPARE_PATH, registryOperationsCompareContract),
-  operationMarketActionEntry('inspect_plan', OPERATION_MARKET_INSPECT_PLAN_PATH, registryOperationsInspectPlanContract),
 ])
 
 export function operationMarketNavigation<Relation extends OperationMarketRelation>(

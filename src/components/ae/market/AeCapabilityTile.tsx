@@ -1,13 +1,11 @@
 import { Link } from "@tanstack/react-router";
 
-import { Badge } from "@/components/ui/badge";
 import {
   Item,
   ItemContent,
   ItemDescription,
   ItemFooter,
   ItemHeader,
-  ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
 import type { MarketWindow } from "@/modules/market/contracts";
@@ -23,7 +21,6 @@ export function AeCapabilityTile({
   group: CapabilityGroupViewModel;
   window: MarketWindow;
 }) {
-  const initial = group.label.trim().charAt(0).toUpperCase() || "T";
   const listingFact =
     group.providerCount > 1
       ? `${group.providerCount.toLocaleString()} listed`
@@ -31,28 +28,28 @@ export function AeCapabilityTile({
   const price = capabilityFromPrice(group.operations);
 
   return (
-    <Item asChild variant="outline" className="h-full rounded-card bg-card">
+    <Item
+      asChild
+      className="group h-full rounded-none border-0 border-t border-border bg-transparent px-0 py-related hover:bg-transparent"
+    >
       <Link
         to="/market"
         search={{ window, capability: group.capabilityId }}
         aria-label={`${group.label}, ${listingFact}, ${price}`}
       >
-        <ItemMedia
-          variant="icon"
-          aria-hidden="true"
-          className="font-mono text-xs font-semibold"
-        >
-          {initial}
-        </ItemMedia>
         <ItemContent>
           <ItemHeader>
-            <ItemTitle>{group.label}</ItemTitle>
-            <Badge variant="outline">{group.category.label}</Badge>
+            <ItemTitle className="text-base font-semibold transition-colors duration-fast ease-standard group-hover:text-brand-strong">
+              {group.label}
+            </ItemTitle>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {group.category.label}
+            </span>
           </ItemHeader>
           <ItemDescription>{group.operations[0]?.summary}</ItemDescription>
-          <ItemFooter className="text-sm">
-            <span>{listingFact}</span>
-            <span className="font-mono tabular-nums">{price}</span>
+          <ItemFooter className="pt-intra text-sm">
+            <span className="text-muted-foreground">{listingFact}</span>
+            <span className="font-mono text-foreground tabular-nums">{price}</span>
           </ItemFooter>
         </ItemContent>
       </Link>

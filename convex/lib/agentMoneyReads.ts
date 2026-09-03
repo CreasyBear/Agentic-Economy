@@ -32,9 +32,10 @@ export const agentBalanceResult = v.union(
     version: v.number(),
     updatedAt: v.number(),
     funding: v.object({
-      kind: v.literal('owner_browser_required'),
-      path: v.literal('/owner/credit'),
-      anchor: v.literal('fund'),
+      kind: v.literal('agent_funding_handoff'),
+      configAction: v.literal('funding.handoff.config'),
+      createAction: v.literal('funding.handoff.create'),
+      statusAction: v.literal('funding.handoff.status'),
     }),
   }),
   v.object({ kind: v.literal('not_found') }),

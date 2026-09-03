@@ -12,13 +12,6 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import {
-  formatOperationAuthentication,
-  formatOperationPrice,
-  formatOperationReadiness,
-  formatPaymentNetwork,
-} from '@/modules/market/operation-view-model'
-
-import {
   OPERATION_SEARCH_RESULT_LIMIT,
   searchMarketOperations,
   type MarketOperationSearchInput,
@@ -289,7 +282,7 @@ export function OperationsSearchPage({
   const groupHeading = trimmedQuery === ''
     ? `Recently inspected · ${recentOperationRefs.length}`
     : state.kind === 'done' && state.query === trimmedQuery && state.result.kind === 'ok'
-      ? `${state.result.matchedCount} matched · showing ${state.result.items.length}`
+      ? `${state.result.count} matched · showing ${state.result.items.length}`
       : 'Matching operations'
 
   return (
@@ -344,17 +337,18 @@ export function OperationsSearchPage({
                       <span className="grid min-w-0 flex-1 gap-0.5">
                         <span className="truncate text-sm font-medium text-foreground">{choice.item.title}</span>
                         <span className="truncate font-mono text-xs text-muted-foreground">
-                          {choice.item.supplier.name} · {choice.item.capabilityId}
+                          {choice.item.provider.name} · {choice.item.capabilityId}
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
-                          {formatOperationReadiness(choice.item.availability.posture)} · {formatOperationAuthentication(choice.item.authentication)}
-                          {choice.item.payment === undefined
-                            ? null
-                            : ` · ${formatPaymentNetwork(choice.item.payment.network)}`}
+                          {choice.item.healthStatus === 'operational'
+                            ? 'Operational'
+                            : choice.item.healthStatus === 'degraded'
+                              ? 'Degraded'
+                              : 'Unverified'}
                         </span>
                       </span>
                       <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                        {formatOperationPrice(choice.item.price)}
+                        {choice.item.priceLabel}
                       </span>
                     </>
                   )}
@@ -453,7 +447,7 @@ function getStatusMessage(state: SearchState, query: string, choiceCount: number
   if (query === '') return choiceCount > 0 ? `${choiceCount} recently inspected Operations.` : ''
   if (state.kind !== 'done' || state.query !== query) return ''
   if (state.result.kind !== 'ok') return 'No matching Operations.'
-  return `${state.result.matchedCount} Operations matched. Showing ${state.result.items.length}.`
+  return `${state.result.count} Operations matched. Showing ${state.result.items.length}.`
 }
 
 function SearchRecovery({

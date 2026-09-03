@@ -11,6 +11,7 @@ import {
 import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
+import type { AgentConnectionReadback } from '@/modules/agent-access/agent-connection'
 import type {
   AgentCredentialSummary,
   AgentCredentialSource,
@@ -57,6 +58,29 @@ const listOwnedAgentDirectoryQuery = sourceQuery<Readonly<{
 }>, CanonicalAgentDirectoryPage>(
   'agentDirectory:listOwnedPage',
 )
+const listOwnerConnectionReadbacksQuery = sourceQuery<Readonly<{
+  principalRefs: readonly string[]
+  now: number
+}>, readonly AgentConnectionReadback[]>(
+  'agentAccessOAuth:listOwnerConnectionReadbacks',
+)
+const listOwnerReconnectCandidatesQuery = sourceQuery<Readonly<{
+  clientId: string
+  principalRefs: readonly string[]
+  now: number
+}>, readonly Readonly<{ principalRef: string; principalRevision: number }>[]>(
+  'agentAccessOAuth:listOwnerReconnectCandidates',
+)
+
+export async function loadOwnerReconnectCandidates(
+  clientId: string,
+  principalRefs: readonly string[],
+  now: number,
+): Promise<readonly Readonly<{ principalRef: string; principalRevision: number }>[]> {
+  if (principalRefs.length === 0) return []
+  const source = await createAuthenticatedSourceTransport()
+  return await source.query(listOwnerReconnectCandidatesQuery, { clientId, principalRefs, now })
+}
 
 
 export async function loadAgentDirectoryReadback(
@@ -75,7 +99,13 @@ export async function loadAgentDirectoryReadback(
     }),
   ])
   const sources = await readAgentCredentialSources(keys, createConvexMoneyQueryPort(), grants)
-  const projection = projectAgentDirectory(sources, canonicalAgents.page)
+  const connections = canonicalAgents.page.length === 0
+    ? []
+    : await source.query(listOwnerConnectionReadbacksQuery, {
+        principalRefs: canonicalAgents.page.map(({ principalRef }) => principalRef),
+        now: Date.now(),
+      })
+  const projection = projectAgentDirectory(sources, canonicalAgents.page, connections)
   const enriched = await enrichAgentDirectoryActivity(projection, operations)
   return canonicalAgents.isDone
     ? enriched
@@ -90,6 +120,7 @@ export async function loadAgentDirectoryReadback(
 export function projectAgentDirectory(
   readbacks: readonly AgentCredentialSource[],
   canonicalAgents: readonly CanonicalAgentDirectoryRecord[],
+  connections: readonly AgentConnectionReadback[] = [],
 ): AgentDirectoryProjection {
   const byPrincipal = new Map<string, AgentCredentialSource[]>()
   for (const readback of readbacks) {
@@ -100,7 +131,11 @@ export function projectAgentDirectory(
 
   const details = canonicalAgents.flatMap((canonical) => {
     const sources = byPrincipal.get(canonical.principalRef) ?? []
-    return [projectAgentDetail(canonical, sources)]
+    return [projectAgentDetail(
+      canonical,
+      sources,
+      connections.filter(({ principalRef }) => principalRef === canonical.principalRef),
+    )]
   }).toSorted((left, right) => (
     right.agent.lastSeenAt === left.agent.lastSeenAt
       ? left.agent.displayName.localeCompare(right.agent.displayName)
@@ -116,6 +151,7 @@ export function projectAgentDirectory(
 function projectAgentDetail(
   canonical: CanonicalAgentDirectoryRecord,
   readbacks: readonly AgentCredentialSource[],
+  connections: readonly AgentConnectionReadback[],
 ): AgentDetail {
   const ordered = [...readbacks].toSorted((left, right) => (
     (left.key.createdAt ?? 0) - (right.key.createdAt ?? 0)
@@ -164,6 +200,9 @@ function projectAgentDetail(
       ? {}
       : { lastAuthenticatedAt: currentCanonicalCredential.lastAuthenticatedAt }),
     lastSeenAt: Math.max(lastSeenAt, canonical.lastSeenAt),
+    connectionCount: connections.length,
+    connectorDisplayNames: [...new Set(connections.map(({ connectorDisplayName }) => connectorDisplayName))],
+    authorityMode: current?.key.authorityMode ?? canonical.authorityMode,
   }
   const activity = ordered
     .flatMap((readback) => readback.activity)
@@ -181,6 +220,7 @@ function projectAgentDetail(
   }
   return {
     agent,
+    connections,
     credentials,
     ...(canonical.admissionLifecycle !== 'active' ? {} : { currentCredentialRef: currentCanonicalCredential.credentialRef }),
     authorityMode: current?.key.authorityMode ?? canonical.authorityMode,

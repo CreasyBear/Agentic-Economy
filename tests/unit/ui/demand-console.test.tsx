@@ -13,10 +13,7 @@ import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeAccountFundingPanel, type AccountFundingPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
-import type { CreditPaymentSession } from '@/modules/money/public'
-import type { AccountFundingBeginInput, AccountFundingBalance } from '@/modules/money/server'
-
-const stripeTestState = vi.hoisted(() => ({ confirm: vi.fn() }))
+import type { AccountFundingBalance } from '@/modules/money/server'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: ReactNode }) => (
@@ -24,15 +21,6 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 
-vi.mock('@stripe/stripe-js', () => ({
-  loadStripe: vi.fn(() => Promise.resolve({})),
-}))
-
-vi.mock('@stripe/react-stripe-js/checkout', () => ({
-  CheckoutElementsProvider: ({ children }: { children: ReactNode }) => <div data-testid="checkout-elements-provider">{children}</div>,
-  PaymentElement: () => <div data-testid="payment-element" />,
-  useCheckoutElements: () => ({ type: 'success', checkout: { confirm: stripeTestState.confirm } }),
-}))
 
 const keyReadback: AgentCredentialSource = {
   key: {
@@ -100,7 +88,6 @@ const accountBalance: AccountFundingBalance = {
 afterEach(() => {
   cleanup()
   window.sessionStorage.clear()
-  stripeTestState.confirm.mockReset()
 })
 
 describe('owner credit target', () => {
@@ -189,97 +176,50 @@ describe('owner credit target', () => {
 })
 
 describe('assistant access components', () => {
-  it('shows the one-command activation and call path', async () => {
+  it('offers native client authentication and agent-owned connection verification', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     render(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example/" />)
 
-    expect(screen.getByRole('heading', { name: 'Install once. Verify both entry points.' })).toBeTruthy()
-    expect(screen.getByText(/npm install --global "https:\/\/ae\.example\/downloads\/agentic-economy-cli-0\.1\.0\.tgz"/u)).toBeTruthy()
-    expect(screen.getByText(/ae --version/u)).toBeTruthy()
-    expect(screen.getByText(/ae search "weather forecast"/u)).toBeTruthy()
-    expect(screen.getByText(/add-mcp@2\.3\.0 "https:\/\/ae\.example\/mcp"/u)).toBeTruthy()
-    expect(screen.getByText(/ae doctor --base-url "https:\/\/ae\.example" --json/u)).toBeTruthy()
-    expect(screen.getByText(/ae inspect "\$AE_OPERATION_REF"/u)).toBeTruthy()
-    expect(screen.getByText(/ae call "\$AE_OPERATION_REF" --input "\$AE_INPUT_JSON"/u)).toBeTruthy()
-    expect(screen.getByText(/returns the exact connection or authority step/iu)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Add Agentic Economy' })).toBeTruthy()
+    expect(document.body.textContent).toContain('codex mcp add agentic-economy --url "https://ae.example/mcp"')
+    expect(document.body.textContent).toContain('codex mcp login agentic-economy')
+    expect(screen.getByText(/Public search works immediately/u)).toBeTruthy()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Claude Code' }), { button: 0 })
+    expect(screen.getByText('claude mcp add --transport http --scope user agentic-economy "https://ae.example/mcp"')).toBeTruthy()
+    expect(screen.getByText(/open \/mcp, select agentic-economy, then choose Authenticate/u)).toBeTruthy()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Cursor' }), { button: 0 })
+    expect(screen.getByText('cursor --add-mcp \'{"name":"agentic-economy","url":"https://ae.example/mcp"}\'')).toBeTruthy()
+    expect(screen.getByText(/follow its OAuth prompt/u)).toBeTruthy()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Codex' }), { button: 0 })
+    expect(document.body.textContent).not.toContain('ae_agentAccess_whoami')
     expect(screen.queryByRole('button', { name: 'Create agent access key' })).toBeNull()
-    expect(screen.queryByText(/AE_API_KEY=/u)).toBeNull()
+    expect(document.body.textContent).not.toMatch(/npm install|ae doctor|ae connect|AE_API_KEY=/u)
 
-    const copyButton = screen.getByRole('button', { name: 'Copy Call command' })
+    const copyButton = screen.getByRole('button', { name: 'Copy Codex MCP command' })
     fireEvent.click(copyButton)
 
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('--input "$AE_INPUT_JSON"'))
-    const status = await screen.findByText('Call command copied.')
+    expect(writeText).toHaveBeenCalledWith([
+      `codex mcp add agentic-economy --url "${window.location.origin}/mcp"`,
+      'codex mcp login agentic-economy',
+    ].join('\n'))
+    const status = await screen.findByText('Codex MCP command copied.')
     expect(status.getAttribute('role')).toBe('status')
   })
 
-  it('copies setup without exposing or asking users to manage the key', async () => {
+  it('normalizes the deployment origin without exposing or asking users to manage a key', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     render(<AeAssistantInstallFunnel canonicalBaseUrl="https://AE.Example:443/" />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy Install and verify command' }))
-    expect(writeText).toHaveBeenCalledWith('npm install --global "https://AE.Example:443/downloads/agentic-economy-cli-0.1.0.tgz"\nae --version')
+    expect(document.body.textContent).toContain('codex mcp add agentic-economy --url "https://AE.Example:443/mcp"')
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Cursor' }), { button: 0 })
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Cursor MCP command' }))
+    expect(writeText).toHaveBeenCalledWith(`cursor --add-mcp '{"name":"agentic-economy","url":"${window.location.origin}/mcp"}'`)
     expect(screen.queryByText(/ae_secret/u)).toBeNull()
     expect(screen.queryByRole('link', { name: /agent-access\.json/u })).toBeNull()
   })
 
-  it('starts a bound Checkout Session and keeps the transient secret out of persistence and copy', async () => {
-    stripeTestState.confirm.mockResolvedValue({ type: 'success', session: {} })
-    const session: CreditPaymentSession = {
-      evidence: {
-        provider: 'stripe',
-        externalRef: 'cs_test_bound',
-        amount: { currency: 'AUD', units: '1055', exponent: 2 },
-        status: 'pending',
-        requestDigest: 'digest:request',
-        metadataDigest: 'digest:metadata',
-        checkoutSessionDigest: 'digest:checkout-session',
-        evidenceDigest: 'digest:evidence',
-        evidenceRef: 'stripe:checkout:cs_test_bound',
-        observedAt: 1,
-      },
-      clientSecret: 'cs_secret_transient_only',
-    }
-    const begin = vi.fn(async (_input: AccountFundingBeginInput) => ({ kind: 'ok' as const, commandRef: 'funding:one', session }))
-    const read = vi.fn(async () => ({
-      ...session,
-      evidence: { ...session.evidence, status: 'pending' as const },
-    }))
-    const port: AccountFundingPort = { begin, read }
-    const onRefresh = vi.fn()
-    render(
-      <AeAccountFundingPanel
-        port={port}
-        publishableKey="pk_test_ui"
-        onRefresh={onRefresh}
-      />
-    )
-
-    fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
-    const quote = screen.getByLabelText('Funding quote')
-    expect(quote.textContent).toContain('Account principalAUD 10.00')
-    expect(quote.textContent).toContain('Service feeAUD 0.50')
-    expect(quote.textContent).toContain('Tax on service feeAUD 0.05')
-    expect(quote.textContent).toContain('Total paymentAUD 10.55')
-    fireEvent.click(screen.getByRole('button', { name: /fund account/i }))
-
-    expect(await screen.findByTestId('payment-element')).toBeTruthy()
-    expect(begin).toHaveBeenCalledWith({
-      amount: { currency: 'AUD', units: '10000000', exponent: 6 },
-      idempotencyKey: expect.any(String),
-    })
-    expect(begin.mock.calls[0]?.[0]).not.toHaveProperty('accountRef')
-    expect(screen.queryByText('cs_secret_transient_only')).toBeNull()
-    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).not.toContain('cs_secret_transient_only')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Pay securely' }))
-    await waitFor(() => expect(read).toHaveBeenCalledWith(expect.objectContaining({ externalRef: 'cs_test_bound' })))
-    expect(screen.queryByText('Payment verified')).toBeNull()
-    expect(screen.getByText(/still being verified|canonical server readback/i)).toBeTruthy()
-    expect(onRefresh).toHaveBeenCalled()
-  })
   it('persists and reuses an outcome-unknown command locator without offering a retry', async () => {
     const begin = vi.fn(async (_input: { idempotencyKey: string }) => ({
       kind: 'outcome_unknown' as const,
@@ -290,20 +230,20 @@ describe('assistant access components', () => {
     }))
     const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'funding_outcome_unknown' as const, retryable: true }))
     const port: AccountFundingPort = { begin, read }
-    render(<AeAccountFundingPanel port={port} publishableKey="pk_test_ui" />)
+    render(<AeAccountFundingPanel port={port} />)
 
     fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /fund account/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }))
 
     expect(await screen.findByText(/do not retry with a new payment/i)).toBeTruthy()
     const raw = window.sessionStorage.getItem('ae.account-funding.recovery.v1')
     const locator = raw === null ? undefined : JSON.parse(raw) as { commandRef: string; idempotencyKey: string }
     expect(locator).toMatchObject({ commandRef: 'sha256:topup-command-unknown' })
     expect(locator?.idempotencyKey).toBe(begin.mock.calls[0]?.[0]?.idempotencyKey)
-    expect(screen.queryByRole('button', { name: /fund account/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /continue to stripe/i })).toBeNull()
 
     cleanup()
-    render(<AeAccountFundingPanel port={port} publishableKey="pk_test_ui" />)
+    render(<AeAccountFundingPanel port={port} />)
     await waitFor(() => expect(read).toHaveBeenCalledWith(locator))
   })
 
@@ -311,13 +251,10 @@ describe('assistant access components', () => {
     const begin = vi.fn(async () => ({ kind: 'refused' as const, code: 'stripe_setup_required' as const, retryable: false }))
     const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'stripe_setup_required' as const, retryable: false }))
     render(
-      <AeAccountFundingPanel
-        port={{ begin, read }}
-        publishableKey="pk_test_ui"
-      />
+      <AeAccountFundingPanel port={{ begin, read }} />
     )
     fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /fund account/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }))
 
     expect(begin).toHaveBeenCalledOnce()
     expect(await screen.findByText(/account funding is unavailable/i)).toBeTruthy()
@@ -340,15 +277,13 @@ describe('assistant access components', () => {
     )
     expect(screen.getByRole('heading', { name: 'Credit' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Credit' })).toBeTruthy()
-    expect(screen.getByRole('list')).toBeTruthy()
-    expect(screen.getByText('Rotate, replace, or recover a key')).toBeTruthy()
-    expect(screen.getByText('Provider reauthorization required')).toBeTruthy()
-    expect(screen.getByText('Outcome uncertain')).toBeTruthy()
+    expect(screen.queryByText('Rotate, replace, or recover a key')).toBeNull()
+    expect(screen.queryByText('Provider reauthorization required')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'View UI assistant' }))
     expect(screen.getAllByText(/USD 12\.5/u).length).toBeGreaterThan(0)
     expect(screen.getByText(/USD 5\.005/u)).toBeTruthy()
-    expect(screen.getByText('Browse only')).toBeTruthy()
-    expect(screen.getAllByText('Development').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Browse only').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Sandbox').length).toBeGreaterThan(0)
     expect(screen.getByText('30/min · 300/hour')).toBeTruthy()
     expect(screen.getByText('USD 25.00')).toBeTruthy()
     expect(screen.queryByText(/scope:|data:|principal|clerk_api_key/u)).toBeNull()

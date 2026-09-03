@@ -14,15 +14,11 @@ import {
   operationInspectResultSchema,
 } from '@/modules/capability-execution/operation-commitment'
 import type { OperationInvokeStatusResult } from '@/modules/capability-execution/operation-recovery-contracts'
-import { operationDetailOutputSchema } from '@/modules/capability-supply/public'
-import { OPERATION_MARKET_DETAIL_PATH } from '@/modules/registry/operation-entry'
-
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
 import { continuationCommand } from '../lib/continuation-command'
-import { throwOperationReadFailure } from '../lib/operation-read-failure'
 import {
   connectionContinuationForCli,
   creditContinuationForCli,
@@ -108,35 +104,6 @@ function resolveIdempotencyKey(options: CliOptions): string {
   const explicit = options.idempotencyKey?.trim()
   if (explicit !== undefined && explicit.length > 0) return explicit
   return randomUUID()
-}
-
-async function requireOperationCanBenefitFromBuyerConnection(
-  baseUrl: string,
-  operationRef: string,
-): Promise<void> {
-  const outcome = await callJson(baseUrl, OPERATION_MARKET_DETAIL_PATH, {
-    method: 'POST',
-    body: JSON.stringify({ operationRef }),
-  })
-  const parsed = operationDetailOutputSchema.safeParse(requireOk(outcome, OPERATION_MARKET_DETAIL_PATH))
-  if (!parsed.success) {
-    throw new CliFailure('The market returned an invalid operation detail result.', {
-      kind: 'UNAVAILABLE',
-      code: 'operation-detail-result-invalid',
-    })
-  }
-  if (parsed.data.kind === 'not_found') {
-    throwOperationReadFailure({ reason: 'operation_not_found', operationRef })
-  }
-  if (parsed.data.kind === 'unavailable') {
-    throwOperationReadFailure({ reason: parsed.data.reason, operationRef })
-  }
-  if (
-    parsed.data.operation.availability.posture !== 'routeable'
-    || !parsed.data.operation.navigation.some(({ relation }) => relation === 'invoke')
-  ) {
-    throwOperationReadFailure({ reason: 'operation_unavailable', operationRef })
-  }
 }
 
 function invokeOutput(
@@ -237,14 +204,13 @@ export async function runInvokeCommand(
   }
   const inspectionInput = operationInspectInputSchema.safeParse({ operationRef, input })
   if (!inspectionInput.success) {
-    throw new CliFailure('Operation input or identity does not match operation.inspect:v1.', {
+    throw new CliFailure('Operation input or identity does not match operation.inspect:v2.', {
       kind: 'INVALID_ARGUMENT',
       code: 'invoke-input',
     })
   }
   const credential = resolveAgentAccessCredential(options.baseUrl)
   if (credential === undefined) {
-    await requireOperationCanBenefitFromBuyerConnection(options.baseUrl, operationRef)
     const continuation = connectionContinuationForCli('buyer')
     throw new CliFailure('No AE agent credential is configured. Run ae connect, then repeat the same call.', {
       kind: 'UNAUTHENTICATED',

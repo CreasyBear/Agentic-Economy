@@ -13,6 +13,7 @@ import {
   createUserCode,
   denyGrant,
   hashOAuthValue,
+  AGENT_ACCESS_OAUTH_OFFLINE_SCOPE,
   normalizeRequestedScopes,
   pollDeviceGrant,
   resetGrantDelivery,
@@ -152,17 +153,25 @@ describe('Customer Request OAuth state machine', () => {
     expect(normalizeRequestedScopes('customer_requests:approve_each')).toEqual({
       mode: 'approve_each', scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:approve_each'],
       profile: 'market',
+      offlineAccess: false,
+    })
+    expect(normalizeRequestedScopes(`customer_requests:approve_each ${AGENT_ACCESS_OAUTH_OFFLINE_SCOPE}`)).toEqual({
+      mode: 'approve_each', scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:approve_each'],
+      profile: 'market',
+      offlineAccess: true,
     })
     expect(normalizeRequestedScopes('customer_requests:create customer_requests:approve_each')).toBeUndefined()
     expect(normalizeRequestedScopes(`${MARKET_OPERATIONS_INVOKE_SCOPE} ${CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE}`)).toEqual({
       mode: 'bounded_mandate',
       scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE],
       profile: 'market',
+      offlineAccess: false,
     })
     expect(normalizeRequestedScopes(MARKET_SUPPLY_MANAGE_SCOPE)).toEqual({
       mode: 'bounded_mandate',
       scopes: [MARKET_SUPPLY_MANAGE_SCOPE],
       profile: 'supplier',
+      offlineAccess: false,
     })
     expect(normalizeRequestedScopes(`${MARKET_SUPPLY_MANAGE_SCOPE} ${MARKET_OPERATIONS_INVOKE_SCOPE}`)).toBeUndefined()
     expect(normalizeRequestedScopes('customer_requests:create customer_requests:approve_each customer_requests:full_yolo')).toBeUndefined()
@@ -224,6 +233,31 @@ describe('Customer Request OAuth state machine', () => {
     expect(JSON.stringify(defaultAuthResult.value.grant.requestedAccess)).toBe(JSON.stringify(expectedDefault))
     expect(deviceResult.value.grant.revision).toBe(1)
     expect(authResult.value.grant.revision).toBe(1)
+  })
+
+  it('keeps offline access as OAuth lifecycle state only on authorization-code grants', async () => {
+    const authStore = storeFixture()
+    const authorized = await beginAuthorizationCodeGrant(authStore, {
+      client: authClient,
+      redirectUri: 'http://localhost/callback',
+      requestedScopes: [...scopes, AGENT_ACCESS_OAUTH_OFFLINE_SCOPE],
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'S256',
+      ownerId: 'owner-one',
+      now: 1_000,
+    })
+    expect(authorized.kind).toBe('ok')
+    if (authorized.kind === 'ok') {
+      expect(authorized.value.grant.offlineAccess).toBe(true)
+      expect(authorized.value.grant.requestedScopes).toEqual(scopes)
+      expect(authorized.value.grant.approvedAccess.expiresInSeconds).toBe(30 * 24 * 60 * 60)
+    }
+
+    await expect(beginDeviceGrant(storeFixture(), {
+      client: deviceClient,
+      requestedScopes: [...scopes, AGENT_ACCESS_OAUTH_OFFLINE_SCOPE],
+      now: 1_000,
+    })).resolves.toEqual({ kind: 'refused', reason: 'invalid_scope' })
   })
 
   it.each(['device_code', 'authorization_code'] as const)(

@@ -37,6 +37,16 @@ describe('local source-write secret provisioning', () => {
     expect(result).toMatchObject({ secret: 'shared-local-secret', source: 'existing' })
   })
 
+  it('accepts the loopback port selected by the local Convex deployment', () => {
+    const result = resolveLocalSourceWriteSecret({
+      env: { VITE_CONVEX_URL: 'http://127.0.0.1:3212' },
+      dotenvFiles: [],
+      randomBytes: () => new Uint8Array([5, 6, 7, 8]),
+    })
+
+    expect(result).toMatchObject({ secret: '05060708', source: 'generated' })
+  })
+
   it('reads standard dotenv quoting, comments, and export prefixes', () => {
     const result = resolveLocalSourceWriteSecret({
       env: { VITE_CONVEX_URL: 'http://127.0.0.1:3210' },

@@ -3,6 +3,7 @@ import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST, CUSTOMER_REQUEST
 import {
   AGENT_ACCESS_OAUTH_CODE_CHALLENGE_METHODS,
   AGENT_ACCESS_OAUTH_GRANT_TYPES,
+  AGENT_ACCESS_OAUTH_OFFLINE_SCOPE,
   AGENT_ACCESS_POLL_INTERVAL_SECONDS,
   AGENT_ACCESS_OAUTH_RESPONSE_TYPES,
   AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS,
@@ -41,8 +42,17 @@ describe('OAuth metadata surfaces', () => {
       response_types_supported: ['code'],
       token_endpoint_auth_methods_supported: ['none'],
       code_challenge_methods_supported: ['S256'],
+      scopes_supported: [
+        'market_operations:invoke',
+        'customer_requests:inspect_only',
+        'customer_requests:approve_each',
+        'customer_requests:bounded_mandate',
+        'customer_requests:full_yolo',
+        'offline_access',
+      ],
+      revocation_endpoint: 'https://local.example/oauth/revoke',
     })
-    expect(authorizationServer).not.toHaveProperty('refresh_token_endpoint')
+    expect(authorizationServer.grant_types_supported).toContain('refresh_token')
   })
 
   it('uses configured canonical origin for metadata and bearer challenges instead of the request host', async () => {
@@ -62,7 +72,7 @@ describe('OAuth metadata surfaces', () => {
         authorization_endpoint: 'https://canonical.agentic.test/oauth/authorize',
       })
       expect(challenge.headers.get('WWW-Authenticate')).toBe(
-        'Bearer resource_metadata="https://canonical.agentic.test/.well-known/oauth-protected-resource", scope="market_operations:invoke"'
+        `Bearer resource_metadata="https://canonical.agentic.test/.well-known/oauth-protected-resource", scope="market_operations:invoke customer_requests:approve_each ${AGENT_ACCESS_OAUTH_OFFLINE_SCOPE}"`
       )
     } finally {
       vi.unstubAllEnvs()

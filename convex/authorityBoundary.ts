@@ -144,6 +144,14 @@ export async function resolveCanonicalAgentBinding(
     || credential.lifecycle !== 'active'
     || admission.lifecycle !== 'active') return await denyKnownCredential('authentication_required')
 
+  const memberships = await ctx.db.query('memberships')
+    .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
+      .eq('accountRef', admission.ownerId)
+      .eq('memberPrincipalRef', binding.principalRef)
+      .eq('lifecycle', 'active'))
+    .take(2)
+  if (memberships.length !== 1) return await denyKnownCredential('authentication_required')
+
   const principal = await ctx.db.query('principals')
     .withIndex('by_principalRef', (query) => query.eq('principalRef', binding.principalRef))
     .unique()

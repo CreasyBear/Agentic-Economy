@@ -65,6 +65,7 @@ export type AccountFundingStartResult =
   | MoneyRefusal
 
 export type AccountFundingReadInput =
+  | Readonly<{ externalRef: string }>
   | Readonly<{ externalRef: string; idempotencyKey: string }>
   | Readonly<{ commandRef: string; idempotencyKey: string }>
 
@@ -107,6 +108,14 @@ export type AccountFundingCommandView = Readonly<{
   paymentIntentDigest?: string
   evidenceDigest?: string
   paymentId?: string
+  initiationKind?: 'owner_top_up' | 'agent_handoff'
+  checkoutMode?: 'hosted_page'
+  checkoutExpiresAt?: number
+  cancelReturnRef?: string
+  requesterDisplayName?: string
+  providerCheckoutStatus?: 'open' | 'complete' | 'expired'
+  providerPaymentStatus?: 'unpaid' | 'paid' | 'no_payment_required'
+  terminalReason?: 'async_payment_failed' | 'expired'
 }>
 
 export type AccountFundingServerRuntime = Readonly<{
@@ -129,6 +138,9 @@ type ReserveFundingArgs = Readonly<{
   idempotencyKey: string
   inputDigest: string
   successReturnRef: string
+  checkoutMode?: 'hosted_page'
+  checkoutExpiresAt?: number
+  cancelReturnRef?: string
   operationKey: string
   correlationId: string
 }> & SourceWriteBoundArgs
@@ -152,7 +164,7 @@ type WebhookFundingCommandInput = Readonly<{
   externalRef: string
   serviceAuth: ConvexServerFunctionAssertion
 }>
-export type FundingProviderEvidence = Omit<CreditPaymentEvidence, 'provider' | 'observedAt' | 'checkoutStatus' | 'paymentStatus'>
+export type FundingProviderEvidence = Omit<CreditPaymentEvidence, 'provider' | 'observedAt'>
 
 const beginInputSchema = z.strictObject({
   amount: z.strictObject({
@@ -167,6 +179,7 @@ const readInputSchema = z.union([
     externalRef: z.string().trim().min(1).max(500),
     idempotencyKey: z.string().trim().min(8).max(200),
   }),
+  z.strictObject({ externalRef: z.string().trim().min(1).max(500) }),
   z.strictObject({
     commandRef: z.string().trim().min(1).max(500),
     idempotencyKey: z.string().trim().min(8).max(200),
@@ -239,7 +252,10 @@ export async function beginAccountFundingThroughSource(
     amount: input.amount,
     idempotencyKey: input.idempotencyKey,
   })
-  const successReturnRef = `${resolveCanonicalBaseUrl().baseUrl}/owner/credit`
+  const baseUrl = resolveCanonicalBaseUrl().baseUrl
+  const successReturnRef = `${baseUrl}/owner/credit?funding={CHECKOUT_SESSION_ID}`
+  const cancelReturnRef = `${baseUrl}/fund/cancelled`
+  const checkoutExpiresAt = (Math.floor(Date.now() / 1_000) + 60 * 60) * 1_000
   const operationKey = 'moneyAccountFunding:reserve'
   const correlationId = commandRef
   const command = {
@@ -249,6 +265,9 @@ export async function beginAccountFundingThroughSource(
     idempotencyKey: input.idempotencyKey,
     inputDigest,
     successReturnRef,
+    checkoutMode: 'hosted_page' as const,
+    checkoutExpiresAt,
+    cancelReturnRef,
     operationKey,
     correlationId,
   }
@@ -388,6 +407,11 @@ export function fundingPaymentRequest(
     inputDigest: command.inputDigest,
     successReturnRef: command.successReturnRef,
     providerRecoveryDeadlineAt: command.providerRecoveryDeadlineAt,
+    principalAmount: { currency: 'AUD' as const, exponent: AUD_EXPONENT, units: command.principalUnits },
+    serviceFeeAmount: { currency: 'AUD' as const, exponent: AUD_EXPONENT, units: command.serviceFeeUnits },
+    taxAmount: { currency: 'AUD' as const, exponent: AUD_EXPONENT, units: command.taxUnits },
+    ...(command.cancelReturnRef === undefined ? {} : { cancelReturnRef: command.cancelReturnRef }),
+    ...(command.checkoutExpiresAt === undefined ? {} : { checkoutExpiresAt: command.checkoutExpiresAt }),
     ...(boundExternalRef === undefined ? {} : { boundExternalRef }),
   }
 }
@@ -406,7 +430,11 @@ export function fundingWebhookReadbackRefusal(
     ? evidence.status === 'succeeded'
       && evidence.checkoutStatus === 'complete'
       && evidence.paymentStatus === 'paid'
-    : event.status === 'expired'
+    : event.status === 'processing'
+      ? evidence.status === 'pending'
+        && evidence.checkoutStatus === 'complete'
+        && evidence.paymentStatus !== 'paid'
+      : event.status === 'expired'
       ? evidence.status === 'failed'
         && evidence.checkoutStatus === 'expired'
         && evidence.paymentStatus !== 'paid'
@@ -437,6 +465,10 @@ export function fundingEvidence(evidence: CreditPaymentEvidence): FundingProvide
     ...(evidence.paymentIntentDigest === undefined ? {} : { paymentIntentDigest: evidence.paymentIntentDigest }),
     evidenceDigest: evidence.evidenceDigest,
     ...(evidence.paymentId === undefined ? {} : { paymentId: evidence.paymentId }),
+    ...(evidence.checkoutStatus === undefined ? {} : { checkoutStatus: evidence.checkoutStatus }),
+    ...(evidence.paymentStatus === undefined ? {} : { paymentStatus: evidence.paymentStatus }),
+    ...(evidence.checkoutMode === undefined ? {} : { checkoutMode: evidence.checkoutMode }),
+    ...(evidence.checkoutExpiresAt === undefined ? {} : { checkoutExpiresAt: evidence.checkoutExpiresAt }),
   }
 }
 

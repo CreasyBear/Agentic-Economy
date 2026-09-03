@@ -22,7 +22,7 @@ export type StripeCheckoutWebhookEvent = Readonly<{
   paymentId?: string
   checkoutSessionDigest: string
   paymentIntentDigest?: string
-  status: 'paid' | 'failed' | 'expired'
+  status: 'paid' | 'processing' | 'failed' | 'expired'
   amount: ExactAmount
   metadataDigest: string
   payloadDigest: string

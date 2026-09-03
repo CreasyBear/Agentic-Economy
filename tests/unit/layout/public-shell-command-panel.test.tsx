@@ -24,10 +24,20 @@ afterEach(() => {
 })
 
 describe('public shell command panel', () => {
-  it('exposes Search on every public page and restores focus after Cmd/Ctrl-K closes', async () => {
+  it('gives a workspace the viewport and omits the marketing footer', () => {
+    renderPublicShell('workspace')
+
+    const shell = document.querySelector('[data-shell-mode="workspace"]')
+    if (!(shell instanceof HTMLElement)) throw new Error('workspace_shell_missing')
+    expect(shell.className).toContain('h-dvh')
+    expect(screen.queryByText('The marketplace built for agents.')).toBeNull()
+    expect(screen.getByText('Public page')).toBeTruthy()
+  })
+
+  it('exposes Operation search on every public page and restores focus after Cmd/Ctrl-K closes', async () => {
     renderPublicShell()
 
-    const trigger = screen.getByRole('button', { name: 'Search' })
+    const trigger = screen.getByRole('button', { name: 'Find Operations' })
     expect(trigger.className).toContain('min-h-touch')
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
 
@@ -46,7 +56,7 @@ describe('public shell command panel', () => {
   it('exposes mobile navigation state and restores its trigger after each close path', async () => {
     renderPublicShell()
 
-    expect(screen.getByRole('button', { name: 'Search' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Find Operations' })).toBeTruthy()
     const trigger = screen.getByRole('button', { name: 'Open public menu' })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(trigger.getAttribute('aria-controls')).toBeNull()
@@ -96,7 +106,7 @@ describe('public shell command panel', () => {
   })
 })
 
-function renderPublicShell(): void {
+function renderPublicShell(mode: 'page' | 'workspace' = 'page'): void {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
@@ -120,7 +130,7 @@ function renderPublicShell(): void {
 
   render(
     <RouterContextProvider router={router}>
-      <AePublicShell><p>Public page</p></AePublicShell>
+      <AePublicShell mode={mode}><p>Public page</p></AePublicShell>
     </RouterContextProvider>,
   )
 }

@@ -1,5 +1,11 @@
 # Twenty → Agentic Economy component gauntlet
 
+**Status:** active implementation-quality record
+
+**Authority note:** this document governs component fidelity and interaction
+quality. [PRODUCT.md](./PRODUCT.md) governs product meaning and
+[DESIGN.md](./DESIGN.md) governs how commercial roles and closure are presented.
+
 Last updated: 2026-08-31  
 Twenty reference: `twentyhq/twenty@60a46b2947cd71a52762af43d8474edf167bfa07`  
 Product authority: `PRODUCT.md`
@@ -21,11 +27,11 @@ An item advances only after source/behavior and screenshot critics pick AE as at
 | 3 | C03 | Selectable list and grouped results | selectable list/item; side-panel list/group; focus hooks | command Operation search/results | shadcn `Command`/`CommandItem`; one AE adapter only for uncovered async intent | Arrow/Home/End/Enter/hover/active-descendant/loading/empty behavior | **PASS** |
 | 4 | C04 | Market toolbar/filter/sort/chips | view bar; filter/sort dropdowns; chip | market catalog controls | shadcn `InputGroup`, `Select`, `Badge`, `Button`; no generic menu or false sort control | URL-backed search/filter/category state, truthful chips/counts, clear-all, complete keyboard path, canonical server ranking preserved | **PASS** |
 | 5 | C05 | Record table focus/selection/opening | table focus/selection hooks and rows | market and operator tables | shadcn `Table` + `Checkbox`, TanStack Table state, Radix roving focus; no second table primitive | Composable focus/selection, consistent opening, correct bulk states and semantics | **PASS** |
-| 6 | C06 | Compare tray | multi-record selection and bottom action surfaces | market compare selection | shadcn `Card`, `Button`, `Badge`, `Separator` | Persistent count, remove/clear/max behavior, keyboard access, compact responsive layout | PENDING |
-| 7 | V01 | Market search and comparison | composed Twenty index/search view | AE market | consume C01–C06 | One URL-recoverable search→compare workflow | PENDING |
-| 8 | V02 | Operation detail | composed record-show view | AE Operation route | consume C01–C06 | Evidence hierarchy and one safe continuation without duplicate presentation | PENDING |
-| 9 | V03 | Command modal | composed command workflow | AE `⌘K` workflow | consume C01–C06 | Search→inspect preserves context and never becomes a desktop sheet | PENDING |
-| 10 | V04 | Owner Operation inventory | composed Twenty table/control view | AE owner inventory | consume C01–C06 | Shared table/control behavior; no CRM scope expansion | PENDING |
+| 6 | C06 | Compare tray | multi-record selection and bottom action surfaces | market compare selection | shadcn `Card`, `Button`, `Badge`, `Separator` | Persistent count, remove/clear/max behavior, keyboard access, compact responsive layout | **PASS** |
+| 7 | V01 | Market search and comparison | composed Twenty index/search view | AE market | consume C01–C06 | One URL-recoverable search→compare workflow | **PASS** |
+| 8 | V02 | Operation detail | composed record-show view | AE Operation route | consume C01–C06 | Evidence hierarchy and one safe continuation without duplicate presentation | **PASS** |
+| 9 | V03 | Command modal | composed command workflow | AE `⌘K` workflow | consume C01–C06 | Search→inspect preserves context and never becomes a desktop sheet | **PASS** |
+| 10 | V04 | Owner Operation inventory | composed Twenty table/control view | AE owner inventory | consume C01–C06 | Shared table/control behavior; no CRM scope expansion | **PASS** |
 
 ## C01 — Canonical Operation inspector
 
@@ -170,6 +176,147 @@ Evidence:
 - Round 1 critic requested TanStack-owned bulk derivation, a stable-ID selection contract, and a visible mixed glyph. All three were corrected and re-tested.
 - Final source/behavior verdict: **AE**. Final screenshot verdict: **AE**.
 - C05 final verdict: **PASS**.
+
+## C06 — Compare tray
+
+| Concern | Twenty source bar | AE result |
+| --- | --- | --- |
+| Selection projection | row/header checkbox components, selected-record selectors/effects, record-index selected count | one controlled TanStack state shared across market tables and projected into `AeCompareTray` |
+| Action surface | command-menu action availability, pinned actions, reset-selection behavior | a product-specific bottom comparison tray; no CRM bulk-action model |
+| Selection scope | current record index state | current loaded cursor page only; stale references are pruned and catalog order is retained |
+| Limit | generic record actions | canonical compare schema maximum of four; unavailable rows and a fifth eligible row cannot be added |
+| Primitive ownership | Twenty UI surfaces | shadcn `Card`, `Badge`, `Button`, `Separator`; Radix `Presence` owns exit lifecycle |
+| Focus and announcements | selected-record state and action affordances | one aggregate live count; Provider-qualified remove labels; nearest-item or Catalog fallback focus recovery |
+| Responsive behavior | compact selected-record action surfaces | safe-area-aware fixed tray, internal chip scrolling, and page clearance protecting the last table row |
+
+Evidence:
+
+- Zero selections hide the tray; one disables Compare; two through four enable it. Remove and Clear all remain synchronized with every rendered table.
+- The Presence-observed `<aside>` owns both open and closed animation state. A lifecycle test proves exit remains mounted until its matching animation completes; reduced motion removes the transition.
+- Checks: 19/19 focused comparison/market tests; focused lint; UI-contract gate; diff check.
+- Twenty screenshot: `output/gauntlet/c06/twenty-bulk-selection-reference.png`.
+- AE screenshots: `output/gauntlet/c06/ae-compare-tray-desktop-two-round1.png`, `ae-compare-tray-desktop-focus-round1.png`, `ae-compare-tray-desktop-max-round1.png`, and `ae-compare-tray-mobile-two-round1.png`, recaptured after the final transition correction.
+- Round 1 source critic found that exit animation lived below the Presence child. The animation and state moved to the observed element and gained an unmount-timing test.
+- Final source/behavior verdict: **AE**. Final screenshot verdict: **AE**.
+- C06 final verdict: **PASS**.
+
+## V01 — Market search and comparison
+
+### Literal module map and gate
+
+| Concern | Twenty source | AE target |
+| --- | --- | --- |
+| Route/page gate | `pages/object-record/RecordIndexPage.tsx`, `RecordIndexContainerGater.tsx` | validated `/market` search plus one server projection |
+| Stable shell | `PageCardLayout.tsx`, `RecordIndexPageHeader.tsx` | `AePublicPage`, `AePageHeader`, and the market rail remain stable across states |
+| Controls | `RecordIndexViewBar.tsx`, `ViewBar.tsx`, `ViewBarDetails.tsx` | consume the existing C04 `AeMarketToolbar`; no second toolbar |
+| URL state | query-param filter/sort effects and view URL hooks | query, availability, category, capability, cursor, and active comparison are recoverable market state |
+| Body dispatch | `RecordIndexContainer.tsx` and table/list/board/calendar containers | one Operation-specific browse/results/comparison dispatch; no CRM view picker |
+| Data lifecycle | record-index query/load effects | route projection plus the canonical Operation compare read |
+| Selection reset | `PageChangeEffect.tsx`, `useResetRecordIndexSelection.ts` | clear local draft selection whenever the result-set URL changes |
+| Return context | record-show pagination and previous-row scroll effect | browser history and visible Back/Edit preserve the exact market context and recover focus |
+
+Active binary gate:
+
+- Production `/market` wires C06 to canonical comparison data.
+- Exact deduplicated 2–4 refs preserve order and round-trip through reload, Back, Forward, and direct URL entry.
+- Compare is a pushed history milestone; returning cannot create a history loop.
+- Dataset-changing query/filter/category/capability/cursor transitions clear incompatible draft and active selection.
+- Only canonical price, readiness, effects, and data-use facts render, with Provider-qualified identity and one Inspect link per Operation.
+- Pending, empty, catalog unavailable, invalid/stale comparison, Operation unavailable, and transport failure remain distinct and truthful.
+- Focus moves into comparison and returns to a meaningful selection/result control; C01–C06 keep ownership of primitives and mechanics.
+- Desktop/mobile have no page overflow or obscured last row; motion stays restrained and reduced-motion safe.
+
+Twenty references: `packages/twenty-docs/images/user-guide/home/main-layout.png` for full-page hierarchy and `packages/twenty-docs/images/releases/1.8/1.8-bulk-select.png` for selection-to-action continuity. Twenty has no literal comparison-result screen, so both references remain explicit rather than implying a false one-to-one screen match.
+
+Evidence:
+
+- `/market` now validates an ordered, deduplicated two-to-four Operation comparison in URL state, loads canonical comparison facts on the server, and wires the C06 tray into production navigation.
+- Direct entry, reload, browser Back/Forward, visible Back, and Edit selection were exercised against the running development app and its local Convex database. Edit restores the two selected Operations without discarding the last recoverable comparison URL; visible Back preserves the query and restores focus to Catalog without adding a history loop.
+- The comparison renders only canonical price, readiness, data use, and effects, with Provider-qualified identity and an Inspect continuation for each Operation. Desktop and mobile keep dense tables in internal horizontal scrollers without page overflow.
+- Round 1 source/behavior verdict: **AE**. Round 1 screenshot verdict: **TWENTY** because the editorial footer entered the short task surface and appeared behind the mobile compare tray.
+- Round 2 keeps both results and comparison workspaces at least one dynamic viewport high. Live measurements place the footer below the viewport on short comparison states and below the complete result set while selection is active.
+- Round 2 live screenshots: `output/gauntlet/v01/ae-live-market-selection-desktop-round2.png`, `ae-live-market-selection-mobile-round2.png`, `ae-live-market-comparison-desktop-round2.png`, and `ae-live-market-comparison-mobile-round2.png`; all use the actual development database. No screenshot runner or gauntlet `.mjs` file remains.
+- Checks: 39/39 focused tests; focused lint; UI-contract gate; production build; diff check. Repository typecheck is blocked only by the unrelated concurrent `operator-route-error-reload` promise return mismatch.
+- Final source/behavior verdict: **AE**. Final screenshot verdict: **AE**.
+- V01 final verdict: **PASS**.
+
+## V02 — Operation detail
+
+### Literal module map and active gate
+
+| Concern | Twenty source | AE target |
+| --- | --- | --- |
+| Canonical route | `RecordShowPage.tsx`, `RecordShowPageHeader.tsx`, `RecordShowPageTitle.tsx` | `/operations/$operationRef` remains the one exact-Operation URL and composes the shared inspector |
+| Shared full/compact body | `PageLayoutRecordPageRenderer.tsx`, `SidePanelRecordPage.tsx` | one `AeOperationInspector` and `toOperationInspectorModel`; chrome and density vary, truth and continuation do not |
+| Record hierarchy | `PageLayoutRenderer*`, `FieldsWidget*`, `WidgetCard*` | decision facts first, exact contract second, technical evidence last; shadcn owns card/disclosure mechanics |
+| Canonical read | `RecordShowEffect.tsx`, record loading state | route loader re-reads the opaque ref and active buyer-access state, fails closed, and never exposes stale prior facts |
+| Parent continuity | `useRecordShowPagePagination.ts`, record-side-panel expand/navigation hooks | browser history plus an explicit return preserve the exact incoming market query/comparison context |
+| One safe action | `SidePanelFooter.tsx` and record command actions | one state-valid controlled-call/connect/alternative continuation; no direct provider call |
+| Focus and scroll | page-layout scroll reset and record transition state | successful SPA entry/ref change focuses the h1 or main record region; return restores the initiating market control where possible |
+
+Active binary gate:
+
+- Direct entry, reload, Back, and Forward preserve the exact Operation identity; a known market origin survives the visible return action, while a genuine deep link falls back to the default catalog.
+- Unknown/malformed, unavailable, and source-unavailable states are distinct and fail closed with no price, evidence, schema, readiness claim, or call command.
+- Ready, connection-required, setup-required, unavailable, and read-failure states each expose exactly one safe primary continuation.
+- Full and compact variants agree on price, readiness, access, terms, evidence, and the exact opaque reference because `toOperationInspectorModel` remains the sole decision projection.
+- Mobile puts the safe continuation before long contract sections; desktop keeps it subordinate and sticky. Neither layout duplicates the CTA or overflows the page.
+- Pending content is detail-shaped; disclosure uses existing shadcn mechanics and AE motion tokens with reduced-motion support.
+- No inline editing, relation graph, timeline, arbitrary record layout, previous/next CRM record controls, or other CRM scope enters AE.
+
+Twenty references: `packages/twenty-docs/images/user-guide/home/side-panel.png` for retained parent context and action separation; `packages/twenty-docs/images/releases/0.3.2_new_layout.png` only for bounded full-record geometry and density because the image predates the pinned source.
+
+Final evidence:
+
+- Actual local Convex detail reads exercised `Chain Pending` in setup-required state and `Eckari` in routeable/connection-required state. Direct entry, reload, explicit return, browser Back, and browser Forward preserved exact identity and comparison state.
+- Catalog rows and comparison Inspect links carry a bounded local return context. Typed `/market` navigation restores it; malformed/external origins are discarded, and genuine deep links fall back to the default catalog.
+- Malformed refs are rejected before catalog or buyer-access reads. Invalid, unknown, unavailable, and source-unavailable states fail closed without commercial facts or invocation UI.
+- One shared inspector/model drives compact and full truth. Its single continuation precedes long contracts on mobile and occupies the subordinate desktop column. Full and compact entry focus their record regions.
+- Screenshot round 1 found a real compact-mobile max-content overflow. The shadcn-backed fact list now stacks to one mobile column and remains two columns on desktop; round 4 is the accepted mobile evidence.
+- Final screenshots: `output/gauntlet/v02/ae-live-operation-detail-desktop-round1.png`, `ae-live-operation-detail-mobile-round1.png`, `ae-live-operation-connection-required-desktop-round1.png`, `ae-live-operation-connection-required-mobile-round2.png`, `ae-live-operation-invalid-desktop-round1.png`, `ae-live-operation-invalid-mobile-round1.png`, `ae-live-operation-compact-desktop-round2.png`, and `ae-live-operation-compact-mobile-round4.png`.
+- Direct Twenty/AE sheets: `output/gauntlet/v02/twenty-vs-ae-compact-round2.png` and `twenty-vs-ae-full-round1.png`. Browser trace: `/Users/joelchan/.config/browser-harness/agent-workspace/recordings/ae-v02-live-gauntlet` (40 frames).
+- Checks: production build, repository typecheck, focused lint, UI contract, module/route boundaries, and 82 focused tests pass. No gauntlet `.mjs` file exists.
+- Final source/behavior critic verdict: **PASS**. Final screenshot critic verdict: **PASS**.
+- V02 final verdict: **PASS**.
+
+## V03 — Command modal workflow
+
+### Literal module map and final gate
+
+| Concern | Twenty source | AE result |
+| --- | --- | --- |
+| Entry and shell | `CommandMenuOpenContainer.tsx`, `CommandMenuForMobile.tsx` | one centered shadcn/Radix `Dialog` on every viewport; the user-locked desktop-modal divergence never becomes a sheet |
+| Keyboard contract | `useCommandMenuHotKeys.ts` and command-menu Escape handling | capture-phase `⌘/Ctrl+K`, `/`, and Escape ownership with repeat, composition, modifier, and text-entry guards |
+| Search and selection | command-menu item rendering and keyboard navigation | shadcn `Command` owns filtering, active selection, keyboard movement, and empty state over canonical Operation search results |
+| Inspect history | side-panel router, history, top bar, and focus hooks | provider-owned root/search/inspect state preserves the query and selected result without importing Twenty's general command router |
+| Exit and continuation | side-panel close, expand, and navigation actions | inspect→search→clear query→close is the exact Escape ladder; any route continuation closes and resets the next opening |
+| Focus | command input and side-panel focus management | open focuses search, inspection focuses its labelled region, Back restores the result workflow, and close restores the invoking control through Radix |
+
+Final gate and evidence:
+
+- `/` opens only from a non-text-entry target, `⌘/Ctrl+K` toggles, repeat and IME events are ignored, and the capture-phase seam resolves Escape before Radix or lower-level hotkeys can skip a rung.
+- A live `Chain` query produced canonical development-database results, preserved the non-first keyboard selection through inspection, and exercised `Chain Pending` in its real setup-required state.
+- The exact three-rung Escape ladder passed in the browser: inspect returns to the same query/results, search clears to root, and root closes. Full details, Browse current Operations, and controlled continuations close and reset the provider before navigation.
+- The command workflow remains a centered modal at 1600×1000 and 390×844. The compact inspector scrolls internally, keeps its continuation reachable, and has no mobile overflow.
+- Final screenshots: `output/gauntlet/v03/ae-command-workflow-desktop-search.png`, `ae-command-workflow-desktop-inspect.png`, `ae-command-workflow-mobile-search.png`, and `ae-command-workflow-mobile-inspect.png`.
+- Literal comparison sheets: `output/gauntlet/v03/twenty-vs-ae-search.png` and `twenty-vs-ae-inspect.png`. Browser trace: `/Users/joelchan/.config/browser-harness/agent-workspace/recordings/ae-v03-live-gauntlet` (142 frames).
+- Checks: 46/46 focused tests, command-panel 29/29, repository typecheck, production build, focused lint, UI contract, import boundaries, and diff check pass. No gauntlet `.mjs` file was created.
+- Final source/behavior critic verdict: **PASS**. Final screenshot critic verdict: **PASS**.
+- V03 final verdict: **PASS**.
+
+## V04 — Owner Operation inventory
+
+- Twenty source map: `RecordIndexPage`, `RecordIndexContainerGater`, `RecordIndexTableContainer`, `RecordIndexViewBar`, `RecordTableEmpty`, `RecordTableBodyLoading`, plus the record-row focus and hotkey modules in the pinned checkout `/tmp/ae-twenty-ui.MECSaG`.
+- AE mapping: the owner Operations route composes the shared operator shell, `AeOwnerOfferingsList`, shadcn `Table`/`Button`/`Badge`, TanStack Table state, and Radix roving focus. CRM saved views, object switching, imports, field configuration, alternate boards/calendars, bulk mutation, side panels, and speculative virtualization remain deliberately excluded.
+- Behavior gate passed: stable first-load shell and table skeleton; compact sortable/filterable Operation rows; one native Open link in the roving tab order; filter, sort, and focused-row restoration across detail navigation; truthful true-empty, filtered-empty, source-error retry, unreadable-revision, projection-pending, and refresh states; local fixed-owner authority materializes before live source reads.
+- Live local Convex proof used five actual mixed-state Operations (Draft, Paused, Published, Retired) with real access-route counts. Desktop filter/sort/keyboard focus, detail round-trip restoration, clear-filter recovery, and projection refresh were exercised against the development database.
+- Desktop screenshots: `output/gauntlet/v04/ae-owner-operations-desktop-populated.png`, `ae-owner-operations-desktop-filter-focus.png`, and `ae-owner-operations-desktop-filter-empty.png`.
+- Mobile screenshots: `output/gauntlet/v04/ae-owner-operations-mobile-populated.png` and `ae-owner-operations-mobile-populated-right.png`. At 390×844 the document has no horizontal overflow; only the 336 px table viewport scrolls across its 511 px content, with five rows and exactly one tabbable row action.
+- Literal comparison: `output/gauntlet/v04/twenty-vs-ae-owner-operations.png` against `output/gauntlet/c05/twenty-record-table-reference.png`.
+- Navigation retention proof after the focus-control fix: 120 list/detail/back cycles retained one document, 415 nodes, 309 listeners, and about 52 MiB heap. The final isolated screenshot run ended at one tab, one document, 769 nodes, 171 listeners, and 48.58 MiB heap before teardown.
+- Checks: 33/33 focused tests, repository typecheck, focused zero-warning lint, UI-contract test, production build, React Doctor 85/100, and diff check pass. No gauntlet `.mjs` file was created.
+- Final source/behavior critic verdict: **PASS**. Final screenshot critic verdict: **PASS**. The critic found AE preserves Twenty's transferable stable-shell, dense-table, truthful-state, and focus contracts while correctly excluding CRM-only machinery.
+- V04 final verdict: **PASS**.
 
 ## Screenshot protocol
 

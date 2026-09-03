@@ -9,13 +9,6 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
   Item,
   ItemContent,
   ItemDescription,
@@ -28,7 +21,6 @@ import type {
   PublicOperationDescriptor,
   PublicOperationParameter,
 } from '@/modules/capability-supply/public'
-import { formatCurrencyAmount } from '@/modules/money/public'
 
 import type { OperationInspectorModel } from './operation-inspector-model'
 import { operationLabel } from './operation-inspector-model'
@@ -36,9 +28,11 @@ import { operationLabel } from './operation-inspector-model'
 export function AeOperationContractSections({
   operation,
   model,
+  onOpenTechnicalContract,
 }: Readonly<{
   operation: PublicOperationDescriptor
   model: OperationInspectorModel
+  onOpenTechnicalContract: () => void
 }>) {
   const requiredParameters = operation.parameters?.filter(({ required }) => required) ?? []
   const optionalParameters = operation.parameters?.filter(({ required }) => !required) ?? []
@@ -53,12 +47,13 @@ export function AeOperationContractSections({
         {operation.parameters === undefined ? (
           <p className="text-sm text-muted-foreground">
             No flat parameter list is published.{' '}
-            <a
-              href="#technical-contract"
+            <button
+              type="button"
+              onClick={onOpenTechnicalContract}
               className="font-medium text-foreground underline underline-offset-4"
             >
               Read the input JSON Schema
-            </a>{' '}
+            </button>{' '}
             before calling.
           </p>
         ) : (
@@ -82,16 +77,9 @@ export function AeOperationContractSections({
         description="Published input only. Missing examples are never inferred."
       >
         <Example
-          title="Example input"
           value={model.inputExample?.input}
-          empty="No example input is published. Use the input schema below."
+          empty="No example input is published. Open schemas to inspect the exact input contract."
         />
-        <a
-          href="#technical-contract"
-          className="inline-flex min-h-touch items-center justify-self-start text-sm font-medium text-foreground underline underline-offset-4"
-        >
-          Read the input and output schemas
-        </a>
       </AeSection>
 
       <AeSection
@@ -99,23 +87,10 @@ export function AeOperationContractSections({
         title="Price and terms"
         description="The exact buyer authorization and published commercial terms for this capability."
       >
-        <PriceBreakdown operation={operation} model={model} />
         <dl className="grid gap-3 sm:grid-cols-2">
-          {operation.commercial.priceEvidence?.observedAt === undefined ? null : (
-            <TimeFact
-              label="Price observed"
-              value={operation.commercial.priceEvidence.observedAt}
-            />
-          )}
-          {operation.commercial.priceEvidence?.validUntil === undefined ? null : (
-            <TimeFact
-              label="Price valid until"
-              value={operation.commercial.priceEvidence.validUntil}
-            />
-          )}
           <Fact
             label="Commercial relationship"
-            value={`${operationLabel(operation.commercial.relationship.kind)} — ${operation.commercial.relationship.summary}`}
+            value={`${operationLabel(operation.commercial.relationship.kind)}: ${operation.commercial.relationship.summary}`}
           />
           <Fact label="Provider" value={operation.business.name} />
         </dl>
@@ -203,57 +178,48 @@ export function AeOperationTechnicalContract({
   operation,
 }: Readonly<{ operation: PublicOperationDescriptor }>) {
   return (
-    <Accordion id="technical-contract" type="single" collapsible className="scroll-mt-anchor">
-      <AccordionItem value="technical-contract" className="rounded-card border bg-card px-gutter">
-        <AccordionTrigger className="min-h-touch hover:no-underline">
-          Technical contract, schemas, digests, and references
-        </AccordionTrigger>
-        <AccordionContent>
-          <div className="grid gap-6">
-            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Fact label="Operation reference">
-                <AeCopyReference label="reference" value={operation.operationRef} />
-              </Fact>
-              <Fact label="Operation ID" value={operation.operationId} />
-              <Fact
-                label="Capability"
-                value={`${operation.contract.capabilityId} · version ${operation.contract.version}`}
-              />
-              <Fact label="Publisher" value={operationLabel(operation.provenance.publisher)} />
-              <Fact label="Source kind" value={operationLabel(operation.provenance.sourceKind)} />
-              <Fact
-                label="Transport"
-                value={`${operation.transport.method}${operation.transport.pathTemplate === undefined ? '' : ` ${operation.transport.pathTemplate}`}`}
-              />
-              <Fact label="Request timeout" value={`${operation.transport.requestTimeoutMs} ms`} />
-              {operation.payment === undefined ? null : (
-                <Fact label="Payment network" value={`${operation.payment.network} · ${operation.payment.asset}`} />
-              )}
-              <Fact
-                label="Price digest"
-                value={operation.commercial.priceEvidence?.priceDigest ?? 'Not published'}
-              />
-              <Fact
-                label="Price source"
-                value={operation.commercial.priceEvidence?.sourceRef ?? 'Not published'}
-              />
-              <Fact
-                label="Price evidence"
-                value={operation.commercial.priceEvidence?.evidenceRefs.join(', ') || 'Not published'}
-              />
-            </dl>
-            <ContractGroup title="Data use">
-              <DataUseList operation={operation} />
-            </ContractGroup>
-            <ContractGroup title="Effects and authority">
-              <EffectsList operation={operation} />
-            </ContractGroup>
-            <Schema title="Input JSON Schema" value={operation.contract.inputJsonSchema} />
-            <Schema title="Output JSON Schema" value={operation.contract.outputJsonSchema} />
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+    <div className="grid gap-6">
+      <dl className="grid gap-3 sm:grid-cols-2">
+        <Fact label="Operation reference">
+          <AeCopyReference label="reference" value={operation.operationRef} />
+        </Fact>
+        <Fact label="Operation ID" value={operation.operationId} />
+        <Fact
+          label="Capability"
+          value={`${operation.contract.capabilityId} · version ${operation.contract.version}`}
+        />
+        <Fact label="Publisher" value={operationLabel(operation.provenance.publisher)} />
+        <Fact label="Source kind" value={operationLabel(operation.provenance.sourceKind)} />
+        <Fact
+          label="Transport"
+          value={`${operation.transport.method}${operation.transport.pathTemplate === undefined ? '' : ` ${operation.transport.pathTemplate}`}`}
+        />
+        <Fact label="Request timeout" value={`${operation.transport.requestTimeoutMs} ms`} />
+        {operation.payment === undefined ? null : (
+          <Fact label="Payment network" value={`${operation.payment.network} · ${operation.payment.asset}`} />
+        )}
+        <Fact
+          label="Price digest"
+          value={operation.commercial.priceEvidence?.priceDigest ?? 'Not published'}
+        />
+        <Fact
+          label="Price source"
+          value={operation.commercial.priceEvidence?.sourceRef ?? 'Not published'}
+        />
+        <Fact
+          label="Price evidence"
+          value={operation.commercial.priceEvidence?.evidenceRefs.join(', ') || 'Not published'}
+        />
+      </dl>
+      <ContractGroup title="Data use">
+        <DataUseList operation={operation} />
+      </ContractGroup>
+      <ContractGroup title="Effects and authority">
+        <EffectsList operation={operation} />
+      </ContractGroup>
+      <Schema title="Input JSON Schema" value={operation.contract.inputJsonSchema} />
+      <Schema title="Output JSON Schema" value={operation.contract.outputJsonSchema} />
+    </div>
   )
 }
 
@@ -298,7 +264,7 @@ function EvidenceList({
   return (
     <ItemGroup aria-label="Output evidence">
       {operation.evidence.map((evidence) => (
-        <Item key={evidence.evidenceId} variant="outline" size="sm">
+        <Item key={evidence.evidenceId} size="sm">
           <ItemContent>
             <ItemTitle>{operationLabel(evidence.purpose)}</ItemTitle>
             <ItemDescription className="line-clamp-none break-all">
@@ -322,7 +288,6 @@ function DataUseList({
       {operation.dataUse.map((effect) => (
         <Item
           key={`${effect.effectId}:${effect.inputPointer}:${effect.phase}`}
-          variant="outline"
           size="sm"
         >
           <ItemContent>
@@ -351,7 +316,6 @@ function EffectsList({
       {operation.effects.map((effect) => (
         <Item
           key={`${effect.effectId}:${effect.class}:${effect.authority}:${effect.reversibility}`}
-          variant="outline"
           size="sm"
         >
           <ItemContent>
@@ -384,7 +348,7 @@ function ParameterList({
       ) : (
         <ItemGroup>
           {parameters.map((parameter) => (
-            <Item key={`${parameter.group}:${parameter.name}`} variant="outline" size="sm">
+            <Item key={`${parameter.group}:${parameter.name}`} size="sm">
               <ItemContent>
                 <ItemTitle>
                   <code className="font-mono text-sm">{parameter.name}</code>
@@ -420,66 +384,24 @@ function TermList({
   )
 }
 
-function PriceBreakdown({
-  operation,
-  model,
-}: Readonly<{
-  operation: PublicOperationDescriptor
-  model: OperationInspectorModel
-}>) {
-  const breakdown = operation.commercial.priceBreakdown
-  if (breakdown === undefined) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle><h3>Total price</h3></CardTitle>
-          <CardDescription>No separate fee breakdown is published for this capability.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="font-mono text-lg font-semibold tabular-nums">{model.totalPrice}</p>
-        </CardContent>
-      </Card>
-    )
-  }
-  return (
-    <Card role="region" aria-label="Exact price breakdown">
-      <CardHeader>
-        <CardTitle><h3>Exact price breakdown</h3></CardTitle>
-        <CardDescription>The total authorization is the maximum charged for this call.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <dl className="grid gap-3 sm:grid-cols-3">
-          <Fact label="Provider price" value={formatCurrencyAmount(breakdown.providerQuotedAmount)} />
-          <Fact label="Agentic Economy fee" value={formatCurrencyAmount(breakdown.agenticEconomyFee)} />
-          <Fact label="Total authorization" value={formatCurrencyAmount(breakdown.totalBuyerAuthorization)} />
-          <Fact label="Payment network" value={`Base (${breakdown.network})`} />
-          <Fact label="Payment asset" value={`USDC (${breakdown.asset})`} />
-        </dl>
-      </CardContent>
-    </Card>
-  )
-}
-
 function Example({
   title,
   value,
   empty,
-}: Readonly<{ title: string; value?: unknown; empty: string }>) {
+}: Readonly<{ title?: string; value?: unknown; empty: string }>) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle><h3>{title}</h3></CardTitle>
-      </CardHeader>
-      <CardContent>
-        {value === undefined ? (
-          <p className="text-sm leading-6 text-muted-foreground">{empty}</p>
-        ) : (
-          <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs text-foreground">
-            <code>{JSON.stringify(value, null, 2)}</code>
-          </pre>
-        )}
-      </CardContent>
-    </Card>
+    <section className="grid min-w-0 gap-2">
+      {title === undefined ? null : (
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      )}
+      {value === undefined ? (
+        <p className="text-sm leading-6 text-muted-foreground">{empty}</p>
+      ) : (
+        <pre className="max-h-80 overflow-auto bg-muted px-gutter py-3 text-xs text-foreground">
+          <code>{JSON.stringify(value, null, 2)}</code>
+        </pre>
+      )}
+    </section>
   )
 }
 

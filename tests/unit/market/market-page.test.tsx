@@ -16,10 +16,12 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import "../../setup/jsdom-platform";
 
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
+import type { MarketComparison } from "@/components/ae/market/AeMarketComparisonView";
+import type { OperationCardViewModel } from "@/modules/market/operation-view-model";
 import type { MarketRouteProjection } from "@/modules/market/server";
 
 const generatedAt = "2026-08-23T03:00:00.000Z";
@@ -124,6 +126,12 @@ const projection: MarketRouteProjection = {
 afterEach(cleanup);
 
 describe("market page", () => {
+  it("keeps the catalog workspace ahead of the editorial footer", () => {
+    renderMarket({ window: "30d" });
+
+    expect(document.querySelector("#operations")?.className).toContain("min-h-dvh");
+  });
+
   it("shows the catalog as category shelves of capabilities", () => {
     renderMarket({ window: "30d" });
 
@@ -181,6 +189,12 @@ describe("market page", () => {
     expect(
       screen.getAllByRole("link", { name: "Use Company registry search" }),
     ).toHaveLength(1);
+    const operationHref = screen.getByRole("link", {
+      name: "Use Company registry search",
+    }).getAttribute("href");
+    expect(operationHref).not.toBeNull();
+    expect(new URL(operationHref!, "https://agentic-economy.example").searchParams.get("from"))
+      .toBe("/market?window=30d&capability=identity.company_search#operations");
     expect(
       within(screen.getByRole("table")).getAllByRole("row").slice(1).map(
         (row) => row.textContent,
@@ -189,6 +203,216 @@ describe("market page", () => {
       expect.stringContaining("Company registry search"),
       expect.stringContaining("Company data lookup"),
     ]);
+  });
+
+  it("shares a bounded comparison selection across result tables in catalog order", async () => {
+    const onCompareOperations = vi.fn();
+    if (projection.catalog.kind !== "ok" || projection.catalog.items[0] === undefined) {
+      throw new Error("expected catalog fixture items");
+    }
+    const baseOperation = projection.catalog.items[0];
+    const items: OperationCardViewModel[] = Array.from({ length: 6 }, (_, index) => ({
+      ...baseOperation,
+      operationRef: `operation:v1:compare-${String(index + 1)}`,
+      title: `Compare Operation ${String(index + 1)}`,
+      supplierName: `Supplier ${String(index + 1)}`,
+      supplierSlug: `supplier-${String(index + 1)}`,
+      capabilityId: `compare.capability_${String(index + 1)}`,
+      capability: `Compare capability ${String(index + 1)}`,
+      ...(index === 5
+        ? {
+            readiness: "Unavailable" as const,
+            readinessLabel: "Unavailable",
+            trustFact: "Not currently available",
+          }
+        : {}),
+    }));
+    const comparisonProjection: MarketRouteProjection = {
+      ...projection,
+      catalog: {
+        kind: "ok",
+        matchedCount: items.length,
+        pagination: { limit: 12, hasMore: false },
+        items,
+      },
+    };
+
+    renderMarket(
+      { window: "30d", query: "compare" },
+      comparisonProjection,
+      onCompareOperations,
+    );
+
+    const checkboxes = items.map((item) => screen.getByRole<HTMLButtonElement>(
+      "checkbox",
+      { name: `Select ${item.title} by ${item.supplierName}` },
+    ));
+    expect(screen.queryByRole("checkbox", { name: /Select all/ })).toBeNull();
+    expect(checkboxes[5]?.disabled).toBe(true);
+
+    for (const index of [3, 0, 2, 1]) {
+      const item = items[index]!;
+      fireEvent.click(screen.getByRole("checkbox", {
+        name: `Select ${item.title} by ${item.supplierName}`,
+      }));
+    }
+
+    const tray = screen.getByRole("complementary", { name: "Operation comparison" });
+    expect(within(tray).getByRole("status", { name: "4 of 4 selected" })).toBeTruthy();
+    const firstSelected = screen.getByRole<HTMLButtonElement>("checkbox", {
+      name: "Select Compare Operation 1 by Supplier 1",
+    });
+    const fifthChoice = screen.getByRole<HTMLButtonElement>("checkbox", {
+      name: "Select Compare Operation 5 by Supplier 5",
+    });
+    expect(fifthChoice.disabled).toBe(true);
+    expect(firstSelected.disabled).toBe(false);
+    expect(firstSelected.closest("tr")?.getAttribute("data-state")).toBe("selected");
+
+    fireEvent.click(within(tray).getByRole("button", { name: "Compare 4" }));
+    expect(onCompareOperations).toHaveBeenCalledWith(
+      items.slice(0, 4).map((item) => item.operationRef),
+    );
+
+    fireEvent.click(within(tray).getByRole("button", {
+      name: "Remove Compare Operation 2 by Supplier 2 from comparison",
+    }));
+    await waitFor(() => expect(screen.getByRole<HTMLButtonElement>("checkbox", {
+      name: "Select Compare Operation 5 by Supplier 5",
+    }).disabled).toBe(false));
+    expect(screen.getByRole("checkbox", {
+      name: "Select Compare Operation 2 by Supplier 2",
+    }).getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("complementary", { name: "Operation comparison" })).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole("link", { name: "Catalog" }));
+    });
+  });
+
+  it("prunes selected Operations before a changed result page renders", () => {
+    const onCompareOperations = vi.fn();
+    const rendered = renderMarket(
+      { window: "30d", capability: "identity.company_search" },
+      projection,
+      onCompareOperations,
+    );
+    fireEvent.click(screen.getByRole("checkbox", {
+      name: "Select Company registry search by Registry Works",
+    }));
+    expect(screen.getByRole("complementary", { name: "Operation comparison" })).toBeTruthy();
+
+    const secondOnly: MarketRouteProjection = {
+      ...projection,
+      catalog: projection.catalog.kind === "ok"
+        ? {
+            ...projection.catalog,
+            matchedCount: 1,
+            items: [projection.catalog.items[1]!],
+          }
+        : projection.catalog,
+    };
+    rendered.rerenderMarket(
+      { window: "30d", query: "different page" },
+      secondOnly,
+      onCompareOperations,
+    );
+
+    expect(screen.queryByRole("complementary", { name: "Operation comparison" })).toBeNull();
+    expect(screen.getByRole("checkbox", {
+      name: "Select Company data lookup by Clear Ledger",
+    }).getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("clears draft comparison selection when the catalog context changes", async () => {
+    const onCompareOperations = vi.fn();
+    const rendered = renderMarket(
+      { window: "30d", query: "company" },
+      projection,
+      onCompareOperations,
+    );
+    fireEvent.click(screen.getByRole("checkbox", {
+      name: "Select Company registry search by Registry Works",
+    }));
+
+    rendered.rerenderMarket(
+      { window: "30d", query: "registry" },
+      projection,
+      onCompareOperations,
+    );
+
+    await waitFor(() => expect(screen.queryByRole("complementary", {
+      name: "Operation comparison",
+    })).toBeNull());
+  });
+
+  it("edits or closes a recovered comparison without dropping its catalog context", async () => {
+    const firstRef = `operation:v1:${"a".repeat(64)}`;
+    const secondRef = `operation:v1:${"b".repeat(64)}`;
+    const comparisonProjection: MarketRouteProjection = projection.catalog.kind === "ok"
+      ? {
+          ...projection,
+          catalog: {
+            ...projection.catalog,
+            items: [
+              { ...projection.catalog.items[0]!, operationRef: firstRef },
+              { ...projection.catalog.items[1]!, operationRef: secondRef },
+            ],
+          },
+        }
+      : projection;
+    const unavailableComparison: MarketComparison = {
+      kind: "unavailable",
+      schemaVersion: "registry-operations:v2",
+      reason: "operation_unavailable",
+    };
+    const search = {
+      window: "30d" as const,
+      query: "company",
+      availability: "routeable" as const,
+      category: "identity-compliance" as const,
+      cursor: "page-2",
+      compare: `${firstRef},${secondRef}`,
+    };
+    const rendered = renderMarket(
+      search,
+      comparisonProjection,
+      vi.fn(),
+      unavailableComparison,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit selection" }));
+    await waitFor(() => expect(screen.getByRole("link", { name: "Catalog" })).toBe(document.activeElement));
+    expect(rendered.state.location.search).toMatchObject({
+      window: "30d",
+      query: "company",
+      availability: "routeable",
+      category: "identity-compliance",
+      cursor: "page-2",
+      compare: `${firstRef},${secondRef}`,
+    });
+    expect(screen.getByRole("checkbox", {
+      name: "Select Company registry search by Registry Works",
+    }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("checkbox", {
+      name: "Select Company data lookup by Clear Ledger",
+    }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("complementary", {
+      name: "Operation comparison",
+    })).toBeTruthy();
+
+    cleanup();
+    const closed = renderMarket(
+      search,
+      comparisonProjection,
+      vi.fn(),
+      unavailableComparison,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Back to results" }));
+    await waitFor(() => expect(closed.state.location.search).not.toHaveProperty("compare"));
+    expect(closed.state.location.search).toMatchObject({ query: "company", cursor: "page-2" });
+    expect(screen.getByRole("link", { name: "Catalog" })).toBe(document.activeElement);
   });
 
   it("submits search as a native GET while preserving only compatible filters", () => {
@@ -410,6 +634,8 @@ describe("market page", () => {
 function renderMarket(
   search: Parameters<typeof AeMarketPage>[0]["search"],
   marketProjection = projection,
+  onCompareOperations?: (operationRefs: readonly string[]) => void,
+  comparison?: MarketComparison,
 ) {
   const rootRoute = createRootRoute();
   const routeTree = rootRoute.addChildren([
@@ -427,13 +653,31 @@ function renderMarket(
     history: createMemoryHistory({ initialEntries: [marketUrl(search)] }),
   });
 
-  render(
+  const market = (
+    nextSearch: Parameters<typeof AeMarketPage>[0]["search"],
+    nextProjection: MarketRouteProjection,
+    nextOnCompareOperations = onCompareOperations,
+  ) => (
     <RouterContextProvider router={router}>
-      <AeMarketPage projection={marketProjection} search={search} />
-    </RouterContextProvider>,
+      <AeMarketPage
+        projection={nextProjection}
+        search={nextSearch}
+        {...(nextOnCompareOperations === undefined
+          ? {}
+          : { onCompareOperations: nextOnCompareOperations })}
+        {...(comparison === undefined ? {} : { comparison })}
+      />
+    </RouterContextProvider>
   );
+  const rendered = render(market(search, marketProjection));
 
-  return router;
+  return Object.assign(router, {
+    rerenderMarket: (
+      nextSearch: Parameters<typeof AeMarketPage>[0]["search"],
+      nextProjection: MarketRouteProjection,
+      nextOnCompareOperations = onCompareOperations,
+    ) => rendered.rerender(market(nextSearch, nextProjection, nextOnCompareOperations)),
+  });
 }
 
 function marketUrl(search: Parameters<typeof AeMarketPage>[0]["search"]) {
@@ -447,6 +691,7 @@ function marketUrl(search: Parameters<typeof AeMarketPage>[0]["search"]) {
   if (search.capability !== undefined) {
     params.set("capability", search.capability);
   }
+  if (search.compare !== undefined) params.set("compare", search.compare);
   return `/market?${params.toString()}`;
 }
 

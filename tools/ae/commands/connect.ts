@@ -2,12 +2,17 @@ import {
   AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST,
   MARKET_SUPPLY_MANAGE_SCOPE,
 } from '@/modules/agent-access/contract'
+import {
+  AGENT_ACCOUNT_SELF_ROUTE_CONTRACT,
+  agentAccountSelfResultSchema,
+  type AgentAccountSelfResult,
+} from '@/modules/agent-access/account.actions'
 import { isRecord } from '@/modules/common/is-record'
 import { spawn } from 'node:child_process'
 import { retry } from 'es-toolkit'
 
 import type { CliOptions } from '../lib/args'
-import { resolveAgentAccessCredential, storeConnection, storeMcpConnection } from '../lib/config'
+import { resolveAgentAccessCredential, storeConnection } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
 import { requireAgentAccessKey } from './status'
@@ -16,7 +21,6 @@ const OAUTH_REGISTER_PATH = '/oauth/register' as const
 const OAUTH_DEVICE_AUTHORIZATION_PATH = '/oauth/device_authorization' as const
 const OAUTH_TOKEN_PATH = '/oauth/token' as const
 const DEVICE_GRANT_TYPE = AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.grant_types[0]
-const CONNECT_VALIDATION_INVOCATION_REF = 'invocation:v1:connect-validation' as const
 const MAX_CONNECT_WAIT_MS = 60_000
 const MIN_POLL_DELAY_MS = 1_000
 const MAX_POLL_DELAY_MS = 10_000
@@ -72,21 +76,15 @@ function connectPending(details: ConnectDetails): JsonRecord {
   }
 }
 
-function mcpImportHandoff(configPath: string): JsonRecord {
-  return {
-    kind: 'import_required',
-    configPath,
-    nextAction: 'Import this file into the harness, start a new agent session, then verify the AE search tool is visible.',
-    verificationTool: 'ae_registry_operations_search',
-  }
+function connectedNextAction(supplier: boolean): string {
+  if (supplier) return 'Run ae supply status <businessId>.'
+  return 'Run ae search "what you need".'
 }
 
-function connectedNextAction(supplier: boolean, mcpConfigPath?: string): string {
-  if (supplier) return 'Run ae supply status <businessId>.'
-  if (mcpConfigPath !== undefined) {
-    return 'Import the returned MCP config path into the harness, start a new agent session, and verify ae_registry_operations_search is visible.'
-  }
-  return 'Run ae search "what you need".'
+function ownerConnectionHref(baseUrl: string, principalRef: string): string {
+  const url = new URL('/agent-access', baseUrl)
+  url.searchParams.set('caller', principalRef)
+  return url.toString()
 }
 
 function printConnectResult(value: JsonRecord, options: CliOptions): void {
@@ -107,14 +105,9 @@ function printConnectResult(value: JsonRecord, options: CliOptions): void {
   ])
   if (value.kind === 'connected') {
     line('Your agent is connected. The origin-bound key is stored with user-only file permissions.')
-    const mcp = isRecord(value.mcp) ? value.mcp : undefined
-    if (mcp?.kind === 'import_required' && typeof mcp.configPath === 'string') {
-      line(`MCP import file: ${mcp.configPath}`)
-      line('Import it into the harness, start a new agent session, then verify ae_registry_operations_search is visible.')
-    }
     line(`Next: ${value.profile === 'supplier'
       ? 'ae supply status <businessId>.'
-      : 'ae search "what you need", then ae inspect <operation> and ae call <operation> --input \'{...}\'.'}`)
+      : 'ae search "what you need", then ae describe <operation> and ae call <operation> --input \'{...}\'.'}`)
   } else if (typeof value.nextAction === 'string') {
     line(value.nextAction)
   }
@@ -129,27 +122,15 @@ function openVerificationUri(uri: string, options: CliOptions): void {
   child.unref()
 }
 
-async function validateAccessToken(options: CliOptions, key: string, supplier: boolean): Promise<void> {
-  const path = supplier
-    ? '/api/v1/supply/earnings'
-    : `/api/v1/operations/${encodeURIComponent(CONNECT_VALIDATION_INVOCATION_REF)}`
-  const outcome = await callJson(options.baseUrl, path, {
-    method: supplier ? 'POST' : 'GET',
+async function validateAccessToken(options: CliOptions, key: string, supplier: boolean): Promise<AgentAccountSelfResult> {
+  const outcome = await callJson(options.baseUrl, AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.path, {
+    method: AGENT_ACCOUNT_SELF_ROUTE_CONTRACT.method,
     headers: { Authorization: `Bearer ${key}` },
-    ...(supplier ? { body: JSON.stringify({ currency: 'USD' }) } : {}),
   })
-  const body = outcome.body
-  if (
-    outcome.ok
-    && isRecord(body)
-    && (supplier
-      ? body.kind === 'available'
-        || body.kind === 'not_found'
-        || (body.kind === 'error' && body.code === 'source_unavailable')
-      : (body.kind === 'found' || body.kind === 'refused')
-        && body.invocationRef === CONNECT_VALIDATION_INVOCATION_REF)
-  ) {
-    return
+  const account = agentAccountSelfResultSchema.safeParse(outcome.body)
+  const requiredScopes = (supplier ? MARKET_SUPPLY_MANAGE_SCOPE : AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope).split(' ')
+  if (outcome.ok && account.success && requiredScopes.every((scope) => account.data.scopes.includes(scope))) {
+    return account.data
   }
   if (outcome.status === 401 || outcome.status === 403) {
     throw new CliFailure('AE_API_KEY was rejected by the configured server.', {
@@ -163,11 +144,11 @@ async function validateAccessToken(options: CliOptions, key: string, supplier: b
   })
 }
 
-async function validateConfiguredKey(options: CliOptions, supplier: boolean): Promise<void> {
-  await validateAccessToken(options, requireAgentAccessKey('connect', options, supplier ? MARKET_SUPPLY_MANAGE_SCOPE : undefined), supplier)
+async function validateConfiguredKey(options: CliOptions, supplier: boolean): Promise<AgentAccountSelfResult> {
+  return await validateAccessToken(options, requireAgentAccessKey('connect', options, supplier ? MARKET_SUPPLY_MANAGE_SCOPE : undefined), supplier)
 }
-async function validateIssuedAccessToken(options: CliOptions, key: string, supplier: boolean): Promise<void> {
-  await retry(
+async function validateIssuedAccessToken(options: CliOptions, key: string, supplier: boolean): Promise<AgentAccountSelfResult> {
+  return await retry(
     async () => await validateAccessToken(options, key, supplier),
     {
       retries: ISSUED_KEY_VALIDATION_RETRIES,
@@ -185,14 +166,6 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
   }
 
   const supplier = options.supplier === true
-  if (supplier && options.mcp === true) {
-    throw new CliFailure('Supplier access cannot be installed as the buyer Operation MCP connection.', {
-      kind: 'INVALID_ARGUMENT',
-      code: 'connect-profile-mcp-conflict',
-      suggestion: 'Connect the supplier CLI profile separately; use ordinary ae connect --mcp for buyer Operation tools.',
-      nextCommand: 'ae connect --supplier',
-    })
-  }
   const requestedScope = supplier
     ? MARKET_SUPPLY_MANAGE_SCOPE
     : AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope
@@ -206,17 +179,20 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
   const configuredCredential = resolveAgentAccessCredential(options.baseUrl, supplier ? MARKET_SUPPLY_MANAGE_SCOPE : undefined)
   if (configuredCredential !== undefined) {
     try {
-      await validateConfiguredKey(options, supplier)
-      const mcpStoredAt = options.mcp === true
-        ? storeMcpConnection({ baseUrl: options.baseUrl, accessToken: configuredCredential.accessToken })
-        : undefined
+      const account = await validateConfiguredKey(options, supplier)
       printConnectResult({
         kind: 'connected',
         credential: 'origin_bound_agent_key',
         profile: supplier ? 'supplier' : 'market',
+        connectionState: supplier ? 'ready_to_supply' : 'ready_to_buy',
+        principalRef: account.principalRef,
+        accountRef: account.accountRef,
+        credentialId: account.credentialId,
+        authorityMode: account.authorityMode,
+        scopes: account.scopes,
+        ownerConnectionHref: ownerConnectionHref(options.baseUrl, account.principalRef),
         source: `validated_${configuredCredential.source}`,
-        nextAction: connectedNextAction(supplier, mcpStoredAt),
-        ...(mcpStoredAt === undefined ? {} : { mcp: mcpImportHandoff(mcpStoredAt) }),
+        nextAction: connectedNextAction(supplier),
       }, options)
       return
     } catch (error) {
@@ -289,7 +265,7 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         throw new CliFailure('OAuth token response was not a JSON object.', { kind: 'UNAVAILABLE', code: 'connect-response-invalid' })
       }
       const accessToken = textField(token.access_token, 'access_token')
-      await validateIssuedAccessToken(options, accessToken, supplier)
+      const account = await validateIssuedAccessToken(options, accessToken, supplier)
       const storedAt = storeConnection({
         baseUrl: options.baseUrl,
         accessToken,
@@ -297,9 +273,6 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         ...(typeof token.scope === 'string' ? { scope: token.scope } : {}),
         profile: supplier ? 'supplier' : 'market',
       })
-      const mcpStoredAt = options.mcp === true
-        ? storeMcpConnection({ baseUrl: options.baseUrl, accessToken })
-        : undefined
       printConnectResult({
         kind: 'connected',
         clientId: details.clientId,
@@ -309,10 +282,16 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         ...(typeof token.scope === 'string' ? { scope: token.scope } : {}),
         credential: 'origin_bound_agent_key',
         profile: supplier ? 'supplier' : 'market',
+        connectionState: supplier ? 'ready_to_supply' : 'ready_to_buy',
+        principalRef: account.principalRef,
+        accountRef: account.accountRef,
+        credentialId: account.credentialId,
+        authorityMode: account.authorityMode,
+        scopes: account.scopes,
+        ownerConnectionHref: ownerConnectionHref(options.baseUrl, account.principalRef),
         credentialStored: true,
         configPath: storedAt,
-        ...(mcpStoredAt === undefined ? {} : { mcp: mcpImportHandoff(mcpStoredAt) }),
-        nextAction: connectedNextAction(supplier, mcpStoredAt),
+        nextAction: connectedNextAction(supplier),
       }, options)
       return
     }

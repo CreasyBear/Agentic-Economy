@@ -3,7 +3,6 @@ import {
   postMcp,
   readMcpBody,
 } from './mcp-api-harness'
-import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
@@ -32,10 +31,10 @@ describe('MCP host adapter tools/list', () => {
       .filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
     const expectedToolNames = mcpActions.map(mcpToolName)
     expect(expectedToolNames).toEqual([
+      'ae_registry_operations_list',
       'ae_registry_operations_search',
-      'ae_registry_operations_detail',
+      'ae_registry_operations_describe',
       'ae_registry_operations_compare',
-      'ae_registry_operations_inspectPlan',
     ])
     expect(expectedToolNames).not.toContain('ae_operation_invoke')
     expect(expectedToolNames).not.toContain('ae_operation_execute')
@@ -55,25 +54,22 @@ describe('MCP host adapter tools/list', () => {
         properties: expect.any(Object),
         additionalProperties: false,
       }))
-      const expectedOutputSchema = toJsonSchemaCompat(z.object({
-        result: action.outputSchema,
-      }), {
-        strictUnions: true,
-        pipeStrategy: 'output',
-      })
-      expect(tool.outputSchema).toEqual(expect.objectContaining({
-        type: 'object',
-        additionalProperties: false,
-        required: ['result'],
-      }))
-      expect(tool.outputSchema).toEqual(expectedOutputSchema)
+      expect(tool.outputSchema).toBeUndefined()
     }
 
+    const list = tools.find((tool) => tool.name === 'ae_registry_operations_list')
     const operations = tools.find((tool) => tool.name === 'ae_registry_operations_search')
+    const describeOperation = tools.find((tool) => tool.name === 'ae_registry_operations_describe')
     const compare = tools.find((tool) => tool.name === 'ae_registry_operations_compare')
-    const inspectPlan = tools.find((tool) => tool.name === 'ae_registry_operations_inspectPlan')
+    expect(list?.inputSchema).toEqual(expect.objectContaining({
+      properties: expect.objectContaining({ limit: expect.any(Object) }),
+    }))
     expect(operations?.inputSchema).toEqual(expect.objectContaining({
       properties: expect.objectContaining({ query: expect.any(Object) }),
+    }))
+    expect(describeOperation?.inputSchema).toEqual(expect.objectContaining({
+      required: ['operationRef'],
+      properties: expect.objectContaining({ operationRef: expect.any(Object) }),
     }))
     expect(compare?.inputSchema).toEqual(expect.objectContaining({
       properties: expect.objectContaining({
@@ -84,29 +80,6 @@ describe('MCP host adapter tools/list', () => {
           items: expect.objectContaining({ type: 'string', pattern: expect.any(String) }),
         }),
       }),
-    }))
-    expect(inspectPlan?.inputSchema).toEqual(expect.objectContaining({
-      required: ['operationRefs'],
-      additionalProperties: false,
-      properties: expect.objectContaining({
-        operationRefs: expect.any(Object),
-        mappingRefs: expect.any(Object),
-        expiresInMs: expect.any(Object),
-      }),
-    }))
-    expect(inspectPlan?.description).toContain('operationRefs')
-    expect(inspectPlan?.description).toContain('not a singular operationRef')
-    expect(inspectPlan?.inputSchema).toEqual(expect.objectContaining({
-      properties: expect.objectContaining({
-        operationRefs: expect.objectContaining({
-          type: 'array',
-          minItems: 1,
-          maxItems: 4,
-        }),
-      }),
-    }))
-    expect(inspectPlan?.inputSchema).not.toEqual(expect.objectContaining({
-      required: expect.arrayContaining(['operationRef']),
     }))
   })
 

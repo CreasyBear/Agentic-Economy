@@ -375,12 +375,14 @@ describe('market-terminal CLI error contracts', () => {
       expect(envelope.flags).toHaveProperty('--cursor')
       expect(envelope.flags).toHaveProperty('--filters')
       if (command === 'connect') {
-        expect(envelope.usage).toBe('ae connect [--mcp] [--supplier]')
+        expect(envelope.usage).toBe('ae connect [--supplier]')
         expect(envelope.flags).toHaveProperty('--supplier')
+        expect(envelope.flags).not.toHaveProperty('--mcp')
         expect(envelope.auth.guidance).toEqual(expect.arrayContaining([
           expect.stringContaining('verification URI'),
           expect.stringContaining('user-only file permissions'),
         ]))
+        expect(JSON.stringify(envelope)).not.toContain('MCP connection')
         expect(JSON.stringify(envelope)).not.toContain('/oauth/grant')
       } else {
         expect(envelope.commands).toEqual(expect.objectContaining({

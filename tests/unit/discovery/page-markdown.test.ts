@@ -79,6 +79,12 @@ describe('site brief markdown', () => {
 
   it('builds a machine guide for non-HTML /for-agents requests', () => {
     const guide = buildForAgentsMarkdown(options)
+    expect(guide).toContain('codex mcp add agentic-economy --url "https://ae.example/mcp"')
+    expect(guide).toContain('codex mcp login agentic-economy')
+    expect(guide).not.toContain('codex mcp login agentic-economy --scopes')
+    expect(guide).toContain('open /mcp, select agentic-economy, then choose Authenticate')
+    expect(guide).toContain('follow its OAuth prompt')
+    expect(guide).toContain('call `ae_agentAccess_whoami` and report the connected Agent Principal and Account')
     expect(guide).toContain('ae connect --base-url "https://ae.example"')
     expect(guide).not.toContain('ae connect --base-url "https://ae.example" --mcp')
     expect(guide).toContain('POST body example')
@@ -89,6 +95,7 @@ describe('site brief markdown', () => {
     expect(guide).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)
     expect(guide).toContain('Client connect performs initialization')
     expect(guide).toContain('may omit `Mcp-Session-Id`')
+    expect(guide).not.toContain('the client opens standard OAuth approval')
   })
 
   it('projects About as the same two doors the HTML page shows', () => {

@@ -1,5 +1,6 @@
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
+import type { AgentConnectionReadback } from '@/modules/agent-access/agent-connection'
 import type { CreditAccountView, CreditActivityView, KeyUsageView } from '@/modules/money/public'
 
 export type AgentActivityView = CreditActivityView & Readonly<{
@@ -46,6 +47,9 @@ export type AgentDirectoryItem = Readonly<{
   currentCredentialGeneration?: number
   lastAuthenticatedAt?: number
   lastSeenAt?: number
+  connectionCount: number
+  connectorDisplayNames: readonly string[]
+  authorityMode: AgentAccessKeyInventoryItem['authorityMode']
 }>
 
 export type AgentUsageSummary = Readonly<Omit<KeyUsageView, 'credentialId'>>
@@ -58,6 +62,7 @@ export type AgentUsageSummary = Readonly<Omit<KeyUsageView, 'credentialId'>>
  */
 export type AgentDetail = Readonly<{
   agent: AgentDirectoryItem
+  connections: readonly AgentConnectionReadback[]
   credentials: readonly AgentCredentialSummary[]
   currentCredentialRef?: string
   authorityMode: AgentAccessKeyInventoryItem['authorityMode']

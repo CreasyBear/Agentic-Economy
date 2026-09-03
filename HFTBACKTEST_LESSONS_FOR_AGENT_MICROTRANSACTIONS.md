@@ -1,5 +1,12 @@
 # hftbacktest lessons for Agentic Economy microtransactions
 
+**Status:** dated technical research
+
+**Authority note:** this study informs evidence timing, simulation and recovery.
+It does not define the product, commercial roles or current roadmap. Interpret
+older transaction language through [PRODUCT.md](./PRODUCT.md) and
+[CONTEXT.md](./CONTEXT.md).
+
 ## Executive verdict
 
 `hftbacktest` is valuable to Agentic Economy (AE) primarily as a **simulation architecture**, not as production HFT infrastructure. Its distinctive contribution is a two-view causal model: an exchange-side processor advances the simulated authoritative world at `exch_ts`, while a local-side processor exposes the same feed and order outcomes only at `local_ts`. Strategy decisions therefore use what the strategy could have known, not future exchange truth.

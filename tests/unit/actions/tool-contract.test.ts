@@ -12,10 +12,11 @@ import {
 } from '@/modules/actions'
 
 const CHAT_TOOL_IDS = [
+  'registry.operations.list',
   'registry.operations.search',
-  'registry.operations.detail',
+  'registry.operations.describe',
   'registry.operations.compare',
-  'registry.operations.inspectPlan',
+  'operation.inspect',
   'operation.invoke',
 ] as const
 
@@ -43,7 +44,7 @@ describe('action tool contract', () => {
   })
 
   it('builds canonical operation read contracts and preserves full input schemas', () => {
-    for (const actionId of ['registry.operations.compare', 'registry.operations.inspectPlan'] as const) {
+    for (const actionId of ['registry.operations.compare', 'registry.operations.describe'] as const) {
       const action = findAction(actionId)
       expect(action).toBeDefined()
       expect(() => actionToToolContract(action!)).not.toThrow('canonical_digest_value_invalid')

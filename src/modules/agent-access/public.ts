@@ -26,3 +26,9 @@ export { agentAuditOpaqueRef, createAgentAuditEnvelope } from './agent-audit'
 export type { AgentAuditEnvelope, AgentAuditInput } from './agent-audit'
 export { readAgentConsentDetails } from './consent-read-model'
 export type { AgentConsentDetails, AgentConsentTarget } from './consent-read-model'
+export { presentConnectionProblem } from './agent-connection'
+export type {
+  AgentConnectionReadback,
+  ConnectionProblemPresentation,
+  OwnerConnectionLifecycleResult,
+} from './agent-connection'

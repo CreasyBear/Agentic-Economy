@@ -9,6 +9,11 @@ export type CreditPaymentRequest = Readonly<{
   inputDigest: string
   successReturnRef: string
   providerRecoveryDeadlineAt: number
+  principalAmount?: ExactAmount
+  serviceFeeAmount?: ExactAmount
+  taxAmount?: ExactAmount
+  cancelReturnRef?: string
+  checkoutExpiresAt?: number
 }>
 
 export type CreditPaymentReadRequest = CreditPaymentRequest & Readonly<{
@@ -23,6 +28,8 @@ export type CreditPaymentEvidence = Readonly<{
   status: 'pending' | 'succeeded' | 'failed' | 'outcome_unknown'
   checkoutStatus?: 'open' | 'complete' | 'expired'
   paymentStatus?: 'paid' | 'unpaid' | 'no_payment_required'
+  checkoutMode?: 'hosted_page'
+  checkoutExpiresAt?: number
   requestDigest: string
   metadataDigest: string
   checkoutSessionDigest: string
@@ -33,8 +40,10 @@ export type CreditPaymentEvidence = Readonly<{
 }>
 
 export type CreditPaymentSession = Readonly<{
+  kind: 'hosted_redirect'
   evidence: CreditPaymentEvidence
-  clientSecret: string
+  expiresAt: number
+  checkoutUrl?: string
 }>
 
 export type CreditPaymentPort = Readonly<{
@@ -123,5 +132,3 @@ export type PayoutTransferPort = Readonly<{
   readTransfer: (input: Readonly<{ externalRef: string; idempotencyKey: string }>) => Promise<PayoutTransferEvidence | MoneyRefusal>
   readTransfersByIdentity: (input: PayoutTransferRequest) => Promise<readonly PayoutTransferEvidence[] | MoneyRefusal>
 }>
-
-

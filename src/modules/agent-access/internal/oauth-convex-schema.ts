@@ -1,5 +1,6 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import { agentAccessPolicyValue } from './convex-schema'
 
 const requestedAccessAmount = v.object({
   currency: v.string(),
@@ -50,6 +51,19 @@ const agentAccessPredecessorSnapshotValue = v.object({
   credentialGeneration: v.number(),
 })
 
+const refreshFamilyLifecycle = v.union(
+  v.literal('active'),
+  v.literal('revoked'),
+  v.literal('expired'),
+)
+
+const refreshTokenLifecycle = v.union(
+  v.literal('active'),
+  v.literal('claimed'),
+  v.literal('consumed'),
+  v.literal('invalidated'),
+)
+
 export const agentAccessConsentReservationValue = v.object({
   action: v.union(v.literal('agent_access.create'), v.literal('agent_access.replace_credential')),
   commandDigest: v.string(),
@@ -78,6 +92,7 @@ export const agentAccessOAuthTables = {
     clientId: v.string(),
     redirectUri: v.optional(v.string()),
     requestedScopes: v.array(v.string()),
+    offlineAccess: v.optional(v.literal(true)),
     requestedAccess,
     approvedAccess: requestedAccess,
     codeChallenge: v.optional(v.string()),
@@ -126,9 +141,69 @@ export const agentAccessOAuthTables = {
     grantTypes: v.array(v.union(
       v.literal('authorization_code'),
       v.literal('urn:ietf:params:oauth:grant-type:device_code'),
+      v.literal('refresh_token'),
     )),
     tokenEndpointAuthMethod: v.literal('none'),
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
   }).index('by_clientId', ['clientId']),
+
+  agentAccessOAuthRefreshFamilies: defineTable({
+    familyRef: v.string(),
+    revision: v.number(),
+    clientId: v.string(),
+    ownerId: v.string(),
+    ownerPrincipalRef: v.string(),
+    providerSubject: v.string(),
+    principalRef: v.string(),
+    displayName: v.string(),
+    applicationRef: v.string(),
+    environment: v.union(v.literal('sandbox'), v.literal('production')),
+    scopes: v.array(v.string()),
+    authorityMode: v.union(
+      v.literal('inspect_only'),
+      v.literal('approve_each'),
+      v.literal('bounded_mandate'),
+      v.literal('full_yolo'),
+    ),
+    operationAccess: v.union(v.literal('all_admitted'), v.literal('selected_operations')),
+    operationRefs: v.array(v.string()),
+    policy: agentAccessPolicyValue,
+    currentCredentialRef: v.string(),
+    currentProviderCredentialId: v.string(),
+    currentGrantRef: v.string(),
+    currentGeneration: v.number(),
+    currentAccessExpiresAt: v.number(),
+    currentTokenHash: v.string(),
+    lifecycle: refreshFamilyLifecycle,
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    updatedAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    revocationReason: v.optional(v.string()),
+  })
+    .index('by_familyRef', ['familyRef'])
+    .index('by_principalRef_and_lifecycle', ['principalRef', 'lifecycle'])
+    .index('by_currentProviderCredentialId_and_lifecycle', ['currentProviderCredentialId', 'lifecycle'])
+    .index('by_currentCredentialRef_and_lifecycle', ['currentCredentialRef', 'lifecycle']),
+
+  agentAccessOAuthRefreshTokens: defineTable({
+    tokenHash: v.string(),
+    accessTokenHash: v.string(),
+    familyRef: v.string(),
+    generation: v.number(),
+    lifecycle: refreshTokenLifecycle,
+    createdAt: v.number(),
+    claimRef: v.optional(v.string()),
+    claimedAt: v.optional(v.number()),
+    claimExpiresAt: v.optional(v.number()),
+    consumedAt: v.optional(v.number()),
+    replayUntil: v.optional(v.number()),
+    replacedByTokenHash: v.optional(v.string()),
+    recoveredAt: v.optional(v.number()),
+    invalidatedAt: v.optional(v.number()),
+  })
+    .index('by_tokenHash', ['tokenHash'])
+    .index('by_accessTokenHash', ['accessTokenHash'])
+    .index('by_familyRef_and_generation', ['familyRef', 'generation']),
 } as const

@@ -7,10 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import {
-  AGENT_INSTRUCTION,
   AGENT_PAGE,
-  AGENT_SETUP_INSTRUCTION,
-  AGENT_STARTER_INSTRUCTION,
 } from '@/content/brand-copy'
 
 vi.mock('@tanstack/react-router', () => ({
@@ -24,7 +21,7 @@ import { AeAgentDoorPage } from '@/components/ae/agents/AeAgentDoorPage'
 describe('agent door page', () => {
   afterEach(cleanup)
 
-  it('separates executable setup from the first real market task', async () => {
+  it('shows one selected native connection path without exposing protocol work', async () => {
     const writeText = vi.fn(async (_text: string) => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     render(<AeAgentDoorPage canonicalBaseUrl="https://ae.example" />)
@@ -32,41 +29,30 @@ describe('agent door page', () => {
     expect(screen.getByRole('heading', { level: 1, name: AGENT_PAGE.heading })).toBeTruthy()
     expect(screen.getByText(AGENT_PAGE.harnesses)).toBeTruthy()
     expect(screen.getByText(AGENT_PAGE.subhead)).toBeTruthy()
-    expect(screen.getByRole('heading', { name: AGENT_SETUP_INSTRUCTION.heading })).toBeTruthy()
-    expect(screen.getByText(AGENT_SETUP_INSTRUCTION.code)).toBeTruthy()
-    expect(screen.getByRole('heading', { name: AGENT_STARTER_INSTRUCTION.heading })).toBeTruthy()
-    expect(screen.getByText(AGENT_STARTER_INSTRUCTION.code)).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: AGENT_INSTRUCTION.heading })).toBeNull()
-    expect(screen.queryByText(AGENT_INSTRUCTION.code)).toBeNull()
-    expect(screen.getByRole('button', { name: `Copy ${AGENT_SETUP_INSTRUCTION.label}` })).toBeTruthy()
-    expect(screen.getByRole('button', { name: `Copy ${AGENT_STARTER_INSTRUCTION.label}` })).toBeTruthy()
-    expect(screen.getAllByText(/npm install --global "https:\/\/ae\.example\/downloads\/agentic-economy-cli-0\.1\.0\.tgz"/u)).not.toHaveLength(0)
-    expect(screen.getAllByText(/ae --version/u)).not.toHaveLength(0)
-    expect(screen.queryByText(/npx @agentic-economy\/cli/u)).toBeNull()
-    expect(screen.getByRole('link', { name: 'Publish an Operation' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Add Agentic Economy' })).toBeTruthy()
+    expect(screen.getByRole('tablist', { name: 'Agent client' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy Codex MCP command' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Copy Claude Code MCP command' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Copy Cursor MCP command' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Six-step agent quickstart' })).toBeNull()
     expect(document.querySelector('[data-slot="ae-site-browser"]')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: `Copy ${AGENT_SETUP_INSTRUCTION.label}` }))
-    await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
-    const copied = String(writeText.mock.calls[0]?.[0])
-    expect(copied).toContain(`npm install --global "${window.location.origin}/downloads/agentic-economy-cli-0.1.0.tgz"`)
-    expect(copied).toContain('ae --version')
-    expect(copied).toContain(`npx --yes add-mcp@2.3.0 "${window.location.origin}/mcp"`)
-    expect(copied).toContain('npx --yes add-mcp@2.3.0 list --global --agent "<agent>"')
-    expect(copied).toContain(`ae doctor --base-url "${window.location.origin}" --json`)
-    expect(copied).toContain('npm install --global --prefix "$HOME/.local"')
-    expect(copied).toContain('Do not connect unless a selected callable Operation requires it.')
-    expect(copied).toContain('buyer warnings only mean paid or authenticated calls are not connected yet')
-    expect(copied).not.toContain('research the latest developments')
-    expect(copied).not.toContain('$ORIGIN')
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Codex MCP command' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Claude Code' }), { button: 0 })
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Claude Code MCP command' }))
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Cursor' }), { button: 0 })
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Cursor MCP command' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(3))
+    expect(writeText).toHaveBeenNthCalledWith(1, [
+      `codex mcp add agentic-economy --url "${window.location.origin}/mcp"`,
+      'codex mcp login agentic-economy',
+    ].join('\n'))
+    expect(writeText).toHaveBeenNthCalledWith(2, `claude mcp add --transport http --scope user agentic-economy "${window.location.origin}/mcp"`)
+    expect(writeText).toHaveBeenNthCalledWith(3, `cursor --add-mcp '{"name":"agentic-economy","url":"${window.location.origin}/mcp"}'`)
 
-    fireEvent.click(screen.getByRole('button', { name: `Copy ${AGENT_STARTER_INSTRUCTION.label}` }))
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2))
-    const starter = String(writeText.mock.calls[1]?.[0])
-    expect(starter).toContain('research the latest developments in AI coding agents')
-    expect(starter).toContain('total price, required inputs, readiness, and access requirements')
-    expect(starter).toContain('ask me to approve the exact total')
-    expect(starter).toContain('sources and the Agentic Economy evidence or receipt')
-    expect(starter).toContain('single exact next command')
+    const pageText = document.body.textContent ?? ''
+    expect(pageText).toContain('Public search works immediately')
+    expect(pageText).toContain('Enable agentic-economy in Cursor, then follow its OAuth prompt.')
+    expect(pageText).not.toMatch(/whoami|Agent Principal|token exchange|scope|bearer|api key|ae connect|npm install|add-mcp@/iu)
   })
 })

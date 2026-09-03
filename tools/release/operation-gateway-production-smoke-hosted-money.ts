@@ -35,7 +35,6 @@ import {
   type StrictLivePayoutReceipt,
 } from "../../src/modules/money/public";
 import {
-  APPROVED_EXTERNAL_MOVEMENT_CAP,
   required,
   sameAmount,
   topupPreparationSchema,
@@ -43,6 +42,7 @@ import {
   topupWebhookReplaySchema,
   zeroAmount,
 } from "./operation-gateway-production-smoke-receipt";
+
 import {
   GatewaySmokeError,
   type GatewayPayoutProviderTransferReadback,
@@ -62,6 +62,11 @@ const MAX_TOPUP_EVENT_PAGES = 10;
 const STRIPE_REQUEST_TIMEOUT_MS = 15_000;
 const MAX_TOPUP_WEBHOOK_RAW_BODY_BYTES = 256 * 1024;
 const MAX_TOPUP_WEBHOOK_SIGNATURE_BYTES = 4 * 1024;
+const APPROVED_TOPUP_EXTERNAL_MOVEMENT_CAP: ExactAmount = Object.freeze({
+  currency: "AUD",
+  units: "6000000",
+  exponent: AUD_EXPONENT,
+});
 
 export type HostedMoneyRuntime = Readonly<{
   mode: "live";
@@ -162,9 +167,9 @@ export function createHostedMoneyRuntime(
   const topupAmount = { currency: "AUD", units: financials.principalUnits.toString(), exponent: AUD_EXPONENT } as const;
   const chargeAmount = { currency: "AUD", units: financials.totalUnits.toString(), exponent: AUD_EXPONENT } as const;
   if (
-    compareExactAmounts(chargeAmount, APPROVED_EXTERNAL_MOVEMENT_CAP) ===
+    compareExactAmounts(chargeAmount, APPROVED_TOPUP_EXTERNAL_MOVEMENT_CAP) ===
       undefined ||
-    compareExactAmounts(chargeAmount, APPROVED_EXTERNAL_MOVEMENT_CAP) === 1
+    compareExactAmounts(chargeAmount, APPROVED_TOPUP_EXTERNAL_MOVEMENT_CAP) === 1
   )
     throw new GatewaySmokeError(
       "gateway_smoke_topup_charge_exceeds_approved_cap",

@@ -10,7 +10,7 @@ describe('funding quote contract', () => {
   it('publishes exact constraints and a fee-inclusive quote without side effects', () => {
     expect(readFundingConstraints()).toEqual({
       kind: 'funding_constraints',
-      contractVersion: 'ae-funding-quote:v2',
+      contractVersion: 'ae-funding-quote:v3',
       currency: 'AUD',
       minimum: { currency: 'AUD', units: '5000000', exponent: 6 },
       maximum: { currency: 'AUD', units: '25000000000', exponent: 6 },
@@ -37,10 +37,10 @@ describe('funding quote contract', () => {
       serviceFeeBps: 500,
       taxOnServiceFeeBps: 1000,
       nextActions: [{
-        action: 'funding.create',
+        action: 'funding.handoff.create',
         kind: 'human_handoff',
-        href: '/owner/credit',
-        requiresFreshHumanAuthority: true,
+        href: '/api/v1/account/funding-sessions',
+        requiresFreshHumanAuthority: false,
       }],
     })
     expect(quote?.quoteRef).toMatch(/^sha256:/u)

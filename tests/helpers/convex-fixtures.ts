@@ -14,6 +14,7 @@ import {
   type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
+import { rescaleExactAmount } from '@/modules/money/public'
 export type ConvexFixtureBackend = TestConvex<typeof schema>
 export type ConvexFixtureAdmin = Pick<
   ConvexFixtureBackend,
@@ -414,12 +415,15 @@ export async function prepareCapabilityPublicationMutation(
   if (price.kind !== 'fixed' && input.pricingConfig === undefined) {
     throw new Error('capability_publication_fixture_price_missing')
   }
+  const fixedAudAmount = price.kind === 'fixed'
+    ? rescaleExactAmount(price.amount, 6)
+    : undefined
   const pricingConfig = input.pricingConfig ?? {
     version: 'pricing:v3' as const,
     kind: 'fixed_aud' as const,
     currency: 'AUD' as const,
     exponent: 6 as const,
-    amountUnits: price.kind === 'fixed' ? price.amount.units : '0',
+    amountUnits: fixedAudAmount?.units ?? '0',
   }
   const catalog = await backend.run(async (ctx) => {
     const offeringRows = await ctx.db

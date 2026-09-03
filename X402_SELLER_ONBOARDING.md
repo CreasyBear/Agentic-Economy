@@ -1,4 +1,11 @@
-# Publish an x402 Operation
+# Publish a Provider's x402 Operation
+
+**Status:** active Provider runbook
+
+**Terminology note:** this filename and the protocol field `seller claim` are
+retained for compatibility. In the Agentic Economy commercial model, the hosted
+service operator is the Provider and Agentic Economy is the buyer-facing Seller
+for supported principal-reseller purchases.
 
 This is the public path for turning a live x402 endpoint into a callable Agentic Economy Operation. A listing or a successful unpaid probe is not a callable Operation.
 
@@ -11,17 +18,25 @@ Your endpoint must:
 - publish a Bazaar input and output contract that matches the route;
 - declare the `payment-identifier` extension so uncertain outcomes can be reconciled;
 - return bounded JSON that matches the published output contract; and
-- use a payee wallet whose key can sign the Agentic Economy seller claim.
+- use a payee wallet whose key can sign the Agentic Economy protocol ownership
+  claim.
 
 Keep the resource URL, HTTP method, payee address, input example, and current source material handy. Do not paste wallet private keys or buyer credentials into Agentic Economy.
+
+The payee address proves control of a payment destination. It does not, by
+itself, establish the Provider, buyer-facing Seller or upstream contracting
+party. Agentic Economy records those roles separately.
 
 ## Onboard in the app
 
 1. Open `/for-providers` and sign in as the business owner.
 2. Choose **Add Operation** and enter the public x402 resource URL and method.
 3. Review the unpaid protocol inspection. Agentic Economy shows the exact network, asset, amount, payee, and contract it observed.
-4. Sign the displayed seller claim with the payee wallet. The claim binds the resource, observation, expiry, and business; it is not a payment authorization.
-5. Complete the explicitly disclosed testnet verification. It does not charge a buyer or create supplier earnings.
+4. Sign the displayed `seller claim` with the payee wallet. The compatibility
+   name comes from the x402 admission flow. The claim binds the resource,
+   observation, expiry and Provider business; it is neither purchase authority
+   nor proof that the payee is the buyer-facing Seller.
+5. Complete the explicitly disclosed testnet verification. It does not charge a buyer or create Provider earnings.
 6. Wait for settlement and output validation, then publish the sealed revision.
 7. Open the returned Operation reference and confirm its readiness is **Ready now** before giving it to buyers.
 
@@ -29,7 +44,9 @@ If verification has an uncertain outcome, use the supplied status or reconciliat
 
 ## Agent and CLI access
 
-Supplier commands require a separately approved credential with `market_supply:manage`:
+Provider commands require a separately approved credential with
+`market_supply:manage`. The `--supplier` flag remains the current CLI
+compatibility spelling:
 
 ```sh
 ae connect --supplier --base-url "$AE_ORIGIN"

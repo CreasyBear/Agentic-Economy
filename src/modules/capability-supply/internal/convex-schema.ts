@@ -224,6 +224,7 @@ export const capabilitySupplyTables = {
     ),
     readinessObservedAt: v.optional(v.number()),
     readinessValidUntil: v.optional(v.number()),
+    readinessLastHealthyAt: v.optional(v.number()),
     readinessTargetDigest: v.optional(v.string()),
     readinessRequestDigest: v.optional(v.string()),
     readinessResponseStatus: v.optional(v.number()),

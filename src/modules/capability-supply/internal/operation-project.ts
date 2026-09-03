@@ -47,17 +47,17 @@ export function operationNavigation(
     throw new Error("operation_projection_call_via_mismatch");
   }
   return Object.freeze([
+    navigation.market.list,
     navigation.market.search,
-    navigation.market.detail,
+    navigation.market.describe,
     navigation.market.compare,
-    navigation.market.inspectPlan,
     ...(accessMode === "authenticated_invoke" ? [navigation.invoke] : []),
   ]);
 }
 export function noOperationNavigation(
   navigation: OperationProjectionNavigationContract,
 ): readonly PublicOperationNavigationRelation[] {
-  return Object.freeze([navigation.market.search]);
+  return Object.freeze([navigation.market.list, navigation.market.search]);
 }
 
 export function normalizeRefs(
@@ -303,11 +303,12 @@ function projectAvailability(
   record: CapabilityOperationSourceRecord,
   now: number,
 ): PublicOperationAvailability {
-  const { observedAt, validUntil } = record.readiness;
+  const { observedAt, validUntil, lastHealthyAt } = record.readiness;
   if (record.routeable && validUntil !== undefined && validUntil > now)
     return {
       posture: "routeable",
       ...(observedAt === undefined ? {} : { observedAt }),
+      ...(lastHealthyAt === undefined ? {} : { lastHealthyAt }),
       validUntil,
     };
   const reason =
@@ -318,6 +319,7 @@ function projectAvailability(
     posture: record.integrated ? "setup_required" : "unavailable",
     ...(observedAt === undefined ? {} : { observedAt }),
     ...(validUntil === undefined ? {} : { validUntil }),
+    ...(lastHealthyAt === undefined ? {} : { lastHealthyAt }),
     reason,
   };
 }

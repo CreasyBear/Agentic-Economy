@@ -37,9 +37,12 @@ import { Route as SShareTokenRouteImport } from './routes/s.$shareToken'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as OperationsOperationRefRouteImport } from './routes/operations.$operationRef'
 import { Route as OauthTokenRouteImport } from './routes/oauth.token'
+import { Route as OauthRevokeRouteImport } from './routes/oauth.revoke'
 import { Route as OauthRegisterRouteImport } from './routes/oauth.register'
 import { Route as OauthDevice_authorizationRouteImport } from './routes/oauth.device_authorization'
 import { Route as OauthAuthorizeRouteImport } from './routes/oauth.authorize'
+import { Route as FundCancelledRouteImport } from './routes/fund.cancelled'
+import { Route as FundFundingSessionIdRouteImport } from './routes/fund.$fundingSessionId'
 import { Route as ApiReadyRouteImport } from './routes/api.ready'
 import { Route as ApiHealthRouteImport } from './routes/api.health'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
@@ -93,11 +96,12 @@ import { Route as ApiV1OperationsInvocationRefRouteImport } from './routes/api.v
 import { Route as ApiV1MarketRequestsStatusRouteImport } from './routes/api.v1.market-requests.status'
 import { Route as ApiV1MarketRequestsListRouteImport } from './routes/api.v1.market-requests.list'
 import { Route as ApiV1MarketOperationsSearchRouteImport } from './routes/api.v1.market-operations.search'
-import { Route as ApiV1MarketOperationsInspectPlanRouteImport } from './routes/api.v1.market-operations.inspect-plan'
-import { Route as ApiV1MarketOperationsDetailRouteImport } from './routes/api.v1.market-operations.detail'
+import { Route as ApiV1MarketOperationsListRouteImport } from './routes/api.v1.market-operations.list'
+import { Route as ApiV1MarketOperationsDescribeRouteImport } from './routes/api.v1.market-operations.describe'
 import { Route as ApiV1MarketOperationsCompareRouteImport } from './routes/api.v1.market-operations.compare'
 import { Route as ApiV1FundingQuoteRouteImport } from './routes/api.v1.funding.quote'
 import { Route as ApiV1FundingConstraintsRouteImport } from './routes/api.v1.funding.constraints'
+import { Route as ApiV1AccountFundingSessionsRouteImport } from './routes/api.v1.account.funding-sessions'
 import { Route as ApiV1AccountBalanceRouteImport } from './routes/api.v1.account.balance'
 import { Route as ApiV1AccountActivityRouteImport } from './routes/api.v1.account.activity'
 import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
@@ -115,6 +119,9 @@ import { Route as ApiV1SupplyConnectionsDetailRouteImport } from './routes/api.v
 import { Route as ApiV1SupplyConnectionsConnectRouteImport } from './routes/api.v1.supply.connections.connect'
 import { Route as ApiV1OperationsInvocationRefReconcileRouteImport } from './routes/api.v1.operations.$invocationRef.reconcile'
 import { Route as ApiV1OperationsInvocationRefCancelRouteImport } from './routes/api.v1.operations.$invocationRef.cancel'
+import { Route as ApiV1AccountFundingConfigRouteImport } from './routes/api.v1.account.funding.config'
+import { Route as ApiV1AccountFundingSessionsFundingSessionIdRouteImport } from './routes/api.v1.account.funding-sessions.$fundingSessionId'
+import { Route as ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport } from './routes/api.v1.account.funding-sessions.public.$fundingSessionId'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -255,6 +262,11 @@ const OauthTokenRoute = OauthTokenRouteImport.update({
   path: '/oauth/token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OauthRevokeRoute = OauthRevokeRouteImport.update({
+  id: '/oauth/revoke',
+  path: '/oauth/revoke',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OauthRegisterRoute = OauthRegisterRouteImport.update({
   id: '/oauth/register',
   path: '/oauth/register',
@@ -269,6 +281,16 @@ const OauthDevice_authorizationRoute =
 const OauthAuthorizeRoute = OauthAuthorizeRouteImport.update({
   id: '/oauth/authorize',
   path: '/oauth/authorize',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FundCancelledRoute = FundCancelledRouteImport.update({
+  id: '/fund/cancelled',
+  path: '/fund/cancelled',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FundFundingSessionIdRoute = FundFundingSessionIdRouteImport.update({
+  id: '/fund/$fundingSessionId',
+  path: '/fund/$fundingSessionId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiReadyRoute = ApiReadyRouteImport.update({
@@ -550,16 +572,16 @@ const ApiV1MarketOperationsSearchRoute =
     path: '/api/v1/market-operations/search',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiV1MarketOperationsInspectPlanRoute =
-  ApiV1MarketOperationsInspectPlanRouteImport.update({
-    id: '/api/v1/market-operations/inspect-plan',
-    path: '/api/v1/market-operations/inspect-plan',
+const ApiV1MarketOperationsListRoute =
+  ApiV1MarketOperationsListRouteImport.update({
+    id: '/api/v1/market-operations/list',
+    path: '/api/v1/market-operations/list',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiV1MarketOperationsDetailRoute =
-  ApiV1MarketOperationsDetailRouteImport.update({
-    id: '/api/v1/market-operations/detail',
-    path: '/api/v1/market-operations/detail',
+const ApiV1MarketOperationsDescribeRoute =
+  ApiV1MarketOperationsDescribeRouteImport.update({
+    id: '/api/v1/market-operations/describe',
+    path: '/api/v1/market-operations/describe',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiV1MarketOperationsCompareRoute =
@@ -578,6 +600,12 @@ const ApiV1FundingConstraintsRoute = ApiV1FundingConstraintsRouteImport.update({
   path: '/api/v1/funding/constraints',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1AccountFundingSessionsRoute =
+  ApiV1AccountFundingSessionsRouteImport.update({
+    id: '/funding-sessions',
+    path: '/funding-sessions',
+    getParentRoute: () => ApiV1AccountRoute,
+  } as any)
 const ApiV1AccountBalanceRoute = ApiV1AccountBalanceRouteImport.update({
   id: '/balance',
   path: '/balance',
@@ -678,6 +706,24 @@ const ApiV1OperationsInvocationRefCancelRoute =
     path: '/cancel',
     getParentRoute: () => ApiV1OperationsInvocationRefRoute,
   } as any)
+const ApiV1AccountFundingConfigRoute =
+  ApiV1AccountFundingConfigRouteImport.update({
+    id: '/funding/config',
+    path: '/funding/config',
+    getParentRoute: () => ApiV1AccountRoute,
+  } as any)
+const ApiV1AccountFundingSessionsFundingSessionIdRoute =
+  ApiV1AccountFundingSessionsFundingSessionIdRouteImport.update({
+    id: '/$fundingSessionId',
+    path: '/$fundingSessionId',
+    getParentRoute: () => ApiV1AccountFundingSessionsRoute,
+  } as any)
+const ApiV1AccountFundingSessionsPublicFundingSessionIdRoute =
+  ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport.update({
+    id: '/public/$fundingSessionId',
+    path: '/public/$fundingSessionId',
+    getParentRoute: () => ApiV1AccountFundingSessionsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -711,9 +757,12 @@ export interface FileRoutesByFullPath {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
+  '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
+  '/fund/cancelled': typeof FundCancelledRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
   '/oauth/register': typeof OauthRegisterRoute
+  '/oauth/revoke': typeof OauthRevokeRoute
   '/oauth/token': typeof OauthTokenRoute
   '/operations/$operationRef': typeof OperationsOperationRefRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -758,11 +807,12 @@ export interface FileRoutesByFullPath {
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
+  '/api/v1/account/funding-sessions': typeof ApiV1AccountFundingSessionsRouteWithChildren
   '/api/v1/funding/constraints': typeof ApiV1FundingConstraintsRoute
   '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
-  '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
-  '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
+  '/api/v1/market-operations/describe': typeof ApiV1MarketOperationsDescribeRoute
+  '/api/v1/market-operations/list': typeof ApiV1MarketOperationsListRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
   '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
   '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
@@ -777,6 +827,8 @@ export interface FileRoutesByFullPath {
   '/api/v1/supply/republish': typeof ApiV1SupplyRepublishRoute
   '/api/v1/supply/status': typeof ApiV1SupplyStatusRoute
   '/api/v1/supply/withdraw': typeof ApiV1SupplyWithdrawRoute
+  '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
+  '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
   '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
   '/api/v1/supply/connections/connect': typeof ApiV1SupplyConnectionsConnectRoute
@@ -785,6 +837,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/supply/connections/reconnect': typeof ApiV1SupplyConnectionsReconnectRoute
   '/api/v1/supply/connections/retry-cleanup': typeof ApiV1SupplyConnectionsRetryCleanupRoute
   '/api/v1/supply/connections/revoke': typeof ApiV1SupplyConnectionsRevokeRoute
+  '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -818,9 +871,12 @@ export interface FileRoutesByTo {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
+  '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
+  '/fund/cancelled': typeof FundCancelledRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
   '/oauth/register': typeof OauthRegisterRoute
+  '/oauth/revoke': typeof OauthRevokeRoute
   '/oauth/token': typeof OauthTokenRoute
   '/operations/$operationRef': typeof OperationsOperationRefRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -865,11 +921,12 @@ export interface FileRoutesByTo {
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
+  '/api/v1/account/funding-sessions': typeof ApiV1AccountFundingSessionsRouteWithChildren
   '/api/v1/funding/constraints': typeof ApiV1FundingConstraintsRoute
   '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
-  '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
-  '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
+  '/api/v1/market-operations/describe': typeof ApiV1MarketOperationsDescribeRoute
+  '/api/v1/market-operations/list': typeof ApiV1MarketOperationsListRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
   '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
   '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
@@ -884,6 +941,8 @@ export interface FileRoutesByTo {
   '/api/v1/supply/republish': typeof ApiV1SupplyRepublishRoute
   '/api/v1/supply/status': typeof ApiV1SupplyStatusRoute
   '/api/v1/supply/withdraw': typeof ApiV1SupplyWithdrawRoute
+  '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
+  '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
   '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
   '/api/v1/supply/connections/connect': typeof ApiV1SupplyConnectionsConnectRoute
@@ -892,6 +951,7 @@ export interface FileRoutesByTo {
   '/api/v1/supply/connections/reconnect': typeof ApiV1SupplyConnectionsReconnectRoute
   '/api/v1/supply/connections/retry-cleanup': typeof ApiV1SupplyConnectionsRetryCleanupRoute
   '/api/v1/supply/connections/revoke': typeof ApiV1SupplyConnectionsRevokeRoute
+  '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -927,9 +987,12 @@ export interface FileRoutesById {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
+  '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
+  '/fund/cancelled': typeof FundCancelledRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
   '/oauth/register': typeof OauthRegisterRoute
+  '/oauth/revoke': typeof OauthRevokeRoute
   '/oauth/token': typeof OauthTokenRoute
   '/operations/$operationRef': typeof OperationsOperationRefRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -974,11 +1037,12 @@ export interface FileRoutesById {
   '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
+  '/api/v1/account/funding-sessions': typeof ApiV1AccountFundingSessionsRouteWithChildren
   '/api/v1/funding/constraints': typeof ApiV1FundingConstraintsRoute
   '/api/v1/funding/quote': typeof ApiV1FundingQuoteRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
-  '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
-  '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
+  '/api/v1/market-operations/describe': typeof ApiV1MarketOperationsDescribeRoute
+  '/api/v1/market-operations/list': typeof ApiV1MarketOperationsListRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
   '/api/v1/market-requests/list': typeof ApiV1MarketRequestsListRoute
   '/api/v1/market-requests/status': typeof ApiV1MarketRequestsStatusRoute
@@ -993,6 +1057,8 @@ export interface FileRoutesById {
   '/api/v1/supply/republish': typeof ApiV1SupplyRepublishRoute
   '/api/v1/supply/status': typeof ApiV1SupplyStatusRoute
   '/api/v1/supply/withdraw': typeof ApiV1SupplyWithdrawRoute
+  '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
+  '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
   '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
   '/api/v1/supply/connections/connect': typeof ApiV1SupplyConnectionsConnectRoute
@@ -1001,6 +1067,7 @@ export interface FileRoutesById {
   '/api/v1/supply/connections/reconnect': typeof ApiV1SupplyConnectionsReconnectRoute
   '/api/v1/supply/connections/retry-cleanup': typeof ApiV1SupplyConnectionsRetryCleanupRoute
   '/api/v1/supply/connections/revoke': typeof ApiV1SupplyConnectionsRevokeRoute
+  '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1036,9 +1103,12 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
+    | '/fund/$fundingSessionId'
+    | '/fund/cancelled'
     | '/oauth/authorize'
     | '/oauth/device_authorization'
     | '/oauth/register'
+    | '/oauth/revoke'
     | '/oauth/token'
     | '/operations/$operationRef'
     | '/privacy/remove-business'
@@ -1083,11 +1153,12 @@ export interface FileRouteTypes {
     | '/owner/supply/$offeringRef'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
+    | '/api/v1/account/funding-sessions'
     | '/api/v1/funding/constraints'
     | '/api/v1/funding/quote'
     | '/api/v1/market-operations/compare'
-    | '/api/v1/market-operations/detail'
-    | '/api/v1/market-operations/inspect-plan'
+    | '/api/v1/market-operations/describe'
+    | '/api/v1/market-operations/list'
     | '/api/v1/market-operations/search'
     | '/api/v1/market-requests/list'
     | '/api/v1/market-requests/status'
@@ -1102,6 +1173,8 @@ export interface FileRouteTypes {
     | '/api/v1/supply/republish'
     | '/api/v1/supply/status'
     | '/api/v1/supply/withdraw'
+    | '/api/v1/account/funding-sessions/$fundingSessionId'
+    | '/api/v1/account/funding/config'
     | '/api/v1/operations/$invocationRef/cancel'
     | '/api/v1/operations/$invocationRef/reconcile'
     | '/api/v1/supply/connections/connect'
@@ -1110,6 +1183,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/connections/reconnect'
     | '/api/v1/supply/connections/retry-cleanup'
     | '/api/v1/supply/connections/revoke'
+    | '/api/v1/account/funding-sessions/public/$fundingSessionId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1143,9 +1217,12 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
+    | '/fund/$fundingSessionId'
+    | '/fund/cancelled'
     | '/oauth/authorize'
     | '/oauth/device_authorization'
     | '/oauth/register'
+    | '/oauth/revoke'
     | '/oauth/token'
     | '/operations/$operationRef'
     | '/privacy/remove-business'
@@ -1190,11 +1267,12 @@ export interface FileRouteTypes {
     | '/owner/supply/$offeringRef'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
+    | '/api/v1/account/funding-sessions'
     | '/api/v1/funding/constraints'
     | '/api/v1/funding/quote'
     | '/api/v1/market-operations/compare'
-    | '/api/v1/market-operations/detail'
-    | '/api/v1/market-operations/inspect-plan'
+    | '/api/v1/market-operations/describe'
+    | '/api/v1/market-operations/list'
     | '/api/v1/market-operations/search'
     | '/api/v1/market-requests/list'
     | '/api/v1/market-requests/status'
@@ -1209,6 +1287,8 @@ export interface FileRouteTypes {
     | '/api/v1/supply/republish'
     | '/api/v1/supply/status'
     | '/api/v1/supply/withdraw'
+    | '/api/v1/account/funding-sessions/$fundingSessionId'
+    | '/api/v1/account/funding/config'
     | '/api/v1/operations/$invocationRef/cancel'
     | '/api/v1/operations/$invocationRef/reconcile'
     | '/api/v1/supply/connections/connect'
@@ -1217,6 +1297,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/connections/reconnect'
     | '/api/v1/supply/connections/retry-cleanup'
     | '/api/v1/supply/connections/revoke'
+    | '/api/v1/account/funding-sessions/public/$fundingSessionId'
   id:
     | '__root__'
     | '/'
@@ -1251,9 +1332,12 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
+    | '/fund/$fundingSessionId'
+    | '/fund/cancelled'
     | '/oauth/authorize'
     | '/oauth/device_authorization'
     | '/oauth/register'
+    | '/oauth/revoke'
     | '/oauth/token'
     | '/operations/$operationRef'
     | '/privacy/remove-business'
@@ -1298,11 +1382,12 @@ export interface FileRouteTypes {
     | '/_operator/owner/supply/$offeringRef'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
+    | '/api/v1/account/funding-sessions'
     | '/api/v1/funding/constraints'
     | '/api/v1/funding/quote'
     | '/api/v1/market-operations/compare'
-    | '/api/v1/market-operations/detail'
-    | '/api/v1/market-operations/inspect-plan'
+    | '/api/v1/market-operations/describe'
+    | '/api/v1/market-operations/list'
     | '/api/v1/market-operations/search'
     | '/api/v1/market-requests/list'
     | '/api/v1/market-requests/status'
@@ -1317,6 +1402,8 @@ export interface FileRouteTypes {
     | '/api/v1/supply/republish'
     | '/api/v1/supply/status'
     | '/api/v1/supply/withdraw'
+    | '/api/v1/account/funding-sessions/$fundingSessionId'
+    | '/api/v1/account/funding/config'
     | '/api/v1/operations/$invocationRef/cancel'
     | '/api/v1/operations/$invocationRef/reconcile'
     | '/api/v1/supply/connections/connect'
@@ -1325,6 +1412,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/connections/reconnect'
     | '/api/v1/supply/connections/retry-cleanup'
     | '/api/v1/supply/connections/revoke'
+    | '/api/v1/account/funding-sessions/public/$fundingSessionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1357,9 +1445,12 @@ export interface RootRouteChildren {
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   ApiHealthRoute: typeof ApiHealthRoute
   ApiReadyRoute: typeof ApiReadyRoute
+  FundFundingSessionIdRoute: typeof FundFundingSessionIdRoute
+  FundCancelledRoute: typeof FundCancelledRoute
   OauthAuthorizeRoute: typeof OauthAuthorizeRoute
   OauthDevice_authorizationRoute: typeof OauthDevice_authorizationRoute
   OauthRegisterRoute: typeof OauthRegisterRoute
+  OauthRevokeRoute: typeof OauthRevokeRoute
   OauthTokenRoute: typeof OauthTokenRoute
   SShareTokenRoute: typeof SShareTokenRoute
   SignInSplatRoute: typeof SignInSplatRoute
@@ -1384,8 +1475,8 @@ export interface RootRouteChildren {
   ApiV1FundingConstraintsRoute: typeof ApiV1FundingConstraintsRoute
   ApiV1FundingQuoteRoute: typeof ApiV1FundingQuoteRoute
   ApiV1MarketOperationsCompareRoute: typeof ApiV1MarketOperationsCompareRoute
-  ApiV1MarketOperationsDetailRoute: typeof ApiV1MarketOperationsDetailRoute
-  ApiV1MarketOperationsInspectPlanRoute: typeof ApiV1MarketOperationsInspectPlanRoute
+  ApiV1MarketOperationsDescribeRoute: typeof ApiV1MarketOperationsDescribeRoute
+  ApiV1MarketOperationsListRoute: typeof ApiV1MarketOperationsListRoute
   ApiV1MarketOperationsSearchRoute: typeof ApiV1MarketOperationsSearchRoute
   ApiV1SupplyEarningsRoute: typeof ApiV1SupplyEarningsRoute
   ApiV1SupplyPublishRoute: typeof ApiV1SupplyPublishRoute
@@ -1599,6 +1690,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OauthTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/oauth/revoke': {
+      id: '/oauth/revoke'
+      path: '/oauth/revoke'
+      fullPath: '/oauth/revoke'
+      preLoaderRoute: typeof OauthRevokeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/oauth/register': {
       id: '/oauth/register'
       path: '/oauth/register'
@@ -1618,6 +1716,20 @@ declare module '@tanstack/react-router' {
       path: '/oauth/authorize'
       fullPath: '/oauth/authorize'
       preLoaderRoute: typeof OauthAuthorizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fund/cancelled': {
+      id: '/fund/cancelled'
+      path: '/fund/cancelled'
+      fullPath: '/fund/cancelled'
+      preLoaderRoute: typeof FundCancelledRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fund/$fundingSessionId': {
+      id: '/fund/$fundingSessionId'
+      path: '/fund/$fundingSessionId'
+      fullPath: '/fund/$fundingSessionId'
+      preLoaderRoute: typeof FundFundingSessionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/ready': {
@@ -1991,18 +2103,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1MarketOperationsSearchRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/v1/market-operations/inspect-plan': {
-      id: '/api/v1/market-operations/inspect-plan'
-      path: '/api/v1/market-operations/inspect-plan'
-      fullPath: '/api/v1/market-operations/inspect-plan'
-      preLoaderRoute: typeof ApiV1MarketOperationsInspectPlanRouteImport
+    '/api/v1/market-operations/list': {
+      id: '/api/v1/market-operations/list'
+      path: '/api/v1/market-operations/list'
+      fullPath: '/api/v1/market-operations/list'
+      preLoaderRoute: typeof ApiV1MarketOperationsListRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/v1/market-operations/detail': {
-      id: '/api/v1/market-operations/detail'
-      path: '/api/v1/market-operations/detail'
-      fullPath: '/api/v1/market-operations/detail'
-      preLoaderRoute: typeof ApiV1MarketOperationsDetailRouteImport
+    '/api/v1/market-operations/describe': {
+      id: '/api/v1/market-operations/describe'
+      path: '/api/v1/market-operations/describe'
+      fullPath: '/api/v1/market-operations/describe'
+      preLoaderRoute: typeof ApiV1MarketOperationsDescribeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/market-operations/compare': {
@@ -2025,6 +2137,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/funding/constraints'
       preLoaderRoute: typeof ApiV1FundingConstraintsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/account/funding-sessions': {
+      id: '/api/v1/account/funding-sessions'
+      path: '/funding-sessions'
+      fullPath: '/api/v1/account/funding-sessions'
+      preLoaderRoute: typeof ApiV1AccountFundingSessionsRouteImport
+      parentRoute: typeof ApiV1AccountRoute
     }
     '/api/v1/account/balance': {
       id: '/api/v1/account/balance'
@@ -2144,6 +2263,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/operations/$invocationRef/cancel'
       preLoaderRoute: typeof ApiV1OperationsInvocationRefCancelRouteImport
       parentRoute: typeof ApiV1OperationsInvocationRefRoute
+    }
+    '/api/v1/account/funding/config': {
+      id: '/api/v1/account/funding/config'
+      path: '/funding/config'
+      fullPath: '/api/v1/account/funding/config'
+      preLoaderRoute: typeof ApiV1AccountFundingConfigRouteImport
+      parentRoute: typeof ApiV1AccountRoute
+    }
+    '/api/v1/account/funding-sessions/$fundingSessionId': {
+      id: '/api/v1/account/funding-sessions/$fundingSessionId'
+      path: '/$fundingSessionId'
+      fullPath: '/api/v1/account/funding-sessions/$fundingSessionId'
+      preLoaderRoute: typeof ApiV1AccountFundingSessionsFundingSessionIdRouteImport
+      parentRoute: typeof ApiV1AccountFundingSessionsRoute
+    }
+    '/api/v1/account/funding-sessions/public/$fundingSessionId': {
+      id: '/api/v1/account/funding-sessions/public/$fundingSessionId'
+      path: '/public/$fundingSessionId'
+      fullPath: '/api/v1/account/funding-sessions/public/$fundingSessionId'
+      preLoaderRoute: typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport
+      parentRoute: typeof ApiV1AccountFundingSessionsRoute
     }
   }
 }
@@ -2286,14 +2426,37 @@ const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
   ApiBusinessesRouteChildren,
 )
 
+interface ApiV1AccountFundingSessionsRouteChildren {
+  ApiV1AccountFundingSessionsFundingSessionIdRoute: typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
+  ApiV1AccountFundingSessionsPublicFundingSessionIdRoute: typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
+}
+
+const ApiV1AccountFundingSessionsRouteChildren: ApiV1AccountFundingSessionsRouteChildren =
+  {
+    ApiV1AccountFundingSessionsFundingSessionIdRoute:
+      ApiV1AccountFundingSessionsFundingSessionIdRoute,
+    ApiV1AccountFundingSessionsPublicFundingSessionIdRoute:
+      ApiV1AccountFundingSessionsPublicFundingSessionIdRoute,
+  }
+
+const ApiV1AccountFundingSessionsRouteWithChildren =
+  ApiV1AccountFundingSessionsRoute._addFileChildren(
+    ApiV1AccountFundingSessionsRouteChildren,
+  )
+
 interface ApiV1AccountRouteChildren {
   ApiV1AccountActivityRoute: typeof ApiV1AccountActivityRoute
   ApiV1AccountBalanceRoute: typeof ApiV1AccountBalanceRoute
+  ApiV1AccountFundingSessionsRoute: typeof ApiV1AccountFundingSessionsRouteWithChildren
+  ApiV1AccountFundingConfigRoute: typeof ApiV1AccountFundingConfigRoute
 }
 
 const ApiV1AccountRouteChildren: ApiV1AccountRouteChildren = {
   ApiV1AccountActivityRoute: ApiV1AccountActivityRoute,
   ApiV1AccountBalanceRoute: ApiV1AccountBalanceRoute,
+  ApiV1AccountFundingSessionsRoute:
+    ApiV1AccountFundingSessionsRouteWithChildren,
+  ApiV1AccountFundingConfigRoute: ApiV1AccountFundingConfigRoute,
 }
 
 const ApiV1AccountRouteWithChildren = ApiV1AccountRoute._addFileChildren(
@@ -2395,9 +2558,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   ApiHealthRoute: ApiHealthRoute,
   ApiReadyRoute: ApiReadyRoute,
+  FundFundingSessionIdRoute: FundFundingSessionIdRoute,
+  FundCancelledRoute: FundCancelledRoute,
   OauthAuthorizeRoute: OauthAuthorizeRoute,
   OauthDevice_authorizationRoute: OauthDevice_authorizationRoute,
   OauthRegisterRoute: OauthRegisterRoute,
+  OauthRevokeRoute: OauthRevokeRoute,
   OauthTokenRoute: OauthTokenRoute,
   SShareTokenRoute: SShareTokenRoute,
   SignInSplatRoute: SignInSplatRoute,
@@ -2422,8 +2588,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1FundingConstraintsRoute: ApiV1FundingConstraintsRoute,
   ApiV1FundingQuoteRoute: ApiV1FundingQuoteRoute,
   ApiV1MarketOperationsCompareRoute: ApiV1MarketOperationsCompareRoute,
-  ApiV1MarketOperationsDetailRoute: ApiV1MarketOperationsDetailRoute,
-  ApiV1MarketOperationsInspectPlanRoute: ApiV1MarketOperationsInspectPlanRoute,
+  ApiV1MarketOperationsDescribeRoute: ApiV1MarketOperationsDescribeRoute,
+  ApiV1MarketOperationsListRoute: ApiV1MarketOperationsListRoute,
   ApiV1MarketOperationsSearchRoute: ApiV1MarketOperationsSearchRoute,
   ApiV1SupplyEarningsRoute: ApiV1SupplyEarningsRoute,
   ApiV1SupplyPublishRoute: ApiV1SupplyPublishRoute,

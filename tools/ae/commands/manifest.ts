@@ -83,7 +83,7 @@ export const ROOT_COMMAND_GROUPS = [
 
 export const ROOT_HELP_START = [
   'ae search "<job>"',
-  'ae inspect <operation-ref>',
+  'ae describe <operation-ref>',
   'ae connect',
   'ae help call',
 ] as const
@@ -107,16 +107,23 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     ],
   },
   search: {
-    summary: 'Search current public Market Operations for a job, or omit the job to browse.',
-    args: '["<job>"] [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\'] [--technical]',
+    summary: 'Search current public Market Operations for a job.',
+    args: '"<job>" [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\']',
     json: true,
     group: 'discover_compare',
     rootOrder: 1,
     guidance: [
-      'Filters: networkId, location, effects, dataUse, availability, currency, and maximumPrice.',
+      'Filters: networkId, location, effects, dataUse, healthStatus, currency, and maximumPrice.',
       'Exact price example for at most USD 0.50: --filters \'{"currency":"USD","maximumPrice":{"currency":"USD","units":"50","exponent":2}}\'',
-      'JSON output keeps decision facts compact by default; pass --technical to include each Operation\'s navigation relations.',
+      'Search returns compact catalog facts. Exact payable price and caller readiness are confirmed by operation.inspect.',
     ],
+  },
+  list: {
+    summary: 'Browse current public Market Operations.',
+    args: '[--limit <1-100>] [--cursor <cursor>] [--filters \'<json>\']',
+    json: true,
+    group: 'discover_compare',
+    rootOrder: 1,
   },
   request: {
     summary: 'Remember and revisit a private missing job after current Market Operations return no match.',
@@ -135,28 +142,25 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
       status: { summary: 'Check whether current canonical Operations now match one private request.', args: '<request-ref>', json: true },
     },
   },
-  inspect: {
-    summary: 'Read one exact current Market Operation before connecting or invoking.',
+  describe: {
+    summary: 'Describe one exact current Market Operation before connecting or invoking.',
     args: '<operation-ref> [--technical]',
     json: true,
     group: 'discover_compare',
     rootOrder: 2,
     guidance: [
-      'JSON output includes the full Operation contract but omits duplicated navigation by default; pass --technical to include it.',
+      'Catalog health and price are indicative. Use operation.inspect for caller-specific readiness and exact terms.',
     ],
   },
   compare: { summary: 'Compare two to four exact current Operation references.', args: '<operation-ref> <operation-ref> [<operation-ref> ...]', json: true, group: 'discover_compare', rootOrder: 3 },
-  'inspect-plan': { summary: 'Inspect a bounded operation plan from one to four exact current Operation references.', args: '<operation-ref> [<operation-ref> ...]', json: true, group: 'discover_compare', rootOrder: 4 },
   connect: {
     summary: 'Register a public device client or validate one separately stored AE credential profile.',
-    args: '[--mcp] [--supplier]',
+    args: '[--supplier]',
     json: true,
     group: 'connect_account',
     rootOrder: 1,
     guidance: [
       'Without --supplier, request buyer Operation access. With --supplier, request a separate owner-approved market_supply:manage credential.',
-      'Pass --mcp to write the matching Streamable HTTP MCP connection after the credential is validated.',
-      'The MCP file must still be imported into the buyer harness and verified in a new session; --mcp cannot be combined with --supplier.',
       'Buyer and supplier credentials are stored independently for the exact server origin.',
     ],
   },

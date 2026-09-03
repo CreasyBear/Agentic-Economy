@@ -4,7 +4,7 @@ import type { RateLimitAdmission } from '@/lib/server/rate-limit'
 import type { ProblemInput } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
 
-import { bearerChallenge, oauthProtectedResourceMetadata } from '@/lib/http/oauth-challenge'
+import { AGENT_ACCESS_OAUTH_AUTHORIZATION_SCOPES, bearerChallenge, oauthProtectedResourceMetadata } from '@/lib/http/oauth-challenge'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { isLocalE2EAuthBypassEnabled, LOCAL_E2E_OPERATOR_PRINCIPAL } from '@/lib/server/local-e2e-bypass'
 import { createLocalE2EAgentAccessKeyApi } from '@/lib/server/local-e2e-agent-key'
@@ -12,8 +12,6 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
-  MARKET_OPERATIONS_INVOKE_SCOPE,
-  agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
 } from '@/modules/agent-access/contract'
 import { isRecord } from '@/modules/common/is-record'
@@ -25,6 +23,9 @@ import {
   AGENT_ACCESS_OAUTH_PATHS,
   AGENT_ACCESS_OAUTH_RESPONSE_TYPES,
   AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS,
+  AGENT_ACCESS_OAUTH_REFRESH_FAMILY_TTL_SECONDS,
+  AGENT_ACCESS_OAUTH_REFRESH_REPLAY_SECONDS,
+  AGENT_ACCESS_OAUTH_SAFE_MCP_SCOPES,
   approveGrant,
   beginAuthorizationCodeGrant,
   beginDeviceGrant,
@@ -50,6 +51,7 @@ import {
 } from '@/modules/agent-access/oauth-state'
 import {
   AGENT_ACCESS_DEFAULT_APPLICATION_REF,
+  AGENT_ACCESS_KEY_TTL_SECONDS,
   AGENT_ACCESS_PURPOSE,
   AGENT_ACCESS_MAX_TTL_SECONDS,
   AGENT_ACCESS_MIN_TTL_SECONDS,
@@ -74,11 +76,13 @@ import {
   registerIssuedAgentBinding,
 } from '@/modules/agent-access/agent-access.functions'
 import { assertCsrf } from '@/modules/security/public'
-import { loadAgentDirectoryReadback } from '@/modules/agent-access/agent-access-console'
+import { loadAgentDirectoryReadback, loadOwnerReconnectCandidates } from '@/modules/agent-access/agent-access-console'
 import { readCapabilityOperationCompare } from '@/modules/capability-supply/operation-source'
 import { isPublicOperationRef } from '@/modules/capability-supply/public'
 import {
   reserveAgentAccessConsentForOwner,
+  type AgentAccessOAuthRefreshFamily,
+  type AgentAccessOAuthRefreshStore,
   type AgentAccessConsentReservationResult,
 } from '@/lib/server/agent-access-oauth-store'
 import type { ConvexSourceAuth } from '@/lib/server/convex-source'
@@ -122,18 +126,32 @@ type OAuthApiOptions = Readonly<{
     correlationRef: string
     outcome: 'revoked'
   }>) => Promise<Readonly<{ kind: 'completed' | 'replayed' | 'conflict' } | { kind: 'refused'; code: 'authentication_required' }>>
+  refreshStore?: AgentAccessOAuthRefreshStore
+  issueRefreshKey?: (input: Readonly<{
+    family: AgentAccessOAuthRefreshFamily
+    issuanceKey: string
+    grantRef: string
+    expiresInSeconds: number
+  }>) => Promise<Readonly<{ keyId: string }>>
   rateLimit?: RateLimitAdmission
   devicePollRateLimit?: RateLimitAdmission
   listAgents?: (cursor: string | null) => Promise<Readonly<{
     items: readonly Readonly<{ principalRef: string; principalRevision: number; displayName: string }>[]
     nextCursor?: string
   }>>
+  listReconnectCandidates?: (input: Readonly<{
+    clientId: string
+    principalRefs: readonly string[]
+    now: number
+  }>) => Promise<readonly Readonly<{ principalRef: string; principalRevision: number }>[]>
 }>
 
 type ConsentAgentTargets = Readonly<{
   items: readonly Readonly<{ principalRef: string; principalRevision: number; displayName: string }>[]
   nextCursor?: string
   unavailable?: true
+  reconnectPrincipalRef?: string
+  reconnectAmbiguous?: true
 }>
 
 export type { OAuthApiOptions }
@@ -187,8 +205,7 @@ export async function handleDeviceAuthorizationPost(request: Request, options: O
   if (limited !== undefined) return limited
   const client = await readClient(clientId, options)
   if (client === null) return oauthError('invalid_client', 401)
-  const scopeText = form.get('scope')
-  if (scopeText === null) return oauthError('invalid_scope', 400)
+  const scopeText = form.get('scope') ?? AGENT_ACCESS_OAUTH_SAFE_MCP_SCOPES.slice(0, -1).join(' ')
   const authorizationDetails = parseAuthorizationDetails(form.get('authorization_details'))
   if (authorizationDetails.kind === 'invalid') return oauthError('invalid_request', 400)
   const requestedAccess = authorizationDetails.kind === 'ok' ? authorizationDetails.requestedAccess : undefined
@@ -221,7 +238,35 @@ export async function handleOAuthTokenPost(request: Request, options: OAuthApiOp
   const grantType = form.get('grant_type')
   if (grantType === DEVICE_GRANT_TYPE) return await pollDeviceGrantRequest(form, request, options)
   if (grantType === AUTHORIZATION_CODE_GRANT_TYPE) return await exchangeAuthorizationCode(form, request, options)
+  if (grantType === 'refresh_token') return await exchangeRefreshToken(form, request, options)
   return oauthError('invalid_request', 400)
+}
+
+export async function handleOAuthRevokePost(request: Request, options: OAuthApiOptions = {}): Promise<Response> {
+  const formResult = await readForm(request)
+  if (formResult.kind === 'too_large') return oauthError('invalid_request', 413)
+  if (formResult.kind !== 'ok') return oauthError('invalid_request', 400)
+  const form = formResult.value
+  const token = form.get('token')
+  const clientId = form.get('client_id')
+  if (token === null || token.length === 0 || clientId === null) return oauthError('invalid_request', 400)
+  const limited = await oauthAdmissionResponse(request, options, `revocation:${clientId}`)
+  if (limited !== undefined) return limited
+  const client = await readClient(clientId, options)
+  if (client === null) return oauthError('invalid_client', 401)
+  const store = requireRefreshStore(options)
+  const now = currentNow(options)
+  try {
+    // RFC 7009 token_type_hint is advisory. Hash lookup keeps both current and
+    // historical credentials revocable even after the provider rejects them.
+    const tokenHash = await hashOAuthValue(token)
+    const refresh = await store.revokeRefreshFamily({ tokenHash, clientId, now, reason: 'oauth_revocation' })
+    if (refresh.kind !== 'unknown') return oauthRevokedResponse()
+    await store.revokeRefreshFamilyByAccessToken({ tokenHash, clientId, now, reason: 'oauth_revocation' })
+    return oauthRevokedResponse()
+  } catch {
+    return oauthError('server_error', 503)
+  }
 }
 
 export async function handleOAuthRegisterPost(request: Request, options: OAuthApiOptions = {}): Promise<Response> {
@@ -239,19 +284,21 @@ export async function handleOAuthRegisterPost(request: Request, options: OAuthAp
   const grantTypes = arrayOfStrings(value.grant_types)
   const responseTypes = arrayOfStrings(value.response_types)
   const authorizationCodeRequested = grantTypes.includes(AUTHORIZATION_CODE_GRANT_TYPE)
+  const refreshRequested = grantTypes.includes('refresh_token')
   const responseTypesValid = authorizationCodeRequested
     ? responseTypes.length === AGENT_ACCESS_OAUTH_RESPONSE_TYPES.length && responseTypes[0] === AGENT_ACCESS_OAUTH_RESPONSE_TYPES[0]
     : responseTypes.length === 0
   const authMethod = value.token_endpoint_auth_method
   if (clientName.length < 1 || clientName.length > 120 || redirectUris.length === 0 || redirectUris.some((uri) => !validRedirectUri(uri))
     || !responseTypesValid
-    || grantTypes.some((grant) => grant !== AUTHORIZATION_CODE_GRANT_TYPE && grant !== DEVICE_GRANT_TYPE)
+    || (refreshRequested && !authorizationCodeRequested)
+    || grantTypes.some((grant) => grant !== AUTHORIZATION_CODE_GRANT_TYPE && grant !== DEVICE_GRANT_TYPE && grant !== 'refresh_token')
     || grantTypes.length === 0 || authMethod !== PUBLIC_CLIENT_AUTH_METHOD) {
     return oauthError('invalid_client', 400)
   }
   const requestedScopes = normalizeRequestedScopes(typeof value.scope === 'string'
     ? value.scope
-    : `${MARKET_OPERATIONS_INVOKE_SCOPE} ${agentAuthorityScopeForMode('inspect_only')}`)
+    : defaultOAuthScopeText(grantTypes.includes('refresh_token')))
   if (requestedScopes === undefined) return oauthError('invalid_scope', 400)
   const createdAt = currentNow(options)
   const client: AgentAccessOAuthClient = {
@@ -271,7 +318,7 @@ export async function handleOAuthRegisterPost(request: Request, options: OAuthAp
     grant_types: client.grantTypes,
     response_types: authorizationCodeRequested ? [...AGENT_ACCESS_OAUTH_RESPONSE_TYPES] : [],
     token_endpoint_auth_method: PUBLIC_CLIENT_AUTH_METHOD,
-    scope: requestedScopes.scopes.join(' '),
+    scope: [...requestedScopes.scopes, ...(requestedScopes.offlineAccess ? ['offline_access'] : [])].join(' '),
   }, { status: 201, headers: { 'Cache-Control': 'no-store' } })
 }
 
@@ -291,24 +338,23 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   const responseType = url.searchParams.get('response_type')
   const challenge = url.searchParams.get('code_challenge')
   const challengeMethod = url.searchParams.get('code_challenge_method')
-  const scopeText = url.searchParams.get('scope')
+  const requestedScopeText = url.searchParams.get('scope')
   let client: AgentAccessOAuthClient | null
   try {
     client = await readClient(clientId, options)
   } catch {
     return oauthAuthorizationUnavailableResponse()
   }
-  if (client === null || redirectUri === null || responseType !== AGENT_ACCESS_OAUTH_RESPONSE_TYPES[0] || state === null || challenge === null || challengeMethod === null || scopeText === null) {
+  if (client === null || redirectUri === null || responseType !== AGENT_ACCESS_OAUTH_RESPONSE_TYPES[0] || state === null || challenge === null || challengeMethod === null) {
     return oauthError('invalid_request', 400)
   }
+  const scopeText = requestedScopeText ?? defaultOAuthScopeText(client.grantTypes.includes('refresh_token'))
   const authorizationDetails = parseAuthorizationDetails(url.searchParams.get('authorization_details'))
   if (authorizationDetails.kind === 'invalid') return oauthError('invalid_request', 400)
   const requestedAccess = authorizationDetails.kind === 'ok' ? authorizationDetails.requestedAccess : undefined
   const normalizedScopes = normalizeRequestedScopes(scopeText)
-  if (requestedAccess !== undefined && (normalizedScopes?.mode === 'full_yolo'
-    || (normalizedScopes?.profile === 'supplier' && requestedAccess.operationAccess !== 'all_admitted'))) {
-    return oauthError('invalid_request', 400)
-  }
+  const scopeError = authorizationRequestScopeError(client, normalizedScopes, requestedAccess)
+  if (scopeError !== undefined) return oauthError(scopeError, 400)
   const limited = await oauthAdmissionResponse(request, options, `authorization:${clientId ?? 'missing'}`)
   if (limited !== undefined) return limited
   const owner = await ownerIdentity(options)
@@ -334,6 +380,24 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   gate.searchParams.set('grant_ref', result.value.grant.grantRef)
   gate.searchParams.set('state', state)
   return Response.redirect(gate, 302)
+}
+
+function defaultOAuthScopeText(includeOfflineAccess: boolean): string {
+  return AGENT_ACCESS_OAUTH_SAFE_MCP_SCOPES
+    .filter((scope) => includeOfflineAccess || scope !== 'offline_access')
+    .join(' ')
+}
+
+function authorizationRequestScopeError(
+  client: AgentAccessOAuthClient,
+  normalizedScopes: ReturnType<typeof normalizeRequestedScopes>,
+  requestedAccess: AgentAccessOAuthRequestedAccess | undefined,
+): 'invalid_scope' | 'invalid_request' | undefined {
+  if (normalizedScopes?.offlineAccess === true && !client.grantTypes.includes('refresh_token')) return 'invalid_scope'
+  return requestedAccess !== undefined && (normalizedScopes?.mode === 'full_yolo'
+    || (normalizedScopes?.profile === 'supplier' && requestedAccess.operationAccess !== 'all_admitted'))
+    ? 'invalid_request'
+    : undefined
 }
 
 async function locatedConsentResponse(
@@ -384,7 +448,7 @@ async function consentResponse(
   options: OAuthApiOptions,
   cursor: string | null,
 ): Promise<Response> {
-  const targets = await consentAgentTargets(options, cursor)
+  const targets = await consentAgentTargets(options, cursor, grant.clientId, currentNow(options))
   return new Response(consentHtml({
     grantRef: grant.grantRef,
     grantRevision: grant.revision,
@@ -397,6 +461,8 @@ async function consentResponse(
     agentTargets: targets.items,
     ...(targets.nextCursor === undefined ? {} : { agentTargetsNextCursor: targets.nextCursor }),
     ...(targets.unavailable === true ? { agentTargetsUnavailable: true } : {}),
+    ...(targets.reconnectPrincipalRef === undefined ? {} : { reconnectPrincipalRef: targets.reconnectPrincipalRef }),
+    ...(targets.reconnectAmbiguous === true ? { reconnectAmbiguous: true } : {}),
   }), {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
   })
@@ -446,21 +512,25 @@ function consentApprovalFields(form: URLSearchParams): ConsentApprovalFields | u
     || expectedTargetRevision === undefined
     || approvedOperationSelection === undefined
     || (targetKind !== 'new_agent' && targetKind !== 'replace_credential')
-    || (targetKind === 'replace_credential' && (principalRef === null || principalRef.trim().length === 0))
-    || (targetKind === 'replace_credential' && replacementMode !== 'planned' && replacementMode !== 'compromise')
     || (state !== null && state.length > 2_048)
   ) return undefined
+  let reservationTarget: ConsentApprovalFields['reservationTarget']
+  if (targetKind === 'new_agent') {
+    reservationTarget = { kind: 'new_agent' }
+  } else {
+    if (principalRef === null || principalRef.trim().length === 0) return undefined
+    if (replacementMode !== 'planned' && replacementMode !== 'compromise') return undefined
+    reservationTarget = {
+      kind: 'replace_credential',
+      principalRef,
+      replacementMode,
+    }
+  }
   return {
     expectedGrantRevision,
     expectedTargetRevision,
     approvedOperationSelection,
-    reservationTarget: targetKind === 'new_agent'
-      ? { kind: 'new_agent' }
-      : {
-          kind: 'replace_credential',
-          principalRef: principalRef!,
-          replacementMode: replacementMode as 'planned' | 'compromise',
-        },
+    reservationTarget,
     state,
   }
 }
@@ -675,10 +745,12 @@ export function oauthAuthorizationServerMetadata(canonicalBaseUrl: string): Read
     token_endpoint: `${base}${AGENT_ACCESS_OAUTH_PATHS.token}`,
     registration_endpoint: `${base}${AGENT_ACCESS_OAUTH_PATHS.register}`,
     device_authorization_endpoint: `${base}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}`,
+    revocation_endpoint: `${base}${AGENT_ACCESS_OAUTH_PATHS.revoke}`,
     grant_types_supported: [...AGENT_ACCESS_OAUTH_GRANT_TYPES],
     response_types_supported: [...AGENT_ACCESS_OAUTH_RESPONSE_TYPES],
     token_endpoint_auth_methods_supported: [...AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS],
     code_challenge_methods_supported: [...AGENT_ACCESS_OAUTH_CODE_CHALLENGE_METHODS],
+    scopes_supported: [...AGENT_ACCESS_OAUTH_AUTHORIZATION_SCOPES],
   }
 }
 
@@ -739,6 +811,199 @@ async function exchangeAuthorizationCode(form: URLSearchParams, request: Request
   return await deliverClaimedGrant(claimed, options)
 }
 
+async function exchangeRefreshToken(form: URLSearchParams, request: Request, options: OAuthApiOptions): Promise<Response> {
+  const refreshToken = form.get('refresh_token')
+  const clientId = form.get('client_id')
+  if (refreshToken === null || refreshToken.length === 0 || clientId === null) return oauthError('invalid_request', 400)
+  const limited = await oauthAdmissionResponse(request, options, `refresh:${clientId}`)
+  if (limited !== undefined) return limited
+  const client = await readClient(clientId, options)
+  if (client === null || !client.grantTypes.includes('refresh_token')) return oauthError('invalid_client', 401)
+
+  const rawSuccessorToken = createOpaqueOAuthValue(32)
+  const tokenHash = await hashOAuthValue(refreshToken)
+  const successorTokenHash = await hashOAuthValue(rawSuccessorToken)
+  const claimRef = `refresh:${createOpaqueOAuthValue(18)}`
+  const now = currentNow(options)
+  const refreshStore = requireRefreshStore(options)
+  let claimed: Awaited<ReturnType<AgentAccessOAuthRefreshStore['claimRefreshFamily']>>
+  try {
+    claimed = await refreshStore.claimRefreshFamily({
+      tokenHash,
+      clientId,
+      claimRef,
+      successorTokenHash,
+      now,
+      claimExpiresAt: now + 30_000,
+    })
+  } catch {
+    return oauthError('server_error', 503)
+  }
+  if (!('family' in claimed)) {
+    return claimed.kind === 'busy' ? oauthError('server_error', 503) : oauthError('invalid_grant', 400)
+  }
+
+  const family = claimed.family
+  if (!refreshScopeMatches(form.get('scope'), family)) {
+    await refreshStore.revokeRefreshFamily({ tokenHash, clientId, now, reason: 'scope_expansion_attempt' }).catch(() => {})
+    return oauthError('invalid_scope', 400)
+  }
+  if (claimed.kind === 'recovered') {
+    try {
+      const secret = await (options.getSecret ?? defaultOAuthKeySecret)(family.currentProviderCredentialId)
+      return refreshTokenResponse(secret.secret, rawSuccessorToken, family, now)
+    } catch {
+      return oauthError('server_error', 503)
+    }
+  }
+
+  const accessExpiresAt = Math.min(
+    family.expiresAt,
+    now + AGENT_ACCESS_KEY_TTL_SECONDS * 1_000,
+  )
+  const expiresInSeconds = Math.floor((accessExpiresAt - now) / 1_000)
+  if (expiresInSeconds < AGENT_ACCESS_MIN_TTL_SECONDS) {
+    await refreshStore.revokeRefreshFamily({ tokenHash, clientId, now, reason: 'expired' }).catch(() => {})
+    return oauthError('invalid_grant', 400)
+  }
+  const issuanceKey = `oauth-${claimRef.replaceAll(':', '-')}`
+  const successorGrantRef = issuedAgentGrantRef(family.providerSubject, issuanceKey)
+  let successorKeyId: string
+  try {
+    const successor = await (options.issueRefreshKey ?? defaultIssueRefreshKey)({
+      family,
+      issuanceKey,
+      grantRef: successorGrantRef,
+      expiresInSeconds,
+    })
+    successorKeyId = successor.keyId
+  } catch {
+    return oauthError('server_error', 503)
+  }
+
+  let successorSecret: string
+  try {
+    successorSecret = (await (options.getSecret ?? defaultOAuthKeySecret)(successorKeyId)).secret
+  } catch {
+    await revokeProviderCredentialIfCurrent(successorKeyId, 'Refresh credential could not be delivered.', options).catch(() => {})
+    return oauthError('server_error', 503)
+  }
+  const commitInput = {
+      familyRef: family.familyRef,
+      expectedRevision: family.revision,
+      tokenHash,
+      claimRef: claimed.claimRef,
+      successorTokenHash,
+      issuanceKey,
+      successorGrantRef,
+      successorCredentialId: successorKeyId,
+      successorAccessTokenHash: await hashOAuthValue(successorSecret),
+      createdAt: now,
+      accessExpiresAt,
+      replayUntil: now + AGENT_ACCESS_OAUTH_REFRESH_REPLAY_SECONDS * 1_000,
+  } as const
+  let committed: Awaited<ReturnType<AgentAccessOAuthRefreshStore['commitRefreshFamilyRotation']>>
+  try {
+    committed = await refreshStore.commitRefreshFamilyRotation(commitInput)
+  } catch {
+    try {
+      committed = await refreshStore.commitRefreshFamilyRotation(commitInput)
+    } catch {
+      // The first response may have been lost after Convex committed. Keep the
+      // successor intact so the same idempotent commit or recovery can converge.
+      return oauthError('server_error', 503)
+    }
+  }
+  if (committed.kind === 'conflict') {
+    await revokeProviderCredentialIfCurrent(successorKeyId, 'Refresh rotation was rejected.', options).catch(() => {})
+    await refreshStore.revokeRefreshFamily({ tokenHash, clientId, now, reason: 'rotation_conflict' }).catch(() => {})
+    return oauthError('invalid_grant', 400)
+  }
+  try {
+    await completeRefreshProviderCleanup(committed, options)
+    return refreshTokenResponse(successorSecret, rawSuccessorToken, committed.family, now)
+  } catch {
+    return oauthError('server_error', 503)
+  }
+}
+
+function refreshScopeMatches(scopeText: string | null, family: AgentAccessOAuthRefreshFamily): boolean {
+  if (scopeText === null) return true
+  const normalized = normalizeRequestedScopes(scopeText)
+  if (normalized === undefined || !normalized.offlineAccess) return false
+  const requested = [...normalized.scopes].sort()
+  const approved = [...family.scopes].sort()
+  return requested.length === approved.length && requested.every((scope, index) => scope === approved[index])
+}
+
+async function defaultIssueRefreshKey(input: Readonly<{
+  family: AgentAccessOAuthRefreshFamily
+  issuanceKey: string
+  grantRef: string
+  expiresInSeconds: number
+}>): Promise<Readonly<{ keyId: string }>> {
+  const api = isLocalE2EAuthBypassEnabled()
+    ? createLocalE2EAgentAccessKeyApi()
+    : createClerkAgentAccessKeyApi(clerkClient().apiKeys)
+  const key = await api.create({
+    name: input.family.displayName,
+    subject: input.family.providerSubject,
+    createdBy: input.family.providerSubject,
+    scopes: [...input.family.scopes],
+    secondsUntilExpiration: input.expiresInSeconds,
+    claims: {
+      aePurpose: AGENT_ACCESS_PURPOSE,
+      aeGrantRef: input.grantRef,
+      aeDisplayName: input.family.displayName,
+      aeAuthorityMode: input.family.authorityMode,
+      aeIssuanceKey: input.issuanceKey,
+      aeApplicationRef: input.family.applicationRef,
+      aeEnvironment: input.family.environment,
+      aeScopes: JSON.stringify(input.family.scopes),
+      aePrincipalRef: input.family.principalRef,
+      aeConnectionTarget: 'replace_credential',
+      aeOperationSelectionDigest: agentAccessOperationSelectionDigest(input.family),
+    },
+    description: 'Rotated credential for a durable Agentic Economy connection.',
+  })
+  return { keyId: key.id }
+}
+
+async function completeRefreshProviderCleanup(
+  committed: Extract<Awaited<ReturnType<AgentAccessOAuthRefreshStore['commitRefreshFamilyRotation']>>, { kind: 'completed' | 'replayed' }>,
+  options: OAuthApiOptions,
+): Promise<void> {
+  const target = committed.providerCleanupTarget
+  if (target === undefined) return
+  const reason = 'Replaced by a refreshed Agentic Economy credential.'
+  await revokeProviderCredentialIfCurrent(target.providerCredentialId, reason, options)
+  const recorded = await (options.recordProviderRevocation ?? recordAgentProviderRevocation)({
+    principalRef: committed.family.principalRef,
+    credentialRef: target.credentialRef,
+    providerCredentialId: target.providerCredentialId,
+    correlationRef: `oauth-refresh:${committed.family.familyRef}:${committed.family.revision}`,
+    outcome: 'revoked',
+  })
+  if (recorded.kind !== 'completed' && recorded.kind !== 'replayed') {
+    throw new Error('refresh_provider_revocation_record_failed')
+  }
+}
+
+function refreshTokenResponse(
+  accessToken: string,
+  refreshToken: string,
+  family: AgentAccessOAuthRefreshFamily,
+  now: number,
+): Response {
+  return Response.json({
+    access_token: accessToken,
+    token_type: 'Bearer',
+    scope: [...family.scopes, 'offline_access'].join(' '),
+    expires_in: Math.max(1, Math.floor((family.currentAccessExpiresAt - now) / 1_000)),
+    refresh_token: refreshToken,
+  }, { headers: { 'Cache-Control': 'no-store' } })
+}
+
 async function cancelExpiredReplacement(grant: AgentAccessOAuthGrant, options: OAuthApiOptions): Promise<boolean> {
   if (grant.replacement === undefined) return true
   const replacement = grant.replacement
@@ -780,6 +1045,13 @@ async function deliverClaimedGrant(
   if (claimed.kind !== 'ok') return oauthTransitionError(claimed)
   const keyId = claimed.value.grant.keyId
   if (keyId === undefined) return oauthError('invalid_grant', 400)
+  const firstDelivery = claimed.value.grant.status !== 'consumed'
+  if (!firstDelivery && claimed.value.grant.offlineAccess === true) {
+    // Authorization codes are single-use. An offline exchange must never
+    // degrade into an access-only response after its refresh token has left
+    // process memory; reconnecting is the only safe recovery at this seam.
+    return oauthError('invalid_grant', 400)
+  }
   try {
     const secret = await (options.getSecret ?? defaultOAuthKeySecret)(keyId)
     if (claimed.value.grant.status !== 'consumed'
@@ -812,11 +1084,35 @@ async function deliverClaimedGrant(
       now: currentNow(options),
     })
     if (consumed.kind !== 'ok') return oauthTransitionError(consumed)
+    let refreshToken: string | undefined
+    if (firstDelivery
+      && claimed.value.grant.flow === 'authorization_code'
+      && claimed.value.grant.offlineAccess === true) {
+      refreshToken = createOpaqueOAuthValue(32)
+      const now = currentNow(options)
+      const family = await requireRefreshStore(options).createRefreshFamily({
+        grantRef: claimed.value.grant.grantRef,
+        keyId,
+        clientId: claimed.value.grant.clientId,
+        tokenHash: await hashOAuthValue(refreshToken),
+        accessTokenHash: await hashOAuthValue(secret.secret),
+        createdAt: now,
+        expiresAt: now + Math.min(
+          claimed.value.grant.approvedAccess.expiresInSeconds,
+          AGENT_ACCESS_OAUTH_REFRESH_FAMILY_TTL_SECONDS,
+        ) * 1_000,
+      })
+      if (family.kind === 'conflict') throw new Error('refresh_family_creation_failed')
+    }
     return Response.json({
       access_token: secret.secret,
       token_type: 'Bearer',
-      scope: claimed.value.grant.requestedScopes.join(' '),
-      expires_in: claimed.value.grant.approvedAccess.expiresInSeconds,
+      scope: [
+        ...claimed.value.grant.requestedScopes,
+        ...(claimed.value.grant.offlineAccess === true ? ['offline_access'] : []),
+      ].join(' '),
+      expires_in: accessCredentialTtlSeconds(claimed.value.grant.approvedAccess),
+      ...(refreshToken === undefined ? {} : { refresh_token: refreshToken }),
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch {
     try {
@@ -871,6 +1167,7 @@ async function issueReplacementGrantKey(input: Readonly<{
     : createClerkAgentAccessKeyApi(clerkClient().apiKeys)
   const successorGrantRef = issuedAgentGrantRef(input.ownerId, input.idempotencyKey)
   const operationSelectionDigest = agentAccessOperationSelectionDigest(input.policy)
+  const accessTtlSeconds = accessCredentialTtlSeconds(input.grant.approvedAccess)
   const existing = (await api.list({ subject: input.ownerId, includeInvalid: false, limit: 100 })).data.find((key) => (
     !key.revoked && !key.expired && key.claims?.aeGrantRef === successorGrantRef
   ))
@@ -883,7 +1180,7 @@ async function issueReplacementGrantKey(input: Readonly<{
     subject: input.ownerId,
     createdBy: input.ownerId,
     scopes: [...input.grant.requestedScopes],
-    secondsUntilExpiration: input.grant.approvedAccess.expiresInSeconds,
+    secondsUntilExpiration: accessTtlSeconds,
     claims: {
       aePurpose: AGENT_ACCESS_PURPOSE,
       aeGrantRef: successorGrantRef,
@@ -918,7 +1215,7 @@ async function issueReplacementGrantKey(input: Readonly<{
     operationRefs: input.policy.operationRefs,
     policy: input.policy,
     createdAt: existing?.createdAt ?? createdAt,
-    expiresAt: existing?.expiresAt ?? existing?.expiration ?? createdAt + input.grant.approvedAccess.expiresInSeconds * 1_000,
+    expiresAt: existing?.expiresAt ?? existing?.expiration ?? createdAt + accessTtlSeconds * 1_000,
   })
   if (prepared.kind !== 'recorded' && prepared.kind !== 'replayed') {
     if (createdHere) {
@@ -969,7 +1266,10 @@ async function issueGrantKey(
         scopes: inputGrant.requestedScopes,
         grantRef: inputGrant.grantRef,
         authorityMode,
-        approvedAccess: inputGrant.approvedAccess,
+        approvedAccess: {
+          ...inputGrant.approvedAccess,
+          expiresInSeconds: accessCredentialTtlSeconds(inputGrant.approvedAccess),
+        },
         policy,
         target: inputTarget,
       })
@@ -997,7 +1297,7 @@ async function issueGrantKey(
         environment: inputGrant.approvedAccess.environment,
         operationAccess: inputGrant.approvedAccess.operationAccess,
         operationRefs: inputGrant.approvedAccess.operationRefs,
-        expiresInSeconds: inputGrant.approvedAccess.expiresInSeconds,
+        expiresInSeconds: accessCredentialTtlSeconds(inputGrant.approvedAccess),
         ...(inputGrant.approvedAccess.maximumSpendPerInvocation === undefined ? {} : { maximumSpendPerInvocation: inputGrant.approvedAccess.maximumSpendPerInvocation }),
         ...(inputGrant.approvedAccess.maximumDailySpend === undefined ? {} : { maximumDailySpend: inputGrant.approvedAccess.maximumDailySpend }),
         ...(inputGrant.approvedAccess.maximumMonthlySpend === undefined ? {} : { maximumMonthlySpend: inputGrant.approvedAccess.maximumMonthlySpend }),
@@ -1020,6 +1320,10 @@ async function issueGrantKey(
     return { keyId: issued.keyId }
   }
   return await issue({ ownerId, grant, target })
+}
+
+function accessCredentialTtlSeconds(approvedAccess: AgentAccessOAuthRequestedAccess): number {
+  return Math.min(approvedAccess.expiresInSeconds, AGENT_ACCESS_KEY_TTL_SECONDS)
 }
 
 function parseConnectionTarget(form: URLSearchParams): AgentConnectionTarget | undefined {
@@ -1046,20 +1350,38 @@ function parseApprovedOperationSelection(form: URLSearchParams): Readonly<{
   })
 }
 
-async function consentAgentTargets(options: OAuthApiOptions, cursor: string | null): Promise<ConsentAgentTargets> {
+async function consentAgentTargets(
+  options: OAuthApiOptions,
+  cursor: string | null,
+  clientId: string,
+  now: number,
+): Promise<ConsentAgentTargets> {
   try {
-    if (options.listAgents !== undefined) return await options.listAgents(cursor)
-    const directory = await loadAgentDirectoryReadback({
-      compare: readCapabilityOperationCompare,
-      isOperationRef: isPublicOperationRef,
-    }, cursor)
+    const listed = options.listAgents !== undefined
+      ? await options.listAgents(cursor)
+      : await loadAgentDirectoryReadback({
+          compare: readCapabilityOperationCompare,
+          isOperationRef: isPublicOperationRef,
+        }, cursor).then((directory) => ({
+          items: directory.items.map(({ principalRef, principalRevision, displayName }) => ({
+            principalRef,
+            principalRevision,
+            displayName,
+          })),
+          ...(directory.nextCursor === undefined ? {} : { nextCursor: directory.nextCursor }),
+        }))
+    const reconnectCandidates = options.listReconnectCandidates !== undefined
+      ? await options.listReconnectCandidates({ clientId, principalRefs: listed.items.map(({ principalRef }) => principalRef), now })
+      : options.listAgents !== undefined
+        ? []
+        : await loadOwnerReconnectCandidates(clientId, listed.items.map(({ principalRef }) => principalRef), now)
     return {
-      items: directory.items.map(({ principalRef, principalRevision, displayName }) => ({
-        principalRef,
-        principalRevision,
-        displayName,
-      })),
-      ...(directory.nextCursor === undefined ? {} : { nextCursor: directory.nextCursor }),
+      ...listed,
+      ...(reconnectCandidates.length === 1
+        ? { reconnectPrincipalRef: reconnectCandidates[0]!.principalRef }
+        : reconnectCandidates.length > 1
+          ? { reconnectAmbiguous: true as const }
+          : {}),
     }
   } catch {
     return { items: [], unavailable: true }
@@ -1226,6 +1548,24 @@ function requireStore(options: OAuthApiOptions): AgentAccessOAuthStore {
   return options.store
 }
 
+function requireRefreshStore(options: OAuthApiOptions): AgentAccessOAuthRefreshStore {
+  if (options.refreshStore !== undefined) return options.refreshStore
+  const candidate = options.store as Partial<AgentAccessOAuthRefreshStore> | undefined
+  if (candidate === undefined
+    || candidate.createRefreshFamily === undefined
+    || candidate.claimRefreshFamily === undefined
+    || candidate.commitRefreshFamilyRotation === undefined
+    || candidate.revokeRefreshFamily === undefined
+    || candidate.revokeRefreshFamilyByAccessToken === undefined) {
+    throw new Error('agent_access_oauth_refresh_state_unavailable')
+  }
+  return candidate as AgentAccessOAuthRefreshStore
+}
+
+function oauthRevokedResponse(): Response {
+  return new Response(null, { status: 200, headers: { 'Cache-Control': 'no-store' } })
+}
+
 function currentNow(options: OAuthApiOptions): number {
   const now = options.now
   return now === undefined ? Date.now() : now()
@@ -1252,7 +1592,7 @@ function baseUrl(request: Request, options: OAuthApiOptions): string {
   return configured === undefined ? resolveCanonicalBaseUrl(request).baseUrl : trimTrailingSlashes(configured)
 }
 
-export function oauthChallengeResponse(request: Request, requiredScope = MARKET_OPERATIONS_INVOKE_SCOPE): Response {
+export function oauthChallengeResponse(request: Request, requiredScope?: string): Response {
   const base = resolveCanonicalBaseUrl(request).baseUrl
   return problem(
     { status: 401, kind: 'UNAUTHENTICATED', code: 'authentication_required', detail: 'Authentication required.' },

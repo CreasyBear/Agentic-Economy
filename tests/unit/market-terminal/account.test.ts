@@ -408,9 +408,8 @@ describe('AE CLI account interface', () => {
       return Response.json({
         kind: 'available', principalRef: 'prn_current', accountRef: 'acc_owner',
         balance: { currency: 'AUD', units: '4200', exponent: 2 },
-        recoveryDue: { currency: 'AUD', units: '0', exponent: 2 },
         accountState: 'active', version: 2, updatedAt: 10,
-        funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+        funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
       })
     })
     vi.stubGlobal('fetch', fetch)
@@ -420,14 +419,14 @@ describe('AE CLI account interface', () => {
 
     expect(JSON.parse(write.mock.calls.map(([value]) => String(value)).join(''))).toMatchObject({
       kind: 'available', balance: { currency: 'AUD', units: '4200' },
-      funding: { kind: 'owner_browser_required' },
+      funding: { kind: 'agent_funding_handoff' },
     })
   })
 
   it('lists the current credential charge activity with bounded pagination', async () => {
     storeConnection({ baseUrl: options.baseUrl, accessToken: 'hidden-secret' })
     const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      expect(JSON.parse(String(init?.body))).toEqual({ currency: 'USD', limit: 5, cursor: 'cursor:one' })
+      expect(JSON.parse(String(init?.body))).toEqual({ currency: 'AUD', limit: 5, cursor: 'cursor:one' })
       return Response.json({ kind: 'available', items: [], hasMore: false })
     })
     vi.stubGlobal('fetch', fetch)

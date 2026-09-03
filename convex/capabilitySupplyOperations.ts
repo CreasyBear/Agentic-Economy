@@ -5,12 +5,9 @@ import {
   compareArgs,
   compareHandler,
   detailHandler,
-  inspectArgs,
-  inspectPlanHandler,
   operationRefArgs,
   publicCompareReturns,
   publicDetailReturns,
-  publicInspectReturns,
   publicSearchReturns,
   searchArgs,
   searchHandler,
@@ -43,12 +40,6 @@ export const compare = queryGeneric({
   returns: publicCompareReturns,
   handler: compareHandler,
 })
-export const inspectPlan = queryGeneric({
-  args: inspectArgs,
-  returns: publicInspectReturns,
-  handler: inspectPlanHandler,
-})
-
 export const offeringOperationMap = queryGeneric({
   args: { businessIds: v.array(v.string()) },
   returns: offeringOperationMapReturns,

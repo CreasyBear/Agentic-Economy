@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 describe('chat IA', () => {
-  it('keeps empty-path suggestions inside the five-tool market loop', () => {
+  it('keeps empty-path suggestions inside the six-tool market loop', () => {
     expect(chatEmpty.title).toContain('catalog')
     const serialized = JSON.stringify(chatSuggestions)
     expect(serialized).toMatch(/search|compare|inspect|call/i)
@@ -110,29 +110,47 @@ describe('transcript projector', () => {
           state: 'output-available',
           output: {
             kind: 'ok',
-            matchedCount: 12,
+            schemaVersion: 'registry-operations:v3',
+            query: 'weather',
+            count: 12,
             items: [{
               operationRef: searchRef,
+              capabilityId: 'weather.forecast',
               title: 'Weather finder',
-              summary: 'Look up forecasts',
-              supplier: { name: 'Sky Co', slug: 'sky-co' },
-              price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
-              authentication: { kind: 'ae_api_key' },
-              availability: { posture: 'routeable' },
-              navigation: [{ relation: 'execute', secret: executeSecret }],
+              description: 'Look up forecasts',
+              provider: { name: 'Sky Co', slug: 'sky-co' },
+              priceLabel: 'USD 0.50',
+              healthStatus: 'operational',
             }],
+            pagination: { limit: 10, hasMore: true, nextCursor: 'next' },
           },
         },
         {
-          type: `tool-${providerSafeActionToolName('registry.operations.inspectPlan')}`,
+          type: `tool-${providerSafeActionToolName('operation.inspect')}`,
           state: 'output-available',
           output: {
-            kind: 'ok',
-            operationRefs: [searchRef],
-            summary: {
-              maximumCost: { kind: 'known', amount: { currency: 'USD', units: '199', exponent: 2 } },
-              effects: [{ class: 'data_release' }, { class: 'financial_exposure' }],
-              dataUse: [{ classification: 'public' }],
+            kind: 'committed',
+            commitmentRef: 'commitment:chat:weather:1',
+            operationRef: searchRef,
+            operationRevision: 1,
+            expiresAt: 60_000,
+            normalizedInput: { location: 'Perth' },
+            price: { currency: 'USD', units: '199', exponent: 2 },
+            account: {
+              accountRef: 'account:chat:1',
+              available: { currency: 'USD', units: '500', exponent: 2 },
+            },
+            budget: {
+              principalRef: 'principal:chat:1',
+              maximumPerInvocation: { currency: 'USD', units: '1000', exponent: 2 },
+            },
+            policyRefs: ['policy:chat:1'],
+            evidenceDigest: 'evidence:inspection:1',
+            continuation: {
+              action: 'operation.invoke',
+              method: 'POST',
+              path: '/api/v1/operations/call',
+              input: { commitmentRef: 'commitment:chat:weather:1', idempotencyKey: 'invoke-weather-1' },
             },
           },
         },
@@ -158,21 +176,22 @@ describe('transcript projector', () => {
       ],
     }])
 
-    const [search, inspectPlan, execute] = turns[0]?.tools ?? []
+    const [search, inspection, execute] = turns[0]?.tools ?? []
     expect(search?.kind).toBe('choices')
     expect(search?.kind === 'choices' ? search.choices : undefined).toEqual([{
       operationRef: searchRef,
       title: 'Weather finder',
       supplier: 'Sky Co',
       price: 'USD 0.50',
-      readiness: 'Ready now',
-      access: 'AE account invocation',
+      readiness: 'Operational',
     }])
     expect(search?.kind === 'choices' ? search.count : undefined).toBe(12)
-    expect(inspectPlan?.kind === 'inspect' ? inspectPlan.facts : undefined).toEqual([
-      { label: 'Maximum cost', value: 'USD 1.99' },
-      { label: 'Effects', value: 'Data release, Financial exposure' },
-      { label: 'Data use', value: 'Public' },
+    expect(inspection?.kind === 'inspect' ? inspection.facts : undefined).toEqual([
+      { label: 'Decision price', value: 'USD 1.99' },
+      { label: 'Account available', value: 'USD 5.00' },
+      { label: 'Agent maximum', value: 'USD 10.00' },
+      { label: 'Expires', value: '1970-01-01T00:01:00.000Z' },
+      { label: 'Commitment', value: 'commitment:chat:weather:1' },
     ])
     expect(execute?.kind).toBe('execute')
     expect(execute?.kind === 'execute' ? execute.state : undefined).toBe('completed')
@@ -507,15 +526,20 @@ describe('transcript projector', () => {
         state: 'output-available',
         output: {
           kind: 'ok',
+          schemaVersion: 'registry-operations:v3',
+          query: 'weather',
+          count: 1,
           items: [{
             operationRef: searchRef,
+            capabilityId: 'weather.forecast',
             title: 'Weather finder',
-            supplier: { name: 'Sky Co', slug: 'sky-co' },
-            price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
-            authentication: { kind: 'ae_api_key' },
-            availability: { posture: 'routeable' },
+            description: 'Look up forecasts',
+            provider: { name: 'Sky Co', slug: 'sky-co' },
+            priceLabel: 'USD 0.50',
+            healthStatus: 'operational',
             raw: 'HANDOFF_RAW_SECRET',
           }],
+          pagination: { limit: 10, hasMore: false },
         },
       }],
     }])
@@ -527,8 +551,7 @@ describe('transcript projector', () => {
       title: 'Weather finder',
       supplier: 'Sky Co',
       price: 'USD 0.50',
-      readiness: 'Ready now',
-      access: 'AE account invocation',
+      readiness: 'Operational',
     }])
     expect(JSON.stringify(stored)).not.toContain('HANDOFF_RAW_SECRET')
     clearAnonymousChatHandoff('handoff-thread')

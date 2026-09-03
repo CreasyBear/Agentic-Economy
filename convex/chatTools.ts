@@ -17,10 +17,8 @@ import {
   type OperationInspectInput,
 } from '@/modules/capability-execution/operation-commitment'
 import type {
-  InspectPlanInput,
   OperationCompareInput,
   OperationDetailInput,
-  OperationSearchInput,
 } from '@/modules/capability-supply/public'
 import {
   deserializeOperationCompareResult,
@@ -34,12 +32,14 @@ import {
 } from '@/modules/chat/tool-card'
 import {
   projectOperationCompareChoices,
+  projectOperationDescription,
+  projectOperationListChoices,
   projectOperationSearchChoices,
 } from '@/modules/registry/operation-choice-contracts'
 import {
   registryOperationsCompareContract,
-  registryOperationsDetailContract,
-  registryOperationsInspectPlanContract,
+  registryOperationsDescribeContract,
+  registryOperationsListContract,
   registryOperationsSearchContract,
 } from '@/modules/registry/operation-action-contracts'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
@@ -108,10 +108,10 @@ const chatOperationInspectContract = {
 } as const satisfies ChatContract
 
 const chatContracts = {
+  'registry.operations.list': registryOperationsListContract,
   'registry.operations.search': registryOperationsSearchContract,
-  'registry.operations.detail': registryOperationsDetailContract,
+  'registry.operations.describe': registryOperationsDescribeContract,
   'registry.operations.compare': registryOperationsCompareContract,
-  'registry.operations.inspectPlan': registryOperationsInspectPlanContract,
   'operation.inspect': chatOperationInspectContract,
   'operation.invoke': chatInvokeContract,
 } as const satisfies Record<ChatToolId, ChatContract>
@@ -134,6 +134,20 @@ function descriptionFor(contract: ChatContract): string {
 
 function failure(toolId: ChatToolId, reason: ChatToolFailure['reason']): ChatToolFailure {
   return { kind: 'chat_tool_refused', toolId, reason }
+}
+
+type CapabilitySearchFilters = FunctionArgs<typeof api.capabilitySupplyOperations.search>['filters']
+
+function operationSourceFilters(filters: z.infer<typeof registryOperationsSearchContract.schema>['filters']): CapabilitySearchFilters | undefined {
+  if (filters === undefined) return undefined
+  return {
+    ...(filters.networkId === undefined ? {} : { networkId: filters.networkId }),
+    ...(filters.location === undefined ? {} : { location: filters.location }),
+    ...(filters.effects === undefined ? {} : { effects: [...filters.effects] }),
+    ...(filters.dataUse === undefined ? {} : { dataUse: [...filters.dataUse] }),
+    ...(filters.currency === undefined ? {} : { currency: filters.currency }),
+    ...(filters.maximumPrice === undefined ? {} : { maximumPrice: filters.maximumPrice }),
+  }
 }
 
 function modelFacingOutput<Output>(
@@ -189,6 +203,8 @@ export function createChatAgent(
   let toolCalls = 0
   let executeCalls = 0
 
+  for (const toolId of CHAT_TOOL_IDS) contractFor(toolId)
+
   const reserve = (toolId: ChatToolId): ChatToolAdmission => {
     if (toolCalls >= MAX_CHAT_TOOL_CALLS) return failure(toolId, 'tool_limit')
     toolCalls += 1
@@ -198,10 +214,10 @@ export function createChatAgent(
     return null
   }
 
-  const searchContract = contractFor('registry.operations.search')
-  const detailContract = contractFor('registry.operations.detail')
-  const compareContract = contractFor('registry.operations.compare')
-  const inspectContract = contractFor('registry.operations.inspectPlan')
+  const listContract = registryOperationsListContract
+  const searchContract = registryOperationsSearchContract
+  const describeContract = registryOperationsDescribeContract
+  const compareContract = registryOperationsCompareContract
   const operationInspectContract = contractFor('operation.inspect')
   const invokeContract = contractFor('operation.invoke')
   const principal = authority === undefined ? undefined : {
@@ -215,34 +231,62 @@ export function createChatAgent(
   }
 
   const tools = {
+    [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.list']]: createTool({
+      description: descriptionFor(listContract),
+      inputSchema: listContract.schema,
+      execute: async (ctx: ToolCtx, input: unknown) => {
+        const data = listContract.schema.parse(input)
+        const denied = reserve('registry.operations.list')
+        if (denied !== null) return denied
+        const filters = operationSourceFilters(data.filters)
+        const result = await ctx.runQuery(api.capabilitySupplyOperations.search, {
+          query: '',
+          limit: data.limit,
+          ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
+          ...(filters === undefined ? {} : { filters }),
+        })
+        return projectedModelFacingOutput(
+          'registry.operations.list',
+          listContract.outputSchema,
+          () => projectOperationListChoices(deserializeOperationSearchResult(result), data.filters),
+        )
+      },
+    }),
     [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.search']]: createTool({
       description: descriptionFor(searchContract),
-      inputSchema: searchContract.schema as z.ZodType<OperationSearchInput>,
-      execute: async (ctx: ToolCtx, input: OperationSearchInput) => {
+      inputSchema: searchContract.schema,
+      execute: async (ctx: ToolCtx, input: unknown) => {
+        const data = searchContract.schema.parse(input)
         const denied = reserve('registry.operations.search')
         if (denied !== null) return denied
+        const filters = operationSourceFilters(data.filters)
         const result = await ctx.runQuery(
           api.capabilitySupplyOperations.search,
-          structuredClone(input) as FunctionArgs<typeof api.capabilitySupplyOperations.search>,
+          {
+            query: data.query,
+            limit: data.limit,
+            ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
+            ...(filters === undefined ? {} : { filters }),
+          },
         )
         return projectedModelFacingOutput(
           'registry.operations.search',
           searchContract.outputSchema,
-          () => projectOperationSearchChoices(deserializeOperationSearchResult(result)),
+          () => projectOperationSearchChoices(deserializeOperationSearchResult(result), data.filters),
         )
       },
     }),
-    [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.detail']]: createTool({
-      description: descriptionFor(detailContract),
-      inputSchema: detailContract.schema as z.ZodType<OperationDetailInput>,
+    [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.describe']]: createTool({
+      description: descriptionFor(describeContract),
+      inputSchema: describeContract.schema as z.ZodType<OperationDetailInput>,
       execute: async (ctx: ToolCtx, input: OperationDetailInput) => {
-        const denied = reserve('registry.operations.detail')
+        const denied = reserve('registry.operations.describe')
         if (denied !== null) return denied
         const result = await ctx.runQuery(api.capabilitySupplyOperations.detail, input)
         return projectedModelFacingOutput(
-          'registry.operations.detail',
-          detailContract.outputSchema,
-          () => deserializeOperationDetailResult(result),
+          'registry.operations.describe',
+          describeContract.outputSchema,
+          () => projectOperationDescription(deserializeOperationDetailResult(result)),
         )
       },
     }),
@@ -260,23 +304,6 @@ export function createChatAgent(
           'registry.operations.compare',
           compareContract.outputSchema,
           () => projectOperationCompareChoices(deserializeOperationCompareResult(result)),
-        )
-      },
-    }),
-    [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.inspectPlan']]: createTool({
-      description: descriptionFor(inspectContract),
-      inputSchema: inspectContract.schema as z.ZodType<InspectPlanInput>,
-      execute: async (ctx: ToolCtx, input: InspectPlanInput) => {
-        const denied = reserve('registry.operations.inspectPlan')
-        if (denied !== null) return denied
-        const result = await ctx.runQuery(
-          api.capabilitySupplyOperations.inspectPlan,
-          structuredClone(input) as FunctionArgs<typeof api.capabilitySupplyOperations.inspectPlan>,
-        )
-        return projectedModelFacingOutput(
-          'registry.operations.inspectPlan',
-          inspectContract.outputSchema,
-          () => result,
         )
       },
     }),

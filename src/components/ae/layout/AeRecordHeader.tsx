@@ -26,7 +26,7 @@ export function AeRecordHeader({
   return (
     <div
       className={cn(
-        'flex min-h-touch flex-wrap items-start justify-between gap-related border-b border-border py-intra',
+        'flex min-h-touch flex-wrap items-start justify-between gap-related py-related',
         className,
       )}
       {...(description === undefined ? {} : { 'aria-describedby': descriptionId })}
@@ -41,11 +41,11 @@ export function AeRecordHeader({
           </span>
         )}
         <div className="grid min-w-0 gap-intra">
-          <h1 id={titleId} className="truncate text-base font-semibold tracking-tight text-foreground">
+          <h1 id={titleId} className="truncate font-sans text-2xl font-semibold leading-tight tracking-tight text-foreground">
             {title}
           </h1>
           {description === undefined ? null : (
-            <p id={descriptionId} className="text-pretty text-sm text-muted-foreground">
+            <p id={descriptionId} className="max-w-[65ch] text-pretty text-sm leading-normal text-muted-foreground">
               {description}
             </p>
           )}

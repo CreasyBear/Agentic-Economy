@@ -10,6 +10,7 @@ import {
   sourceWriteRequestFromAdmission,
 } from '../src/modules/security/source-write-admission'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import { issuedAgentGrantRef } from '../src/modules/agent-access/issued-agent-binding'
 import { api, internal } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import schema from './schema'
@@ -874,10 +875,9 @@ describe('Agent Access consequence proof reservation', () => {
     const backend = convexTest(schema, modules)
     registerRateLimiter(backend)
     const owner = await materializeReservationOwner(backend, 'operation-narrowing')
-    const operationRefs = [
-      `operation:v1:${'a'.repeat(64)}`,
-      `operation:v1:${'b'.repeat(64)}`,
-    ]
+    const firstOperationRef = `operation:v1:${'a'.repeat(64)}`
+    const secondOperationRef = `operation:v1:${'b'.repeat(64)}`
+    const operationRefs = [firstOperationRef, secondOperationRef]
     await insertCurrentOperations(backend, operationRefs)
     const oauthGrant = await insertReservableGrant(backend, 'device:reserve-operation-narrowing')
     const command = {
@@ -910,7 +910,7 @@ describe('Agent Access consequence proof reservation', () => {
       ...(await sourceArgs(command, 'nonce:reserve:operation-narrowing:replay')),
     })).resolves.toEqual({ ...first, kind: 'replayed' })
 
-    const changedSelection = { ...command, approvedOperationRefs: [operationRefs[0]!] }
+    const changedSelection = { ...command, approvedOperationRefs: [firstOperationRef] }
     await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
       ...changedSelection,
       ...(await sourceArgs(changedSelection, 'nonce:reserve:operation-narrowing:changed')),
@@ -922,10 +922,9 @@ describe('Agent Access consequence proof reservation', () => {
     const backend = convexTest(schema, modules)
     registerRateLimiter(backend)
     const owner = await materializeReservationOwner(backend, 'operation-subset')
-    const requestedRefs = [
-      `operation:v1:${'c'.repeat(64)}`,
-      `operation:v1:${'d'.repeat(64)}`,
-    ]
+    const firstRequestedRef = `operation:v1:${'c'.repeat(64)}`
+    const secondRequestedRef = `operation:v1:${'d'.repeat(64)}`
+    const requestedRefs = [firstRequestedRef, secondRequestedRef]
     const foreignRef = `operation:v1:${'e'.repeat(64)}`
     await insertCurrentOperations(backend, [...requestedRefs, foreignRef])
     const subsetGrant = await insertReservableGrant(backend, 'device:reserve-operation-subset')
@@ -933,7 +932,7 @@ describe('Agent Access consequence proof reservation', () => {
     const subset = {
       ...reservationCommand({ grantRef: subsetGrant.grantRef, reverificationId: 'rev_operation_subset' }),
       approvedOperationAccess: 'selected_operations' as const,
-      approvedOperationRefs: [requestedRefs[0]!],
+      approvedOperationRefs: [firstRequestedRef],
     }
     await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
       ...subset,
@@ -945,7 +944,7 @@ describe('Agent Access consequence proof reservation', () => {
     const foreign = {
       ...reservationCommand({ grantRef: foreignGrant.grantRef, reverificationId: 'rev_operation_foreign' }),
       approvedOperationAccess: 'selected_operations' as const,
-      approvedOperationRefs: [requestedRefs[0]!, foreignRef],
+      approvedOperationRefs: [firstRequestedRef, foreignRef],
     }
     await expect(owner.backend.mutation(api.agentAccessOAuth.reserveAgentAccessConsent, {
       ...foreign,
@@ -1498,6 +1497,438 @@ describe('Agent Access OAuth grant cleanup', () => {
       .resolves.toMatchObject({ deleted: 1, rescheduled: false })
   })
 })
+
+describe('durable OAuth refresh families', () => {
+  it('projects an owner connection receipt without credential material', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const fixture = await insertRefreshFamilyFixture(backend, 'owner-readback')
+    const create = {
+      grantRef: fixture.oauthGrantRef, keyId: fixture.keyId, clientId: fixture.clientId,
+      tokenHash: 'sha256:owner-readback-refresh', accessTokenHash: 'sha256:owner-readback-access',
+      createdAt: fixture.now, expiresAt: fixture.familyExpiresAt,
+      operationKey: 'oauth-refresh:create:owner-readback', correlationId: 'oauth-refresh:create:owner-readback',
+    }
+    await backend.mutation(api.agentAccessOAuth.createRefreshFamily, {
+      ...create, ...(await sourceArgs(create)),
+    })
+
+    const result = await fixture.ownerBackend.query(api.agentAccessOAuth.listOwnerConnectionReadbacks, {
+      principalRefs: [fixture.principalRef],
+      now: fixture.now + 1,
+    })
+
+    expect(result).toEqual([expect.objectContaining({
+      principalRef: fixture.principalRef,
+      agentDisplayName: 'Durable Codex connection',
+      connectorDisplayName: 'Codex',
+      state: 'active',
+      commercialScopes: ['customer_requests:inspect_only', 'market_operations:invoke'],
+      credentialGeneration: 1,
+    })])
+    expect(JSON.stringify(result)).not.toMatch(/clientId|credentialRef|providerSubject|tokenHash|offline_access/u)
+    const foreign = await materializeReservationOwner(backend, 'owner-readback-foreign')
+    await expect(foreign.backend.query(api.agentAccessOAuth.listOwnerConnectionReadbacks, {
+      principalRefs: [fixture.principalRef],
+      now: fixture.now + 1,
+    })).resolves.toEqual([])
+    await expect(fixture.ownerBackend.query(api.agentAccessOAuth.listOwnerConnectionHistory, {
+      principalRef: fixture.principalRef,
+      now: fixture.now + 1,
+      paginationOpts: { numItems: 10, cursor: null },
+    })).resolves.toMatchObject({ page: [expect.objectContaining({ connectorDisplayName: 'Codex' })], isDone: true })
+    await expect(foreign.backend.mutation(api.agentAccessOAuth.revokeOwnerConnection, {
+      connectionRef: result[0]!.connectionRef,
+      expectedRevision: result[0]!.revision,
+      correlationRef: 'foreign-revoke-correlation',
+    })).resolves.toEqual({
+      kind: 'conflict', code: 'connection_not_found', correlationRef: 'foreign-revoke-correlation',
+    })
+    await expect(fixture.ownerBackend.query(api.agentAccessOAuth.listOwnerConnectionReadbacks, {
+      principalRefs: Array.from({ length: 26 }, (_, index) => `prn_${String(index).padStart(32, '0')}`),
+      now: fixture.now + 1,
+    })).rejects.toThrow('principal_ref_limit_exceeded')
+  })
+
+  it('suggests only this owner\'s expired connection for the requesting OAuth client', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const fixture = await insertRefreshFamilyFixture(backend, 'owner-reconnect')
+    const create = {
+      grantRef: fixture.oauthGrantRef, keyId: fixture.keyId, clientId: fixture.clientId,
+      tokenHash: 'sha256:owner-reconnect-refresh', accessTokenHash: 'sha256:owner-reconnect-access',
+      createdAt: fixture.now, expiresAt: fixture.familyExpiresAt,
+      operationKey: 'oauth-refresh:create:owner-reconnect', correlationId: 'oauth-refresh:create:owner-reconnect',
+    }
+    await backend.mutation(api.agentAccessOAuth.createRefreshFamily, {
+      ...create, ...(await sourceArgs(create)),
+    })
+
+    await expect(fixture.ownerBackend.query(api.agentAccessOAuth.listOwnerReconnectCandidates, {
+      clientId: fixture.clientId,
+      principalRefs: [fixture.principalRef],
+      now: fixture.now + 1,
+    })).resolves.toEqual([])
+    await expect(fixture.ownerBackend.query(api.agentAccessOAuth.listOwnerReconnectCandidates, {
+      clientId: fixture.clientId,
+      principalRefs: [fixture.principalRef],
+      now: fixture.familyExpiresAt + 1,
+    })).resolves.toEqual([{ principalRef: fixture.principalRef, principalRevision: 1 }])
+    await expect(fixture.ownerBackend.query(api.agentAccessOAuth.listOwnerReconnectCandidates, {
+      clientId: 'another-client',
+      principalRefs: [fixture.principalRef],
+      now: fixture.familyExpiresAt + 1,
+    })).resolves.toEqual([])
+    const foreign = await materializeReservationOwner(backend, 'owner-reconnect-foreign')
+    await expect(foreign.backend.query(api.agentAccessOAuth.listOwnerReconnectCandidates, {
+      clientId: fixture.clientId,
+      principalRefs: [fixture.principalRef],
+      now: fixture.familyExpiresAt + 1,
+    })).resolves.toEqual([])
+  })
+
+  it('lets the owner revoke one stable connection by revision', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const fixture = await insertRefreshFamilyFixture(backend, 'owner-revoke')
+    const create = {
+      grantRef: fixture.oauthGrantRef, keyId: fixture.keyId, clientId: fixture.clientId,
+      tokenHash: 'sha256:owner-revoke-refresh', accessTokenHash: 'sha256:owner-revoke-access',
+      createdAt: fixture.now, expiresAt: fixture.familyExpiresAt,
+      operationKey: 'oauth-refresh:create:owner-revoke', correlationId: 'oauth-refresh:create:owner-revoke',
+    }
+    const created = await backend.mutation(api.agentAccessOAuth.createRefreshFamily, {
+      ...create, ...(await sourceArgs(create)),
+    })
+    if (created.kind === 'conflict') throw new Error(created.code)
+
+    await expect(fixture.ownerBackend.mutation(api.agentAccessOAuth.revokeOwnerConnection, {
+      connectionRef: created.family.familyRef,
+      expectedRevision: created.family.revision + 1,
+      correlationRef: 'owner-revoke-stale',
+    })).resolves.toEqual({
+      kind: 'conflict', code: 'connection_revision_conflict', correlationRef: 'owner-revoke-stale',
+    })
+
+    const revoked = await fixture.ownerBackend.mutation(api.agentAccessOAuth.revokeOwnerConnection, {
+      connectionRef: created.family.familyRef,
+      expectedRevision: created.family.revision,
+      correlationRef: 'owner-revoke-correlation',
+    })
+
+    expect(revoked).toMatchObject({
+      kind: 'completed',
+      connectionRef: created.family.familyRef,
+      principalRef: fixture.principalRef,
+      revision: created.family.revision + 1,
+    })
+    await expect(fixture.ownerBackend.mutation(api.agentAccessOAuth.revokeOwnerConnection, {
+      connectionRef: created.family.familyRef,
+      expectedRevision: created.family.revision,
+      correlationRef: 'owner-revoke-replay',
+    })).resolves.toMatchObject({ kind: 'replayed', connectionRef: created.family.familyRef })
+    await expect(fixture.ownerBackend.query(api.agentAccessOAuth.listOwnerConnectionReadbacks, {
+      principalRefs: [fixture.principalRef],
+      now: fixture.now + 2,
+    })).resolves.toEqual([expect.objectContaining({ state: 'revoked', revocationReason: 'owner_revoked' })])
+  })
+
+  it('creates a hash-only family and serializes rotation claims', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const fixture = await insertRefreshFamilyFixture(backend, 'claim')
+    const create = {
+      grantRef: fixture.oauthGrantRef, keyId: fixture.keyId, clientId: fixture.clientId,
+      tokenHash: 'sha256:refresh-token-one', accessTokenHash: 'sha256:access-token-one',
+      createdAt: fixture.now, expiresAt: fixture.familyExpiresAt,
+      operationKey: 'oauth-refresh:create:claim', correlationId: 'oauth-refresh:create:claim',
+    }
+    const created = await backend.mutation(api.agentAccessOAuth.createRefreshFamily, {
+      ...create, ...(await sourceArgs(create)),
+    })
+    expect(created).toMatchObject({ kind: 'recorded', family: {
+      providerSubject: fixture.providerSubject, principalRef: fixture.principalRef,
+      displayName: 'Durable Codex connection', currentProviderCredentialId: fixture.keyId,
+    } })
+    const persisted = await backend.run(async (ctx) => ({
+      families: await ctx.db.query('agentAccessOAuthRefreshFamilies').collect(),
+      tokens: await ctx.db.query('agentAccessOAuthRefreshTokens').collect(),
+    }))
+    expect(JSON.stringify(persisted)).not.toContain('raw-refresh-secret')
+    expect(persisted.tokens).toEqual([expect.objectContaining({
+      tokenHash: create.tokenHash, lifecycle: 'active', generation: 1,
+    })])
+
+    const claim = {
+      tokenHash: create.tokenHash, clientId: fixture.clientId, claimRef: 'refresh-claim-one',
+      successorTokenHash: 'sha256:refresh-token-two', now: fixture.now + 1,
+      claimExpiresAt: fixture.now + 30_001,
+      operationKey: 'oauth-refresh:claim:one', correlationId: 'oauth-refresh:claim:one',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
+      ...claim, ...(await sourceArgs(claim)),
+    })).resolves.toMatchObject({ kind: 'claimed', claimRef: claim.claimRef })
+    await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
+      ...claim, ...(await sourceArgs(claim, 'oauth-refresh:claim:one:replay')),
+    })).resolves.toMatchObject({ kind: 'replayed', claimRef: claim.claimRef })
+    const competing = {
+      ...claim, claimRef: 'refresh-claim-two',
+      operationKey: 'oauth-refresh:claim:two', correlationId: 'oauth-refresh:claim:two',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
+      ...competing, ...(await sourceArgs(competing)),
+    })).resolves.toEqual({ kind: 'busy' })
+  })
+
+  it('atomically promotes a refresh replacement and revokes it on late token reuse', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const fixture = await insertRefreshFamilyFixture(backend, 'rotate')
+    const create = {
+      grantRef: fixture.oauthGrantRef, keyId: fixture.keyId, clientId: fixture.clientId,
+      tokenHash: 'sha256:rotate-token-one', accessTokenHash: 'sha256:rotate-access-one',
+      createdAt: fixture.now, expiresAt: fixture.familyExpiresAt,
+      operationKey: 'oauth-refresh:create:rotate', correlationId: 'oauth-refresh:create:rotate',
+    }
+    const created = await backend.mutation(api.agentAccessOAuth.createRefreshFamily, {
+      ...create, ...(await sourceArgs(create)),
+    })
+    if (created.kind === 'conflict') throw new Error(created.code)
+    const claim = {
+      tokenHash: create.tokenHash, clientId: fixture.clientId, claimRef: 'refresh-rotate-claim',
+      successorTokenHash: 'sha256:rotate-token-two', now: fixture.now + 1,
+      claimExpiresAt: fixture.now + 30_001,
+      operationKey: 'oauth-refresh:claim:rotate', correlationId: 'oauth-refresh:claim:rotate',
+    }
+    await backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
+      ...claim, ...(await sourceArgs(claim)),
+    })
+    const issuanceKey = 'oauth-refresh-rotation-issuance'
+    const commit = {
+      familyRef: created.family.familyRef, expectedRevision: created.family.revision,
+      tokenHash: create.tokenHash, claimRef: claim.claimRef, successorTokenHash: claim.successorTokenHash,
+      issuanceKey, successorGrantRef: issuedAgentGrantRef(fixture.providerSubject, issuanceKey),
+      successorCredentialId: 'key_refresh_successor', successorAccessTokenHash: 'sha256:rotate-access-two',
+      createdAt: fixture.now + 2,
+      accessExpiresAt: fixture.now + 600_000, replayUntil: fixture.now + 30_002,
+      operationKey: 'oauth-refresh:commit:rotate', correlationId: 'oauth-refresh:commit:rotate',
+    }
+    const committed = await backend.mutation(api.agentAccessOAuth.commitRefreshFamilyRotation, {
+      ...commit, ...(await sourceArgs(commit)),
+    })
+    expect(committed).toMatchObject({
+      kind: 'completed',
+      family: { currentProviderCredentialId: commit.successorCredentialId, currentTokenHash: claim.successorTokenHash },
+      providerCleanupTarget: { providerCredentialId: fixture.keyId },
+    })
+    expect(await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_principalId', (query) => query.eq('principalId', fixture.principalRef)).unique()))
+      .toMatchObject({ credentialId: commit.successorCredentialId, grantGeneration: 2, lifecycle: 'active' })
+
+    const recovery = {
+      tokenHash: create.tokenHash, clientId: fixture.clientId, claimRef: 'delivery-recovery',
+      successorTokenHash: 'sha256:rotate-token-three', now: commit.createdAt + 1,
+      claimExpiresAt: commit.createdAt + 30_001,
+      operationKey: 'oauth-refresh:recovery', correlationId: 'oauth-refresh:recovery',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
+      ...recovery, ...(await sourceArgs(recovery)),
+    })).resolves.toMatchObject({
+      kind: 'recovered',
+      family: {
+        currentProviderCredentialId: commit.successorCredentialId,
+        currentTokenHash: recovery.successorTokenHash,
+      },
+    })
+
+    const reuse = {
+      tokenHash: create.tokenHash, clientId: fixture.clientId, claimRef: 'late-reuse',
+      successorTokenHash: 'sha256:rotate-token-four', now: commit.replayUntil + 1,
+      claimExpiresAt: commit.replayUntil + 30_001,
+      operationKey: 'oauth-refresh:reuse:late', correlationId: 'oauth-refresh:reuse:late',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
+      ...reuse, ...(await sourceArgs(reuse)),
+    })).resolves.toEqual({ kind: 'revoked' })
+    const revoked = await backend.run(async (ctx) => ({
+      family: await ctx.db.query('agentAccessOAuthRefreshFamilies')
+        .withIndex('by_familyRef', (query) => query.eq('familyRef', created.family.familyRef)).unique(),
+      principal: await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query.eq('principalId', fixture.principalRef)).unique(),
+      providerCleanup: await ctx.db.query('agentAccessProviderRevocations')
+        .withIndex('by_principalRef_and_lifecycle', (query) => query.eq('principalRef', fixture.principalRef).eq('lifecycle', 'pending')).collect(),
+    }))
+    expect(revoked.family).toMatchObject({ lifecycle: 'revoked', revocationReason: 'refresh_token_reuse' })
+    expect(revoked.principal).toMatchObject({ lifecycle: 'revoked' })
+    expect(revoked.providerCleanup).toEqual(expect.arrayContaining([
+      expect.objectContaining({ providerCredentialId: commit.successorCredentialId }),
+    ]))
+  })
+
+  it('revokes the active family from a historical access token after Account membership loss', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const fixture = await insertRefreshFamilyFixture(backend, 'historical-access-revoke')
+    const create = {
+      grantRef: fixture.oauthGrantRef, keyId: fixture.keyId, clientId: fixture.clientId,
+      tokenHash: 'sha256:historical-refresh-one', accessTokenHash: 'sha256:historical-access-one',
+      createdAt: fixture.now, expiresAt: fixture.familyExpiresAt,
+      operationKey: 'oauth-refresh:create:historical', correlationId: 'oauth-refresh:create:historical',
+    }
+    const created = await backend.mutation(api.agentAccessOAuth.createRefreshFamily, {
+      ...create, ...(await sourceArgs(create)),
+    })
+    if (created.kind === 'conflict') throw new Error(created.code)
+    const claim = {
+      tokenHash: create.tokenHash, clientId: fixture.clientId, claimRef: 'refresh-historical-claim',
+      successorTokenHash: 'sha256:historical-refresh-two', now: fixture.now + 1,
+      claimExpiresAt: fixture.now + 30_001,
+      operationKey: 'oauth-refresh:claim:historical', correlationId: 'oauth-refresh:claim:historical',
+    }
+    await backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
+      ...claim, ...(await sourceArgs(claim)),
+    })
+    const issuanceKey = 'oauth-refresh-historical-issuance'
+    const commit = {
+      familyRef: created.family.familyRef, expectedRevision: created.family.revision,
+      tokenHash: create.tokenHash, claimRef: claim.claimRef, successorTokenHash: claim.successorTokenHash,
+      issuanceKey, successorGrantRef: issuedAgentGrantRef(fixture.providerSubject, issuanceKey),
+      successorCredentialId: 'key_refresh_historical_successor',
+      successorAccessTokenHash: 'sha256:historical-access-two',
+      createdAt: fixture.now + 2, accessExpiresAt: fixture.now + 600_000,
+      replayUntil: fixture.now + 30_002,
+      operationKey: 'oauth-refresh:commit:historical', correlationId: 'oauth-refresh:commit:historical',
+    }
+    await backend.mutation(api.agentAccessOAuth.commitRefreshFamilyRotation, {
+      ...commit, ...(await sourceArgs(commit)),
+    })
+    await backend.run(async (ctx) => {
+      const membership = await ctx.db.query('memberships')
+        .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
+          .eq('accountRef', created.family.ownerId)
+          .eq('memberPrincipalRef', fixture.principalRef)
+          .eq('lifecycle', 'active'))
+        .unique()
+      if (membership === null) throw new Error('refresh_membership_fixture_missing')
+      await ctx.db.patch(membership._id, { lifecycle: 'ended', revision: membership.revision + 1 })
+    })
+    const revoke = {
+      tokenHash: create.accessTokenHash, clientId: fixture.clientId, now: fixture.now + 3,
+      reason: 'oauth_revocation', operationKey: 'oauth-refresh:revoke:historical',
+      correlationId: 'oauth-refresh:revoke:historical',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.revokeRefreshFamilyByAccessToken, {
+      ...revoke, ...(await sourceArgs(revoke)),
+    })).resolves.toEqual({ kind: 'completed' })
+    await expect(backend.run(async (ctx) => ({
+      family: await ctx.db.query('agentAccessOAuthRefreshFamilies')
+        .withIndex('by_familyRef', (query) => query.eq('familyRef', created.family.familyRef)).unique(),
+      principal: await ctx.db.query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) => query.eq('principalId', fixture.principalRef)).unique(),
+    }))).resolves.toMatchObject({
+      family: { lifecycle: 'revoked' },
+      principal: { lifecycle: 'revoked' },
+    })
+  })
+})
+
+async function insertRefreshFamilyFixture(
+  backend: TestConvex<typeof schema>,
+  seed: string,
+) {
+  const owner = await materializeReservationOwner(backend, `refresh-${seed}`)
+  const now = Date.now()
+  const suffix = canonicalDigest({ format: 'refresh-family-fixture:v1', seed })
+    .slice('sha256:'.length, 'sha256:'.length + 32)
+  const principalRef = `prn_${suffix}`
+  const keyId = `key_${suffix}`
+  const bindingRef = `eib_${suffix}`
+  const credentialRef = `crd_${suffix}`
+  const accessGrantRef = `grt_${suffix}`
+  const oauthGrantRef = `authorization:${suffix}`
+  const clientId = `client_${suffix}`
+  const providerSubject = `user_refresh_${seed}`
+  const accessExpiresAt = now + 7 * 86_400_000
+  const familyExpiresAt = now + 30 * 86_400_000
+  const policy = {
+    format: 'ae.agent-access-policy:v2' as const,
+    operationAccess: 'all_admitted' as const,
+    operationRefs: [],
+    environment: 'sandbox' as const,
+    budget: {
+      budgetPolicyRef: `budget:${suffix}`, generation: 1, currency: 'USD', exponent: 2,
+      maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+      maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
+      maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
+      maximumConcurrentInvocations: 2,
+    },
+    rate: {
+      ratePolicyRef: `rate:${suffix}`, generation: 1,
+      maximumCallsPerMinute: 10, maximumCallsPerHour: 100,
+    },
+  }
+  const policyDigest = canonicalDigest(policy)
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('agentAccessOAuthClients', {
+      clientId, clientName: 'Codex', redirectUris: ['http://localhost/callback'],
+      grantTypes: ['authorization_code', 'refresh_token'], tokenEndpointAuthMethod: 'none', createdAt: now,
+    })
+    await ctx.db.insert('principals', {
+      principalRef, kind: 'agent', displayName: 'Durable Codex connection', lifecycle: 'active',
+      revision: 1, createdAt: now, updatedAt: now,
+    })
+    await ctx.db.insert('memberships', {
+      membershipRef: `mem_${suffix}`, accountRef: owner.accountRef, memberPrincipalRef: principalRef,
+      lifecycle: 'active', revision: 1, createdAt: now,
+      createdBy: {
+        actorPrincipalRef: owner.principalRef, activeAccountRef: owner.accountRef,
+        correlationRef: `refresh:${seed}`, idempotencyRef: `refresh:${seed}`,
+      },
+    })
+    await ctx.db.insert('externalIdentityBindings', {
+      bindingRef, principalRef, providerNamespace: 'clerk/api-key', providerIdentifier: keyId,
+      providerState: { kind: 'known', value: 'active' }, lifecycle: 'active', credentialGeneration: 1,
+      bindIdempotencyRef: `refresh:${seed}`, revision: 1, createdAt: now, updatedAt: now,
+    })
+    await ctx.db.insert('credentials', {
+      credentialRef, bindingRef, principalRef, type: 'api_key', lifecycle: 'active', generation: 1,
+      issueIdempotencyRef: `refresh:${seed}`, revision: 1, issuedAt: now,
+      expiresAt: accessExpiresAt, updatedAt: now,
+    })
+    await ctx.db.insert('agentAccessPrincipals', {
+      principalId: principalRef, ownerId: owner.accountRef, credentialId: keyId,
+      applicationRef: 'agentic-economy', environment: 'sandbox',
+      scopes: ['customer_requests:inspect_only', 'market_operations:invoke'], authorityMode: 'inspect_only',
+      grantGeneration: 1, policyDigest, lifecycle: 'active', expiresAt: accessExpiresAt,
+      recordedAt: now, lastSeenAt: now,
+    })
+    await ctx.db.insert('agentAccessGrants', {
+      format: 'ae.agent-access-grant:v2', grantRef: accessGrantRef, principalId: principalRef,
+      ownerId: owner.accountRef, applicationRef: 'agentic-economy', credentialId: keyId,
+      environment: 'sandbox', operationAccess: 'all_admitted', operationRefs: [],
+      authorityMode: 'inspect_only', policy,
+      budgetPolicyRef: policy.budget.budgetPolicyRef, ratePolicyRef: policy.rate.ratePolicyRef,
+      lifecycle: 'active', generation: 1, policyDigest,
+      createdAt: now, updatedAt: now, expiresAt: accessExpiresAt,
+    })
+    const requestedAccess = {
+      environment: 'sandbox' as const, operationAccess: 'all_admitted' as const,
+      operationRefs: [], expiresInSeconds: 7 * 86_400,
+    }
+    await ctx.db.insert('agentAccessOAuthGrants', {
+      grantRef: oauthGrantRef, revision: 1, flow: 'authorization_code', clientId,
+      requestedScopes: ['customer_requests:inspect_only', 'market_operations:invoke'], offlineAccess: true,
+      requestedAccess, approvedAccess: requestedAccess, status: 'consumed', ownerId: providerSubject,
+      keyId, createdAt: now, expiresAt: now + 600_000, consumedAt: now,
+      displayName: 'Durable Codex connection',
+    })
+  })
+  return {
+    now, principalRef, keyId, credentialRef, oauthGrantRef, clientId,
+    providerSubject, accessExpiresAt, familyExpiresAt,
+    ownerBackend: owner.backend,
+  }
+}
 
 async function materializeReservationOwner(
   backend: TestConvex<typeof schema>,

@@ -18,7 +18,13 @@ import type {
 const MAX_CLERK_WEBHOOK_BODY_BYTES = 256 * 1024
 const RETRY_AFTER_SECONDS = 5
 
-type WebhookVerifier = (request: Request) => Promise<unknown>
+type VerifiedWebhookEvent = Readonly<{
+  type: string
+  object: string
+  data: unknown
+  event_attributes?: unknown
+}>
+type WebhookVerifier = (request: Request) => Promise<VerifiedWebhookEvent>
 type ObservationApplier = (command: ClerkSecurityObservation) => Promise<ClerkSecurityObservationResult>
 
 export async function handleClerkSecurityWebhookRequest(

@@ -122,6 +122,13 @@ export const ownerSupplyFunnelResultValue = v.union(
           v.literal('paused'),
           v.literal('retired'),
         ),
+        managementStatus: v.union(
+          v.literal('Validating'),
+          v.literal('Live'),
+          v.literal('Action needed'),
+          v.literal('Degraded'),
+          v.literal('Removed'),
+        ),
         sourceHash: v.optional(v.string()),
         sourceMaterial: v.optional(preparedPublicationMaterialValue),
         source: v.optional(

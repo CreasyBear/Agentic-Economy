@@ -1,20 +1,118 @@
 /// <reference types="vite/client" />
-import { anyApi } from 'convex/server'
-import { describe, expect, it } from 'vitest'
+import { anyApi, makeFunctionReference } from 'convex/server'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { internal } from '../../../convex/_generated/api'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
+import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
+import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
+import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
+import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
+import type { ConvexFixtureBackend } from '../../helpers/convex-fixtures'
 
 const reserve = anyApi.moneyAccountFunding?.reserve
 const bind = anyApi.moneyAccountFunding?.bind
 const signDailyClose = anyApi.moneyDocuments?.signOwnerDailyClose
 const listCases = anyApi.moneyReconciliationCases?.listOwnerCases
+const reserveAgentHandoff = anyApi.moneyAccountFunding?.reserveAgentHandoff
+const bindAgentHandoff = anyApi.moneyAccountFunding?.bindAgentHandoff
+const readAgentHandoff = anyApi.moneyAccountFunding?.readAgentHandoff
+const readPayerSafeHandoff = anyApi.moneyAccountFunding?.readPayerSafeHandoff
 if (reserve === undefined || bind === undefined || signDailyClose === undefined || listCases === undefined) {
   throw new Error('Account funding functions missing')
 }
 
+const SERVICE_KEY = 'funding-handoff-test-key-material-32-bytes'
+const registerBinding = makeFunctionReference<'mutation', Record<string, unknown>, Record<string, unknown>>(
+  'agentAccessPrincipals:registerIssuedAgentBindingForServer',
+)
+
+async function issueBuyerAgent(
+  backend: ConvexFixtureBackend,
+  owner: ReturnType<ConvexFixtureBackend['withIdentity']>,
+  subject: string,
+): Promise<AgentAccessPrincipal> {
+  const now = Date.now()
+  const issuanceKey = `funding-${subject}`
+  const input = {
+    issuanceKey, grantRef: issuedAgentGrantRef(subject, issuanceKey), credentialId: `credential:${subject}`,
+    displayName: `${subject} buyer`, applicationRef: 'agentic-economy', environment: 'sandbox' as const,
+    scopes: ['market_operations:invoke'], authorityMode: 'inspect_only' as const,
+    operationAccess: 'all_admitted' as const, operationRefs: [] as string[],
+    policy: defaultSandboxAgentAccessPolicy({ currency: 'AUD', exponent: 6 }), createdAt: now, expiresAt: now + 600_000,
+  }
+  const serviceAuth = await createCustomerRequestServiceAssertion({
+    key: SERVICE_KEY, operation: 'agentAccessPrincipals.registerIssuedAgentBindingForServer',
+    command: toStableHashValue({ ...input, scopes: [...input.scopes] }),
+    principal: { principalId: 'ae:server-function', ownerId: 'ae:server-function', credentialId: 'ae:server-function', scopes: ['market_operations:invoke'] },
+    issuedAt: now,
+  })
+  const result = await owner.mutation(registerBinding, { ...input, serviceAuth })
+  if (result.kind !== 'recorded' && result.kind !== 'replayed') throw new Error(`buyer_binding_failed:${JSON.stringify(result)}`)
+  const stored = await backend.run(async (ctx) => ctx.db.query('agentAccessPrincipals')
+    .withIndex('by_credentialId', (index) => index.eq('credentialId', input.credentialId)).unique())
+  if (stored === null) throw new Error('buyer_principal_missing')
+  return {
+    principalId: stored.principalId, ownerId: stored.ownerId, credentialId: stored.credentialId,
+    applicationRef: stored.applicationRef, environment: stored.environment, scopes: [...stored.scopes], authorityMode: stored.authorityMode,
+  }
+}
+
 describe('Account AUD funding through Formance', () => {
+  const previousServiceKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+  beforeEach(() => { process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = SERVICE_KEY })
+  afterEach(() => {
+    if (previousServiceKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+    else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServiceKey
+  })
+
+  it('binds an agent handoff to one principal while exposing only a payer-safe receipt', async () => {
+    if (reserveAgentHandoff === undefined || bindAgentHandoff === undefined || readAgentHandoff === undefined || readPayerSafeHandoff === undefined) {
+      throw new Error('Agent funding handoff functions missing')
+    }
+    const backend = convexTestWithMarketComponents()
+    const firstOwner = await publishedBusinessOwner(backend, 'funding-agent-first')
+    const secondOwner = await publishedBusinessOwner(backend, 'funding-agent-second')
+    const first = await issueBuyerAgent(backend, firstOwner.owner, 'user_funding-agent-first')
+    const second = await issueBuyerAgent(backend, secondOwner.owner, 'user_funding-agent-second')
+    const checkoutExpiresAt = (Math.floor(Date.now() / 1000) + 3600) * 1000
+    const command = {
+      principalAmountUnits: '5000000', environment: 'sandbox' as const, idempotencyKey: 'caller-key-one',
+      successReturnRef: 'https://ae.test/fund/{CHECKOUT_SESSION_ID}', cancelReturnRef: 'https://ae.test/fund/cancelled',
+      checkoutExpiresAt, agentPrincipal: first, operationKey: 'moneyAccountFunding:reserveAgentHandoff', correlationId: 'funding-agent-one',
+    }
+    const reserved = await backend.mutation(reserveAgentHandoff, await withSourceWrite('billing', command))
+    expect(reserved).toMatchObject({ kind: 'accepted', command: {
+      initiationKind: 'agent_handoff', checkoutMode: 'hosted_page', principalUnits: '5000000',
+      accountRef: first.ownerId, actorPrincipalRef: first.principalId,
+    } })
+    if (reserved.kind !== 'accepted' || reserved.command.metadataDigest === undefined) throw new Error('handoff_not_reserved')
+    expect(reserved.command.idempotencyKey).not.toContain('caller-key-one')
+    await expect(backend.mutation(reserveAgentHandoff, await withSourceWrite('billing', command)))
+      .resolves.toMatchObject({ kind: 'accepted', command: { commandRef: reserved.command.commandRef } })
+    const evidence = {
+      externalRef: 'cs_agent_handoff_one', amount: { currency: 'AUD' as const, exponent: 6 as const, units: reserved.command.totalUnits },
+      status: 'pending' as const, evidenceRef: 'stripe:checkout:cs_agent_handoff_one', requestDigest: `sha256:${'2'.repeat(64)}`,
+      metadataDigest: reserved.command.metadataDigest, checkoutSessionDigest: `sha256:${'3'.repeat(64)}`,
+      evidenceDigest: `sha256:${'4'.repeat(64)}`, checkoutStatus: 'open' as const, paymentStatus: 'unpaid' as const,
+      checkoutMode: 'hosted_page' as const, checkoutExpiresAt,
+    }
+    await expect(backend.mutation(bindAgentHandoff, await withSourceWrite('billing', {
+      commandRef: reserved.command.commandRef, evidence, agentPrincipal: first,
+      operationKey: 'moneyAccountFunding:bindAgentHandoff', correlationId: 'funding-agent-bind',
+    }))).resolves.toMatchObject({ kind: 'accepted', command: { externalRef: evidence.externalRef } })
+    await expect(backend.mutation(readAgentHandoff, await withSourceWrite('billing', {
+      externalRef: evidence.externalRef, agentPrincipal: second,
+      operationKey: 'moneyAccountFunding:readAgentHandoff', correlationId: 'funding-agent-cross-read',
+    }))).resolves.toEqual({ kind: 'refused', code: 'funding_pending', retryable: false })
+    const publicRead = await backend.query(readPayerSafeHandoff, { externalRef: evidence.externalRef })
+    expect(publicRead).toEqual({ kind: 'found', funding: {
+      state: 'awaiting_payment', agentName: 'user_funding-agent-first buyer',
+      creditAmount: { currency: 'AUD', exponent: 6, units: '5000000' },
+    } })
+    expect(JSON.stringify(publicRead)).not.toMatch(/account|owner|checkoutUrl|serviceFee|tax|credential|commandRef/u)
+  })
   it('prepares one exact booking and finalizes only the returned Formance reference', async () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await publishedBusinessOwner(backend, 'formance-account-funding')
@@ -119,6 +217,48 @@ describe('Account AUD funding through Formance', () => {
         readback, operationKey: 'moneyAccountFunding:applyVerifiedEvent', correlationId: 'evt_conflict',
       }))
     expect(result).toEqual({ kind: 'refused', code: 'payment_binding_invalid', retryable: false })
+  })
+
+  it('records delayed payment as processing without failing or crediting the command', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'formance-funding-processing')
+    const reserved = await fixture.owner.mutation(reserve, await withSourceWrite('billing', {
+      amountUnits: '5000000', environment: 'sandbox', commandRef: 'account-funding:processing',
+      idempotencyKey: 'account-funding:processing', inputDigest: `sha256:${'1'.repeat(64)}`,
+      successReturnRef: 'owner/credit', operationKey: 'moneyAccountFunding:reserve',
+      correlationId: 'account-funding:processing',
+    }))
+    if (reserved.kind !== 'accepted' || reserved.command.metadataDigest === undefined) {
+      throw new Error('funding fixture not reserved')
+    }
+    const readback = {
+      externalRef: 'cs_processing',
+      amount: { currency: 'AUD' as const, units: reserved.command.totalUnits, exponent: 6 as const },
+      status: 'pending' as const, evidenceRef: 'stripe:checkout:cs_processing',
+      requestDigest: `sha256:${'2'.repeat(64)}`, metadataDigest: reserved.command.metadataDigest,
+      checkoutSessionDigest: `sha256:${'3'.repeat(64)}`, evidenceDigest: `sha256:${'4'.repeat(64)}`,
+      checkoutStatus: 'complete' as const, paymentStatus: 'unpaid' as const,
+    }
+    const event = {
+      kind: 'checkout' as const, stripeEventId: 'evt_processing',
+      eventType: 'checkout.session.completed' as const, externalRef: readback.externalRef,
+      sessionId: readback.externalRef, commandRef: reserved.command.commandRef,
+      checkoutSessionDigest: readback.checkoutSessionDigest, status: 'processing' as const,
+      amount: readback.amount, metadataDigest: readback.metadataDigest,
+      payloadDigest: `sha256:${'5'.repeat(64)}`, observedAt: 1_800_000_000_002,
+    }
+    const result = await fixture.owner.mutation(internal.moneyAccountFunding.prepareVerifiedEvent,
+      await withSourceWrite('billing', {
+        event, readback, operationKey: 'moneyAccountFunding:applyVerifiedEvent', correlationId: event.stripeEventId,
+      }))
+    expect(result).toEqual({ kind: 'accepted', status: 'ignored' })
+    const rows = await backend.run(async (ctx) => ({
+      command: await ctx.db.query('moneyFundingCommands')
+        .withIndex('by_commandRef', (query) => query.eq('commandRef', reserved.command.commandRef)).unique(),
+      stripeEvents: await ctx.db.query('moneyStripeEvents').collect(),
+    }))
+    expect(rows.command).toMatchObject({ state: 'pending', providerStatus: 'pending' })
+    expect(rows.stripeEvents).toEqual([expect.objectContaining({ status: 'ignored' })])
   })
 
   it('binds a daily close signature to the authenticated owner and frozen document digest', async () => {

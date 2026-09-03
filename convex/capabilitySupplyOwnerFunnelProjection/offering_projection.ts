@@ -6,6 +6,7 @@ import {
 } from '@/modules/capability-supply/owner-supply-validators'
 import type { Doc } from '../_generated/dataModel'
 import type { OwnerSupplyFunnelResult } from './contracts'
+import { projectProviderManagementStatus } from '@/modules/capability-supply/operation-health'
 
 type OwnerSupplyAvailable = Extract<
   OwnerSupplyFunnelResult,
@@ -247,6 +248,7 @@ export function ownerSupplyOfferingResult(input: Readonly<{
   stepStates: OwnerSupplyStepStates
   actionableReason: OwnerSupplyOffering['actionableReason']
   sourceMaterial: NonNullable<OwnerSupplyOffering['sourceMaterial']> | undefined
+  now: number
 }>): OwnerSupplyOffering {
   const {
     offering,
@@ -264,6 +266,7 @@ export function ownerSupplyOfferingResult(input: Readonly<{
     stepStates,
     actionableReason,
     sourceMaterial,
+    now,
   } = input
   const sourceHash = revision?.sourceHash
   const source = publicationDetails?.source
@@ -277,6 +280,25 @@ export function ownerSupplyOfferingResult(input: Readonly<{
       ['draft', 'published', 'paused', 'retired'] as const,
       'offering status',
     ),
+    managementStatus: projectProviderManagementStatus({
+      ...(publication === undefined ? {} : {
+        disposition: publication.disposition,
+        credentialState: publication.credentialState,
+        healthState: publication.healthState,
+        ...(publication.readinessObservedAt === undefined
+          ? {}
+          : { readinessObservedAt: publication.readinessObservedAt }),
+        ...(publication.readinessValidUntil === undefined
+          ? {}
+          : { readinessValidUntil: publication.readinessValidUntil }),
+        ...(publication.readinessLastHealthyAt === undefined
+          ? {}
+          : { readinessLastHealthyAt: publication.readinessLastHealthyAt }),
+      }),
+      ownerActionRequired: actionableReason === 'credential_rejected'
+        || actionableReason === 'credential_unavailable'
+        || actionableReason === 'authority_stale',
+    }, now),
     ...(sourceHash === undefined ? {} : { sourceHash }),
     ...(sourceMaterial === undefined ? {} : { sourceMaterial }),
     ...(source === undefined ? {} : { source }),

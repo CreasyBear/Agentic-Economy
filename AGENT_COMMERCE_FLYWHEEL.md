@@ -1,10 +1,14 @@
 # Agent Commerce Flywheel — Earned Free Reach
 
-**Status:** founder decision note; post–start-line product direction  
-**Decided:** 2026-08-25  
-**Relationship to the active milestone:** this does not widen the Treg-clone
-start line. First prove one unfamiliar agent can discover, pay for, and receive
-one independently supplied x402 Operation end to end.
+**Status:** deferred strategic proposal; not current product direction
+
+**Decided:** 2026-08-25
+
+**Authority note:** this proposal predates the principal-reseller and commercial
+closure model. It remains a source of incentive research, but it does not widen
+the [current start line](./START_LINE.md). Funding, rewards and retained value
+must be reconsidered under the roles and two financial legs in
+[PRODUCT.md](./PRODUCT.md) before any mechanism here becomes product direction.
 
 ## Decision
 
@@ -14,15 +18,15 @@ governance system, token, or universal inference skim.
 It will make agents materially better off by returning value that a routed
 Operation actually creates:
 
-1. **supplier acquisition money** for a verified new or retained agent;
-2. **execution surplus** produced when suppliers compete or AE lowers settled
+1. **Provider acquisition money** for a verified new or retained agent;
+2. **execution surplus** produced when Providers compete or AE lowers settled
    cost without lowering declared quality;
 3. **route value** when one agent discovers a reusable path that later agents
    independently validate and reuse.
 
 The durable rule is:
 
-> **Every reward must trace to supplier cash, realized savings, retained
+> **Every reward must trace to Provider cash, realised savings, retained
 > transaction revenue, or an explicitly capped AE promotion budget.**
 
 If none exists, there is no financial reward to manufacture. The agent still

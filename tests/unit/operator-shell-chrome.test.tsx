@@ -16,7 +16,6 @@ import '../setup/jsdom-platform'
 
 const shellMocks = vi.hoisted(() => ({
   readAgentKeys: vi.fn(async (): Promise<unknown[]> => []),
-  readBuyerCredentialPresence: undefined as undefined | (() => Promise<boolean>),
   localPreview: false,
   useUser: vi.fn(() => ({
     isLoaded: true,
@@ -48,16 +47,7 @@ vi.mock('@/lib/client/local-e2e-auth', () => ({
   isLocalE2EAuthBypassEnabled: () => shellMocks.localPreview,
 }))
 vi.mock('@/components/ae/command-panel', () => ({
-  CommandPanelProvider: ({
-    children,
-    readBuyerCredentialPresence,
-  }: {
-    children: ReactElement
-    readBuyerCredentialPresence: () => Promise<boolean>
-  }) => {
-    shellMocks.readBuyerCredentialPresence = readBuyerCredentialPresence
-    return children
-  },
+  CommandPanelProvider: ({ children }: { children: ReactElement }) => children,
   AeCommandPanel: () => null,
 }))
 
@@ -77,7 +67,6 @@ afterEach(() => {
   cleanup()
   shellMocks.readAgentKeys.mockReset()
   shellMocks.readAgentKeys.mockResolvedValue([])
-  shellMocks.readBuyerCredentialPresence = undefined
   shellMocks.localPreview = false
   shellMocks.useUser.mockClear()
   shellMocks.userButton.mockClear()
@@ -293,33 +282,6 @@ describe('operator shell nested chrome', () => {
     expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull()
   })
 
-  it('only reports active invoke-scoped buyer access to the shared command panel', async () => {
-    renderAt(
-      <AeOperatorShell
-        operatorRole="owner"
-        title="Workspace"
-        description="Loading your latest marketplace activity."
-        currentPath="/owner/settings"
-      >
-        <div>Workspace body</div>
-      </AeOperatorShell>,
-      '/owner/settings',
-    )
-    const readPresence = shellMocks.readBuyerCredentialPresence
-    if (readPresence === undefined) throw new Error('buyer_presence_reader_missing')
-
-    shellMocks.readAgentKeys.mockResolvedValueOnce([
-      { revoked: true, expired: false, scopes: ['market_operations:invoke'] },
-      { revoked: false, expired: true, scopes: ['market_operations:invoke'] },
-      { revoked: false, expired: false, scopes: ['market_operations:read'] },
-    ])
-    await expect(readPresence()).resolves.toBe(false)
-
-    shellMocks.readAgentKeys.mockResolvedValueOnce([
-      { revoked: false, expired: false, scopes: ['market_operations:invoke'] },
-    ])
-    await expect(readPresence()).resolves.toBe(true)
-  })
 })
 
 describe('owner mobile navigation', () => {

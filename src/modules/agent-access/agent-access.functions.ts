@@ -51,6 +51,7 @@ import {
 import { defaultSandboxAgentAccessPolicy } from './sandbox-policy'
 import { exactAmountSchema } from '@/modules/money/public'
 import { issuedAgentGrantRef } from './issued-agent-binding'
+import type { OwnerConnectionLifecycleResult } from './agent-connection'
 
 const issueInputSchema = z.strictObject({
   name: z.string().trim().min(1).max(80),
@@ -239,6 +240,13 @@ const recordProviderRevocationMutation = sourceMutation<LifecycleMutationArgs<Pr
 )
 const listOwnerGrantReadbacksQuery = sourceQuery<{ requireAuthority: true }, readonly unknown[]>(
   'agentAccessPolicy:listOwnerGrantReadbacks',
+)
+const revokeOwnerConnectionMutation = sourceMutation<Readonly<{
+  connectionRef: string
+  expectedRevision: number
+  correlationRef: string
+}>, Exclude<OwnerConnectionLifecycleResult, { kind: 'refused'; code: 'source_unavailable' }>>(
+  'agentAccessOAuth:revokeOwnerConnection',
 )
 
 async function requireCanonicalOwnerAuthorityServer(): Promise<void> {
@@ -537,6 +545,25 @@ export const disconnectAgentServer = createServerFn({ method: 'POST' })
         disconnectAgentMutation,
         command,
       ))
+    } catch {
+      return { kind: 'refused', code: 'source_unavailable', correlationRef }
+    }
+  })
+
+export const revokeOwnerConnectionServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({
+    connectionRef: z.string().trim().min(1).max(300),
+    expectedRevision: z.number().int().safe().positive(),
+  }).parse(data))
+  .handler(async ({ data }): Promise<OwnerConnectionLifecycleResult> => {
+    const correlationRef = lifecycleCorrelationRef()
+    try {
+      await requireCanonicalOwnerAuthorityServer()
+      const result = await callSourceMutation(revokeOwnerConnectionMutation, { ...data, correlationRef })
+      if ((result.kind === 'completed' || result.kind === 'replayed') && result.providerCleanupPending) {
+        return { ...result, providerCleanupPending: true }
+      }
+      return result
     } catch {
       return { kind: 'refused', code: 'source_unavailable', correlationRef }
     }

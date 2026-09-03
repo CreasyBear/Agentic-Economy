@@ -109,9 +109,8 @@ describe("market comparison view", () => {
     const onBack = vi.fn();
     renderComparison({
       kind: "unavailable",
-      schemaVersion: "registry-operations:v1",
+      schemaVersion: "registry-operations:v2",
       reason: "operation_unavailable",
-      navigation: [],
     }, { onRetry, onEditSelection, onBack });
 
     expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Comparison unavailable" }));

@@ -64,6 +64,7 @@ export type PublicationCommandRow = Readonly<{
   readinessOutcome?: PublicationReadinessOutcome
   readinessObservedAt?: number
   readinessValidUntil?: number
+  readinessLastHealthyAt?: number
   readinessEvidenceRefs?: readonly string[]
   registrationEvidenceRefs?: readonly string[]
 }>

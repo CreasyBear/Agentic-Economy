@@ -31,12 +31,12 @@
 - Env: `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET`, `CLERK_JWT_ISSUER_DOMAIN`. Required family at `src/lib/deployment/manifest.ts:57`.
 
 ### Stripe
-- Server config resolution reads `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `VITE_STRIPE_PUBLISHABLE_KEY`; incomplete config returns a typed refusal (`src/lib/server/stripe-money-provider-config.ts:42-48`).
+- Server config resolution reads `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`; incomplete config returns a typed refusal (`src/lib/server/stripe-money-provider-config.ts`).
 - Webhook: `src/lib/server/stripe-money-webhook.ts`; destination URL `${AE_CANONICAL_BASE_URL}/api/stripe/webhook` (per `.env.example`).
 - Evidence/digest modules: `stripe-checkout-evidence.ts`, `stripe-connect-evidence.ts`, `stripe-transfer-evidence.ts` — each computes `canonicalDigest` over Stripe objects for Convex-side verification.
-- Browser Elements: `AeCreditTopUpPanel.tsx:75-78` lazily `loadStripe(publishableKey ?? import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)`.
+- Account funding redirects to Stripe-hosted Checkout. AE ships no embedded Stripe payment form or browser Stripe SDK.
 - Production validation: live keys only (`sk_live_`/`pk_live_`/`whsec_` patterns) — `src/lib/deployment/manifest.ts:363-375`.
-- Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `VITE_STRIPE_PUBLISHABLE_KEY`; Autumn family: `AUTUMN_SECRET_KEY`, `AUTUMN_WEBHOOK_SECRET`, `AUTUMN_ENVIRONMENT`, `AUTUMN_PROJECT_ID`, `AUTUMN_API_BASE_URL`, `AUTUMN_API_VERSION`, `AUTUMN_PORTAL_RETURN_BASE_URL`.
+- Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`; Autumn family: `AUTUMN_SECRET_KEY`, `AUTUMN_WEBHOOK_SECRET`, `AUTUMN_ENVIRONMENT`, `AUTUMN_PROJECT_ID`, `AUTUMN_API_BASE_URL`, `AUTUMN_API_VERSION`, `AUTUMN_PORTAL_RETURN_BASE_URL`.
 
 ### OpenRouter — single model-gateway seam
 `src/modules/model-gateway/` contains exactly one file, `public.ts`, and is the project's only seam onto a language-model provider:

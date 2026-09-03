@@ -77,7 +77,7 @@ describe('MCP host adapter with the official client', () => {
 
     const expectedActions = listMcpActions()
     expect(listed.tools.map(({ name }) => name)).toEqual(expectedActions.map(mcpToolName))
-    expect(listed.tools).toHaveLength(28)
+    expect(listed.tools).toHaveLength(31)
 
     for (const tool of listed.tools) {
       const action = expectedActions.find((candidate) => mcpToolName(candidate) === tool.name)

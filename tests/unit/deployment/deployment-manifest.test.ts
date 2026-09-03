@@ -36,7 +36,7 @@ function productionEnvironment(): Record<string, string> {
     AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
     STRIPE_SECRET_KEY: 'sk_live_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_live_example',
-    VITE_STRIPE_PUBLISHABLE_KEY: 'pk_live_example',
+    STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_au_gst_10_inclusive',
     AE_LLM_MODEL: 'deepseek/deepseek-v4-flash',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
@@ -105,7 +105,7 @@ describe('deployment manifest validator', () => {
       'AE_SOURCE_WRITE_KEY_SESSION',
       'STRIPE_SECRET_KEY',
       'STRIPE_WEBHOOK_SECRET',
-      'VITE_STRIPE_PUBLISHABLE_KEY',
+      'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
     ]))
   })
 
@@ -164,14 +164,14 @@ describe('deployment manifest validator', () => {
       ...productionEnvironment(),
       STRIPE_SECRET_KEY: 'sk_test_example',
       STRIPE_WEBHOOK_SECRET: 'not-a-webhook-secret',
-      VITE_STRIPE_PUBLISHABLE_KEY: 'pk_test_example',
+      STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'not-a-tax-rate',
     }, { nodeMajor: 22 })
 
     expect(result.ok).toBe(false)
     expect(result.findings).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'malformed', code: 'stripe_secret_key_invalid', names: ['STRIPE_SECRET_KEY'] }),
       expect.objectContaining({ kind: 'malformed', code: 'stripe_webhook_secret_invalid', names: ['STRIPE_WEBHOOK_SECRET'] }),
-      expect.objectContaining({ kind: 'malformed', code: 'stripe_publishable_key_invalid', names: ['VITE_STRIPE_PUBLISHABLE_KEY'] }),
+      expect.objectContaining({ kind: 'malformed', code: 'stripe_tax_rate_invalid', names: ['STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'] }),
     ]))
   })
 

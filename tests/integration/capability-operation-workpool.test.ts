@@ -50,9 +50,8 @@ import {
   type ConvexSourceTransport,
 } from '@/lib/server/convex-source'
 import { handleMarketOperationSearchRequest } from '@/routes/api.v1.market-operations.search'
-import { handleMarketOperationDetailRequest } from '@/routes/api.v1.market-operations.detail'
+import { handleMarketOperationDescribeRequest } from '@/routes/api.v1.market-operations.describe'
 import { handleMarketOperationCompareRequest } from '@/routes/api.v1.market-operations.compare'
-import { handleMarketOperationInspectPlanRequest } from '@/routes/api.v1.market-operations.inspect-plan'
 import {
   handleOperationInspectPost,
   handleOperationInvokePost,
@@ -430,12 +429,10 @@ async function serveOperationRoutes(input: Readonly<{
       let response: Response
       if (url.pathname === '/api/v1/market-operations/search') {
         response = await handleMarketOperationSearchRequest(request)
-      } else if (url.pathname === '/api/v1/market-operations/detail') {
-        response = await handleMarketOperationDetailRequest(request)
+      } else if (url.pathname === '/api/v1/market-operations/describe') {
+        response = await handleMarketOperationDescribeRequest(request)
       } else if (url.pathname === '/api/v1/market-operations/compare') {
         response = await handleMarketOperationCompareRequest(request)
-      } else if (url.pathname === '/api/v1/market-operations/inspect-plan') {
-        response = await handleMarketOperationInspectPlanRequest(request)
       } else if (url.pathname === '/api/v1/operations/inspect') {
         response = await handleOperationInspectPost(request, { authenticate, resolvePrincipal })
       } else if (url.pathname === '/api/v1/operations/call') {

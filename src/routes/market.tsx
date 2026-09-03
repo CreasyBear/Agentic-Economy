@@ -1,9 +1,15 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, type ErrorComponentProps } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
 
 import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import { Button } from "@/components/ui/button";
+import { readCapabilityOperationCompare } from "@/modules/capability-supply/operation-source";
+import {
+  isPublicOperationRef,
+  operationCompareInputSchema,
+} from "@/modules/capability-supply/public";
 import {
   marketWindowSchema,
   type MarketWindow,
@@ -13,6 +19,7 @@ import {
   type MarketCategoryId,
 } from "@/modules/market/listing-evidence";
 import { readMarketRouteServer } from "@/modules/market/market.functions";
+import { projectOperationCompareChoices } from "@/modules/registry/operation-choice-contracts";
 import { buildPublicPageHead } from "@/modules/seo/public";
 
 export type MarketSearch = Readonly<{
@@ -22,11 +29,34 @@ export type MarketSearch = Readonly<{
   category?: MarketCategoryId;
   cursor?: string;
   capability?: string;
+  compare?: string;
 }>;
+
+const readMarketComparisonServer = createServerFn({ method: "GET" })
+  .validator((data) => operationCompareInputSchema.parse(data))
+  .handler(async ({ data }) =>
+    projectOperationCompareChoices(
+      await readCapabilityOperationCompare({ operationRefs: data.operationRefs }),
+    ),
+  );
+
+export function parseMarketCompareRefs(value: unknown): readonly string[] | undefined {
+  if (typeof value !== "string" || value.length > 1_000) return undefined;
+  const refs = [...new Set(value.split(","))];
+  if (
+    refs.length < 2 ||
+    refs.length > 4 ||
+    !refs.every(isPublicOperationRef)
+  ) {
+    return undefined;
+  }
+  return refs;
+}
 
 export function validateMarketSearch(
   search: Record<string, unknown>,
 ): MarketSearch {
+  const compareRefs = parseMarketCompareRefs(search.compare);
   return {
     window: marketWindowSchema.safeParse(search.window).success
       ? (search.window as MarketWindow)
@@ -54,6 +84,7 @@ export function validateMarketSearch(
     search.capability.length <= 200
       ? { capability: search.capability }
       : {}),
+    ...(compareRefs === undefined ? {} : { compare: compareRefs.join(",") }),
   };
 }
 
@@ -66,8 +97,27 @@ export const Route = createFileRoute("/market")({
       ? {}
       : { availability: search.availability }),
     ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+    ...(search.compare === undefined ? {} : { compare: search.compare }),
   }),
-  loader: ({ deps }) => readMarketRouteServer({ data: deps }),
+  loader: async ({ deps }) => {
+    const operationRefs = parseMarketCompareRefs(deps.compare);
+    const [projection, comparison] = await Promise.all([
+      readMarketRouteServer({
+        data: {
+          window: deps.window,
+          ...(deps.query === undefined ? {} : { query: deps.query }),
+          ...(deps.availability === undefined
+            ? {}
+            : { availability: deps.availability }),
+          ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
+        },
+      }),
+      operationRefs === undefined
+        ? Promise.resolve(undefined)
+        : readMarketComparisonServer({ data: { operationRefs } }),
+    ]);
+    return { projection, comparison };
+  },
   shouldReload: () => true,
   staleTime: 0,
   preloadStaleTime: 0,
@@ -84,18 +134,18 @@ export const Route = createFileRoute("/market")({
 });
 
 function MarketPending() {
-  return <AePageSkeleton title="Updating market results…" description="Updating market results…" shape="market" />;
+  return <AePageSkeleton title="Updating the market view…" description="Loading current catalog facts…" shape="market" />;
 }
 
-function MarketError() {
+function MarketError({ reset }: ErrorComponentProps) {
   return (
     <AePageState
       tone="danger"
-      title="The catalog didn’t load"
-      description="Reload this page to fetch the current tools. No Operation was called."
+      title="The market view didn’t load"
+      description="Try again to fetch the current catalog and comparison. No Operation was called."
       action={
-        <Button asChild className="min-h-touch">
-          <Link to="/market" search={{ window: "30d" }} reloadDocument>Reload catalog</Link>
+        <Button type="button" className="min-h-touch" onClick={reset}>
+          Try again
         </Button>
       }
     />
@@ -103,11 +153,24 @@ function MarketError() {
 }
 
 function MarketRoute() {
+  const data = Route.useLoaderData();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+
   return (
     <AePublicPage>
       <AeMarketPage
-        projection={Route.useLoaderData()}
-        search={Route.useSearch()}
+        projection={data.projection}
+        search={search}
+        {...(data.comparison === undefined
+          ? {}
+          : { comparison: data.comparison })}
+        onCompareOperations={(operationRefs) => {
+          void navigate({
+            to: "/market",
+            search: { ...search, compare: operationRefs.join(",") },
+          });
+        }}
       />
     </AePublicPage>
   );

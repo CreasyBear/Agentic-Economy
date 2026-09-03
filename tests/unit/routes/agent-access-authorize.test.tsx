@@ -128,7 +128,7 @@ describe('/agent-access/authorize consent loading', () => {
     expect(screen.getByText('The approval may have completed. Do not submit it again.')).toBeTruthy()
     expect(screen.getByText('Request reference: device:grant-issuing')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Agents' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Approve access' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Connect agent' })).toBeNull()
     expect(screen.queryByText('Try again')).toBeNull()
   })
 
@@ -152,7 +152,7 @@ describe('/agent-access/authorize consent loading', () => {
     expect(screen.queryByText(/ready for one-time delivery/i)).toBeNull()
     expect(screen.getByText('Request reference: device:grant-complete')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open Agents' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Approve access' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Connect agent' })).toBeNull()
     expect(screen.queryByText('Try again')).toBeNull()
   })
 
@@ -161,8 +161,13 @@ describe('/agent-access/authorize consent loading', () => {
 
     renderComponent()
 
-    expect(await screen.findByRole('button', { name: 'Approve access' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Connect agent' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Decline' })).toBeTruthy()
+    expect(screen.queryByRole('radio', { name: /New agent/ })).toBeNull()
+    expect(document.body.textContent).not.toContain('Request revision')
+    fireEvent.click(screen.getByRole('button', { name: 'Technical details' }))
+    expect(document.body.textContent).toContain('Request revision')
+    expect(document.body.textContent).toContain('Request reference')
     expect(screen.queryByText('Loading access request')).toBeNull()
   })
 
@@ -176,11 +181,10 @@ describe('/agent-access/authorize consent loading', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     renderComponent()
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve access' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect agent' }))
 
-    expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
-    expect(screen.getByText('Approval is complete. Return to your agent so it can finish the token exchange. Supplier authority is not included.')).toBeTruthy()
+    expect(await screen.findByText('Connected to Local CLI')).toBeTruthy()
+    expect(screen.getByText('Return there to continue. This connection remains signed in until it expires or you disconnect it.')).toBeTruthy()
     expect(screen.queryByText(/delivers the caller key/i)).toBeNull()
     expect(serverMocks.useReverification).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledOnce()
@@ -196,11 +200,10 @@ describe('/agent-access/authorize consent loading', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     renderComponent()
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve access' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect agent' }))
 
-    expect(await screen.findByText('Access request unavailable')).toBeTruthy()
-    expect(screen.getByText(/no access was created/u)).toBeTruthy()
+    expect(await screen.findByText('Connection status is temporarily unavailable')).toBeTruthy()
+    expect(screen.getByText(/could not confirm whether the requested state changed/u)).toBeTruthy()
     expect(screen.getByText(/oauth:grant:grant-rate-down:reserve:1/u)).toBeTruthy()
   })
 
@@ -222,8 +225,7 @@ describe('/agent-access/authorize consent loading', () => {
     expect(screen.getAllByText(/Access expires in 2 hours after issue/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/\$1 each/)).toBeNull()
     expect(screen.getByRole('radio', { name: /Work within limits/ }).getAttribute('data-state')).toBe('checked')
-    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect agent' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = fetchMock.mock.calls[0]?.[1]
@@ -234,7 +236,7 @@ describe('/agent-access/authorize consent loading', () => {
     expect(String(request?.body)).toContain('connection_target=new_agent')
     expect(String(request?.body)).toContain('approved_operation_access=all_admitted')
     expect(String(request?.body)).not.toContain('approved_operation_ref=')
-    expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
+    expect(await screen.findByText('Connected to Test assistant')).toBeTruthy()
   })
 
   it('lets the owner narrow caller-requested Operations and posts the exact approved subset', async () => {
@@ -252,10 +254,8 @@ describe('/agent-access/authorize consent loading', () => {
     }
     const removeButtons = screen.getAllByRole('button', { name: 'Remove' })
     fireEvent.click(removeButtons[0]!)
-    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
-    expect((await screen.findAllByText(new RegExp(refs[1]!))).length).toBeGreaterThan(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Connect agent' }))
     expect(screen.queryByText(new RegExp(refs[0]!))).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm and approve' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const body = String(fetchMock.mock.calls[0]?.[1]?.body)
     expect(body).toContain('approved_operation_access=selected_operations')
@@ -274,14 +274,13 @@ describe('/agent-access/authorize consent loading', () => {
     expect(await screen.findByText('Supplier management')).toBeTruthy()
     expect(screen.getByText(/cannot spend buyer credit/)).toBeTruthy()
     expect(screen.queryByRole('radio', { name: /Browse only/ })).toBeNull()
-    expect(screen.getByRole('radio', { name: /New agent/ })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
+    expect(screen.queryByRole('radio', { name: /New agent/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect agent' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = fetchMock.mock.calls[0]?.[1]
     expect(String(request?.body)).toContain('authority_mode=bounded_mandate')
-    expect(await screen.findByText(/finish the token exchange for its separate supplier access/)).toBeTruthy()
+    expect(await screen.findByText('Connected to Supplier CLI')).toBeTruthy()
   })
 
   it('requires an explicit existing agent before credential replacement can be approved', async () => {
@@ -298,12 +297,11 @@ describe('/agent-access/authorize consent loading', () => {
 
     const replace = await screen.findByRole('radio', { name: /Replace credential/ })
     fireEvent.click(replace)
-    expect(screen.getByRole('button', { name: 'Approve access' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Replace credential' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(screen.getByRole('combobox', { name: 'Agent' }))
     fireEvent.click(await screen.findByRole('option', { name: 'Research agent' }))
-    expect(screen.getByRole('button', { name: 'Approve access' }).hasAttribute('disabled')).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
+    expect(screen.getByRole('button', { name: 'Replace credential' }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Replace credential' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = fetchMock.mock.calls[0]?.[1]
@@ -311,6 +309,46 @@ describe('/agent-access/authorize consent loading', () => {
     expect(String(request?.body)).toContain('principal_ref=prn_agent_a')
     expect(String(request?.body)).toContain('expected_target_revision=3')
     expect(String(request?.body)).toContain('replacement_mode=planned')
+  })
+
+  it('preselects the sole reconnectable agent for the requesting client', async () => {
+    const targets = [
+      { principalRef: 'prn_agent_a', principalRevision: 3, displayName: 'Research agent' },
+      { principalRef: 'prn_agent_b', principalRevision: 5, displayName: 'Shipping agent' },
+    ]
+    mockConsent({
+      userCode: 'RECO-NNECT',
+      grantRef: 'grant-reconnect',
+      clientName: 'Codex',
+      mode: 'approve_each',
+      agentTargets: targets,
+      reconnectPrincipalRef: 'prn_agent_a',
+    })
+
+    renderComponent()
+
+    expect((await screen.findByRole('radio', { name: /Replace credential/ })).getAttribute('data-state')).toBe('checked')
+    expect(screen.getByRole('combobox', { name: 'Agent' }).textContent).toContain('Research agent')
+  })
+
+  it('requires an explicit agent choice when reconnect history is ambiguous', async () => {
+    const targets = [
+      { principalRef: 'prn_agent_a', principalRevision: 3, displayName: 'Research agent' },
+      { principalRef: 'prn_agent_b', principalRevision: 5, displayName: 'Shipping agent' },
+    ]
+    mockConsent({
+      userCode: 'AMBI-GUOUS',
+      grantRef: 'grant-ambiguous',
+      clientName: 'Codex',
+      mode: 'approve_each',
+      agentTargets: targets,
+      reconnectAmbiguous: true,
+    })
+
+    renderComponent()
+
+    expect((await screen.findByRole('radio', { name: /Replace credential/ })).getAttribute('data-state')).toBe('checked')
+    expect(screen.getByRole('button', { name: 'Replace credential' }).hasAttribute('disabled')).toBe(true)
   })
 
   it('makes compromise replacement explicit and binds it into the approval request', async () => {
@@ -328,9 +366,9 @@ describe('/agent-access/authorize consent loading', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'Research agent' }))
     fireEvent.click(screen.getByRole('radio', { name: /Suspected compromise/ }))
     expect(screen.getByText(/current authority is revoked first and is never reactivated/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Approve access' }))
-    expect(await screen.findByText(/revoked before successor issuance and cannot be reactivated/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm and approve' }))
+    const replaceButton = screen.getByRole('button', { name: 'Revoke and replace credential' })
+    expect(replaceButton.getAttribute('data-variant')).toBe('destructive')
+    fireEvent.click(replaceButton)
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('replacement_mode=compromise')
@@ -343,18 +381,17 @@ describe('/agent-access/authorize consent loading', () => {
     serverMocks.reverifyMode = 'cancel'
     renderComponent()
 
-    const approveButton = await screen.findByRole('button', { name: 'Approve access' })
+    const approveButton = await screen.findByRole('button', { name: 'Connect agent' })
     approveButton.focus()
     fireEvent.click(approveButton)
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and approve' }))
 
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Confirm and approve' })).toBeNull())
+    await waitFor(() => expect(approveButton.hasAttribute('disabled')).toBe(false))
     expect(fetchMock).not.toHaveBeenCalled()
     expect(screen.getByRole('radio', { name: /Work within limits/ }).getAttribute('data-state')).toBe('checked')
     await waitFor(() => expect(document.activeElement).toBe(approveButton))
   })
 
-  it('dispatches one immutable approval when confirm is activated twice before rerender', async () => {
+  it('dispatches one immutable approval when the connection action is activated twice before rerender', async () => {
     mockConsent({ userCode: 'DOUBLE-1', grantRef: 'grant-double', clientName: 'Test assistant', mode: 'inspect_only' })
     let resolveResponse: ((response: Response) => void) | undefined
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => await new Promise<Response>((resolve) => {
@@ -363,13 +400,12 @@ describe('/agent-access/authorize consent loading', () => {
     vi.stubGlobal('fetch', fetchMock)
     renderComponent()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve access' }))
-    const confirm = await screen.findByRole('button', { name: 'Confirm and approve' })
-    fireEvent.click(confirm)
-    fireEvent.click(confirm)
+    const connect = await screen.findByRole('button', { name: 'Connect agent' })
+    fireEvent.click(connect)
+    fireEvent.click(connect)
     expect(fetchMock).toHaveBeenCalledOnce()
     resolveResponse?.(Response.json({ kind: 'approved', grantRef: 'grant-double' }))
-    expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
+    expect(await screen.findByText('Connected to Test assistant')).toBeTruthy()
   })
 
   it('retains loaded choices when the next replacement-target page fails and retries it', async () => {
@@ -426,6 +462,8 @@ function mockConsent(input: Readonly<{
   accessSummary?: string
   operationAccess?: 'all_admitted' | 'selected_operations'
   operationRefs?: readonly string[]
+  reconnectPrincipalRef?: string
+  reconnectAmbiguous?: boolean
 }>) {
   vi.spyOn(AgentAccessAuthorizeRoute, 'useLoaderData').mockReturnValue({
     kind: 'ready',
@@ -446,6 +484,8 @@ function mockConsent(input: Readonly<{
       agentTargets: input.agentTargets ?? [],
       ...(input.agentTargetsNextCursor === undefined ? {} : { agentTargetsNextCursor: input.agentTargetsNextCursor }),
       agentTargetsUnavailable: false,
+      ...(input.reconnectPrincipalRef === undefined ? {} : { reconnectPrincipalRef: input.reconnectPrincipalRef }),
+      ...(input.reconnectAmbiguous === true ? { reconnectAmbiguous: true } : {}),
     },
   })
 }

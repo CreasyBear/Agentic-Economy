@@ -1,5 +1,12 @@
 # NautilusTrader HFT lessons for Agentic Economy microtransactions
 
+**Status:** dated technical research
+
+**Authority note:** this study informs state control, reconciliation and
+resilience. It does not define the product, commercial roles or current
+roadmap. Interpret older transaction language through
+[PRODUCT.md](./PRODUCT.md) and [CONTEXT.md](./CONTEXT.md).
+
 ## Executive verdict
 
 NautilusTrader is a useful reference for a **deterministic trading-state runtime**, but the inspected source does not establish a full production, bounded-latency HFT gateway. Its strongest transferable ideas are explicit lifecycle state, one authoritative mutation boundary, immutable order-origin claims, priority for safety-relevant work, reconciliation, and replay that rebuilds state without blindly replaying external effects. Its least transferable properties are a global owner loop, unbounded principal queues, static one-adapter routing, asynchronous audit persistence, and microbenchmarks that stop before a real venue round trip.

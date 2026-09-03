@@ -385,7 +385,7 @@ describe('ADR-009 supplied-candidate qualification', () => {
     expect(admitted).toMatchObject({ status: 'eligible', reasons: [] })
   })
   it('records credential rejection as durable unavailable state over stale healthy readiness', async () => {
-    const basePublication = publication()
+    const basePublication = publication({ readinessLastHealthyAt: 1_850 })
     const baseOffering = offering()
     const baseBinding = binding()
     let updated: GraphPublicationRow | undefined
@@ -424,7 +424,34 @@ describe('ADR-009 supplied-candidate qualification', () => {
       healthState: 'unhealthy',
       readinessOutcome: 'credential_rejected',
       readinessResponseStatus: 401,
+      readinessLastHealthyAt: 1_850,
     })
+  })
+
+  it('records a successful probe as the latest durable healthy observation', async () => {
+    const basePublication = publication({ readinessLastHealthyAt: 1_850 })
+    let updated: GraphPublicationRow | undefined
+    const targetDigest = probeTargetDigest(basePublication, offering(), binding())
+    await recordCapabilityProbeResult(ports({
+      loadPublicationAtRevision: async () => basePublication,
+      patchProbeReadiness: async (_publicationId, patch) => {
+        updated = { ...basePublication, ...patch }
+      },
+    }), {
+      publicationRef: candidate.publicationRef,
+      expectedRevision: candidate.revision,
+      targetDigest,
+      requestDigest: canonicalDigest({ probe: 'healthy-again' }),
+      outcome: 'healthy',
+      credentialState: 'ready',
+      healthState: 'healthy',
+      observedAt: now,
+      validUntil: now + 100,
+      evidenceRefs: ['fixture:healthy-again'],
+      now,
+    })
+
+    expect(updated?.readinessLastHealthyAt).toBe(now)
   })
 
   it('derives POST for an exact current MCP Agent Plugin publication in both routeability consumers', async () => {

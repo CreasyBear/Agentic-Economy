@@ -96,7 +96,7 @@ async function readAccountMoney(
 ): Promise<void> {
   const descriptor = ACCOUNT_COMMAND_DESCRIPTORS.find((item) => item.subcommand === subcommand)
   if (descriptor === undefined) throw new Error('account_command_descriptor_missing')
-  const currency = args[1] ?? 'USD'
+  const currency = args[1] ?? 'AUD'
   if (args.length > 2) {
     throw usageFailure(`account ${subcommand}`, `account-${subcommand}-usage`)
   }
@@ -162,7 +162,7 @@ async function readAccountMoney(
       ['account', parsed.data.accountRef],
       ['balance', `${parsed.data.balance.units} × 10^-${parsed.data.balance.exponent} ${parsed.data.balance.currency}`],
       ['state', parsed.data.accountState],
-      ['funding', `${parsed.data.funding.path}#${parsed.data.funding.anchor} (owner browser)`],
+      ['funding', `${parsed.data.funding.createAction} → ${parsed.data.funding.statusAction}`],
     ])
     return
   }

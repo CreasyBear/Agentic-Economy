@@ -49,7 +49,12 @@ export const balance = actionGeneric({
       accountState: 'active' as const,
       version: balance.observedAt,
       updatedAt: balance.observedAt,
-      funding: { kind: 'owner_browser_required' as const, path: '/owner/credit' as const, anchor: 'fund' as const },
+      funding: {
+        kind: 'agent_funding_handoff' as const,
+        configAction: 'funding.handoff.config' as const,
+        createAction: 'funding.handoff.create' as const,
+        statusAction: 'funding.handoff.status' as const,
+      },
     }
   },
 })

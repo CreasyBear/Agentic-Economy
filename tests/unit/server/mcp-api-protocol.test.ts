@@ -37,19 +37,21 @@ describe('MCP host adapter protocol', () => {
     expect(instructions).toBe(
       'Use Agentic Economy to acquire one bounded outside contribution when your current harness lacks a capability. '
       + 'Search with `ae_registry_operations_search` and a capability phrase. '
-      + 'If multiple supplier Operations match, compare their price, readiness, data use, and effects with `ae_registry_operations_compare`; choose one supplier, then inspect that exact Operation with `ae_registry_operations_detail`. '
-      + 'Use `ae_registry_operations_inspectPlan` only for a bounded multi-Operation composition, not to choose a supplier. '
-      + 'Authenticated clients may use `ae_operation_invoke` only when that tool is admitted and the returned access and authority conditions are satisfied. '
+      + 'Use `ae_registry_operations_list` to browse, `ae_registry_operations_describe` for one exact input contract, and `ae_registry_operations_compare` for up to four exact references. '
+      + 'Call `ae_operation_inspect` with the exact Operation and input. Complete its one continuation or required action, then inspect again. Invoke only with the Commitment returned by inspection. '
+      + 'If Account credit is insufficient, use `ae_funding_handoff_create`, give only its Stripe checkoutUrl to the payer, persist fundingSessionId, poll `ae_funding_handoff_status`, then explicitly retry the original Operation only after ready. '
       + 'If effects are uncertain, use `ae_operation_status` or `ae_operation_reconcile` before retrying. '
       + 'Agentic Economy returns the contribution or receipt; your existing harness keeps project planning and execution.',
     )
     expect(typeof instructions).toBe('string')
     expect([...String(instructions).matchAll(/`(ae_[^`]+)`/g)].map((match) => match[1])).toEqual([
       'ae_registry_operations_search',
+      'ae_registry_operations_list',
+      'ae_registry_operations_describe',
       'ae_registry_operations_compare',
-      'ae_registry_operations_detail',
-      'ae_registry_operations_inspectPlan',
-      'ae_operation_invoke',
+      'ae_operation_inspect',
+      'ae_funding_handoff_create',
+      'ae_funding_handoff_status',
       'ae_operation_status',
       'ae_operation_reconcile',
     ])
@@ -57,7 +59,7 @@ describe('MCP host adapter protocol', () => {
     expect(instructions).toContain('your existing harness keeps project planning and execution')
     expect(instructions).not.toMatch(/Agentic Economy (?:owns|plans|executes|orchestrates)/i)
     expect(instructions).not.toMatch(/api[_ -]?key|bearer|credential|password|secret|private origin|https?:\/\/|localhost/i)
-    expect(instructions).not.toMatch(/\baccount\b|\brequest\b|\bevidence\b|idempotenc/i)
+    expect(instructions).not.toMatch(/\brequest\b|\bevidence\b|idempotenc/i)
   })
   it('maps top-level MCP request schema failures to Invalid params', async () => {
     const malformedInitialize = await postMcp({
@@ -354,7 +356,7 @@ describe('MCP host adapter protocol', () => {
 
     expect(response.status).toBe(401)
     expect(response.headers.get('WWW-Authenticate')).toBe(
-      'Bearer resource_metadata="https://canonical.example/.well-known/oauth-protected-resource", scope="customer_requests:approve_each"',
+      'Bearer resource_metadata="https://canonical.example/.well-known/oauth-protected-resource", scope="market_operations:invoke customer_requests:approve_each offline_access"',
     )
   })
 

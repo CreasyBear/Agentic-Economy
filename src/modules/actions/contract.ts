@@ -7,13 +7,14 @@ import type { SupplyManagementService } from '@/modules/capability-supply/supply
 import { operationMarketNavigation } from '@/modules/registry/operation-entry'
 import type { SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import type { MarketDemandService } from '@/modules/market-demand/market-demand.actions'
+import type { FundingHandoffService } from '@/modules/money/funding-handoff.actions'
 
 export const CURRENT_OPERATION_PROJECTION_NAVIGATION = Object.freeze({
   market: Object.freeze({
+    list: operationMarketNavigation('list'),
     search: operationMarketNavigation('search'),
-    detail: operationMarketNavigation('detail'),
+    describe: operationMarketNavigation('describe'),
     compare: operationMarketNavigation('compare'),
-    inspectPlan: operationMarketNavigation('inspect_plan'),
   }),
   invoke: Object.freeze({
     relation: 'invoke',
@@ -39,5 +40,7 @@ declare module '@/modules/common/action' {
     accountManagementService?: AccountManagementService
     /** Private market-demand memory shared by authenticated HTTP, MCP, and CLI adapters. */
     marketDemandService?: MarketDemandService
+    /** Agent-native hosted funding session service shared by HTTP and MCP. */
+    fundingHandoffService?: FundingHandoffService
   }
 }

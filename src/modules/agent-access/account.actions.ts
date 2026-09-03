@@ -73,9 +73,10 @@ export const agentAccountBalanceInputSchema = z.strictObject({
 })
 
 const agentAccountFundingContinuationSchema = z.strictObject({
-  kind: z.literal('owner_browser_required'),
-  path: z.literal('/owner/credit'),
-  anchor: z.literal('fund'),
+  kind: z.literal('agent_funding_handoff'),
+  configAction: z.literal('funding.handoff.config'),
+  createAction: z.literal('funding.handoff.create'),
+  statusAction: z.literal('funding.handoff.status'),
 })
 
 export const agentAccountBalanceResultSchema = z.discriminatedUnion('kind', [
@@ -304,12 +305,12 @@ export const agentAccountBalanceAction = defineAction<AgentAccountBalanceInput, 
   boundaries: [
     'Reads only the owner account bound to the exact authenticated principal and credential.',
     'Amounts retain exact integer units and exponent; clients must not infer floating-point balances.',
-    'Funding remains an authenticated owner browser action. The result returns that continuation and never charges a payment method.',
+    'Funding uses a Stripe-hosted human handoff. Creating the handoff never charges a payment method or grants payer authority.',
   ],
   schema: agentAccountBalanceInputSchema,
   outputSchema: agentAccountBalanceResultSchema,
   parameters: [
-    { name: 'currency', type: 'string', description: 'Credit account currency, default USD.', required: false },
+    { name: 'currency', type: 'string', description: 'Credit account currency, fixed to AUD.', required: false },
   ],
   readOnly: true,
   effect: {
@@ -321,7 +322,7 @@ export const agentAccountBalanceAction = defineAction<AgentAccountBalanceInput, 
   invocationContract: {
     version: AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.balance.contractVersion,
     consequenceClass: 'read_only', materialInputPaths: ['currency'], authorityRequirement: 'principal',
-    retryClass: 'replayable', expectedEvidence: ['credit_account_balance'], safeContinuations: ['owner_credit_funding'],
+    retryClass: 'replayable', expectedEvidence: ['credit_account_balance'], safeContinuations: ['funding.handoff.create'],
     invalidationConditions: ['credential_revoked', 'currency_changed', 'ledger_version_changed'],
   },
   run: async ({ data, context }) => {

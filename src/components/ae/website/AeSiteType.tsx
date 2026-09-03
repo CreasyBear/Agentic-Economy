@@ -1,11 +1,9 @@
-import { Fragment, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 import { SiteMarker } from '@/components/ui/site-marker'
 
 import { AeMarkedDivider } from './AeSiteMarks'
-import { parseHeadingNotation } from './heading-notation'
-
 export type AeSiteHeadingLevel = 'h1' | 'h2' | 'h3'
 export type AeSiteHeadingSize = 'xl' | 'lg' | 'md' | 'sm' | 'xs'
 
@@ -18,11 +16,11 @@ type AeSiteHeadingProps = {
 }
 
 const sizeClass: Record<AeSiteHeadingSize, string> = {
-  xl: 'font-display text-6xl font-medium leading-[1.04] tracking-tight sm:text-7xl',
-  lg: 'font-display text-5xl font-medium leading-[1.08] tracking-tight sm:text-6xl',
-  md: 'font-display text-4xl font-medium leading-[1.08] tracking-tight sm:text-5xl',
-  sm: 'font-display text-2xl font-medium tracking-tight sm:text-3xl',
-  xs: 'font-sans text-lg font-medium tracking-tight sm:text-xl',
+  xl: 'font-display text-6xl font-normal leading-[1.02] tracking-[-0.04em] sm:text-7xl',
+  lg: 'font-display text-5xl font-normal leading-[1.04] tracking-[-0.035em] sm:text-6xl',
+  md: 'font-display text-4xl font-normal leading-[1.06] tracking-[-0.03em] sm:text-5xl',
+  sm: 'font-display text-2xl font-normal leading-tight tracking-[-0.025em] sm:text-3xl',
+  xs: 'font-sans text-lg font-semibold leading-snug tracking-tight sm:text-xl',
 }
 
 export function AeSiteHeading({
@@ -32,29 +30,9 @@ export function AeSiteHeading({
   id,
   className,
 }: AeSiteHeadingProps) {
-  let offset = 0
-  const segments = parseHeadingNotation(children).map((segment) => {
-    const text = segment.kind === 'break' ? '' : segment.text
-    const keyed = { key: `${segment.kind}-${offset}`, kind: segment.kind, text }
-    // Render-scoped cursor used only to construct stable segment keys.
-    // oxlint-disable-next-line react/immutability
-    offset += text.length + (segment.kind === 'break' ? 1 : 0)
-    return keyed
-  })
-
   return (
     <Tag id={id} className={cn('text-balance', sizeClass[size], className)}>
-      {segments.map((segment) =>
-        segment.kind === 'accent' ? (
-          <span key={segment.key} className="font-sans font-medium tracking-tight">
-            {segment.text}
-          </span>
-        ) : segment.kind === 'break' ? (
-          <br key={segment.key} />
-        ) : (
-          <Fragment key={segment.key}>{segment.text}</Fragment>
-        ),
-      )}
+      {children}
     </Tag>
   )
 }
@@ -73,7 +51,7 @@ export function AeSiteBody({ children, muted = false, size = 'md', id, className
       {...(id === undefined ? {} : { id })}
       data-ae-muted={muted ? '' : undefined}
       className={cn(
-        'ae-site-body max-w-prose text-pretty',
+        'ae-site-body max-w-[65ch] text-pretty',
         size === 'md' ? 'text-lg leading-7 sm:text-xl sm:leading-8' : 'text-base leading-7 sm:text-lg sm:leading-8',
         muted ? 'text-muted-foreground' : 'text-foreground',
         className,
@@ -86,7 +64,7 @@ export function AeSiteBody({ children, muted = false, size = 'md', id, className
 
 export function AeSiteEyebrow({ children }: { children: string }) {
   return (
-    <p className="ae-site-eyebrow inline-flex items-center gap-2 font-sans text-xs font-medium tracking-tight text-muted-foreground">
+    <p className="ae-site-eyebrow inline-flex items-center gap-2 font-sans text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
       <SiteMarker tone="info" visible dataMarker />
       {children}
     </p>

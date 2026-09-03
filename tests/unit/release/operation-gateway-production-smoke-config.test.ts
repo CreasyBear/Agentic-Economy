@@ -88,20 +88,20 @@ describe("hosted Operation gateway smoke config", () => {
       CLERK_SECRET_KEY: "sk_test_smoke",
       STRIPE_SECRET_KEY: "sk_live_smoke",
       STRIPE_WEBHOOK_SECRET: "whsec_smoke",
-      VITE_STRIPE_PUBLISHABLE_KEY: "pk_live_smoke",
+      STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: "txr_au_gst_10_inclusive",
       AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID: "sess_smoke",
       AE_GATEWAY_SMOKE_OWNER_CLERK_USER_ID: "user_smoke",
       AE_GATEWAY_SMOKE_CONTROL_BUSINESS_ID: "business:provider",
       AE_GATEWAY_SMOKE_CREDENTIAL_ID: "ak_smoke",
       AE_GATEWAY_SMOKE_TOPUP_STAGE: "prepare",
       AE_GATEWAY_SMOKE_TOPUP_AMOUNT_JSON: JSON.stringify({
-        currency: "USD",
-        units: "500",
-        exponent: 2,
+        currency: "AUD",
+        units: "5000000",
+        exponent: 6,
       }),
       AE_GATEWAY_SMOKE_PAYOUT_REF: `ae-release-smoke:${"a".repeat(40)}:run-1:payout`,
       AE_GATEWAY_SMOKE_PAYOUT_IDEMPOTENCY_KEY: `ae-release-smoke:${"a".repeat(40)}:run-1:payout`,
-      AE_GATEWAY_SMOKE_CURRENCY: "USD",
+      AE_GATEWAY_SMOKE_CURRENCY: "AUD",
     };
     const config = gatewaySmokeConfigFromEnvironment(env);
     expect(config.apiKey).toBe("key:smoke");

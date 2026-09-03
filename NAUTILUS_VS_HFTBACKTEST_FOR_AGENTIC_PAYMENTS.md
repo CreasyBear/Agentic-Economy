@@ -1,5 +1,12 @@
 # NautilusTrader vs hftbacktest: architecture for machine-scale agentic payments
 
+**Status:** dated architecture synthesis
+
+**Authority note:** the paper preserves research and proposed mechanisms. Its
+roadmap is not active product direction. [PRODUCT.md](./PRODUCT.md) now defines
+the principal-reseller model and [START_LINE.md](./START_LINE.md) defines the
+commercial closure proof.
+
 **Evidence cut:** 2026-08-25
 
 **Repository pins:** NautilusTrader [`13559f053a376bbbd4bdd765cdefe2a635f893e7`](https://github.com/nautechsystems/nautilus_trader/tree/13559f053a376bbbd4bdd765cdefe2a635f893e7); hftbacktest [`5f3ec40b2afb764e0fea112f941ed85523ef4e88`](https://github.com/nkaz001/hftbacktest/tree/5f3ec40b2afb764e0fea112f941ed85523ef4e88).
@@ -1349,7 +1356,13 @@ AE is materially ahead of both references on several payment-safety mechanics:
 5. **Material external-spend identity and unknown state.** External spend binds principal, credential, grant generation, invocation, attempt, effect generation, operation, provider, payment identifier, challenge, amount, custody and idempotency; settlement maps explicitly to `settled`, `released`, or `outcome_unknown` ([identity](src/modules/money/internal/external-spend.ts#L217-L251), [reconciliation transition](src/modules/money/internal/external-spend.ts#L436-L493)).
 6. **Bounded production authority.** Production `full_yolo` is rejected at principal write and verification boundaries ([principal enforcement](convex/agentAccessPrincipals.ts#L55-L80), [supply verification](convex/agentAccessPrincipals.ts#L103-L120)).
 7. **Durable automatic reconciliation.** A scheduled worker has bounded selection, a 45-second sweep deadline, leases, retries/backoff, expiry recovery, and manual disposition ([sweep](convex/capabilityOperationInvocationWorker.ts#L41-L203), [finish/backoff](convex/capabilityOperationInvocations.ts#L252-L313)).
-8. **Deliberate exact-Operation start line.** The Atomic Operation Market requires one exact, real-funds x402 journey before automatic provider selection; the Consuming Agent owns planning and supplies exact `operationRef`, which the invoke API materially includes in its request and invocation identity ([start line](START_LINE.md#L24-L66), [admission](src/modules/capability-execution/operation-invoke-admit.ts#L184-L256), [language](UBIQUITOUS_LANGUAGE.md#operation)).
+8. **Deliberate exact-Operation start line.** The current product requires one
+   exact, real-funds x402 journey to remain bound to its Operation and authority
+   before commercial closure can be proved. The Agent Principal supplies the
+   exact `operationRef`, which the invoke API includes in its request and
+   invocation identity ([start line](START_LINE.md),
+   [admission](src/modules/capability-execution/operation-invoke-admit.ts#L184-L256),
+   [language](CONTEXT.md)).
 
 These are not reasons to rewrite. They are the production kernel nucleus.
 

@@ -19,7 +19,6 @@ export {
   searchCapabilityOperations,
   detailCapabilityOperation,
   compareCapabilityOperations,
-  inspectCapabilityOperationPlan,
   projectCapabilityOperation,
   serializeOperationDescriptor,
   deserializeOperationDescriptor,
@@ -36,8 +35,6 @@ export {
 export type {
   CapabilityOperationSourcePort,
   CapabilityOperationSourceRecord,
-  InspectPlanInput,
-  InspectPlanResult,
   OperationCompareInput,
   OperationCompareResult,
   OperationComparisonFact,

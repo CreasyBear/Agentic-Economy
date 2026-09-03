@@ -27,6 +27,7 @@ describe("market listing evidence", () => {
     expect(projection.latency).toMatchObject({
       kind: "insufficient_sample",
       sampleSize: 0,
+      samplesMs: [],
       display: "Not enough data",
     });
   });
@@ -61,6 +62,7 @@ describe("market listing evidence", () => {
       medianMs: 110,
       p95Ms: 2_000,
       sampleSize: 6,
+      samplesMs: [90, 110, 100, 130, 2_000, 120],
       display: "110 ms",
     });
   });
@@ -82,6 +84,7 @@ describe("market listing evidence", () => {
       kind: "insufficient_sample",
       sampleSize: 4,
       minimumSampleSize: 5,
+      samplesMs: [10, 20, 30, 40],
     });
   });
 

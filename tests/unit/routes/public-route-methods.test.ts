@@ -56,7 +56,7 @@ async function assertMethodNotAllowed(response: Response, allowed: readonly Meth
     status: 405,
     kind: 'METHOD_NOT_ALLOWED',
     code: 'method_not_allowed',
-    detail: `Only ${allowedText} are supported by this route.`,
+    detail: `Only ${allowedText} ${allowed.length === 1 ? 'is' : 'are'} supported by this route.`,
   })
 }
 

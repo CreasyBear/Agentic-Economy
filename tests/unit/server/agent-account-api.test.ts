@@ -116,18 +116,17 @@ describe('agent account HTTP adapter', () => {
       kind: 'available',
       principalRef: 'prn_00000000000040008000000000000043',
       accountRef: 'acc_00000000000040008000000000000043',
-      balance: { currency: 'USD', units: '2500', exponent: 2 },
-      recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
+      balance: { currency: 'AUD', units: '25000000', exponent: 6 },
       accountState: 'active',
       version: 3,
       updatedAt: 1_700_000_000_000,
-      funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+      funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
     })
     const response = await handleAgentAccountActionPost(
       new Request('https://ae.example/api/v1/account/balance', {
         method: 'POST',
         headers: { Authorization: 'Bearer hidden-secret' },
-        body: JSON.stringify({ currency: 'USD' }),
+        body: JSON.stringify({ currency: 'AUD' }),
       }),
       'balance',
       {
@@ -144,10 +143,10 @@ describe('agent account HTTP adapter', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       kind: 'available',
-      balance: { currency: 'USD', units: '2500', exponent: 2 },
-      funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+      balance: { currency: 'AUD', units: '25000000', exponent: 6 },
+      funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
     })
-    expect(balance).toHaveBeenCalledWith(expect.objectContaining({ input: { currency: 'USD' } }))
+    expect(balance).toHaveBeenCalledWith(expect.objectContaining({ input: { currency: 'AUD' } }))
   })
 
   it('refuses supplier-only credentials from buyer balance reads', async () => {
@@ -155,7 +154,7 @@ describe('agent account HTTP adapter', () => {
     const response = await handleAgentAccountActionPost(
       new Request('https://ae.example/api/v1/account/balance', {
         method: 'POST',
-        body: JSON.stringify({ currency: 'USD' }),
+        body: JSON.stringify({ currency: 'AUD' }),
       }),
       'balance',
       {

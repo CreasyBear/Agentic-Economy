@@ -10,7 +10,7 @@ import {
 } from './aud-funding'
 import { SANDBOX_COMMERCIAL_POLICY_CONTROLS } from './commercial-policy'
 
-export const FUNDING_QUOTE_CONTRACT_VERSION = 'ae-funding-quote:v2' as const
+export const FUNDING_QUOTE_CONTRACT_VERSION = 'ae-funding-quote:v3' as const
 export const FUNDING_QUOTE_VALIDITY_MS = 5 * 60 * 1_000
 export const FUNDING_CONSTRAINTS_PATH = '/api/v1/funding/constraints' as const
 export const FUNDING_QUOTE_PATH = '/api/v1/funding/quote' as const
@@ -50,13 +50,13 @@ export const fundingQuoteSchema = z.strictObject({
   serviceFeeBps: z.number().int().min(0).max(10_000),
   taxOnServiceFeeBps: z.number().int().min(0).max(10_000),
   nextActions: z.tuple([z.strictObject({
-    action: z.literal('funding.create'),
+    action: z.literal('funding.handoff.create'),
     kind: z.literal('human_handoff'),
-    method: z.literal('GET'),
-    href: z.literal('/owner/credit'),
-    requiresFreshHumanAuthority: z.literal(true),
-    consequence: z.literal('opens_secure_payment_creation'),
-    retryClass: z.literal('safe_before_payment_submit'),
+    method: z.literal('POST'),
+    href: z.literal('/api/v1/account/funding-sessions'),
+    requiresFreshHumanAuthority: z.literal(false),
+    consequence: z.literal('creates_stripe_hosted_checkout'),
+    retryClass: z.literal('same_idempotency_key'),
   })]),
 })
 
@@ -138,13 +138,13 @@ export function quoteFunding(input: Readonly<{
     serviceFeeBps: constraints.serviceFeeBps,
     taxOnServiceFeeBps: constraints.taxOnServiceFeeBps,
     nextActions: [{
-      action: 'funding.create',
+      action: 'funding.handoff.create',
       kind: 'human_handoff',
-      method: 'GET',
-      href: '/owner/credit',
-      requiresFreshHumanAuthority: true,
-      consequence: 'opens_secure_payment_creation',
-      retryClass: 'safe_before_payment_submit',
+      method: 'POST',
+      href: '/api/v1/account/funding-sessions',
+      requiresFreshHumanAuthority: false,
+      consequence: 'creates_stripe_hosted_checkout',
+      retryClass: 'same_idempotency_key',
     }],
   }
 }

@@ -19,6 +19,7 @@ import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 import type {
   AgentDetail,
@@ -29,15 +30,18 @@ import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 import type { PendingOperationApproval } from '@/modules/capability-execution/operation-approval.functions'
 import { suggestContinuation } from '@/modules/market/suggested-continuation'
+import type { AgentConnectionReadback } from '@/modules/agent-access/public'
+import { NATIVE_MCP_CLIENTS } from '@/lib/cli-distribution'
 
 export type AeAgentOperatorConsoleProps = Readonly<{
   directory: AgentDirectoryProjection
   loading: boolean
   onRevokeCredential: (credentialRef: string) => void | Promise<void>
   onDisconnectAgent: (principalRef: string) => void | Promise<void>
+  onDisconnectConnection?: (connectionRef: string, expectedRevision: number) => void | Promise<void>
   onRenameAgent?: (principalRef: string, expectedRevision: number, displayName: string) => Promise<boolean>
   agentHistory?: ReactNode
-  lifecyclePending?: Readonly<{ kind: 'credential' | 'agent'; ref: string }>
+  lifecyclePending?: Readonly<{ kind: 'credential' | 'connection' | 'agent'; ref: string }>
   approvals: readonly PendingOperationApproval[]
   approvalsLoading: boolean
   approvalsError?: string
@@ -56,6 +60,7 @@ export function AeAgentOperatorConsole({
   loading,
   onRevokeCredential,
   onDisconnectAgent,
+  onDisconnectConnection,
   onRenameAgent,
   agentHistory,
   lifecyclePending,
@@ -75,6 +80,7 @@ export function AeAgentOperatorConsole({
   const [localSelected, setLocalSelected] = useState<AgentDirectoryItem>()
   const [lifecycleTarget, setLifecycleTarget] = useState<
     | Readonly<{ kind: 'credential'; credentialRef: string; generation: number; name: string }>
+    | Readonly<{ kind: 'connection'; connectionRef: string; revision: number; connectorName: string; name: string }>
     | Readonly<{ kind: 'agent'; principalRef: string; name: string }>
   >()
   const [revokePending, setRevokePending] = useState(false)
@@ -91,22 +97,47 @@ export function AeAgentOperatorConsole({
   const columns = useMemo<ColumnDef<AgentDirectoryItem, unknown>[]>(
     () => [
       {
-        id: 'name',
+        id: 'agent',
         accessorFn: (item) => item.displayName,
-        header: ({ column }) => <AeOperatorSortableHeader label="Name" column={column} />,
+        header: ({ column }) => <AeOperatorSortableHeader label="Agent" column={column} />,
         cell: ({ row }) => (
-          <InlineEditField
-            value={row.original.displayName}
-            label={`Rename ${row.original.displayName}`}
-            readOnly={onRenameAgent === undefined}
-            errorMessage="Could not rename this Agent. Current saved name has been restored."
-            onSave={async (displayName) => onRenameAgent?.(
-              row.original.principalRef,
-              row.original.principalRevision,
-              displayName,
-            ) ?? false}
-          />
+          <div className="grid gap-1">
+            <InlineEditField
+              value={row.original.displayName}
+              label={`Rename ${row.original.displayName}`}
+              readOnly={onRenameAgent === undefined}
+              errorMessage="Could not rename this Agent. Current saved name has been restored."
+              onSave={async (displayName) => onRenameAgent?.(
+                row.original.principalRef,
+                row.original.principalRevision,
+                displayName,
+              ) ?? false}
+            />
+            <Badge variant="outline" className="w-fit">{environmentLabel(row.original.environment)}</Badge>
+          </div>
         ),
+      },
+      {
+        id: 'connection',
+        accessorFn: (item) => item.connectorDisplayNames.join(', '),
+        header: ({ column }) => <AeOperatorSortableHeader label="Connection" column={column} />,
+        cell: ({ row }) => row.original.connectionCount === 0
+          ? 'Legacy credential'
+          : row.original.connectorDisplayNames.join(', '),
+      },
+      {
+        id: 'authority',
+        accessorFn: (item) => scopeLabel(item.authorityMode),
+        header: ({ column }) => <AeOperatorSortableHeader label="Authority" column={column} />,
+        cell: ({ row }) => scopeLabel(row.original.authorityMode),
+      },
+      {
+        id: 'lastUsed',
+        accessorFn: (item) => item.lastSeenAt ?? 0,
+        header: ({ column }) => <AeOperatorSortableHeader label="Last used" column={column} />,
+        cell: ({ row }) => row.original.lastSeenAt === undefined
+          ? 'No activity'
+          : <span className="font-mono tabular-nums">{formatTimestamp(row.original.lastSeenAt)}</span>,
       },
       {
         id: 'status',
@@ -116,36 +147,6 @@ export function AeAgentOperatorConsole({
           const status = agentStatusLabel(row.original.status)
           return <Badge variant={status === 'Connected' ? 'default' : 'outline'}>{status}</Badge>
         },
-      },
-      {
-        id: 'environment',
-        accessorFn: (item) => environmentLabel(item.environment),
-        header: ({ column }) => <AeOperatorSortableHeader label="Environment" column={column} />,
-        cell: ({ row }) => environmentLabel(row.original.environment),
-      },
-      {
-        id: 'credentials',
-        accessorFn: (item) => item.currentCredentialGeneration ?? 0,
-        header: ({ column }) => <AeOperatorSortableHeader label="Generation" column={column} />,
-        cell: ({ row }) => row.original.currentCredentialGeneration === undefined
-          ? '—'
-          : <span className="font-mono tabular-nums">{String(row.original.currentCredentialGeneration)}</span>,
-      },
-      {
-        id: 'lastAuthenticated',
-        accessorFn: (item) => item.lastAuthenticatedAt ?? 0,
-        header: ({ column }) => <AeOperatorSortableHeader label="Last authenticated" column={column} />,
-        cell: ({ row }) => row.original.lastAuthenticatedAt === undefined
-          ? 'Not recorded'
-          : <span className="font-mono tabular-nums">{formatTimestamp(row.original.lastAuthenticatedAt)}</span>,
-      },
-      {
-        id: 'lastSeen',
-        accessorFn: (item) => item.lastSeenAt ?? 0,
-        header: ({ column }) => <AeOperatorSortableHeader label="Last seen" column={column} />,
-        cell: ({ row }) => row.original.lastSeenAt === undefined
-          ? 'No activity'
-          : <span className="font-mono tabular-nums">{formatTimestamp(row.original.lastSeenAt)}</span>,
       },
     ],
     [onRenameAgent],
@@ -171,12 +172,6 @@ export function AeAgentOperatorConsole({
     )
   }
 
-  const disconnecting = selected !== undefined
-    && lifecyclePending?.kind === 'agent'
-    && lifecyclePending.ref === selected.agent.principalRef
-  const disconnectDisabled = selected === undefined
-    || lifecyclePending !== undefined
-    || selected.agent.status === 'disconnected'
   const agentsPhase = stagedListPhase({ firstLoadPending, rows: directoryItems })
   const missingAgentContinuation = suggestContinuation({
     subject: 'connection',
@@ -194,13 +189,26 @@ export function AeAgentOperatorConsole({
     setLifecycleTarget({ kind: 'agent', principalRef: item.agent.principalRef, name: item.agent.displayName })
   }
 
+  function requestConnectionDisconnect(item: AgentDetail, connection: AgentConnectionReadback, trigger: HTMLButtonElement) {
+    revokeTriggerRef.current = trigger
+    setLifecycleTarget({
+      kind: 'connection',
+      connectionRef: connection.connectionRef,
+      revision: connection.revision,
+      connectorName: connection.connectorDisplayName,
+      name: item.agent.displayName,
+    })
+  }
+
   async function confirmLifecycle() {
     if (lifecycleTarget === undefined || revokeInFlightRef.current) return
     revokeInFlightRef.current = true
     setRevokePending(true)
     try {
       if (lifecycleTarget.kind === 'credential') await onRevokeCredential(lifecycleTarget.credentialRef)
-      else await onDisconnectAgent(lifecycleTarget.principalRef)
+      else if (lifecycleTarget.kind === 'connection') {
+        await onDisconnectConnection?.(lifecycleTarget.connectionRef, lifecycleTarget.revision)
+      } else await onDisconnectAgent(lifecycleTarget.principalRef)
       setLifecycleTarget(undefined)
     } finally {
       revokeInFlightRef.current = false
@@ -297,32 +305,41 @@ export function AeAgentOperatorConsole({
         }}
         title={selected?.agent.displayName ?? 'Agent'}
         {...(selected === undefined ? {} : { description: agentStatusLabel(selected.agent.status), facts: agentFacts(selected) })}
-        {...(selected === undefined
-          ? {}
-          : {
-              action: (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={disconnectDisabled}
-                  onClick={(event) => requestDisconnect(selected, event.currentTarget)}
-                  className="min-h-touch"
-                >
-                  {disconnecting ? 'Disconnecting agent…' : 'Disconnect agent'}
-                </Button>
-              ),
-            })}
       >
         {selected === undefined ? null : (
           <div className="mt-4 grid gap-3">
-            <p className="text-sm text-muted-foreground">{agentRecoveryCopy(selected)}</p>
+            {agentRecoveryCopy(selected) === undefined ? null : (
+              <p className="text-sm text-muted-foreground">{agentRecoveryCopy(selected)}</p>
+            )}
             <AuthorizedOperations detail={selected} />
-            <CredentialHistory
+            <ConnectionReceipts
               detail={selected}
               {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
-              onRequestRevoke={(credentialRef, generation, trigger) => requestCredentialRevoke(selected, credentialRef, generation, trigger)}
+              onDisconnect={(connection, trigger) => requestConnectionDisconnect(selected, connection, trigger)}
             />
-            {agentHistory}
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button type="button" variant="ghost" className="w-fit min-h-touch">Technical details</Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="grid gap-3 pt-2">
+                <AeFactList density="compact" facts={technicalAgentFacts(selected)} />
+                <CredentialHistory
+                  detail={selected}
+                  {...(lifecyclePending === undefined ? {} : { lifecyclePending })}
+                  onRequestRevoke={(credentialRef, generation, trigger) => requestCredentialRevoke(selected, credentialRef, generation, trigger)}
+                />
+                {agentHistory}
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={lifecyclePending !== undefined || selected.agent.status === 'disconnected'}
+                  onClick={(event) => requestDisconnect(selected, event.currentTarget)}
+                  className="w-fit min-h-touch"
+                >
+                  Remove agent everywhere
+                </Button>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         )}
       </AeRecordSheet>
@@ -336,35 +353,27 @@ export function AeAgentOperatorConsole({
           ? 'Change agent access?'
           : lifecycleTarget.kind === 'credential'
             ? `Revoke generation ${lifecycleTarget.generation} for ${lifecycleTarget.name}?`
-            : `Disconnect ${lifecycleTarget.name}?`}
+            : lifecycleTarget.kind === 'connection'
+              ? `Disconnect ${lifecycleTarget.connectorName} from ${lifecycleTarget.name}?`
+              : `Remove ${lifecycleTarget.name} everywhere?`}
         description={lifecycleTarget === undefined
           ? ''
           : lifecycleTarget.kind === 'credential'
             ? `Only this credential stops. Any other active credential for ${lifecycleTarget.name} remains usable, and history stays attached to the agent.`
-            : `Every active credential, grant, delegation, and provider key for ${lifecycleTarget.name} will be revoked. Historical activity remains readable.`}
-        confirmLabel={lifecycleTarget?.kind === 'credential' ? 'Revoke credential' : 'Disconnect agent'}
+            : lifecycleTarget.kind === 'connection'
+              ? `Only this ${lifecycleTarget.connectorName} connection stops. Other connections for ${lifecycleTarget.name} remain usable.`
+              : `Every active credential, grant, delegation, and provider key for ${lifecycleTarget.name} will be revoked. Historical activity remains readable.`}
+        confirmLabel={lifecycleTarget?.kind === 'credential'
+          ? 'Revoke credential'
+          : lifecycleTarget?.kind === 'connection'
+            ? 'Disconnect'
+            : 'Remove agent everywhere'}
         confirmVariant="destructive"
         pending={revokePending}
         onConfirm={confirmLifecycle}
         returnFocusRef={revokeTriggerRef}
       />
 
-      <AeSection title="Recovery" description="The next step depends on what stopped the call.">
-        <ul className="m-0 grid list-none divide-y divide-border p-0">
-          <RecoveryItem title="Rotate, replace, or recover a key">
-            For planned rotation, start a replacement request from the agent; the old credential remains active until the successor is delivered. If compromise is suspected, revoke the current credential first, then start replacement. AE delivers the replacement caller key once; supplier credentials stay server-side.
-          </RecoveryItem>
-          <RecoveryItem title="Stale access grant">
-            Revoke the affected access, then approve a new request so the key and current grant are issued together.
-          </RecoveryItem>
-          <RecoveryItem title="Provider reauthorization required">
-            The supplier connection owner must reauthorize that connection. Do not put a supplier credential into the agent key or request payload.
-          </RecoveryItem>
-          <RecoveryItem title="Outcome uncertain">
-            Reconcile the recorded invocation before retrying. A retry could repeat work that the supplier already received.
-          </RecoveryItem>
-        </ul>
-      </AeSection>
     </div>
   )
 }
@@ -476,25 +485,10 @@ function agentFacts(detail: AgentDetail): readonly AeFact[] {
   const accountBalance = detail.account?.balance
   const zeroBalance = accountBalance === undefined ? undefined : { ...accountBalance, units: '0' }
   return [
-    { label: 'Application', value: detail.agent.applicationRef, mono: true},
     { label: 'Environment', value: environmentLabel(detail.agent.environment) },
-    { label: 'Credentials', value: String(detail.credentials.length), mono: true},
-    { label: 'Current generation', value: detail.agent.currentCredentialGeneration === undefined
-      ? 'None'
-      : String(detail.agent.currentCredentialGeneration),
-      mono: true },
-    { label: 'Last authenticated', value: detail.agent.lastAuthenticatedAt === undefined
-      ? 'Not recorded'
-      : formatTimestamp(detail.agent.lastAuthenticatedAt),
-      definition: 'Recorded at most once every 15 minutes for the current credential.',
-      mono: true },
-    { label: 'Last seen', value: detail.agent.lastSeenAt === undefined
+    { label: 'Last used', value: detail.agent.lastSeenAt === undefined
       ? 'No activity recorded'
       : formatTimestamp(detail.agent.lastSeenAt),
-      mono: true },
-    { label: 'Current credential', value: detail.currentCredentialRef === undefined
-      ? 'None'
-      : redactedKeyId(detail.currentCredentialRef),
       mono: true },
     { label: 'Per call', value: formatAmount(detail.grant?.budget.maximumSpendPerInvocation), mono: true},
     { label: 'Daily budget', value: formatAmount(detail.grant?.budget.maximumDailySpend), mono: true},
@@ -502,7 +496,6 @@ function agentFacts(detail: AgentDetail): readonly AeFact[] {
     { label: 'Rate', value: detail.grant === undefined ? 'Unavailable' : `${detail.grant.rate.maximumCallsPerMinute}/min · ${detail.grant.rate.maximumCallsPerHour}/hour`, mono: true},
     { label: 'Concurrency', value: detail.grant === undefined ? 'Unavailable' : String(detail.grant.budget.maximumConcurrentInvocations), mono: true},
     { label: 'Authority', value: scopeLabel(detail.authorityMode) },
-    { label: 'Scopes', value: detail.scopes.length === 0 ? 'None' : detail.scopes.join(', ') },
     { label: 'Operations', value: operationAccessLabel(detail) },
     { label: 'Balance', value: formatAmount(accountBalance), mono: true},
     { label: 'Calls', value: String(detail.usage?.callCount ?? 0), mono: true},
@@ -512,13 +505,85 @@ function agentFacts(detail: AgentDetail): readonly AeFact[] {
   ]
 }
 
+function technicalAgentFacts(detail: AgentDetail): readonly AeFact[] {
+  return [
+    { label: 'Application', value: detail.agent.applicationRef, mono: true },
+    { label: 'Credentials', value: String(detail.credentials.length), mono: true },
+    { label: 'Current generation', value: detail.agent.currentCredentialGeneration === undefined ? 'None' : String(detail.agent.currentCredentialGeneration), mono: true },
+    {
+      label: 'Last authenticated',
+      value: detail.agent.lastAuthenticatedAt === undefined ? 'Not recorded' : formatTimestamp(detail.agent.lastAuthenticatedAt),
+      definition: 'Recorded at most once every 15 minutes for the current credential.',
+      mono: true,
+    },
+    { label: 'Current credential', value: detail.currentCredentialRef === undefined ? 'None' : redactedKeyId(detail.currentCredentialRef), mono: true },
+    { label: 'Scopes', value: detail.scopes.length === 0 ? 'None' : detail.scopes.join(', '), mono: true },
+  ]
+}
+
+function ConnectionReceipts({
+  detail,
+  lifecyclePending,
+  onDisconnect,
+}: Readonly<{
+  detail: AgentDetail
+  lifecyclePending?: Readonly<{ kind: 'credential' | 'connection' | 'agent'; ref: string }>
+  onDisconnect: (connection: AgentConnectionReadback, trigger: HTMLButtonElement) => void
+}>) {
+  if (detail.connections.length === 0) {
+    return (
+      <div className="grid gap-1 rounded-md border border-border p-3">
+        <p className="font-medium text-foreground">Legacy credential</p>
+        <p className="text-sm text-muted-foreground">This access predates durable client connections. No client identity is inferred.</p>
+      </div>
+    )
+  }
+  return (
+    <div className="grid gap-2">
+      <h3 className="text-sm font-medium text-foreground">Connections</h3>
+      <ul className="m-0 grid list-none gap-2 p-0">
+        {detail.connections.map((connection) => (
+          <li key={connection.connectionRef} className="grid gap-3 rounded-md border border-border p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium text-foreground">{connection.connectorDisplayName}</p>
+              <Badge variant={connection.state === 'active' ? 'default' : 'outline'}>{connectionStateLabel(connection.state)}</Badge>
+            </div>
+            <AeFactList density="compact" facts={[
+              { label: 'Environment', value: environmentLabel(connection.environment) },
+              { label: 'Authority', value: scopeLabel(connection.authorityMode) },
+              { label: 'Budget', value: formatCurrencyAmount(connection.policy.budget.maximumMonthlySpend), mono: true },
+              { label: 'Connected', value: formatTimestamp(connection.connectedAt), mono: true },
+              { label: 'Last refresh', value: formatTimestamp(connection.lastRotatedAt), mono: true },
+              { label: 'Connection expires', value: formatTimestamp(connection.connectionExpiresAt), mono: true },
+              { label: 'Last agent use', value: detail.agent.lastSeenAt === undefined ? 'No activity' : formatTimestamp(detail.agent.lastSeenAt), mono: true },
+            ]} />
+            {connection.state === 'active' ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-fit min-h-touch"
+                disabled={lifecyclePending !== undefined}
+                onClick={(event) => onDisconnect(connection, event.currentTarget)}
+              >
+                {lifecyclePending?.kind === 'connection' && lifecyclePending.ref === connection.connectionRef ? 'Disconnecting…' : 'Disconnect'}
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">{reconnectInstructionFor(connection.connectorDisplayName)}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function CredentialHistory({
   detail,
   lifecyclePending,
   onRequestRevoke,
 }: Readonly<{
   detail: AgentDetail
-  lifecyclePending?: Readonly<{ kind: 'credential' | 'agent'; ref: string }>
+  lifecyclePending?: Readonly<{ kind: 'credential' | 'connection' | 'agent'; ref: string }>
   onRequestRevoke: (credentialRef: string, generation: number, trigger: HTMLButtonElement) => void
 }>) {
   return (
@@ -577,7 +642,7 @@ function agentStatusLabel(status: AgentDirectoryItem['status']): 'Connected' | '
   return 'Disconnected'
 }
 
-function agentRecoveryCopy(detail: AgentDetail): string {
+function agentRecoveryCopy(detail: AgentDetail): string | undefined {
   if (detail.agent.status === 'disconnected' || detail.agent.status === 'expired') {
     return 'To reconnect, start a new access request from the agent.'
   }
@@ -587,16 +652,18 @@ function agentRecoveryCopy(detail: AgentDetail): string {
   if (detail.usage?.states.includes('outcome_unknown')) {
     return 'One or more calls needs checking. Reconcile the recorded outcome before retrying.'
   }
-  return 'Revoking the current credential blocks new calls; prior usage and evidence remain visible.'
+  return undefined
 }
 
-function RecoveryItem({ title, children }: Readonly<{ title: string; children: string }>) {
-  return (
-    <li className="grid gap-1 py-3 first:pt-0 last:pb-0">
-      <p className="font-medium text-foreground">{title}</p>
-      <p className="max-w-3xl text-sm text-muted-foreground">{children}</p>
-    </li>
-  )
+function connectionStateLabel(state: AgentConnectionReadback['state']): string {
+  if (state === 'active') return 'Connected'
+  if (state === 'expired') return 'Expired'
+  return 'Revoked'
+}
+
+function reconnectInstructionFor(connectorDisplayName: string): string {
+  return NATIVE_MCP_CLIENTS.find(({ displayName }) => displayName === connectorDisplayName)?.reconnectInstruction
+    ?? 'Reconnect from the original agent client.'
 }
 
 function consequenceLabel(consequence: PendingOperationApproval['authorityRequest']['consequence']): string {
@@ -617,7 +684,7 @@ function consequenceLabel(consequence: PendingOperationApproval['authorityReques
 function environmentLabel(environment: AgentDirectoryItem['environment']): string {
   switch (environment) {
     case 'sandbox':
-      return 'Development'
+      return 'Sandbox'
     case 'production':
       return 'Production'
     default: {

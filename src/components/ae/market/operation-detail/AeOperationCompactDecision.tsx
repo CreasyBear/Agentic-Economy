@@ -18,9 +18,11 @@ import {
 export function AeOperationCompactDecision({
   operation,
   model,
+  onNavigate,
 }: Readonly<{
   operation: PublicOperationDescriptor
   model: OperationInspectorModel
+  onNavigate?: () => void
 }>) {
   const code = continuationCode(model)
   const { status, isCopied, copy } = useClipboardCopy(code ?? '', { timeout: 1_600 })
@@ -46,7 +48,7 @@ export function AeOperationCompactDecision({
           <AeOperationPrice
             price={model.totalPrice}
             size="sm"
-            label="Authorization"
+            label="Indicative price"
             className="shrink-0 place-items-end"
           />
         </div>
@@ -56,7 +58,7 @@ export function AeOperationCompactDecision({
 
         {model.continuation.kind === 'navigate' && model.continuation.href !== undefined ? (
           <Button asChild size="sm" className="min-h-touch justify-self-start">
-            <Link to={model.continuation.href}>{model.continuation.label}</Link>
+            <Link to={model.continuation.href} onClick={onNavigate}>{model.continuation.label}</Link>
           </Button>
         ) : code !== undefined ? (
           <div className="flex items-center gap-intra">
@@ -87,8 +89,8 @@ export function AeOperationCompactDecision({
 }
 
 function decisionVariant(model: OperationInspectorModel): 'success' | 'warning' | 'outline' {
-  if (model.continuation.label === 'Call Operation') return 'success'
-  if (model.continuation.label === 'Connect agent' || model.availabilityPosture === 'setup_required') {
+  if (model.continuation.label === 'Operation reference') return 'success'
+  if (model.availabilityPosture === 'setup_required') {
     return 'warning'
   }
   return 'outline'

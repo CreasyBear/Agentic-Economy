@@ -88,7 +88,7 @@ describe('operator command panel', () => {
   it('opens as a centered modal with cmd+k or ctrl+k and closes again with truthful aria-expanded', async () => {
     renderPanel()
 
-    const trigger = screen.getByRole('button', { name: 'Search' })
+    const trigger = screen.getByRole('button', { name: 'Find Operations' })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
 
     fireEvent.keyDown(window, { key: 'k', metaKey: true })
@@ -108,6 +108,26 @@ describe('operator command panel', () => {
     })
   })
 
+  it('honors the advertised slash entry shortcut and ignores repeat, composition, and text entry', async () => {
+    renderPanel()
+
+    fireEvent.keyDown(window, { key: '/', repeat: true })
+    fireEvent.keyDown(window, { key: '/', isComposing: true })
+    fireEvent.keyDown(window, { key: 'k', metaKey: true, repeat: true })
+    fireEvent.keyDown(window, { key: 'k', metaKey: true, isComposing: true })
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    const editor = document.createElement('input')
+    document.body.append(editor)
+    fireEvent.keyDown(editor, { key: '/' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    editor.remove()
+
+    fireEvent.keyDown(window, { key: '/' })
+    const input = await screen.findByRole('combobox', { name: 'Search operations' })
+    expect(document.activeElement).toBe(input)
+  })
+
   it('focuses the search input when slash is pressed while open', async () => {
     renderPanel()
 
@@ -125,7 +145,7 @@ describe('operator command panel', () => {
   it('lets the dialog primitive dismiss an outside press and restore its trigger', async () => {
     renderPanel()
 
-    const trigger = screen.getByRole('button', { name: 'Search' })
+    const trigger = screen.getByRole('button', { name: 'Find Operations' })
     fireEvent.click(trigger)
     expect(await screen.findByRole('dialog', { name: 'Command console' })).toBeTruthy()
 
@@ -208,9 +228,8 @@ describe('operator command panel', () => {
     expect(option.getAttribute('data-slot')).toBe('command-item')
     expect(option.closest('[data-slot="command-group"]')).toBeTruthy()
     expect(option.getAttribute('aria-selected')).toBe('true')
-    expect(option.textContent).toContain('Price on request')
-    expect(option.textContent).toContain('Ready now')
-    expect(option.textContent).toContain('AE account invocation')
+    expect(option.textContent).toContain('Price confirmed at inspection')
+    expect(option.textContent).toContain('Operational')
     const listbox = screen.getByRole('listbox', { name: 'Matching operations' })
     expect(listbox.getAttribute('data-slot')).toBe('command-list')
     expect(input.getAttribute('aria-controls')).toBe(listbox.getAttribute('id'))
@@ -222,16 +241,46 @@ describe('operator command panel', () => {
     // Inspect composes the same market formatters the catalog tiles use.
     const fixture = detailFixture()
     expect(await screen.findByText(formatOperationPrice(fixture.commercial.price))).toBeTruthy()
+    expect(document.activeElement).toBe(screen.getByRole('region', { name: 'Operation inspection' }))
     expect(screen.getByText(formatOperationAuthentication(fixture.authentication))).toBeTruthy()
-    expect(screen.getByText('Connection required')).toBeTruthy()
-    expect(screen.queryByText(formatOperationReadiness(fixture.availability.posture))).toBeNull()
+    expect(screen.getByText(formatOperationReadiness(fixture.availability.posture))).toBeTruthy()
     expect(screen.getByText('Charged per call.')).toBeTruthy()
-    expect(screen.getByText(/Connect an agent before/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Connect agent' }).getAttribute('href')).toBe('/for-agents')
-    expect(screen.queryByRole('button', { name: 'Copy Call command' })).toBeNull()
+    expect(screen.getByText(/Paste this reference into your existing agent client/)).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Copy Operation reference' }).length).toBeGreaterThan(0)
     expect(
       screen.getByRole('link', { name: /Open full Operation details/ }).getAttribute('href'),
     ).toBe(`/operations/${encodeURIComponent(TEST_OPERATION_REF)}`)
+  })
+
+  it('exits and resets the modal after navigation to full Operation details', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
+    const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
+      kind: 'found',
+      schemaVersion: 'registry-operations:v1',
+      operation: detailFixture(),
+    }))
+    const router = renderPanel({ openImmediately: true, readDetail })
+
+    const input = screen.getByRole('combobox', { name: 'Search operations' })
+    fireEvent.change(input, { target: { value: 'weather' } })
+    fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), {
+      key: 'Enter',
+    })
+    fireEvent.click(await screen.findByRole('link', { name: 'Open full Operation details' }))
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(
+        `/operations/${encodeURIComponent(TEST_OPERATION_REF)}`,
+      )
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Find Operations' }))
+    const reopenedInput = await screen.findByRole<HTMLInputElement>('combobox', {
+      name: 'Search operations',
+    })
+    expect(reopenedInput.value).toBe('')
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
   })
 
   it('opens the newly selected Operation when ArrowDown and Enter arrive in one input turn', async () => {
@@ -466,7 +515,7 @@ describe('operator command panel', () => {
     })
   })
 
-  it('copies the public reference and ready-to-run inspect and call commands', async () => {
+  it('hands the public Operation reference to the existing agent client without browser readiness claims', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
@@ -475,54 +524,23 @@ describe('operator command panel', () => {
       operation: detailFixture(),
     }))
 
-    renderPanel({
-      openImmediately: true,
-      readDetail,
-      readBuyerCredentialPresence: async () => true,
-    })
+    renderPanel({ openImmediately: true, readDetail })
     const input = await screen.findByRole('combobox', { name: 'Search operations' })
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
     fireEvent.change(input, { target: { value: 'weather' } })
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
-    expect(await screen.findByText(/single safe next step/)).toBeTruthy()
+    expect(await screen.findByText(/Paste this reference into your existing agent client/)).toBeTruthy()
     expect(screen.getByText(formatOperationReadiness(detailFixture().availability.posture))).toBeTruthy()
     expect(screen.queryByText('Connection required')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Copy Call Operation' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Copy Operation reference' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: 'Connect agent' })).toBeNull()
+    expect(screen.queryByText(/ae call/)).toBeNull()
+    expect(screen.queryByText(/ae inspect/)).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Copy Operation reference' }))
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Copy Operation reference' }))[0]!)
     expect(writeText).toHaveBeenLastCalledWith(TEST_OPERATION_REF)
-    fireEvent.click(screen.getByRole('button', { name: 'Copy Inspect command' }))
-    expect(writeText).toHaveBeenLastCalledWith(`ae inspect '${TEST_OPERATION_REF}'`)
-    fireEvent.click(screen.getByRole('button', { name: 'Copy Call Operation' }))
-    expect(writeText).toHaveBeenLastCalledWith(
-      `ae call '${TEST_OPERATION_REF}' --input '{"from":"USD","to":"EUR","note":"today'\\''s rate"}' --wait`,
-    )
-  })
-
-  it('fails buyer-access lookup closed instead of exposing a call command', async () => {
-    const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
-      kind: 'found',
-      schemaVersion: 'registry-operations:v1',
-      operation: detailFixture(),
-    }))
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
-
-    renderPanel({
-      openImmediately: true,
-      readDetail,
-      readBuyerCredentialPresence: async () => {
-        throw new Error('buyer access unavailable')
-      },
-    })
-    const input = await screen.findByRole('combobox', { name: 'Search operations' })
-    fireEvent.change(input, { target: { value: 'weather' } })
-    fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
-
-    expect(await screen.findByRole('link', { name: 'Connect agent' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Copy Call command' })).toBeNull()
   })
 
   it('shows up to five recently inspected public operation references before search', async () => {
@@ -569,10 +587,10 @@ describe('operator command panel', () => {
     fireEvent.change(input, { target: { value: 'weather' } })
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
-    expect(await screen.findByText(/not currently callable/iu)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Find callable alternatives' })).toBeTruthy()
+    expect((await screen.findAllByText(/not operational/iu)).length).toBeGreaterThan(0)
+    expect(screen.getByRole('link', { name: 'Find operational alternatives' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Continue supplier setup' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Copy Call command' })).toBeNull()
+    expect(screen.queryByText(/ae call/)).toBeNull()
   })
 
   it('gives an unavailable Operation one primary route back to current supply', async () => {
@@ -585,13 +603,20 @@ describe('operator command panel', () => {
     }))
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(operationSearchPayload())))
 
-    renderPanel({ openImmediately: true, readDetail })
+    const router = renderPanel({ openImmediately: true, readDetail })
     const input = await screen.findByRole('combobox', { name: 'Search operations' })
     fireEvent.change(input, { target: { value: 'weather' } })
     fireEvent.keyDown(await screen.findByRole('option', { name: /Weather forecast/ }), { key: 'Enter' })
 
     const action = await screen.findByRole('link', { name: 'Browse current Operations' })
     expect(action.getAttribute('href')).toBe('/market?window=30d#operations')
+    fireEvent.click(action)
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/market')
+      expect(router.state.location.search).toEqual({ window: '30d' })
+      expect(router.state.location.hash).toBe('operations')
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
   })
 
   it('turns a rejected detail read into the same actionable unavailable state', async () => {
@@ -629,7 +654,7 @@ describe('operator command panel', () => {
 
     expect(await screen.findByText('Setup required')).toBeTruthy()
     expect(screen.queryByText('Ready now')).toBeNull()
-    expect(screen.getByRole('link', { name: 'Find callable alternatives' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Find operational alternatives' })).toBeTruthy()
   })
 
   it('pops one inspect layer per Escape before closing, then survives ⌘K flicker', async () => {
@@ -644,7 +669,7 @@ describe('operator command panel', () => {
     })
 
     renderPanel({ readDetail })
-    const trigger = screen.getByRole('button', { name: 'Search' })
+    const trigger = screen.getByRole('button', { name: 'Find Operations' })
     fireEvent.keyDown(window, { key: 'k', metaKey: true })
     const input = await screen.findByRole('combobox', { name: 'Search operations' })
     fireEvent.change(input, { target: { value: 'weather' } })
@@ -696,8 +721,10 @@ describe('operator command panel', () => {
   it('turns a no-match result into clear and browse continuations', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
       ...operationSearchPayload(),
+      kind: 'no_candidates',
       items: [],
-      matchedCount: 0,
+      count: 0,
+      note: 'No operational Operations matched this search.',
     })))
 
     const readDetail = vi.fn(async (): Promise<PublicOperationDetailRouteResult> => ({
@@ -748,28 +775,25 @@ const TEST_OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
 const SECOND_TEST_OPERATION_REF = `operation:v1:${'b'.repeat(64)}`
 const RECENT_TEST_OPERATION_REF = `operation:v1:${'c'.repeat(64)}`
 
-function operationSearchPayload(authentication: unknown = { kind: 'ae_api_key' }) {
+function operationSearchPayload(authentication?: unknown) {
   return {
     kind: 'ok',
-    schemaVersion: 'registry-operations:v1',
+    schemaVersion: 'registry-operations:v3',
     query: 'weather forecast',
     items: [
       {
         operationRef: TEST_OPERATION_REF,
         capabilityId: 'get.open-meteo.forecast',
         title: 'Weather forecast',
-        summary: 'Forecast by coordinates.',
-        supplier: { name: 'Open-Meteo', slug: 'open-meteo' },
-        price: { kind: 'on_request' },
-        authentication,
-        availability: { posture: 'routeable' },
-        navigation: [],
+        description: 'Forecast by coordinates.',
+        provider: { name: 'Open-Meteo', slug: 'open-meteo' },
+        priceLabel: 'Price confirmed at inspection',
+        healthStatus: 'operational',
+        ...(authentication === undefined ? {} : { authentication }),
       },
     ],
-    matchedCount: 1,
-    ranking: [],
+    count: 1,
     pagination: { limit: 12, hasMore: false },
-    navigation: [],
   }
 }
 
@@ -786,10 +810,10 @@ function twoOperationSearchPayload() {
         operationRef: SECOND_TEST_OPERATION_REF,
         capabilityId: 'convert.currency.exchange-rate',
         title: 'Currency exchange rate',
-        summary: 'Current exchange rate for a currency pair.',
+        description: 'Current exchange rate for a currency pair.',
       },
     ],
-    matchedCount: 2,
+    count: 2,
   }
 }
 
@@ -853,7 +877,6 @@ export function detailFixture(operationRef: string = TEST_OPERATION_REF): Public
 function PanelHarness(props: {
   initialOpen: boolean
   readDetail?: (operationRef: string) => Promise<PublicOperationDetailRouteResult>
-  readBuyerCredentialPresence?: () => Promise<boolean>
 }): ReactElement {
   const [open, setOpen] = useState(props.initialOpen)
   return (
@@ -861,9 +884,6 @@ function PanelHarness(props: {
       open={open}
       onOpenChange={setOpen}
       {...(props.readDetail === undefined ? {} : { readDetail: props.readDetail })}
-      {...(props.readBuyerCredentialPresence === undefined
-        ? {}
-        : { readBuyerCredentialPresence: props.readBuyerCredentialPresence })}
     >
       <AeCommandPanel />
     </CommandPanelProvider>
@@ -872,13 +892,14 @@ function PanelHarness(props: {
 
 function renderPanel(options: {
   readDetail?: (operationRef: string) => Promise<PublicOperationDetailRouteResult>
-  readBuyerCredentialPresence?: () => Promise<boolean>
   openImmediately?: boolean
-} = {}): void {
+} = {}) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/operations/$operationRef' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/market' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/for-agents' }),
   ])
   const router = createRouter({
     routeTree,
@@ -890,10 +911,9 @@ function renderPanel(options: {
       <PanelHarness
         initialOpen={options.openImmediately === true}
         {...(options.readDetail === undefined ? {} : { readDetail: options.readDetail })}
-        {...(options.readBuyerCredentialPresence === undefined
-          ? {}
-          : { readBuyerCredentialPresence: options.readBuyerCredentialPresence })}
       />
     </RouterContextProvider>,
   )
+
+  return router
 }

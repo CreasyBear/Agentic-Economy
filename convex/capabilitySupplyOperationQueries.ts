@@ -6,22 +6,18 @@ import {
   CURRENT_OPERATION_CALL_VIA,
   compareCapabilityOperations,
   detailCapabilityOperation,
-  inspectCapabilityOperationPlan,
   searchCapabilityOperations,
-  serializeInspectPlanResult,
   serializeOperationCompareResult,
   serializeOperationDetailResult,
   serializeOperationSearchResult,
   type CapabilityOperationSourcePort,
   type CapabilityOperationSourceRecord,
-  type InspectPlanInput,
   type OperationCompareInput,
   type OperationDetailInput,
   type OperationSearchInput,
 } from '@/modules/capability-supply/public'
 
 import type { QueryCtx } from './_generated/server'
-import { toRegisteredOperationMapping } from './capabilitySupplyRowMappers'
 import {
   exactAmount,
   operationRecord,
@@ -90,10 +86,10 @@ const publicPriceEvidence = v.object({
 })
 const publicNavigation = v.object({
   relation: v.union(
+    v.literal('list'),
     v.literal('search'),
-    v.literal('detail'),
+    v.literal('describe'),
     v.literal('compare'),
-    v.literal('inspect_plan'),
     v.literal('execute'),
     v.literal('invoke'),
     v.literal('authenticate'),
@@ -285,35 +281,6 @@ export const publicCompareReturns = v.union(
     navigation: publicSearchNavigation,
   }),
 )
-export const publicInspectReturns = v.union(
-  v.object({
-    kind: v.literal('ok'),
-    schemaVersion: v.literal('registry-operations:v1'),
-    inspectPlanRef: v.string(),
-    operationRefs: v.array(v.string()),
-    mappingRefs: v.array(v.string()),
-    summary: v.object({
-      maximumCost: v.union(v.object({ kind: v.literal('known'), amount: exactAmount }), v.object({ kind: v.literal('requires_preparation') })),
-      dataUse: v.array(publicDataUse),
-      effects: v.array(publicEffect),
-      expiry: v.number(),
-    }),
-    navigation: publicSearchNavigation,
-  }),
-  v.object({
-    kind: v.literal('unavailable'),
-    schemaVersion: v.literal('registry-operations:v1'),
-    reason: v.union(
-      v.literal('query_invalid'),
-      v.literal('operation_not_found'),
-      v.literal('operation_unavailable'),
-      v.literal('mapping_unavailable'),
-      v.literal('mapping_incompatible'),
-      v.literal('mapping_cycle'),
-    ),
-    navigation: publicSearchNavigation,
-  }),
-)
 export const searchArgs = {
   query: v.string(),
   limit: v.optional(v.number()),
@@ -322,7 +289,6 @@ export const searchArgs = {
 }
 export const operationRefArgs = { operationRef: v.string() }
 export const compareArgs = { operationRefs: v.array(v.string()) }
-export const inspectArgs = { operationRefs: v.array(v.string()), mappingRefs: v.optional(v.array(v.string())), expiresInMs: v.optional(v.number()) }
 
 export async function searchHandler(ctx: QueryCtx, args: OperationSearchInput) {
   const now = Date.now()
@@ -336,10 +302,6 @@ export async function detailHandler(ctx: QueryCtx, args: OperationDetailInput) {
 export async function compareHandler(ctx: QueryCtx, args: OperationCompareInput) {
   return serializeOperationCompareResult(await compareCapabilityOperations(capabilityOperationSourcePort(ctx), args))
 }
-export async function inspectPlanHandler(ctx: QueryCtx, args: InspectPlanInput) {
-  return serializeInspectPlanResult(await inspectCapabilityOperationPlan(capabilityOperationSourcePort(ctx), args))
-}
-
 function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSourcePort {
   const listCurrent = async (
     networkId: string | undefined,
@@ -389,6 +351,7 @@ function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSource
           readinessOutcome: publication.readinessOutcome ?? null,
           readinessObservedAt: publication.readinessObservedAt ?? null,
           readinessValidUntil: publication.readinessValidUntil ?? null,
+          readinessLastHealthyAt: publication.readinessLastHealthyAt ?? null,
           readinessEvidenceRefs: [...publication.readinessEvidenceRefs].sort(),
         })),
         operationDigests: operations.map((operation) => canonicalDigest(operation)),
@@ -408,14 +371,5 @@ function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSource
     navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
     listCurrent: async (input) => await listCurrent(input.networkId, input.limit, input.now),
     loadCurrent,
-    resolveMapping: async (mappingRef, networkId) => {
-      if (networkId === undefined) return null
-      const row = await ctx.db.query('registeredOperationMappings')
-        .withIndex('by_networkId_and_mappingRef', (query) => (
-          query.eq('networkId', networkId).eq('mappingRef', mappingRef)
-        ))
-        .unique()
-      return row === null ? null : toRegisteredOperationMapping(row)
-    },
   }
 }

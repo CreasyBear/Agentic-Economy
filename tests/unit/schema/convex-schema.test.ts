@@ -90,6 +90,8 @@ const durableTables = [
   'agentAccessProviderRevocations',
   'agentAccessOAuthGrants',
   'agentAccessOAuthClients',
+  'agentAccessOAuthRefreshFamilies',
+  'agentAccessOAuthRefreshTokens',
   'operationKeys',
   'sourceWriteNonces',
   'adminMemberships',
@@ -279,6 +281,13 @@ const requiredIndexes = {
     'by_status_and_expiresAt',
   ],
   agentAccessOAuthClients: ['by_clientId'],
+  agentAccessOAuthRefreshFamilies: [
+    'by_familyRef',
+    'by_principalRef_and_lifecycle',
+    'by_currentProviderCredentialId_and_lifecycle',
+    'by_currentCredentialRef_and_lifecycle',
+  ],
+  agentAccessOAuthRefreshTokens: ['by_tokenHash', 'by_accessTokenHash', 'by_familyRef_and_generation'],
   capabilityContractDocuments: ['by_capabilityId_and_version', 'by_status_and_capabilityId_and_version'],
   capabilityPublications: [
     'by_publicationRef_and_revision',
@@ -324,7 +333,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(79)
+    expect(durableTables).toHaveLength(81)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

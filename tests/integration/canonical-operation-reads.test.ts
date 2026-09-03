@@ -175,14 +175,14 @@ async function corruptCurrentOperationMaterial(
 
 
 describe('canonical Operation reads', () => {
-  it('keeps two suppliers coherent across search, detail, compare, inspect, and pinned call identity', async () => {
+  it('keeps two suppliers coherent across search, detail, compare, and pinned call identity', async () => {
     const backend = convexTestWithMarketComponents()
     const first = await publishCurrentOperation(backend, 'parity-first')
     const second = await publishCurrentOperation(backend, 'parity-second')
     const operationRefs = [first.operationRef, second.operationRef].sort()
     const search = await backend.query(api.capabilitySupplyOperations.search, {
       query: 'lookup',
-      limit: 20,
+      limit: 2,
     })
     expect(search.kind).toBe('ok')
     if (search.kind !== 'ok') return
@@ -190,8 +190,6 @@ describe('canonical Operation reads', () => {
     const compare = await backend.query(api.capabilitySupplyOperations.compare, { operationRefs })
     expect(compare.kind).toBe('ok')
     if (compare.kind !== 'ok') return
-    const inspect = await backend.query(api.capabilitySupplyOperations.inspectPlan, { operationRefs })
-    expect(inspect).toMatchObject({ kind: 'ok', operationRefs })
     for (const operationRef of operationRefs) {
       const searched = search.items.find((item) => item.operationRef === operationRef)
       const compared = compare.operations.find((item) => item.operationRef === operationRef)
@@ -232,13 +230,10 @@ describe('canonical Operation reads', () => {
   })
 
   it.each(['price', 'readiness', 'effects'] as const)(
-    'refuses execution when %s changes after inspect, with no stale provider effect',
+    'refuses the current Operation when %s changes, with no stale provider effect',
     async (material) => {
       const backend = convexTestWithMarketComponents()
       const fixture = await publishCurrentOperation(backend, `stale-${material}`)
-      await expect(backend.query(api.capabilitySupplyOperations.inspectPlan, {
-        operationRefs: [fixture.operationRef],
-      })).resolves.toMatchObject({ kind: 'ok', operationRefs: [fixture.operationRef] })
       await backend.run(async (ctx) => {
         const publication = await ctx.db.query('capabilityPublications')
           .withIndex('by_publicationRef_and_revision', (query) => (
@@ -329,9 +324,6 @@ describe('canonical Operation reads', () => {
     await expect(backend.query(api.capabilitySupplyOperations.compare, {
       operationRefs: [fixture.operationRef],
     })).resolves.toMatchObject({ kind: 'unavailable', reason: 'operation_not_found' })
-    await expect(backend.query(api.capabilitySupplyOperations.inspectPlan, {
-      operationRefs: [fixture.operationRef],
-    })).resolves.toMatchObject({ kind: 'unavailable', reason: 'operation_not_found' })
     await expect(backend.query(
       internal.capabilitySupplyOperations.readCurrentPublishedOperationSnapshot,
       { operationRef: fixture.operationRef },
@@ -355,9 +347,6 @@ describe('canonical Operation reads', () => {
       operationRef: fixture.operationRef,
     })).resolves.toMatchObject({ kind: 'not_found' })
     await expect(backend.query(api.capabilitySupplyOperations.compare, {
-      operationRefs: [fixture.operationRef],
-    })).resolves.toMatchObject({ kind: 'unavailable', reason: 'operation_not_found' })
-    await expect(backend.query(api.capabilitySupplyOperations.inspectPlan, {
       operationRefs: [fixture.operationRef],
     })).resolves.toMatchObject({ kind: 'unavailable', reason: 'operation_not_found' })
     await expect(backend.query(

@@ -1,6 +1,9 @@
 import { callPublicSourceQuery, sourceQuery } from "@/lib/server/convex-source";
 import { readCapabilityOperationSearch } from "@/modules/capability-supply/operation-source";
-import type { OperationSearchResult } from "@/modules/capability-supply/public";
+import type {
+  OperationSearchResult,
+  PublicOperationDescriptor,
+} from "@/modules/capability-supply/public";
 import {
   MARKET_MAX_DAILY_POINTS,
   MARKET_MAX_FEATURED_SERVICES,
@@ -19,6 +22,7 @@ import {
 import {
   emptyMarketListingEvidence,
   projectMarketListingEvidence,
+  type MarketListingEvidenceProjection,
   type MarketListingEvidenceSource,
 } from "./listing-evidence";
 import {
@@ -86,6 +90,43 @@ export type MarketCatalogQuery = Readonly<{
   availability?: "routeable" | "setup_required" | "unavailable";
   cursor?: string;
 }>;
+
+export async function readOperationListingEvidence(
+  operation: PublicOperationDescriptor,
+  window: MarketWindow = "30d",
+): Promise<MarketListingEvidenceProjection> {
+  const summary = catalogJobSummary(
+    operation.summary || operation.offering.summary,
+  );
+  const catalogText = `${catalogJobLabel(
+    operation.contract.capabilityId,
+    operation.offering.label,
+    summary,
+  )} ${summary}`;
+  try {
+    const [source] = await callPublicSourceQuery(readListingEvidence, {
+      operationRefs: [operation.operationRef],
+      since: Date.now() - windowMilliseconds(window),
+    });
+    return source === undefined
+      ? emptyMarketListingEvidence(
+          operation.operationRef,
+          operation.contract.capabilityId,
+          catalogText,
+        )
+      : projectMarketListingEvidence(
+          source,
+          operation.contract.capabilityId,
+          catalogText,
+        );
+  } catch {
+    return emptyMarketListingEvidence(
+      operation.operationRef,
+      operation.contract.capabilityId,
+      catalogText,
+    );
+  }
+}
 
 export async function readMarketRouteProjection(
   window: MarketWindow,

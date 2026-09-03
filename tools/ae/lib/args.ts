@@ -26,7 +26,6 @@ export type CliOptions = {
   state?: string
   filters?: string | Record<string, unknown>
   input?: string
-  mcp?: boolean
   supplier?: boolean
 }
 
@@ -151,7 +150,6 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       state: { type: 'string' },
       filters: { type: 'string' },
       input: { type: 'string' },
-      mcp: { type: 'boolean' },
       supplier: { type: 'boolean' },
     },
     allowPositionals: true,
@@ -192,7 +190,6 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     ...(parsed.values.state === undefined ? {} : { state: parsed.values.state }),
     ...(parsed.values.filters === undefined ? {} : { filters: parsed.values.filters }),
     ...(parsed.values.input === undefined ? {} : { input: parsed.values.input }),
-    mcp: parsed.values.mcp ?? false,
     supplier: parsed.values.supplier ?? false,
   }
   const [command, ...positionals] = parsed.positionals

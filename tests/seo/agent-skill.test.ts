@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 
 import { buildPublicAgentSkillMarkdown } from '@/modules/discovery/public'
-import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
-import { listMcpActions, listOperationRouteDescriptors, mcpToolName } from '@/modules/actions'
+import { findAction, listMcpActions, listOperationRouteDescriptors, mcpToolName } from '@/modules/actions'
+import { AGENT_ACCOUNT_SELF_ACTION_ID } from '@/modules/agent-access/account.actions'
 import handlePublicAgentSkillNitroRequest, { handlePublicAgentSkillRequest } from '@/routes/SKILL[.]md'
 
 const body = buildPublicAgentSkillMarkdown({
@@ -30,14 +30,21 @@ describe('public agent skill', () => {
       previous = current
     }
   })
-  it('opens with the activation funnel before the market loop', () => {
+  it('opens with truthful native client authentication and agent-owned verification', () => {
+    const whoami = findAction(AGENT_ACCOUNT_SELF_ACTION_ID)
+    expect(whoami).toBeDefined()
+    const whoamiToolName = mcpToolName(whoami!)
     const funnelMarkers = [
-      '## 1. Pick your path',
-      '/llms.txt',
-      '/for-agents',
-      'npm install --global "https://ae.example/downloads/agentic-economy-cli-0.1.0.tgz"',
-      'ae --version',
-      'tell your human what you needed',
+      '## 1. Connect the current client',
+      'codex mcp add agentic-economy --url "https://ae.example/mcp"',
+      'codex mcp login agentic-economy',
+      'claude mcp add --transport http --scope user agentic-economy "https://ae.example/mcp"',
+      'open /mcp, select agentic-economy, then choose Authenticate',
+      'cursor --add-mcp \'{"name":"agentic-economy","url":"https://ae.example/mcp"}\'',
+      'follow its OAuth prompt',
+      'Public search works immediately',
+      whoamiToolName,
+      'report the connected Agent Principal and Account',
       '## 2. Price rule — before any paid call',
       'state the total price and the required inputs',
       '## 3. Search by job',
@@ -48,12 +55,12 @@ describe('public agent skill', () => {
       expect(current).toBeGreaterThan(previous)
       previous = current
     }
-    expect(body).toMatch(/names begin with `ae_`/u)
-    expect(body).toContain('anonymously and free')
-    expect(body).toContain('npm install --global --prefix "$HOME/.local" "https://ae.example/downloads/agentic-economy-cli-0.1.0.tgz"')
-    expect(body).toContain('npx --yes add-mcp@2.3.0 "https://ae.example/mcp" --name agentic-economy --transport http --global --agent "<agent>" --yes')
-    expect(body).toContain('npx --yes add-mcp@2.3.0 list --global --agent "<agent>"')
-    expect(body).not.toContain('npx @agentic-economy/cli')
+    expect(body).toContain('Use the native entry for the client already in use')
+    expect(body).toContain('standard OAuth approval')
+    expect(body).toContain('returns to the same task')
+    expect(body).not.toContain('the client opens standard OAuth approval')
+    expect(body).not.toContain('codex mcp login agentic-economy --scopes')
+    expect(body).not.toMatch(/add-mcp@|restart|npm install|AE_API_KEY=/u)
   })
 
   it('gives supplier agents a bounded owner-approved onboarding path', () => {
@@ -109,17 +116,15 @@ describe('public agent skill', () => {
     expect(body.indexOf('/api/v1/market-operations/search')).toBeLessThan(body.indexOf('ae connect --json'))
   })
 
-  it('keeps the single caller key boundary explicit', () => {
-    expect(body).toContain(`https://ae.example${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...`)
-    expect(body).toContain('POST https://ae.example/oauth/register')
-    expect(body).toContain('POST https://ae.example/oauth/device_authorization')
-    expect(body).toContain('POST https://ae.example/oauth/token')
+  it('keeps authentication separate from authority and provider credentials', () => {
+    expect(body).toContain('standard OAuth approval')
+    expect(body).toContain('authenticated account read')
+    expect(body).toContain('report the connected Agent Principal and Account')
     expect(body).toContain('The AE key identifies the caller.')
     expect(body).toMatch(/never contains or grants a provider credential/u)
     expect(body).toMatch(/silent consequential authority/u)
     expect(body).toContain('The request JSON body field `idempotencyKey` is required')
     expect(body).toMatch(/same key with identical material replays the original state/u)
-    expect(body).toContain('export AE_CLI_BASE_URL="https://ae.example"')
   })
 
   it('documents the MCP projection from the registered action graph', () => {

@@ -302,6 +302,7 @@ export type OwnerSupplyOfferingReadback = Readonly<{
   name: string;
   summary: string;
   status: BusinessOfferingStatus;
+  managementStatus: "Validating" | "Live" | "Action needed" | "Degraded" | "Removed";
   sourceHash?: string;
   sourceMaterial?: PreparedPublicationMaterial;
   endpointUrl?: string;

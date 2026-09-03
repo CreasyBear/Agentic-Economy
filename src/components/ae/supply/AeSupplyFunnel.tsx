@@ -111,6 +111,7 @@ export function AeSupplyFunnel({
   }>>()
   const [publishPending, setPublishPending] = useState(false)
   const publishInFlight = useRef(false)
+  const feedbackOwnerRef = useRef<number>(0)
   const actionContext = contextForOffering(businessId, offering)
   const currentStep = offering.currentStep
   const isX402Test = offering.publication?.source.kind === 'x402'
@@ -158,6 +159,7 @@ export function AeSupplyFunnel({
   }, [authorityNeedsRebind])
 
   async function reload(): Promise<boolean> {
+    const owner = ++feedbackOwnerRef.current
     setConfirmTest(false)
     setReloadPending(true)
     try {
@@ -167,6 +169,7 @@ export function AeSupplyFunnel({
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       setReloadRequired(true)
+      if (feedbackOwnerRef.current !== owner) return false
       setFeedback({
         message: 'AE received the action result, but current setup could not be reloaded. Reload setup before another action.',
         variant: 'destructive',
@@ -416,7 +419,7 @@ function SellerCanaryStatus({
   payment?: X402CanaryDisclosure
   retry: RunCanaryCallback
   promote?: PromoteCanaryCallback
-  onReload: () => Promise<unknown>
+  onReload: () => Promise<boolean>
   onFeedback: (feedback: Feedback) => void
   onError: (cause: unknown, message?: string) => void
 }>) {
@@ -711,6 +714,7 @@ function SupplyTruthCard({ offering }: Readonly<{ offering: OwnerSupplyOfferingR
         ) : null}
         <AeFactList
           facts={[
+            { label: 'Status', value: offering.managementStatus },
             { label: 'Admission', value: offering.admission.state },
             { label: 'Publication', value: publication?.state ?? 'not published' },
             { label: 'Readiness', value: offering.readiness.outcome },

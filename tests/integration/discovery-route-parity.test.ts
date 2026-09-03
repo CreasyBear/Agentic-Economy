@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import { getPublicBusinessCatalog } from '@/modules/registry/public'
 import {
-  operationCompareOutputSchema,
-  operationDetailOutputSchema,
-  operationInspectPlanOutputSchema,
-  operationSearchOutputSchema,
-} from '@/modules/capability-supply/public'
+  operationChoiceCompareOutputSchema,
+  operationChoiceDescribeOutputSchema,
+  operationChoiceListOutputSchema,
+  operationChoiceSearchOutputSchema,
+} from '@/modules/registry/operation-choice-contracts'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { isRecord } from '@/modules/common/is-record'
@@ -17,8 +17,8 @@ import {
 import {
   OPERATION_MARKET_ACTION_ENTRIES,
   OPERATION_MARKET_COMPARE_PATH,
-  OPERATION_MARKET_DETAIL_PATH,
-  OPERATION_MARKET_INSPECT_PLAN_PATH,
+  OPERATION_MARKET_DESCRIBE_PATH,
+  OPERATION_MARKET_LIST_PATH,
   OPERATION_MARKET_SEARCH_PATH,
 } from '@/modules/registry/operation-entry'
 import {
@@ -34,8 +34,8 @@ import {
 } from '@/modules/registry/public'
 import { registryDetailAction, registryListAction } from '@/modules/registry/registry.actions'
 import { Route as MarketOperationCompareRoute } from '@/routes/api.v1.market-operations.compare'
-import { Route as MarketOperationDetailRoute } from '@/routes/api.v1.market-operations.detail'
-import { Route as MarketOperationInspectPlanRoute } from '@/routes/api.v1.market-operations.inspect-plan'
+import { Route as MarketOperationDescribeRoute } from '@/routes/api.v1.market-operations.describe'
+import { Route as MarketOperationListRoute } from '@/routes/api.v1.market-operations.list'
 import { Route as MarketOperationSearchRoute } from '@/routes/api.v1.market-operations.search'
 import { handleUcpManifestRequest } from '../helpers/discovery-fixture-routes'
 import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
@@ -182,10 +182,10 @@ describe('discovery route parity', () => {
       .map(advertisedRoute)
     const apiPaths = apiRoutes.map((route) => new URL(route.url).pathname)
     const expectedApiPaths = [
+      OPERATION_MARKET_LIST_PATH,
       OPERATION_MARKET_SEARCH_PATH,
-      OPERATION_MARKET_DETAIL_PATH,
+      OPERATION_MARKET_DESCRIBE_PATH,
       OPERATION_MARKET_COMPARE_PATH,
-      OPERATION_MARKET_INSPECT_PLAN_PATH,
     ].sort()
 
     expect(apiPaths.sort()).toEqual(expectedApiPaths)
@@ -196,16 +196,16 @@ describe('discovery route parity', () => {
     ).toBe(true)
 
     const searchRoute = apiRoutes.find((route) => new URL(route.url).pathname === OPERATION_MARKET_SEARCH_PATH)
-    const operationDetailRoute = apiRoutes.find((route) => new URL(route.url).pathname === OPERATION_MARKET_DETAIL_PATH)
+    const operationDescribeRoute = apiRoutes.find((route) => new URL(route.url).pathname === OPERATION_MARKET_DESCRIBE_PATH)
     if (
       searchRoute === undefined
-      || operationDetailRoute === undefined
+      || operationDescribeRoute === undefined
     ) {
-      throw new Error('Expected current llms Operation search and detail URLs to be present.')
+      throw new Error('Expected current llms Operation search and describe URLs to be present.')
     }
     const restoreMarketOperationSource = installMarketOperationSource()
-    const operationDetailResponse = await routeHandler(MarketOperationDetailRoute, 'POST')({
-      request: new Request(`${origin}${OPERATION_MARKET_DETAIL_PATH}`, {
+    const operationDetailResponse = await routeHandler(MarketOperationDescribeRoute, 'POST')({
+      request: new Request(`${origin}${OPERATION_MARKET_DESCRIBE_PATH}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ operationRef: MARKET_OPERATION_DETAIL_REF }),
@@ -214,12 +214,11 @@ describe('discovery route parity', () => {
     })
     expect(operationDetailResponse.status).toBe(200)
     const operationDetailBody: unknown = await operationDetailResponse.json()
-    expect(operationDetailOutputSchema.safeParse(operationDetailBody).success).toBe(true)
+    expect(operationChoiceDescribeOutputSchema.safeParse(operationDetailBody).success).toBe(true)
     expect(operationDetailBody).toMatchObject({
       kind: 'found',
       operation: {
-        callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
-        paymentLane: 'brokered',
+        operationRef: MARKET_OPERATION_DETAIL_REF,
       },
     })
     try {
@@ -314,16 +313,22 @@ const MARKET_OPERATION_DETAIL_WIRE_DESCRIPTOR = {
 
 const MARKET_OPERATION_ROUTE_CASES: readonly MarketOperationRouteCase[] = [
   {
+    path: OPERATION_MARKET_LIST_PATH,
+    route: MarketOperationListRoute,
+    input: {},
+    outputSchema: operationChoiceListOutputSchema,
+  },
+  {
     path: OPERATION_MARKET_SEARCH_PATH,
     route: MarketOperationSearchRoute,
     input: { query: 'reference lookup', limit: 1 },
-    outputSchema: operationSearchOutputSchema,
+    outputSchema: operationChoiceSearchOutputSchema,
   },
   {
-    path: OPERATION_MARKET_DETAIL_PATH,
-    route: MarketOperationDetailRoute,
+    path: OPERATION_MARKET_DESCRIBE_PATH,
+    route: MarketOperationDescribeRoute,
     input: { operationRef: MARKET_OPERATION_DETAIL_REF },
-    outputSchema: operationDetailOutputSchema,
+    outputSchema: operationChoiceDescribeOutputSchema,
   },
   {
     path: OPERATION_MARKET_COMPARE_PATH,
@@ -331,13 +336,7 @@ const MARKET_OPERATION_ROUTE_CASES: readonly MarketOperationRouteCase[] = [
     input: {
       operationRefs: [`operation:v1:${'a'.repeat(64)}`, `operation:v1:${'b'.repeat(64)}`],
     },
-    outputSchema: operationCompareOutputSchema,
-  },
-  {
-    path: OPERATION_MARKET_INSPECT_PLAN_PATH,
-    route: MarketOperationInspectPlanRoute,
-    input: { operationRefs: [`operation:v1:${'c'.repeat(64)}`], expiresInMs: 1_000 },
-    outputSchema: operationInspectPlanOutputSchema,
+    outputSchema: operationChoiceCompareOutputSchema,
   },
 ]
 
@@ -488,16 +487,6 @@ function installMarketOperationSource(): () => void {
               kind: 'unavailable',
               schemaVersion: 'registry-operations:v1',
               reason: 'operation_not_found',
-              navigation: [],
-            },
-          })
-        case 'capabilitySupplyOperations:inspectPlan':
-          return Response.json({
-            status: 'success',
-            value: {
-              kind: 'unavailable',
-              schemaVersion: 'registry-operations:v1',
-              reason: 'mapping_unavailable',
               navigation: [],
             },
           })

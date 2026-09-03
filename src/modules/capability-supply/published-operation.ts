@@ -84,6 +84,7 @@ export type PublishedOperation = Readonly<{
   readiness: Readonly<{
     observedAt: number
     validUntil: number
+    lastHealthyAt?: number
     qualificationDigest: string
     evidenceRefs: readonly string[]
   }>
@@ -160,6 +161,7 @@ export function materializePublishedOperation(input: Readonly<{
     priceDigest: string
     readinessObservedAt?: number
     readinessValidUntil?: number
+    readinessLastHealthyAt?: number
     readinessEvidenceRefs: readonly string[]
   }>
   contract: CapabilityContract
@@ -293,6 +295,9 @@ export function materializePublishedOperation(input: Readonly<{
     readiness: {
       observedAt: publication.readinessObservedAt,
       validUntil: publication.readinessValidUntil,
+      ...(publication.readinessLastHealthyAt === undefined
+        ? {}
+        : { lastHealthyAt: publication.readinessLastHealthyAt }),
       qualificationDigest: qualification.qualificationDigest,
       evidenceRefs: [...publication.readinessEvidenceRefs].sort(),
     },

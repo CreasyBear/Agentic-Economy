@@ -6,11 +6,8 @@ import { readOperationReadRequest } from '@/lib/server/operation-read-request'
 import { problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
-import {
-  operationSearchInputSchema,
-} from '@/modules/capability-supply/public'
 import { registryOperationsSearchAction } from '@/modules/registry/operations.actions'
-import { operationChoiceSearchOutputSchema } from '@/modules/registry/operation-choice-contracts'
+import { operationCatalogSearchInputSchema, operationChoiceSearchOutputSchema } from '@/modules/registry/operation-choice-contracts'
 
 const MAX_OPERATION_SEARCH_BODY_BYTES = 16 * 1024
 
@@ -34,7 +31,7 @@ export async function handleMarketOperationSearchRequest(request: Request): Prom
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
     let response: Response
     try {
-      const parsed = await readOperationReadRequest(request, MAX_OPERATION_SEARCH_BODY_BYTES, operationSearchInputSchema)
+      const parsed = await readOperationReadRequest(request, MAX_OPERATION_SEARCH_BODY_BYTES, operationCatalogSearchInputSchema)
       response = !parsed.ok ? parsed.response : await withHttpRateLimit(request, 'public-read', async () => {
         const result = operationChoiceSearchOutputSchema.safeParse(await registryOperationsSearchAction.run({
           data: parsed.data,

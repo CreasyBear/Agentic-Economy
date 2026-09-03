@@ -56,7 +56,7 @@ function productionReadinessEnvironment(): Record<string, string> {
     AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
     STRIPE_SECRET_KEY: 'sk_live_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_example',
-    VITE_STRIPE_PUBLISHABLE_KEY: 'pk_live_example',
+    STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_au_gst_10_inclusive',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
       `${family}:0123456789abcdef0123456789abcdef`,

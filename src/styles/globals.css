@@ -32,8 +32,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
+  --color-foreground-subtle: var(--ae-fg-subtle);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
@@ -78,8 +77,24 @@
   --radius-nav: 0.125rem;
   --shadow-soft: var(--shadow-low);
   --shadow-float: var(--shadow-med);
+  --shadow-float-dark: var(--shadow-high);
   --shadow-overlay: var(--ae-shadow-overlay);
   --shadow-market-row-hover: var(--shadow-inset-market-row);
+  /* Collapse Tailwind's default radius/shadow scale onto the Twenty grammar
+     so components using rounded-* / shadow-* resolve to it centrally instead
+     of writing ad-hoc geometry. Controls 2px; larger surfaces 4px; nothing
+     above. Elevation is the donor four-level ladder. */
+  --radius-sm: 0.125rem;
+  --radius-md: 0.125rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.25rem;
+  --radius-2xl: 0.25rem;
+  --shadow-xs: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 12px 32px -16px rgba(0, 0, 0, 0.18);
+  --shadow-2xl: 0 12px 32px -16px rgba(0, 0, 0, 0.18);
   --duration-fast: var(--motion-duration-fast);
   --duration-base: var(--motion-duration-base);
   --duration-slow: var(--motion-duration-slow);
@@ -126,7 +141,11 @@
      white data surfaces; near-black ink; hairlines black-10/20. */
   --ae-bg: #f4f4f4;
   --ae-fg: #1c1c1c;
-  --ae-muted-fg: rgba(28, 28, 28, 0.6);
+  /* black-70 delivers WCAG AA on light surfaces (black-60 is 4.48:1, FAIL —
+     the Twenty reference flags exactly this). Plain-text muted copy uses this. */
+  --ae-muted-fg: rgba(28, 28, 28, 0.7);
+  /* black-40: decorative/label-only, never body/supporting text. */
+  --ae-fg-subtle: rgba(28, 28, 28, 0.4);
   --ae-surface: #ffffff;
   --ae-surface-sunken: #f4f4f4;
   --ae-surface-raised: var(--ae-surface);

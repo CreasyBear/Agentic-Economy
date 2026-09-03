@@ -1,5 +1,9 @@
 import { clerk } from '@clerk/testing/playwright'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+
+import { createOpaqueOAuthValue, hashOAuthValue } from '@/modules/agent-access/oauth-state'
 import { authenticatedE2EEnvironment, requireAuthenticatedE2EEnvironment } from './environment'
 
 const environment = authenticatedE2EEnvironment
@@ -42,6 +46,7 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     expect(predecessor.status()).toBe(401)
 
     await openAgent(page, agentAName)
+    await page.getByRole('button', { name: 'Technical details' }).click()
     await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
     await expect(page.getByText('Generation 1')).toBeVisible()
     await expect(page.getByText('Generation 2')).toBeVisible()
@@ -65,10 +70,11 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
     await expectUsableAgent(page.request, agentB.secret)
 
     await openAgent(page, agentBName)
-    const disconnect = page.getByRole('button', { name: 'Disconnect agent' })
+    await page.getByRole('button', { name: 'Technical details' }).click()
+    const disconnect = page.getByRole('button', { name: 'Remove agent everywhere' })
     await expect(disconnect).toHaveCount(1)
     await disconnect.dispatchEvent('click')
-    const confirmDisconnect = page.getByRole('button', { name: 'Disconnect agent' }).last()
+    const confirmDisconnect = page.getByRole('button', { name: 'Remove agent everywhere' }).last()
     await expect(confirmDisconnect).toBeVisible()
     await confirmDisconnect.dispatchEvent('click')
     await expect(page.getByText('Disconnected', { exact: true }).first()).toBeVisible()
@@ -79,6 +85,88 @@ test.describe('configured Clerk and Convex multi-agent lifecycle', () => {
       headers: { Authorization: `Bearer ${agentB.secret}` },
     })
     expect(disconnected.status()).toBe(401)
+  })
+
+  test('connects once, survives a client restart and refresh, then fails closed on revocation', async ({ page }) => {
+    const configuredEnvironment = requireAuthenticatedE2EEnvironment()
+    if (configuredEnvironment.ownerEmail === undefined) throw new Error('authenticated_e2e_owner_email_missing')
+    const callback = 'http://127.0.0.1/callback'
+    const verifier = createOpaqueOAuthValue(48)
+    const state = createOpaqueOAuthValue(18)
+
+    await expectExactReleaseRevision(page.request, configuredEnvironment.expectedSourceRevision)
+    await page.goto('/')
+    await clerk.signIn({ page, emailAddress: configuredEnvironment.ownerEmail })
+
+    const clientName = `E2E durable MCP ${Date.now()}`
+    const registration = await page.request.post('/oauth/register', {
+      data: {
+        client_name: clientName,
+        redirect_uris: [callback],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'none',
+      },
+    })
+    expect(registration.status()).toBe(201)
+    const { client_id: clientId } = await registration.json() as { client_id: string }
+    const authorize = new URL('/oauth/authorize', configuredEnvironment.baseURL)
+    authorize.search = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: callback,
+      response_type: 'code',
+      state,
+      code_challenge: await hashOAuthValue(verifier),
+      code_challenge_method: 'S256',
+    }).toString()
+
+    await page.goto(authorize.toString())
+    await expect(page.getByRole('radio', { name: /Ask each time/ })).toBeChecked()
+    const redirectTo = await submitAgentApprovalRedirect(page)
+    const callbackUrl = new URL(redirectTo)
+    expect(callbackUrl.searchParams.get('state')).toBe(state)
+    const code = callbackUrl.searchParams.get('code')
+    expect(code).not.toBeNull()
+
+    const initial = await exchangeAuthorizationCode(page.request, {
+      clientId,
+      code: code!,
+      callback,
+      verifier,
+    })
+    const firstIdentity = await callOfficialWhoami(configuredEnvironment.baseURL, initial.accessToken)
+    expect(firstIdentity.kind).toBe('authenticated')
+    expect(firstIdentity.principalRef).toMatch(/^prn_[0-9a-f]{32}$/u)
+    expect(firstIdentity.accountRef).toBeTruthy()
+
+    const refreshed = await refreshAuthorization(page.request, clientId, initial.refreshToken)
+    const restartedIdentity = await callOfficialWhoami(configuredEnvironment.baseURL, refreshed.accessToken)
+    expect(restartedIdentity).toMatchObject({
+      kind: 'authenticated',
+      principalRef: firstIdentity.principalRef,
+      accountRef: firstIdentity.accountRef,
+      authorityMode: firstIdentity.authorityMode,
+    })
+    expect(restartedIdentity.scopes).toEqual(firstIdentity.scopes)
+
+    await openAgent(page, clientName)
+    await expect(page.getByText(clientName, { exact: true }).first()).toBeVisible()
+    const disconnect = page.getByRole('button', { name: 'Disconnect', exact: true })
+    await disconnect.click()
+    await page.getByRole('button', { name: 'Disconnect', exact: true }).last().click()
+    const rejectedRefresh = await page.request.post('/oauth/token', {
+      form: { grant_type: 'refresh_token', refresh_token: refreshed.refreshToken, client_id: clientId },
+    })
+    expect(rejectedRefresh.status()).toBe(400)
+    await expect(rejectedRefresh.json()).resolves.toMatchObject({ error: 'invalid_grant' })
+    const protectedRead = await page.request.get('/api/v1/account', {
+      headers: { Authorization: `Bearer ${refreshed.accessToken}` },
+    })
+    expect(protectedRead.status()).toBe(401)
+    await expect(callOfficialWhoami(configuredEnvironment.baseURL, refreshed.accessToken)).rejects.toThrow()
+
+    const anonymous = await callOfficialPublicSearch(configuredEnvironment.baseURL)
+    expect(anonymous).toMatchObject({ result: { kind: expect.any(String) } })
   })
 })
 
@@ -94,9 +182,8 @@ async function connectNewAgent(page: Page, name: string): Promise<ConnectedAgent
   const grant = await beginDeviceGrant(page.request, name)
   await page.goto(grant.verificationUri)
   await expect(page.getByRole('heading', { name: `Connect ${name}`, exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Approve access' }).click()
-  await confirmAgentApproval(page)
-  await expect(page.getByText('Access approved — return to your agent')).toBeVisible()
+  await submitAgentApproval(page, 'Connect agent')
+  await expect(page.getByText(`Connected to ${name}`)).toBeVisible()
   return { secret: await exchangeDeviceGrant(page.request, grant.clientId, grant.deviceCode) }
 }
 
@@ -124,9 +211,8 @@ async function replaceAgentCredential(page: Page, name: string, targetName: stri
     if (await loadMore.count() === 0) throw new Error('replacement_agent_not_found')
     await loadNextConsentPage(page)
   }
-  await page.getByRole('button', { name: 'Approve access' }).click()
-  await confirmAgentApproval(page)
-  await expect(page.getByText('Access approved — return to your agent')).toBeVisible()
+  await submitAgentApproval(page, 'Replace credential')
+  await expect(page.getByText(`Connected to ${name}`)).toBeVisible()
   return { secret: await exchangeDeviceGrant(page.request, grant.clientId, grant.deviceCode) }
 }
 
@@ -142,14 +228,27 @@ async function loadNextConsentPage(page: Page): Promise<void> {
   ])
 }
 
-async function confirmAgentApproval(page: Page): Promise<void> {
+async function submitAgentApproval(page: Page, actionName: 'Connect agent' | 'Replace credential' | 'Revoke and replace credential'): Promise<void> {
   const responsePromise = page.waitForResponse((response) => {
     const url = new URL(response.url())
     return url.pathname === '/oauth/authorize' && response.request().method() === 'POST'
   })
-  await page.getByRole('button', { name: 'Confirm and approve' }).click()
+  await page.getByRole('button', { name: actionName, exact: true }).click()
   const response = await responsePromise
   await expect(response.json()).resolves.toMatchObject({ kind: 'approved' })
+}
+
+async function submitAgentApprovalRedirect(page: Page): Promise<string> {
+  const responsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return url.pathname === '/oauth/authorize' && response.request().method() === 'POST'
+  })
+  await page.getByRole('button', { name: 'Connect agent', exact: true }).click()
+  const response = await responsePromise
+  const result = await response.json() as { kind?: string; redirectTo?: string }
+  expect(result.kind).toBe('approved')
+  expect(result.redirectTo).toBeTruthy()
+  return result.redirectTo!
 }
 
 async function ensureAgentVisible(page: Page, name: string): Promise<void> {
@@ -174,7 +273,7 @@ async function openAgent(page: Page, name: string): Promise<void> {
   }
   await page.goto(href, { waitUntil: 'networkidle' })
   await expect(page).toHaveURL(new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}$`, 'u'))
-  await expect(page.getByText('Credential history', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Technical details' })).toBeVisible()
 }
 
 async function expectExactReleaseRevision(request: APIRequestContext, expected: string | undefined): Promise<void> {
@@ -223,6 +322,101 @@ async function exchangeDeviceGrant(request: APIRequestContext, clientId: string,
   const token = await response.json() as { access_token: string }
   expect(token.access_token).toMatch(/^ak_/u)
   return token.access_token
+}
+
+type DurableTokens = Readonly<{ accessToken: string; refreshToken: string }>
+
+async function exchangeAuthorizationCode(
+  request: APIRequestContext,
+  input: Readonly<{ clientId: string; code: string; callback: string; verifier: string }>,
+): Promise<DurableTokens> {
+  const response = await request.post('/oauth/token', {
+    form: {
+      grant_type: 'authorization_code',
+      code: input.code,
+      client_id: input.clientId,
+      redirect_uri: input.callback,
+      code_verifier: input.verifier,
+    },
+  })
+  expect(response.ok()).toBe(true)
+  const tokens = await response.json() as { access_token?: string; refresh_token?: string; scope?: string }
+  expect(tokens).toMatchObject({
+    access_token: expect.stringMatching(/^ak_/u),
+    refresh_token: expect.any(String),
+    scope: 'market_operations:invoke customer_requests:approve_each offline_access',
+  })
+  return { accessToken: tokens.access_token!, refreshToken: tokens.refresh_token! }
+}
+
+async function refreshAuthorization(
+  request: APIRequestContext,
+  clientId: string,
+  refreshToken: string,
+): Promise<DurableTokens> {
+  const response = await request.post('/oauth/token', {
+    form: {
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+    },
+  })
+  expect(response.ok()).toBe(true)
+  const tokens = await response.json() as { access_token?: string; refresh_token?: string }
+  expect(tokens.access_token).toMatch(/^ak_/u)
+  expect(tokens.refresh_token).toEqual(expect.any(String))
+  expect(tokens.refresh_token).not.toBe(refreshToken)
+  return { accessToken: tokens.access_token!, refreshToken: tokens.refresh_token! }
+}
+
+type AgentIdentity = Readonly<{
+  kind: string
+  principalRef: string
+  accountRef: string
+  scopes: readonly string[]
+  authorityMode: string
+}>
+
+function officialMcpClient(baseURL: string, accessToken?: string): Readonly<{
+  client: Client
+  transport: StreamableHTTPClientTransport
+}> {
+  const client = new Client({ name: 'ae-authenticated-e2e', version: '1.0.0' })
+  const transport = new StreamableHTTPClientTransport(new URL('/mcp', baseURL), {
+    ...(accessToken === undefined
+      ? {}
+      : { requestInit: { headers: { authorization: `Bearer ${accessToken}` } } }),
+  })
+  return { client, transport }
+}
+
+async function callOfficialWhoami(baseURL: string, accessToken: string): Promise<AgentIdentity> {
+  const { client, transport } = officialMcpClient(baseURL, accessToken)
+  try {
+    await client.connect(transport as unknown as Parameters<Client['connect']>[0])
+    const response = await client.callTool({ name: 'ae_agentAccess_whoami', arguments: {} })
+    if (response.isError) throw new Error('agent_access_whoami_rejected')
+    const identity = (response.structuredContent as { result?: AgentIdentity } | undefined)?.result
+    if (identity === undefined) throw new Error('agent_access_whoami_missing_result')
+    return identity
+  } finally {
+    await client.close().catch(() => undefined)
+  }
+}
+
+async function callOfficialPublicSearch(baseURL: string): Promise<Record<string, unknown>> {
+  const { client, transport } = officialMcpClient(baseURL)
+  try {
+    await client.connect(transport as unknown as Parameters<Client['connect']>[0])
+    const response = await client.callTool({
+      name: 'ae_registry_operations_search',
+      arguments: { query: 'research' },
+    })
+    if (response.isError) throw new Error('public_operation_search_rejected')
+    return response.structuredContent as Record<string, unknown>
+  } finally {
+    await client.close().catch(() => undefined)
+  }
 }
 
 async function expectUsableAgent(request: APIRequestContext, secret: string): Promise<{ principalRef: string }> {

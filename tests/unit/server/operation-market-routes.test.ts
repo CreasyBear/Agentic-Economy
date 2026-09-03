@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { handleMarketOperationCompareRequest } from '@/routes/api.v1.market-operations.compare'
-import { handleMarketOperationInspectPlanRequest } from '@/routes/api.v1.market-operations.inspect-plan'
-import { handleMarketOperationDetailRequest } from '@/routes/api.v1.market-operations.detail'
+import { handleMarketOperationDescribeRequest } from '@/routes/api.v1.market-operations.describe'
+import { handleMarketOperationListRequest } from '@/routes/api.v1.market-operations.list'
 import { handleMarketOperationSearchRequest } from '@/routes/api.v1.market-operations.search'
 import {
   handleApiRegistryRequest,
@@ -28,28 +28,6 @@ const detailResult = {
   navigation: [],
 }
 const compareResult = {
-  kind: 'ok' as const,
-  schemaVersion: 'registry-operations:v1' as const,
-  operations: [],
-  facts: [{
-    field: 'dataUse' as const,
-    values: [{
-      operationRef: `operation:v1:${'a'.repeat(64)}`,
-      value: [{
-        effectId: 'query_release',
-        inputPointer: '/query',
-        classification: 'public' as const,
-        phase: 'execution' as const,
-        recipient: 'selected_binding' as const,
-        purposes: ['lookup_reference'],
-      }],
-      source: 'contract' as const,
-    }],
-  }],
-  navigation: [],
-}
-
-const inspectPlanResult = {
   kind: 'unavailable' as const,
   schemaVersion: 'registry-operations:v1' as const,
   reason: 'operation_not_found' as const,
@@ -60,7 +38,6 @@ vi.mock('@/modules/capability-supply/operation-source', () => ({
   readCapabilityOperationSearch: vi.fn(async () => searchResult),
   readCapabilityOperationDetail: vi.fn(async () => detailResult),
   readCapabilityOperationCompare: vi.fn(async () => compareResult),
-  readCapabilityOperationInspectPlan: vi.fn(async () => inspectPlanResult),
 }))
 
 describe('public market operation routes', () => {
@@ -80,12 +57,20 @@ describe('public market operation routes', () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get('x-ae-request-id')).toBe('route-test')
-    await expect(response.json()).resolves.toEqual(searchResult)
+    await expect(response.json()).resolves.toEqual({
+      kind: 'no_candidates',
+      schemaVersion: 'registry-operations:v3',
+      query: 'reference lookup',
+      count: 0,
+      items: [],
+      note: 'No operational Operations matched this search.',
+      pagination: { limit: 10, hasMore: false },
+    })
   })
 
-  it('rejects malformed detail input as RFC9457 problem details', async () => {
+  it('rejects malformed describe input as RFC9457 problem details', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
-    const response = await handleMarketOperationDetailRequest(new Request('https://ae.test/api/v1/market-operations/detail', {
+    const response = await handleMarketOperationDescribeRequest(new Request('https://ae.test/api/v1/market-operations/describe', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ operationRef: 'historical-or-malformed' }),
@@ -97,10 +82,10 @@ describe('public market operation routes', () => {
   })
 
   it.each([
+    ['list', handleMarketOperationListRequest],
     ['search', handleMarketOperationSearchRequest],
-    ['detail', handleMarketOperationDetailRequest],
+    ['describe', handleMarketOperationDescribeRequest],
     ['compare', handleMarketOperationCompareRequest],
-    ['inspect-plan', handleMarketOperationInspectPlanRequest],
   ])('returns local input errors for %s even when remote admission is unavailable', async (route, handler) => {
     const admit = vi.fn(async () => { throw new Error('rate limit source unavailable') })
     setHttpRateLimitAdmissionForTests(admit)
@@ -138,19 +123,11 @@ describe('public market operation routes', () => {
     }))
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual(compareResult)
-  })
-
-  it('runs anonymous inspect-plan through the canonical POST path', async () => {
-    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
-    const response = await handleMarketOperationInspectPlanRequest(new Request('https://ae.test/api/v1/market-operations/inspect-plan', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ operationRefs: [`operation:v1:${'c'.repeat(64)}`] }),
-    }))
-
-    expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual(inspectPlanResult)
+    await expect(response.json()).resolves.toEqual({
+      kind: 'unavailable',
+      schemaVersion: 'registry-operations:v2',
+      reason: 'operation_not_found',
+    })
   })
 })
 

@@ -3,6 +3,7 @@ import type * as SourceWriteAdmissionModule from '@/lib/server/source-write-admi
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  callPublicSourceAction: vi.fn(),
   callPublicSourceMutation: vi.fn(),
   sourceMutation: vi.fn((name: string) => ({ name })),
   sourceWriteAdmissionFromRequest: vi.fn(),
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof ConvexSourceModule>()),
+  callPublicSourceAction: mocks.callPublicSourceAction,
   callPublicSourceMutation: mocks.callPublicSourceMutation,
   sourceMutation: mocks.sourceMutation,
 }))
@@ -31,17 +33,18 @@ const principal: AgentAccessPrincipal = {
 
 describe('account management action service', () => {
   beforeEach(() => {
+    mocks.callPublicSourceAction.mockReset()
     mocks.callPublicSourceMutation.mockReset()
     mocks.sourceWriteAdmissionFromRequest.mockReset().mockResolvedValue({ operationKey: 'signed' })
     mocks.sourceWriteRequestFromAdmission.mockReset().mockReturnValue({ method: 'POST' })
   })
 
   it('reads exact account balance through the signed billing boundary', async () => {
-    mocks.callPublicSourceMutation.mockResolvedValue({
+    mocks.callPublicSourceAction.mockResolvedValue({
       kind: 'available', principalRef: principal.principalId, accountRef: principal.ownerId,
       balance: { currency: 'AUD', units: '25000000', exponent: 6 },
       accountState: 'active', version: 3, updatedAt: 10,
-      funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+      funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
     })
     const service = createAccountManagementService(
       new Request('https://ae.example/api/v1/account/balance', { method: 'POST' }),
@@ -51,8 +54,8 @@ describe('account management action service', () => {
     await expect(service.balance({ input: { currency: 'AUD' }, principal, correlationId: 'request:one' }))
       .resolves.toMatchObject({ kind: 'available', balance: { units: '25000000' } })
     expect(mocks.sourceWriteAdmissionFromRequest).toHaveBeenCalledWith(expect.objectContaining({ scope: 'billing' }))
-    expect(mocks.callPublicSourceMutation).toHaveBeenCalledWith(
-      { name: 'agentMoneyReads:balance' },
+    expect(mocks.callPublicSourceAction).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({ currency: 'AUD', agentPrincipal: principal }),
     )
   })
@@ -85,11 +88,11 @@ describe('account management action service', () => {
   })
 
   it('fails closed when the source adds undeclared balance fields', async () => {
-    mocks.callPublicSourceMutation.mockResolvedValue({
+    mocks.callPublicSourceAction.mockResolvedValue({
       kind: 'available', principalRef: principal.principalId, accountRef: principal.ownerId,
       balance: { currency: 'AUD', units: '25000000', exponent: 6 },
       accountState: 'active', version: 3, updatedAt: 10,
-      funding: { kind: 'owner_browser_required', path: '/owner/credit', anchor: 'fund' },
+      funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
       stripeCustomerId: 'cus_secret',
     })
     const service = createAccountManagementService(

@@ -9,6 +9,11 @@ import { readCommercialPolicyGate } from './moneyCommercialPolicy'
 import { exactAmount, serverFunctionAuth, stripeMoneyWebhookEventArg } from './moneyLedgerValues'
 import { eventRowFields, eventRowMatches } from './moneyStripeEvents'
 import {
+  agentAccessPrincipalValue,
+  verifyMarketAgentPrincipal,
+  type AgentAccessPrincipalValue,
+} from './agentAccessPrincipals'
+import {
   resolveAndBindLegalCustomer,
 } from './lib/moneyLegalCustomer'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
@@ -43,6 +48,10 @@ const fundingProviderEvidenceArg = v.object({
   paymentIntentDigest: v.optional(v.string()),
   evidenceDigest: v.string(),
   paymentId: v.optional(v.string()),
+  checkoutStatus: v.optional(v.union(v.literal('open'), v.literal('complete'), v.literal('expired'))),
+  paymentStatus: v.optional(v.union(v.literal('unpaid'), v.literal('paid'), v.literal('no_payment_required'))),
+  checkoutMode: v.optional(v.literal('hosted_page')),
+  checkoutExpiresAt: v.optional(v.number()),
 })
 const fundingCommandValue = v.object({
   commandRef: v.string(),
@@ -62,6 +71,14 @@ const fundingCommandValue = v.object({
   inputDigest: v.string(),
   successReturnRef: v.string(),
   providerRecoveryDeadlineAt: v.number(),
+  initiationKind: v.optional(v.union(v.literal('owner_top_up'), v.literal('agent_handoff'))),
+  checkoutMode: v.optional(v.literal('hosted_page')),
+  checkoutExpiresAt: v.optional(v.number()),
+  cancelReturnRef: v.optional(v.string()),
+  requesterDisplayName: v.optional(v.string()),
+  providerCheckoutStatus: v.optional(v.union(v.literal('open'), v.literal('complete'), v.literal('expired'))),
+  providerPaymentStatus: v.optional(v.union(v.literal('unpaid'), v.literal('paid'), v.literal('no_payment_required'))),
+  terminalReason: v.optional(v.union(v.literal('async_payment_failed'), v.literal('expired'))),
   state: fundingStateValue,
   externalRef: v.optional(v.string()),
   providerStatus: v.optional(fundingStateValue),
@@ -89,6 +106,9 @@ const reserveFundingArgsValue = v.object({
   idempotencyKey: v.string(),
   inputDigest: v.string(),
   successReturnRef: v.string(),
+  checkoutMode: v.optional(v.literal('hosted_page')),
+  checkoutExpiresAt: v.optional(v.number()),
+  cancelReturnRef: v.optional(v.string()),
   operationKey: v.string(),
   correlationId: v.string(),
   ...sourceWriteArgs,
@@ -110,8 +130,52 @@ const applyFundingEventArgsValue = v.object({
 const readFundingArgsValue = v.object({
   commandRef: v.optional(v.string()),
   externalRef: v.optional(v.string()),
-  idempotencyKey: v.string(),
+  idempotencyKey: v.optional(v.string()),
 })
+const reserveAgentHandoffArgsValue = v.object({
+  principalAmountUnits: v.string(),
+  environment: environmentValue,
+  idempotencyKey: v.string(),
+  successReturnRef: v.string(),
+  cancelReturnRef: v.string(),
+  checkoutExpiresAt: v.number(),
+  agentPrincipal: agentAccessPrincipalValue,
+  operationKey: v.string(),
+  correlationId: v.string(),
+  ...sourceWriteArgs,
+})
+const bindAgentHandoffArgsValue = v.object({
+  commandRef: v.string(),
+  evidence: fundingProviderEvidenceArg,
+  agentPrincipal: agentAccessPrincipalValue,
+  operationKey: v.string(),
+  correlationId: v.string(),
+  ...sourceWriteArgs,
+})
+const readAgentHandoffArgsValue = v.object({
+  externalRef: v.string(),
+  agentPrincipal: agentAccessPrincipalValue,
+  operationKey: v.string(),
+  correlationId: v.string(),
+  ...sourceWriteArgs,
+})
+const publicFundingHandoffValue = v.union(
+  v.object({
+    kind: v.literal('found'),
+    funding: v.object({
+      state: v.union(
+        v.literal('awaiting_payment'),
+        v.literal('processing'),
+        v.literal('ready'),
+        v.literal('expired'),
+        v.literal('failed'),
+      ),
+      agentName: v.string(),
+      creditAmount: exactAmount,
+    }),
+  }),
+  v.object({ kind: v.literal('not_found') }),
+)
 const markFundingUnknownArgsValue = v.object({
   commandRef: v.string(),
   idempotencyKey: v.string(),
@@ -160,6 +224,38 @@ const POSITIVE_UNITS = /^[1-9]\d{0,29}$/u
 const SHA256 = /^sha256:[a-f0-9]{64}$/u
 const FUNDING_WEBHOOK_LOOKUP_OPERATION = 'moneyAccountFunding:readWebhookCommand'
 const FUNDING_WEBHOOK_LOOKUP_SCOPE = 'money:funding_webhook_read'
+
+function agentHandoffIdempotencyRef(
+  admission: Readonly<{ ownerId: string; principalId: string }>,
+  environment: 'sandbox' | 'production',
+  callerKey: string,
+): string {
+  return canonicalDigest({
+    format: 'ae.agent-funding-idempotency:v1',
+    accountRef: admission.ownerId,
+    principalRef: admission.principalId,
+    environment,
+    callerKey,
+  })
+}
+
+function agentHandoffCommandRef(idempotencyRef: string): string {
+  return canonicalDigest({ format: 'ae.agent-funding-command:v1', idempotencyRef })
+}
+
+async function admitAgentHandoff(
+  ctx: MutationCtx,
+  args: Readonly<{
+    agentPrincipal: AgentAccessPrincipalValue
+    operationKey: string
+    correlationId: string
+  }>,
+) {
+  const source = await requireSourceWrite(ctx, args as never, 'billing')
+  if (source.kind === 'rejected') return null
+  const admission = await verifyMarketAgentPrincipal(ctx, args.agentPrincipal)
+  return admission.kind === 'allowed' ? admission : null
+}
 
 async function recordFundingDocuments(
   ctx: MutationCtx,
@@ -322,15 +418,185 @@ async function reserveFundingHandler(
     idempotencyKey: args.idempotencyKey,
     inputDigest: args.inputDigest,
     successReturnRef: args.successReturnRef,
+    initiationKind: 'owner_top_up' as const,
+    ...(args.checkoutMode === undefined ? {} : { checkoutMode: args.checkoutMode }),
+    ...(args.checkoutExpiresAt === undefined ? {} : { checkoutExpiresAt: args.checkoutExpiresAt }),
+    ...(args.cancelReturnRef === undefined ? {} : { cancelReturnRef: args.cancelReturnRef }),
     providerRecoveryDeadlineAt: now + RECOVERY_WINDOW_MS,
     state: 'pending' as const,
     providerStatus: 'pending' as const,
-    metadataDigest: canonicalDigest({ ae_command_ref: args.commandRef }),
+    metadataDigest: canonicalDigest({ ae_command_ref: args.commandRef, ae_contract: 'account_funding_v2' }),
     createdAt: now,
     updatedAt: now,
   }
   await ctx.db.insert('moneyFundingCommands', row)
   return { kind: 'accepted', command: row }
+}
+
+async function reserveAgentHandoffHandler(
+  ctx: MutationCtx,
+  args: Infer<typeof reserveAgentHandoffArgsValue>,
+): Promise<FundingResult> {
+  const admission = await admitAgentHandoff(ctx, args)
+  const callerKey = args.idempotencyKey.trim()
+  if (admission === null) return refused('billing_identity_missing')
+  if (!POSITIVE_UNITS.test(args.principalAmountUnits)
+    || callerKey.length < 1 || callerKey.length > 255
+    || !Number.isSafeInteger(args.checkoutExpiresAt)) return refused('funding_amount_invalid')
+  const idempotencyRef = agentHandoffIdempotencyRef(admission, args.environment, callerKey)
+  const commandRef = agentHandoffCommandRef(idempotencyRef)
+  const inputDigest = canonicalDigest({
+    format: 'ae.agent-funding-input:v1',
+    idempotencyRef,
+    principalAmount: { currency: 'AUD', exponent: AUD_EXPONENT, units: args.principalAmountUnits },
+  })
+  const prior = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_idempotencyKey', (builder) => builder.eq('idempotencyKey', idempotencyRef))
+    .unique()
+  if (prior !== null) {
+    return prior.commandRef === commandRef
+      && prior.accountRef === admission.ownerId
+      && prior.actorPrincipalRef === admission.principalId
+      && prior.inputDigest === inputDigest
+      && prior.principalUnits === args.principalAmountUnits
+      && prior.environment === args.environment
+      && prior.initiationKind === 'agent_handoff'
+      ? { kind: 'accepted', command: fundingCommandView(prior) }
+      : refused('funding_idempotency_conflict')
+  }
+  const now = Date.now()
+  if (args.checkoutExpiresAt < now + 30 * 60_000 || args.checkoutExpiresAt > now + 60 * 60_000 + 5_000) {
+    return refused('funding_amount_invalid')
+  }
+  const policy = await readCommercialPolicyGate(ctx.db, {
+    environment: args.environment,
+    now,
+    ...(args.environment === 'sandbox'
+      ? { sandboxFixture: 'managed_x402_deterministic_v1' as const }
+      : {}),
+  })
+  if (policy.kind === 'refused') return refused('commercial_policy_required')
+  const quote = quoteAudAccountFunding(BigInt(args.principalAmountUnits), audFundingPolicyFromCommercialControls(policy.controls))
+  if (quote === undefined) return refused('funding_amount_invalid')
+  const legalCustomer = await resolveAndBindLegalCustomer(ctx, admission.ownerId, now)
+  if (legalCustomer.kind === 'refused') return refused(legalCustomer.code)
+  const principal = await ctx.db.query('principals')
+    .withIndex('by_principalRef', (query) => query.eq('principalRef', admission.principalId))
+    .unique()
+  if (principal === null || principal.lifecycle !== 'active') return refused('billing_identity_missing')
+  const row = {
+    commandRef,
+    accountRef: admission.ownerId,
+    legalCustomerRef: legalCustomer.legalCustomerRef,
+    actorPrincipalRef: admission.principalId,
+    environment: args.environment,
+    currency: 'AUD' as const,
+    exponent: AUD_EXPONENT,
+    principalUnits: quote.principalUnits.toString(),
+    serviceFeeUnits: quote.serviceFeeUnits.toString(),
+    taxUnits: quote.taxUnits.toString(),
+    totalUnits: quote.totalUnits.toString(),
+    commercialPolicyDigest: policy.policyDigest,
+    commercialPolicyRefs: [...policy.policyRefs],
+    idempotencyKey: idempotencyRef,
+    inputDigest,
+    successReturnRef: args.successReturnRef,
+    cancelReturnRef: args.cancelReturnRef,
+    providerRecoveryDeadlineAt: args.checkoutExpiresAt,
+    initiationKind: 'agent_handoff' as const,
+    checkoutMode: 'hosted_page' as const,
+    checkoutExpiresAt: args.checkoutExpiresAt,
+    requesterDisplayName: principal.displayName,
+    state: 'pending' as const,
+    providerStatus: 'pending' as const,
+    metadataDigest: canonicalDigest({ ae_command_ref: commandRef, ae_contract: 'account_funding_v2' }),
+    createdAt: now,
+    updatedAt: now,
+  }
+  await ctx.db.insert('moneyFundingCommands', row)
+  return { kind: 'accepted', command: row }
+}
+
+async function bindAgentHandoffHandler(
+  ctx: MutationCtx,
+  args: Infer<typeof bindAgentHandoffArgsValue>,
+): Promise<FundingResult> {
+  const admission = await admitAgentHandoff(ctx, args)
+  if (admission === null) return refused('billing_identity_missing')
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_commandRef', (builder) => builder.eq('commandRef', args.commandRef))
+    .unique()
+  if (command === null || command.initiationKind !== 'agent_handoff'
+    || command.accountRef !== admission.ownerId || command.actorPrincipalRef !== admission.principalId) {
+    return refused('funding_pending', true)
+  }
+  if (args.evidence.checkoutMode !== 'hosted_page'
+    || compareExactAmounts(args.evidence.amount, { currency: 'AUD', exponent: AUD_EXPONENT, units: command.totalUnits }) !== 0
+    || (command.externalRef !== undefined && command.externalRef !== args.evidence.externalRef)
+    || command.metadataDigest !== args.evidence.metadataDigest
+    || command.checkoutExpiresAt !== args.evidence.checkoutExpiresAt) {
+    return refused('payment_binding_invalid')
+  }
+  await ctx.db.patch(command._id, {
+    externalRef: args.evidence.externalRef,
+    providerStatus: args.evidence.status,
+    providerEvidenceRef: args.evidence.evidenceRef,
+    requestDigest: args.evidence.requestDigest,
+    metadataDigest: args.evidence.metadataDigest,
+    checkoutSessionDigest: args.evidence.checkoutSessionDigest,
+    evidenceDigest: args.evidence.evidenceDigest,
+    ...(args.evidence.paymentIntentDigest === undefined ? {} : { paymentIntentDigest: args.evidence.paymentIntentDigest }),
+    ...(args.evidence.paymentId === undefined ? {} : { paymentId: args.evidence.paymentId }),
+    ...(args.evidence.checkoutStatus === undefined ? {} : { providerCheckoutStatus: args.evidence.checkoutStatus }),
+    ...(args.evidence.paymentStatus === undefined ? {} : { providerPaymentStatus: args.evidence.paymentStatus }),
+    updatedAt: Date.now(),
+  })
+  const updated = await ctx.db.get(command._id)
+  return updated === null ? refused('funding_pending', true) : { kind: 'accepted', command: fundingCommandView(updated) }
+}
+
+async function readAgentHandoffHandler(
+  ctx: MutationCtx,
+  args: Infer<typeof readAgentHandoffArgsValue>,
+): Promise<FundingResult> {
+  const admission = await admitAgentHandoff(ctx, args)
+  if (admission === null) return refused('billing_identity_missing')
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_externalRef', (builder) => builder.eq('externalRef', args.externalRef))
+    .unique()
+  return command === null || command.initiationKind !== 'agent_handoff'
+    || command.accountRef !== admission.ownerId || command.actorPrincipalRef !== admission.principalId
+    ? refused('funding_pending', false)
+    : { kind: 'accepted', command: fundingCommandView(command) }
+}
+
+function handoffState(command: Doc<'moneyFundingCommands'>) {
+  if (command.state === 'succeeded') return 'ready' as const
+  if (command.terminalReason === 'expired') return 'expired' as const
+  if (command.terminalReason === 'async_payment_failed' || command.state === 'failed') return 'failed' as const
+  if (command.providerCheckoutStatus === 'complete') return 'processing' as const
+  return 'awaiting_payment' as const
+}
+
+async function readPayerSafeHandoffHandler(
+  ctx: QueryCtx,
+  args: Readonly<{ externalRef: string }>,
+): Promise<Infer<typeof publicFundingHandoffValue>> {
+  if (!/^cs_[A-Za-z0-9_]+$/u.test(args.externalRef)) return { kind: 'not_found' }
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_externalRef', (builder) => builder.eq('externalRef', args.externalRef))
+    .unique()
+  if (command === null || command.initiationKind !== 'agent_handoff' || command.requesterDisplayName === undefined) {
+    return { kind: 'not_found' }
+  }
+  return {
+    kind: 'found',
+    funding: {
+      state: handoffState(command),
+      agentName: command.requesterDisplayName,
+      creditAmount: { currency: 'AUD', exponent: AUD_EXPONENT, units: command.principalUnits },
+    },
+  }
 }
 
 async function bindFundingHandler(
@@ -366,6 +632,10 @@ async function bindFundingHandler(
       : { paymentIntentDigest: args.evidence.paymentIntentDigest }),
     evidenceDigest: args.evidence.evidenceDigest,
     ...(args.evidence.paymentId === undefined ? {} : { paymentId: args.evidence.paymentId }),
+    ...(args.evidence.checkoutStatus === undefined ? {} : { providerCheckoutStatus: args.evidence.checkoutStatus }),
+    ...(args.evidence.paymentStatus === undefined ? {} : { providerPaymentStatus: args.evidence.paymentStatus }),
+    ...(args.evidence.checkoutMode === undefined ? {} : { checkoutMode: args.evidence.checkoutMode }),
+    ...(args.evidence.checkoutExpiresAt === undefined ? {} : { checkoutExpiresAt: args.evidence.checkoutExpiresAt }),
     updatedAt: Date.now(),
   })
   const updated = await ctx.db.get(command._id)
@@ -390,7 +660,7 @@ async function readFundingHandler(
       .unique()
   return command === null
     || command.accountRef !== actor.canonicalAccountRef
-    || command.idempotencyKey !== args.idempotencyKey
+    || (args.commandRef !== undefined && command.idempotencyKey !== args.idempotencyKey)
     ? refused('funding_pending', true)
     : { kind: 'accepted', command: fundingCommandView(command) }
 }
@@ -520,11 +790,31 @@ async function prepareFundingEventHandler(
       })
       return { kind: 'accepted', status: 'ignored' }
     }
-    await ctx.db.patch(command._id, {
-      state: 'failed',
-      providerStatus: 'failed',
-      updatedAt: event.observedAt,
-    })
+    if (event.status === 'processing') {
+      await ctx.db.patch(command._id, {
+        providerStatus: 'pending',
+        ...(args.readback.checkoutStatus === undefined ? {} : {
+          providerCheckoutStatus: args.readback.checkoutStatus,
+        }),
+        ...(args.readback.paymentStatus === undefined ? {} : {
+          providerPaymentStatus: args.readback.paymentStatus,
+        }),
+        updatedAt: event.observedAt,
+      })
+    } else {
+      await ctx.db.patch(command._id, {
+        state: 'failed',
+        providerStatus: 'failed',
+        ...(args.readback.checkoutStatus === undefined ? {} : {
+          providerCheckoutStatus: args.readback.checkoutStatus,
+        }),
+        ...(args.readback.paymentStatus === undefined ? {} : {
+          providerPaymentStatus: args.readback.paymentStatus,
+        }),
+        terminalReason: event.status === 'expired' ? 'expired' : 'async_payment_failed',
+        updatedAt: event.observedAt,
+      })
+    }
     if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
       ...eventRowFields(event), status: 'ignored',
     })
@@ -586,6 +876,12 @@ async function finalizeFundingEventHandler(
     paymentIntentDigest: args.readback.paymentIntentDigest,
     evidenceDigest: args.readback.evidenceDigest,
     paymentId: args.readback.paymentId,
+    ...(args.readback.checkoutStatus === undefined ? {} : {
+      providerCheckoutStatus: args.readback.checkoutStatus,
+    }),
+    ...(args.readback.paymentStatus === undefined ? {} : {
+      providerPaymentStatus: args.readback.paymentStatus,
+    }),
     appliedStripeEventId: args.event.stripeEventId,
     appliedPayloadDigest: args.event.payloadDigest,
     appliedTransactionRef: args.formanceTransactionRef,
@@ -633,6 +929,30 @@ export const read = query({
   args: readFundingArgsValue.fields,
   returns: fundingResultValue,
   handler: readFundingHandler,
+})
+
+export const reserveAgentHandoff = mutation({
+  args: reserveAgentHandoffArgsValue.fields,
+  returns: fundingResultValue,
+  handler: reserveAgentHandoffHandler,
+})
+
+export const bindAgentHandoff = mutation({
+  args: bindAgentHandoffArgsValue.fields,
+  returns: fundingResultValue,
+  handler: bindAgentHandoffHandler,
+})
+
+export const readAgentHandoff = mutation({
+  args: readAgentHandoffArgsValue.fields,
+  returns: fundingResultValue,
+  handler: readAgentHandoffHandler,
+})
+
+export const readPayerSafeHandoff = query({
+  args: { externalRef: v.string() },
+  returns: publicFundingHandoffValue,
+  handler: readPayerSafeHandoffHandler,
 })
 
 export const readWebhookCommand = query({

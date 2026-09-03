@@ -1,259 +1,251 @@
-# The Agentic Economy Manifesto
+# The Agentic Economy manifesto
+
+**Status:** strategic doctrine
+
+**Revised:** 2026-09-01
+
+**Relationship to the product:** this document states the future the company is
+built to serve. [PRODUCT.md](./PRODUCT.md) defines the active product and the
+[whitepaper](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md) supplies the full
+institutional argument.
 
 ## The future thesis
 
-**Agentic Economy is the market agents use to acquire capabilities beyond those
-already available in their model and harness.**
-
-The agent encounters a boundary during its work. It finds an outside supplier,
-acquires one contribution, incorporates it, and continues. Suppliers compete for
-those calls, observe where demand accumulates, and build more services for
-agents.
-
-The question is no longer whether agents will need external capabilities. They
-will. The question is what market forms around that behaviour, where value
-concentrates, and whether Agentic Economy can occupy that position.
-
-## The capability boundary is durable
-
-Models can absorb more knowledge and generate more internally, but they cannot
-absorb all live state, private data, inventory, permissions, physical machinery,
-or external action.
-
-A better model may reduce demand for generic summarisation or copywriting. It
-increases demand for:
-
-- current information;
-- proprietary datasets;
-- authenticated access;
-- specialist computation;
-- regional inventory;
-- external action;
-- physical fulfilment;
-- capabilities created after the model was trained.
-
-Improving intelligence makes agents better at using outside services. It does
-not eliminate the outside world.
-
-This is the most durable part of the thesis.
-
-## Connectors and markets will coexist
-
-Frequent, predictable capabilities will become bundled connectors. Email,
-calendars, payments, major travel platforms, and popular developer tools will be
-installed by default.
-
-But an increasingly capable agent will attempt increasingly diverse work. The
-number of possible capability gaps expands faster than any harness can integrate
-suppliers.
-
-Runtime markets win where the need is:
-
-- unexpected;
-- specialised;
-- temporary;
-- regional;
-- fragmented across providers;
-- too infrequent to justify permanent integration;
-- newly created;
-- specific to the context of one project.
-
-The open market does not need to replace connectors. It needs to own the long
-tail beyond them.
-
-The structural threat is that this long tail may be broad but economically
-shallow. If almost all valuable calls concentrate in twenty bundled services,
-the category exists but the open market remains small. If valuable work
-continues to generate new and specialised gaps, the market can be enormous.
-
-## The agent is the allocator
-
-The agent does not need sovereign ownership of money. It needs discretion over
-allocation.
-
-A media buyer works inside a campaign budget. A fund manager works inside a
-mandate. An employee uses approved vendors and a corporate card. They remain
-economic actors because their decisions determine where money goes.
-
-An agent becomes an economic actor when it can:
-
-- recognise the missing capability;
-- choose among acceptable suppliers;
-- commit part of an allowance;
-- consume the result;
-- return, switch, or stop.
-
-The principal funds the agent. The harness enables it. The agent allocates the
-next unit of demand.
-
-This is stronger than “agents make payments.” Payment is incidental. Allocation
-is the category-forming behaviour.
-
-## Suppliers respond to concentrated demand
-
-Suppliers will make services agent-ready when doing so produces calls and
-revenue.
-
-This is where the UGC comparison matters. Creators do not flock to TikTok
-because its upload mechanism is unique. They go because attention and money are
-there. Models list on OpenRouter because demand is there. Merchants tolerate
-marketplace fees because customers are there.
-
-Supply could come from:
-
-- existing API companies;
-- platforms exposing inventory or action;
-- agent-native service companies;
-- specialists packaging judgement;
-- data owners;
-- compute and machinery providers;
-- humans working behind agent-consumable boundaries;
-- agents producing services for other agents.
-
-The supplier does not need to care whether its customer is a “real agent.” It
-needs to see incremental demand.
-
-If Agentic Economy cannot produce demand, supplier onboarding is theatre. If it
-does produce demand, suppliers will adapt without needing to believe our category
-story.
-
-## Market power sits at allocation
-
-Owning listings is weak. Owning an invocation gateway is useful but replaceable.
-Owning standards is not the business. Even having the largest catalogue may be
-insufficient if agents discover suppliers elsewhere and call them directly.
-
-Market power sits at the moment the agent asks:
-
-> What can provide the capability I need now?
-
-The company controlling that allocation point can direct demand. That causes
-suppliers to publish there, improve for its agents, and compete for allocation.
-Better supply makes agents more likely to search there again.
-
-The future Agentic Economy must therefore own four things behaviourally:
-
-1. Agents look there when they encounter an unfamiliar gap.
-2. Useful suppliers are available there.
-3. The selected contribution can be acquired immediately.
-4. Subsequent demand continues to flow through the market.
-
-If Agentic Economy loses the first moment, it is a backend utility.
-
-If it loses the fourth, it is a lead-generation directory.
-
-If it owns both, it owns the market.
-
-## Platforms will capture the obvious supply
-
-Platforms will capture predictable demand around supply they already control.
-
-OpenAI can bundle popular connectors. Google can prefer Maps, Flights, and
-Workspace. Microsoft can prefer its enterprise graph. Amazon can own product
-search through fulfilment. Shopify can remain close to merchant inventory and
-checkout.
-
-Agentic Economy should not attack those positions head-on.
-
-Its opportunity is to become the wholesale service market behind many agents
-and harnesses: the broad, cross-platform supply surface they cannot each build
-independently.
-
-That position exists if:
-
-- agent demand remains distributed across many environments;
-- suppliers want access to that distributed demand;
-- agents encounter capabilities outside each platform’s preferred supply;
-- suppliers can participate in multiple channels;
-- Agentic Economy finds better-fitting long-tail supply than a general web
-  search or registry.
-
-The platform risk is real, but it does not invalidate the category. It
-determines where the open market begins.
-
-## Atomic demand does not require simple suppliers
-
-The consuming unit is atomic from the agent’s perspective, not necessarily from
-the supplier’s.
-
-One customs classification may require a specialist company. One reservation
-may involve a global booking platform. One compliance determination may use
-private data, models, and humans. One rendered file may require expensive
-machinery.
-
-The market does not require every supplier to become a tiny API wrapper. It
-requires the consuming agent to acquire a bounded contribution without
-transferring ownership of the entire project.
-
-This is how AI-native service companies fit. They can sell whole outcomes
-directly while also supplying components to other agents.
-
-The future supply is heterogeneous. The consumption boundary is what makes it
-composable.
-
-## What can kill the category
-
-Four conditions could genuinely break the thesis:
-
-1. Agents cannot reliably recognise when they need outside capability and
-   continue fabricating internally.
-2. They cannot translate their working context into a need precise enough to
-   find specialised supply.
-3. Nearly all valuable capabilities become bundled by dominant harnesses.
-4. Agents discover suppliers through Agentic Economy once, then permanently
-   bypass it.
-
-The second is the deepest product problem. The third and fourth are the deepest
-business problems.
-
-Payments, protocols, and transaction records do not solve any of them.
-
-## The future shape that survives
-
-The strongest future shape is not a tender board, human procurement marketplace,
-tool directory, or universal agent.
-
-It is a runtime market at the edge of an agent’s existing reach:
-
-1. The agent is pursuing its own project.
-2. It encounters a missing capability.
-3. It searches a broader service market.
-4. It selects a supplier within its constraints.
-5. It acquires one bounded contribution.
-6. It continues working.
-7. Repeated allocation moves demand towards useful suppliers.
-8. Suppliers build where agent demand accumulates.
-
-The consumer experience should feel less like shopping and more like the agent’s
-abilities expanding when required.
-
-The supplier experience should feel like publishing a capability into a market
-of active software customers.
-
-## What this means for the company
-
-The Atomic Operation Market is a credible supply foundation. It gives
-independently hosted services something exact that agents can inspect and invoke.
-
-But the future company cannot stop at supply.
-
-It must become the place where agents bring capability gaps.
-
-That is the missing pressure on the current shape. We have been building the
-shelves. The future business depends on owning the moment an agent needs
-something from them.
-
-Agentic Economy’s valuable future shape is a cross-harness market for last-mile
-agent services. Its defensibility comes from concentrating agent demand and
-useful supply, not from possessing a unique protocol.
-
-The next strategic question is not whether to keep building the market
-foundation. It is which first category can prove that an agent will discover an
-unfamiliar supplier, pay for one useful contribution, continue its work, and
-return through Agentic Economy the next time it reaches that boundary.
-
-## The category
-
-**The Agentic Economy is the market that forms when agents acquire outside
-capabilities while pursuing their own goals, and suppliers compete to provide
-the next useful contribution.**
+Agents will acquire outside services while pursuing work that remains inside
+their existing harnesses. They will recognise a missing contribution, compare
+Providers the buyer did not select in advance, commit within delegated authority
+and consume the result without stopping for a conventional procurement cycle.
+
+This behaviour creates a market only if the resulting purchases can enter the
+world of ordinary business. A machine can move money without establishing who
+bought what, from whom, under which authority, with what delivery condition and
+with what remedy. A wallet history is a trace of value. It is not a commercial
+institution.
+
+Agentic Economy will be that institution. It will preserve open competition at
+the moment an agent chooses a Provider while giving the Business Principal one
+accountable Seller and one explainable purchase record.
+
+## The capability boundary will endure
+
+Models will absorb more knowledge and produce more work internally. They will
+not absorb all live state, private data, permissions, inventory, specialist
+judgement, machinery or physical action. Better models will often make the
+boundary more visible because they can attempt more ambitious work and describe
+the missing contribution more precisely.
+
+The relevant boundary is local to the next step. An agent may understand an
+equipment failure but lack the proprietary maintenance record. It may plan a
+shipment but lack a regional carrier quote. It may classify a legal issue but
+need a licensed professional's judgement. It may know how to reserve a table but
+lack current inventory and authority to book.
+
+The agent does not need another general intelligence. It needs one bounded
+outside contribution, then it needs to continue.
+
+## The market appears after work has begun
+
+Conventional software consumption starts with a selected vendor. A company
+approves the provider, accepts terms, configures access and then lets software
+make calls inside that relationship.
+
+Agentic work reverses the sequence. The exact need may not exist until the task
+reaches a particular state. The suitable Provider may depend on the record just
+found, the location that became relevant, a previous failure, current capacity,
+the buyer's data restrictions or the evidence required for this one decision.
+
+This is just-in-time service procurement. The Provider and exact Operation are
+selected after the capability gap appears and bound before Invocation.
+
+Connectors will remain the right answer for frequent, predictable and
+strategically important capabilities. Direct contracts will remain the right
+answer for known, repeated Providers. The open market serves the rest: narrow,
+regional, contingent, specialised and newly created supply that no harness can
+integrate in advance.
+
+The economic territory is largest where an outside contribution is valuable but
+too small to justify a new human vendor process. Machine payments make the price
+smaller. They do not remove the fixed cost of accepting a new commercial
+relationship. As the price falls, that fixed cost matters more.
+
+## The agent allocates; the principal remains responsible
+
+An agent does not need sovereign money or legal personhood to become an economic
+allocator. It needs real discretion within a mandate.
+
+The Business Principal owns the objective, funds the Account, sets the policy
+and bears the economic result. The Agent Principal observes the state of the
+work and decides which eligible Operation should receive the next unit of
+demand. Its authority may be narrow. It can still be economically meaningful.
+
+Payment authority alone is insufficient. A balance limit says how much value may
+move. Purchase authority must also constrain the service, Provider, data use,
+external effects, terms, evidence and response to failure. The Commitment binds
+those facts before an irreversible action begins.
+
+Funding is not authority. Authority is not purchase. Settlement is not delivery.
+Delivery is not commercial closure. The system becomes trustworthy by refusing
+to collapse those states.
+
+## The Operation is the unit of exchange
+
+A provider profile is too broad to authorise. An endpoint is too technical to
+state a commercial promise. An agent identity may contain many changing
+capabilities. A payment says too little.
+
+The market therefore trades Operations. An Operation is one versioned,
+callable contribution with fixed inputs, price, terms, data use, effects,
+readiness and evidence. It is bounded from the consuming agent's perspective,
+even when its production requires a company, specialist team, private dataset
+or physical system.
+
+The Operation lets heterogeneous supply become comparable without pretending it
+is interchangeable. It also sets the boundary of responsibility. The Provider
+does not own the buyer's larger project. The Seller does not promise that the
+project succeeds. They owe the delivery condition stated for this bounded
+purchase.
+
+## Payment infrastructure exposes the missing institution
+
+x402 and related systems allow software to encounter a price, authorise a
+payment and continue through one machine exchange. Credit systems, wallets and
+delegated spending tools extend that ability. These systems are necessary.
+
+Their success makes the remaining gap harder to ignore. The buyer must still
+know which legal person bought the service, which agent acted, which authority
+applied, what terms were accepted, where information went, whether the promised
+result arrived and what happens when settlement or delivery is uncertain.
+
+No payment protocol should be forced to answer all of those questions. Its job
+is to move value and preserve settlement evidence. The purchase needs another
+institution around it.
+
+Agentic Economy will not compete by inventing a proprietary rail. It will use
+the best available rails while owning the commercial meaning of the event.
+
+## Open allocation and one Seller can coexist
+
+The false choice is between an open market and an accountable commercial
+counterparty.
+
+Agentic Economy will operate a two-sided market for discovery, comparison and
+allocation. Providers will compete to perform precise Operations. For supported
+production purchases, Agentic Economy will act as principal reseller and fixed
+buyer-facing Seller.
+
+The buyer pays Agentic Economy for the Operation. Agentic Economy separately
+owes the selected Provider under the upstream arrangement. These are two
+financial legs, even when a payment technology makes them appear simultaneous.
+
+The model carries real obligations. Agentic Economy must control admission,
+state the buyer-facing terms, bind authority, inspect delivery evidence, suspend
+supply, issue adjustments and pursue upstream recourse. It must carry fraud,
+refund and bounded performance exposure. That burden is the price of giving the
+buyer one counterparty and one remedy.
+
+A neutral router can be cheaper because it accepts less responsibility. A direct
+Provider relationship can be appropriate when the Provider is known and repeat
+use justifies onboarding. Agentic Economy earns its place where runtime choice
+and a common commercial boundary are both valuable.
+
+## Commercial closure is the completed state
+
+An Invocation can end technically while the purchase remains unresolved. The
+Provider may have received funds but returned no evidence. The network may
+report an uncertain settlement. An external effect may have occurred even
+though the response timed out.
+
+Commercial closure is reached when the roles, authority, exact service,
+consideration, delivery and remedy form one explainable state. Delivered,
+failed, adjusted and refunded can all be closed outcomes. Uncertain remains
+open.
+
+This record is more than administrative exhaust. It is part of the purchased
+service. Without it, a business can delegate execution but must later rebuild
+the meaning of each event from systems that saw only fragments.
+
+## Australia is where the institution becomes concrete
+
+The problem is global. Australia is the first place Agentic Economy will resolve
+it as a complete business system.
+
+Australian companies must be able to explain their transactions. GST depends on
+the supply and parties, not on the novelty of the payment rail. Cross-border
+data disclosure remains consequential when an agent selects a Provider during
+work. Prepaid value can raise questions that a database balance does not answer.
+Business identity and electronic invoicing provide routes into ordinary company
+systems.
+
+These requirements do not make Australia a regulatory inconvenience to work
+around. They reveal the product. If an agent-selected service cannot produce an
+authorised, attributable and remediable purchase here, it has not yet become
+business infrastructure.
+
+The Australian implementation can then become a template for other
+jurisdictions. The transaction core remains stable. Seller, tax, privacy,
+document and retention rules receive a local interpretation.
+
+## Advantage accumulates across the complete sequence
+
+Listings are copyable. Payment integrations are replaceable. Protocols will
+standardise. Even transaction volume can be shallow if buyers and Providers
+bypass the market after first contact.
+
+The scarce record crosses systems that normally stop at different points:
+
+```text
+need -> candidates -> authorised choice -> invocation -> delivery -> use -> remedy
+```
+
+The harness sees the surrounding task. The Provider sees its own performance.
+The payment rail sees settlement. The accounting system sees a later posting.
+Agentic Economy can connect the considered supply, exact Commitment,
+buyer-facing sale, Provider obligation, delivery and remedy because it occupied
+the boundary where the choice became a purchase.
+
+That history can improve future allocation. It can also justify broader
+delegated authority because the Business Principal can see and remedy what its
+agents buy. More authority creates more qualified demand. Qualified demand draws
+Providers willing to publish precise Operations and accept common evidence
+rules.
+
+The process is conditional. Comparable needs must recur. Evidence must keep its
+provenance. Buyers must permit its use. The next purchase must still pass through
+the same boundary. When those conditions hold, the market compounds through
+closed purchases rather than raw call volume.
+
+## What can break the thesis
+
+The category fails if agents cannot recognise their own capability gaps, cannot
+describe them well enough to find specialised supply or remain confined to the
+few services bundled by dominant harnesses.
+
+The company fails if Providers receive no incremental demand, if the cost of
+admission and remedy exceeds the value created, if buyers refuse meaningful
+delegated authority or if the market is bypassed after discovery.
+
+The institutional model fails if Agentic Economy accepts buyer-facing
+responsibility without enough control over Provider admission, delivery and
+recourse. It also fails if the funded Account creates a legal or treasury burden
+that the service margin cannot support.
+
+These are design constraints, not reasons to retreat into a directory. The
+company must choose Operations whose economics can carry the institution it
+promises.
+
+## What the company must become
+
+Agentic Economy must be the place an agent brings a capability gap and the place
+the resulting purchase reaches closure.
+
+It must give Providers distribution into many agent environments without asking
+each Provider to build a separate buyer, authority, tax, evidence and remedy
+system. It must give businesses access to a broader field of services without
+asking finance and risk teams to reconcile a new counterparty every time an
+agent encounters an unfamiliar need.
+
+The ambition is larger than an API marketplace and more disciplined than a
+universal autonomous economy. Agentic Economy will make bounded outside work
+purchasable by software and recognisable by institutions.
+
+That is the category. That is why the company exists.

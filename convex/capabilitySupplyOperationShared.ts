@@ -231,6 +231,7 @@ export async function operationRecordProjection(
     readiness: {
       ...(publication.readinessObservedAt === undefined ? {} : { observedAt: publication.readinessObservedAt }),
       ...(publication.readinessValidUntil === undefined ? {} : { validUntil: publication.readinessValidUntil }),
+      ...(publication.readinessLastHealthyAt === undefined ? {} : { lastHealthyAt: publication.readinessLastHealthyAt }),
     },
     searchTerms: offering.searchTerms,
     snapshotKey: `publication:${publication.publicationRef}:${publication.revision}`,
