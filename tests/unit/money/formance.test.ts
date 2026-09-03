@@ -571,11 +571,11 @@ describe('Package 4 official Formance boundary', () => {
     expect(await readFormanceHealth(createFormanceContext({
       ...base,
       accessClientId: 'old-token',
-    }))).toEqual({ kind: 'unavailable', code: 'formance_health_unavailable' })
+    }))).toEqual({ kind: 'unavailable', code: 'formance_access_unavailable' })
     expect(await readFormanceHealth(createFormanceContext({
       ...base,
       accessClientId: 'new-token',
-    }))).toEqual({ kind: 'unavailable', code: 'formance_health_unavailable' })
+    }))).toEqual({ kind: 'unavailable', code: 'formance_access_unavailable' })
 
     expect(observedIds).toEqual(['old-token', 'new-token'])
     expect(metric.mock.calls.flat().join(' ')).not.toContain('old-token')
