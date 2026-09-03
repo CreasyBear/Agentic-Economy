@@ -206,7 +206,11 @@ async function recordFundingDocuments(
   transactionRef: string,
   occurredAt: number,
 ): Promise<void> {
-  const definitions = [
+  const definitions: readonly Readonly<{
+    kind: 'funding_receipt' | 'service_fee_document'
+    amountUnits: string
+    detail: Readonly<Record<string, string>>
+  }>[] = [
     {
       kind: 'funding_receipt' as const,
       amountUnits: command.principalUnits,

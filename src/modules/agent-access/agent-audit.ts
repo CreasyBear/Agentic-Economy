@@ -101,6 +101,9 @@ export function createAgentAuditEnvelope(input: AgentAuditInput): AgentAuditEnve
     : commandDigest
   const eventId = `audit:${input.eventType}:${eventIdentityDigest.slice('sha256:'.length)}`
   const actorKind = credentialObservation ? 'agent' as const : 'owner' as const
+  const redactedPayload: Readonly<Record<string, string>> = affectedCredential === undefined
+    ? {}
+    : { credentialRef: affectedCredential }
   return Object.freeze({
     eventId: brandNonEmpty(eventId, 'AuditEventId'),
     eventType: input.eventType,
@@ -122,9 +125,7 @@ export function createAgentAuditEnvelope(input: AgentAuditInput): AgentAuditEnve
     evidenceRefs: affectedCredential === undefined
       ? []
       : [`credential:${affectedCredential}`],
-    redactedPayload: affectedCredential === undefined
-      ? {}
-      : { credentialRef: affectedCredential },
+    redactedPayload,
     commandDigest: brandNonEmpty(commandDigest, 'SourceHash'),
     createdAt: input.occurredAt,
   })

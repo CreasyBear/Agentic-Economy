@@ -12,7 +12,7 @@ import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { readAgentAccessConsentServer } from '@/lib/server/agent-access-consent.functions'
-import { readAgentConsentDetails } from '@/modules/agent-access/public'
+import { readAgentConsentDetails } from '@/modules/agent-access/consent-read-model'
 
 export const Route = createFileRoute('/_operator/agent-access/authorize')({
   validateSearch: z.object({
