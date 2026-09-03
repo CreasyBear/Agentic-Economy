@@ -39,6 +39,9 @@ spec:
   targetNamespace: formance-system
   createNamespace: true
   valuesContent: |-
+    global:
+      licence:
+        createSecret: false
     replicaCount: 1
     image:
       repository: ${split("@", operator_image)[0]}
@@ -233,9 +236,14 @@ spec:
             capabilities: { drop: [ALL] }
 YAML
 
-kubectl -n '${stack_name}' rollout status deployment/gateway --timeout=10m
-kubectl -n '${stack_name}' rollout status deployment/ledger --timeout=10m
-kubectl -n '${stack_name}' rollout status deployment/ledger-worker --timeout=10m
+for deployment in gateway ledger ledger-worker; do
+  for _ in $(seq 1 120); do
+    kubectl -n '${stack_name}' get deployment "$deployment" >/dev/null 2>&1 && break
+    sleep 5
+  done
+  kubectl -n '${stack_name}' get deployment "$deployment" >/dev/null
+  kubectl -n '${stack_name}' rollout status "deployment/$deployment" --timeout=10m
+done
 kubectl -n '${stack_name}' rollout status deployment/cloudflared --timeout=10m
 SCRIPT
 

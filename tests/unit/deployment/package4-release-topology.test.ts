@@ -60,6 +60,11 @@ describe('Package 4 reusable release topology', () => {
     expect(bootstrap.indexOf("kubectl get namespace '${stack_name}'")).toBeLessThan(
       bootstrap.indexOf("create secret generic cloudflare-tunnel-token"),
     )
+    expect(bootstrap).toContain('createSecret: false')
+    expect(bootstrap).toContain('for deployment in gateway ledger ledger-worker; do')
+    expect(bootstrap.indexOf('get deployment "$deployment"')).toBeLessThan(
+      bootstrap.indexOf('rollout status "deployment/$deployment"'),
+    )
     expect(bootstrap.match(/^kind: (Gateway|Ledger)$/gmu)?.sort()).toEqual(['kind: Gateway', 'kind: Ledger'])
     for (const excluded of ['kind: Payments', 'kind: Auth', 'kind: Wallets', 'kind: Reconciliation', 'kind: Webhooks']) {
       expect(bootstrap).not.toContain(excluded)
