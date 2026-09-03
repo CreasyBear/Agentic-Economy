@@ -63,7 +63,7 @@ describe('Account AUD funding HTTP boundary', () => {
         evidenceRef: 'stripe:checkout.session:cs_account_funding_one',
         observedAt: 100,
       },
-      clientSecret: 'cs_secret_redacted',
+      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_account_funding_one',
     }
     const createOrRecoverCreditPayment = vi.fn(async () => session)
     sourceMocks.callSourceMutation
@@ -182,7 +182,7 @@ describe('Account AUD funding HTTP boundary', () => {
     sourceMocks.callPublicSourceQuery.mockResolvedValueOnce({ kind: 'accepted', command: durable })
     stripeMocks.createStripeMoneyProvider.mockReturnValueOnce({
       createOrRecoverCreditPayment: vi.fn(),
-      readCreditPayment: vi.fn(async () => ({ evidence, clientSecret: 'cs_secret_redacted' })),
+      readCreditPayment: vi.fn(async () => ({ evidence })),
     })
     sourceMocks.sourceWriteAdmissionFromRequest.mockResolvedValueOnce({
       version: 'source-write:v2',
@@ -203,7 +203,7 @@ describe('Account AUD funding HTTP boundary', () => {
       request: new Request('https://ae.test/api/stripe/webhook', { method: 'POST' }),
       config: {
         secretKey: 'sk_test_redacted', webhookSecret: 'whsec_redacted',
-        publishableKey: 'pk_test_redacted', mode: 'test',
+        mode: 'test',
       },
     })).resolves.toEqual({
       kind: 'accepted', status: 'applied', appliedRef: 'journal:funding:one',

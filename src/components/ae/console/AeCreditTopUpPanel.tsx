@@ -1,10 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { loadStripe } from '@stripe/stripe-js'
-import {
-  CheckoutElementsProvider,
-  PaymentElement,
-  useCheckoutElements,
-} from '@stripe/react-stripe-js/checkout'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -37,8 +31,8 @@ export type AccountFundingPort = Readonly<{
 
 export type AeAccountFundingPanelProps = Readonly<{
   port?: AccountFundingPort
-  publishableKey?: string
   onRefresh?: () => void | Promise<void>
+  redirectToCheckout?: (url: string) => void
 }>
 
 type RecoveryLocator =
@@ -49,7 +43,7 @@ type CreditPaymentStatus = CreditPaymentSession['evidence']['status']
 
 const recoveryStorageKey = 'ae.account-funding.recovery.v1'
 
-export function AeAccountFundingPanel({ port, publishableKey, onRefresh }: AeAccountFundingPanelProps) {
+export function AeAccountFundingPanel({ port, onRefresh, redirectToCheckout = defaultCheckoutRedirect }: AeAccountFundingPanelProps) {
   const [pending, setPending] = useState(false)
   const [checking, setChecking] = useState(false)
   const [amountText, setAmountText] = useState('')
@@ -68,11 +62,6 @@ export function AeAccountFundingPanel({ port, publishableKey, onRefresh }: AeAcc
           audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS),
         )
   }, [amountText])
-
-  const stripePromise = useMemo(() => {
-    const key = (publishableKey ?? import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)?.trim()
-    return key === undefined || key.length === 0 ? null : loadStripe(key)
-  }, [publishableKey])
 
   const readCanonicalPayment = useCallback(async (locator: RecoveryLocator) => {
     if (port === undefined) return
@@ -128,11 +117,6 @@ export function AeAccountFundingPanel({ port, publishableKey, onRefresh }: AeAcc
       setErrorMessage('Enter a valid AUD funding amount before starting payment.')
       return
     }
-    if (stripePromise === null) {
-      setErrorMessage(topUpErrorCopy({ kind: 'refused', code: 'stripe_setup_required', retryable: false }))
-      return
-    }
-
     const nextIdempotencyKey = idempotencyKey.current ?? `account-funding:${randomId()}`
     idempotencyKey.current = nextIdempotencyKey
     setPending(true)
@@ -156,8 +140,16 @@ export function AeAccountFundingPanel({ port, publishableKey, onRefresh }: AeAcc
       }
       const locator = { externalRef: result.session.evidence.externalRef, idempotencyKey: nextIdempotencyKey }
       setSession(result.session)
+      setPaymentStatus(result.session.evidence.status)
       setRecovery(locator)
       persistRecovery(locator)
+      if (result.session.evidence.status === 'pending' && result.session.checkoutUrl !== undefined) {
+        redirectToCheckout(result.session.checkoutUrl)
+        return
+      }
+      if (result.session.evidence.status === 'pending') {
+        setErrorMessage(topUpErrorCopy({ kind: 'refused', code: 'stripe_setup_required', retryable: false }))
+      }
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       setErrorMessage('Account funding could not be started. No payment was confirmed; try again.')
@@ -171,21 +163,12 @@ export function AeAccountFundingPanel({ port, publishableKey, onRefresh }: AeAcc
     await readCanonicalPayment(recovery)
   }
 
-  const showPaymentForm = session !== undefined && paymentStatus === undefined && stripePromise !== null
-  const showSetupRefusal = stripePromise === null && session === undefined
-
   return (
     <div className="grid gap-3">
         {port === undefined ? (
           <Alert>
             <AlertTitle>Account funding is unavailable</AlertTitle>
             <AlertDescription>Your authenticated Account could not be loaded. No payment was started.</AlertDescription>
-          </Alert>
-        ) : null}
-        {showSetupRefusal ? (
-          <Alert>
-            <AlertTitle>Account funding is unavailable right now</AlertTitle>
-            <AlertDescription>No payment started and your balance did not change. Try again later.</AlertDescription>
           </Alert>
         ) : null}
         {errorMessage !== undefined ? (
@@ -207,11 +190,6 @@ export function AeAccountFundingPanel({ port, publishableKey, onRefresh }: AeAcc
             <AlertTitle>Payment verified</AlertTitle>
             <AlertDescription>Your Account balance changes only after the canonical journal readback. The browser return did not grant funds.</AlertDescription>
           </Alert>
-        ) : null}
-        {showPaymentForm ? (
-          <CheckoutElementsProvider stripe={stripePromise} options={{ clientSecret: session.clientSecret }}>
-            <CheckoutPaymentForm confirming={pending} onConfirmed={refreshPayment} />
-          </CheckoutElementsProvider>
         ) : null}
         {session === undefined && recovery === undefined && port !== undefined ? (
           <div className="grid gap-2">
@@ -255,7 +233,7 @@ export function AeAccountFundingPanel({ port, publishableKey, onRefresh }: AeAcc
             className="min-h-touch"
           >
             {pending ? <Spinner data-icon="inline-start" /> : null}
-            {pending ? 'Preparing secure payment…' : 'Fund Account for paid Calls'}
+            {pending ? 'Opening Stripe Checkout…' : 'Continue to Stripe Checkout'}
           </Button>
         ) : recovery !== undefined && (paymentStatus === 'pending' || paymentStatus === 'outcome_unknown') ? (
           <Button type="button" variant="ghost" disabled={checking || pending} onClick={() => void refreshPayment()} className="min-h-touch">
@@ -265,46 +243,6 @@ export function AeAccountFundingPanel({ port, publishableKey, onRefresh }: AeAcc
         ) : null}
       </div>
     </div>
-  )
-}
-
-function CheckoutPaymentForm({ confirming, onConfirmed }: Readonly<{ confirming: boolean; onConfirmed: () => Promise<void> }>) {
-  const checkoutState = useCheckoutElements()
-  const [confirmingLocal, setConfirmingLocal] = useState(false)
-
-  if (checkoutState.type === 'loading') {
-    return <p className="text-sm text-muted-foreground" role="status">Loading secure payment form…</p>
-  }
-  if (checkoutState.type === 'error') {
-    return <p className="text-sm text-muted-foreground">The secure payment form could not load. No payment was confirmed.</p>
-  }
-  const checkout = checkoutState.checkout
-
-  async function confirmPayment() {
-    if (confirming || confirmingLocal) return
-    setConfirmingLocal(true)
-    try {
-      const result = await checkout.confirm()
-      if (result.type === 'error') {
-        await onConfirmed()
-        return
-      }
-      await onConfirmed()
-    } catch {
-      await onConfirmed()
-    } finally {
-      setConfirmingLocal(false)
-    }
-  }
-
-  return (
-    <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); void confirmPayment() }}>
-      <PaymentElement />
-      <Button type="submit" disabled={confirming || confirmingLocal} className="min-h-touch">
-        {confirming || confirmingLocal ? <Spinner data-icon="inline-start" /> : null}
-        {confirming || confirmingLocal ? 'Confirming payment…' : 'Pay securely'}
-      </Button>
-    </form>
   )
 }
 
@@ -324,6 +262,10 @@ function formatAudUnits(units: bigint): string {
 function randomId(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
+function defaultCheckoutRedirect(url: string): void {
+  window.location.assign(url)
 }
 
 function persistRecovery(locator: RecoveryLocator): void {

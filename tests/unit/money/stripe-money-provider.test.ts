@@ -18,7 +18,6 @@ import type { StripeMoneyProviderConfig } from '../../../src/lib/server/stripe-m
 const config: StripeMoneyProviderConfig = {
   secretKey: 'sk_test_adapter',
   webhookSecret: 'whsec_adapter',
-  publishableKey: 'pk_test_adapter',
   mode: 'test',
 }
 
@@ -34,7 +33,7 @@ const request = {
 } as const
 
 describe('Stripe money provider adapter', () => {
-  it('creates and recovers one Elements Checkout Session with the same scoped key and material', async () => {
+  it('creates and recovers one hosted Checkout Session with the same scoped key and material', async () => {
     const session = checkoutSession()
     const createResponse = checkoutSession({ line_items: undefined })
     const create = vi.fn()
@@ -46,16 +45,17 @@ describe('Stripe money provider adapter', () => {
 
     const result = await provider.createOrRecoverCreditPayment(request)
 
-    expect(result).toMatchObject({ clientSecret: 'cs_secret_transient', evidence: { externalRef: 'cs_test_1', amount: request.amount } })
+    expect(result).toMatchObject({ checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_1', evidence: { externalRef: 'cs_test_1', amount: request.amount } })
     expect(create).toHaveBeenCalledTimes(2)
     expect(create.mock.calls[0]?.[0]).toEqual(create.mock.calls[1]?.[0])
     expect(create.mock.calls[0]?.[1]).toEqual({ idempotencyKey: 'ae:money:credit:topup-idempotency-1' })
     expect(create.mock.calls[0]?.[0]).toMatchObject({
       mode: 'payment',
-      ui_mode: 'elements',
+      ui_mode: 'hosted',
       client_reference_id: request.commandRef,
       metadata: { ae_command_ref: request.commandRef },
-      return_url: request.successReturnRef,
+      success_url: `${request.successReturnRef}?checkout_session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${request.successReturnRef}?payment=cancelled`,
       line_items: [{ quantity: 1, price_data: { currency: 'usd', unit_amount: 1050 } }],
     })
     expect(retrieve).toHaveBeenCalledWith('cs_test_1', {
@@ -84,7 +84,7 @@ describe('Stripe money provider adapter', () => {
       retryable: true,
     })
     expect(recovered).toMatchObject({
-      clientSecret: 'cs_secret_transient',
+      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_1',
       evidence: { externalRef: 'cs_test_1', amount: request.amount },
     })
     expect(create).toHaveBeenCalledTimes(3)
@@ -125,6 +125,24 @@ describe('Stripe money provider adapter', () => {
     expect(isMoneyRefusal(result) && result.code).toBe('ledger_idempotency_conflict')
     expect(retrieve).toHaveBeenCalledWith('cs_test_1', { expand: ['payment_intent', 'line_items.data.price'] })
     expect(create).not.toHaveBeenCalled()
+  })
+  it('refuses an open Session that does not point to Stripe-hosted Checkout', async () => {
+    const retrieve = vi.fn().mockResolvedValue({
+      data: checkoutSession({ url: 'https://example.test/not-stripe' }),
+    })
+    const provider = createStripeMoneyProvider({
+      config,
+      client: fakeClient({ retrieve }),
+    })
+
+    await expect(provider.readCreditPayment({
+      ...request,
+      externalRef: 'cs_test_1',
+    })).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'stripe_setup_required',
+      retryable: false,
+    })
   })
   it('reads the exact durable Checkout request material and binds without digest conflict', async () => {
     const retrieve = vi.fn().mockResolvedValue({ data: checkoutSession() })
@@ -415,16 +433,15 @@ describe('Stripe money provider adapter', () => {
     expect(readStripeMoneyProviderConfig({
       STRIPE_SECRET_KEY: 'sk_live_secret',
       STRIPE_WEBHOOK_SECRET: 'whsec_secret',
-      VITE_STRIPE_PUBLISHABLE_KEY: 'pk_test_public',
-    })).toMatchObject({ code: 'stripe_setup_required' })
+    }, 'test')).toMatchObject({ code: 'stripe_setup_required' })
 
     const create = vi.fn()
     const provider = createStripeMoneyProvider({
       env: {
         STRIPE_SECRET_KEY: 'sk_live_secret',
         STRIPE_WEBHOOK_SECRET: 'whsec_secret',
-        VITE_STRIPE_PUBLISHABLE_KEY: 'pk_test_public',
       },
+      mode: 'test',
       client: fakeClient({ create }),
     })
     const result = await provider.createOrRecoverCreditPayment(request)
@@ -607,7 +624,7 @@ function checkoutSession(overrides: Readonly<Record<string, unknown>> = {}): Str
     object: 'checkout.session',
     amount_total: 1050,
     client_reference_id: request.commandRef,
-    client_secret: 'cs_secret_transient',
+    client_secret: null,
     created: 1_700_000_000,
     currency: 'usd',
     livemode: false,
@@ -616,8 +633,11 @@ function checkoutSession(overrides: Readonly<Record<string, unknown>> = {}): Str
     payment_intent: 'pi_test_1',
     payment_status: 'unpaid',
     status: 'open',
-    ui_mode: 'elements',
-    return_url: request.successReturnRef,
+    ui_mode: 'hosted',
+    success_url: `${request.successReturnRef}?checkout_session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${request.successReturnRef}?payment=cancelled`,
+    return_url: null,
+    url: 'https://checkout.stripe.com/c/pay/cs_test_1',
     line_items: { object: 'list', data: [{ id: 'li_test_1', object: 'item', amount_subtotal: 1050, amount_total: 1050, currency: 'usd', description: 'AE credit', price: null, quantity: 1, discounts: [], taxes: [] }], has_more: false, url: '/v1/checkout/sessions/cs_test_1/line_items' },
     ...overrides,
   } as unknown as Stripe.Checkout.Session

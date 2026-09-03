@@ -101,7 +101,6 @@ export const input = {
 export const config = {
   secretKey: 'sk_live_test',
   webhookSecret: 'whsec_test',
-  publishableKey: 'pk_live_test',
   mode: 'live' as const,
 }
 export const unavailable = {

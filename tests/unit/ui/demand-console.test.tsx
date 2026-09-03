@@ -16,22 +16,10 @@ import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
 import type { CreditPaymentSession } from '@/modules/money/public'
 import type { AccountFundingBeginInput, AccountFundingBalance } from '@/modules/money/server'
 
-const stripeTestState = vi.hoisted(() => ({ confirm: vi.fn() }))
-
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: ReactNode }) => (
     <a href={params?.operationRef === undefined ? to : to.replace('$operationRef', encodeURIComponent(params.operationRef))} {...props}>{children}</a>
   ),
-}))
-
-vi.mock('@stripe/stripe-js', () => ({
-  loadStripe: vi.fn(() => Promise.resolve({})),
-}))
-
-vi.mock('@stripe/react-stripe-js/checkout', () => ({
-  CheckoutElementsProvider: ({ children }: { children: ReactNode }) => <div data-testid="checkout-elements-provider">{children}</div>,
-  PaymentElement: () => <div data-testid="payment-element" />,
-  useCheckoutElements: () => ({ type: 'success', checkout: { confirm: stripeTestState.confirm } }),
 }))
 
 const keyReadback: AgentCredentialSource = {
@@ -100,7 +88,6 @@ const accountBalance: AccountFundingBalance = {
 afterEach(() => {
   cleanup()
   window.sessionStorage.clear()
-  stripeTestState.confirm.mockReset()
 })
 
 describe('owner credit target', () => {
@@ -225,8 +212,7 @@ describe('assistant access components', () => {
     expect(screen.queryByRole('link', { name: /agent-access\.json/u })).toBeNull()
   })
 
-  it('starts a bound Checkout Session and keeps the transient secret out of persistence and copy', async () => {
-    stripeTestState.confirm.mockResolvedValue({ type: 'success', session: {} })
+  it('starts a bound hosted Checkout Session and redirects without persisting payment material', async () => {
     const session: CreditPaymentSession = {
       evidence: {
         provider: 'stripe',
@@ -240,7 +226,7 @@ describe('assistant access components', () => {
         evidenceRef: 'stripe:checkout:cs_test_bound',
         observedAt: 1,
       },
-      clientSecret: 'cs_secret_transient_only',
+      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_bound',
     }
     const begin = vi.fn(async (_input: AccountFundingBeginInput) => ({ kind: 'ok' as const, commandRef: 'funding:one', session }))
     const read = vi.fn(async () => ({
@@ -249,11 +235,12 @@ describe('assistant access components', () => {
     }))
     const port: AccountFundingPort = { begin, read }
     const onRefresh = vi.fn()
+    const redirectToCheckout = vi.fn()
     render(
       <AeAccountFundingPanel
         port={port}
-        publishableKey="pk_test_ui"
         onRefresh={onRefresh}
+        redirectToCheckout={redirectToCheckout}
       />
     )
 
@@ -263,22 +250,19 @@ describe('assistant access components', () => {
     expect(quote.textContent).toContain('Service feeAUD 0.50')
     expect(quote.textContent).toContain('Tax on service feeAUD 0.05')
     expect(quote.textContent).toContain('Total paymentAUD 10.55')
-    fireEvent.click(screen.getByRole('button', { name: /fund account/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe checkout/i }))
 
-    expect(await screen.findByTestId('payment-element')).toBeTruthy()
+    await waitFor(() => expect(redirectToCheckout).toHaveBeenCalledWith(session.checkoutUrl))
     expect(begin).toHaveBeenCalledWith({
       amount: { currency: 'AUD', units: '10000000', exponent: 6 },
       idempotencyKey: expect.any(String),
     })
     expect(begin.mock.calls[0]?.[0]).not.toHaveProperty('accountRef')
-    expect(screen.queryByText('cs_secret_transient_only')).toBeNull()
-    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).not.toContain('cs_secret_transient_only')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Pay securely' }))
-    await waitFor(() => expect(read).toHaveBeenCalledWith(expect.objectContaining({ externalRef: 'cs_test_bound' })))
+    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).not.toContain('checkout.stripe.com')
+    expect(read).not.toHaveBeenCalled()
     expect(screen.queryByText('Payment verified')).toBeNull()
     expect(screen.getByText(/still being verified|canonical server readback/i)).toBeTruthy()
-    expect(onRefresh).toHaveBeenCalled()
+    expect(onRefresh).not.toHaveBeenCalled()
   })
   it('persists and reuses an outcome-unknown command locator without offering a retry', async () => {
     const begin = vi.fn(async (_input: { idempotencyKey: string }) => ({
@@ -290,10 +274,10 @@ describe('assistant access components', () => {
     }))
     const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'funding_outcome_unknown' as const, retryable: true }))
     const port: AccountFundingPort = { begin, read }
-    render(<AeAccountFundingPanel port={port} publishableKey="pk_test_ui" />)
+    render(<AeAccountFundingPanel port={port} />)
 
     fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /fund account/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe checkout/i }))
 
     expect(await screen.findByText(/do not retry with a new payment/i)).toBeTruthy()
     const raw = window.sessionStorage.getItem('ae.account-funding.recovery.v1')
@@ -303,7 +287,7 @@ describe('assistant access components', () => {
     expect(screen.queryByRole('button', { name: /fund account/i })).toBeNull()
 
     cleanup()
-    render(<AeAccountFundingPanel port={port} publishableKey="pk_test_ui" />)
+    render(<AeAccountFundingPanel port={port} />)
     await waitFor(() => expect(read).toHaveBeenCalledWith(locator))
   })
 
@@ -313,11 +297,10 @@ describe('assistant access components', () => {
     render(
       <AeAccountFundingPanel
         port={{ begin, read }}
-        publishableKey="pk_test_ui"
       />
     )
     fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
-    fireEvent.click(screen.getByRole('button', { name: /fund account/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe checkout/i }))
 
     expect(begin).toHaveBeenCalledOnce()
     expect(await screen.findByText(/account funding is unavailable/i)).toBeTruthy()

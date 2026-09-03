@@ -20,7 +20,6 @@ export type StripeMoneyClient = Stripe;
 export type StripeMoneyProviderConfig = Readonly<{
   secretKey: string;
   webhookSecret: string;
-  publishableKey: string;
   mode: StripeMoneyMode;
 }>;
 
@@ -42,22 +41,13 @@ export function readStripeMoneyProviderConfig(
 ): StripeMoneyProviderConfig | MoneyRefusal {
   const secretKey = readEnvironmentValue(env, "STRIPE_SECRET_KEY");
   const webhookSecret = readEnvironmentValue(env, "STRIPE_WEBHOOK_SECRET");
-  const publishableKey = readEnvironmentValue(
-    env,
-    "VITE_STRIPE_PUBLISHABLE_KEY",
-  );
-  if (
-    secretKey === undefined ||
-    webhookSecret === undefined ||
-    publishableKey === undefined
-  ) {
+  if (secretKey === undefined || webhookSecret === undefined) {
     return refusal("stripe_setup_required", false);
   }
   return validateStripeMoneyProviderConfig(
     {
       secretKey,
       webhookSecret,
-      publishableKey,
       mode: modeFromSecretKey(secretKey) ?? "test",
     },
     expectedMode,
@@ -69,11 +59,8 @@ export function validateStripeMoneyProviderConfig(
   expectedMode?: StripeMoneyMode,
 ): StripeMoneyProviderConfig | MoneyRefusal {
   const secretMode = modeFromSecretKey(config.secretKey);
-  const publishableMode = modeFromPublishableKey(config.publishableKey);
   if (
     secretMode === undefined ||
-    publishableMode === undefined ||
-    secretMode !== publishableMode ||
     config.mode !== secretMode ||
     (expectedMode !== undefined && secretMode !== expectedMode) ||
     !/^whsec_[A-Za-z0-9_-]+$/u.test(config.webhookSecret)
@@ -222,12 +209,6 @@ function readEnvironmentValue(
 function modeFromSecretKey(value: string): StripeMoneyMode | undefined {
   if (/^sk_test_[A-Za-z0-9_-]+$/u.test(value)) return "test";
   if (/^sk_live_[A-Za-z0-9_-]+$/u.test(value)) return "live";
-  return undefined;
-}
-
-function modeFromPublishableKey(value: string): StripeMoneyMode | undefined {
-  if (/^pk_test_[A-Za-z0-9_-]+$/u.test(value)) return "test";
-  if (/^pk_live_[A-Za-z0-9_-]+$/u.test(value)) return "live";
   return undefined;
 }
 

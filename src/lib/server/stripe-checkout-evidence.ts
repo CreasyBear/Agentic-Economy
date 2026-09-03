@@ -29,6 +29,7 @@ import {
 } from "./stripe-money-provider-config";
 
 const CREDIT_LINE_ITEM_NAME = "AE credit";
+const STRIPE_HOSTED_CHECKOUT_ORIGIN = "https://checkout.stripe.com";
 
 export async function createOrRecoverCreditPayment(
   client: StripeMoneyClient,
@@ -217,7 +218,7 @@ export function readCheckoutSessionMaterial(
   if (
     !sessionMatchesMode(session.livemode, config.mode) ||
     session.mode !== "payment" ||
-    session.ui_mode !== "elements"
+    session.ui_mode !== "hosted"
   ) {
     return refusal("stripe_setup_required", false);
   }
@@ -244,7 +245,8 @@ export function readCheckoutSessionMaterial(
     clientReferenceId: session.client_reference_id,
     currency: session.currency?.toUpperCase() ?? null,
     amountTotal: session.amount_total,
-    returnUrl: session.return_url ?? null,
+    successUrl: session.success_url ?? null,
+    cancelUrl: session.cancel_url ?? null,
     paymentId: paymentId ?? null,
     metadataDigest,
     created: session.created,
@@ -291,10 +293,13 @@ function paymentSessionFromCheckoutSession(
     expected,
   });
   if (isMoneyRefusal(evidence)) return evidence;
-  const clientSecret = session.client_secret;
-  if (typeof clientSecret !== "string" || clientSecret.length === 0)
+  const checkoutUrl = hostedCheckoutUrl(session.url);
+  if (session.status === "open" && checkoutUrl === undefined)
     return refusal("stripe_setup_required", false);
-  return { evidence, clientSecret };
+  return {
+    evidence,
+    ...(checkoutUrl === undefined ? {} : { checkoutUrl }),
+  };
 }
 
 function creditSessionCreateParams(
@@ -302,9 +307,11 @@ function creditSessionCreateParams(
 ): Stripe.Checkout.SessionCreateParams | undefined {
   const amount = stripeMinorAmount(input.amount);
   if (amount === undefined) return undefined;
+  const returnUrls = hostedCheckoutReturnUrls(input.successReturnRef);
+  if (returnUrls === undefined) return undefined;
   return {
     mode: "payment",
-    ui_mode: "elements",
+    ui_mode: "hosted",
     line_items: [
       {
         price_data: {
@@ -317,7 +324,8 @@ function creditSessionCreateParams(
     ],
     client_reference_id: input.commandRef,
     metadata: creditMetadata(input),
-    return_url: input.successReturnRef,
+    success_url: returnUrls.successUrl,
+    cancel_url: returnUrls.cancelUrl,
   };
 }
 
@@ -346,15 +354,18 @@ function creditSessionMatchesRequest(
   const expectedAmount = stripeMinorAmount(input.amount);
   if (expectedAmount === undefined) return false;
   const expectedMetadata = creditMetadata(input);
+  const returnUrls = hostedCheckoutReturnUrls(input.successReturnRef);
+  if (returnUrls === undefined) return false;
   if (
     session.client_reference_id !== input.commandRef ||
     session.mode !== "payment" ||
-    session.ui_mode !== "elements"
+    session.ui_mode !== "hosted"
   )
     return false;
   if (
     session.currency?.toUpperCase() !== expectedAmount.currency ||
-    session.return_url !== input.successReturnRef
+    session.success_url !== returnUrls.successUrl ||
+    session.cancel_url !== returnUrls.cancelUrl
   )
     return false;
   if (compareExactAmounts(amount, expectedAmount) !== 0) return false;
@@ -368,6 +379,35 @@ function creditSessionMatchesRequest(
   )
     return false;
   return true;
+}
+
+function hostedCheckoutReturnUrls(
+  successReturnRef: string,
+): Readonly<{ successUrl: string; cancelUrl: string }> | undefined {
+  try {
+    const success = new URL(successReturnRef);
+    const cancel = new URL(successReturnRef);
+    success.searchParams.set("checkout_session_id", "{CHECKOUT_SESSION_ID}");
+    cancel.searchParams.set("payment", "cancelled");
+    return {
+      successUrl: success
+        .toString()
+        .replace("%7BCHECKOUT_SESSION_ID%7D", "{CHECKOUT_SESSION_ID}"),
+      cancelUrl: cancel.toString(),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function hostedCheckoutUrl(value: string | null): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const url = new URL(value);
+    return url.origin === STRIPE_HOSTED_CHECKOUT_ORIGIN ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function exactSessionAmount(

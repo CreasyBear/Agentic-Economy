@@ -34,7 +34,7 @@ export type CreditPaymentEvidence = Readonly<{
 
 export type CreditPaymentSession = Readonly<{
   evidence: CreditPaymentEvidence
-  clientSecret: string
+  checkoutUrl?: string
 }>
 
 export type CreditPaymentPort = Readonly<{
@@ -123,5 +123,4 @@ export type PayoutTransferPort = Readonly<{
   readTransfer: (input: Readonly<{ externalRef: string; idempotencyKey: string }>) => Promise<PayoutTransferEvidence | MoneyRefusal>
   readTransfersByIdentity: (input: PayoutTransferRequest) => Promise<readonly PayoutTransferEvidence[] | MoneyRefusal>
 }>
-
 
