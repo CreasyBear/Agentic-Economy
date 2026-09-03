@@ -51,7 +51,7 @@ describe('Stripe money provider adapter', () => {
     expect(create.mock.calls[0]?.[1]).toEqual({ idempotencyKey: 'ae:money:credit:topup-idempotency-1' })
     expect(create.mock.calls[0]?.[0]).toMatchObject({
       mode: 'payment',
-      ui_mode: 'hosted',
+      ui_mode: 'hosted_page',
       client_reference_id: request.commandRef,
       metadata: { ae_command_ref: request.commandRef },
       success_url: `${request.successReturnRef}?checkout_session_id={CHECKOUT_SESSION_ID}`,
@@ -633,7 +633,7 @@ function checkoutSession(overrides: Readonly<Record<string, unknown>> = {}): Str
     payment_intent: 'pi_test_1',
     payment_status: 'unpaid',
     status: 'open',
-    ui_mode: 'hosted',
+    ui_mode: 'hosted_page',
     success_url: `${request.successReturnRef}?checkout_session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${request.successReturnRef}?payment=cancelled`,
     return_url: null,

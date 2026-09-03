@@ -218,7 +218,7 @@ export function readCheckoutSessionMaterial(
   if (
     !sessionMatchesMode(session.livemode, config.mode) ||
     session.mode !== "payment" ||
-    session.ui_mode !== "hosted"
+    session.ui_mode !== "hosted_page"
   ) {
     return refusal("stripe_setup_required", false);
   }
@@ -311,7 +311,7 @@ function creditSessionCreateParams(
   if (returnUrls === undefined) return undefined;
   return {
     mode: "payment",
-    ui_mode: "hosted",
+    ui_mode: "hosted_page",
     line_items: [
       {
         price_data: {
@@ -359,7 +359,7 @@ function creditSessionMatchesRequest(
   if (
     session.client_reference_id !== input.commandRef ||
     session.mode !== "payment" ||
-    session.ui_mode !== "hosted"
+    session.ui_mode !== "hosted_page"
   )
     return false;
   if (
