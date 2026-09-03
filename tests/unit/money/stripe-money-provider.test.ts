@@ -36,10 +36,12 @@ const request = {
 describe('Stripe money provider adapter', () => {
   it('creates and recovers one Elements Checkout Session with the same scoped key and material', async () => {
     const session = checkoutSession()
+    const createResponse = checkoutSession({ line_items: undefined })
     const create = vi.fn()
       .mockRejectedValueOnce(new Error('response lost after provider effect'))
-      .mockResolvedValueOnce({ data: session })
-    const client = fakeClient({ create })
+      .mockResolvedValueOnce({ data: createResponse })
+    const retrieve = vi.fn().mockResolvedValue({ data: session })
+    const client = fakeClient({ create, retrieve })
     const provider = createStripeMoneyProvider({ config, client })
 
     const result = await provider.createOrRecoverCreditPayment(request)
@@ -56,6 +58,9 @@ describe('Stripe money provider adapter', () => {
       return_url: request.successReturnRef,
       line_items: [{ quantity: 1, price_data: { currency: 'usd', unit_amount: 1050 } }],
     })
+    expect(retrieve).toHaveBeenCalledWith('cs_test_1', {
+      expand: ['payment_intent', 'line_items.data.price'],
+    })
   })
   it('reuses the same Checkout idempotency key when recovery spans repeated calls', async () => {
     const session = checkoutSession()
@@ -64,9 +69,10 @@ describe('Stripe money provider adapter', () => {
       .mockRejectedValueOnce(new Error('first response lost after provider effect'))
       .mockRejectedValueOnce(new Error('second response lost after provider effect'))
       .mockResolvedValueOnce({ data: session })
+    const retrieve = vi.fn().mockResolvedValue({ data: session })
     const provider = createStripeMoneyProvider({
       config,
-      client: fakeClient({ create }),
+      client: fakeClient({ create, retrieve }),
     })
 
     const first = await provider.createOrRecoverCreditPayment(request)
@@ -88,16 +94,17 @@ describe('Stripe money provider adapter', () => {
       idempotencyKey: 'ae:money:credit:topup-idempotency-1',
     })
     expect(create.mock.calls[1]?.[1]).toEqual(create.mock.calls[2]?.[1])
+    expect(retrieve).toHaveBeenCalledOnce()
   })
   it('rescales USD exponent-one amounts before Checkout and matches the scaled readback', async () => {
     const exponentOneRequest = { ...request, amount: amount('USD', '10', 1) }
-    const create = vi.fn().mockResolvedValue({
-      data: checkoutSession({
-        amount_total: 100,
-        line_items: { data: [{ quantity: 1, amount_total: 100 }] },
-      }),
+    const session = checkoutSession({
+      amount_total: 100,
+      line_items: { data: [{ quantity: 1, amount_total: 100 }] },
     })
-    const provider = createStripeMoneyProvider({ config, client: fakeClient({ create }) })
+    const create = vi.fn().mockResolvedValue({ data: checkoutSession({ line_items: undefined }) })
+    const retrieve = vi.fn().mockResolvedValue({ data: session })
+    const provider = createStripeMoneyProvider({ config, client: fakeClient({ create, retrieve }) })
 
     const result = await provider.createOrRecoverCreditPayment(exponentOneRequest)
 

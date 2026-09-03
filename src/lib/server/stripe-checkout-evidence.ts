@@ -59,7 +59,8 @@ export async function createOrRecoverCreditPayment(
     const created = await client.checkout.sessions.create(params, {
       idempotencyKey,
     });
-    return paymentSessionFromCheckoutSession(
+    return await paymentSessionFromCreatedCheckoutSession(
+      client,
       responseData(created),
       config,
       input,
@@ -71,7 +72,8 @@ export async function createOrRecoverCreditPayment(
       const recovered = await client.checkout.sessions.create(params, {
         idempotencyKey,
       });
-      return paymentSessionFromCheckoutSession(
+      return await paymentSessionFromCreatedCheckoutSession(
+        client,
         responseData(recovered),
         config,
         input,
@@ -80,6 +82,19 @@ export async function createOrRecoverCreditPayment(
       return refusal("credit_topup_outcome_unknown", true);
     }
   }
+}
+
+async function paymentSessionFromCreatedCheckoutSession(
+  client: StripeMoneyClient,
+  created: Stripe.Checkout.Session,
+  config: StripeMoneyProviderConfig,
+  expected: CreditPaymentRequest,
+): Promise<CreditPaymentSession | MoneyRefusal> {
+  if (!validIdentifier(created.id))
+    return refusal("payment_binding_invalid", false);
+  const retrieved = await retrieveCheckoutSession(client, created.id);
+  if (isMoneyRefusal(retrieved)) return retrieved;
+  return paymentSessionFromCheckoutSession(retrieved, config, expected);
 }
 
 export async function readCreditPayment(
