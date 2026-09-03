@@ -33,6 +33,48 @@ the repository, then provide AWS and Cloudflare credentials through their
 official environment variables or workload identity. Never place credentials
 in a `.tfvars` file.
 
+For a new standalone AWS account, create that boundary once with the checked-in
+AWS CloudFormation bootstrap:
+
+```sh
+aws cloudformation deploy \
+  --region ap-southeast-2 \
+  --stack-name package4-release-bootstrap \
+  --template-file infra/package4/bootstrap/state-and-deployer.yaml \
+  --capabilities CAPABILITY_NAMED_IAM
+
+aws iam update-account-password-policy \
+  --minimum-password-length 16 \
+  --require-symbols \
+  --require-numbers \
+  --require-uppercase-characters \
+  --require-lowercase-characters \
+  --allow-users-to-change-password \
+  --password-reuse-prevention 24 \
+  --no-hard-expiry
+```
+
+Run this only from a temporary root console-backed AWS CLI session. The retained
+stack creates the encrypted, versioned state bucket, a console-only human user
+with no access keys, AWS's maintained local-development sign-in policy and a
+dedicated deployment role. Set the user's login profile and MFA outside
+CloudFormation, then enroll MFA from AWS's **My security credentials** page at
+`https://console.aws.amazon.com/iam/home#/security_credentials`. Do not use the
+administrator-facing IAM Users detail page for self-enrollment; that page probes
+account-wide IAM APIs the deployment user intentionally cannot access. The
+user can manage only its own password and MFA devices. It cannot create or manage
+access keys, roles, users or infrastructure directly.
+
+Register two MFA devices: a passkey or security key for phishing-resistant
+console sign-in, and a virtual TOTP device named
+`joel-package4-deployer-cli` for MFA-protected STS role assumption. AWS does not
+support FIDO MFA for CLI/API calls. After enrollment, use `aws login` as that
+user and configure the role profile's `mfa_serial` to the virtual device ARN.
+The CLI then prompts for one TOTP when it creates a cached temporary role
+session. Use the emitted bucket, key ARN and role ARN for initialization and
+the real plan;
+do not run the release module as the root principal or the human user directly.
+
 The apply identity needs bounded AWS permissions for the declared resources and
 Cloudflare permissions for Tunnel, DNS and Access. A separate subscription must
 be attached to the emitted alert-topic ARN. The state is sensitive because
