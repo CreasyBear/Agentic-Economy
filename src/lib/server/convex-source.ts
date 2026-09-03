@@ -151,7 +151,7 @@ export async function createAuthenticatedConvexClient(
     }])
   } else {
     const authObject = options.authObject ?? (await auth())
-    const token = await readRequiredConvexAuthToken(authObject, options.tokenTemplate ?? 'convex')
+    const token = await readRequiredConvexAuthToken(authObject, options.tokenTemplate)
 
     client = new ConvexHttpClient(convexUrl, {
       auth: token,
@@ -282,12 +282,14 @@ export function readRequiredConvexUrl(env: Env = process.env): string {
   return value
 }
 
-export async function readRequiredConvexAuthToken(authObject: ConvexSourceAuth, tokenTemplate = 'convex'): Promise<string> {
+export async function readRequiredConvexAuthToken(authObject: ConvexSourceAuth, tokenTemplate?: string): Promise<string> {
   if (!authObject.isAuthenticated) {
     throw new ConvexSourceError('missing_auth', 'Authenticated owner session is required for this Convex call.', 401)
   }
 
-  const token = await authObject.getToken({ template: tokenTemplate })
+  const token = tokenTemplate === undefined
+    ? await authObject.getToken()
+    : await authObject.getToken({ template: tokenTemplate })
   if (token === null || token.trim().length === 0) {
     throw new ConvexSourceError('missing_auth', 'Clerk did not return a Convex auth token for this request.', 401)
   }

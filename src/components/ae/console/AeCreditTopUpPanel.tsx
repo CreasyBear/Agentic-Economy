@@ -32,6 +32,7 @@ export type AccountFundingPort = Readonly<{
 export type AeAccountFundingPanelProps = Readonly<{
   port?: AccountFundingPort
   onRefresh?: () => void | Promise<void>
+  redirectToCheckout?: (url: string) => void
 }>
 
 type RecoveryLocator =
@@ -42,7 +43,11 @@ type CreditPaymentStatus = CreditPaymentSession['evidence']['status']
 
 const recoveryStorageKey = 'ae.account-funding.recovery.v1'
 
-export function AeAccountFundingPanel({ port, onRefresh }: AeAccountFundingPanelProps) {
+export function AeAccountFundingPanel({
+  port,
+  onRefresh,
+  redirectToCheckout = defaultCheckoutRedirect,
+}: AeAccountFundingPanelProps) {
   const [pending, setPending] = useState(false)
   const [checking, setChecking] = useState(false)
   const [amountText, setAmountText] = useState('')
@@ -140,7 +145,7 @@ export function AeAccountFundingPanel({ port, onRefresh }: AeAccountFundingPanel
       setRecovery(locator)
       persistRecovery(locator)
       if (result.session.kind === 'hosted_redirect' && result.session.checkoutUrl !== undefined) {
-        window.location.assign(result.session.checkoutUrl)
+        redirectToCheckout(result.session.checkoutUrl)
       }
     } catch (cause) {
       captureClientExceptionOnClient(cause)
@@ -293,4 +298,8 @@ function isRecoveryLocator(value: unknown): value is RecoveryLocator {
   const hasCommandRef = typeof candidate.commandRef === 'string' && candidate.commandRef.length > 0
   return (hasExternalRef && !hasCommandRef)
     || (hasCommandRef && !hasExternalRef && hasIdempotencyKey)
+}
+
+function defaultCheckoutRedirect(url: string): void {
+  window.location.assign(url)
 }

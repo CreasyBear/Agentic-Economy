@@ -25,6 +25,7 @@ import {
   prepareFormanceManagedCallRelease,
   prepareFormanceManagedCallReservation,
   prepareFormanceManagedCallSettlement,
+  reverseFormanceProviderSettlement,
 } from '@/modules/money/formance-workflows'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from '@/modules/money/public'
 
@@ -182,6 +183,70 @@ describe('Package 4 official Formance boundary', () => {
       ...booking,
       providerAmountUnits: '9007199254740992',
     })).toEqual({ kind: 'refused', code: 'formance_managed_call_input_invalid', retryable: false })
+  })
+
+  it('reverses a Provider settlement only after exact official-reference readback', async () => {
+    const booking = managedCallBooking()
+    const settlement = prepareFormanceManagedCallSettlement({
+      booking,
+      externalEvidenceDigest: `sha256:${'d'.repeat(64)}`,
+    })
+    if (settlement.kind !== 'prepared') throw new Error(settlement.code)
+    const providerSettlement = settlement.bulk.commands[1]!
+    const createTransaction = vi.fn(async (request: {
+      v2PostTransaction: { reference: string; metadata: Record<string, string>; script: { template: string } }
+    }) => ({
+      v2CreateTransactionResponse: {
+        data: {
+          reference: request.v2PostTransaction.reference,
+          template: request.v2PostTransaction.script.template,
+          metadata: request.v2PostTransaction.metadata,
+          postings: [],
+        },
+      },
+    }))
+    const listTransactions = vi.fn()
+      .mockResolvedValueOnce({
+        v2TransactionsCursorResponse: { cursor: { data: [{
+          id: 1n,
+          reference: providerSettlement.commandRef,
+          template: providerSettlement.template,
+          metadata: providerSettlement.metadata,
+          postings: [],
+        }] } },
+      })
+      .mockResolvedValueOnce({ v2TransactionsCursorResponse: { cursor: { data: [] } } })
+    const context = {
+      configuration: {
+        environment: 'sandbox',
+        gatewayUrl: 'http://127.0.0.1:8080',
+        ledger: 'test-ledger',
+        requestTimeoutMs: 1_000,
+      },
+      sdk: { ledger: { v2: {
+        getSchema: vi.fn(async () => ({
+          v2SchemaResponse: { data: { version: 'v1.3.0', ...PACKAGE4_FORMANCE_SCHEMA } },
+        })),
+        listTransactions,
+        createTransaction,
+      } } },
+    } as unknown as FormanceContext
+    const result = await reverseFormanceProviderSettlement(context, {
+      booking,
+      originalSettlementRef: providerSettlement.commandRef,
+      correctionEvidenceDigest: `sha256:${'e'.repeat(64)}`,
+    })
+
+    expect(result).toMatchObject({ kind: 'completed', replayed: false })
+    expect(createTransaction).toHaveBeenCalledOnce()
+    expect(createTransaction.mock.calls[0]?.[0]).toMatchObject({
+      v2PostTransaction: {
+        runtime: 'machine',
+        script: { template: 'PROVIDER_REVERSED' },
+      },
+    })
+    expect(JSON.stringify(createTransaction.mock.calls[0]?.[0]))
+      .not.toContain(booking.providerRef)
   })
 
   it('recovers a lost bulk response only when every exact reference matches', async () => {
@@ -506,11 +571,11 @@ describe('Package 4 official Formance boundary', () => {
     expect(await readFormanceHealth(createFormanceContext({
       ...base,
       accessClientId: 'old-token',
-    }))).toEqual({ kind: 'unavailable', code: 'formance_health_unavailable' })
+    }))).toEqual({ kind: 'unavailable', code: 'formance_access_unavailable' })
     expect(await readFormanceHealth(createFormanceContext({
       ...base,
       accessClientId: 'new-token',
-    }))).toEqual({ kind: 'unavailable', code: 'formance_health_unavailable' })
+    }))).toEqual({ kind: 'unavailable', code: 'formance_access_unavailable' })
 
     expect(observedIds).toEqual(['old-token', 'new-token'])
     expect(metric.mock.calls.flat().join(' ')).not.toContain('old-token')

@@ -4,6 +4,7 @@ import {
   COMMERCIAL_POLICY_FAMILIES,
   evaluateCommercialPolicyGate,
   SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+  PACKAGE4_SYNTHETIC_VPS_CONTROLS,
   type CommercialPolicyApproval,
 } from '../../../src/modules/money/public'
 import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../../helpers/commercial-policy-fixtures'
@@ -45,7 +46,10 @@ describe('commercial policy launch gate', () => {
     })).toEqual({
       kind: 'admitted',
       environment: 'sandbox',
-      policyRefs: ['commercial-policy-fixture:managed_x402_deterministic_v1'],
+      policyRefs: [
+        'commercial-policy-fixture:managed_x402_deterministic_v1',
+        'commercial-policy-deployment:local_ci',
+      ],
       policyDigest: expect.stringMatching(/^sha256:/u),
       controls: SANDBOX_COMMERCIAL_POLICY_CONTROLS,
     })
@@ -59,6 +63,35 @@ describe('commercial policy launch gate', () => {
       code: 'commercial_policy_fixture_required',
       missingFamilies: COMMERCIAL_POLICY_FAMILIES,
     })
+  })
+
+  it('binds the server-owned synthetic release controls into the sandbox policy digest', () => {
+    const local = evaluateCommercialPolicyGate({
+      environment: 'sandbox',
+      now: NOW,
+      approvals: [],
+      sandboxFixture: 'managed_x402_deterministic_v1',
+      sandboxDeploymentProfile: 'local_ci',
+    })
+    const release = evaluateCommercialPolicyGate({
+      environment: 'sandbox',
+      now: NOW,
+      approvals: [],
+      sandboxFixture: 'managed_x402_deterministic_v1',
+      sandboxDeploymentProfile: 'synthetic_vps_fixture',
+    })
+
+    expect(release).toMatchObject({
+      kind: 'admitted',
+      controls: PACKAGE4_SYNTHETIC_VPS_CONTROLS,
+      policyRefs: [
+        'commercial-policy-fixture:managed_x402_deterministic_v1',
+        'commercial-policy-deployment:synthetic_vps_fixture',
+      ],
+    })
+    expect(release.kind === 'admitted' && local.kind === 'admitted'
+      ? release.policyDigest === local.policyDigest
+      : true).toBe(false)
   })
 
   it('admits production only when every required family is current', () => {

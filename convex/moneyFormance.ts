@@ -21,6 +21,7 @@ import {
   formanceAccountMetadataDigest,
   readFormanceDisplayBalance,
   releaseFormanceManagedCall,
+  reverseFormanceProviderSettlement,
   reserveFormanceManagedCall,
   settleFormanceManagedCall,
   syncFormanceCapacity,
@@ -300,7 +301,6 @@ export const bookBuyerAdjustment = internalAction({
   },
 })
 
-/** Inert until the Package 4 no-user cutover switches the existing funding caller. */
 export const bookFundingSettlement = internalAction({
   args: fundingBookingArgs,
   returns: moneyResult,
@@ -312,7 +312,6 @@ export const bookFundingSettlement = internalAction({
   },
 })
 
-/** Inert until processor reversals are switched at the Package 4 cutover. */
 export const bookFundingReversal = internalAction({
   args: fundingBookingArgs,
   returns: moneyResult,
@@ -324,7 +323,6 @@ export const bookFundingReversal = internalAction({
   },
 })
 
-/** Inert capacity replacement. It is not called by a product route before cutover. */
 export const syncCapacity = internalAction({
   args: {
     commandRef: v.string(),
@@ -393,7 +391,6 @@ export const canRebindLegalCustomer = internalAction({
   },
 })
 
-/** Inert until the Package 4 cutover switches the managed-call worker. */
 export const reserveManagedCall = internalAction({
   args: managedCallBookingArgs,
   returns: moneyResult,
@@ -421,7 +418,6 @@ export const releaseManagedCall = internalAction({
   },
 })
 
-/** Inert settlement finalizer; x402 evidence is still owned by the existing worker. */
 export const settleManagedCall = internalAction({
   args: { booking: v.object(managedCallBookingArgs), externalEvidenceDigest: v.string() },
   returns: moneyResult,
@@ -430,6 +426,21 @@ export const settleManagedCall = internalAction({
     return context.kind === 'setup_required'
       ? { kind: 'refused' as const, code: context.code, retryable: false as const }
       : convexMoneyResult(await settleFormanceManagedCall(context.context, args))
+  },
+})
+
+export const reverseProviderSettlement = internalAction({
+  args: {
+    booking: v.object(managedCallBookingArgs),
+    originalSettlementRef: v.string(),
+    correctionEvidenceDigest: v.string(),
+  },
+  returns: moneyResult,
+  handler: async (_ctx, args) => {
+    const context = configuredContext()
+    return context.kind === 'setup_required'
+      ? { kind: 'refused' as const, code: context.code, retryable: false as const }
+      : convexMoneyResult(await reverseFormanceProviderSettlement(context.context, args))
   },
 })
 

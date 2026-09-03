@@ -271,11 +271,24 @@ export const moneyTables = {
     providerCheckoutStatus: v.optional(v.union(v.literal('open'), v.literal('complete'), v.literal('expired'))),
     providerPaymentStatus: v.optional(v.union(v.literal('unpaid'), v.literal('paid'), v.literal('no_payment_required'))),
     terminalReason: v.optional(v.union(v.literal('async_payment_failed'), v.literal('expired'))),
+    reversalState: v.optional(v.union(
+      v.literal('pending'),
+      v.literal('succeeded'),
+      v.literal('outcome_unknown'),
+    )),
+    reversalStripeEventId: v.optional(identifier),
+    reversalRefundId: v.optional(identifier),
+    reversalChargeId: v.optional(identifier),
+    reversalEvidenceDigest: v.optional(identifier),
+    reversalTransactionRef: v.optional(identifier),
+    reversalStatusRef: v.optional(identifier),
+    reversedAt: v.optional(v.number()),
     state: v.union(
       v.literal('pending'),
       v.literal('succeeded'),
       v.literal('failed'),
       v.literal('outcome_unknown'),
+      v.literal('reversed'),
     ),
     externalRef: v.optional(identifier),
     providerStatus: v.optional(v.union(
@@ -283,6 +296,7 @@ export const moneyTables = {
       v.literal('succeeded'),
       v.literal('failed'),
       v.literal('outcome_unknown'),
+      v.literal('reversed'),
     )),
     providerEvidenceRef: v.optional(identifier),
     requestDigest: v.optional(identifier),
@@ -300,6 +314,7 @@ export const moneyTables = {
     .index('by_commandRef', ['commandRef'])
     .index('by_idempotencyKey', ['idempotencyKey'])
     .index('by_externalRef', ['externalRef'])
+    .index('by_paymentId', ['paymentId'])
     .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
     .index('by_accountRef_and_state', ['accountRef', 'state'])
     .index('by_legalCustomerRef_and_state', ['legalCustomerRef', 'state']),
@@ -355,15 +370,28 @@ export const moneyTables = {
     state: v.union(
       v.literal('accrued'),
       v.literal('held'),
+      v.literal('payable'),
       v.literal('settled'),
       v.literal('reversed'),
       v.literal('disputed'),
     ),
     payoutEligibility: v.literal('ineligible_x402'),
     evidenceRefs,
+    settlementTransactionRef: v.optional(identifier),
+    reversalCommandRef: v.optional(identifier),
+    reversalIdempotencyKey: v.optional(identifier),
+    reversalEvidenceDigest: v.optional(identifier),
+    reversalState: v.optional(v.union(
+      v.literal('pending'),
+      v.literal('succeeded'),
+      v.literal('outcome_unknown'),
+    )),
+    reversalTransactionRef: v.optional(identifier),
+    reversalStatusRef: v.optional(identifier),
     createdAt: v.number(),
     updatedAt: v.number(),
     settledAt: v.optional(v.number()),
+    reversedAt: v.optional(v.number()),
   })
     .index('by_obligationRef', ['obligationRef'])
     .index('by_invocationRef', ['invocationRef'])
@@ -547,12 +575,14 @@ export const moneyTables = {
     sessionId: v.optional(identifier),
     paymentId: v.optional(identifier),
     paymentIntentDigest: v.optional(identifier),
+    chargeId: v.optional(identifier),
     checkoutStatus: v.optional(v.union(
       v.literal('paid'),
       v.literal('processing'),
       v.literal('failed'),
       v.literal('expired'),
     )),
+    refundStatus: v.optional(v.union(v.literal('pending'), v.literal('succeeded'), v.literal('failed'))),
     currency: v.optional(currency),
     amountUnits: v.optional(units),
     exponent: v.optional(exponent),

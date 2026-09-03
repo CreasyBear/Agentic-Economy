@@ -116,6 +116,14 @@ export type AccountFundingCommandView = Readonly<{
   providerCheckoutStatus?: 'open' | 'complete' | 'expired'
   providerPaymentStatus?: 'unpaid' | 'paid' | 'no_payment_required'
   terminalReason?: 'async_payment_failed' | 'expired'
+  reversalState?: 'pending' | 'succeeded' | 'outcome_unknown'
+  reversalStripeEventId?: string
+  reversalRefundId?: string
+  reversalChargeId?: string
+  reversalEvidenceDigest?: string
+  reversalTransactionRef?: string
+  reversalStatusRef?: string
+  reversedAt?: number
 }>
 
 export type AccountFundingServerRuntime = Readonly<{
@@ -205,6 +213,10 @@ export const readWebhookFundingCommandQuery = sourceQuery<
   WebhookFundingCommandInput,
   FundingResult
 >('moneyAccountFunding:readWebhookCommand')
+export const readWebhookRefundCommandQuery = sourceQuery<
+  Readonly<{ paymentId: string; refundId: string; serviceAuth: ConvexServerFunctionAssertion }>,
+  FundingResult
+>('moneyAccountFunding:readWebhookRefundCommand')
 
 async function defaultResolveOwnerId(): Promise<string | undefined> {
   const { userId } = await auth()

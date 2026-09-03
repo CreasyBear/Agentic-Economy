@@ -37,6 +37,12 @@ function productionEnvironment(): Record<string, string> {
     STRIPE_SECRET_KEY: 'sk_live_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_live_example',
     STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_au_gst_10_inclusive',
+    AE_FORMANCE_ENVIRONMENT: 'production',
+    AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com',
+    AE_FORMANCE_LEDGER: 'agentic-economy-production',
+    AE_FORMANCE_REQUEST_TIMEOUT_MS: '10000',
+    AE_FORMANCE_ACCESS_CLIENT_ID: 'access-client-id',
+    AE_FORMANCE_ACCESS_CLIENT_SECRET: 'access-client-secret',
     AE_LLM_MODEL: 'deepseek/deepseek-v4-flash',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
@@ -55,6 +61,7 @@ describe('deployment manifest validator', () => {
       'web-server',
       'convex-components',
       'agent-access',
+      'formance-financial-authority',
       'seller-onboarding-canary-funding',
       'durable-invocation-workpool',
       'operation-gateway',
@@ -172,6 +179,32 @@ describe('deployment manifest validator', () => {
       expect.objectContaining({ kind: 'malformed', code: 'stripe_secret_key_invalid', names: ['STRIPE_SECRET_KEY'] }),
       expect.objectContaining({ kind: 'malformed', code: 'stripe_webhook_secret_invalid', names: ['STRIPE_WEBHOOK_SECRET'] }),
       expect.objectContaining({ kind: 'malformed', code: 'stripe_tax_rate_invalid', names: ['STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'] }),
+    ]))
+  })
+
+  it('admits only sandbox identities and remote Formance for the synthetic release profile', () => {
+    const environment = {
+      ...productionEnvironment(),
+      AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture',
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_release',
+      CLERK_SECRET_KEY: 'sk_test_release',
+      STRIPE_SECRET_KEY: 'sk_test_release',
+      STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_au_gst_10_inclusive',
+      AE_FORMANCE_ENVIRONMENT: 'sandbox',
+      AE_FORMANCE_LEDGER: 'agentic-economy-release',
+    }
+
+    expect(validateDeploymentManifest(environment, { nodeMajor: 22 })).toMatchObject({
+      ok: true,
+      findings: [],
+    })
+    expect(validateDeploymentManifest({
+      ...environment,
+      STRIPE_SECRET_KEY: 'sk_live_wrong-boundary',
+      AE_FORMANCE_ENVIRONMENT: 'production',
+    }, { nodeMajor: 22 }).findings.map(({ code }) => code)).toEqual(expect.arrayContaining([
+      'stripe_secret_key_invalid',
+      'formance_environment_mismatch',
     ]))
   })
 

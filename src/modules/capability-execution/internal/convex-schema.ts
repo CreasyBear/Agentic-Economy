@@ -303,6 +303,7 @@ export const capabilityOperationInvocationTables = {
     providerObligationState: v.optional(v.union(
       v.literal('accrued'),
       v.literal('held'),
+      v.literal('payable'),
       v.literal('settled'),
       v.literal('reversed'),
       v.literal('disputed'),

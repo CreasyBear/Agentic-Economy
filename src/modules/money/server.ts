@@ -14,14 +14,17 @@ import {
 import { isMoneyRefusal, type MoneyRefusal } from './public'
 import {
   createStripeMoneyProvider,
+  resolveStripeMoneyProviderContext,
   verifyStripeMoneyWebhook,
   type StripeMoneyClient,
   type StripeMoneyMode,
   type StripeMoneyProviderConfig,
 } from '@/lib/server/stripe-money-provider'
+import { readStripeFundingRefund, type StripeFundingRefundEvidence } from '@/lib/server/stripe-money-provider'
 import {
   handleStripeWebhookRequest as handleStripeWebhook,
   type StripeMoneyWebhookEvent,
+  type StripeRefundWebhookEvent,
   type StripeWebhookApplier,
   type StripeWebhookApplication,
   type StripeWebhookVerifier,
@@ -31,6 +34,7 @@ import {
   fundingEvidence,
   fundingWebhookReadbackRefusal,
   readWebhookFundingCommandQuery,
+  readWebhookRefundCommandQuery,
   type FundingProviderEvidence,
 } from './internal/account-funding-http'
 import { applyVerifiedConnectAccountEvent } from './internal/payout-connect-http'
@@ -76,6 +80,7 @@ export type {
   StripeAccountUpdatedWebhookEvent,
   StripeCheckoutWebhookEvent,
   StripeMoneyWebhookEvent,
+  StripeRefundWebhookEvent,
   StripeWebhookApplier,
   StripeWebhookApplication,
   StripeWebhookVerifier,
@@ -116,7 +121,8 @@ type SourceWriteBoundArgs = Readonly<{
 }>
 type ApplyVerifiedStripeEventArgs = Readonly<{
   event: StripeMoneyWebhookEvent
-  readback: FundingProviderEvidence
+  readback?: FundingProviderEvidence
+  refundReadback?: StripeFundingRefundEvidence
   operationKey: string
   correlationId: string
 }> &
@@ -149,6 +155,9 @@ export async function applyVerifiedStripeEventThroughSource(
       ...(input.mode === undefined ? {} : { mode: input.mode }),
       ...(input.client === undefined ? {} : { client: input.client }),
     })
+  if (input.event.kind === 'refund') {
+    return await applyVerifiedStripeRefundThroughSource(input as typeof input & { event: StripeRefundWebhookEvent })
+  }
   let serviceAuth: ConvexServerFunctionAssertion
   try {
     serviceAuth = await createConvexServerFunctionAssertion({
@@ -198,6 +207,66 @@ export async function applyVerifiedStripeEventThroughSource(
     operationKey,
     correlationId,
   }
+  const sourceWrite = await sourceWriteAdmissionFromRequest({
+    request: input.request,
+    command,
+    body: input.rawBody,
+    scope: 'billing',
+    operationKey,
+    correlationId,
+    ...(input.env === undefined ? {} : { env: input.env }),
+  })
+  return await callPublicSourceAction(applyVerifiedStripeEventAction, {
+    ...command,
+    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    sourceWrite,
+  })
+}
+
+async function applyVerifiedStripeRefundThroughSource(
+  input: Readonly<{
+    event: StripeRefundWebhookEvent
+    rawBody: string
+    request: Request
+    env?: Environment
+    config?: StripeMoneyProviderConfig
+    mode?: StripeMoneyMode
+    client?: StripeMoneyClient
+  }>,
+): Promise<ApplyVerifiedStripeEventResult> {
+  let serviceAuth: ConvexServerFunctionAssertion
+  try {
+    serviceAuth = await createConvexServerFunctionAssertion({
+      operation: 'moneyAccountFunding:readWebhookRefundCommand',
+      scope: 'money:funding_webhook_read',
+      command: { paymentId: input.event.paymentId, refundId: input.event.refundId },
+      ...(input.env === undefined ? {} : { env: input.env }),
+    })
+  } catch {
+    return { kind: 'refused', code: 'credit_topup_pending', retryable: true }
+  }
+  const durableCommand = await callPublicSourceQuery(
+    readWebhookRefundCommandQuery,
+    { paymentId: input.event.paymentId, refundId: input.event.refundId, serviceAuth },
+    input.env === undefined ? {} : { env: input.env },
+  )
+  if (isMoneyRefusal(durableCommand)) return durableCommand
+  const providerContext = resolveStripeMoneyProviderContext({
+    ...(input.env === undefined ? {} : { env: input.env }),
+    ...(input.config === undefined ? {} : { config: input.config }),
+    ...(input.mode === undefined ? {} : { mode: input.mode }),
+    ...(input.client === undefined ? {} : { client: input.client }),
+  })
+  if (isMoneyRefusal(providerContext)) return providerContext
+  const refundReadback = await readStripeFundingRefund(
+    providerContext.client,
+    providerContext.config,
+    input.event.refundId,
+  )
+  if (isMoneyRefusal(refundReadback)) return refundReadback
+  const operationKey = 'moneyAccountFunding:applyVerifiedEvent'
+  const correlationId = input.event.stripeEventId
+  const command = { event: input.event, refundReadback, operationKey, correlationId }
   const sourceWrite = await sourceWriteAdmissionFromRequest({
     request: input.request,
     command,

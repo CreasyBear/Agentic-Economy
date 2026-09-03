@@ -3,7 +3,7 @@ import type { GenericDatabaseReader } from 'convex/server'
 
 import type { DataModel } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
-import { mutation } from './_generated/server'
+import { env, mutation } from './_generated/server'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import { clerkConsequenceProofValue } from './lib/consequenceProof'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
@@ -17,6 +17,7 @@ import {
   type CommercialPolicyEnvironment,
   type CommercialPolicyGateResult,
   type CommercialPolicySandboxFixture,
+  type Package4SandboxDeploymentProfile,
 } from '../src/modules/money/public'
 
 const commercialPolicyFamilyValue = v.union(
@@ -125,11 +126,22 @@ export async function readCommercialPolicyGate(
   }>,
 ): Promise<CommercialPolicyGateResult> {
   if (input.environment === 'sandbox') {
+    const configuredProfile = env.AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE?.trim()
+    const sandboxDeploymentProfile: Package4SandboxDeploymentProfile | undefined =
+      configuredProfile === undefined || configuredProfile === '' || configuredProfile === 'local_ci'
+        ? 'local_ci'
+        : configuredProfile === 'synthetic_vps_fixture'
+          ? 'synthetic_vps_fixture'
+          : undefined
+    if (sandboxDeploymentProfile === undefined) {
+      return { kind: 'refused', code: 'commercial_policy_deployment_profile_invalid' }
+    }
     return evaluateCommercialPolicyGate({
       environment: input.environment,
       now: input.now,
       approvals: [],
       ...(input.sandboxFixture === undefined ? {} : { sandboxFixture: input.sandboxFixture }),
+      sandboxDeploymentProfile,
     })
   }
 

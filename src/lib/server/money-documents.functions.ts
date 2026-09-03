@@ -9,6 +9,10 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
+import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
+import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 export type MoneyDocumentView = Readonly<{
   documentRef: string
@@ -54,12 +58,17 @@ export type MoneyProviderObligationView = Readonly<{
   providerRef: string
   buyerAmountUnits: string
   providerAmountUnits: string
-  state: 'accrued' | 'held' | 'settled' | 'reversed' | 'disputed'
+  state: 'accrued' | 'held' | 'payable' | 'settled' | 'reversed' | 'disputed'
   payoutEligibility: 'ineligible_x402'
   evidenceRefs: string[]
+  settlementTransactionRef?: string
+  reversalState?: 'pending' | 'succeeded' | 'outcome_unknown'
+  reversalTransactionRef?: string
+  reversalStatusRef?: string
   createdAt: number
   updatedAt: number
   settledAt?: number
+  reversedAt?: number
 }>
 
 type Page<T> = Readonly<{
@@ -102,6 +111,30 @@ const signDailyCloseMutation = sourceMutation<{
   documentRef: string; expectedRenderInputDigest: string; confirmation: string
 }, { kind: 'signed' | 'replayed'; documentRef: string; evidenceDigest: string }
   | { kind: 'refused'; code: string }>('moneyDocuments:signOwnerDailyClose')
+type ProviderReversalResult =
+  | Readonly<{ kind: 'completed' | 'replayed'; obligationRef: string; transactionRef: string }>
+  | Readonly<{ kind: 'refused'; code: string; retryable: false }>
+  | Readonly<{ kind: 'unavailable'; code: string; submissionProvenAbsent: true }>
+  | Readonly<{ kind: 'outcome_unknown'; reference: string; statusRef: string }>
+const reverseProviderSettlementAction = sourceAction<
+  Readonly<{
+    obligationRef: string
+    invocationRef: string
+    settlementTransactionRef: string
+    evidenceRef: string
+    evidenceDigest: string
+    expectedUpdatedAt: number
+    confirmation: string
+    commandRef: string
+    idempotencyKey: string
+    proof: Awaited<ReturnType<typeof requireStrictClerkConsequenceProof>>
+    operationKey: string
+    correlationId: string
+    sourceWrite: Awaited<ReturnType<typeof sourceWriteAdmissionFromContext>>
+    sourceWriteRequest: ReturnType<typeof sourceWriteRequestFromAdmission>
+  }>,
+  ProviderReversalResult
+>('moneyProviderObligations:reverseOwnerSettlement')
 
 const cursorInput = z.strictObject({ cursor: z.string().max(2_000).nullable().optional() })
 const statementInput = z.strictObject({
@@ -116,6 +149,14 @@ const signCloseInput = z.strictObject({
 const resolveCaseInput = z.strictObject({
   caseRef: z.string().min(1).max(500),
   resolutionEvidenceRef: z.string().min(1).max(500),
+})
+const reverseProviderSettlementInput = z.strictObject({
+  obligationRef: z.string().min(1).max(500),
+  invocationRef: z.string().min(1).max(500),
+  settlementTransactionRef: z.string().min(1).max(500),
+  evidenceRef: z.string().min(1).max(500),
+  evidenceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  expectedUpdatedAt: z.number().int().nonnegative(),
 })
 
 export const readOwnerMoneyDocumentsServer = createServerFn({ method: 'GET' })
@@ -167,6 +208,41 @@ export const resolveOwnerMoneyCaseServer = createServerFn({ method: 'POST' })
     ...data,
     confirmation: data.caseRef,
   }))
+
+export const reverseOwnerProviderSettlementServer = createServerFn({ method: 'POST' })
+  .validator((data) => reverseProviderSettlementInput.parse(data))
+  .handler(async ({ data, context }): Promise<ProviderReversalResult> => {
+    const commandRef = canonicalDigest({
+      format: 'ae.provider-obligation-reversal-command-ref:v1',
+      obligationRef: data.obligationRef,
+      invocationRef: data.invocationRef,
+      settlementTransactionRef: data.settlementTransactionRef,
+      evidenceDigest: data.evidenceDigest,
+    })
+    const proof = await requireStrictClerkConsequenceProof(commandRef)
+    const operationKey = 'moneyProviderObligations:reverseOwnerSettlement'
+    const command = {
+      ...data,
+      confirmation: data.obligationRef,
+      commandRef,
+      idempotencyKey: commandRef,
+      proof,
+      operationKey,
+      correlationId: commandRef,
+    }
+    const sourceWrite = await sourceWriteAdmissionFromContext({
+      context,
+      command,
+      scope: 'billing',
+      operationKey,
+      correlationId: commandRef,
+    })
+    return await callSourceAction(reverseProviderSettlementAction, {
+      ...command,
+      sourceWrite,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    })
+  })
 
 export const renderOwnerMoneyDocumentServer = createServerFn({ method: 'POST' })
   .validator((data) => documentInput.parse(data))

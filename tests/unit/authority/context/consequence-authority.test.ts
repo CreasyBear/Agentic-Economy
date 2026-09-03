@@ -826,6 +826,12 @@ describe('centralized cross-surface consequence authority', () => {
         confirmationFields: ['actor', 'account', 'target', 'amount', 'fees_and_total', 'consequence', 'recovery'],
         recoveryClass: 'irreversible',
       },
+      'provider_obligation.reverse': {
+        actionClass: 'spend_or_transfer',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'amount', 'destination', 'consequence', 'recovery'],
+        recoveryClass: 'compensatable',
+      },
       'payout_authority.create': {
         actionClass: 'authority_increase',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },

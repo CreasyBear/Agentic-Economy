@@ -20,6 +20,7 @@ import {
   prepareFormanceManagedCallReservation,
   readFormanceDisplayBalance,
   releaseFormanceManagedCall,
+  reverseFormanceProviderSettlement,
   reserveFormanceManagedCall,
   settleFormanceManagedCall,
   syncFormanceCapacity,
@@ -174,7 +175,7 @@ describe.runIf(integrationEnabled)('Package 4 real Formance boundary', () => {
     })
   })
 
-  it('books verified funding and controlled capacities through inert named workflows', async () => {
+  it('books verified funding and controlled capacities through named workflows', async () => {
     const runDigest = digest(`package4-pr3:${Date.now()}:${process.pid}`)
     const context = createFormanceContext({
       environment: 'sandbox',
@@ -455,10 +456,31 @@ describe.runIf(integrationEnabled)('Package 4 real Formance boundary', () => {
       externalEvidenceDigest: `sha256:${digest('proven-pre-submit-failure')}`,
       submissionProvenAbsent: true,
     })).toMatchObject({ kind: 'completed', replayed: false })
-    expect(await settleFormanceManagedCall(context, {
+    const settlement = await settleFormanceManagedCall(context, {
       booking: settledBooking,
       externalEvidenceDigest: `sha256:${digest('verified-x402-settlement')}`,
-    })).toMatchObject({ kind: 'completed', replayed: false })
+    })
+    expect(settlement).toMatchObject({ kind: 'completed', replayed: false })
+    if (settlement.kind !== 'completed' || settlement.transactionRefs[1] === undefined) {
+      throw new Error('Provider settlement reference missing')
+    }
+    const providerReversal = {
+      booking: settledBooking,
+      originalSettlementRef: settlement.transactionRefs[1],
+      correctionEvidenceDigest: `sha256:${digest('verified-provider-reversal')}`,
+    }
+    expect(await reverseFormanceProviderSettlement(context, providerReversal))
+      .toMatchObject({ kind: 'completed', replayed: false })
+    expect(await reverseFormanceProviderSettlement(context, providerReversal))
+      .toMatchObject({ kind: 'completed', replayed: true })
+    expect(await reverseFormanceProviderSettlement(context, {
+      ...providerReversal,
+      originalSettlementRef: settlement.transactionRefs[0]!,
+    })).toEqual({
+      kind: 'refused',
+      code: 'formance_provider_settlement_reference_invalid',
+      retryable: false,
+    })
 
     const statementEndAt = Date.now()
     let statementCursor: string | undefined
@@ -509,7 +531,7 @@ describe.runIf(integrationEnabled)('Package 4 real Formance boundary', () => {
       subjectRef: 'custody:shared',
       generation: 1,
       now: 5_000,
-    })).toMatchObject({ kind: 'available', units: '991' })
+    })).toMatchObject({ kind: 'available', units: '992' })
   })
 })
 

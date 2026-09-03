@@ -18,7 +18,7 @@ const callValue = v.object({
   deliveryState: v.union(v.literal('delivered'), v.literal('not_delivered'), v.literal('unknown')),
   paymentState: v.union(v.literal('settled'), v.literal('released'), v.literal('unknown'), v.literal('not_applicable')),
   providerObligationState: v.optional(v.union(
-    v.literal('accrued'), v.literal('held'), v.literal('settled'), v.literal('reversed'), v.literal('disputed'),
+    v.literal('accrued'), v.literal('held'), v.literal('payable'), v.literal('settled'), v.literal('reversed'), v.literal('disputed'),
   )),
   providerAmountUnits: v.optional(v.string()),
   audAmountUnits: v.optional(v.string()),

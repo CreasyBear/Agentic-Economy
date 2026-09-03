@@ -201,7 +201,7 @@ const requiredIndexes = {
   moneyReconciliationCases: ['by_caseRef', 'by_accountRef_and_createdAt', 'by_accountRef_and_status_and_createdAt', 'by_scopeType_and_scopeRef_and_status'],
   moneyDocuments: ['by_documentRef', 'by_accountRef_and_createdAt'],
   moneyDocumentSnapshotPages: ['by_pageRef', 'by_documentRef_and_position'],
-  moneyFundingCommands: ['by_commandRef', 'by_idempotencyKey', 'by_externalRef', 'by_accountRef_and_createdAt'],
+  moneyFundingCommands: ['by_commandRef', 'by_idempotencyKey', 'by_externalRef', 'by_paymentId', 'by_accountRef_and_createdAt'],
   moneyTreasuryObservations: ['by_observationRef', 'by_custody_and_observedAt'],
   moneyLegalCustomerBindings: ['by_accountRef', 'by_legalCustomerRef_and_state'],
   moneyProviderObligations: ['by_obligationRef', 'by_invocationRef', 'by_buyerAccountRef_and_createdAt', 'by_providerRef_and_createdAt'],

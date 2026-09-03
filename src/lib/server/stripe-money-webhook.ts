@@ -9,6 +9,7 @@ import {
 } from "@/modules/money/public";
 import { readCheckoutSessionMaterial } from "./stripe-checkout-evidence";
 import { accountObjectDigest } from "./stripe-connect-evidence";
+import { refundMaterial } from "./stripe-refund-evidence";
 import {
   refusal,
   resolveStripeMoneyProviderContext,
@@ -61,9 +62,53 @@ export function mapStripeMoneyWebhookEvent(
     case "checkout.session.async_payment_failed":
     case "checkout.session.expired":
       return mapCheckoutSessionWebhookEvent(event, input.config);
+    case "refund.created":
+    case "refund.updated":
+    case "refund.failed":
+      return mapRefundWebhookEvent(event);
     default:
       return refusal("payment_binding_invalid", false);
   }
+}
+
+function mapRefundWebhookEvent(
+  event: Stripe.RefundCreatedEvent | Stripe.RefundUpdatedEvent | Stripe.RefundFailedEvent,
+): StripeMoneyWebhookEvent | MoneyRefusal {
+  const refund = event.data.object;
+  const material = refundMaterial(refund);
+  if (isMoneyRefusal(material)) return material;
+  if (event.type === "refund.failed" && material.status !== "failed")
+    return refusal("payment_binding_invalid", false);
+  const refundDigest = canonicalDigest({
+    format: "stripe-refund:v1",
+    refundId: refund.id,
+    paymentId: material.paymentId,
+    chargeId: material.chargeId,
+    status: material.status,
+    amount: material.amount,
+    balanceTransactionId:
+      typeof refund.balance_transaction === "string"
+        ? refund.balance_transaction
+        : refund.balance_transaction?.id ?? null,
+    failureBalanceTransactionId:
+      typeof refund.failure_balance_transaction === "string"
+        ? refund.failure_balance_transaction
+        : refund.failure_balance_transaction?.id ?? null,
+  });
+  return {
+    kind: "refund",
+    stripeEventId: event.id,
+    eventType: event.type,
+    externalRef: refund.id,
+    refundId: refund.id,
+    paymentId: material.paymentId,
+    chargeId: material.chargeId,
+    refundDigest,
+    status: material.status,
+    amount: material.amount,
+    payloadDigest: canonicalDigest({ format: "stripe-webhook-payload:v1", event }),
+    observedAt: event.created * 1000,
+  };
 }
 
 export async function verifyStripeMoneyWebhook(

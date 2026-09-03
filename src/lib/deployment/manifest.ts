@@ -60,6 +60,7 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
   { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_POLICY_RULES_DIGEST', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
   { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], mode: 'all' },
+  { scope: 'formance', code: 'formance_configuration_required', names: ['AE_FORMANCE_ENVIRONMENT', 'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_REQUEST_TIMEOUT_MS', 'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET'], mode: 'all' },
 ]
 
 const liveGatewaySmokeNames = [
@@ -115,6 +116,7 @@ const optionalNames = Object.freeze([
   'SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_POSTHOG_KEY', 'POSTHOG_KEY', 'VITE_POSTHOG_HOST', 'POSTHOG_HOST',
   'VITE_POSTHOG_APP_URL', 'POSTHOG_APP_URL',   'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', 'AE_WBA_DIRECTORY_PUBLIC_JWK_JSON',
   'AE_CLI_BASE_URL',
+  'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE',
 ])
 
 const fieldRules: readonly FieldRule[] = [
@@ -150,6 +152,8 @@ const knownNames = Object.freeze([
   'AE_DEV_WBA_SMOKE_SECRET', 'AE_DEV_WBA_SIGNATURE_AGENT', 'AE_LOCAL_DEV_VITE_ARGS', 'AE_KERNEL_PROOF_MANIFEST_JSON',
   'AE_KERNEL_PROOF_MANIFEST_PATH', 'AE_CLI_BASE_URL',
   'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
+  'AE_FORMANCE_ENVIRONMENT', 'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_REQUEST_TIMEOUT_MS',
+  'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET',
 ])
 
 export const DEPLOYMENT_MANIFEST = Object.freeze({
@@ -177,6 +181,7 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
       ]),
     }),
     Object.freeze({ id: 'agent-access', kind: 'clerk-api-key-agent-access', declaration: 'Clerk-issued bearer key; AE-owned principal, grant, policy, and revocation readback.' }),
+    Object.freeze({ id: 'formance-financial-authority', kind: 'private-formance-community-stack', declaration: 'Cloudflare Access protected Gateway; Ledger and managed PostgreSQL remain private.' }),
     Object.freeze({
       id: 'seller-onboarding-canary-funding',
       kind: 'convex-agent-access-funding-authority',
@@ -218,6 +223,7 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   }
   const envClass = resolveEnvironment(environment, options.environment, add)
   const production = envClass === 'production'
+  const package4Release = present(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE') === 'synthetic_vps_fixture'
   const compatible = options.nodeMajor === undefined || options.nodeMajor === 22
   if (!compatible) add('runtime', 'node_runtime_incompatible', ['NODE_RUNTIME'], 'runtime')
 
@@ -231,8 +237,9 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   }
   for (const group of requiredProduction) if (production) requireGroup(environment, group, add)
   for (const group of conditional) if (group.trigger?.some((name) => present(environment, name)) === true) requireGroup(environment, group, add)
-  if (production) validateProductionClerkCredentials(environment, add)
-  if (production) validateProductionStripeCredentials(environment, add)
+  if (production) validateProductionClerkCredentials(environment, add, package4Release)
+  if (production) validateProductionStripeCredentials(environment, add, package4Release)
+  if (production) validateProductionFormanceConfiguration(environment, add, package4Release)
   if (production) validateProductionBrowserSecurity(environment, add)
   if (production) validateSourceWriteAuthority(environment, add)
   for (const rule of fieldRules) validateField(environment, rule, production, add)
@@ -342,13 +349,16 @@ function validateSourceWriteAuthority(
 function validateProductionClerkCredentials(
   environment: DeploymentEnvironmentInput,
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  sandboxRelease: boolean,
 ): void {
   const publishableKey = present(environment, 'VITE_CLERK_PUBLISHABLE_KEY')
-  if (publishableKey !== undefined && !/^pk_live_[A-Za-z0-9_-]+$/u.test(publishableKey)) {
+  const publishablePattern = sandboxRelease ? /^pk_test_[A-Za-z0-9_-]+$/u : /^pk_live_[A-Za-z0-9_-]+$/u
+  const secretPattern = sandboxRelease ? /^sk_test_[A-Za-z0-9_-]+$/u : /^sk_live_[A-Za-z0-9_-]+$/u
+  if (publishableKey !== undefined && !publishablePattern.test(publishableKey)) {
     add('malformed', 'clerk_publishable_key_invalid', ['VITE_CLERK_PUBLISHABLE_KEY'], 'clerk')
   }
   const secretKey = present(environment, 'CLERK_SECRET_KEY')
-  if (secretKey !== undefined && !/^sk_live_[A-Za-z0-9_-]+$/u.test(secretKey)) {
+  if (secretKey !== undefined && !secretPattern.test(secretKey)) {
     add('malformed', 'clerk_secret_key_invalid', ['CLERK_SECRET_KEY'], 'clerk')
   }
   const webhookSecret = present(environment, 'CLERK_WEBHOOK_SIGNING_SECRET')
@@ -359,9 +369,11 @@ function validateProductionClerkCredentials(
 function validateProductionStripeCredentials(
   environment: DeploymentEnvironmentInput,
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  sandboxRelease: boolean,
 ): void {
+  const secretPattern = sandboxRelease ? /^sk_test_[A-Za-z0-9_-]+$/u : /^sk_live_[A-Za-z0-9_-]+$/u
   const secretKey = present(environment, 'STRIPE_SECRET_KEY')
-  if (secretKey !== undefined && !/^sk_live_[A-Za-z0-9_-]+$/u.test(secretKey)) {
+  if (secretKey !== undefined && !secretPattern.test(secretKey)) {
     add('malformed', 'stripe_secret_key_invalid', ['STRIPE_SECRET_KEY'], 'stripe-money')
   }
   const webhookSecret = present(environment, 'STRIPE_WEBHOOK_SECRET')
@@ -371,6 +383,30 @@ function validateProductionStripeCredentials(
   const taxRateId = present(environment, 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID')
   if (taxRateId !== undefined && !/^txr_[A-Za-z0-9_]+$/u.test(taxRateId)) {
     add('malformed', 'stripe_tax_rate_invalid', ['STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], 'stripe-money')
+  }
+}
+
+function validateProductionFormanceConfiguration(
+  environment: DeploymentEnvironmentInput,
+  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+  sandboxRelease: boolean,
+): void {
+  const profile = present(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE')
+  if (profile !== undefined && profile !== 'synthetic_vps_fixture') {
+    add('malformed', 'package4_deployment_profile_invalid', ['AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE'], 'formance')
+  }
+  const formanceEnvironment = present(environment, 'AE_FORMANCE_ENVIRONMENT')
+  const expected = sandboxRelease ? 'sandbox' : 'production'
+  if (formanceEnvironment !== undefined && formanceEnvironment !== expected) {
+    add('conflict', 'formance_environment_mismatch', ['AE_FORMANCE_ENVIRONMENT'], 'formance')
+  }
+  const gateway = present(environment, 'AE_FORMANCE_GATEWAY_URL')
+  if (gateway !== undefined && !validUrl(gateway, true)) {
+    add('malformed', 'formance_gateway_invalid', ['AE_FORMANCE_GATEWAY_URL'], 'formance')
+  }
+  const timeout = present(environment, 'AE_FORMANCE_REQUEST_TIMEOUT_MS')
+  if (timeout !== undefined && (!/^\d+$/u.test(timeout) || Number(timeout) < 100 || Number(timeout) > 30_000)) {
+    add('malformed', 'formance_timeout_invalid', ['AE_FORMANCE_REQUEST_TIMEOUT_MS'], 'formance')
   }
 }
 function validateProductionBrowserSecurity(

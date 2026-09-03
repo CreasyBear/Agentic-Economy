@@ -737,8 +737,8 @@ export async function readFormanceHealth(context: FormanceContext): Promise<Form
       schemaVersion: schema.schemaVersion,
       schemaDigest: schema.schemaDigest,
     })
-  } catch {
-    return unavailableHealth('formance_health_unavailable', startedAt)
+  } catch (error) {
+    return unavailableHealth(formanceReadFailureCode(error, 'health'), startedAt)
   }
 }
 
@@ -1311,6 +1311,14 @@ function statusCode(error: unknown): number | undefined {
 function errorName(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('name' in error)) return undefined
   return typeof error.name === 'string' ? error.name : undefined
+}
+
+function formanceReadFailureCode(error: unknown, operation: 'health'): string {
+  const status = statusCode(error)
+  if (status === 401 || status === 403) return 'formance_access_unavailable'
+  if (errorName(error) === 'RequestTimeoutError') return 'formance_request_timeout'
+  if (errorName(error) === 'ConnectionError') return 'formance_connection_unavailable'
+  return `formance_${operation}_unavailable`
 }
 
 function completed(reference: string, replayed: boolean): FormanceMoneyResult {

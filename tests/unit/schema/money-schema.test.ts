@@ -30,6 +30,7 @@ describe('money schema ownership', () => {
     for (const retired of RETIRED_FINANCIAL_AUTHORITY) expect(byName.has(retired)).toBe(false)
     expect(byName.get('moneyFundingCommands')?.indexes).toEqual(expect.arrayContaining([
       expect.objectContaining({ indexDescriptor: 'by_commandRef', fields: ['commandRef'] }),
+      expect.objectContaining({ indexDescriptor: 'by_paymentId', fields: ['paymentId'] }),
       expect.objectContaining({ indexDescriptor: 'by_accountRef_and_createdAt', fields: ['accountRef', 'createdAt'] }),
     ]))
     expect(byName.get('moneyTreasuryObservations')?.indexes).toEqual(expect.arrayContaining([

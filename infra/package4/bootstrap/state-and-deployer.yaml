@@ -1,0 +1,281 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Package 4 release OpenTofu state and temporary-console deployment role
+
+Parameters:
+  DeploymentName:
+    Type: String
+    Default: package4-release
+    AllowedPattern: '^[a-z][a-z0-9-]{2,30}$'
+
+Resources:
+  StateKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub '${DeploymentName} OpenTofu state'
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnableAccountIAMPolicies
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+      Tags:
+        - Key: Application
+          Value: agentic-economy
+        - Key: Environment
+          Value: !Ref DeploymentName
+        - Key: ManagedBy
+          Value: cloudformation-bootstrap
+
+  StateKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${DeploymentName}-opentofu-state'
+      TargetKeyId: !Ref StateKey
+
+  StateBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'agentic-economy-p4-state-${AWS::AccountId}-${AWS::Region}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !GetAtt StateKey.Arn
+              SSEAlgorithm: aws:kms
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-state-versions
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+            Status: Enabled
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Application
+          Value: agentic-economy
+        - Key: Environment
+          Value: !Ref DeploymentName
+        - Key: ManagedBy
+          Value: cloudformation-bootstrap
+
+  StateBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref StateBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt StateBucket.Arn
+              - !Sub '${StateBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: DenyUnencryptedStateWrites
+            Effect: Deny
+            Principal: '*'
+            Action: s3:PutObject
+            Resource: !Sub '${StateBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: aws:kms
+          - Sid: DenyWrongStateKey
+            Effect: Deny
+            Principal: '*'
+            Action: s3:PutObject
+            Resource: !Sub '${StateBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption-aws-kms-key-id: !GetAtt StateKey.Arn
+
+  HumanDeployerUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: joel-package4-deployer
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/SignInLocalDevelopmentAccess'
+      Policies:
+        - PolicyName: Package4ReleaseHumanAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: AssumeDeploymentRole
+                Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/Package4ReleaseOpenTofu'
+              - Sid: ViewAccountMfaAndPasswordInfo
+                Effect: Allow
+                Action:
+                  - iam:GetAccountPasswordPolicy
+                  - iam:GetAccountSummary
+                  - iam:ListVirtualMFADevices
+                Resource: '*'
+              - Sid: ManageOwnPassword
+                Effect: Allow
+                Action:
+                  - iam:ChangePassword
+                  - iam:GetUser
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:user/joel-package4-deployer'
+              - Sid: EnrollOwnVirtualMfa
+                Effect: Allow
+                Action: iam:CreateVirtualMFADevice
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:mfa/joel-package4-deployer*'
+              - Sid: BootstrapOwnMfa
+                Effect: Allow
+                Action:
+                  - iam:GetMFADevice
+                  - iam:ListMFADevices
+                  - iam:EnableMFADevice
+                  - iam:ResyncMFADevice
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:user/joel-package4-deployer'
+              - Sid: RemoveOwnMfaAfterAuthentication
+                Effect: Allow
+                Action: iam:DeactivateMFADevice
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:user/joel-package4-deployer'
+                Condition:
+                  Bool:
+                    aws:MultiFactorAuthPresent: true
+              - Sid: DeleteOwnVirtualMfaAfterAuthentication
+                Effect: Allow
+                Action:
+                  - iam:DeleteVirtualMFADevice
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:mfa/joel-package4-deployer*'
+                Condition:
+                  Bool:
+                    aws:MultiFactorAuthPresent: true
+      Tags:
+        - Key: Application
+          Value: agentic-economy
+        - Key: Environment
+          Value: !Ref DeploymentName
+        - Key: ManagedBy
+          Value: cloudformation-bootstrap
+
+  DeploymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: Package4ReleaseOpenTofu
+      Description: The console-only Package 4 deployer assumes this role using temporary credentials.
+      MaxSessionDuration: 14400
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: TemporaryConsoleSession
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt HumanDeployerUser.Arn
+            Action: sts:AssumeRole
+            Condition:
+              Bool:
+                aws:MultiFactorAuthPresent: true
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/PowerUserAccess'
+      Policies:
+        - PolicyName: Package4ReleaseIamBoundary
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ManagePackage4Roles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListRolePolicies
+                  - iam:ListRoleTags
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateAssumeRolePolicy
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${DeploymentName}-package4-*'
+              - Sid: ManagePackage4InstanceProfiles
+                Effect: Allow
+                Action:
+                  - iam:CreateInstanceProfile
+                  - iam:DeleteInstanceProfile
+                  - iam:GetInstanceProfile
+                  - iam:AddRoleToInstanceProfile
+                  - iam:RemoveRoleFromInstanceProfile
+                  - iam:TagInstanceProfile
+                  - iam:UntagInstanceProfile
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${DeploymentName}-package4-*'
+              - Sid: AttachApprovedManagedPolicies
+                Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${DeploymentName}-package4-*'
+                Condition:
+                  ArnEquals:
+                    iam:PolicyARN:
+                      - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore'
+                      - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup'
+              - Sid: ReadApprovedManagedPolicies
+                Effect: Allow
+                Action:
+                  - iam:GetPolicy
+                  - iam:GetPolicyVersion
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore'
+                  - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup'
+              - Sid: PassPackage4Roles
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${DeploymentName}-package4-*'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService:
+                      - ec2.amazonaws.com
+                      - backup.amazonaws.com
+              - Sid: CreateRequiredServiceLinkedRoles
+                Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    iam:AWSServiceName:
+                      - rds.amazonaws.com
+                      - backup.amazonaws.com
+      Tags:
+        - Key: Application
+          Value: agentic-economy
+        - Key: Environment
+          Value: !Ref DeploymentName
+        - Key: ManagedBy
+          Value: cloudformation-bootstrap
+
+Outputs:
+  StateBucketName:
+    Value: !Ref StateBucket
+  StateKeyArn:
+    Value: !GetAtt StateKey.Arn
+  DeploymentRoleArn:
+    Value: !GetAtt DeploymentRole.Arn
+  HumanDeployerUserName:
+    Value: !Ref HumanDeployerUser
+  HumanDeployerSignInUrl:
+    Value: !Sub 'https://${AWS::AccountId}.signin.aws.amazon.com/console'

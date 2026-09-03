@@ -40,6 +40,16 @@ describe('server Convex source seam', () => {
     ).rejects.toMatchObject({ code: 'missing_auth', status: 401 })
   })
 
+  it('uses Clerk Convex integration session claims unless a caller explicitly selects a JWT template', async () => {
+    const getToken = vi.fn().mockResolvedValue('owner.jwt')
+
+    await expect(readRequiredConvexAuthToken({ isAuthenticated: true, getToken })).resolves.toBe('owner.jwt')
+    await expect(readRequiredConvexAuthToken({ isAuthenticated: true, getToken }, 'legacy-template')).resolves.toBe('owner.jwt')
+
+    expect(getToken).toHaveBeenNthCalledWith(1)
+    expect(getToken).toHaveBeenNthCalledWith(2, { template: 'legacy-template' })
+  })
+
   it('creates a fresh credentialed Convex client for each owner request', async () => {
     const authObject = { isAuthenticated: true, getToken: async () => 'owner.jwt' }
     const calls: { url: string; init: RequestInit }[] = []

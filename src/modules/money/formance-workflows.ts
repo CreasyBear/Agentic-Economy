@@ -86,6 +86,12 @@ export type FormanceManagedCallRelease = FormanceManagedCallFinalization & Reado
   submissionProvenAbsent: true
 }>
 
+export type FormanceProviderReversal = Readonly<{
+  booking: FormanceManagedCallBooking
+  originalSettlementRef: string
+  correctionEvidenceDigest: string
+}>
+
 export type FormanceBuyerAdjustment = Readonly<{
   documentRef: string
   accountRef: string
@@ -266,6 +272,60 @@ export async function settleFormanceManagedCall(
   input: FormanceManagedCallFinalization,
 ): Promise<FormanceMoneyResult> {
   return executePreparedBulk(context, prepareFormanceManagedCallSettlement(input))
+}
+
+export async function reverseFormanceProviderSettlement(
+  context: FormanceContext,
+  input: FormanceProviderReversal,
+): Promise<FormanceMoneyResult> {
+  if (!SHA256.test(input.correctionEvidenceDigest)) {
+    return refused('formance_provider_reversal_input_invalid')
+  }
+  const accounts = managedCallAccounts(input.booking)
+  const amounts = managedCallAmounts(input.booking)
+  if (accounts === undefined || amounts === undefined) {
+    return refused('formance_provider_reversal_input_invalid')
+  }
+  const expectedSettlement = managedCallCommand(
+    input.booking,
+    'settle-provider',
+    'PROVIDER_SETTLED',
+    {
+      treasury_committed: accounts.treasuryCommitted,
+      provider_settlement: accounts.providerSettlement,
+      obligation_accrued: accounts.obligationAccrued,
+      obligation_settled: accounts.obligationSettled,
+      amount: amounts.provider,
+    },
+    input.correctionEvidenceDigest,
+  )
+  if (expectedSettlement.commandRef !== input.originalSettlementRef) {
+    return refused('formance_provider_settlement_reference_invalid')
+  }
+  const settlement = await readFormanceTransactionByReference(context, input.originalSettlementRef)
+  if (settlement.kind === 'setup_required') return refused(settlement.code)
+  if (settlement.kind === 'unavailable') return unavailable(settlement.code)
+  if (settlement.kind !== 'found'
+    || settlement.template !== 'PROVIDER_SETTLED'
+    || settlement.metadata.account_digest !== expectedSettlement.metadata.account_digest
+    || settlement.metadata.call_digest !== expectedSettlement.metadata.call_digest
+    || settlement.metadata.provider_digest !== expectedSettlement.metadata.provider_digest
+    || settlement.metadata.policy_digest !== expectedSettlement.metadata.policy_digest) {
+    return refused('formance_provider_settlement_evidence_invalid')
+  }
+  return await executeFormanceMoneyCommand(context, managedCallCommand(
+    input.booking,
+    'reverse-provider',
+    'PROVIDER_REVERSED',
+    {
+      treasury_available: accounts.treasuryAvailable,
+      provider_settlement: accounts.providerSettlement,
+      obligation_settled: accounts.obligationSettled,
+      obligation_reversed: accounts.obligationReversed,
+      amount: amounts.provider,
+    },
+    input.correctionEvidenceDigest,
+  ))
 }
 
 export function prepareFormanceBuyerAdjustment(input: FormanceBuyerAdjustment): PreparedCommand {
@@ -544,6 +604,7 @@ function managedCallAccounts(input: FormanceManagedCallBooking) {
     treasuryCommitted: `treasury:corporate:${treasuryDigest}:committed`,
     obligationAccrued: `provider_obligations:${callDigest}:accrued`,
     obligationSettled: `provider_obligations:${callDigest}:settled`,
+    obligationReversed: `provider_obligations:${callDigest}:reversed`,
     providerSettlement: `providers:${digestReference('provider', input.providerRef)}:settlement`,
   })
 }

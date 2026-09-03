@@ -23,9 +23,21 @@ const fundingProviderEvidenceArg = v.object({
   evidenceDigest: v.string(),
   paymentId: v.optional(v.string()),
 })
+const fundingRefundEvidenceArg = v.object({
+  refundId: v.string(),
+  paymentId: v.string(),
+  chargeId: v.string(),
+  status: v.union(v.literal('pending'), v.literal('succeeded'), v.literal('failed')),
+  amount: exactAmount,
+  refundDigest: v.string(),
+  evidenceDigest: v.string(),
+  evidenceRef: v.string(),
+  observedAt: v.number(),
+})
 const applyArgs = v.object({
   event: stripeMoneyWebhookEventArg,
-  readback: fundingProviderEvidenceArg,
+  readback: v.optional(fundingProviderEvidenceArg),
+  refundReadback: v.optional(fundingRefundEvidenceArg),
   operationKey: v.string(),
   correlationId: v.string(),
   ...sourceWriteArgs,
@@ -64,19 +76,35 @@ export const applyVerifiedEvent = action({
   handler: async (ctx, args): Promise<ApplyResult> => {
     const prepared = await ctx.runMutation(internal.moneyAccountFunding.prepareVerifiedEvent, args)
     if (prepared.kind !== 'prepared') return prepared
-    const booked = await ctx.runAction(internal.moneyFormance.bookFundingSettlement, prepared.booking)
+    const booked = prepared.bookingKind === 'settlement'
+      ? await ctx.runAction(internal.moneyFormance.bookFundingSettlement, prepared.booking)
+      : await ctx.runAction(internal.moneyFormance.bookFundingReversal, prepared.booking)
     if (booked.kind === 'completed') {
       if (booked.transactionRefs.length !== 1) return refused('formance_reference_invalid')
-      return await ctx.runMutation(internal.moneyAccountFunding.finalizeVerifiedEvent, {
-        ...args, formanceTransactionRef: booked.transactionRefs[0]!,
-      })
+      return prepared.bookingKind === 'settlement'
+        ? await ctx.runMutation(internal.moneyAccountFunding.finalizeVerifiedEvent, {
+            ...args, formanceTransactionRef: booked.transactionRefs[0]!,
+          })
+        : await ctx.runMutation(internal.moneyAccountFunding.finalizeVerifiedRefund, {
+            ...args, formanceTransactionRef: booked.transactionRefs[0]!,
+          })
     }
     if (booked.kind === 'outcome_unknown') {
-      await ctx.runMutation(internal.moneyAccountFunding.markFundingBookingUnknown, {
-        commandRef: args.event.kind === 'checkout' ? args.event.commandRef : '',
-        stripeEventId: args.event.stripeEventId,
-        observedAt: args.event.observedAt,
-      })
+      if (args.event.kind === 'checkout') {
+        await ctx.runMutation(internal.moneyAccountFunding.markFundingBookingUnknown, {
+          commandRef: args.event.commandRef,
+          stripeEventId: args.event.stripeEventId,
+          observedAt: args.event.observedAt,
+        })
+      } else if (args.event.kind === 'refund') {
+        await ctx.runMutation(internal.moneyAccountFunding.markFundingReversalUnknown, {
+          paymentId: args.event.paymentId,
+          refundId: args.event.refundId,
+          stripeEventId: args.event.stripeEventId,
+          statusRef: booked.statusRef,
+          observedAt: args.event.observedAt,
+        })
+      }
     }
     return refused(
       booked.kind === 'refused' ? booked.code : 'credit_topup_pending',

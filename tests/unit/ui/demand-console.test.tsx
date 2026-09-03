@@ -13,7 +13,8 @@ import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeAccountFundingPanel, type AccountFundingPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
-import type { AccountFundingBalance } from '@/modules/money/server'
+import type { CreditPaymentSession } from '@/modules/money/public'
+import type { AccountFundingBalance, AccountFundingBeginInput } from '@/modules/money/server'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: ReactNode }) => (
@@ -218,6 +219,54 @@ describe('assistant access components', () => {
     expect(writeText).toHaveBeenCalledWith(`cursor --add-mcp '{"name":"agentic-economy","url":"${window.location.origin}/mcp"}'`)
     expect(screen.queryByText(/ae_secret/u)).toBeNull()
     expect(screen.queryByRole('link', { name: /agent-access\.json/u })).toBeNull()
+  })
+
+  it('starts a bound hosted Checkout Session and redirects without persisting payment material', async () => {
+    const session: CreditPaymentSession = {
+      kind: 'hosted_redirect',
+      evidence: {
+        provider: 'stripe',
+        externalRef: 'cs_test_bound',
+        amount: { currency: 'AUD', units: '1055', exponent: 2 },
+        status: 'pending',
+        checkoutStatus: 'open',
+        paymentStatus: 'unpaid',
+        checkoutMode: 'hosted_page',
+        checkoutExpiresAt: 3_600_000,
+        requestDigest: 'digest:request',
+        metadataDigest: 'digest:metadata',
+        checkoutSessionDigest: 'digest:checkout-session',
+        evidenceDigest: 'digest:evidence',
+        evidenceRef: 'stripe:checkout:cs_test_bound',
+        observedAt: 1,
+      },
+      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_bound',
+      expiresAt: 3_600_000,
+    }
+    const begin = vi.fn(async (_input: AccountFundingBeginInput) => ({
+      kind: 'ok' as const,
+      commandRef: 'funding:one',
+      session,
+    }))
+    const read = vi.fn(async () => session)
+    const redirectToCheckout = vi.fn()
+    render(
+      <AeAccountFundingPanel
+        port={{ begin, read }}
+        redirectToCheckout={redirectToCheckout}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }))
+
+    await waitFor(() => expect(redirectToCheckout).toHaveBeenCalledWith(session.checkoutUrl))
+    expect(begin).toHaveBeenCalledWith({
+      amount: { currency: 'AUD', units: '10000000', exponent: 6 },
+      idempotencyKey: expect.any(String),
+    })
+    expect(window.sessionStorage.getItem('ae.account-funding.recovery.v1')).not.toContain('checkout.stripe.com')
+    expect(read).not.toHaveBeenCalled()
   })
 
   it('persists and reuses an outcome-unknown command locator without offering a retry', async () => {
