@@ -60,7 +60,7 @@ resource "cloudflare_zero_trust_access_service_token" "application" {
 resource "cloudflare_zero_trust_access_policy" "application" {
   account_id       = var.cloudflare_account_id
   name             = "${var.name}-formance-service-token-only"
-  decision         = "allow"
+  decision         = "non_identity"
   session_duration = "24h"
   include = [{
     service_token = {

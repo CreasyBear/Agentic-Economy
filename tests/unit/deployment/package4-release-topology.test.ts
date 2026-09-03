@@ -16,6 +16,7 @@ describe('Package 4 reusable release topology', () => {
     expect(network).not.toContain('aws_vpc_security_group_ingress_rule" "k3s')
     expect(cloudflare).toContain('cloudflare_zero_trust_tunnel_cloudflared_config')
     expect(cloudflare).toContain('service_token = {')
+    expect(cloudflare).toContain('decision         = "non_identity"')
     expect(cloudflare).toContain('service_auth_401_redirect = true')
     expect(cloudflare).toContain('http_status:404')
     expect(network).toContain('k3s_tunnel_tcp')
