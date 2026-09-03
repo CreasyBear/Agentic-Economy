@@ -13,3 +13,4 @@ outputs
 .codex
 .claude
 .agents
+infra/**/.terraform
