@@ -44,6 +44,11 @@ describe('Package 4 reusable release topology', () => {
       expect(pins).toContain(pin)
     }
     expect(pins).toContain('k3s_install_script_sha')
+    expect(pins).toContain('aws_cli_version')
+    expect(pins).toContain('aws_cli_install_sha')
+    expect(pins).toContain('awscli-exe-linux-aarch64')
+    expect(bootstrap).toContain("'${aws_cli_install_url}'")
+    expect(bootstrap).not.toMatch(/apt-get install[^\n]*awscli/u)
     expect(bootstrap).toContain('sha256sum --check --strict')
     expect(bootstrap.match(/^kind: (Gateway|Ledger)$/gmu)?.sort()).toEqual(['kind: Gateway', 'kind: Ledger'])
     for (const excluded of ['kind: Payments', 'kind: Auth', 'kind: Wallets', 'kind: Reconciliation', 'kind: Webhooks']) {

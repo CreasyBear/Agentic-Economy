@@ -3,7 +3,16 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends awscli ca-certificates curl jq python3
+apt-get install -y --no-install-recommends ca-certificates curl jq python3 unzip
+
+curl --fail --silent --show-error --location \
+  '${aws_cli_install_url}' \
+  -o /var/tmp/awscliv2.zip
+printf '%s  %s\n' '${aws_cli_install_sha}' /var/tmp/awscliv2.zip | sha256sum --check --strict
+unzip -q /var/tmp/awscliv2.zip -d /var/tmp/aws-cli-installer
+/var/tmp/aws-cli-installer/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
+test "$(aws --version 2>&1 | cut -d/ -f2 | cut -d' ' -f1)" = '${aws_cli_version}'
+rm -rf /var/tmp/awscliv2.zip /var/tmp/aws-cli-installer
 
 curl --fail --silent --show-error --location \
   '${k3s_install_script_url}' \

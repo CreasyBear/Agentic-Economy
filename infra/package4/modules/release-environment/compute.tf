@@ -59,6 +59,9 @@ resource "aws_instance" "k3s" {
   user_data_replace_on_change = true
   user_data = templatefile("${path.module}/templates/bootstrap.sh.tftpl", {
     aws_region                   = "ap-southeast-2"
+    aws_cli_version              = local.pins.aws_cli_version
+    aws_cli_install_url          = local.pins.aws_cli_install_url
+    aws_cli_install_sha          = local.pins.aws_cli_install_sha
     stack_name                   = local.stack_name
     k3s_version                  = local.pins.k3s_version
     k3s_install_script_url       = local.pins.k3s_install_script_url

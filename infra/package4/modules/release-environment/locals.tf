@@ -23,6 +23,9 @@ locals {
 
   stack_name = var.name
   pins = {
+    aws_cli_version        = "2.36.38"
+    aws_cli_install_url    = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.38.zip"
+    aws_cli_install_sha    = "52b045f09058a8e9f54976ec136bb2085463f4ce6db3008980d62381bfeccff5"
     k3s_version            = "v1.33.12+k3s1"
     k3s_install_script_url = "https://raw.githubusercontent.com/k3s-io/k3s/v1.33.12%2Bk3s1/install.sh"
     k3s_install_script_sha = "9ca7930c31179d83bc13de20078fd8ad3e1ee00875b31f39a7e524ca4ef7d9de"
