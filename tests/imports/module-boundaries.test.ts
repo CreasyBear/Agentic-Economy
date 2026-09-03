@@ -64,7 +64,7 @@ describe('module surface and dependency manifest', () => {
     )
   })
 
-  it('keeps the official Formance SDK behind one inert Node Action boundary', () => {
+  it('keeps the official Formance SDK behind one Node Action boundary', () => {
     const files = findFiles([
       { root: 'src', includeExtensions: ['.ts', '.tsx'] },
       { root: 'convex', includeExtensions: ['.ts'] },

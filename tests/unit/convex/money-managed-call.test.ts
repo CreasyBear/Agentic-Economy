@@ -7,6 +7,8 @@ import { internal } from '../../../convex/_generated/api'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import { canonicalDigest } from '../../../src/modules/common/canonical-digest'
 import { PACKAGE4_FORMANCE_REQUIREMENTS } from '../../../src/modules/money/public'
+import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
+import { withSourceWrite } from '../../helpers/source-write-admission'
 
 const convexModules = Object.fromEntries(
   Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
@@ -184,7 +186,11 @@ describe('Formance managed Call evidence', () => {
         .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef)).unique(),
     }))).resolves.toMatchObject({
       invocation: { formanceFinancialState: 'settled', formanceSettlementRefs: settlementRefs },
-      obligation: { state: 'settled', settledAt: now + 4 },
+      obligation: {
+        state: 'settled',
+        settlementTransactionRef: settlementRefs[1],
+        settledAt: now + 4,
+      },
     })
   })
 
@@ -228,5 +234,139 @@ describe('Formance managed Call evidence', () => {
     })
     await expect(backend.query(internal.moneyManagedCall.readBooking, { invocationRef }))
       .resolves.toMatchObject({ kind: 'available', entryRefusalCode: 'financial_scope_locked' })
+  })
+
+  it('binds a Provider settlement reversal to owner proof, exact evidence, and one append-only reference', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'provider-settlement-reversal')
+    const settledAt = now + 4
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('capabilityOperationCommitments', {
+        ...commitment(),
+        accountRef: fixture.canonicalAccountRef,
+        principalId: fixture.canonicalPrincipalRef,
+      })
+      await ctx.db.insert('capabilityOperationInvocations', {
+        ...invocation(),
+        ownerId: fixture.canonicalAccountRef,
+        principalId: fixture.canonicalPrincipalRef,
+      })
+    })
+    await backend.mutation(internal.moneyManagedCall.attachReservation, {
+      invocationRef,
+      transactionRefs: reservationRefs,
+    })
+    await backend.mutation(internal.moneyManagedCallLifecycle.markPossiblySubmitted, {
+      invocationRef,
+      evidenceDigest: 'sha256:submission-fence',
+      now: now + 1,
+    })
+    const settlementRefs = ['formance:settle-buyer', 'formance:settle-provider']
+    await backend.mutation(internal.moneyManagedCallLifecycle.finalizeSettlement, {
+      invocationRef,
+      transactionRefs: settlementRefs,
+      now: settledAt,
+    })
+    const obligationRef = `provider-obligation:${invocationRef}`
+    const evidenceDigest = `sha256:${'a'.repeat(64)}`
+    const commandRef = 'provider-reversal:managed-call'
+    const prepareArgs = await withSourceWrite('billing', {
+      obligationRef,
+      invocationRef,
+      settlementTransactionRef: settlementRefs[1]!,
+      evidenceRef: 'provider-reversal-evidence:managed-call',
+      evidenceDigest,
+      expectedUpdatedAt: settledAt,
+      confirmation: obligationRef,
+      commandRef,
+      idempotencyKey: commandRef,
+      proof: {
+        reverificationId: 'reverification:provider-reversal',
+        firstFactorAgeMinutes: 0,
+        secondFactorAgeMinutes: -1,
+      },
+      operationKey: 'moneyProviderObligations:reverseOwnerSettlement',
+      correlationId: commandRef,
+    })
+
+    await expect(fixture.owner.mutation(
+      internal.moneyProviderObligations.prepareOwnerReversal,
+      await withSourceWrite('billing', {
+        obligationRef: prepareArgs.obligationRef,
+        invocationRef: prepareArgs.invocationRef,
+        settlementTransactionRef: prepareArgs.settlementTransactionRef,
+        evidenceRef: prepareArgs.evidenceRef,
+        evidenceDigest: prepareArgs.evidenceDigest,
+        expectedUpdatedAt: prepareArgs.expectedUpdatedAt,
+        confirmation: prepareArgs.confirmation,
+        commandRef: prepareArgs.commandRef,
+        idempotencyKey: prepareArgs.idempotencyKey,
+        proof: prepareArgs.proof,
+        operationKey: prepareArgs.operationKey,
+        correlationId: prepareArgs.correlationId,
+      }),
+    )).resolves.toEqual({ kind: 'prepared' })
+    await expect(fixture.owner.mutation(
+      internal.moneyProviderObligations.prepareOwnerReversal,
+      prepareArgs,
+    )).resolves.toEqual({ kind: 'prepared' })
+
+    const reversalRef = 'formance:provider-reversal'
+    const finalizeArgs = {
+      obligationRef,
+      invocationRef,
+      commandRef,
+      idempotencyKey: commandRef,
+      evidenceRef: prepareArgs.evidenceRef,
+      evidenceDigest,
+      settlementTransactionRef: settlementRefs[1]!,
+      reversalTransactionRef: reversalRef,
+    }
+    await expect(backend.mutation(
+      internal.moneyProviderObligations.finalizeOwnerReversal,
+      finalizeArgs,
+    )).resolves.toEqual({ kind: 'completed', obligationRef, transactionRef: reversalRef })
+    await expect(backend.mutation(
+      internal.moneyProviderObligations.finalizeOwnerReversal,
+      finalizeArgs,
+    )).resolves.toEqual({ kind: 'replayed', obligationRef, transactionRef: reversalRef })
+    await expect(backend.run(async (ctx) => await ctx.db.query('moneyProviderObligations')
+      .withIndex('by_obligationRef', (query) => query.eq('obligationRef', obligationRef)).unique()))
+      .resolves.toMatchObject({
+        state: 'reversed',
+        payoutEligibility: 'ineligible_x402',
+        reversalState: 'succeeded',
+        reversalTransactionRef: reversalRef,
+      })
+
+    const conflictingEvidenceDigest = `sha256:${'b'.repeat(64)}`
+    await expect(fixture.owner.mutation(
+      internal.moneyProviderObligations.prepareOwnerReversal,
+      await withSourceWrite('billing', {
+        obligationRef,
+        invocationRef,
+        settlementTransactionRef: settlementRefs[1]!,
+        evidenceRef: 'provider-reversal-evidence:conflict',
+        evidenceDigest: conflictingEvidenceDigest,
+        expectedUpdatedAt: settledAt,
+        confirmation: obligationRef,
+        commandRef,
+        idempotencyKey: commandRef,
+        proof: prepareArgs.proof,
+        operationKey: prepareArgs.operationKey,
+        correlationId: prepareArgs.correlationId,
+      }),
+    )).resolves.toEqual({
+      kind: 'refused',
+      code: 'provider_reversal_conflict',
+      retryable: false,
+    })
+    await expect(backend.run(async (ctx) => await ctx.db.query('moneyProviderObligations')
+      .withIndex('by_obligationRef', (query) => query.eq('obligationRef', obligationRef)).unique()))
+      .resolves.toMatchObject({
+        state: 'disputed',
+        payoutEligibility: 'ineligible_x402',
+        reversalTransactionRef: reversalRef,
+      })
   })
 })

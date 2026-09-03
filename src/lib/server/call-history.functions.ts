@@ -24,7 +24,7 @@ const listOwnerCallsQuery = sourceQuery<{
     state: 'completed' | 'refused' | 'outcome_unknown'
     deliveryState: 'delivered' | 'not_delivered' | 'unknown'
     paymentState: 'settled' | 'released' | 'unknown' | 'not_applicable'
-    providerObligationState?: 'accrued' | 'held' | 'settled' | 'reversed' | 'disputed'
+    providerObligationState?: 'accrued' | 'held' | 'payable' | 'settled' | 'reversed' | 'disputed'
     providerAmountUnits?: string
     audAmountUnits?: string
     receiptRef?: string

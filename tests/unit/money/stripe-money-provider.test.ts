@@ -3,9 +3,11 @@ import { describe, expect, it, vi, type Mock } from 'vitest'
 
 import {
   createStripeMoneyProvider,
+  mapStripeFundingRefundEvidence,
   mapStripeMoneyWebhookEvent,
   mapStripeTransferEvidence,
   readStripeMoneyProviderConfig,
+  readStripeFundingRefund,
   readStripeTransfersByIdentity,
   verifyStripeMoneyWebhook,
   stripeCreditRequestDigest,
@@ -499,6 +501,55 @@ describe('Stripe money provider adapter', () => {
       observedAt: Date.parse('2026-08-11T00:00:00.000Z'),
     })
   })
+
+  it('verifies refund webhooks and re-reads the exact refund through the official Stripe SDK', async () => {
+    const refund = stripeRefund()
+    const payload = JSON.stringify({
+      id: 'evt_refund_succeeded',
+      object: 'event',
+      api_version: Stripe.API_VERSION,
+      created: 1_700_000_100,
+      livemode: false,
+      pending_webhooks: 1,
+      request: null,
+      type: 'refund.updated',
+      data: { object: refund },
+    })
+    const signature = new Stripe(config.secretKey).webhooks.generateTestHeaderString({
+      payload,
+      secret: config.webhookSecret,
+      timestamp: Math.floor(Date.now() / 1000),
+    })
+
+    const event = await verifyStripeMoneyWebhook({ rawBody: payload, signature, config })
+    expect(event).toMatchObject({
+      kind: 'refund',
+      stripeEventId: 'evt_refund_succeeded',
+      refundId: 're_test_1',
+      paymentId: 'pi_test_1',
+      chargeId: 'ch_test_1',
+      status: 'succeeded',
+      amount: amount('AUD', '5280000', 2),
+    })
+    expect(JSON.stringify(event)).not.toContain('customer@example.test')
+
+    const retrieveRefund = vi.fn().mockResolvedValue({ data: refund })
+    const readback = await readStripeFundingRefund(
+      fakeClient({ retrieveRefund }),
+      config,
+      refund.id,
+    )
+    expect(readback).toEqual(mapStripeFundingRefundEvidence({ refund, config }))
+    expect(readback).toMatchObject({
+      refundId: 're_test_1',
+      paymentId: 'pi_test_1',
+      chargeId: 'ch_test_1',
+      status: 'succeeded',
+      amount: amount('AUD', '5280000', 2),
+      evidenceRef: 'stripe:refund:re_test_1',
+    })
+    expect(retrieveRefund).toHaveBeenCalledWith('re_test_1')
+  })
 })
 type AdapterMock = Mock
 
@@ -511,10 +562,12 @@ function fakeClient(input: Readonly<{
   connectCreate?: AdapterMock
   accountLinkCreate?: AdapterMock
   connectRetrieve?: AdapterMock
+  retrieveRefund?: AdapterMock
 }>): Stripe {
   return {
     checkout: { sessions: { create: input.create ?? vi.fn(), retrieve: input.retrieve ?? vi.fn() } },
     transfers: { create: input.transferCreate ?? vi.fn(), retrieve: input.transferRetrieve ?? vi.fn(), list: input.transferList ?? vi.fn() },
+    refunds: { retrieve: input.retrieveRefund ?? vi.fn() },
     v2: {
       core: {
         accounts: { create: input.connectCreate ?? vi.fn(), retrieve: input.connectRetrieve ?? vi.fn() },
@@ -522,6 +575,23 @@ function fakeClient(input: Readonly<{
       },
     },
   } as unknown as Stripe
+}
+
+function stripeRefund(overrides: Readonly<Record<string, unknown>> = {}): Stripe.Refund {
+  return {
+    id: 're_test_1',
+    object: 'refund',
+    amount: 5_280_000,
+    balance_transaction: 'txn_test_1',
+    charge: 'ch_test_1',
+    created: 1_700_000_100,
+    currency: 'aud',
+    metadata: { unsafe_customer_detail: 'customer@example.test' },
+    payment_intent: 'pi_test_1',
+    reason: 'requested_by_customer',
+    status: 'succeeded',
+    ...overrides,
+  } as unknown as Stripe.Refund
 }
 
 function checkoutSession(overrides: Readonly<Record<string, unknown>> = {}): Stripe.Checkout.Session {

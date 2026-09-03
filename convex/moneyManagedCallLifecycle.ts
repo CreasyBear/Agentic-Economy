@@ -175,7 +175,13 @@ export const finalizeSettlement = internalMutation({
       .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
       .unique()
     if (obligation !== null) {
-      await ctx.db.patch(obligation._id, { state: 'settled', settledAt: args.now, updatedAt: args.now })
+      await ctx.db.patch(obligation._id, {
+        state: 'settled',
+        settlementTransactionRef: args.transactionRefs[1]!,
+        evidenceRefs: [...new Set([...obligation.evidenceRefs, ...args.transactionRefs])].slice(-32),
+        settledAt: args.now,
+        updatedAt: args.now,
+      })
     }
     return { kind: 'accepted' as const, state: 'settled', replayed: false }
   },

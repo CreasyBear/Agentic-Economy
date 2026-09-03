@@ -79,7 +79,26 @@ export const accountUpdatedEventArg = v.object({
   payloadDigest: identifier,
   observedAt: v.number(),
 })
+export const refundEventArg = v.object({
+  kind: v.literal('refund'),
+  stripeEventId: identifier,
+  eventType: v.union(
+    v.literal('refund.created'),
+    v.literal('refund.updated'),
+    v.literal('refund.failed'),
+  ),
+  externalRef: identifier,
+  refundId: identifier,
+  paymentId: identifier,
+  chargeId: identifier,
+  refundDigest: identifier,
+  status: v.union(v.literal('pending'), v.literal('succeeded'), v.literal('failed')),
+  amount: exactAmount,
+  payloadDigest: identifier,
+  observedAt: v.number(),
+})
 export const stripeMoneyWebhookEventArg = v.union(
   checkoutEventArg,
+  refundEventArg,
   accountUpdatedEventArg,
 )

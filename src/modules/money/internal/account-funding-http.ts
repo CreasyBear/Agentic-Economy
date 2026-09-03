@@ -97,9 +97,9 @@ export type AccountFundingCommandView = Readonly<{
   inputDigest: string
   successReturnRef: string
   providerRecoveryDeadlineAt: number
-  state: 'pending' | 'succeeded' | 'failed' | 'outcome_unknown'
+  state: 'pending' | 'succeeded' | 'failed' | 'outcome_unknown' | 'reversed'
   externalRef?: string
-  providerStatus?: 'pending' | 'succeeded' | 'failed' | 'outcome_unknown'
+  providerStatus?: 'pending' | 'succeeded' | 'failed' | 'outcome_unknown' | 'reversed'
   providerEvidenceRef?: string
   requestDigest?: string
   metadataDigest?: string
@@ -107,6 +107,14 @@ export type AccountFundingCommandView = Readonly<{
   paymentIntentDigest?: string
   evidenceDigest?: string
   paymentId?: string
+  reversalState?: 'pending' | 'succeeded' | 'outcome_unknown'
+  reversalStripeEventId?: string
+  reversalRefundId?: string
+  reversalChargeId?: string
+  reversalEvidenceDigest?: string
+  reversalTransactionRef?: string
+  reversalStatusRef?: string
+  reversedAt?: number
 }>
 
 export type AccountFundingServerRuntime = Readonly<{
@@ -192,6 +200,10 @@ export const readWebhookFundingCommandQuery = sourceQuery<
   WebhookFundingCommandInput,
   FundingResult
 >('moneyAccountFunding:readWebhookCommand')
+export const readWebhookRefundCommandQuery = sourceQuery<
+  Readonly<{ paymentId: string; refundId: string; serviceAuth: ConvexServerFunctionAssertion }>,
+  FundingResult
+>('moneyAccountFunding:readWebhookRefundCommand')
 
 async function defaultResolveOwnerId(): Promise<string | undefined> {
   const { userId } = await auth()

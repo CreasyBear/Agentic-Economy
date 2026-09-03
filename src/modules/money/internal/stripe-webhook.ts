@@ -29,6 +29,21 @@ export type StripeCheckoutWebhookEvent = Readonly<{
   observedAt: number
 }>
 
+export type StripeRefundWebhookEvent = Readonly<{
+  kind: 'refund'
+  stripeEventId: string
+  eventType: 'refund.created' | 'refund.updated' | 'refund.failed'
+  externalRef: string
+  refundId: string
+  paymentId: string
+  chargeId: string
+  refundDigest: string
+  status: 'pending' | 'succeeded' | 'failed'
+  amount: ExactAmount
+  payloadDigest: string
+  observedAt: number
+}>
+
 export type StripeAccountUpdatedWebhookEvent = Readonly<{
   kind: 'account'
   stripeEventId: string
@@ -47,7 +62,10 @@ export type StripeAccountUpdatedWebhookEvent = Readonly<{
   observedAt: number
 }>
 
-export type StripeMoneyWebhookEvent = StripeCheckoutWebhookEvent | StripeAccountUpdatedWebhookEvent
+export type StripeMoneyWebhookEvent =
+  | StripeCheckoutWebhookEvent
+  | StripeRefundWebhookEvent
+  | StripeAccountUpdatedWebhookEvent
 
 export type StripeWebhookVerification = StripeMoneyWebhookEvent | MoneyRefusal
 

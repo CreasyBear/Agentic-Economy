@@ -589,6 +589,7 @@ export type {
 } from "./internal/ports";
 export type {
   StripeAccountUpdatedWebhookEvent,
+  StripeRefundWebhookEvent,
   StripeMoneyWebhookEvent,
 } from "./internal/stripe-webhook";
 export {

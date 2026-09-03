@@ -26,16 +26,23 @@ import {
 } from '../src/modules/money/public'
 
 const environmentValue = v.union(v.literal('sandbox'), v.literal('production'))
-const fundingStateValue = v.union(
+const fundingProviderStateValue = v.union(
   v.literal('pending'),
   v.literal('succeeded'),
   v.literal('failed'),
   v.literal('outcome_unknown'),
 )
+const fundingStateValue = v.union(
+  v.literal('pending'),
+  v.literal('succeeded'),
+  v.literal('failed'),
+  v.literal('outcome_unknown'),
+  v.literal('reversed'),
+)
 const fundingProviderEvidenceArg = v.object({
   externalRef: v.string(),
   amount: exactAmount,
-  status: fundingStateValue,
+  status: fundingProviderStateValue,
   evidenceRef: v.string(),
   requestDigest: v.string(),
   metadataDigest: v.string(),
@@ -43,6 +50,17 @@ const fundingProviderEvidenceArg = v.object({
   paymentIntentDigest: v.optional(v.string()),
   evidenceDigest: v.string(),
   paymentId: v.optional(v.string()),
+})
+const fundingRefundEvidenceArg = v.object({
+  refundId: v.string(),
+  paymentId: v.string(),
+  chargeId: v.string(),
+  status: v.union(v.literal('pending'), v.literal('succeeded'), v.literal('failed')),
+  amount: exactAmount,
+  refundDigest: v.string(),
+  evidenceDigest: v.string(),
+  evidenceRef: v.string(),
+  observedAt: v.number(),
 })
 const fundingCommandValue = v.object({
   commandRef: v.string(),
@@ -75,6 +93,16 @@ const fundingCommandValue = v.object({
   appliedStripeEventId: v.optional(v.string()),
   appliedPayloadDigest: v.optional(v.string()),
   appliedTransactionRef: v.optional(v.string()),
+  reversalState: v.optional(v.union(
+    v.literal('pending'), v.literal('succeeded'), v.literal('outcome_unknown'),
+  )),
+  reversalStripeEventId: v.optional(v.string()),
+  reversalRefundId: v.optional(v.string()),
+  reversalChargeId: v.optional(v.string()),
+  reversalEvidenceDigest: v.optional(v.string()),
+  reversalTransactionRef: v.optional(v.string()),
+  reversalStatusRef: v.optional(v.string()),
+  reversedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -102,7 +130,8 @@ const bindFundingArgsValue = v.object({
 })
 const applyFundingEventArgsValue = v.object({
   event: stripeMoneyWebhookEventArg,
-  readback: fundingProviderEvidenceArg,
+  readback: v.optional(fundingProviderEvidenceArg),
+  refundReadback: v.optional(fundingRefundEvidenceArg),
   operationKey: v.string(),
   correlationId: v.string(),
   ...sourceWriteArgs,
@@ -122,6 +151,11 @@ const markFundingUnknownArgsValue = v.object({
 const readWebhookFundingArgsValue = v.object({
   commandRef: v.string(),
   externalRef: v.string(),
+  serviceAuth: serverFunctionAuth,
+})
+const readWebhookRefundFundingArgsValue = v.object({
+  paymentId: v.string(),
+  refundId: v.string(),
   serviceAuth: serverFunctionAuth,
 })
 const applyFundingEventResultValue = v.union(
@@ -145,7 +179,11 @@ const fundingBookingValue = v.object({
   externalEvidenceDigest: v.string(),
 })
 const prepareFundingEventResultValue = v.union(
-  v.object({ kind: v.literal('prepared'), booking: fundingBookingValue }),
+  v.object({
+    kind: v.literal('prepared'),
+    bookingKind: v.union(v.literal('settlement'), v.literal('reversal')),
+    booking: fundingBookingValue,
+  }),
   applyFundingEventResultValue,
 )
 
@@ -159,6 +197,7 @@ const RECOVERY_WINDOW_MS = 23 * 60 * 60 * 1_000
 const POSITIVE_UNITS = /^[1-9]\d{0,29}$/u
 const SHA256 = /^sha256:[a-f0-9]{64}$/u
 const FUNDING_WEBHOOK_LOOKUP_OPERATION = 'moneyAccountFunding:readWebhookCommand'
+const FUNDING_REFUND_LOOKUP_OPERATION = 'moneyAccountFunding:readWebhookRefundCommand'
 const FUNDING_WEBHOOK_LOOKUP_SCOPE = 'money:funding_webhook_read'
 
 async function recordFundingDocuments(
@@ -430,6 +469,38 @@ async function readWebhookFundingHandler(
     : { kind: 'accepted', command: fundingCommandView(command) }
 }
 
+async function refundWebhookLookupAuthorized(
+  serviceAuth: CustomerRequestServiceAssertion,
+  paymentId: string,
+  refundId: string,
+): Promise<boolean> {
+  const key = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+  if (key === undefined
+    || key.length < 32
+    || !serviceAuth.scopes.includes(FUNDING_WEBHOOK_LOOKUP_SCOPE)) return false
+  return await verifyCustomerRequestServiceAssertion({
+    key,
+    operation: FUNDING_REFUND_LOOKUP_OPERATION,
+    command: { paymentId, refundId },
+    assertion: serviceAuth,
+  })
+}
+
+async function readWebhookRefundFundingHandler(
+  ctx: QueryCtx,
+  args: Infer<typeof readWebhookRefundFundingArgsValue>,
+): Promise<FundingResult> {
+  if (!await refundWebhookLookupAuthorized(args.serviceAuth, args.paymentId, args.refundId)) {
+    return refused('billing_identity_missing')
+  }
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_paymentId', (builder) => builder.eq('paymentId', args.paymentId))
+    .unique()
+  return command === null || command.paymentId !== args.paymentId
+    ? refused('funding_pending', true)
+    : { kind: 'accepted', command: fundingCommandView(command) }
+}
+
 async function markFundingUnknownHandler(
   ctx: MutationCtx,
   args: Infer<typeof markFundingUnknownArgsValue>,
@@ -478,7 +549,18 @@ async function prepareFundingEventHandler(
 ): Promise<Infer<typeof prepareFundingEventResultValue>> {
   const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
   if (sourceWrite.kind === 'rejected') return refused('source_write_denied')
-  if (args.event.kind !== 'checkout') return refused('payment_binding_invalid')
+  if (args.event.kind === 'checkout') return await prepareFundingSettlementEvent(ctx, args)
+  if (args.event.kind === 'refund') return await prepareFundingRefundEvent(ctx, args)
+  return refused('payment_binding_invalid')
+}
+
+async function prepareFundingSettlementEvent(
+  ctx: MutationCtx,
+  args: ApplyFundingEventArgs,
+): Promise<Infer<typeof prepareFundingEventResultValue>> {
+  if (args.event.kind !== 'checkout' || args.readback === undefined || args.refundReadback !== undefined) {
+    return refused('payment_binding_invalid')
+  }
   const event = args.event
   const command = await ctx.db.query('moneyFundingCommands')
     .withIndex('by_commandRef', (builder) => builder.eq('commandRef', event.commandRef))
@@ -537,6 +619,7 @@ async function prepareFundingEventHandler(
   })
   return {
     kind: 'prepared',
+    bookingKind: 'settlement',
     booking: {
       commandRef: command.commandRef,
       accountRef: command.accountRef,
@@ -552,11 +635,129 @@ async function prepareFundingEventHandler(
   }
 }
 
+async function prepareFundingRefundEvent(
+  ctx: MutationCtx,
+  args: ApplyFundingEventArgs,
+): Promise<Infer<typeof prepareFundingEventResultValue>> {
+  if (args.event.kind !== 'refund' || args.refundReadback === undefined || args.readback !== undefined) {
+    return refused('payment_binding_invalid')
+  }
+  const event = args.event
+  const readback = args.refundReadback
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_paymentId', (builder) => builder.eq('paymentId', event.paymentId))
+    .unique()
+  if (command === null || command.appliedTransactionRef === undefined) return refused('funding_pending', true)
+  const priorEvent = await ctx.db.query('moneyStripeEvents')
+    .withIndex('by_stripeEventId', (builder) => builder.eq('stripeEventId', event.stripeEventId))
+    .unique()
+  if (priorEvent !== null) {
+    if (!eventRowMatches(priorEvent, event)) return refused('payment_binding_invalid')
+    if (priorEvent.status === 'applied' || priorEvent.status === 'ignored') {
+      return {
+        kind: 'accepted',
+        status: 'replayed',
+        ...(priorEvent.appliedRef === undefined ? {} : { appliedRef: priorEvent.appliedRef }),
+      }
+    }
+    if (priorEvent.status !== 'received') return refused('payment_binding_invalid')
+  }
+  const sameEvidence = event.refundId === readback.refundId
+    && event.paymentId === readback.paymentId
+    && event.chargeId === readback.chargeId
+    && event.refundDigest === readback.refundDigest
+    && event.status === readback.status
+    && compareExactAmounts(event.amount, readback.amount) === 0
+  if (!sameEvidence) return refused('payment_binding_invalid')
+
+  if (event.status !== 'succeeded') {
+    if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
+      ...eventRowFields(event), status: 'ignored',
+    })
+    return { kind: 'accepted', status: 'ignored' }
+  }
+  if (command.state === 'reversed') {
+    return command.reversalRefundId === event.refundId
+      && command.reversalTransactionRef !== undefined
+      ? { kind: 'accepted', status: 'replayed', appliedRef: command.reversalTransactionRef }
+      : refused('funding_state_conflict')
+  }
+  if (command.state !== 'succeeded') return refused('funding_state_conflict')
+  const fullRefund = compareExactAmounts(event.amount, {
+    currency: 'AUD', exponent: AUD_EXPONENT, units: command.totalUnits,
+  }) === 0
+  if (!fullRefund) {
+    const caseRef = `money-case:${canonicalDigest({
+      format: 'ae.funding-refund-discrepancy:v1',
+      fundingCommandRef: command.commandRef,
+    })}`
+    const existingCase = await ctx.db.query('moneyReconciliationCases')
+      .withIndex('by_caseRef', (builder) => builder.eq('caseRef', caseRef))
+      .unique()
+    if (existingCase === null) {
+      await ctx.db.insert('moneyReconciliationCases', {
+        caseRef,
+        accountRef: command.accountRef,
+        kind: 'processor_difference',
+        status: 'open',
+        scopeType: 'account',
+        scopeRef: command.accountRef,
+        transactionRef: command.appliedTransactionRef,
+        reasonCode: 'funding_refund_not_full',
+        evidenceRefs: [event.stripeEventId, event.refundId, readback.evidenceRef],
+        createdAt: event.observedAt,
+        updatedAt: event.observedAt,
+      })
+    } else {
+      await ctx.db.patch(existingCase._id, {
+        evidenceRefs: [...new Set([
+          ...existingCase.evidenceRefs,
+          event.stripeEventId,
+          event.refundId,
+          readback.evidenceRef,
+        ])].slice(-32),
+        updatedAt: event.observedAt,
+      })
+    }
+    if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
+      ...eventRowFields(event), status: 'ignored', appliedRef: caseRef,
+    })
+    return { kind: 'accepted', status: 'ignored', appliedRef: caseRef }
+  }
+  if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
+    ...eventRowFields(event), status: 'received',
+  })
+  await ctx.db.patch(command._id, {
+    reversalState: 'pending',
+    reversalStripeEventId: event.stripeEventId,
+    reversalRefundId: event.refundId,
+    reversalChargeId: event.chargeId,
+    reversalEvidenceDigest: readback.evidenceDigest,
+    updatedAt: event.observedAt,
+  })
+  return {
+    kind: 'prepared',
+    bookingKind: 'reversal',
+    booking: {
+      commandRef: `funding-reversal:${event.refundId}`,
+      accountRef: command.accountRef,
+      processorRef: command.externalRef ?? event.paymentId,
+      idempotencyKey: `funding-reversal:${event.refundId}`,
+      principalUnits: command.principalUnits,
+      serviceFeeUnits: command.serviceFeeUnits,
+      taxUnits: command.taxUnits,
+      totalUnits: command.totalUnits,
+      policyDigest: command.commercialPolicyDigest,
+      externalEvidenceDigest: readback.evidenceDigest,
+    },
+  }
+}
+
 async function finalizeFundingEventHandler(
   ctx: MutationCtx,
   args: ApplyFundingEventArgs & Readonly<{ formanceTransactionRef: string }>,
 ): Promise<ApplyFundingEventResult> {
-  if (args.event.kind !== 'checkout' || args.event.status !== 'paid') {
+  if (args.event.kind !== 'checkout' || args.event.status !== 'paid' || args.readback === undefined) {
     return refused('payment_binding_invalid')
   }
   const fundingEvent = args.event
@@ -603,6 +804,105 @@ async function finalizeFundingEventHandler(
   }
 }
 
+async function recordFundingReversalDocument(
+  ctx: MutationCtx,
+  command: Doc<'moneyFundingCommands'>,
+  transactionRef: string,
+  occurredAt: number,
+): Promise<void> {
+  const documentRef = `money-document:adjustment:${transactionRef}`
+  const existing = await ctx.db.query('moneyDocuments')
+    .withIndex('by_documentRef', (query) => query.eq('documentRef', documentRef))
+    .unique()
+  if (existing !== null) return
+  const renderInput = {
+    format: 'ae.money-document-render-input:v1',
+    documentRef,
+    accountRef: command.accountRef,
+    kind: 'adjustment',
+    currency: 'AUD',
+    exponent: AUD_EXPONENT,
+    amountUnits: command.totalUnits,
+    detail: {
+      reason: 'processor_full_refund',
+      principalUnits: command.principalUnits,
+      serviceFeeUnits: command.serviceFeeUnits,
+      taxUnits: command.taxUnits,
+      totalUnits: command.totalUnits,
+    },
+    transactionRef,
+    occurredAt,
+    policyRefs: command.commercialPolicyRefs,
+    policyDigest: command.commercialPolicyDigest,
+  } as const satisfies StableHashValue
+  const renderInputJson = stableStringify(renderInput)
+  const renderInputDigest = canonicalDigest(renderInput)
+  await ctx.db.insert('moneyDocuments', {
+    documentRef,
+    accountRef: command.accountRef,
+    kind: 'adjustment',
+    sourceTransactionRefs: [transactionRef],
+    amountUnits: command.totalUnits,
+    residualUnits: '0',
+    policyRefs: [...command.commercialPolicyRefs],
+    policyDigest: command.commercialPolicyDigest,
+    templateVersion: 'ae.money-document:html:v1',
+    renderInputJson,
+    renderInputDigest,
+    state: 'rendering',
+    environment: command.environment,
+    sourceCount: 1,
+    snapshotDigest: renderInputDigest,
+    createdAt: occurredAt,
+  })
+}
+
+async function finalizeFundingRefundHandler(
+  ctx: MutationCtx,
+  args: ApplyFundingEventArgs & Readonly<{ formanceTransactionRef: string }>,
+): Promise<ApplyFundingEventResult> {
+  if (args.event.kind !== 'refund'
+    || args.event.status !== 'succeeded'
+    || args.refundReadback === undefined) return refused('payment_binding_invalid')
+  const refundEvent = args.event
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_paymentId', (builder) => builder.eq('paymentId', refundEvent.paymentId))
+    .unique()
+  const event = await ctx.db.query('moneyStripeEvents')
+    .withIndex('by_stripeEventId', (builder) => builder.eq('stripeEventId', args.event.stripeEventId))
+    .unique()
+  if (command === null || event === null || !eventRowMatches(event, refundEvent)) {
+    return refused('payment_binding_invalid')
+  }
+  if (command.state === 'reversed') {
+    return command.reversalRefundId === refundEvent.refundId
+      && command.reversalTransactionRef === args.formanceTransactionRef
+      ? { kind: 'accepted', status: 'replayed', appliedRef: args.formanceTransactionRef }
+      : refused('funding_idempotency_conflict')
+  }
+  if (command.state !== 'succeeded'
+    || event.status !== 'received'
+    || command.reversalRefundId !== refundEvent.refundId
+    || command.reversalEvidenceDigest !== args.refundReadback.evidenceDigest) {
+    return refused('funding_state_conflict')
+  }
+  await recordFundingReversalDocument(ctx, command, args.formanceTransactionRef, refundEvent.observedAt)
+  await ctx.db.patch(command._id, {
+    state: 'reversed',
+    providerStatus: 'reversed',
+    reversalState: 'succeeded',
+    reversalTransactionRef: args.formanceTransactionRef,
+    reversedAt: refundEvent.observedAt,
+    updatedAt: refundEvent.observedAt,
+  })
+  await ctx.db.patch(event._id, {
+    status: 'applied',
+    appliedRef: args.formanceTransactionRef,
+    appliedAt: refundEvent.observedAt,
+  })
+  return { kind: 'accepted', status: 'applied', appliedRef: args.formanceTransactionRef }
+}
+
 async function markFundingBookingUnknownHandler(
   ctx: MutationCtx,
   args: Readonly<{ commandRef: string; stripeEventId: string; observedAt: number }>,
@@ -613,6 +913,31 @@ async function markFundingBookingUnknownHandler(
   if (command !== null && command.state !== 'succeeded' && command.state !== 'failed') {
     await ctx.db.patch(command._id, {
       state: 'outcome_unknown', providerStatus: 'outcome_unknown', updatedAt: args.observedAt,
+    })
+  }
+}
+
+async function markFundingReversalUnknownHandler(
+  ctx: MutationCtx,
+  args: Readonly<{
+    paymentId: string
+    refundId: string
+    stripeEventId: string
+    statusRef: string
+    observedAt: number
+  }>,
+): Promise<void> {
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_paymentId', (builder) => builder.eq('paymentId', args.paymentId))
+    .unique()
+  if (command !== null
+    && command.state === 'succeeded'
+    && command.reversalRefundId === args.refundId
+    && command.reversalStripeEventId === args.stripeEventId) {
+    await ctx.db.patch(command._id, {
+      reversalState: 'outcome_unknown',
+      reversalStatusRef: args.statusRef,
+      updatedAt: args.observedAt,
     })
   }
 }
@@ -639,6 +964,12 @@ export const readWebhookCommand = query({
   args: readWebhookFundingArgsValue.fields,
   returns: fundingResultValue,
   handler: readWebhookFundingHandler,
+})
+
+export const readWebhookRefundCommand = query({
+  args: readWebhookRefundFundingArgsValue.fields,
+  returns: fundingResultValue,
+  handler: readWebhookRefundFundingHandler,
 })
 
 export const markOutcomeUnknown = mutation({
@@ -668,11 +999,29 @@ export const finalizeVerifiedEvent = internalMutation({
   handler: finalizeFundingEventHandler,
 })
 
+export const finalizeVerifiedRefund = internalMutation({
+  args: { ...applyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
+  returns: applyFundingEventResultValue,
+  handler: finalizeFundingRefundHandler,
+})
+
 export const markFundingBookingUnknown = internalMutation({
   args: { commandRef: v.string(), stripeEventId: v.string(), observedAt: v.number() },
   returns: v.null(),
   handler: async (ctx, args) => {
     await markFundingBookingUnknownHandler(ctx, args)
+    return null
+  },
+})
+
+export const markFundingReversalUnknown = internalMutation({
+  args: {
+    paymentId: v.string(), refundId: v.string(), stripeEventId: v.string(),
+    statusRef: v.string(), observedAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await markFundingReversalUnknownHandler(ctx, args)
     return null
   },
 })

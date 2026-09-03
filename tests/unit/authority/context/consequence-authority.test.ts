@@ -826,6 +826,12 @@ describe('centralized cross-surface consequence authority', () => {
         confirmationFields: ['actor', 'account', 'target', 'amount', 'fees_and_total', 'consequence', 'recovery'],
         recoveryClass: 'irreversible',
       },
+      'provider_obligation.reverse': {
+        actionClass: 'spend_or_transfer',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'amount', 'destination', 'consequence', 'recovery'],
+        recoveryClass: 'compensatable',
+      },
       'payout_authority.create': {
         actionClass: 'authority_increase',
         proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
@@ -862,6 +868,24 @@ describe('centralized cross-surface consequence authority', () => {
         confirmationFields: ['actor', 'account', 'target', 'operation_revision', 'market_visibility', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
+      'commercial_policy.activate': {
+        actionClass: 'authority_increase',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'scope', 'expiry', 'consequence', 'recovery'],
+        recoveryClass: 'reversible_before_dispatch',
+      },
+      'commercial_policy.replace': {
+        actionClass: 'authority_increase',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'scope', 'expiry', 'consequence', 'recovery'],
+        recoveryClass: 'reversible_before_dispatch',
+      },
+      'commercial_policy.suspend': {
+        actionClass: 'authority_reduction',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'scope', 'expiry', 'consequence', 'recovery'],
+        recoveryClass: 'reversible_before_dispatch',
+      },
     })
 
     for (const action of PACKAGE_3_CONSEQUENCE_ACTIONS) {
@@ -880,7 +904,7 @@ describe('centralized cross-surface consequence authority', () => {
           uniquePerCommand: true,
         })
       }
-      if (policy.actionClass === 'authority_reduction') {
+      if (policy.actionClass === 'authority_reduction' && action !== 'commercial_policy.suspend') {
         expect(policy.proofPolicy).toEqual({ kind: 'none' })
       }
     }
