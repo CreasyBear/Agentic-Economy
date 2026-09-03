@@ -126,9 +126,7 @@ export async function readCommercialPolicyGate(
   }>,
 ): Promise<CommercialPolicyGateResult> {
   if (input.environment === 'sandbox') {
-    const configuredProfile = (env as typeof env & {
-      AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE?: string
-    }).AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE?.trim()
+    const configuredProfile = env.AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE?.trim()
     const sandboxDeploymentProfile: Package4SandboxDeploymentProfile | undefined =
       configuredProfile === undefined || configuredProfile === '' || configuredProfile === 'local_ci'
         ? 'local_ci'

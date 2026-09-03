@@ -5,8 +5,9 @@ Captured on 2026-09-03 for closure PR 8 and updated during closure PR 9B.
 ## Disposition
 
 **PACKAGE 4 NOT CLOSED.** The deterministic implementation and local OSS
-Formance gates pass. Two required release inputs are unavailable in this
-environment and were treated as failures, not skips:
+Formance gates pass. The dedicated Clerk instance and Convex release deployment
+are now live. The authenticated commercial journey and remote Base Sepolia
+canary remain required release evidence and are treated as failures, not skips:
 
 1. the authenticated Clerk/Convex browser environment;
 2. the opt-in remote Base Sepolia x402 provider and payment key.
@@ -27,8 +28,8 @@ The two product-hosting shells have also been isolated:
 | Resource | State | Evidence |
 | --- | --- | --- |
 | Vercel release project | CREATED, NOT DEPLOYED | `agentic-economy-package4-release`, Node.js 22.x. No release variables or credentials have been attached. |
-| Convex release project | CREATED, NOT DEPLOYED | `agentic-economy-package4-release`, development deployment `fastidious-barracuda-66`. Its first push stopped before schema deployment because the dedicated Clerk issuer was absent. |
-| Clerk test instance | BLOCKED | Dashboard requires an interactive account sign-in before the isolated instance and keys can be created. Existing application credentials were not reused. |
+| Convex release project | DEPLOYED | `agentic-economy-package4-release`, development deployment `fastidious-barracuda-66`. The dedicated Clerk issuer is configured and the Package 4 functions, schema, indexes and components were pushed successfully. The application release is not deployed. |
+| Clerk test instance | CREATED, LINKED | `Agentic Economy Package 4 Release`, application `app_3Io6c0wmApyND4IBtoeomurojqj`, development instance `ins_3Io6c2NfCPqxUqJI3Vx3Jvc37V9`. The release worktree is linked and its ignored local environment contains the dedicated test keys. Existing application credentials were not reused. |
 | AWS/Cloudflare release stack | NOT PROVISIONED | No AWS or Cloudflare deployment identity is available in this execution environment. No speculative plan or partial apply was run. |
 
 This is intentionally not recorded as a passing PR 9B deployment gate. The
@@ -61,16 +62,11 @@ official cursor rather than a Convex monetary projection.
 
 ### Authenticated browser journey
 
-The required Playwright command refused to start because the following
-server/test values are absent:
+The dedicated Clerk and Convex values are now present locally. The required
+Playwright journey still needs the remaining isolated owner fixture and signed
+server-function test configuration before it can be run as release evidence:
 
-- `CLERK_PUBLISHABLE_KEY`
-- `CLERK_SECRET_KEY`
 - `AE_E2E_OWNER_EMAIL`
-- `VITE_CLERK_PUBLISHABLE_KEY`
-- `CLERK_JWT_ISSUER_DOMAIN`
-- `CONVEX_URL`
-- `VITE_CONVEX_URL`
 - `AE_CONVEX_SERVER_FUNCTION_TOKEN`
 
 The required-mode refusal is the intended fail-closed behavior. Package 4 may
