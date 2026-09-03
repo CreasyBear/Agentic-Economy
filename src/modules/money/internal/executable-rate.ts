@@ -77,11 +77,12 @@ export function quoteExecutableAudToUsdc(input: Readonly<{
   if (input.environment !== 'sandbox') {
     return { kind: 'refused', code: 'pricing_setup_required', retryable: false }
   }
-  const targetUnits = new Decimal(sourceAmount.units)
-    .mul(SANDBOX_AUD_TO_USDC_NUMERATOR)
-    .div(SANDBOX_AUD_TO_USDC_DENOMINATOR)
-    .ceil()
-    .toFixed(0)
+  const sourceUnits = BigInt(sourceAmount.units)
+  const targetUnits = (
+    (sourceUnits * BigInt(SANDBOX_AUD_TO_USDC_NUMERATOR)
+      + BigInt(SANDBOX_AUD_TO_USDC_DENOMINATOR - 1))
+    / BigInt(SANDBOX_AUD_TO_USDC_DENOMINATOR)
+  ).toString()
   const material: ExecutableRateMaterial = {
     version: 'ae.executable-rate:v1',
     environment: 'sandbox',
@@ -114,11 +115,12 @@ export function quoteManagedX402BuyerAud(input: Readonly<{
   if (!/^[1-9]\d*$/u.test(input.requiredUsdcAtomicUnits)) {
     return { kind: 'refused', code: 'pricing_source_amount_invalid', retryable: false }
   }
-  const audUnits = new Decimal(input.requiredUsdcAtomicUnits)
-    .mul(SANDBOX_AUD_TO_USDC_DENOMINATOR)
-    .div(SANDBOX_AUD_TO_USDC_NUMERATOR)
-    .ceil()
-    .toFixed(0)
+  const requiredUnits = BigInt(input.requiredUsdcAtomicUnits)
+  const audUnits = (
+    ((requiredUnits - 1n) * BigInt(SANDBOX_AUD_TO_USDC_DENOMINATOR))
+    / BigInt(SANDBOX_AUD_TO_USDC_NUMERATOR)
+    + 1n
+  ).toString()
   return quoteExecutableAudToUsdc({
     environment: input.environment,
     sourceAmount: { currency: 'AUD', exponent: 6, units: audUnits },

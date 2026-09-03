@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   createExecutableRatePort,
   quoteExecutableAudToUsdc,
+  quoteManagedX402BuyerAud,
+  splitInclusiveAudTax,
   validateExecutableRateEvidence,
 } from '../../../src/modules/money/internal/executable-rate'
 
@@ -58,5 +60,38 @@ describe('executable AUD to USDC pricing evidence', () => {
       targetAmount: { ...quoted.evidence.targetAmount, units: '1' },
     }, 1_800_000_001_000)).toBe(false)
     expect(validateExecutableRateEvidence(quoted.evidence, quoted.evidence.expiresAt)).toBe(false)
+  })
+
+  it('quotes the minimum AUD units that still cover the exact upstream USDC requirement', () => {
+    for (let requiredUnits = 1n; requiredUnits <= 10_000n; requiredUnits += 1n) {
+      const quoted = quoteManagedX402BuyerAud({
+        environment: 'sandbox',
+        requiredUsdcAtomicUnits: requiredUnits.toString(),
+        observedAt: 1_800_000_000_000,
+      })
+      if (quoted.kind !== 'quoted') throw new Error(`quote refused for ${requiredUnits}`)
+
+      const buyerUnits = BigInt(quoted.evidence.sourceAmount.units)
+      const providerUnits = BigInt(quoted.evidence.targetAmount.units)
+      expect(providerUnits).toBeGreaterThanOrEqual(requiredUnits)
+      if (buyerUnits > 1n) {
+        const providerUnitsForOneLess = ((buyerUnits - 1n) * 65n + 99n) / 100n
+        expect(providerUnitsForOneLess).toBeLessThan(requiredUnits)
+      }
+    }
+  })
+
+  it('splits inclusive GST without losing or creating an AUD unit', () => {
+    for (let totalUnits = 1n; totalUnits <= 10_000n; totalUnits += 1n) {
+      const split = splitInclusiveAudTax(totalUnits.toString(), 1_000)
+      const expectedTaxUnits = (2n * totalUnits * 1_000n + 11_000n) / 22_000n
+      if (expectedTaxUnits === 0n) {
+        expect(split).toBeUndefined()
+        continue
+      }
+      if (split === undefined) throw new Error(`GST split missing for ${totalUnits}`)
+      expect(BigInt(split.taxUnits)).toBe(expectedTaxUnits)
+      expect(BigInt(split.revenueUnits) + BigInt(split.taxUnits)).toBe(totalUnits)
+    }
   })
 })
