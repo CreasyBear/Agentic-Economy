@@ -4,13 +4,16 @@ Captured on 2026-09-03 for closure PR 8 and updated during closure PR 9B.
 
 ## Disposition
 
-**PACKAGE 4 NOT CLOSED.** The deterministic implementation and local OSS
-Formance gates pass. The dedicated Clerk instance and Convex release deployment
-are now live. The authenticated commercial journey and remote Base Sepolia
-canary remain required release evidence and are treated as failures, not skips:
+**PACKAGE 4 NOT CLOSED.** The dedicated AWS, Cloudflare, Formance, Vercel,
+Convex, Clerk, and Stripe sandbox environment is live. A real authenticated
+owner completed Stripe-hosted Checkout with sandbox 3DS; the verified webhook
+and Formance readback credited exactly `AUD 5.000000` from an `AUD 5.280000`
+processor total.
 
-1. the authenticated Clerk/Convex browser environment;
-2. the opt-in remote Base Sepolia x402 provider and payment key.
+The original closeout still requires official Stripe event replay and refund,
+managed-x402 success/refusal/recovery, Calls/Usage/Spend documents and signed
+close, black-box protocol parity, current-environment restart/restore, and the
+remote Base Sepolia canary. Missing evidence remains a failure, not a skip.
 
 Production funding and mainnet effects remain disabled.
 
@@ -27,15 +30,17 @@ The two product-hosting shells have also been isolated:
 
 | Resource | State | Evidence |
 | --- | --- | --- |
-| Vercel release project | CREATED, NOT DEPLOYED | `agentic-economy-package4-release`, Node.js 22.x. No release variables or credentials have been attached. |
-| Convex release project | DEPLOYED | `agentic-economy-package4-release`, development deployment `fastidious-barracuda-66`. The dedicated Clerk issuer is configured and the Package 4 functions, schema, indexes and components were pushed successfully. The application release is not deployed. |
-| Clerk test instance | CREATED, LINKED | `Agentic Economy Package 4 Release`, application `app_3Io6c0wmApyND4IBtoeomurojqj`, development instance `ins_3Io6c2NfCPqxUqJI3Vx3Jvc37V9`. The release worktree is linked and its ignored local environment contains the dedicated test keys. Existing application credentials were not reused. |
-| AWS/Cloudflare release stack | NOT PROVISIONED | No AWS or Cloudflare deployment identity is available in this execution environment. No speculative plan or partial apply was run. |
+| Vercel release project | DEPLOYED, VERIFIED | `agentic-economy-package4-release`, deployment `dpl_HusZd4YE3huJEwzyeKaAypS4unjL`, canonical alias `https://agentic-economy-package4-release.vercel.app`, source revision `79a24a309fe8e0a3ce02905caa9674cbd35db375`; health, readiness and release readback return HTTP 200. |
+| Convex release project | DEPLOYED, VERIFIED | `agentic-economy-package4-release`, development deployment `fastidious-barracuda-66`. It owns the synthetic release product state and completed the authenticated funding command. |
+| Clerk test instance | DEPLOYED, VERIFIED | Application `app_3Io6c0wmApyND4IBtoeomurojqj`, instance `ins_3Io6c2NfCPqxUqJI3Vx3Jvc37V9`; authenticated owner session completed the live hosted-funding journey. |
+| Stripe sandbox | DEPLOYED, PARTIALLY VERIFIED | Account `acct_1Tlni770N4UjLqHt`, enabled webhook `we_1UBYM070N4UjLqHtknl4R8Ep`, hosted Checkout and required sandbox 3DS passed. Event resend and refund/reversal remain. |
+| AWS/Cloudflare/Formance | DEPLOYED, PARTIALLY VERIFIED | AWS account `197716152388`, private k3s `i-063c00d935d85d74f`, private Multi-AZ RDS `package4-release-formance`, protected `formance-release.aecon.ai`, and live Formance funding/balance readback. Routine non-root deployment access, alerts, current backup jobs, and remote restore remain unproved. |
 
-This is intentionally not recorded as a passing PR 9B deployment gate. The
-infrastructure module is reproducible evidence; the live health, private-origin,
-token-rotation, database-reachability and backup controls still require an
-authenticated apply and verification against the dedicated release resources.
+The complete identities, linkage, credential custody, and current gaps are
+recorded in `docs/operations/deployment-registry.yaml` and
+`docs/operations/deployment-maturity.md`. The environment is deployed but PR 9B
+is not fully closed until non-root operations, alert delivery, backup/restore,
+and token lifecycle evidence pass.
 
 ## Passing evidence
 
@@ -60,18 +65,25 @@ official cursor rather than a Convex monetary projection.
 
 ## Blocked release inputs
 
-### Authenticated browser journey
+### Remaining authenticated commercial journey
 
-The dedicated Clerk and Convex values are now present locally. The required
-Playwright journey still needs the remaining isolated owner fixture and signed
-server-function test configuration before it can be run as release evidence:
+Clerk sign-in and real Stripe-hosted funding now work in the isolated release
+environment. The automated black-box journey still needs official webhook
+redelivery, full refund/reversal, managed x402, documents and signed-close
+coverage before it becomes complete release evidence.
 
-- `AE_E2E_OWNER_EMAIL`
-- `AE_CONVEX_SERVER_FUNCTION_TOKEN`
+### Infrastructure operations
 
-The required-mode refusal is the intended fail-closed behavior. Package 4 may
-close only after `tests/e2e/authenticated/package4-account-commerce.spec.ts`
-runs in a complete isolated test environment.
+The intended MFA-backed `package4-release-deployer` role path is not working,
+while a local bootstrap profile resolves to AWS root credentials. The alert SNS
+topic has no subscribers, the new RDS alarms are in missing-data `ALARM`, no
+completed regional backup copy was yet visible, and the current release
+database has not completed an isolated restore rehearsal. These are explicit
+release blockers.
+
+The current Cloudflare Tunnel token was exposed during local operator evidence
+capture. The user accepted continued use only for the synthetic release. It
+must be rotated and old connections force-disconnected before production.
 
 ### External Base Sepolia canary
 
@@ -82,16 +94,17 @@ external evidence.
 
 ## Release completion procedure
 
-1. Supply the isolated authenticated E2E environment and run
-   `npm run test:e2e:authenticated:required`.
-2. Supply the remote HTTPS Base Sepolia Provider and bounded test payment key;
+1. Repair and prove the MFA-backed AWS deployment role, alert delivery, first
+   backup copy, and isolated restore.
+2. Complete Stripe resend/refund and the remaining authenticated commercial
+   journey with `npm run test:e2e:authenticated:required`.
+3. Supply the remote HTTPS Base Sepolia Provider and bounded test payment key;
    run the opt-in testnet canary once and retain its redacted durable reference.
-3. Re-run lint, typecheck, codegen dry run, imports, UI contract, focused
+4. Re-run lint, typecheck, codegen dry run, imports, UI contract, focused
    Package 4 suites, real Formance integration and production build at the
    release commit.
-4. Confirm Australian approval families and managed-PostgreSQL/PITR controls
+5. Confirm Australian approval families and managed-PostgreSQL/PITR controls
    remain inactive for production until separately evidenced.
 
-No deterministic failure is outstanding. The missing external evidence is a
-release-state blocker, not an implementation fallback or TODO inside the
-financial authority.
+The missing live evidence and operational findings are release-state blockers,
+not implementation fallbacks. Production remains disabled.

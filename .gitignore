@@ -20,7 +20,11 @@ graphify-out/
 
 # Local planning, agent memory, and development journals
 /.planning/
-/.agents/
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/deployment-operations/
+!/.agents/skills/deployment-operations/**
 /.claude/
 /agent/
 /skills-lock.json
@@ -30,7 +34,9 @@ graphify-out/
 /DESIGN.md
 /INVESTMENT_THESIS.md
 /UBIQUITOUS_LANGUAGE.md
-/docs/
+/docs/*
+!/docs/operations/
+!/docs/operations/**
 /convex/README.md
 /tools/ae/README.md
 /eval/**/*.md

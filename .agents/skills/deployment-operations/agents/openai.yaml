@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deployment Operations"
+  short_description: "Trace, operate, and assess AE deployments"
+  default_prompt: "Use $deployment-operations to inventory this environment, trace its service and credential links, assess maturity, and identify the safest next operational action."

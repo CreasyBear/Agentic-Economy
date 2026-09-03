@@ -1,0 +1,160 @@
+schemaVersion: ae.deployment-registry/v1
+capturedAt: "2026-09-03T13:44:10Z"
+capturedFromRevision: "79a24a309fe8e0a3ce02905caa9674cbd35db375"
+
+environment:
+  id: package4-release
+  purpose: synthetic_release_qualification
+  authority: non_production
+  deploymentClass: synthetic_vps_fixture
+  moneyMode: fixture_only
+  releaseState: not_closed
+  productionReady: false
+  neverPromoteInPlace: true
+
+links:
+  - from: browser
+    to: vercel:agentic-economy-package4-release
+    purpose: public_ui_and_http
+  - from: vercel:agentic-economy-package4-release
+    to: convex:fastidious-barracuda-66
+    purpose: product_state_and_commands
+  - from: clerk:ins_3Io6c2NfCPqxUqJI3Vx3Jvc37V9
+    to: vercel:agentic-economy-package4-release
+    purpose: human_identity_and_session
+  - from: stripe:we_1UBYM070N4UjLqHtknl4R8Ep
+    to: https://agentic-economy-package4-release.vercel.app/api/stripe/webhook
+    purpose: funding_settlement_evidence
+  - from: convex:fastidious-barracuda-66
+    to: cloudflare-access:formance-release.aecon.ai
+    purpose: official_formance_sdk
+  - from: cloudflare-access:formance-release.aecon.ai
+    to: aws:i-063c00d935d85d74f
+    purpose: outbound_tunnel_to_private_k3s
+  - from: aws:i-063c00d935d85d74f
+    to: rds:package4-release-formance
+    purpose: formance_ledger_storage
+
+services:
+  web:
+    provider: vercel
+    projectName: agentic-economy-package4-release
+    projectId: prj_ADlGp7Fkox0D2MsAq0RkL3oaNFFn
+    teamId: team_O85TtPPdPANw2OCjrj4dEpxp
+    canonicalUrl: https://agentic-economy-package4-release.vercel.app
+    observedDeploymentId: dpl_HusZd4YE3huJEwzyeKaAypS4unjL
+    observedSourceRevision: "79a24a309fe8e0a3ce02905caa9674cbd35db375"
+    observedState: ready
+  backend:
+    provider: convex
+    projectName: agentic-economy-package4-release
+    deploymentName: fastidious-barracuda-66
+    providerClass: development
+    aeAuthority: synthetic_release
+    observedState: deployed
+  identity:
+    provider: clerk
+    applicationId: app_3Io6c0wmApyND4IBtoeomurojqj
+    instanceId: ins_3Io6c2NfCPqxUqJI3Vx3Jvc37V9
+    issuerHost: relative-phoenix-8958.clerk.accounts.dev
+    mode: test
+    observedState: authenticated_journey_verified
+  processor:
+    provider: stripe
+    accountId: acct_1Tlni770N4UjLqHt
+    webhookEndpointId: we_1UBYM070N4UjLqHtknl4R8Ep
+    mode: sandbox
+    checkoutMode: hosted_page
+    observedState: funded_with_3ds
+  formanceEdge:
+    provider: cloudflare
+    hostname: formance-release.aecon.ai
+    accessTeamDomain: agentic-economy-release.cloudflareaccess.com
+    unauthenticatedReadback: http_401
+    observedState: protected_and_application_connected
+  formance:
+    edition: community
+    stackVersion: v3.2.10
+    gatewayVersion: v2.3.1
+    ledgerVersion: v2.4.12
+    sdkVersion: v7.0.0
+    ledgerName: agentic-economy-release
+    schemaVersion: v1.3.0
+    observedState: funding_write_and_balance_read_verified
+  infrastructure:
+    provider: aws
+    accountId: "197716152388"
+    primaryRegion: ap-southeast-2
+    disasterRecoveryRegion: ap-southeast-4
+    vpcId: vpc-013df7a404d89edd4
+    k3sInstanceId: i-063c00d935d85d74f
+    k3sInstanceType: t4g.large
+    k3sPublicAddress: false
+    ssmState: online
+    rdsInstanceId: package4-release-formance
+    rdsEngineVersion: "16.13"
+    rdsMultiAz: true
+    rdsPublic: false
+    rdsEncrypted: true
+    rdsDeletionProtection: true
+    rdsBackupRetentionDays: 7
+    primaryBackupVault: package4-release-package4-primary
+    disasterRecoveryBackupVault: package4-release-package4-dr
+    stateBucket: agentic-economy-p4-state-197716152388-ap-southeast-2
+    observedInfrastructureRevision: c2306fad2fcd2cd036990dba3542a81381544906
+
+credentialCustody:
+  - id: aws-human-login
+    owner: aws_iam
+    reference: arn:aws:iam::197716152388:user/joel-package4-deployer
+    valueLocation: aws_managed_login
+  - id: aws-opentofu-role
+    owner: aws_iam
+    reference: arn:aws:iam::197716152388:role/Package4ReleaseOpenTofu
+    valueLocation: temporary_sts_session
+  - id: cloudflare-tunnel-token
+    owner: cloudflare
+    valueLocation: aws_secrets_manager
+    reference: package4-release/package4/cloudflare-tunnel-token
+  - id: cloudflare-access-application
+    owner: cloudflare
+    valueLocation: aws_secrets_manager_and_runtime_environment
+    reference: package4-release/package4/cloudflare-access-application
+  - id: application-runtime-secrets
+    owner: individual_providers
+    valueLocation: vercel_and_convex_environment
+    reference: src/lib/deployment/manifest.ts
+
+acceptedSyntheticReleaseRisks:
+  - id: cloudflare-tunnel-token-rotation-deferred
+    condition: token_was_exposed_during_local_operator_evidence_capture
+    acceptedBy: user
+    acceptedAt: "2026-09-03"
+    boundary: synthetic_release_only
+    mandatoryBeforeProduction: rotate_token_force_disconnect_old_connections_and_rebind_replicas
+
+blockingFindings:
+  - id: aws-routine-role-unavailable
+    severity: critical
+    evidence: package4-release-deployer_profile_cannot_assume_Package4ReleaseOpenTofu
+  - id: aws-root-static-profile-present
+    severity: critical
+    evidence: package4-release_profile_resolves_to_account_root_with_shared_credentials
+  - id: alert-topic-unsubscribed
+    severity: high
+    evidence: package4-release-package4-alerts_has_zero_subscriptions
+  - id: rds-alarms-missing-data
+    severity: high
+    evidence: rds_connections_and_low_storage_alarms_are_ALARM_due_to_missing_datapoints
+  - id: backup-copy-not-yet-observed
+    severity: high
+    evidence: no_primary_backup_or_regional_copy_job_was_visible_at_capture_time
+  - id: remote-restore-not-rehearsed
+    severity: high
+    evidence: current_AWS_release_database_has_no_recorded_restore_rehearsal
+  - id: package4-commercial-closure-incomplete
+    severity: high
+    evidence: refund_replay_managed_x402_recovery_protocol_and_Base_Sepolia_gates_remain
+  - id: production-approvals-inactive
+    severity: blocking
+    evidence: production_funding_and_mainnet_effects_remain_disabled
