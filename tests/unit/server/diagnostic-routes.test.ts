@@ -57,6 +57,12 @@ function productionReadinessEnvironment(): Record<string, string> {
     STRIPE_SECRET_KEY: 'sk_live_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_example',
     VITE_STRIPE_PUBLISHABLE_KEY: 'pk_live_example',
+    AE_FORMANCE_ENVIRONMENT: 'production',
+    AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com',
+    AE_FORMANCE_LEDGER: 'agentic-economy-production',
+    AE_FORMANCE_REQUEST_TIMEOUT_MS: '10000',
+    AE_FORMANCE_ACCESS_CLIENT_ID: 'access-client-id',
+    AE_FORMANCE_ACCESS_CLIENT_SECRET: 'access-client-secret',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
       `${family}:0123456789abcdef0123456789abcdef`,

@@ -1,0 +1,6 @@
+bucket       = "replace-with-encrypted-state-bucket"
+key          = "agentic-economy/package4-release/opentofu.tfstate"
+region       = "ap-southeast-2"
+encrypt      = true
+use_lockfile = true
+kms_key_id   = "replace-with-state-kms-key-arn"

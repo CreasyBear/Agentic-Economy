@@ -1,6 +1,6 @@
 # Package 4 Formance release evidence
 
-Captured on 2026-09-03 for closure PR 8.
+Captured on 2026-09-03 for closure PR 8 and updated during closure PR 9B.
 
 ## Disposition
 
@@ -12,6 +12,29 @@ environment and were treated as failures, not skips:
 2. the opt-in remote Base Sepolia x402 provider and payment key.
 
 Production funding and mainnet effects remain disabled.
+
+## Dedicated release topology
+
+The reusable `package4-release` deployment definition is implemented and
+passes the pinned OpenTofu 1.12.6 formatter and validator. It defines the
+private Sydney VPC, private ARM64 k3s host, Multi-AZ PostgreSQL 16 with PITR,
+nightly encrypted Melbourne backup copy, the pinned Formance Community
+Gateway/Ledger components, and Cloudflare Tunnel/Access boundary required by
+the final closeout plan.
+
+The two product-hosting shells have also been isolated:
+
+| Resource | State | Evidence |
+| --- | --- | --- |
+| Vercel release project | CREATED, NOT DEPLOYED | `agentic-economy-package4-release`, Node.js 22.x. No release variables or credentials have been attached. |
+| Convex release project | CREATED, NOT DEPLOYED | `agentic-economy-package4-release`, development deployment `fastidious-barracuda-66`. Its first push stopped before schema deployment because the dedicated Clerk issuer was absent. |
+| Clerk test instance | BLOCKED | Dashboard requires an interactive account sign-in before the isolated instance and keys can be created. Existing application credentials were not reused. |
+| AWS/Cloudflare release stack | NOT PROVISIONED | No AWS or Cloudflare deployment identity is available in this execution environment. No speculative plan or partial apply was run. |
+
+This is intentionally not recorded as a passing PR 9B deployment gate. The
+infrastructure module is reproducible evidence; the live health, private-origin,
+token-rotation, database-reachability and backup controls still require an
+authenticated apply and verification against the dedicated release resources.
 
 ## Passing evidence
 

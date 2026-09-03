@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends awscli ca-certificates curl jq python3
+
+curl --fail --silent --show-error --location \
+  '${k3s_install_script_url}' \
+  -o /var/tmp/install-k3s.sh
+printf '%s  %s\n' '${k3s_install_script_sha}' /var/tmp/install-k3s.sh | sha256sum --check --strict
+chmod 0700 /var/tmp/install-k3s.sh
+INSTALL_K3S_VERSION='${k3s_version}' \
+INSTALL_K3S_EXEC='server --disable traefik --disable servicelb --secrets-encryption --write-kubeconfig-mode 0600' \
+  /var/tmp/install-k3s.sh
+rm -f /var/tmp/install-k3s.sh
+
+install -d -m 0700 /opt/agentic-economy-package4
+
+cat >/var/lib/rancher/k3s/server/manifests/formance-operator.yaml <<'YAML'
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: formance-operator
+  namespace: kube-system
+spec:
+  chart: oci://ghcr.io/formancehq/helm/operator
+  version: '${operator_chart_version}'
+  targetNamespace: formance-system
+  createNamespace: true
+  valuesContent: |-
+    replicaCount: 1
+    image:
+      repository: ${split("@", operator_image)[0]}
+      tag: v${operator_chart_version}@${split("@", operator_image)[1]}
+      pullPolicy: IfNotPresent
+    operator:
+      dev: false
+      region: ap-southeast-2
+      env: '${stack_name}'
+      enableLeaderElection: true
+      utils:
+        tag: '${operator_utils_version}'
+    webhooks:
+      enabled: false
+    operator-crds:
+      create: true
+YAML
+
+cat >/opt/agentic-economy-package4/reconcile.sh <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+for _ in $(seq 1 120); do
+  kubectl get crd stacks.formance.com >/dev/null 2>&1 && break
+  sleep 5
+done
+kubectl get crd stacks.formance.com >/dev/null
+
+database_secret=$(aws secretsmanager get-secret-value \
+  --region '${aws_region}' \
+  --secret-id '${rds_secret_arn}' \
+  --query SecretString \
+  --output text)
+database_username=$(jq -r '.username' <<<"$database_secret")
+database_password=$(jq -r '.password' <<<"$database_secret")
+database_uri=$(DB_USER="$database_username" DB_PASSWORD="$database_password" python3 - <<'PY'
+import os
+from urllib.parse import quote
+print("postgresql://%s:%s@${rds_endpoint}:5432/formance?sslmode=require" % (
+    quote(os.environ["DB_USER"], safe=""), quote(os.environ["DB_PASSWORD"], safe="")))
+PY
+)
+unset database_secret database_username database_password
+
+kubectl apply -f - <<YAML
+apiVersion: formance.com/v1beta1
+kind: Versions
+metadata:
+  name: ${stack_name}-pins
+spec:
+  gateway: '${gateway_version}'
+  ledger: '${ledger_version}'
+---
+apiVersion: formance.com/v1beta1
+kind: Settings
+metadata:
+  name: ${stack_name}-postgres
+spec:
+  stacks: ['${stack_name}']
+  key: postgres.ledger.uri
+  value: "$database_uri"
+---
+apiVersion: formance.com/v1beta1
+kind: Settings
+metadata:
+  name: ${stack_name}-caddy-image
+spec:
+  stacks: ['${stack_name}']
+  key: caddy.image
+  value: '${caddy_image}'
+---
+apiVersion: formance.com/v1beta1
+kind: Settings
+metadata:
+  name: ${stack_name}-schema-enforcement
+spec:
+  stacks: ['${stack_name}']
+  key: ledger.schema-enforcement-mode
+  value: strict
+---
+apiVersion: formance.com/v1beta1
+kind: Settings
+metadata:
+  name: ${stack_name}-experimental-features
+spec:
+  stacks: ['${stack_name}']
+  key: ledger.experimental-features
+  value: "false"
+---
+apiVersion: formance.com/v1beta1
+kind: Settings
+metadata:
+  name: ${stack_name}-experimental-numscript
+spec:
+  stacks: ['${stack_name}']
+  key: ledger.experimental-numscript
+  value: "false"
+---
+apiVersion: formance.com/v1beta1
+kind: Settings
+metadata:
+  name: ${stack_name}-default-page-size
+spec:
+  stacks: ['${stack_name}']
+  key: ledger.api.default-page-size
+  value: "50"
+---
+apiVersion: formance.com/v1beta1
+kind: Settings
+metadata:
+  name: ${stack_name}-max-page-size
+spec:
+  stacks: ['${stack_name}']
+  key: ledger.api.max-page-size
+  value: "1000"
+---
+apiVersion: formance.com/v1beta1
+kind: Stack
+metadata:
+  name: '${stack_name}'
+  annotations:
+    agentic-economy.dev/source-revision: '${source_revision}'
+spec:
+  versionsFromFile: ${stack_name}-pins
+  disabled: false
+---
+apiVersion: formance.com/v1beta1
+kind: Gateway
+metadata:
+  name: ${stack_name}-gateway
+spec:
+  stack: '${stack_name}'
+---
+apiVersion: formance.com/v1beta1
+kind: Ledger
+metadata:
+  name: ${stack_name}-ledger
+spec:
+  stack: '${stack_name}'
+  dev: false
+  debug: false
+YAML
+unset database_uri
+
+kubectl -n '${stack_name}' create secret generic cloudflare-tunnel-token \
+  --from-literal=token="$(aws secretsmanager get-secret-value \
+    --region '${aws_region}' \
+    --secret-id '${cloudflare_tunnel_secret_arn}' \
+    --query SecretString \
+    --output text)" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl -n '${stack_name}' apply -f - <<'YAML'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: cloudflared }
+  template:
+    metadata:
+      labels: { app: cloudflared }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: cloudflared
+          image: '${cloudflared_image}'
+          args: [tunnel, --no-autoupdate, run, --token, $(TUNNEL_TOKEN)]
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-tunnel-token
+                  key: token
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: { drop: [ALL] }
+YAML
+
+kubectl -n formance-system rollout status deployment/formance-operator --timeout=10m
+kubectl -n '${stack_name}' rollout status deployment/gateway --timeout=10m
+kubectl -n '${stack_name}' rollout status deployment/ledger --timeout=10m
+kubectl -n '${stack_name}' rollout status deployment/ledger-worker --timeout=10m
+kubectl -n '${stack_name}' rollout status deployment/cloudflared --timeout=10m
+SCRIPT
+
+chmod 0700 /opt/agentic-economy-package4/reconcile.sh
+
+cat >/etc/systemd/system/agentic-economy-package4-reconcile.service <<'UNIT'
+[Unit]
+Description=Reconcile Package 4 Formance Community release stack
+After=k3s.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/agentic-economy-package4/reconcile.sh
+RemainAfterExit=yes
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now agentic-economy-package4-reconcile.service

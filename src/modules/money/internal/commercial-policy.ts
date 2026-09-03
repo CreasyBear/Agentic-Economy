@@ -13,6 +13,7 @@ export type CommercialPolicyFamily = typeof COMMERCIAL_POLICY_FAMILIES[number]
 export type CommercialPolicyEnvironment = 'sandbox' | 'production'
 export type CommercialPolicyLifecycle = 'active' | 'superseded' | 'suspended'
 export type CommercialPolicySandboxFixture = 'managed_x402_deterministic_v1'
+export type Package4SandboxDeploymentProfile = 'local_ci' | 'synthetic_vps_fixture'
 
 export const PACKAGE4_FORMANCE_REQUIREMENTS = Object.freeze({
   ledgerVersion: 'v2.4.12',
@@ -141,6 +142,23 @@ export const SANDBOX_COMMERCIAL_POLICY_CONTROLS: CommercialPolicyControls = Obje
   }),
 })
 
+export const PACKAGE4_SYNTHETIC_VPS_CONTROLS: CommercialPolicyControls = Object.freeze({
+  ...SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+  treasury_custody: Object.freeze({
+    ...SANDBOX_COMMERCIAL_POLICY_CONTROLS.treasury_custody,
+    deploymentClass: 'synthetic_vps_fixture',
+    postgresProtection: 'managed_pitr',
+    recoveryPointObjectiveMinutes: 5,
+    recoveryTimeObjectiveMinutes: 60,
+  }),
+  operations: Object.freeze({
+    ...SANDBOX_COMMERCIAL_POLICY_CONTROLS.operations,
+    backupControl: 'postgres_pitr',
+    restoreControl: 'production_rehearsed',
+    dailyCloseControl: 'human_signed',
+  }),
+})
+
 export type CommercialPolicyApproval = Readonly<{
   policyRef: string
   family: CommercialPolicyFamily
@@ -170,6 +188,7 @@ export type CommercialPolicyGateResult =
       kind: 'refused'
       code:
         | 'commercial_policy_fixture_required'
+        | 'commercial_policy_deployment_profile_invalid'
         | 'commercial_policy_missing'
         | 'commercial_policy_not_effective'
         | 'commercial_policy_expired'
@@ -186,6 +205,7 @@ export function evaluateCommercialPolicyGate(input: Readonly<{
   now: number
   approvals: readonly CommercialPolicyApproval[]
   sandboxFixture?: CommercialPolicySandboxFixture
+  sandboxDeploymentProfile?: Package4SandboxDeploymentProfile
 }>): CommercialPolicyGateResult {
   if (input.environment === 'sandbox') {
     if (input.sandboxFixture !== 'managed_x402_deterministic_v1') {
@@ -195,19 +215,25 @@ export function evaluateCommercialPolicyGate(input: Readonly<{
         missingFamilies: COMMERCIAL_POLICY_FAMILIES,
       })
     }
+    const deploymentProfile = input.sandboxDeploymentProfile ?? 'local_ci'
+    const controls = deploymentProfile === 'synthetic_vps_fixture'
+      ? PACKAGE4_SYNTHETIC_VPS_CONTROLS
+      : SANDBOX_COMMERCIAL_POLICY_CONTROLS
     const policyRefs = Object.freeze([
       'commercial-policy-fixture:managed_x402_deterministic_v1',
+      `commercial-policy-deployment:${deploymentProfile}`,
     ])
     return Object.freeze({
       kind: 'admitted',
       environment: 'sandbox',
       policyRefs,
-      controls: SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+      controls,
       policyDigest: canonicalDigest({
         format: 'ae.commercial-policy-gate:v1',
         environment: 'sandbox',
         fixture: input.sandboxFixture,
-        controls: SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+        deploymentProfile,
+        controls,
       }),
     })
   }

@@ -33,6 +33,7 @@ const app = defineApp({
     AE_X402_CUSTODY_ENABLED: v.optional(v.string()),
     AE_X402_CUSTODY_MAX_ATOMIC: v.optional(v.string()),
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: v.optional(v.string()),
+    AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: v.optional(v.string()),
   },
 })
 
