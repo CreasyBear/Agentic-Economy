@@ -25,6 +25,7 @@ INSTALL_K3S_EXEC='server --disable traefik --disable servicelb --secrets-encrypt
 rm -f /var/tmp/install-k3s.sh
 
 install -d -m 0700 /opt/agentic-economy-package4
+install -d -m 0700 /var/lib/rancher/k3s/server/manifests
 
 cat >/var/lib/rancher/k3s/server/manifests/formance-operator.yaml <<'YAML'
 apiVersion: helm.cattle.io/v1
