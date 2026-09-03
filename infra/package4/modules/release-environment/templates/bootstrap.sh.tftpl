@@ -67,6 +67,7 @@ for _ in $(seq 1 120); do
   sleep 5
 done
 kubectl get crd stacks.formance.com >/dev/null
+kubectl -n formance-system rollout status deployment/formance-operator --timeout=10m
 
 database_secret=$(aws secretsmanager get-secret-value \
   --region '${aws_region}' \
@@ -184,6 +185,12 @@ spec:
 YAML
 unset database_uri
 
+for _ in $(seq 1 120); do
+  kubectl get namespace '${stack_name}' >/dev/null 2>&1 && break
+  sleep 5
+done
+kubectl get namespace '${stack_name}' >/dev/null
+
 kubectl -n '${stack_name}' create secret generic cloudflare-tunnel-token \
   --from-literal=token="$(aws secretsmanager get-secret-value \
     --region '${aws_region}' \
@@ -226,7 +233,6 @@ spec:
             capabilities: { drop: [ALL] }
 YAML
 
-kubectl -n formance-system rollout status deployment/formance-operator --timeout=10m
 kubectl -n '${stack_name}' rollout status deployment/gateway --timeout=10m
 kubectl -n '${stack_name}' rollout status deployment/ledger --timeout=10m
 kubectl -n '${stack_name}' rollout status deployment/ledger-worker --timeout=10m
