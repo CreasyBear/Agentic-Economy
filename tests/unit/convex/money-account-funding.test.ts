@@ -68,6 +68,16 @@ describe('Account AUD funding through Formance', () => {
     await expect(fixture.owner.mutation(internal.moneyAccountFunding.finalizeVerifiedEvent, {
       ...actionArgs, formanceTransactionRef,
     })).resolves.toEqual({ kind: 'accepted', status: 'replayed', appliedRef: formanceTransactionRef })
+    const redeliveredArgs = await withSourceWrite('billing', {
+      ...actionArgs,
+      event: { ...event, payloadDigest: `sha256:${'0'.repeat(64)}` },
+    })
+    await expect(fixture.owner.mutation(
+      internal.moneyAccountFunding.prepareVerifiedEvent,
+      redeliveredArgs,
+    )).resolves.toEqual({
+      kind: 'accepted', status: 'replayed', appliedRef: formanceTransactionRef,
+    })
     const rows = await backend.run(async (ctx) => ({
       command: await ctx.db.query('moneyFundingCommands')
         .withIndex('by_commandRef', (query) => query.eq('commandRef', base.commandRef)).unique(),
@@ -171,6 +181,14 @@ describe('Account AUD funding through Formance', () => {
       ...actionArgs,
       formanceTransactionRef: reversalRef,
     })).resolves.toEqual({ kind: 'accepted', status: 'replayed', appliedRef: reversalRef })
+    const redeliveredArgs = await withSourceWrite('billing', {
+      ...actionArgs,
+      event: { ...event, payloadDigest: `sha256:${'0'.repeat(64)}` },
+    })
+    await expect(fixture.owner.mutation(
+      internal.moneyAccountFunding.prepareVerifiedEvent,
+      redeliveredArgs,
+    )).resolves.toEqual({ kind: 'accepted', status: 'replayed', appliedRef: reversalRef })
 
     const rows = await backend.run(async (ctx) => ({
       command: await ctx.db.query('moneyFundingCommands')

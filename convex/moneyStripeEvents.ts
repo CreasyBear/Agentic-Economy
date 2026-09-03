@@ -11,7 +11,6 @@ export function eventRowMatches(
 ): boolean {
   if (
     row.eventType !== event.eventType ||
-    row.payloadDigest !== event.payloadDigest ||
     row.providerObjectId !== event.externalRef
   )
     return false
