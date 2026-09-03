@@ -51,6 +51,9 @@ describe('Package 4 reusable release topology', () => {
     expect(bootstrap).not.toMatch(/apt-get install[^\n]*awscli/u)
     expect(bootstrap).toContain('sha256sum --check --strict')
     expect(bootstrap).toContain('install -d -m 0700 /var/lib/rancher/k3s/server/manifests')
+    expect(bootstrap).toContain('--cluster-cidr 10.244.0.0/16')
+    expect(bootstrap).toContain('--service-cidr 10.245.0.0/16')
+    expect(bootstrap).toContain('--cluster-dns 10.245.0.10')
     expect(bootstrap.match(/^kind: (Gateway|Ledger)$/gmu)?.sort()).toEqual(['kind: Gateway', 'kind: Ledger'])
     for (const excluded of ['kind: Payments', 'kind: Auth', 'kind: Wallets', 'kind: Reconciliation', 'kind: Webhooks']) {
       expect(bootstrap).not.toContain(excluded)

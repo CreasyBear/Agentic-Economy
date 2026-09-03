@@ -20,7 +20,7 @@ curl --fail --silent --show-error --location \
 printf '%s  %s\n' '${k3s_install_script_sha}' /var/tmp/install-k3s.sh | sha256sum --check --strict
 chmod 0700 /var/tmp/install-k3s.sh
 INSTALL_K3S_VERSION='${k3s_version}' \
-INSTALL_K3S_EXEC='server --disable traefik --disable servicelb --secrets-encryption --write-kubeconfig-mode 0600' \
+INSTALL_K3S_EXEC='server --disable traefik --disable servicelb --secrets-encryption --write-kubeconfig-mode 0600 --cluster-cidr 10.244.0.0/16 --service-cidr 10.245.0.0/16 --cluster-dns 10.245.0.10' \
   /var/tmp/install-k3s.sh
 rm -f /var/tmp/install-k3s.sh
 
