@@ -25,6 +25,10 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ProviderOffboardingStatus } from '@/modules/capability-supply/provider-offboarding'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
+import {
+  supplierOperationStatusSchema,
+  type SupplierOperationStatus,
+} from '@/modules/capability-supply/supplier-operation-status'
 
 export type OwnerOperationsInventoryRow = Readonly<{
   offeringRef: string
@@ -67,6 +71,14 @@ export type OwnerOperationsLifecycleResult =
   | Readonly<{ kind: 'available'; value: readonly OwnerOperationsLifecycleRow[] }>
   | Readonly<{ kind: 'unavailable' | 'not_applicable' }>
   | Readonly<{ kind: 'conflict'; reason: 'multiple_suppliers' | 'business_mismatch' }>
+
+export type OwnerSupplierOperationStatusResult =
+  | Readonly<{
+      kind: 'available'
+      status: SupplierOperationStatus
+      resumeCandidateRef?: string
+    }>
+  | Readonly<{ kind: 'not_found' | 'unavailable' }>
 
 export type OwnerOperationsConnectionsResult =
   | Readonly<{
@@ -144,6 +156,11 @@ type CurrentOwnerIdentityResult =
 const readCurrentOwnerIdentityQuery = sourceQuery<Record<string, never>, CurrentOwnerIdentityResult>(
   'catalog:getCurrentOwnerSupplierIdentity',
 )
+const readOwnerSupplierOperationQuery = sourceQuery<
+  { businessId: string; offeringRef: string; now: number },
+  | { kind: 'available'; statusJson: string; resumeCandidateRef?: string }
+  | { kind: 'not_found' }
+>('capabilitySupplierOperations:readOwner')
 
 export type OwnerOperationsIdentityDetailResult =
   | Extract<CurrentOwnerIdentityResult, { kind: 'available' }>
@@ -171,6 +188,31 @@ export const readOwnerOperationsLifecycleServer = createServerFn().handler(async
   privateOwnerResponse()
   return readOwnerOperationsLifecycleThroughSource()
 })
+
+export const readOwnerSupplierOperationStatusServer = createServerFn()
+  .validator((data) => z.strictObject({
+    businessId: z.string().trim().min(1),
+    offeringRef: z.string().trim().min(1),
+  }).parse(data))
+  .handler(async ({ data }): Promise<OwnerSupplierOperationStatusResult> => {
+    privateOwnerResponse()
+    try {
+      const result = await callSourceQuery(readOwnerSupplierOperationQuery, {
+        ...data,
+        now: Date.now(),
+      })
+      if (result.kind === 'not_found') return result
+      const parsed = supplierOperationStatusSchema.safeParse(JSON.parse(result.statusJson) as unknown)
+      if (!parsed.success) return { kind: 'unavailable' }
+      return {
+        kind: 'available',
+        status: parsed.data,
+        ...(result.resumeCandidateRef === undefined ? {} : { resumeCandidateRef: result.resumeCandidateRef }),
+      }
+    } catch {
+      return { kind: 'unavailable' }
+    }
+  })
 
 export async function readOwnerOperationsLifecycleThroughSource(): Promise<OwnerOperationsLifecycleResult> {
   const identity = await readCurrentOwnerIdentity()

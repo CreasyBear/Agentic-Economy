@@ -155,6 +155,20 @@ describe('Provider source integration draft', () => {
       operationRef: resumed.offeringRef,
       state: 'Draft',
     })
+    const ownerExact = await owner.query(
+      api.capabilitySupplierOperations.readOwner,
+      { businessId, offeringRef: resumed.offeringRef, now: 1_000 },
+    )
+    expect(ownerExact.kind === 'available' ? JSON.parse(ownerExact.statusJson) : ownerExact).toMatchObject({
+      schemaVersion: 'supplier_operations:v1',
+      operationRef: resumed.offeringRef,
+      state: 'Draft',
+    })
+    expect(ownerExact).toMatchObject({ kind: 'available', resumeCandidateRef: candidateRef })
+    await expect(foreignOwner.query(
+      api.capabilitySupplierOperations.readOwner,
+      { businessId, offeringRef: resumed.offeringRef, now: 1_000 },
+    )).resolves.toEqual({ kind: 'not_found' })
     await backend.run(async (ctx) => {
       const rows = await ctx.db.query('capabilitySupplierOperationProjections').take(10)
       await Promise.all(rows.map((row) => ctx.db.delete(row._id)))

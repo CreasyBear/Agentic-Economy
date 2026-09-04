@@ -110,6 +110,55 @@ export type SupplierOperationStatus = Readonly<{
   ownerHandoff?: SupplierOperationOwnerHandoff | undefined
 }>
 
+export type SupplierOperationReasonPresentation = Readonly<{
+  title: string
+  description: string
+}>
+
+const reasonPresentations: Readonly<Record<string, SupplierOperationReasonPresentation>> = {
+  source_drift: {
+    title: 'Source changed',
+    description: 'The source no longer matches the submitted Operation. Recheck it before publication can continue.',
+  },
+  credential_lost: {
+    title: 'Connection unavailable',
+    description: 'The source connection is no longer available. Reconnect it before publication can continue.',
+  },
+  credential_cleanup_pending: {
+    title: 'Connection cleanup pending',
+    description: 'AE has removed local authority and is still confirming cleanup with the source.',
+  },
+  provider_authority_unverified: {
+    title: 'Provider authority under review',
+    description: 'AE has not yet verified that this Business controls the source.',
+  },
+  provider_offboarding: {
+    title: 'Provider offboarding in progress',
+    description: 'This Business is leaving AE. New work remains frozen while obligations and connections are closed.',
+  },
+  health_unobserved: {
+    title: 'Validation pending',
+    description: 'AE has not yet completed a successful source validation.',
+  },
+  health_stale: {
+    title: 'Validation expired',
+    description: 'The last successful source validation is no longer current.',
+  },
+  health_unhealthy: {
+    title: 'Validation failed',
+    description: 'The latest source validation did not pass.',
+  },
+}
+
+export function supplierOperationReasonPresentation(
+  code: string,
+): SupplierOperationReasonPresentation {
+  return reasonPresentations[code] ?? {
+    title: 'Operation needs attention',
+    description: 'AE cannot confirm the current publication requirements. Use the available next action or contact support.',
+  }
+}
+
 function stateFor(facts: SupplierOperationStatusFacts): SupplierOperationState {
   if (facts.retired && facts.retirementProven) return 'Retired'
   if (facts.blockerCodes.length > 0 || (facts.retired && !facts.retirementProven)) {

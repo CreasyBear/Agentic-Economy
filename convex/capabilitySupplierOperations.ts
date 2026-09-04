@@ -4,10 +4,11 @@ import { v } from 'convex/values'
 import { projectSupplierOperationStatus } from '@/modules/capability-supply/supplier-operation-status'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/public'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
+import { resolveBusinessActor } from './authz'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import { upsertSupplierOperationIdentity } from './capabilitySupplierOperationProjection'
 import type { Doc } from './_generated/dataModel'
-import { internalMutation, mutation, type MutationCtx } from './_generated/server'
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 
 const EVIDENCE_WINDOW_MS = 30 * 24 * 60 * 60_000
@@ -15,6 +16,15 @@ const EVIDENCE_READ_LIMIT = 10_000
 
 const readResultValue = v.union(
   v.object({ kind: v.literal('available'), statusJson: v.string() }),
+  v.object({ kind: v.literal('not_found') }),
+)
+
+const ownerReadResultValue = v.union(
+  v.object({
+    kind: v.literal('available'),
+    statusJson: v.string(),
+    resumeCandidateRef: v.optional(v.string()),
+  }),
   v.object({ kind: v.literal('not_found') }),
 )
 
@@ -51,7 +61,7 @@ function sourceKind(sourceKind: Doc<'capabilityPublications'>['sourceKind'] | un
 }
 
 async function projectIdentity(
-  ctx: MutationCtx,
+  ctx: MutationCtx | QueryCtx,
   identity: Doc<'capabilitySupplierOperationProjections'>,
   now: number,
   includeEvidence: boolean,
@@ -155,6 +165,40 @@ async function projectIdentity(
   })
   return status
 }
+
+export const readOwner = query({
+  args: {
+    businessId: v.id('businesses'),
+    offeringRef: v.string(),
+    now: v.number(),
+  },
+  returns: ownerReadResultValue,
+  handler: async (ctx, args) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') return { kind: 'not_found' as const }
+    const business = await ctx.db.get(args.businessId)
+    if (business === null || business.owningAccountRef !== actor.canonicalAccountRef) {
+      return { kind: 'not_found' as const }
+    }
+    const identity = await ctx.db.query('capabilitySupplierOperationProjections')
+      .withIndex('by_businessId_and_offeringRef', (index) => index.eq('businessId', args.businessId).eq('offeringRef', args.offeringRef))
+      .unique()
+    if (identity === null) return { kind: 'not_found' as const }
+    const [status, paths] = await Promise.all([
+      projectIdentity(ctx, identity, args.now, true),
+      ctx.db.query('offeringAccessPaths')
+        .withIndex('by_offeringRef_and_offeringRevision', (index) => index.eq('offeringRef', identity.offeringRef).eq('offeringRevision', identity.offeringRevision))
+        .take(100),
+    ])
+    if (status === null) return { kind: 'not_found' as const }
+    const resumeCandidateRef = paths.find((path) => path.integrationDraft !== undefined)?.integrationDraft?.candidateRef
+    return {
+      kind: 'available' as const,
+      statusJson: JSON.stringify(status),
+      ...(resumeCandidateRef === undefined ? {} : { resumeCandidateRef }),
+    }
+  },
+})
 
 export const listAgent = mutation({
   args: { ...agentReadArgs, paginationOpts: paginationOptsValidator },
