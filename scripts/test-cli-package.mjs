@@ -23,7 +23,6 @@ const expectedCommands = [
   "doctor",
   "fund",
   "history",
-  "inspect",
   "list",
   "manifest",
   "recover",
