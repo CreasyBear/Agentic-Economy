@@ -59,7 +59,7 @@ The three failures are attributable to concurrent dirty-tree work:
 - two `ae doctor` expectations in a separately modified market-terminal file;
 - one schema census missing a separately added Package 4 Stripe webhook inbox table.
 
-Focused OAuth/connection/draft/boundary proof after the final reference correction passed **23/23 tests**. The complete import and architecture boundary suite passed **49/49 tests**, and Convex code generation completed in dry-run mode. Full typecheck reaches only the concurrent `convex/moneyAccountFundingFormance.ts` change.
+Focused OAuth/connection/draft/boundary proof after the final reference correction passed **23/23 tests**. The complete import and architecture boundary suite passed **49/49 tests**. Full typecheck, lint, production build and Convex code generation in dry-run mode all pass on the shared tree.
 
 The public CLI archive was rebuilt from clean committed source rather than the dirty workspace. Its package gate passed under Node 20 and Node 22, blocked programmatic imports, and verified exactly `README.md`, `dist/ae.js` and `package.json`. SHA-256:
 
