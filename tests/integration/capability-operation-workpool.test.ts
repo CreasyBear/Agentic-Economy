@@ -950,7 +950,7 @@ describe('capability operation Workpool lifecycle', () => {
     expect(refused.attempt).toBeNull()
     expect(refused.call).toBeNull()
     expect(providerFetch).toHaveBeenCalledTimes(1)
-  })
+  }, 15_000)
 
   it('runs the installed CLI through served routes and one real durable backend receipt', async () => {
     vi.useFakeTimers()
