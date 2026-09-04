@@ -59,6 +59,14 @@ export type OwnerSupplierOperationStatusResult =
   | Readonly<{
       kind: 'available'
       status: SupplierOperationStatus
+      operation: OwnerOperationsInventoryRow
+      maintenance?: Readonly<{
+        offeringRef: string
+        offeringRevision: number
+        offeringSourceHash: string
+        publicationRef: string
+        publicationRevision: number
+      }>
       resumeCandidateRef?: string
     }>
   | Readonly<{ kind: 'not_found' | 'unavailable' }>
@@ -136,7 +144,13 @@ const readCurrentOwnerIdentityQuery = sourceQuery<Record<string, never>, Current
 )
 const readOwnerSupplierOperationQuery = sourceQuery<
   { businessId: string; offeringRef: string; now: number },
-  | { kind: 'available'; statusJson: string; resumeCandidateRef?: string }
+  | {
+      kind: 'available'
+      statusJson: string
+      operation: OwnerOperationsInventoryRow
+      maintenance?: NonNullable<Extract<OwnerSupplierOperationStatusResult, { kind: 'available' }>['maintenance']>
+      resumeCandidateRef?: string
+    }
   | { kind: 'not_found' }
 >('capabilitySupplierOperations:readOwner')
 type OwnerSupplierOperationDirectoryReadback =
@@ -232,6 +246,8 @@ export const readOwnerSupplierOperationStatusServer = createServerFn()
       return {
         kind: 'available',
         status: parsed.data,
+        operation: result.operation,
+        ...(result.maintenance === undefined ? {} : { maintenance: result.maintenance }),
         ...(result.resumeCandidateRef === undefined ? {} : { resumeCandidateRef: result.resumeCandidateRef }),
       }
     } catch {

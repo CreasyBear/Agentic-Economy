@@ -13,7 +13,6 @@ import { AGENT_ACCESS_DEFAULT_APPLICATION_REF } from '@/modules/agent-access/age
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import {
   MAX_ACCESS_PATHS_PER_OFFERING,
-  MAX_OFFERINGS_PER_BUSINESS,
   type OfferingPrice,
 } from '@/modules/catalog/public'
 import {
@@ -286,8 +285,7 @@ export async function seedBusinessOfferings(
   const offerings = await ctx.db
     .query('businessOfferings')
     .withIndex('by_businessId_and_status', (query) => query.eq('businessId', business._id))
-    .take(MAX_OFFERINGS_PER_BUSINESS + 1)
-  if (offerings.length > MAX_OFFERINGS_PER_BUSINESS) return { kind: 'error', code: 'offering_capacity_exceeded' }
+    .collect()
   let seeded = 0
 
   for (const offering of offerings) {

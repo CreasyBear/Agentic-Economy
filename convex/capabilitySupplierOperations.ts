@@ -23,6 +23,22 @@ const ownerReadResultValue = v.union(
   v.object({
     kind: v.literal('available'),
     statusJson: v.string(),
+    operation: v.object({
+      offeringRef: v.string(),
+      currentRevision: v.number(),
+      name: v.string(),
+      category: v.string(),
+      summary: v.string(),
+      status: v.union(v.literal('draft'), v.literal('published'), v.literal('paused'), v.literal('retired')),
+      accessPathCount: v.number(),
+    }),
+    maintenance: v.optional(v.object({
+      offeringRef: v.string(),
+      offeringRevision: v.number(),
+      offeringSourceHash: v.string(),
+      publicationRef: v.string(),
+      publicationRevision: v.number(),
+    })),
     resumeCandidateRef: v.optional(v.string()),
   }),
   v.object({ kind: v.literal('not_found') }),
@@ -203,17 +219,52 @@ export const readOwner = query({
       .withIndex('by_businessId_and_offeringRef', (index) => index.eq('businessId', args.businessId).eq('offeringRef', args.offeringRef))
       .unique()
     if (identity === null) return { kind: 'not_found' as const }
-    const [status, paths] = await Promise.all([
+    const [status, offering, revision, paths] = await Promise.all([
       projectIdentity(ctx, identity, args.now, true),
+      ctx.db.query('businessOfferings')
+        .withIndex('by_offeringRef', (index) => index.eq('offeringRef', identity.offeringRef))
+        .unique(),
+      ctx.db.query('businessOfferingRevisions')
+        .withIndex('by_offeringRef_and_revision', (index) => index
+          .eq('offeringRef', identity.offeringRef)
+          .eq('revision', identity.offeringRevision))
+        .unique(),
       ctx.db.query('offeringAccessPaths')
         .withIndex('by_offeringRef_and_offeringRevision', (index) => index.eq('offeringRef', identity.offeringRef).eq('offeringRevision', identity.offeringRevision))
-        .take(100),
+        .take(21),
     ])
-    if (status === null) return { kind: 'not_found' as const }
+    if (
+      status === null
+      || offering === null
+      || revision === null
+      || offering.businessId !== args.businessId
+      || revision.businessId !== args.businessId
+      || paths.length > 20
+    ) return { kind: 'not_found' as const }
     const resumeCandidateRef = paths.find((path) => path.integrationDraft !== undefined)?.integrationDraft?.candidateRef
     return {
       kind: 'available' as const,
       statusJson: JSON.stringify(status),
+      operation: {
+        offeringRef: offering.offeringRef,
+        currentRevision: offering.currentRevision,
+        name: revision.name,
+        category: revision.category,
+        summary: revision.summary,
+        status: offering.status,
+        accessPathCount: paths.filter((path) => path.status !== 'withdrawn').length,
+      },
+      ...(identity.publicationRef === undefined || identity.publicationRevision === undefined
+        ? {}
+        : {
+            maintenance: {
+              offeringRef: offering.offeringRef,
+              offeringRevision: identity.offeringRevision,
+              offeringSourceHash: revision.sourceHash,
+              publicationRef: identity.publicationRef,
+              publicationRevision: identity.publicationRevision,
+            },
+          }),
       ...(resumeCandidateRef === undefined ? {} : { resumeCandidateRef }),
     }
   },

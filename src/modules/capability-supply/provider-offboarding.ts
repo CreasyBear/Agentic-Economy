@@ -7,6 +7,7 @@ export type ProviderOffboardingBlocker =
   | 'payout_resolution_required'
   | 'connections_remain'
   | 'provider_cleanup_pending'
+  | 'offering_retirement_conflict'
   | 'retention_policy_unbound'
 
 export type ProviderOffboardingState =
@@ -61,6 +62,7 @@ const blockerSchema = z.enum([
   'payout_resolution_required',
   'connections_remain',
   'provider_cleanup_pending',
+  'offering_retirement_conflict',
   'retention_policy_unbound',
 ])
 

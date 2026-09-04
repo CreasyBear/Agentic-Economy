@@ -165,13 +165,14 @@ export async function rebuildCapabilityOriginSupplyProjection(
   now: number,
 ): Promise<void> {
   const db = ctx.db
-  const support = await providerRouteabilityIsFrozen(ctx, businessId)
-    ? {}
-    : await deriveBusinessOfferingSupportFromCapabilitySupply(
-        db,
-        businessId,
-        now,
-      )
+  const business = await db.get(businessId)
+  if (business?.businessContext?.kind === 'programmable_provider') return
+  if (await providerRouteabilityIsFrozen(ctx, businessId)) return
+  const support = await deriveBusinessOfferingSupportFromCapabilitySupply(
+    db,
+    businessId,
+    now,
+  )
   await rebuildBusinessSupplyProjectionSnapshotCommand({
     db,
     sourceDb: db,

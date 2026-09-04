@@ -6,7 +6,6 @@ import {
   ExternalOperationProvenanceValues,
   HumanRequestChannelValues,
   MAX_ACCESS_PATHS_PER_OFFERING,
-  MAX_OFFERINGS_PER_BUSINESS,
   normalizeOfferingPrice,
   OfferingAccessPathStatusValues,
   type BusinessOfferingRecord,
@@ -34,6 +33,8 @@ import {
 import { qualifySuppliedCandidate } from '../src/modules/capability-supply/public'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 
+const MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD = 100
+
 export type CapabilityProjectionDb = GenericDatabaseWriter<DataModel>
 type CapabilityProjectionReadDb = GenericDatabaseReader<DataModel>
 
@@ -50,8 +51,8 @@ export async function readLiveBusinessSupplyProjection(input: {
   if (business === null || context === null || business.publicStatus !== 'published') return null
   const offeringRows = await db.query('businessOfferings')
     .withIndex('by_businessId_and_status', (q) => q.eq('businessId', businessId))
-    .take(MAX_OFFERINGS_PER_BUSINESS + 1)
-  if (offeringRows.length > MAX_OFFERINGS_PER_BUSINESS) throw new Error('business_offering_capacity_exceeded')
+    .take(MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD + 1)
+  if (offeringRows.length > MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD) throw new Error('business_catalog_rebuild_requires_pagination')
   const offeringRecords = offeringRows.map(toOffering)
   const revisionRows = await Promise.all(offeringRecords.map((offering) => (
     db.query('businessOfferingRevisions')
@@ -126,9 +127,9 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
   )
   const existingSearchDocuments = await db.query('registrySearchDocuments')
     .withIndex('by_business', (query) => query.eq('businessSlug', business.slug))
-    .take(MAX_OFFERINGS_PER_BUSINESS + 1)
-  if (existingSearchDocuments.length > MAX_OFFERINGS_PER_BUSINESS) {
-    throw new Error('registry_search_document_capacity_exceeded')
+    .take(MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD + 1)
+  if (existingSearchDocuments.length > MAX_BUSINESS_CATALOG_OFFERINGS_PER_REBUILD) {
+    throw new Error('registry_search_document_rebuild_requires_pagination')
   }
   const nextDocumentIds = new Set(searchDocuments.map((document) => document.documentId))
   const writes: Promise<void>[] = existingSearchDocuments.flatMap((document) => (

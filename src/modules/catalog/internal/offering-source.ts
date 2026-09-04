@@ -13,7 +13,6 @@ import {
   type OfferingAccessPathStatus,
 } from './offering-supply'
 
-export const MAX_OFFERINGS_PER_BUSINESS = 100
 export const MAX_ACCESS_PATHS_PER_OFFERING = 20
 
 export type OfferingSourceState = Readonly<{
@@ -85,9 +84,6 @@ export function createOfferingInState(state: OfferingSourceState, command: Reado
   const replay = replayOperation(state, command.authority.ownerRef, 'createOffering', command.operationKey, requestHash)
   if (replay) return replay as OfferingSourceResult<BusinessOfferingRecord>
   if (state.offerings.some((item) => item.offeringRef === command.offeringRef)) return fail(state, 'operation_conflict', 'Offering reference already exists.')
-  if (state.offerings.filter((item) => item.businessId === command.businessId && item.status !== 'retired').length >= MAX_OFFERINGS_PER_BUSINESS) {
-    return fail(state, 'limit_exceeded', 'A business may have at most 100 current Offerings.')
-  }
   const facts = validateFacts(command.facts)
   if (!facts) return fail(state, 'invalid_offering', 'Offering facts are invalid.')
   const sourceHash = canonicalDigest({ businessId: command.businessId, offeringRef: command.offeringRef, revision: 1, ...facts }) as SourceHash

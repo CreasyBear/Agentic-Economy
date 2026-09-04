@@ -151,7 +151,8 @@ export const catalogTables = {
     updatedAt: v.number(),
   })
     .index('by_offeringRef', ['offeringRef'])
-    .index('by_businessId_and_status', ['businessId', 'status']),
+    .index('by_businessId_and_status', ['businessId', 'status'])
+    .index('by_businessId_and_offeringRef', ['businessId', 'offeringRef']),
 
   businessOfferingRevisions: defineTable({
     offeringRef: v.string(),

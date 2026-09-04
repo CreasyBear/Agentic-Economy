@@ -15,6 +15,42 @@ describe('durable Provider offboarding', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
+  it('allows a programmable Provider to create an Offering beyond the former fleet cap', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await createPublishedBusinessOwner(backend, 'provider-offering-cap-removed')
+    await backend.run(async (ctx) => {
+      for (let index = 0; index < 100; index += 1) {
+        await ctx.db.insert('businessOfferings', {
+          offeringRef: `catalog-offering:provider-offering-cap-removed:${String(index).padStart(3, '0')}`,
+          businessId: fixture.businessId,
+          currentRevision: 1,
+          status: 'draft',
+          createdAt: index,
+          updatedAt: index,
+        })
+      }
+    })
+    const command = {
+      businessId: fixture.businessId,
+      offeringRef: 'catalog-offering:provider-offering-cap-removed:100',
+      operationKey: 'provider-offering-cap-removed:create-101',
+      correlationId: 'provider-offering-cap-removed:create-101',
+      facts: {
+        name: 'Operation 101',
+        category: 'API services',
+        summary: 'Proves exact Offering writes do not load or cap the Provider fleet.',
+      },
+    }
+
+    await expect(fixture.owner.mutation(
+      api.catalog.createBusinessOffering,
+      await withSourceWrite('catalog_publish', command),
+    )).resolves.toMatchObject({ kind: 'ok', code: 'created' })
+    await expect(backend.run(async (ctx) => await ctx.db.query('businessOfferings')
+      .withIndex('by_businessId_and_status', (index) => index.eq('businessId', fixture.businessId))
+      .collect())).resolves.toHaveLength(101)
+  })
+
   it('retires only after the official workflow proves every child authority complete', async () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await createPublishedBusinessOwner(backend, 'provider-offboarding-owner')
@@ -324,5 +360,53 @@ describe('durable Provider offboarding', () => {
         .eq('businessId', fixture.businessId)
         .eq('disposition', 'current'))
       .take(1))).resolves.toHaveLength(0)
+  })
+
+  it('retires more than 100 canonical Offerings without loading the Provider fleet as one aggregate', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await createPublishedBusinessOwner(backend, 'provider-offboarding-large-offering-fleet')
+    for (let index = 0; index < 101; index += 1) {
+      await seedCatalogOffering(
+        backend,
+        fixture.businessId,
+        `catalog-offering:provider-offboarding-large-offering-fleet:${String(index).padStart(3, '0')}`,
+        1,
+        index + 1,
+        `catalog-source:provider-offboarding-large-offering-fleet:${index}:v1`,
+      )
+    }
+
+    const started = await fixture.owner.mutation(
+      api.capabilityProviderOffboarding.startCase,
+      await withSourceWrite('catalog_publish', {
+        businessId: fixture.businessId,
+        idempotencyKey: 'provider-offboarding:large-offering-fleet',
+        operationKey: 'provider-offboarding:large-offering-fleet',
+        correlationId: 'provider-offboarding:large-offering-fleet',
+        retentionPolicyVersion: 'retention-policy:2026-09',
+        proof: {
+          reverificationId: 'rev_provider_offboarding_large_offering_fleet',
+          firstFactorAgeMinutes: 0,
+          secondFactorAgeMinutes: -1,
+        },
+      }),
+    )
+    expect(started).toMatchObject({ kind: 'available', status: { state: 'Freezing' } })
+
+    await backend.finishAllScheduledFunctions(vi.runAllTimers)
+
+    await expect(fixture.owner.query(
+      api.capabilityProviderOffboarding.readStatus,
+      { businessId: fixture.businessId },
+    )).resolves.toMatchObject({
+      kind: 'available',
+      status: { state: 'Retired', routeabilityFrozen: true },
+    })
+    const active = await backend.run(async (ctx) => await ctx.db.query('businessOfferings')
+      .withIndex('by_businessId_and_status', (index) => index
+        .eq('businessId', fixture.businessId)
+        .eq('status', 'published'))
+      .take(1))
+    expect(active).toHaveLength(0)
   })
 })

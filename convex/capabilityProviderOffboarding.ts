@@ -25,7 +25,7 @@ import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import { clerkConsequenceProofValue } from './lib/consequenceProof'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import {
-  loadOfferingSourceState,
+  loadExactOfferingSourceState,
   persistOfferingSourceState,
 } from './catalogOfferingMutations'
 import {
@@ -82,12 +82,30 @@ export const run = manager.define({
   if (!frozen.ready) throw new Error('provider_offboarding_freeze_blocked')
   for (let page = 0; ; page += 1) {
     const withdrawn = await step.runMutation(
+      offboardingInternal.withdrawCatalogDocumentsPage,
+      args,
+      { name: `withdraw-catalog-documents-${page}` },
+    )
+    if (withdrawn.done) break
+  }
+  for (let page = 0; ; page += 1) {
+    const withdrawn = await step.runMutation(
       offboardingInternal.withdrawOperationTargetsPage,
       args,
       { name: `withdraw-operations-${page}` },
     )
     if (!withdrawn.ready) throw new Error('provider_offboarding_freeze_blocked')
     if (withdrawn.done) break
+  }
+  let offeringCursor: string | undefined
+  for (let page = 0; ; page += 1) {
+    const snapshotted = await step.runMutation(
+      offboardingInternal.snapshotOfferingTargetsPage,
+      { ...args, ...(offeringCursor === undefined ? {} : { afterOfferingRef: offeringCursor }) },
+      { name: `snapshot-offerings-${page}` },
+    )
+    offeringCursor = snapshotted.nextOfferingRef
+    if (snapshotted.done) break
   }
   let connectionCursor: string | undefined
   for (let page = 0; ; page += 1) {
@@ -141,6 +159,17 @@ export const run = manager.define({
     if (!verified.ready) throw new Error('provider_offboarding_calls_blocked')
     verificationCursor = verified.nextOperationRef
     if (verified.done) break
+  }
+  let retirementCursor: string | undefined
+  for (let page = 0; ; page += 1) {
+    const retired = await step.runMutation(
+      offboardingInternal.retireOfferingTargetsPage,
+      { ...args, ...(retirementCursor === undefined ? {} : { afterOfferingRef: retirementCursor }) },
+      { name: `retire-offerings-${page}` },
+    )
+    if (!retired.ready) throw new Error('provider_offboarding_retirement_blocked')
+    retirementCursor = retired.nextOfferingRef
+    if (retired.done) break
   }
   const completed = await step.runMutation(offboardingInternal.verifyCompletion, args, { name: 'verify-completion' })
   if (!completed.ready) throw new Error('provider_offboarding_completion_blocked')
@@ -215,6 +244,7 @@ export const startCase = mutation({
       authorityRevision: actor.authorityRevision,
       authorityProvenance: actor.authorityProvenance,
       operationTargetCount: 0,
+      offeringTargetCount: 0,
       connectionTargetCount: 0,
       targetSnapshotDigest: canonicalDigest({ version: 'provider-offboarding-targets:v1', caseRef, targets: [] }),
       currentStep: 'freeze-routeability',
@@ -447,6 +477,22 @@ export const freezeRouteability = internalMutation({
   },
 })
 
+export const withdrawCatalogDocumentsPage = internalMutation({
+  args: { caseRef: v.string() },
+  returns: v.object({ done: v.boolean() }),
+  handler: async (ctx, args) => {
+    const row = await requireCase(ctx, args.caseRef)
+    if (row.routeabilityFrozenAt === undefined) return { done: false }
+    const business = await ctx.db.get(row.businessId)
+    if (business === null) return { done: true }
+    const documents = await ctx.db.query('registrySearchDocuments')
+      .withIndex('by_business', (index) => index.eq('businessSlug', business.slug))
+      .take(100)
+    await Promise.all(documents.map(async (document) => await ctx.db.delete(document._id)))
+    return { done: documents.length < 100 }
+  },
+})
+
 export const withdrawOperationTargetsPage = internalMutation({
   args: { caseRef: v.string() },
   returns: v.object({ ready: v.boolean(), done: v.boolean() }),
@@ -517,6 +563,66 @@ export const withdrawOperationTargetsPage = internalMutation({
       })
     }
     return { ready: true, done: publications.length < 100 }
+  },
+})
+
+export const snapshotOfferingTargetsPage = internalMutation({
+  args: { caseRef: v.string(), afterOfferingRef: v.optional(v.string()) },
+  returns: v.object({ done: v.boolean(), nextOfferingRef: v.optional(v.string()) }),
+  handler: async (ctx, args) => {
+    const row = await requireCase(ctx, args.caseRef)
+    if (row.routeabilityFrozenAt === undefined) return { done: false }
+    const offerings = await ctx.db.query('businessOfferings')
+      .withIndex('by_businessId_and_offeringRef', (index) => {
+        const business = index.eq('businessId', row.businessId)
+        return args.afterOfferingRef === undefined
+          ? business
+          : business.gt('offeringRef', args.afterOfferingRef)
+      })
+      .take(100)
+    const insertedTargets: Array<Readonly<{ targetRef: string; targetRevision: number; authorityDigest: string }>> = []
+    for (const offering of offerings) {
+      if (offering.status === 'retired') continue
+      const authorityDigest = offeringOffboardingAuthorityDigest(row.businessId, offering)
+      const existingTarget = await ctx.db.query('capabilityProviderOffboardingTargets')
+        .withIndex('by_caseRef_and_kind_and_targetRef', (index) => index
+          .eq('caseRef', row.caseRef)
+          .eq('kind', 'offering')
+          .eq('targetRef', offering.offeringRef))
+        .unique()
+      if (existingTarget !== null) continue
+      await ctx.db.insert('capabilityProviderOffboardingTargets', {
+        caseRef: row.caseRef,
+        businessId: row.businessId,
+        kind: 'offering',
+        targetRef: offering.offeringRef,
+        targetRevision: offering.currentRevision,
+        authorityDigest,
+        createdAt: Date.now(),
+      })
+      insertedTargets.push({
+        targetRef: offering.offeringRef,
+        targetRevision: offering.currentRevision,
+        authorityDigest,
+      })
+    }
+    if (insertedTargets.length > 0) {
+      await ctx.db.patch(row._id, {
+        offeringTargetCount: row.offeringTargetCount + insertedTargets.length,
+        targetSnapshotDigest: canonicalDigest({
+          version: 'provider-offboarding-target-page:v1',
+          previousDigest: row.targetSnapshotDigest,
+          targets: insertedTargets,
+        }),
+        revision: row.revision + 1,
+        updatedAt: Date.now(),
+      })
+    }
+    const last = offerings.at(-1)
+    return {
+      done: offerings.length < 100,
+      ...(offerings.length < 100 || last === undefined ? {} : { nextOfferingRef: last.offeringRef }),
+    }
   },
 })
 
@@ -707,6 +813,63 @@ export const verifyCallsPage = internalMutation({
   },
 })
 
+export const retireOfferingTargetsPage = internalMutation({
+  args: { caseRef: v.string(), afterOfferingRef: v.optional(v.string()) },
+  returns: v.object({ ready: v.boolean(), done: v.boolean(), nextOfferingRef: v.optional(v.string()) }),
+  handler: async (ctx, args) => {
+    const row = await requireCase(ctx, args.caseRef)
+    const targets = await readTargetPage(ctx, row.caseRef, 'offering', args.afterOfferingRef)
+    for (const target of targets) {
+      const initial = await loadExactOfferingSourceState(ctx.db, row.businessId, {
+        offeringRef: target.targetRef,
+      })
+      const offering = initial.offerings[0]
+      if (offering === undefined || offering.status === 'retired') continue
+      if (
+        offering.currentRevision !== target.targetRevision
+        || offeringOffboardingAuthorityDigest(row.businessId, offering) !== target.authorityDigest
+      ) {
+        await block(ctx, row, 'verify-completion', 'offering_retirement_conflict')
+        return { ready: false, done: false }
+      }
+      let next = initial
+      const authority = {
+        actorRef: row.requestedByPrincipalRef,
+        ownerRef: row.requestedByPrincipalRef,
+        businessOwnerRef: row.requestedByPrincipalRef,
+      }
+      for (const path of initial.accessPaths.filter((candidate) => candidate.status !== 'withdrawn')) {
+        const withdrawn = withdrawAccessPathInState(next, {
+          authority,
+          operationKey: `${row.caseRef}:withdraw-path:${path.accessPathRef}`,
+          accessPathRef: path.accessPathRef,
+          expectedRevision: offering.currentRevision,
+          now: Date.now(),
+        })
+        if (withdrawn.kind === 'error') throw new Error(`provider_offboarding_path_${withdrawn.code}`)
+        next = withdrawn.state
+      }
+      const retired = changeOfferingStatusInState(next, {
+        authority,
+        operationKey: `${row.caseRef}:retire-offering:${offering.offeringRef}`,
+        offeringRef: offering.offeringRef,
+        expectedRevision: offering.currentRevision,
+        status: 'retired',
+        now: Date.now(),
+      })
+      if (retired.kind === 'error') throw new Error(`provider_offboarding_offering_${retired.code}`)
+      const persisted = await persistOfferingSourceState(ctx.db, row.businessId, initial, retired.state, 'owner')
+      if (persisted.kind === 'error') throw new Error('provider_offboarding_retirement_persist_failed')
+    }
+    const last = targets.at(-1)
+    return {
+      ready: true,
+      done: targets.length < 100,
+      ...(targets.length < 100 || last === undefined ? {} : { nextOfferingRef: last.targetRef }),
+    }
+  },
+})
+
 export const verifyCompletion = internalMutation({
   args: { caseRef: v.string() },
   returns: v.object({ ready: v.boolean() }),
@@ -725,7 +888,6 @@ export const verifyCompletion = internalMutation({
     })
     if (completion.kind === 'blocked') return await block(ctx, row, 'verify-completion', completion.blocker)
     if (await hasUnresolvedPayouts(ctx, String(row.businessId))) return await block(ctx, row, 'verify-completion', 'payout_resolution_required')
-    await retireOfferings(ctx, row)
     const now = Date.now()
     await ctx.db.patch(row._id, {
       state: 'retired',
@@ -783,7 +945,7 @@ async function block(
 async function readTargetPage(
   ctx: MutationCtx,
   caseRef: string,
-  kind: 'operation' | 'connection',
+  kind: 'operation' | 'offering' | 'connection',
   afterTargetRef?: string,
 ): Promise<Array<Doc<'capabilityProviderOffboardingTargets'>>> {
   return await ctx.db.query('capabilityProviderOffboardingTargets')
@@ -837,42 +999,17 @@ async function countActiveConnections(
   return count
 }
 
-async function retireOfferings(
-  ctx: MutationCtx,
-  row: Doc<'capabilityProviderOffboardingCases'>,
-): Promise<void> {
-  const initial = await loadOfferingSourceState(ctx.db, row.businessId)
-  let next = initial
-  const authority = {
-    actorRef: row.requestedByPrincipalRef,
-    ownerRef: row.requestedByPrincipalRef,
-    businessOwnerRef: row.requestedByPrincipalRef,
-  }
-  for (const offering of initial.offerings) {
-    for (const path of next.accessPaths.filter((candidate) => candidate.offeringRef === offering.offeringRef && candidate.status !== 'withdrawn')) {
-      const withdrawn = withdrawAccessPathInState(next, {
-        authority,
-        operationKey: `${row.caseRef}:withdraw-path:${path.accessPathRef}`,
-        accessPathRef: path.accessPathRef,
-        expectedRevision: offering.currentRevision,
-        now: Date.now(),
-      })
-      if (withdrawn.kind === 'error') throw new Error(`provider_offboarding_path_${withdrawn.code}`)
-      next = withdrawn.state
-    }
-    const retired = changeOfferingStatusInState(next, {
-      authority,
-      operationKey: `${row.caseRef}:retire-offering:${offering.offeringRef}`,
-      offeringRef: offering.offeringRef,
-      expectedRevision: offering.currentRevision,
-      status: 'retired',
-      now: Date.now(),
-    })
-    if (retired.kind === 'error') throw new Error(`provider_offboarding_offering_${retired.code}`)
-    next = retired.state
-  }
-  const persisted = await persistOfferingSourceState(ctx.db, row.businessId, initial, next, 'owner')
-  if (persisted.kind === 'error') throw new Error('provider_offboarding_retirement_persist_failed')
+function offeringOffboardingAuthorityDigest(
+  businessId: Doc<'capabilityProviderOffboardingCases'>['businessId'],
+  offering: Pick<Doc<'businessOfferings'>, 'offeringRef' | 'currentRevision' | 'status'>,
+): string {
+  return canonicalDigest({
+    version: 'provider-offboarding-offering-authority:v1',
+    businessId,
+    offeringRef: offering.offeringRef,
+    revision: offering.currentRevision,
+    status: offering.status,
+  })
 }
 
 function stateForStep(step: Doc<'capabilityProviderOffboardingCases'>['currentStep']): Doc<'capabilityProviderOffboardingCases'>['state'] {

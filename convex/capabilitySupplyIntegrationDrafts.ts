@@ -19,7 +19,7 @@ import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAc
 import { resolveBusinessActor } from './authz'
 import { ownsPublishedBusinessForOwnerId, publicationPorts } from './capabilitySupply'
 import {
-  loadOfferingSourceState,
+  loadExactOfferingSourceState,
   persistOfferingSourceState,
 } from './catalogOfferingMutations'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
@@ -202,7 +202,9 @@ async function saveSupplyIntegrationDraft(
     return { ...expected, kind: 'replayed' }
   }
 
-  const initial = await loadOfferingSourceState(ctx.db, args.businessId)
+  const initial = await loadExactOfferingSourceState(ctx.db, args.businessId, {
+    offeringRef: refs.offeringRef,
+  })
   let next = initial
   const existingOffering = initial.offerings.find((item) => item.offeringRef === refs.offeringRef)
   if (existingOffering === undefined) {

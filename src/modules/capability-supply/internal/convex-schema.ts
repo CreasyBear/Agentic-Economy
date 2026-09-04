@@ -346,6 +346,7 @@ export const capabilitySupplyTables = {
       resolvedAt: v.number(),
     }),
     operationTargetCount: v.number(),
+    offeringTargetCount: v.number(),
     connectionTargetCount: v.number(),
     targetSnapshotDigest: v.string(),
     workflowId: v.optional(v.string()),
@@ -384,7 +385,7 @@ export const capabilitySupplyTables = {
   capabilityProviderOffboardingTargets: defineTable({
     caseRef: v.string(),
     businessId: v.id('businesses'),
-    kind: v.union(v.literal('operation'), v.literal('connection')),
+    kind: v.union(v.literal('operation'), v.literal('offering'), v.literal('connection')),
     targetRef: v.string(),
     targetRevision: v.number(),
     authorityDigest: v.string(),

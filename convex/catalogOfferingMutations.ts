@@ -23,7 +23,6 @@ import {
   changeOfferingStatusInState,
   createOfferingInState,
   MAX_ACCESS_PATHS_PER_OFFERING,
-  MAX_OFFERINGS_PER_BUSINESS,
   reviseOfferingInState,
   upsertAccessPathInState,
   withdrawAccessPathInState,
@@ -119,6 +118,10 @@ type EnsureSupplierBusinessArgs = {
   providerIdentifier: string
 }
 type RenameSupplierBusinessArgs = OfferingSourceMutationArgs & { name: string }
+type OfferingCommandTarget = Readonly<{
+  offeringRef?: string
+  accessPathRef?: string
+}>
 
 export type RenameSupplierBusinessResult =
   | { kind: 'updated' | 'unchanged'; businessId: Id<'businesses'>; slug: string; name: string }
@@ -310,7 +313,7 @@ export async function reviseBusinessOfferingCommand(
   }>,
   now: number,
 ) {
-  return runSystemOfferingSourceCommand(ctx, { ...command, operationName: 'reviseOffering' }, (state, authority) => reviseOfferingInState(state, {
+  return runSystemOfferingSourceCommand(ctx, { ...command, operationName: 'reviseOffering' }, { offeringRef: command.offeringRef }, (state, authority) => reviseOfferingInState(state, {
     authority,
     operationKey: command.operationKey,
     offeringRef: brandNonEmpty(command.offeringRef, 'OfferingRef'),
@@ -331,7 +334,7 @@ export async function upsertOfferingAccessPathCommand(
   }>,
   now: number,
 ) {
-  return runSystemOfferingSourceCommand(ctx, { ...command, operationName: 'upsertAccessPath' }, (state, authority) => upsertAccessPathInState(state, {
+  return runSystemOfferingSourceCommand(ctx, { ...command, operationName: 'upsertAccessPath' }, { offeringRef: command.offeringRef }, (state, authority) => upsertAccessPathInState(state, {
     authority,
     operationKey: command.operationKey,
     offeringRef: brandNonEmpty(command.offeringRef, 'OfferingRef'),
@@ -352,7 +355,7 @@ export async function withdrawOfferingAccessPathCommand(
   }>,
   now: number,
 ) {
-  return runSystemOfferingSourceCommand(ctx, { ...command, operationName: 'withdrawAccessPath' }, (state, authority) => (
+  return runSystemOfferingSourceCommand(ctx, { ...command, operationName: 'withdrawAccessPath' }, { accessPathRef: command.accessPathRef }, (state, authority) => (
     withdrawAccessPathInState(state, {
       authority,
       operationKey: command.operationKey,
@@ -370,6 +373,7 @@ async function runOfferingSourceCore(
   actorRef: string,
   operationName: string,
   operationKey: string,
+  target: OfferingCommandTarget,
   mutate: (
     state: OfferingSourceState,
     authority: { actorRef?: string; ownerRef: string; businessOwnerRef: string },
@@ -378,7 +382,7 @@ async function runOfferingSourceCore(
   now: number,
   actorKind: 'owner' | 'system',
 ): Promise<OfferingCommandResult> {
-  const state = await loadOfferingSourceState(db, businessId, {
+  const state = await loadExactOfferingSourceState(db, businessId, target, {
     actorRef: ownerRef,
     operationName,
     operationKey,
@@ -407,6 +411,7 @@ type SystemOfferingCommand = Readonly<{
 async function runSystemOfferingSourceCommand(
   ctx: MutationCtx,
   command: SystemOfferingCommand,
+  target: OfferingCommandTarget,
   mutate: (
     state: OfferingSourceState,
     authority: { actorRef?: string; ownerRef: string; businessOwnerRef: string },
@@ -430,6 +435,7 @@ async function runSystemOfferingSourceCommand(
     snapshot.actorPrincipalRef,
     command.operationName,
     command.operationKey,
+    target,
     mutate,
     now,
     'system',
@@ -643,7 +649,7 @@ export async function admitDevSeedCatalogAuthority(
 }
 
 export async function createBusinessOfferingHandler(ctx: MutationCtx, args: CreateBusinessOfferingArgs) {
-  return runOfferingSourceMutation(ctx, args, 'createOffering', (state, authority, now) => createOfferingInState(state, {
+  return runOfferingSourceMutation(ctx, args, 'createOffering', { offeringRef: args.offeringRef }, (state, authority, now) => createOfferingInState(state, {
     authority,
     operationKey: args.operationKey,
     businessId: brandNonEmpty(args.businessId, 'BusinessId'),
@@ -654,7 +660,7 @@ export async function createBusinessOfferingHandler(ctx: MutationCtx, args: Crea
 }
 
 export async function reviseBusinessOfferingHandler(ctx: MutationCtx, args: ReviseBusinessOfferingArgs) {
-  return runOfferingSourceMutation(ctx, args, 'reviseOffering', (state, authority, now) => reviseOfferingInState(state, {
+  return runOfferingSourceMutation(ctx, args, 'reviseOffering', { offeringRef: args.offeringRef }, (state, authority, now) => reviseOfferingInState(state, {
     authority,
     operationKey: args.operationKey,
     offeringRef: brandNonEmpty(args.offeringRef, 'OfferingRef'),
@@ -665,7 +671,7 @@ export async function reviseBusinessOfferingHandler(ctx: MutationCtx, args: Revi
 }
 
 export async function changeBusinessOfferingStatusHandler(ctx: MutationCtx, args: ChangeBusinessOfferingStatusArgs) {
-  return runOfferingSourceMutation(ctx, args, 'changeOfferingStatus', (state, authority, now) => changeOfferingStatusInState(state, {
+  return runOfferingSourceMutation(ctx, args, 'changeOfferingStatus', { offeringRef: args.offeringRef }, (state, authority, now) => changeOfferingStatusInState(state, {
     authority,
     operationKey: args.operationKey,
     offeringRef: brandNonEmpty(args.offeringRef, 'OfferingRef'),
@@ -676,7 +682,7 @@ export async function changeBusinessOfferingStatusHandler(ctx: MutationCtx, args
 }
 
 export async function upsertOfferingAccessPathHandler(ctx: MutationCtx, args: UpsertOfferingAccessPathArgs) {
-  return runOfferingSourceMutation(ctx, args, 'upsertAccessPath', (state, authority, now) => upsertAccessPathInState(state, {
+  return runOfferingSourceMutation(ctx, args, 'upsertAccessPath', { offeringRef: args.offeringRef }, (state, authority, now) => upsertAccessPathInState(state, {
     authority,
     operationKey: args.operationKey,
     offeringRef: brandNonEmpty(args.offeringRef, 'OfferingRef'),
@@ -689,7 +695,7 @@ export async function upsertOfferingAccessPathHandler(ctx: MutationCtx, args: Up
 }
 
 export async function withdrawOfferingAccessPathHandler(ctx: MutationCtx, args: WithdrawOfferingAccessPathArgs) {
-  return runOfferingSourceMutation(ctx, args, 'withdrawAccessPath', (state, authority, now) => withdrawAccessPathInState(state, {
+  return runOfferingSourceMutation(ctx, args, 'withdrawAccessPath', { accessPathRef: args.accessPathRef }, (state, authority, now) => withdrawAccessPathInState(state, {
     authority,
     operationKey: args.operationKey,
     accessPathRef: brandNonEmpty(args.accessPathRef, 'AccessPathRef'),
@@ -1267,6 +1273,7 @@ async function runOfferingSourceMutation(
   ctx: MutationCtx,
   args: OfferingSourceMutationArgs,
   operationName: string,
+  target: OfferingCommandTarget,
   mutate: (state: OfferingSourceState, authority: { actorRef?: string; ownerRef: string; businessOwnerRef: string }, now: number) => OfferingSourceResult<unknown>,
 ): Promise<OfferingCommandResult> {
   const actor = await resolveBusinessActor(ctx)
@@ -1286,11 +1293,13 @@ async function runOfferingSourceMutation(
     actor.canonicalPrincipalRef,
     operationName,
     args.operationKey,
+    target,
     mutate,
     now,
     'owner',
   )
   if (core.kind === 'error') return core
+  if (business.businessContext?.kind === 'programmable_provider') return core
   const support = await deriveBusinessOfferingSupportFromCapabilitySupply(ctx.db, args.businessId, now)
   await rebuildBusinessSupplyProjectionSnapshotCommand({ db: ctx.db, sourceDb: ctx.db, businessId: args.businessId, support, now })
   return core
@@ -1495,15 +1504,114 @@ function readCatalogAccessPath(row: Doc<'offeringAccessPaths'>): OfferingAccessP
   }
 }
 
+export async function loadExactOfferingSourceState(
+  db: GenericDatabaseReader<DataModel>,
+  businessId: Id<'businesses'>,
+  target: OfferingCommandTarget,
+  operation?: Readonly<{ actorRef: string; operationName: string; operationKey: string }>,
+): Promise<OfferingSourceState> {
+  const operationRow = operation === undefined
+    ? null
+    : await db.query('operationKeys')
+      .withIndex('by_actor_operation_key', (query) => (
+        query.eq('actorRef', operation.actorRef)
+          .eq('operationName', operation.operationName)
+          .eq('key', operation.operationKey)
+      ))
+      .unique()
+  const operationRefs = readCatalogOperationRefs(operationRow)
+  const explicitPath = target.accessPathRef === undefined
+    ? null
+    : await db.query('offeringAccessPaths')
+      .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', target.accessPathRef!))
+      .unique()
+  const replayRef = operationRefs[0]
+  const replayOffering = target.offeringRef === undefined && explicitPath === null && replayRef !== undefined
+    ? await db.query('businessOfferings')
+      .withIndex('by_offeringRef', (query) => query.eq('offeringRef', replayRef))
+      .unique()
+    : null
+  const replayPath = target.offeringRef === undefined && explicitPath === null && replayOffering === null && replayRef !== undefined
+    ? await db.query('offeringAccessPaths')
+      .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', replayRef))
+      .unique()
+    : null
+  const offeringRef = target.offeringRef
+    ?? (explicitPath === null ? undefined : requiredCatalogString(explicitPath, 'offeringRef'))
+    ?? (replayOffering === null ? undefined : requiredCatalogString(replayOffering, 'offeringRef'))
+    ?? (replayPath === null ? undefined : requiredCatalogString(replayPath, 'offeringRef'))
+  const offeringRow = offeringRef === undefined
+    ? null
+    : await db.query('businessOfferings')
+      .withIndex('by_offeringRef', (query) => query.eq('offeringRef', offeringRef))
+      .unique()
+  const ownedOffering = offeringRow !== null && requiredCatalogString(offeringRow, 'businessId') === businessId
+    ? offeringRow
+    : null
+  const offering = ownedOffering === null ? undefined : {
+    offeringRef: brandNonEmpty(requiredCatalogString(ownedOffering, 'offeringRef'), 'OfferingRef'),
+    businessId: brandNonEmpty(requiredCatalogString(ownedOffering, 'businessId'), 'BusinessId'),
+    currentRevision: requiredCatalogNumber(ownedOffering, 'currentRevision'),
+    status: readCatalogStatus(ownedOffering.status),
+    createdAt: requiredCatalogNumber(ownedOffering, 'createdAt'),
+    updatedAt: requiredCatalogNumber(ownedOffering, 'updatedAt'),
+  }
+  const [revisionRow, pathRows] = offering === undefined
+    ? [null, []] as const
+    : await Promise.all([
+        db.query('businessOfferingRevisions')
+          .withIndex('by_offeringRef_and_revision', (query) => (
+            query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision)
+          ))
+          .unique(),
+        db.query('offeringAccessPaths')
+          .withIndex('by_offeringRef_and_status', (query) => query.eq('offeringRef', offering.offeringRef))
+          .take(MAX_ACCESS_PATHS_PER_OFFERING + 1),
+      ])
+  if (pathRows.length > MAX_ACCESS_PATHS_PER_OFFERING) {
+    throw new Error('offering_access_path_capacity_exceeded')
+  }
+  return {
+    offerings: offering === undefined ? [] : [offering],
+    revisions: revisionRow === null ? [] : [readCatalogRevision(revisionRow)],
+    accessPaths: pathRows.map(readCatalogAccessPath),
+    operations: readCatalogOperation(operationRow, operationRefs),
+  }
+}
+
+function readCatalogOperationRefs(operationRow: Doc<'operationKeys'> | null): string[] {
+  if (operationRow === null || operationRow.scope !== 'catalog_offering') return []
+  const value = operationRow.effectRefs
+  if (!Array.isArray(value) || value.some((ref) => typeof ref !== 'string')) {
+    throw new Error('catalog_invalid_operation_effect_refs')
+  }
+  return value
+}
+
+function readCatalogOperation(
+  operationRow: Doc<'operationKeys'> | null,
+  operationRefs: readonly string[],
+): OfferingSourceState['operations'] {
+  return operationRefs[0] === undefined || operationRow === null
+    ? []
+    : [{
+        actorRef: requiredCatalogString(operationRow, 'actorRef'),
+        operationName: requiredCatalogString(operationRow, 'operationName'),
+        operationKey: requiredCatalogString(operationRow, 'key'),
+        requestHash: brandNonEmpty(requiredCatalogString(operationRow, 'requestHash'), 'SourceHash'),
+        resultRef: operationRefs[0],
+        ...(operationRow.resultHash === undefined
+          ? {}
+          : { resultHash: brandNonEmpty(requiredCatalogString(operationRow, 'resultHash'), 'SourceHash') }),
+      }]
+}
+
 export async function loadOfferingSourceState(
   db: GenericDatabaseReader<DataModel>,
   businessId: Id<'businesses'>,
   operation?: Readonly<{ actorRef: string; operationName: string; operationKey: string }>,
 ): Promise<OfferingSourceState> {
-  const offeringRows = await db.query('businessOfferings').withIndex('by_businessId_and_status', (query) => query.eq('businessId', businessId)).take(MAX_OFFERINGS_PER_BUSINESS + 1)
-  if (offeringRows.length > MAX_OFFERINGS_PER_BUSINESS) {
-    throw new Error('business_offering_capacity_exceeded')
-  }
+  const offeringRows = await db.query('businessOfferings').withIndex('by_businessId_and_status', (query) => query.eq('businessId', businessId)).collect()
   const offerings = offeringRows.map((row) => ({
     offeringRef: brandNonEmpty(requiredCatalogString(row, 'offeringRef'), 'OfferingRef'),
     businessId: brandNonEmpty(requiredCatalogString(row, 'businessId'), 'BusinessId'),
@@ -1538,31 +1646,12 @@ export async function loadOfferingSourceState(
           .eq('key', operation.operationKey)
       ))
       .unique()
-  const operationRefs = operationRow === null || operationRow.scope !== 'catalog_offering'
-    ? []
-    : (() => {
-        const value = operationRow.effectRefs
-        if (!Array.isArray(value) || value.some((ref) => typeof ref !== 'string')) {
-          throw new Error('catalog_invalid_operation_effect_refs')
-        }
-        return value
-      })()
+  const operationRefs = readCatalogOperationRefs(operationRow)
   return {
     offerings,
     revisions: revisionRows.flatMap((row) => row === null ? [] : [readCatalogRevision(row)]),
     accessPaths: pathRows.flat().map(readCatalogAccessPath),
-    operations: operationRefs[0] === undefined || operationRow === null
-      ? []
-      : [{
-          actorRef: requiredCatalogString(operationRow, 'actorRef'),
-          operationName: requiredCatalogString(operationRow, 'operationName'),
-          operationKey: requiredCatalogString(operationRow, 'key'),
-          requestHash: brandNonEmpty(requiredCatalogString(operationRow, 'requestHash'), 'SourceHash'),
-          resultRef: operationRefs[0],
-          ...(operationRow.resultHash === undefined
-            ? {}
-            : { resultHash: brandNonEmpty(requiredCatalogString(operationRow, 'resultHash'), 'SourceHash') }),
-        }],
+    operations: readCatalogOperation(operationRow, operationRefs),
   }
 }
 

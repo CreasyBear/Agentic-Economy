@@ -4,8 +4,10 @@ import { useReverification } from '@clerk/tanstack-react-start'
 import { useState } from 'react'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { readOwnerOfferingSupplyServer } from '@/components/ae/offerings/owner-offering.functions'
-import { readOwnerSupplierOperationStatusServer } from '@/components/ae/offerings/owner-operations.functions'
+import {
+  readOwnerOperationsIdentityDetailServer,
+  readOwnerSupplierOperationStatusServer,
+} from '@/components/ae/offerings/owner-operations.functions'
 import {
   AeSupplierOperationDetail,
   type SupplierOperationActionOutcome,
@@ -14,8 +16,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  ownerSupplyActionContext,
-  readOwnerSupplyFunnelServer,
   recheckOwnerCapabilityServer,
   republishOwnerCapabilityServer,
   withdrawOwnerCapabilityServer,
@@ -28,22 +28,13 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 export const Route = createFileRoute('/_operator/owner/supply/$offeringRef')({
   ...operatorRouteOptions,
   loader: async ({ params }) => {
-    const offerings = await readOwnerOfferingSupplyServer()
-    if (offerings.kind !== 'available') return { offerings, status: { kind: 'not_found' as const }, maintenance: undefined }
-    const [status, supply] = await Promise.all([
-      readOwnerSupplierOperationStatusServer({ data: {
-        businessId: offerings.businessId,
-        offeringRef: params.offeringRef,
-      } }),
-      readOwnerSupplyFunnelServer({ data: {
-        businessId: offerings.businessId,
-        editorOfferingRef: params.offeringRef,
-      } }),
-    ])
-    const maintenance = supply.kind === 'available'
-      ? supply.offerings.find((item) => item.offeringRef === params.offeringRef)
-      : undefined
-    return { offerings, status, maintenance }
+    const identity = await readOwnerOperationsIdentityDetailServer()
+    if (identity.kind !== 'available') return { identity, status: { kind: 'not_found' as const } }
+    const status = await readOwnerSupplierOperationStatusServer({ data: {
+      businessId: identity.businessId,
+      offeringRef: params.offeringRef,
+    } })
+    return { identity, status }
   },
   head: () => ({
     meta: [
@@ -64,17 +55,19 @@ function OwnerSupplyDetailRoute() {
   const republishRequest = useServerFn(republishOwnerCapabilityServer)
   const republish = useReverification(republishRequest)
 
-  if (result.offerings.kind !== 'available' || result.status.kind !== 'available') {
+  if (result.identity.kind !== 'available' || result.status.kind !== 'available') {
     return <UnavailableOperation offeringRef={offeringRef} unavailable={result.status.kind === 'unavailable'} />
   }
-  const source = result.offerings.offerings.find((item) => item.offeringRef === offeringRef)
-  if (source === undefined || result.status.status.businessRef !== result.offerings.businessId) {
+  if (
+    result.status.operation.offeringRef !== offeringRef
+    || result.status.status.businessRef !== result.identity.businessId
+  ) {
     return <UnavailableOperation offeringRef={offeringRef} unavailable={false} />
   }
-  const context = result.maintenance === undefined
+  const context: SupplyFunnelActionContext | undefined = result.status.maintenance === undefined
     ? undefined
-    : ownerSupplyActionContext(result.offerings.businessId, result.maintenance)
-  const name = source.revision?.name ?? result.maintenance?.name ?? 'Operation'
+    : { businessId: result.identity.businessId, ...result.status.maintenance }
+  const name = result.status.operation.name
   const resumeHref = result.status.resumeCandidateRef === undefined
     ? undefined
     : `/owner/offerings/new?draft=${encodeURIComponent(result.status.resumeCandidateRef)}`
