@@ -1,59 +1,18 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
-import type { ColumnDef, OnChangeFn, SortingState } from '@tanstack/react-table'
 import { Link } from '@tanstack/react-router'
-import {
-  BotIcon,
-  CheckCircle2Icon,
-  CircleDashedIcon,
-  FilePenLineIcon,
-  Link2Icon,
-} from 'lucide-react'
+import type { ColumnDef, OnChangeFn, SortingState } from '@tanstack/react-table'
+import { BotIcon, Link2Icon } from 'lucide-react'
+import { useEffect, useMemo, useRef } from 'react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
-import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
-import { AeSection } from '@/components/ae/layout/AeSection'
-import {
-  AeOperatorSortableHeader,
-  AeRecordTable,
-} from '@/components/ae/operator/AeOperatorDataTable'
+import { AeOperatorSortableHeader, AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Field as UiField, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-
-import { cn } from '@/lib/utils'
-import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import {
-  OfferingPriceKindValues,
-  OfferingPriceTaxTreatmentValues,
-  OfferingPriceUnitValues,
-  SUPPORTED_OFFERING_CURRENCIES,
-  DEFAULT_OFFERING_PRICE_CURRENCY,
-  isSupportedOfferingCurrency,
-  normalizeOfferingPrice,
-} from '@/modules/catalog/public'
-import { formatExactAmount, parseDecimalExactAmount } from '@/modules/money/public'
-import { createPrefixedRandomId } from '@/modules/common/random-id'
-
 import type {
   BusinessOfferingProjection,
   BusinessOfferingStatus,
-  OfferingAccessPathDescriptor,
-  OfferingAccessPathStatus,
-  OfferingPrice,
-  OfferingPriceInput,
-  OfferingPriceKind,
-  OfferingPriceTaxTreatment,
-  OfferingPriceUnit,
   PublicOfferingSupplyProjection,
 } from '@/modules/catalog/public'
-import type { OfferingRef } from '@/modules/common/ids'
-import { clearStoredOfferingDraft, publishGateRefusal, readStoredOfferingDraft, writeStoredOfferingDraft } from './AeOwnerOfferings.exports'
 
 export type OwnerOfferingSummary = Readonly<{
   offering: BusinessOfferingProjection
@@ -67,74 +26,17 @@ export type OwnerOfferingSummary = Readonly<{
   lifecyclePending?: boolean
 }>
 
-export type OwnerOfferingEditorValue = Readonly<{
-  offeringRef?: OfferingRef
-  expectedRevision: number
-  name: string
-  category: string
-  summary: string
-  serviceAreaSummary: string
-  availabilitySummary: string
-  pricingSummary: string
-  /**
-   * The comparable twin of `pricingSummary`, never derived from it. Present as
-   * a declared key so every construction site has to decide, and so clearing
-   * the price group actually clears the published price.
-   */
-  price: OfferingPrice | undefined
-  status: BusinessOfferingStatus
-  accessPaths: readonly OwnerAccessPathEditorValue[]
-}>
-
-export type OwnerAccessPathEditorValue = Readonly<{
-  accessPathRef?: string
-  localDraftKey?: string
-  status: OfferingAccessPathStatus
-  descriptor: OfferingAccessPathDescriptor
-}>
-function ensureOwnerAccessPathDraftIdentity(value: OwnerOfferingEditorValue): OwnerOfferingEditorValue {
+export function toOwnerOfferingSummary(
+  projection: PublicOfferingSupplyProjection,
+  status: BusinessOfferingStatus = 'published',
+): OwnerOfferingSummary {
   return {
-    ...value,
-    accessPaths: value.accessPaths.map((path) => path.accessPathRef === undefined && path.localDraftKey === undefined
-      ? { ...path, localDraftKey: createPrefixedRandomId('access-path-draft:') }
-      : path),
+    offering: projection.offering,
+    status,
+    accessPathCount: projection.accessPaths.length,
+    support: projection.support,
   }
 }
-
-function stripOwnerAccessPathDraftIdentity(value: OwnerOfferingEditorValue): OwnerOfferingEditorValue {
-  return {
-    ...value,
-    accessPaths: value.accessPaths.map(({ localDraftKey: _localDraftKey, ...path }) => path),
-  }
-}
-
-export type OwnerOfferingSaveResult =
-  | Readonly<{ kind: 'saved'; value: OwnerOfferingEditorValue; message: string }>
-  | Readonly<{ kind: 'revision_conflict'; message: string }>
-  | Readonly<{ kind: 'invalid'; field?: string; message: string }>
-  | Readonly<{
-      kind: 'refused'
-      message: string
-      retry?: Readonly<{ offeringRef: string; currentRevision: number; completedSteps: readonly string[] }>
-    }>
-
-type OwnerOfferingEditorSafetyState = Readonly<{
-  dirty: boolean
-  pending: boolean
-  draftStorage: 'stored' | 'unavailable'
-  saveOutcome: 'idle' | 'saved' | 'failed'
-}>
-
-type OwnerOfferingEditorProps = Readonly<{
-  initialValue: OwnerOfferingEditorValue
-  onSave: (value: OwnerOfferingEditorValue) => Promise<OwnerOfferingSaveResult>
-  seed?: Readonly<{ label: string; value: Partial<OwnerOfferingEditorValue> }>
-  draftKey?: string
-  backAction?: ReactNode
-  onSafetyStateChange?: (state: OwnerOfferingEditorSafetyState) => void
-  saveActionRef?: Ref<HTMLButtonElement>
-  headingRef?: Ref<HTMLHeadingElement>
-}>
 
 export function AeOwnerOfferingsList({
   offerings,
@@ -177,7 +79,11 @@ export function AeOwnerOfferingsList({
     const rule = sorting?.[0]
     if (rule === undefined) return filtered
     return filtered.sort((left, right) => {
-      const comparison = compactSortValue(left, rule.id).localeCompare(compactSortValue(right, rule.id), undefined, { numeric: true })
+      const comparison = compactSortValue(left, rule.id).localeCompare(
+        compactSortValue(right, rule.id),
+        undefined,
+        { numeric: true },
+      )
       return rule.desc ? -comparison : comparison
     })
   }, [filterValue, offerings, sorting])
@@ -191,76 +97,72 @@ export function AeOwnerOfferingsList({
     return () => window.cancelAnimationFrame(frame)
   }, [activeRowActionId, compactOfferings, hasLifecyclePresentation, restoreRowActionFocus])
 
-  const columns = useMemo<ColumnDef<OwnerOfferingSummary, unknown>[]>(
-    () => [
-      {
-        id: 'name',
-        accessorFn: (item) => item.offering.name,
-        header: ({ column }) => <AeOperatorSortableHeader label="Operation" column={column} />,
-        cell: ({ row }) => (
-          <div className="grid min-w-[12rem] gap-0.5">
-            <span className="font-medium">{row.original.offering.name}</span>
-            <span className="line-clamp-2 text-xs text-muted-foreground">{row.original.offering.summary}</span>
-          </div>
-        ),
-      },
-      {
-        id: 'status',
-        accessorFn: (item) => item.lifecycleLabel ?? statusLabel(item.status),
-        header: ({ column }) => <AeOperatorSortableHeader label="Lifecycle" column={column} />,
-        cell: ({ row }) => (
-          <div className="grid gap-1">
-            <Badge variant="outline">{row.original.lifecyclePending ? 'Loading…' : row.original.lifecycleLabel ?? statusLabel(row.original.status)}</Badge>
-            {row.original.availability === undefined ? null : (
-              <span className="text-xs text-muted-foreground">{availabilityLabel(row.original.availability)}</span>
-            )}
-          </div>
-        ),
-      },
-      {
-        id: 'blocker',
-        accessorFn: (item) => item.blocker ?? '',
-        header: 'Blocker',
-        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.blocker ?? '—'}</span>,
-      },
-      {
-        id: 'continuation',
-        header: 'Next action',
-        cell: ({ row }) => row.original.continuation === undefined ? null : (
-          <Button asChild size="sm" variant="secondary" className="min-h-touch w-full whitespace-normal sm:w-auto">
-            <a href={row.original.continuation.href}>{row.original.continuation.label}</a>
-          </Button>
-        ),
-      },
-      {
-        id: 'routes',
-        accessorFn: (item) => item.accessPathCount,
-        header: 'Access',
-        cell: ({ row }) => (
-          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Link2Icon className="size-3.5" aria-hidden="true" />
-            {row.original.accessPathCount === 0
-              ? 'No access route'
-              : `${row.original.accessPathCount} ${row.original.accessPathCount === 1 ? 'route' : 'routes'}`}
-          </span>
-        ),
-      },
-      {
-        id: 'ready',
-        accessorFn: (item) => item.support?.routeable === true,
-        header: 'Readiness',
-        cell: ({ row }) =>
-          row.original.support?.routeable === true ? (
-            <span className="inline-flex items-center gap-1.5 text-xs">
-              <BotIcon className="size-3.5" aria-hidden="true" /> Ready now
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          ),
-      },
-    ],
-    [],
-  )
+  const columns = useMemo<ColumnDef<OwnerOfferingSummary, unknown>[]>(() => [
+    {
+      id: 'name',
+      accessorFn: (item) => item.offering.name,
+      header: ({ column }) => <AeOperatorSortableHeader label="Operation" column={column} />,
+      cell: ({ row }) => (
+        <div className="grid min-w-[12rem] gap-0.5">
+          <span className="font-medium">{row.original.offering.name}</span>
+          <span className="line-clamp-2 text-xs text-muted-foreground">{row.original.offering.summary}</span>
+        </div>
+      ),
+    },
+    {
+      id: 'status',
+      accessorFn: (item) => item.lifecycleLabel ?? statusLabel(item.status),
+      header: ({ column }) => <AeOperatorSortableHeader label="Lifecycle" column={column} />,
+      cell: ({ row }) => (
+        <div className="grid gap-1">
+          <Badge variant="outline">
+            {row.original.lifecyclePending ? 'Loading…' : row.original.lifecycleLabel ?? statusLabel(row.original.status)}
+          </Badge>
+          {row.original.availability === undefined ? null : (
+            <span className="text-xs text-muted-foreground">{availabilityLabel(row.original.availability)}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'blocker',
+      accessorFn: (item) => item.blocker ?? '',
+      header: 'Blocker',
+      cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.blocker ?? '—'}</span>,
+    },
+    {
+      id: 'continuation',
+      header: 'Next action',
+      cell: ({ row }) => row.original.continuation === undefined ? null : (
+        <Button asChild size="sm" variant="secondary" className="min-h-touch w-full whitespace-normal sm:w-auto">
+          <a href={row.original.continuation.href}>{row.original.continuation.label}</a>
+        </Button>
+      ),
+    },
+    {
+      id: 'routes',
+      accessorFn: (item) => item.accessPathCount,
+      header: 'Access',
+      cell: ({ row }) => (
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Link2Icon className="size-3.5" aria-hidden="true" />
+          {row.original.accessPathCount === 0
+            ? 'No access route'
+            : `${row.original.accessPathCount} ${row.original.accessPathCount === 1 ? 'route' : 'routes'}`}
+        </span>
+      ),
+    },
+    {
+      id: 'ready',
+      accessorFn: (item) => item.support?.routeable === true,
+      header: 'Readiness',
+      cell: ({ row }) => row.original.support?.routeable === true ? (
+        <span className="inline-flex items-center gap-1.5 text-xs">
+          <BotIcon className="size-3.5" aria-hidden="true" /> Ready now
+        </span>
+      ) : <span className="text-xs text-muted-foreground">—</span>,
+    },
+  ], [])
 
   return (
     <div className="grid gap-4">
@@ -270,7 +172,9 @@ export function AeOwnerOfferingsList({
           <AlertDescription>
             <p>Your changes are saved. People still see the last safe page until this update finishes.</p>
             {onRetryProjection === undefined ? null : (
-              <Button type="button" variant="secondary" className="min-h-touch" onClick={onRetryProjection}>Refresh public status</Button>
+              <Button type="button" variant="secondary" className="min-h-touch" onClick={onRetryProjection}>
+                Refresh public status
+              </Button>
             )}
           </AlertDescription>
         </Alert>
@@ -278,12 +182,8 @@ export function AeOwnerOfferingsList({
       {offerings.length === 0 && !loading ? (
         <AeEmptyState
           title="No Operations yet"
-          description="Describe one exact tool, then add its price and access route."
-          action={
-            <Button asChild className="min-h-touch">
-              <Link to="/owner/offerings/new">Add Operation</Link>
-            </Button>
-          }
+          description="Connect a source and choose the exact Operation AE should validate."
+          action={<Button asChild className="min-h-touch"><Link to="/owner/offerings/new">Add Operation</Link></Button>}
         />
       ) : (
         <AeRecordTable
@@ -300,9 +200,7 @@ export function AeOwnerOfferingsList({
           {...(onSortingChange === undefined ? {} : { onSortingChange })}
           rowActionFocus={{
             ...(activeRowActionId === undefined ? {} : { currentId: activeRowActionId }),
-            ...(onActiveRowActionIdChange === undefined
-              ? {}
-              : { onCurrentIdChange: onActiveRowActionIdChange }),
+            ...(onActiveRowActionIdChange === undefined ? {} : { onCurrentIdChange: onActiveRowActionIdChange }),
             restore: restoreRowActionFocus,
           }}
           {...(hasLifecyclePresentation ? {
@@ -311,7 +209,7 @@ export function AeOwnerOfferingsList({
                 {compactOfferings.map((item) => {
                   const action = item.continuation ?? {
                     label: 'Open Operation',
-                    href: `/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}`,
+                    href: `/owner/supply/${encodeURIComponent(item.offering.offeringRef)}`,
                   }
                   return (
                     <li key={item.offering.offeringRef} className="grid min-w-0 gap-related py-related">
@@ -341,7 +239,7 @@ export function AeOwnerOfferingsList({
           rowAction={{
             kind: 'link',
             label: 'Open',
-            getHref: (item) => `/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}`,
+            getHref: (item) => `/owner/supply/${encodeURIComponent(item.offering.offeringRef)}`,
             getAccessibleLabel: (item) => `Open ${item.offering.name}`,
           }}
         />
@@ -350,535 +248,9 @@ export function AeOwnerOfferingsList({
   )
 }
 
-export function AeOwnerOfferingEditor({
-  initialValue,
-  onSave,
-  seed,
-  draftKey,
-  backAction,
-  onSafetyStateChange,
-  saveActionRef,
-  headingRef,
-}: OwnerOfferingEditorProps) {
-  const [restoredDraft] = useState<OwnerOfferingEditorValue | undefined>(() => {
-    if (draftKey === undefined) return undefined
-    const stored = readStoredOfferingDraft(draftKey)
-    return stored === undefined || stored.expectedRevision !== initialValue.expectedRevision
-      ? undefined
-      : { ...stored, price: normalizeOfferingPrice(stored.price) }
-  })
-  const [value, setValue] = useState(() => ensureOwnerAccessPathDraftIdentity(restoredDraft ?? initialValue))
-  const [pending, setPending] = useState(false)
-  const [result, setResult] = useState<OwnerOfferingSaveResult | undefined>()
-  const [dirty, setDirty] = useState(false)
-  const [draftStorage, setDraftStorage] = useState<'stored' | 'unavailable'>(restoredDraft === undefined ? 'unavailable' : 'stored')
-  const [draftCleanupUnavailable, setDraftCleanupUnavailable] = useState(false)
-  const [priceDraft, setPriceDraft] = useState(() => toOwnerPriceDraft((restoredDraft ?? initialValue).price))
-  const firstFieldRef = useRef<HTMLInputElement>(null)
-  const categoryFieldRef = useRef<HTMLInputElement>(null)
-  const summaryFieldRef = useRef<HTMLTextAreaElement>(null)
-  const liveRegionId = useId()
-  const retryingPartialSave = result?.kind === 'refused' && result.retry !== undefined
-  const editorDisabled = pending || retryingPartialSave
-  const invalidField = result?.kind === 'invalid' ? result.field : undefined
-  const invalidMessage = result?.kind === 'invalid' ? result.message : undefined
-
-  useEffect(() => {
-    if (draftKey === undefined || !dirty) return
-    setDraftStorage(writeStoredOfferingDraft(draftKey, value).kind)
-  }, [draftKey, dirty, value])
-
-  useEffect(() => {
-    onSafetyStateChange?.({
-      dirty,
-      pending,
-      draftStorage,
-      saveOutcome: result === undefined ? 'idle' : result.kind === 'saved' ? 'saved' : 'failed',
-    })
-  }, [dirty, draftStorage, onSafetyStateChange, pending, result])
-
-  function update(patch: Partial<OwnerOfferingEditorValue>) {
-    setDirty(true)
-    setDraftStorage('unavailable')
-    setDraftCleanupUnavailable(false)
-    setResult(undefined)
-    setValue((current) => ({ ...current, ...patch }))
-  }
-
-  function focusInvalidField(field: string | undefined): void {
-    if (field === 'category') {
-      categoryFieldRef.current?.focus()
-      return
-    }
-    if (field === 'summary') {
-      summaryFieldRef.current?.focus()
-      return
-    }
-    firstFieldRef.current?.focus()
-  }
-
-  function updatePrice(patch: Partial<OwnerOfferingPriceDraft>) {
-    const next = { ...priceDraft, ...patch }
-    setPriceDraft(next)
-    // The boundary: a group that is not internally consistent is dropped here
-    // rather than published as a number the business never agreed to.
-    update({ price: normalizeOfferingPrice(offeringPriceInputFromDraft(next)) })
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (pending) return
-    // Requiredness belongs to the publish gate, not to saving a draft.
-    const missing = publishGateRefusal(value)
-    if (missing !== undefined) {
-      setResult({ kind: 'invalid', field: missing.field, message: missing.message })
-      focusInvalidField(missing.field)
-      return
-    }
-    setPending(true)
-    setResult(undefined)
-    try {
-      const next = await onSave(stripOwnerAccessPathDraftIdentity(value))
-      setResult(next)
-      if (next.kind === 'saved') {
-        const cleanup = draftKey === undefined
-          ? { kind: 'stored' as const }
-          : clearStoredOfferingDraft(draftKey)
-        setValue(next.value)
-        setDirty(false)
-        setDraftCleanupUnavailable(cleanup.kind === 'unavailable')
-      } else if (next.kind === 'revision_conflict') {
-        firstFieldRef.current?.focus()
-      }
-    } catch (error) {
-      captureClientExceptionOnClient(error)
-      setResult({
-        kind: 'refused',
-        message: 'The Operation save could not be confirmed. Your changes remain on this page.',
-      })
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <form className="grid gap-section" onSubmit={(event) => void submit(event)} noValidate>
-      {result === undefined ? null : (
-        <Alert variant={result.kind === 'invalid' || result.kind === 'refused' ? 'destructive' : 'default'}>
-          <AlertTitle>{result.kind === 'saved' ? 'Operation saved' : result.kind === 'revision_conflict' ? 'This Operation changed elsewhere' : 'Operation needs attention'}</AlertTitle>
-          <AlertDescription>{result.message}</AlertDescription>
-        </Alert>
-      )}
-      {draftCleanupUnavailable ? (
-        <Alert role="status">
-          <AlertTitle>Operation saved; browser draft not cleared</AlertTitle>
-          <AlertDescription>The supplier account has the saved Operation. AE will ignore this browser draft when its revision no longer matches.</AlertDescription>
-        </Alert>
-      ) : null}
-      <span id={liveRegionId} className="sr-only" role="status" aria-live="polite">
-        {pending ? 'Saving Operation' : result?.message ?? ''}
-      </span>
-      <ol className="grid list-none gap-2 p-0 sm:grid-cols-3" aria-label="Operation setup">
-        <EditorStep icon={<FilePenLineIcon aria-hidden="true" />} label="Describe" detail="Job, outcome, and price" active />
-        <EditorStep icon={<Link2Icon aria-hidden="true" />} label="Connect" detail="Add an access route" active={value.accessPaths.length > 0} />
-        <EditorStep icon={value.status === 'published' ? <CheckCircle2Icon aria-hidden="true" /> : <CircleDashedIcon aria-hidden="true" />} label="Publish" detail={value.status === 'published' ? 'Visible in the market' : 'Choose when it goes live'} active={value.status === 'published'} />
-      </ol>
-      {seed === undefined ? null : (
-        <div className="flex flex-wrap items-center gap-intra">
-          <Button type="button" variant="secondary" className="min-h-touch" disabled={editorDisabled} onClick={() => update(seed.value)}>
-            Start from {seed.label}
-          </Button>
-          <p className="text-sm text-muted-foreground">Fills the details below. You can change every field.</p>
-        </div>
-      )}
-      <AeSection {...(headingRef === undefined ? {} : { headingRef })} title="Public details" description="Describe the exact tool and outcome agents can inspect before calling it.">
-        <FieldGroup className="gap-related">
-          <TextInput label="Name" value={value.name} onChange={(name) => update({ name })} disabled={editorDisabled} inputRef={firstFieldRef} {...(invalidField === 'name' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
-          <TextInput label="Category" value={value.category} onChange={(category) => update({ category })} disabled={editorDisabled} inputRef={categoryFieldRef} {...(invalidField === 'category' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
-          <TextAreaInput label="Summary" value={value.summary} onChange={(summary) => update({ summary })} disabled={editorDisabled} inputRef={summaryFieldRef} {...(invalidField === 'summary' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
-          <TextInput label="Coverage" value={value.serviceAreaSummary} onChange={(serviceAreaSummary) => update({ serviceAreaSummary })} disabled={editorDisabled} optional />
-          <TextInput label="Availability" value={value.availabilitySummary} onChange={(availabilitySummary) => update({ availabilitySummary })} disabled={editorDisabled} optional />
-          <TextInput label="Pricing" value={value.pricingSummary} onChange={(pricingSummary) => update({ pricingSummary })} disabled={editorDisabled} optional />
-          <div className="grid gap-related border-t border-border pt-related">
-            <div className="grid gap-1">
-              <p className="font-semibold text-foreground">Comparable price</p>
-              <p className="block text-sm text-muted-foreground">Optional, and separate from the note above. Choose a supported currency so agents can compare exact amounts. Your note is never used to infer this value.</p>
-            </div>
-            <Field label="Currency" inputID="offering-price-currency" description="Choose the currency for this exact amount.">
-              <Select value={priceDraft.currency} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ currency: isSupportedOfferingCurrency(chosen) ? chosen : DEFAULT_OFFERING_PRICE_CURRENCY })}>
-                <SelectTrigger id="offering-price-currency" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
-                <SelectContent><SelectGroup>
-                  {SUPPORTED_OFFERING_CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
-                </SelectGroup></SelectContent>
-              </Select>
-            </Field>
-            <Field label="Price type" inputID="offering-price-kind" description="Leave unpublished to keep only the note above.">
-              <Select value={priceDraft.kind === '' ? unsetOptionValue : priceDraft.kind} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ kind: OfferingPriceKindValues.find((kind) => kind === chosen) ?? '' })}>
-                <SelectTrigger id="offering-price-kind" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
-                <SelectContent><SelectGroup>
-                  <SelectItem value={unsetOptionValue}>Not published</SelectItem>
-                  <SelectItem value="fixed">Fixed price</SelectItem>
-                  <SelectItem value="from">From</SelectItem>
-                  <SelectItem value="range">Range</SelectItem>
-                  <SelectItem value="quote_only">Quoted on request</SelectItem>
-                </SelectGroup></SelectContent>
-              </Select>
-            </Field>
-            {priceDraft.kind === '' ? null : (
-              <>
-                {priceDraft.kind === 'quote_only' ? null : (
-                  <TextInput label="Amount" value={priceDraft.amount} onChange={(amount) => updatePrice({ amount })} disabled={editorDisabled} inputMode="decimal" description={priceDraft.kind === 'range' ? 'Lowest price, in dollars.' : 'In dollars.'} />
-                )}
-                {priceDraft.kind === 'range' ? (
-                  <TextInput label="Maximum amount" value={priceDraft.maximumAmount} onChange={(maximumAmount) => updatePrice({ maximumAmount })} disabled={editorDisabled} inputMode="decimal" description="Highest price, in dollars." />
-                ) : null}
-                <Field label="Charged per" inputID="offering-price-unit" description="Optional">
-                  <Select value={priceDraft.unit === '' ? unsetOptionValue : priceDraft.unit} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ unit: OfferingPriceUnitValues.find((unit) => unit === chosen) ?? '' })}>
-                    <SelectTrigger id="offering-price-unit" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
-                    <SelectContent><SelectGroup>
-                      <SelectItem value={unsetOptionValue}>Not per unit</SelectItem>
-                      <SelectItem value="call">Call</SelectItem>
-                      <SelectItem value="job">Job</SelectItem>
-                      <SelectItem value="hour">Hour</SelectItem>
-                      <SelectItem value="visit">Visit</SelectItem>
-                      <SelectItem value="item">Item</SelectItem>
-                      <SelectItem value="day">Day</SelectItem>
-                      <SelectItem value="week">Week</SelectItem>
-                      <SelectItem value="month">Month</SelectItem>
-                    </SelectGroup></SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Tax" inputID="offering-price-tax">
-                  <Select value={priceDraft.taxTreatment} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ taxTreatment: OfferingPriceTaxTreatmentValues.find((treatment) => treatment === chosen) ?? 'unstated' })}>
-                    <SelectTrigger id="offering-price-tax" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
-                    <SelectContent><SelectGroup>
-                      <SelectItem value="inclusive">Includes tax</SelectItem>
-                      <SelectItem value="exclusive">Excludes tax</SelectItem>
-                      <SelectItem value="unstated">Not stated</SelectItem>
-                    </SelectGroup></SelectContent>
-                  </Select>
-                </Field>
-              </>
-            )}
-          </div>
-          <Field label="Public state" inputID="offering-status" description="Draft stays private. Paused and retired Operations are removed from the market.">
-            <Select value={value.status} disabled={editorDisabled} onValueChange={(status) => update({ status: toStatus(status) })}>
-              <SelectTrigger id="offering-status" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
-              <SelectContent><SelectGroup>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="published">Published</SelectItem>
-                <SelectItem value="paused">Paused</SelectItem>
-                <SelectItem value="retired">Retired</SelectItem>
-              </SelectGroup></SelectContent>
-            </Select>
-          </Field>
-        </FieldGroup>
-      </AeSection>
-
-      <OwnerAccessPathsEditor paths={value.accessPaths} disabled={editorDisabled} onChange={(accessPaths) => update({ accessPaths })} />
-
-      <div className="sticky bottom-0 flex flex-col gap-intra border-t border-border bg-card py-related sm:flex-row sm:items-center">
-        <Button asChild variant="secondary" className="min-h-touch">
-          {backAction ?? <a href="/owner/offerings">Back to Operations</a>}
-        </Button>
-        <div className="flex min-w-0 flex-col gap-intra sm:ms-auto sm:flex-row sm:items-center">
-          {pending ? (
-            <AeInlineState state="saving" description="Confirming the Operation draft." />
-          ) : result?.kind === 'saved' ? (
-            <AeInlineState state="saved" description="Stored in your supplier account." />
-          ) : dirty ? (
-            <AeInlineState state="draft" description="Changes are not yet saved to your supplier account." />
-          ) : null}
-          <Button ref={saveActionRef} type="submit" variant="default" disabled={pending || !dirty} aria-busy={pending || undefined} className="min-h-touch">
-            {retryingPartialSave ? 'Retry save' : value.status === 'published' ? 'Publish Operation' : 'Save draft'}
-          </Button>
-        </div>
-      </div>
-    </form>
-  )
+function statusLabel(status: BusinessOfferingStatus): string {
+  return status[0]?.toUpperCase() + status.slice(1)
 }
-
-export function AeOwnerOfferingEditorWithNavigationSafety(props: OwnerOfferingEditorProps) {
-  const [safetyState, setSafetyState] = useState<OwnerOfferingEditorSafetyState>({
-    dirty: false,
-    pending: false,
-    draftStorage: 'unavailable',
-    saveOutcome: 'idle',
-  })
-  const saveActionRef = useRef<HTMLButtonElement>(null)
-  const headingRef = useRef<HTMLHeadingElement>(null)
-
-  return (
-    <AeNavigationSafetyBoundary
-      state={safetyState}
-      title="Leave Operation editor?"
-      pendingTitle="Finishing the Operation save"
-      description={safetyState.draftStorage === 'stored'
-        ? 'A draft remains in this browser, but it is not saved to your supplier account.'
-        : 'These changes exist only on this page and will be lost if you leave.'}
-      pendingDescription="AE is confirming whether your Operation was saved. Stay on this page until the outcome is known."
-      saveActionRef={saveActionRef}
-      headingRef={headingRef}
-    >
-      <AeOwnerOfferingEditor
-        {...props}
-        backAction={<Link to="/owner/offerings">Back to Operations</Link>}
-        onSafetyStateChange={setSafetyState}
-        saveActionRef={saveActionRef}
-        headingRef={headingRef}
-      />
-    </AeNavigationSafetyBoundary>
-  )
-}
-
-function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly OwnerAccessPathEditorValue[]; disabled: boolean; onChange: (paths: readonly OwnerAccessPathEditorValue[]) => void }) {
-  const [selectedKind, setSelectedKind] = useState<'phone' | 'website' | 'external_operation'>('phone')
-  const [technicalExpanded, setTechnicalExpanded] = useState(false)
-  const [draftDetail, setDraftDetail] = useState('')
-  const [endpoint, setEndpoint] = useState(emptyOwnerEndpointDraft)
-  const [websiteUrl, setWebsiteUrl] = useState('')
-  const [websiteUrlError, setWebsiteUrlError] = useState<string | undefined>()
-
-  return (
-    <AeSection title="Access routes" description="Give agents a clear route to call the Operation. Each route stands on its own.">
-      {paths.length === 0 ? <p className="text-muted-foreground">Add a phone, website, or message route.</p> : (
-        <ul className="m-0 list-none divide-y divide-border p-0">
-          {paths.map((path) => (
-            <li key={path.accessPathRef ?? path.localDraftKey} className="grid gap-intra py-intra sm:grid-cols-[1fr_auto] sm:items-center">
-              <div>
-                <p className="font-semibold text-foreground">{pathLabel(path.descriptor)}</p>
-                <p className="text-sm text-muted-foreground">{path.descriptor.kind === 'human_request' ? path.descriptor.disclosure : path.descriptor.summary}</p>
-              </div>
-              <Button type="button" variant="secondary" size="sm" disabled={disabled || path.status === 'withdrawn'} onClick={() => onChange(paths.map((item) => item === path ? { ...item, status: 'withdrawn' } : item))}>Withdraw</Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <FieldGroup className="gap-related">
-        <Field label="Add a contact route" inputID="access-path-kind">
-          <Select value={selectedKind} disabled={disabled} onValueChange={(kind) => { setSelectedKind(toAccessKind(kind)); setTechnicalExpanded(false) }}>
-            <SelectTrigger id="access-path-kind" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
-            <SelectContent><SelectGroup>
-              <SelectItem value="phone">Call</SelectItem>
-              <SelectItem value="website">Website</SelectItem>
-              <SelectItem value="external_operation">Agent request</SelectItem>
-            </SelectGroup></SelectContent>
-          </Select>
-        </Field>
-        <TextAreaInput label={selectedKind === 'external_operation' ? 'What this request does' : 'Access instructions'} value={draftDetail} onChange={setDraftDetail} disabled={disabled} />
-        {selectedKind === 'website' ? (
-          <TextInput
-            label="Website URL"
-            value={websiteUrl}
-            onChange={(next) => { setWebsiteUrl(next); setWebsiteUrlError(undefined) }}
-            disabled={disabled}
-            inputMode="url"
-            ariaInvalid={websiteUrlError !== undefined}
-            {...(websiteUrlError === undefined ? {} : { error: websiteUrlError })}
-          />
-        ) : null}
-        {selectedKind === 'external_operation' ? (
-          <Collapsible open={technicalExpanded} onOpenChange={setTechnicalExpanded} className="grid gap-intra">
-            <CollapsibleTrigger asChild>
-              <Button type="button" variant="link" className="h-auto min-h-touch justify-self-start px-0 font-semibold text-foreground underline">
-                {technicalExpanded ? 'Hide request details' : 'Add request details'}
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <FieldGroup className="gap-related">
-                <TextInput label="Request name" value={endpoint.name} onChange={(name) => setEndpoint((current) => ({ ...current, name }))} disabled={disabled} description="What an agent should call this. Left blank, it publishes as “Agent request”." />
-                <TextInput label="Request URL" value={endpoint.url} onChange={(url) => setEndpoint((current) => ({ ...current, url }))} disabled={disabled} inputMode="url" />
-                <Field label="Method" inputID="access-path-method" description="Optional">
-                  <Select value={endpoint.method === '' ? unsetOptionValue : endpoint.method} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, method: ownerEndpointMethods.find((method) => method === chosen) ?? '' }))}>
-                    <SelectTrigger id="access-path-method" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
-                    <SelectContent><SelectGroup>
-                      <SelectItem value={unsetOptionValue}>Not stated</SelectItem>
-                      <SelectItem value="GET">GET</SelectItem>
-                      <SelectItem value="POST">POST</SelectItem>
-                      <SelectItem value="PUT">PUT</SelectItem>
-                      <SelectItem value="PATCH">PATCH</SelectItem>
-                      <SelectItem value="DELETE">DELETE</SelectItem>
-                    </SelectGroup></SelectContent>
-                  </Select>
-                </Field>
-                <TextInput label="Instructions URL" value={endpoint.documentationUrl} onChange={(documentationUrl) => setEndpoint((current) => ({ ...current, documentationUrl }))} disabled={disabled} inputMode="url" optional />
-                <Field label="Interface description" inputID="access-path-interface-format" description="Optional">
-                  <Select value={endpoint.interfaceFormat === '' ? unsetOptionValue : endpoint.interfaceFormat} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, interfaceFormat: ownerInterfaceFormats.find((format) => format === chosen) ?? '' }))}>
-                    <SelectTrigger id="access-path-interface-format" className="min-h-touch w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
-                    <SelectContent><SelectGroup>
-                      <SelectItem value={unsetOptionValue}>Not stated</SelectItem>
-                      <SelectItem value="OpenAPI">OpenAPI</SelectItem>
-                      <SelectItem value="JSON Schema">JSON Schema</SelectItem>
-                      <SelectItem value="MCP">MCP</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectGroup></SelectContent>
-                  </Select>
-                </Field>
-                {endpoint.interfaceFormat === '' ? null : (
-                  <TextInput label="Interface description URL" value={endpoint.interfaceUrl} onChange={(interfaceUrl) => setEndpoint((current) => ({ ...current, interfaceUrl }))} disabled={disabled} inputMode="url" optional />
-                )}
-                <TextInput label="Authentication" value={endpoint.authenticationSummary} onChange={(authenticationSummary) => setEndpoint((current) => ({ ...current, authenticationSummary }))} disabled={disabled} description="Optional. Explain how a caller signs in, in your own words." />
-                <TextInput label="Request price note" value={endpoint.pricingSummary} onChange={(pricingSummary) => setEndpoint((current) => ({ ...current, pricingSummary }))} disabled={disabled} description="Optional. Published exactly as written." />
-              </FieldGroup>
-            </CollapsibleContent>
-          </Collapsible>
-        ) : null}
-        <Button
-          type="button"
-          variant="secondary"
-          className="min-h-touch"
-          disabled={disabled || draftDetail.trim().length === 0 || (selectedKind === 'external_operation' && endpoint.url.trim().length === 0) || (selectedKind === 'website' && websiteUrl.trim().length === 0)}
-          onClick={() => {
-            if (selectedKind === 'website' && !isHttpsUrl(websiteUrl)) {
-              setWebsiteUrlError('Enter a full HTTPS website address, such as https://example.com/start.')
-              return
-            }
-            const descriptor: OfferingAccessPathDescriptor = selectedKind === 'external_operation'
-              ? externalOperationDescriptor(endpoint, draftDetail.trim())
-              : { kind: 'human_request', channel: selectedKind, disclosure: draftDetail.trim(), ...(selectedKind === 'website' ? { url: websiteUrl.trim() } : {}) }
-            onChange([...paths, { localDraftKey: createPrefixedRandomId('access-path-draft:'), status: 'draft', descriptor }])
-            setDraftDetail('')
-            setEndpoint(emptyOwnerEndpointDraft)
-            setWebsiteUrl('')
-            setWebsiteUrlError(undefined)
-            setTechnicalExpanded(false)
-          }}
-        >
-          Add this way
-        </Button>
-      </FieldGroup>
-    </AeSection>
-  )
-}
-
-function EditorStep({ icon, label, detail, active }: { icon: ReactNode; label: string; detail: string; active: boolean }) {
-  return (
-    <li className={cn('flex min-h-16 items-center gap-intra rounded-lg border p-related', active ? 'border-ring' : 'border-border bg-card')}>
-      <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-md', active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>{icon}</span>
-      <span className="grid min-w-0 gap-0.5">
-        <span className="font-semibold text-foreground">{label}</span>
-        <span className="text-sm text-muted-foreground">{detail}</span>
-      </span>
-    </li>
-  )
-}
-function Field({
-  label,
-  inputID,
-  description,
-  error,
-  invalid = false,
-  children,
-}: {
-  label: string
-  inputID: string
-  description?: string
-  error?: string
-  invalid?: boolean
-  children: ReactNode
-}) {
-  const errorID = `${inputID}-error`
-  return (
-    <UiField {...(invalid ? { 'data-invalid': true } : {})}>
-      <FieldLabel htmlFor={inputID}>{label}</FieldLabel>
-      {children}
-      {description === undefined ? null : <FieldDescription>{description}</FieldDescription>}
-      {error === undefined ? null : <FieldError id={errorID}>{error}</FieldError>}
-    </UiField>
-  )
-}
-
-function TextInput({
-  label,
-  value,
-  onChange,
-  disabled,
-  optional = false,
-  description,
-  inputRef,
-  inputMode,
-  ariaInvalid,
-  describedBy,
-  error,
-}: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  disabled: boolean
-  optional?: boolean
-  description?: string
-  inputRef?: Ref<HTMLInputElement>
-  inputMode?: 'url' | 'decimal'
-  ariaInvalid?: boolean
-  describedBy?: string
-  error?: string
-}) {
-  const id = useId()
-  const hint = description ?? (optional ? 'Optional' : undefined)
-  const invalid = ariaInvalid === true || error !== undefined
-  const describedByValue = [describedBy, error === undefined ? undefined : `${id}-error`]
-    .filter((value): value is string => value !== undefined)
-    .join(' ')
-  return (
-    <Field label={label} inputID={id} {...(hint === undefined ? {} : { description: hint })} {...(error === undefined ? {} : { error })} {...(invalid ? { invalid: true } : {})}>
-      <Input
-        ref={inputRef}
-        id={id}
-        aria-label={label}
-        value={value}
-        disabled={disabled}
-        {...(inputMode === undefined ? {} : { inputMode })}
-        {...(invalid ? { 'aria-invalid': true } : {})}
-        {...(describedByValue.length === 0 ? {} : { 'aria-describedby': describedByValue })}
-        onChange={(event) => onChange(event.currentTarget.value)}
-        className="min-h-touch bg-card"
-      />
-    </Field>
-  )
-}
-
-function TextAreaInput({
-  label,
-  value,
-  onChange,
-  disabled,
-  inputRef,
-  ariaInvalid,
-  describedBy,
-  error,
-}: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  disabled: boolean
-  inputRef?: Ref<HTMLTextAreaElement>
-  ariaInvalid?: boolean
-  describedBy?: string
-  error?: string
-}) {
-  const id = useId()
-  const invalid = ariaInvalid === true || error !== undefined
-  const describedByValue = [describedBy, error === undefined ? undefined : `${id}-error`]
-    .filter((value): value is string => value !== undefined)
-    .join(' ')
-  return (
-    <Field label={label} inputID={id} {...(error === undefined ? {} : { error })} {...(invalid ? { invalid: true } : {})}>
-      <Textarea
-        ref={inputRef}
-        id={id}
-        aria-label={label}
-        value={value}
-        disabled={disabled}
-        {...(invalid ? { 'aria-invalid': true } : {})}
-        {...(describedByValue.length === 0 ? {} : { 'aria-describedby': describedByValue })}
-        onChange={(event) => onChange(event.currentTarget.value)}
-        className="min-h-28 bg-card"
-      />
-    </Field>
-  )
-}
-
-function statusLabel(status: BusinessOfferingStatus) { return status[0]?.toUpperCase() + status.slice(1) }
 
 function availabilityLabel(value: 'available' | 'unavailable' | 'unknown'): string {
   if (value === 'available') return 'Available'
@@ -893,114 +265,4 @@ function compactSortValue(item: OwnerOfferingSummary, id: string): string {
   if (id === 'routes') return String(item.accessPathCount)
   if (id === 'ready') return String(item.support?.routeable === true)
   return item.offering.name
-}
-function toStatus(value: string): BusinessOfferingStatus { return ['draft', 'published', 'paused', 'retired'].includes(value) ? value as BusinessOfferingStatus : 'draft' }
-function toAccessKind(value: string): 'phone' | 'website' | 'external_operation' { return ['phone', 'website', 'external_operation'].includes(value) ? value as 'phone' | 'website' | 'external_operation' : 'phone' }
-function pathLabel(descriptor: OfferingAccessPathDescriptor) { return descriptor.kind === 'external_operation' ? descriptor.name : descriptor.channel === 'phone' ? 'Call' : 'Website' }
-
-function isHttpsUrl(value: string): boolean {
-  try {
-    return new URL(value).protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
-/**
- * What the owner typed into the price group. Amounts stay as entered dollar
- * text so a half-typed figure survives a re-render; the group only becomes a
- * comparable price at the editor boundary. Nothing here is ever read from, or
- * written back to, the free-text pricing note beside it.
- */
-type OwnerOfferingPriceDraft = Readonly<{
-  kind: OfferingPriceKind | ''
-  currency: string
-  amount: string
-  maximumAmount: string
-  unit: OfferingPriceUnit | ''
-  taxTreatment: OfferingPriceTaxTreatment
-}>
-
-/** What the owner typed about an external operation before it is added. */
-type OwnerEndpointDraft = Readonly<{
-  name: string
-  url: string
-  method: string
-  documentationUrl: string
-  interfaceFormat: string
-  interfaceUrl: string
-  authenticationSummary: string
-  pricingSummary: string
-}>
-
-/** The one select value that means "the owner has not chosen". */
-const unsetOptionValue = 'none'
-
-const emptyOwnerOfferingPriceDraft: OwnerOfferingPriceDraft = { kind: '', currency: DEFAULT_OFFERING_PRICE_CURRENCY, amount: '', maximumAmount: '', unit: '', taxTreatment: 'unstated' }
-const emptyOwnerEndpointDraft: OwnerEndpointDraft = { name: '', url: '', method: '', documentationUrl: '', interfaceFormat: '', interfaceUrl: '', authenticationSummary: '', pricingSummary: '' }
-
-const ownerEndpointMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
-const ownerInterfaceFormats = ['OpenAPI', 'JSON Schema', 'MCP', 'Other'] as const
-
-function toOwnerPriceDraft(price: OfferingPrice | undefined): OwnerOfferingPriceDraft {
-  if (price === undefined) return emptyOwnerOfferingPriceDraft
-  const amount = price.kind === 'range' ? price.minimum : price.kind === 'quote_only' ? undefined : price.amount
-  const maximumAmount = price.kind === 'range' ? price.maximum : undefined
-  return {
-    kind: price.kind,
-    currency: price.kind === 'quote_only' ? price.currency : amount?.currency ?? DEFAULT_OFFERING_PRICE_CURRENCY,
-    amount: amount === undefined ? '' : formatExactAmount(amount) ?? '',
-    maximumAmount: maximumAmount === undefined ? '' : formatExactAmount(maximumAmount) ?? '',
-    unit: price.unit ?? '',
-    taxTreatment: price.taxTreatment,
-  }
-}
-
-/** Decimal text in, exact minor units out; absence is preserved until publish. */
-function offeringPriceInputFromDraft(draft: OwnerOfferingPriceDraft): OfferingPriceInput | undefined {
-  if (draft.kind === '') return undefined
-  const currency = draft.currency.trim().toUpperCase()
-  if (!isSupportedOfferingCurrency(currency)) return undefined
-  const shared = {
-    kind: draft.kind,
-    taxTreatment: draft.taxTreatment,
-    ...(draft.unit === '' ? {} : { unit: draft.unit }),
-  }
-  if (draft.kind === 'quote_only') return { ...shared, currency }
-  if (draft.kind === 'range') {
-    const minimum = parseDecimalExactAmount(currency, draft.amount, 2)
-    const maximum = parseDecimalExactAmount(currency, draft.maximumAmount, 2)
-    return {
-      ...shared,
-      ...(minimum === undefined ? {} : { minimum }),
-      ...(maximum === undefined ? {} : { maximum }),
-    }
-  }
-  const amount = parseDecimalExactAmount(currency, draft.amount, 2)
-  return { ...shared, ...(amount === undefined ? {} : { amount }) }
-}
-
-/**
- * Everything the owner published about the endpoint. An untouched field is
- * absent rather than an empty string, so a caller can tell "not stated" apart
- * from "stated as nothing".
- */
-function externalOperationDescriptor(draft: OwnerEndpointDraft, summary: string): OfferingAccessPathDescriptor {
-  const name = draft.name.trim()
-  const documentationUrl = draft.documentationUrl.trim()
-  const interfaceUrl = draft.interfaceUrl.trim()
-  const authenticationSummary = draft.authenticationSummary.trim()
-  const pricingSummary = draft.pricingSummary.trim()
-  return {
-    kind: 'external_operation',
-    name: name.length === 0 ? 'Agent request' : name,
-    summary,
-    url: draft.url.trim(),
-    ...(draft.method === '' ? {} : { method: draft.method }),
-    ...(documentationUrl.length === 0 ? {} : { documentationUrl }),
-    ...(draft.interfaceFormat === '' ? {} : { interfaceDescription: { format: draft.interfaceFormat, ...(interfaceUrl.length === 0 ? {} : { url: interfaceUrl }) } }),
-    ...(authenticationSummary.length === 0 ? {} : { authenticationSummary }),
-    ...(pricingSummary.length === 0 ? {} : { pricingSummary }),
-    provenance: 'business_declared',
-  }
 }

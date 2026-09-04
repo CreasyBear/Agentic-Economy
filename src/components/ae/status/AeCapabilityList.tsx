@@ -73,7 +73,7 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
       rowAction={{
         kind: 'link',
         label: 'Open',
-        getHref: (item) => `/owner/offerings/${encodeURIComponent(item.offeringRef)}`,
+        getHref: (item) => `/owner/supply/${encodeURIComponent(item.offeringRef)}`,
         getAccessibleLabel: (item) => `Open ${item.name}`,
       }}
     />

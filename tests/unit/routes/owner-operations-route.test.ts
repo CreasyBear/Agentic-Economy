@@ -16,8 +16,25 @@ vi.mock('@/components/ae/offerings/AeOwnerOfferings', () => ({ AeOwnerOfferingsL
 vi.mock('@/components/ae/layout/AeOperatorShell', () => ({ AeOperatorShell: () => null }))
 
 import { Route } from '@/routes/_operator/owner.offerings'
+import { Route as LegacyDetailRoute } from '@/routes/_operator/owner.offerings.$offeringRef'
 
 describe('Operations route loader', () => {
+  it('redirects the retired hand-written editor URL to canonical Supplier Operation status', () => {
+    const beforeLoad = LegacyDetailRoute.options.beforeLoad as (input: {
+      params: { offeringRef: string }
+    }) => never
+
+    expect(() => beforeLoad({ params: { offeringRef: 'offering:one' } })).toThrow(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          to: '/owner/supply/$offeringRef',
+          params: { offeringRef: 'offering:one' },
+          replace: true,
+        }),
+      }),
+    )
+  })
+
   it('returns one canonical Operation page without awaiting secondary reads', async () => {
     const inventory = { kind: 'available', supplier: { name: 'One' }, operations: [], projection: 'current', isDone: true, continueCursor: '' } as const
     const lifecycle = { kind: 'available', value: [] } as const

@@ -37,7 +37,7 @@ vi.mock('@/components/ae/offerings/owner-operations.functions', () => ({
   readOwnerOperationsConnectionsDetailServer: tokens.connections,
   readOwnerOperationsIdentityDetailServer: tokens.identity,
 }))
-vi.mock('@/components/ae/offerings/owner-offering.functions', () => ({ ensureSupplierBusinessServer: tokens.ensure }))
+vi.mock('@/components/ae/offerings/supplier-identity.functions', () => ({ ensureSupplierBusinessServer: tokens.ensure }))
 vi.mock('@/lib/server/owner-workspace.functions', () => ({ renameSupplierDisplayNameServer: tokens.rename }))
 vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({ readOwnerProviderEarningsServer: tokens.earnings }))
 vi.mock('@/modules/money/money.functions', () => ({ readOwnerConnectReadinessServer: tokens.connect }))

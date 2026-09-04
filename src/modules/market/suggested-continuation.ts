@@ -205,7 +205,7 @@ function supplierContinuation(
     return {
       label: 'Continue description',
       kind: 'navigate',
-      href: `/owner/offerings/${encodeURIComponent(state.offeringRef)}`,
+      href: `/owner/supply/${encodeURIComponent(state.offeringRef)}`,
     }
   }
   if (state.state === 'unready' || state.state === 'current') {

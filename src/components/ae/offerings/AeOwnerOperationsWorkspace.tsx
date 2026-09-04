@@ -15,7 +15,7 @@ import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
 import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
 import { AeOwnerOfferingsList, type OwnerOfferingSummary } from './AeOwnerOfferings'
 import { projectOwnerOperations, type OwnerOperationsProjectionRow } from './owner-operations-projection'
-import { ensureSupplierBusinessServer } from './owner-offering.functions'
+import { ensureSupplierBusinessServer } from './supplier-identity.functions'
 import type {
   OwnerOperationsConnectionsResult,
   OwnerOperationsConnectionsDetailResult,
