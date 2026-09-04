@@ -9,56 +9,65 @@ import {
   runOwnerSupplyTest,
 } from '../../../convex/capabilitySupplyOwnerSupply'
 import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
 import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
 
-const facts = {
-  name: 'Canonical authority offering',
+const draftSource = { definitionUrl: 'https://provider.example/openapi.json', environment: 'sandbox', kind: 'openapi' } as const
+const draftSourceDigest = `sha256:${'1'.repeat(64)}`
+const draftSelector = { method: 'get', path: '/canonical-owner' }
+const draftFacts = {
+  title: 'Canonical authority Operation',
+  description: 'An authority-context regression fixture.',
   category: 'testing',
-  summary: 'An authority-context regression fixture.',
+  sourceKind: 'openapi' as const,
+  sourceDescriptorJson: stableStringify(draftSource),
+  sourceDigest: draftSourceDigest,
+  sourceRevision: 'openapi:canonical-owner',
+  candidateRef: canonicalDigest({ sourceDigest: draftSourceDigest, selector: draftSelector }),
+  sourceSelectorJson: stableStringify(draftSelector),
 }
 
 describe('interactive consequence authority', () => {
-  it('catalog accepts exact canonical ownership', async () => {
+  it('source-native draft accepts exact canonical ownership', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'catalog-canonical-owner')
     const input = {
       businessId,
-      offeringRef: 'offering:canonical-owner',
       operationKey: 'catalog:canonical-owner:create',
       correlationId: 'catalog:canonical-owner:create',
-      facts,
+      ...draftFacts,
     }
     const command = await withSourceWrite('catalog_publish', input)
 
-    const first = await owner.mutation(api.catalog.createBusinessOffering, command)
+    const first = await owner.mutation(api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft, command)
     const replay = await owner.mutation(
-      api.catalog.createBusinessOffering,
+      api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft,
       await withSourceWrite('catalog_publish', input),
     )
 
-    if (first.kind !== 'ok') throw new Error(`catalog_valid_owner_failed:${first.code}`)
-    expect(first).toMatchObject({ kind: 'ok', code: 'created', currentRevision: 1 })
+    if (first.kind !== 'saved') throw new Error(`catalog_valid_owner_failed:${first.kind}`)
+    expect(first).toMatchObject({ kind: 'saved', sourceDigest: draftFacts.sourceDigest })
     expect(replay).toMatchObject({
-      kind: 'ok',
-      code: 'replayed',
-      resultRef: first.resultRef,
-      currentRevision: first.currentRevision,
+      kind: 'replayed',
+      offeringRef: first.offeringRef,
+      candidateRef: draftFacts.candidateRef,
     })
     await expect(
       backend.run((ctx) => ctx.db.query('businessOfferings').collect()),
     ).resolves.toHaveLength(1)
-    await expect(
-      backend.run((ctx) => ctx.db.query('operationKeys').collect()),
-    ).resolves.toEqual([
+    const operations = await backend.run((ctx) => ctx.db.query('operationKeys').collect())
+    expect(operations).toHaveLength(3)
+    expect(operations).toEqual(expect.arrayContaining([
       expect.objectContaining({
         actorRef: expect.stringMatching(/^prn_[a-f0-9]{32}$/u),
         key: input.operationKey,
       }),
-    ])
+    ]))
   })
 
-  it('catalog rejects hostile authority substitutions', async () => {
+  it('source-native draft rejects hostile authority substitutions', async () => {
     const backend = convexTest(schema, modules)
     const { businessId } = await publishedBusinessOwner(backend, 'catalog-account-a')
     const { owner: accountBOwner } = await publishedBusinessOwner(backend, 'catalog-account-b')
@@ -66,20 +75,22 @@ describe('interactive consequence authority', () => {
 
     const command = await withSourceWrite('catalog_publish', {
       businessId,
-      offeringRef: 'offering:cross-account-substitution',
       operationKey: 'catalog:cross-account-substitution',
       correlationId: 'catalog:cross-account-substitution',
-      facts,
+      ...draftFacts,
     })
     await expect(
-      accountBOwner.mutation(api.catalog.createBusinessOffering, command),
-    ).resolves.toMatchObject({ kind: 'error', code: 'wrong_owner' })
+      accountBOwner.mutation(api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft, command),
+    ).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
     await expect(
       backend.run((ctx) => ctx.db.query('businessOfferings').collect()),
     ).resolves.toEqual([])
     await expect(
       backend.run((ctx) => ctx.db.query('sourceWriteNonces').collect()),
-    ).resolves.toEqual([])
+    ).resolves.toEqual([expect.objectContaining({
+      operationKey: command.operationKey,
+      consumedAt: expect.any(Number),
+    })])
 
     await expect(accountBOwner.action(
       api.capabilitySupplyOwnerSupply.runOwnerSupplyReadiness,
@@ -152,14 +163,19 @@ describe('interactive consequence authority', () => {
         : owner
       const lifecycleCommand = await withSourceWrite('catalog_publish', {
         businessId: lifecycleBusinessId,
-        offeringRef: `offering:${slug}`,
         operationKey: `catalog:${slug}`,
         correlationId: `catalog:${slug}`,
-        facts,
+        ...draftFacts,
+        sourceRevision: `openapi:${slug}`,
+        candidateRef: canonicalDigest({
+          sourceDigest: draftSourceDigest,
+          selector: { ...draftSelector, lifecycle },
+        }),
+        sourceSelectorJson: stableStringify({ ...draftSelector, lifecycle }),
       })
       await expect(
-        caller.mutation(api.catalog.createBusinessOffering, lifecycleCommand),
-      ).resolves.toMatchObject({ kind: 'error', code: 'unauthenticated' })
+        caller.mutation(api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft, lifecycleCommand),
+      ).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
     }
   })
 

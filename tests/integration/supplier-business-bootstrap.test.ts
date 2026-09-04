@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { convexModules as modules, ownerAdmin } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
+import { seedCatalogOffering } from './capability-publication-harness'
 
 describe('supplier business bootstrap', () => {
   it('creates one unpublished programmable-provider workspace and replays safely', async () => {
@@ -191,22 +192,7 @@ describe('supplier business bootstrap', () => {
       name: 'Old Supplier Name', slug: 'Old Supplier Name', website: 'https://public-rename.example.com', providerIdentifier: 'public-rename.example.com',
     })
     if (created.kind !== 'created') throw new Error('supplier_business_not_created')
-    const offeringRef = 'offering:rename-public'
-    await owner.mutation(api.catalog.createBusinessOffering, await withSourceWrite('catalog_publish', {
-      businessId: created.businessId,
-      offeringRef,
-      operationKey: 'supplier-rename-public:create',
-      correlationId: 'supplier-rename-public:create',
-      facts: { name: 'Bounded lookup', category: 'Data', summary: 'Returns one bounded result.' },
-    }))
-    await owner.mutation(api.catalog.changeBusinessOfferingStatus, await withSourceWrite('catalog_publish', {
-      businessId: created.businessId,
-      offeringRef,
-      expectedRevision: 1,
-      status: 'published',
-      operationKey: 'supplier-rename-public:publish',
-      correlationId: 'supplier-rename-public:publish',
-    }))
+    await seedCatalogOffering(backend, created.businessId, 'rename-public')
     await backend.run(async (ctx) => ctx.db.patch(created.businessId, { publicStatus: 'published' }))
 
     await expect(owner.mutation(api.catalog.renameSupplierBusiness, await withSourceWrite('catalog_publish', {

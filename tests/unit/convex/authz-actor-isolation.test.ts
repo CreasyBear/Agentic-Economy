@@ -10,7 +10,7 @@ import {
 } from '../../helpers/convex-fixtures'
 type Backend = ConvexFixtureBackend
 
-describe('resolveBusinessActor isolation through the registered owner catalog supply query', () => {
+describe('resolveBusinessActor isolation through the Supplier Operation directory', () => {
   it('fails closed when the current account owns multiple supplier identities', async () => {
     const backend = convexTestWithMarketComponents()
     const published = await publishedBusinessOwner(backend, 'owner-identity-conflict')
@@ -38,7 +38,7 @@ describe('resolveBusinessActor isolation through the registered owner catalog su
     'wrong_account',
     'stale_generation',
   ] as const)(
-    'evaluates resolveBusinessActor %s through the registered owner catalog supply query',
+    'evaluates resolveBusinessActor %s through the Supplier Operation directory',
     async (caseKind) => {
       const backend = convexTestWithMarketComponents()
       const slug = `authz-actor-isolation-${caseKind}`
@@ -109,25 +109,21 @@ describe('resolveBusinessActor isolation through the registered owner catalog su
       }))
       const before = await authorityState()
 
-      const result = await caller.query(api.catalog.getCurrentOwnerOfferingSupply, {})
+      const result = await caller.query(api.capabilitySupplierOperations.listOwner, {
+        businessId: published.businessId,
+        now: 1_000,
+        paginationOpts: { numItems: 50, cursor: null },
+      })
 
       await expect(authorityState()).resolves.toEqual(before)
-      // The registered owner-supply union is `catalogOwnerSupplyResult`: the
-      // denied shapes are `error/unauthenticated` (authority resolution refuses
-      // the caller) and `not_found` (authenticated actor owns no business). The
-      // canonical wrong_account patch makes production throw ownership_mismatch
-      // during authority resolution, so every denied case lands on the exact
-      // unauthenticated variant; only owner/member reach `available`.
       if (caseKind === 'owner' || caseKind === 'member') {
         expect(result).toMatchObject({
           kind: 'available',
-          businessId: published.businessId,
-          business: { slug, publicStatus: 'published' },
-          offerings: [],
-          projection: { status: 'current' },
+          page: [],
+          isDone: true,
         })
       } else {
-        expect(result).toEqual({ kind: 'error', code: 'unauthenticated' })
+        expect(result).toEqual({ kind: 'not_found' })
       }
     },
   )

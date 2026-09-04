@@ -101,6 +101,27 @@ describe('capability supply boundaries', () => {
     expect(queries).toMatch(/query\('capabilityPublications'\)[\s\S]*?\.withIndex\('by_operationRef_and_disposition'/)
     expect(queries).not.toContain('CURRENT_OPERATION_SHADOW')
   })
+
+  it('ships one source-native Provider writer instead of the retired Offering editor contract', () => {
+    const catalog = readFileSync('convex/catalog.ts', 'utf8')
+    const retiredPublicNames = [
+      'createBusinessOffering',
+      'reviseBusinessOffering',
+      'changeBusinessOfferingStatus',
+      'upsertOfferingAccessPath',
+      'withdrawOfferingAccessPath',
+      'retryBusinessSupplyProjection',
+      'getCurrentOwnerOfferingSupply',
+    ]
+
+    for (const name of retiredPublicNames) {
+      expect(catalog).not.toMatch(new RegExp(`export const ${name}\\b`, 'u'))
+    }
+    expect(readFileSync('src/routes/_operator/owner.offerings.$offeringRef.tsx', 'utf8'))
+      .toContain("to: '/owner/supply/$offeringRef'")
+    expect(readFileSync('src/modules/capability-supply/supply-actions.ts', 'utf8'))
+      .toContain("publish: 'supply.publish'")
+  })
 })
 
 function sources(): string[] {

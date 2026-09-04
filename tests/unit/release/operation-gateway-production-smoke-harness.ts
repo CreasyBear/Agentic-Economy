@@ -357,7 +357,7 @@ export function strictReceipt(): GatewayProductionSmokeReceipt {
       publicationRef: "publication:owner",
       publicationRevision: 1,
       operationRef,
-      cleanup: { publicationState: "withdrawn", offeringStatus: "retired" },
+      cleanup: { publicationState: "withdrawn", supplierState: "Paused" },
     },
     discovery: {
       query: "paid",

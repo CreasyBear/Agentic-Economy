@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
 import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
 import {
   createPublishedBusinessOwner,
   openApiSource,
@@ -30,22 +32,28 @@ describe('durable Provider offboarding', () => {
         })
       }
     })
+    const source = { definitionUrl: 'https://provider.example/openapi.json', environment: 'sandbox', kind: 'openapi' } as const
+    const sourceDigest = `sha256:${'1'.repeat(64)}`
+    const selector = { method: 'get', path: '/operation-101' }
     const command = {
       businessId: fixture.businessId,
-      offeringRef: 'catalog-offering:provider-offering-cap-removed:100',
+      title: 'Operation 101',
+      description: 'Proves source-native Offering writes do not load or cap the Provider fleet.',
+      category: 'API services',
+      sourceKind: 'openapi' as const,
+      sourceDescriptorJson: stableStringify(source),
+      sourceDigest,
+      sourceRevision: 'openapi:revision-101',
+      candidateRef: canonicalDigest({ sourceDigest, selector }),
+      sourceSelectorJson: stableStringify(selector),
       operationKey: 'provider-offering-cap-removed:create-101',
       correlationId: 'provider-offering-cap-removed:create-101',
-      facts: {
-        name: 'Operation 101',
-        category: 'API services',
-        summary: 'Proves exact Offering writes do not load or cap the Provider fleet.',
-      },
     }
 
     await expect(fixture.owner.mutation(
-      api.catalog.createBusinessOffering,
+      api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft,
       await withSourceWrite('catalog_publish', command),
-    )).resolves.toMatchObject({ kind: 'ok', code: 'created' })
+    )).resolves.toMatchObject({ kind: 'saved' })
     await expect(backend.run(async (ctx) => await ctx.db.query('businessOfferings')
       .withIndex('by_businessId_and_status', (index) => index.eq('businessId', fixture.businessId))
       .collect())).resolves.toHaveLength(101)

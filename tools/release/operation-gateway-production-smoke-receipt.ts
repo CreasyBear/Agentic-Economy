@@ -29,7 +29,9 @@ export const MAX_ENDPOINT_COUNT = 50_000;
 export const MAX_PROVIDER_TRANSFER_COUNT = 100;
 export const boundedRefSchema = z.string().trim().min(1).max(MAX_REF_LENGTH);
 export const digestSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
-export const operationRefSchema = z.string().regex(/^operation:v1:[0-9a-f]{64}$/u);
+export const operationRefSchema = z
+  .string()
+  .regex(/^operation:v1:[0-9a-f]{64}$/u);
 export const APPROVED_EXTERNAL_MOVEMENT_CAP: ExactAmount = Object.freeze({
   currency: "USD",
   units: "600",
@@ -212,8 +214,8 @@ export const fixtureSchema = z.strictObject({
   publicationRevision: z.number().int().positive(),
   operationRef: operationRefSchema,
   cleanup: z.strictObject({
-    publicationState: z.literal("withdrawn"),
-    offeringStatus: z.literal("retired"),
+    publicationState: z.enum(["not_created", "withdrawn"]),
+    supplierState: z.enum(["Draft", "Paused"]),
   }),
 });
 export const GatewayProductionSmokeReceiptMaterialSchema = z.strictObject({
@@ -400,18 +402,31 @@ export const GatewayProductionSmokeReceiptSchema =
     )
       issue(["money"], "money idempotency namespace mismatch");
     const topupAmount = receipt.money.topup.creditAmount;
-    const expectedTopup = topupAmount.currency === "AUD" && topupAmount.exponent === AUD_EXPONENT
-      ? quoteAudAccountFunding(
-          BigInt(topupAmount.units),
-          audFundingPolicyFromCommercialControls(SANDBOX_COMMERCIAL_POLICY_CONTROLS),
-        )
-      : undefined;
-    const expectedTopupFee = expectedTopup === undefined
-      ? undefined
-      : { currency: "AUD", units: expectedTopup.serviceFeeUnits.toString(), exponent: AUD_EXPONENT } as const;
-    const expectedTopupTotal = expectedTopup === undefined
-      ? undefined
-      : { currency: "AUD", units: expectedTopup.totalUnits.toString(), exponent: AUD_EXPONENT } as const;
+    const expectedTopup =
+      topupAmount.currency === "AUD" && topupAmount.exponent === AUD_EXPONENT
+        ? quoteAudAccountFunding(
+            BigInt(topupAmount.units),
+            audFundingPolicyFromCommercialControls(
+              SANDBOX_COMMERCIAL_POLICY_CONTROLS,
+            ),
+          )
+        : undefined;
+    const expectedTopupFee =
+      expectedTopup === undefined
+        ? undefined
+        : ({
+            currency: "AUD",
+            units: expectedTopup.serviceFeeUnits.toString(),
+            exponent: AUD_EXPONENT,
+          } as const);
+    const expectedTopupTotal =
+      expectedTopup === undefined
+        ? undefined
+        : ({
+            currency: "AUD",
+            units: expectedTopup.totalUnits.toString(),
+            exponent: AUD_EXPONENT,
+          } as const);
     if (
       expectedTopup === undefined ||
       expectedTopupFee === undefined ||

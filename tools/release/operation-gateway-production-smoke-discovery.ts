@@ -188,7 +188,7 @@ export async function discoverOperation(
       continue;
     const detail: GatewayHttpResponse = await requestJson(
       config.fetch,
-      `${config.baseUrl}/api/v1/market-operations/detail`,
+      `${config.baseUrl}/api/v1/market-operations/describe`,
       {
         method: "POST",
         headers: {

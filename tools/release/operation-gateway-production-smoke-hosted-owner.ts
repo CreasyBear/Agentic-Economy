@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { canonicalDigest } from "../../src/modules/common/canonical-digest";
+import { stableStringify } from "../../src/modules/common/stable-hash";
 import {
   jsonValueSchema,
   type JsonValue,
@@ -14,7 +15,6 @@ import {
   type PublicOperationDescriptor,
 } from "../../src/modules/capability-supply/public";
 import {
-  sourceAction,
   sourceMutation,
   sourceQuery,
   type ConvexSourceTransport,
@@ -45,7 +45,9 @@ export type GatewayOwnerFixtureIdentity = Omit<
   "cleanup"
 > &
   Readonly<{ businessId: string; businessName: string }>;
-export type GatewayOwnerFixtureCleanup = z.infer<typeof fixtureSchema>["cleanup"];
+export type GatewayOwnerFixtureCleanup = z.infer<
+  typeof fixtureSchema
+>["cleanup"];
 export type HostedOwnerAuthority = z.infer<
   typeof selectedOperationSchema
 >["ownerAuthority"];
@@ -374,22 +376,16 @@ export function createHostedOwnerRuntime(
   const currentOwnerCatalogQuery = sourceQuery<Record<string, never>, unknown>(
     "catalog:getCurrentOwnerPublicCatalog",
   );
-  const createOfferingMutation = sourceMutation<Record<string, unknown>, unknown>(
-    "catalog:createBusinessOffering",
-  );
+  const saveIntegrationDraftMutation = sourceMutation<
+    Record<string, unknown>,
+    unknown
+  >("capabilitySupplyOwnerFunnel:saveOwnerSupplyIntegrationDraft");
 
   const withdrawMutation = sourceMutation<Record<string, unknown>, unknown>(
     "capabilitySupplyOwnerFunnel:withdrawOwnerCapability",
   );
-  const retireOfferingMutation = sourceMutation<
-    Record<string, unknown>,
-    unknown
-  >("catalog:changeBusinessOfferingStatus");
   const publishMutation = sourceMutation<Record<string, unknown>, unknown>(
     "capabilitySupply:publishPreparedCapability",
-  );
-  const readinessAction = sourceAction<Record<string, unknown>, unknown>(
-    "capabilitySupplyOwnerSupply:runOwnerSupplyReadiness",
   );
   const ownerSupplyQuery = sourceQuery<Record<string, unknown>, unknown>(
     "capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel",
@@ -425,7 +421,7 @@ export function createHostedOwnerRuntime(
       }>
     | undefined;
   let publicationMayExist = false;
-  const retirePartialOffering =
+  const verifyPartialDraftIsNotRouteable =
     async (): Promise<GatewayOwnerFixtureCleanup> => {
       const current = partialOffering;
       if (current === undefined)
@@ -448,61 +444,12 @@ export function createHostedOwnerRuntime(
         throw new GatewaySmokeError(
           "gateway_smoke_owner_partial_offering_identity_changed",
         );
-      const offeringRevision = z
-        .number()
-        .int()
-        .positive()
-        .parse(beforeOfferings[0].revision);
-      const beforeOffering = beforeOfferings[0];
-      if (beforeOffering.status !== "retired") {
-        const operationKey = `ae-release-smoke:${options.runId}:retire-partial:${offeringRevision}`;
-        const command = {
-          businessId: current.businessId,
-          offeringRef: current.offeringRef,
-          expectedRevision: offeringRevision,
-          status: "retired" as const,
-          operationKey,
-          correlationId: operationKey,
-        };
-        const sourceWrite = await sourceWriteAdmissionFromContext({
-          context,
-          command,
-          scope: "catalog_publish",
-          operationKey,
-          correlationId: operationKey,
-          env: options.env,
-        });
-        const result = record(
-          await (
-            await transport()
-          ).mutation(retireOfferingMutation, {
-            ...command,
-            sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
-            sourceWrite,
-          }),
-        );
-        if (result?.kind !== "ok")
-          throw new GatewaySmokeError(
-            "gateway_smoke_owner_partial_offering_retire_refused",
-          );
-      }
-      const after = await ownerSupplyReadback(current.businessId);
-      const afterOfferings = after.offerings
-        .map(record)
-        .filter((candidate) => candidate?.offeringRef === current.offeringRef);
-      if (
-        afterOfferings.length !== 1 ||
-        afterOfferings[0]?.name !== options.runId ||
-        afterOfferings[0].status !== "retired" ||
-        afterOfferings[0].revision !== offeringRevision ||
-        (current.offeringSourceHash !== undefined &&
-          afterOfferings[0].sourceHash !== current.offeringSourceHash)
-      )
+      if (beforeOfferings[0]?.publication !== undefined)
         throw new GatewaySmokeError(
-          "gateway_smoke_owner_partial_cleanup_readback_invalid",
+          "gateway_smoke_owner_partial_draft_became_routeable",
         );
       partialOffering = undefined;
-      return { publicationState: "withdrawn", offeringStatus: "retired" };
+      return { publicationState: "not_created", supplierState: "Draft" };
     };
   const createFixture = async (): Promise<GatewayOwnerFixtureIdentity> => {
     if (fixture !== undefined)
@@ -535,83 +482,72 @@ export function createHostedOwnerRuntime(
         throw new GatewaySmokeError(
           "gateway_smoke_owner_control_business_identity_collision",
         );
-      const offeringRef = boundedRefSchema.parse(
-        `offering:${businessId}:${material.ids.capabilityId}`,
-      );
-      const before = await ownerSupplyReadback(businessId);
-      if (
-        before.offerings
-          .map(record)
-          .some((candidate) => candidate?.offeringRef === offeringRef)
-      )
-        throw new GatewaySmokeError("gateway_smoke_owner_fixture_preexisting");
-      const createOfferingOperationKey = `ae-release-smoke:${options.runId}:offering:create`;
-      const createOfferingCommand = {
-        businessId,
-        offeringRef,
-        facts: {
-          name: options.runId,
-          category: "release-smoke",
-          summary: `Run-scoped release smoke operation ${options.runId}.`,
-          serviceAreaSummary: "Production release smoke.",
-          availabilitySummary: "Available only for this release smoke run.",
-        },
-        operationKey: createOfferingOperationKey,
-        correlationId: createOfferingOperationKey,
+      const sourceDescriptor = {
+        kind: "openapi" as const,
+        definitionUrl: new URL(
+          "/.well-known/ae-release-smoke-openapi.json",
+          options.baseUrl,
+        ).toString(),
+        environment: "production" as const,
       };
-      const createOfferingSourceWrite = await sourceWriteAdmissionFromContext({
+      const sourceSelector = {
+        serverUrl: options.baseUrl,
+        path: options.ownerOpenApiPath,
+        method: options.ownerOpenApiMethod,
+      };
+      const sourceDigest = canonicalDigest(
+        ownerOpenApiDocumentForRun(
+          options.ownerOpenApiDocument,
+          options.ownerOpenApiPath,
+          options.ownerOpenApiMethod,
+          options.runId,
+        ),
+      );
+      const candidateRef = canonicalDigest({
+        sourceDigest,
+        selector: sourceSelector,
+      });
+      const saveDraftOperationKey = `ae-release-smoke:${options.runId}:source-selection`;
+      const saveDraftCommand = {
+        businessId,
+        title: options.runId,
+        description: `Run-scoped release smoke operation ${options.runId}.`,
+        category: "release-smoke",
+        sourceKind: "openapi" as const,
+        sourceDescriptorJson: stableStringify(sourceDescriptor),
+        sourceDigest,
+        sourceRevision: `openapi:${sourceDigest}`,
+        candidateRef,
+        sourceSelectorJson: stableStringify(sourceSelector),
+        operationKey: saveDraftOperationKey,
+        correlationId: saveDraftOperationKey,
+      };
+      const saveDraftSourceWrite = await sourceWriteAdmissionFromContext({
         context,
-        command: createOfferingCommand,
+        command: saveDraftCommand,
         scope: "catalog_publish",
-        operationKey: createOfferingOperationKey,
-        correlationId: createOfferingOperationKey,
+        operationKey: saveDraftOperationKey,
+        correlationId: saveDraftOperationKey,
         env: options.env,
       });
-      const createdOffering = record(
-        await (await transport()).mutation(createOfferingMutation, {
-          ...createOfferingCommand,
-          sourceWriteRequest: sourceWriteRequestFromAdmission(
-            createOfferingSourceWrite,
-          ),
-          sourceWrite: createOfferingSourceWrite,
+      const savedDraft = record(
+        await (
+          await transport()
+        ).mutation(saveIntegrationDraftMutation, {
+          ...saveDraftCommand,
+          sourceWriteRequest:
+            sourceWriteRequestFromAdmission(saveDraftSourceWrite),
+          sourceWrite: saveDraftSourceWrite,
         }),
       );
       if (
-        createdOffering?.kind !== "ok" ||
-        createdOffering.resultRef !== offeringRef ||
-        createdOffering.currentRevision !== 1
+        (savedDraft?.kind !== "saved" && savedDraft?.kind !== "replayed") ||
+        typeof savedDraft.offeringRef !== "string"
       )
         throw new GatewaySmokeError(
-          "gateway_smoke_owner_offering_create_refused",
+          "gateway_smoke_owner_source_selection_refused",
         );
-      const publishOfferingOperationKey = `ae-release-smoke:${options.runId}:offering:publish`;
-      const publishOfferingCommand = {
-        businessId,
-        offeringRef,
-        expectedRevision: 1,
-        status: "published" as const,
-        operationKey: publishOfferingOperationKey,
-        correlationId: publishOfferingOperationKey,
-      };
-      const publishOfferingSourceWrite = await sourceWriteAdmissionFromContext({
-        context,
-        command: publishOfferingCommand,
-        scope: "catalog_publish",
-        operationKey: publishOfferingOperationKey,
-        correlationId: publishOfferingOperationKey,
-        env: options.env,
-      });
-      const publishedOffering = record(
-        await (await transport()).mutation(retireOfferingMutation, {
-          ...publishOfferingCommand,
-          sourceWriteRequest: sourceWriteRequestFromAdmission(
-            publishOfferingSourceWrite,
-          ),
-          sourceWrite: publishOfferingSourceWrite,
-        }),
-      );
-      if (publishedOffering?.kind !== "ok")
-        throw new GatewaySmokeError("gateway_smoke_owner_offering_publish_refused");
+      const offeringRef = boundedRefSchema.parse(savedDraft.offeringRef);
       partialOffering = { businessId, offeringRef, offeringRevision: 1 };
       const afterCatalog = await ownerSupplyReadback(businessId);
       const offerings = afterCatalog.offerings
@@ -620,7 +556,7 @@ export function createHostedOwnerRuntime(
           (candidate) =>
             candidate?.offeringRef === offeringRef &&
             candidate.name === options.runId &&
-            candidate.status === "published",
+            candidate.status === "draft",
         );
       if (
         offerings.length !== 1 ||
@@ -742,29 +678,6 @@ export function createHostedOwnerRuntime(
         throw new GatewaySmokeError(
           "gateway_smoke_owner_publication_create_refused",
         );
-      const readinessOperationKey = `ae-release-smoke:${options.runId}:readiness`;
-      const readiness = record(
-        await (
-          await transport()
-        ).action(readinessAction, {
-          businessId,
-          offeringRef,
-          offeringRevision,
-          offeringSourceHash,
-          publicationRef,
-          publicationRevision,
-          operationKey: readinessOperationKey,
-        }),
-      );
-      if (
-        readiness?.step !== "readiness" ||
-        readiness.state !== "completed" ||
-        readiness.offeringRef !== offeringRef ||
-        readiness.revision !== offeringRevision ||
-        readiness.publicationRef !== publicationRef ||
-        readiness.operationRef !== operationRef
-      )
-        throw new GatewaySmokeError("gateway_smoke_owner_readiness_refused");
       return createdFixture;
     } catch (error) {
       const cleanupFailures: unknown[] = [];
@@ -844,7 +757,7 @@ export function createHostedOwnerRuntime(
         }
       } else if (partialOffering !== undefined) {
         try {
-          await retirePartialOffering();
+          await verifyPartialDraftIsNotRouteable();
         } catch (cleanupError) {
           cleanupFailures.push(cleanupError);
         }
@@ -880,7 +793,6 @@ export function createHostedOwnerRuntime(
     const publication = record(offering?.publication);
     if (
       offering?.name !== options.runId ||
-      offering.status !== "published" ||
       offering.revision !== currentFixture.offeringRevision ||
       offering.sourceHash !== currentFixture.offeringSourceHash ||
       publication?.publicationRef !== currentFixture.publicationRef ||
@@ -1003,36 +915,6 @@ export function createHostedOwnerRuntime(
       throw new GatewaySmokeError(
         "gateway_smoke_owner_cleanup_identity_changed",
       );
-    if (beforeOffering.status !== "retired") {
-      const operationKey = `ae-release-smoke:${options.runId}:retire:${currentFixture.offeringRevision}`;
-      const command = {
-        businessId: currentFixture.businessId,
-        offeringRef: currentFixture.offeringRef,
-        expectedRevision: currentFixture.offeringRevision,
-        status: "retired" as const,
-        operationKey,
-        correlationId: operationKey,
-      };
-      const sourceWrite = await sourceWriteAdmissionFromContext({
-        context,
-        command,
-        scope: "catalog_publish",
-        operationKey,
-        correlationId: operationKey,
-        env: options.env,
-      });
-      const result = record(
-        await (
-          await transport()
-        ).mutation(retireOfferingMutation, {
-          ...command,
-          sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
-          sourceWrite,
-        }),
-      );
-      if (result?.kind !== "ok")
-        throw new GatewaySmokeError("gateway_smoke_owner_retire_refused");
-    }
     const after = await ownerSupplyReadback(currentFixture.businessId);
     const afterOffering = after.offerings
       .map(record)
@@ -1043,7 +925,7 @@ export function createHostedOwnerRuntime(
     if (
       afterOffering === undefined ||
       afterPublication === undefined ||
-      afterOffering.status !== "retired" ||
+      afterOffering.status !== "draft" ||
       afterOffering.sourceHash !== currentFixture.offeringSourceHash ||
       afterPublication.publicationRef !== currentFixture.publicationRef ||
       afterPublication.state !== "withdrawn"
@@ -1052,7 +934,7 @@ export function createHostedOwnerRuntime(
         "gateway_smoke_owner_cleanup_readback_invalid",
       );
     fixture = undefined;
-    return { publicationState: "withdrawn", offeringStatus: "retired" };
+    return { publicationState: "withdrawn", supplierState: "Paused" };
   };
 
   const readWithdrawnOperation = async (
@@ -1060,7 +942,7 @@ export function createHostedOwnerRuntime(
   ): Promise<Readonly<{ kind: "refused"; code: "operation_withdrawn" }>> => {
     const response = await requestJson(
       options.fetch,
-      `${options.baseUrl}/api/v1/market-operations/detail`,
+      `${options.baseUrl}/api/v1/market-operations/describe`,
       {
         method: "POST",
         headers: {

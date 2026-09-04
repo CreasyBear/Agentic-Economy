@@ -43,7 +43,7 @@ async function installCurrentProviderConnection(
 }
 
 describe('capability publication owner', () => {
-  it('preserves canonical owner catalog and editor reads', async () => {
+  it('preserves the canonical owner catalog read', async () => {
     const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(
       backend,
@@ -54,9 +54,6 @@ describe('capability publication owner', () => {
     await expect(
       owner.query(api.catalog.getCurrentOwnerPublicCatalog, {}),
     ).resolves.toMatchObject({ kind: 'available' })
-    await expect(
-      owner.query(api.catalog.getCurrentOwnerOfferingSupply, {}),
-    ).resolves.not.toMatchObject({ kind: 'error', code: 'unauthenticated' })
   })
 
   it('fails closed across readiness, stale health, and withdrawal transitions', async () => {
