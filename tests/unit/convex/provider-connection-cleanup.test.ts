@@ -1,7 +1,8 @@
 import { getFunctionName, type FunctionReference } from 'convex/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { completeWork, run } from '../../../convex/capabilityProviderConnectionCleanup'
+import { completeWork } from '../../../convex/capabilityProviderConnectionCleanup'
+import { perform } from '../../../convex/capabilityProviderConnectionCleanupAction'
 import { providerConnectionCleanupRequestDigest } from '@/modules/capability-supply/provider-connection'
 
 vi.mock('@/modules/network-guard/server', () => ({
@@ -29,7 +30,7 @@ type RegisteredWorker = { _handler: WorkerHandler }
 
 const registeredCleanup = completeWork as unknown as RegisteredCleanup
 const handler = registeredCleanup._handler
-const registeredWorker = run as unknown as RegisteredWorker
+const registeredWorker = perform as unknown as RegisteredWorker
 const workerHandler = registeredWorker._handler
 const context = {
   connectionRef: 'connection:test',

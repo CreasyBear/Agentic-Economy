@@ -2,13 +2,10 @@ import { vOnCompleteArgs } from '@convex-dev/workpool'
 import { v } from 'convex/values'
 
 import {
-  isCanonicalCredentiallessX402ProviderConnection,
-  providerConnectionCleanupRequestDigest,
   type ProviderConnectionCleanupOutcome,
 } from '../src/modules/capability-supply/provider-connection'
 import { isCanonicalDigest } from '../src/modules/common/canonical-digest'
 import { isRecord } from '../src/modules/common/is-record'
-import { sendGuardedHttpRequest } from '../src/modules/network-guard/server'
 import { internal } from './_generated/api'
 import { internalAction, internalMutation, type ActionCtx, type MutationCtx } from './_generated/server'
 import {
@@ -34,11 +31,11 @@ const cleanupResult = v.object({
   reasonCode: v.optional(v.string()),
   evidenceRefs: v.array(v.string()),
 })
-const workerResult = v.union(
+export const workerResult = v.union(
   v.object({ kind: v.literal('lease_drain') }),
   v.object({ kind: v.literal('cleanup'), result: cleanupResult }),
 )
-const cleanupArgs = {
+export const cleanupArgs = {
   connectionRef: v.string(),
   commandId: v.string(),
   expectedAuthorityGeneration: v.number(),
@@ -59,14 +56,14 @@ const cleanupContext = v.object({
   resourceAuthority: cleanupResourceAuthorityValue,
 })
 
-type CleanupResult = Readonly<{
+export type CleanupResult = Readonly<{
   outcome: ProviderConnectionCleanupOutcome
   responseDigest?: string
   reasonCode?: string
   evidenceRefs: string[]
 }>
 
-type CleanupTarget = Readonly<{
+export type CleanupTarget = Readonly<{
   connectionRef: string
   providerRef: string
   providerAccountRef: string
@@ -87,17 +84,17 @@ type CleanupTarget = Readonly<{
   resourceAuthority: CleanupResourceAuthority
 }>
 
-function unknownResult(reasonCode: 'cleanup_target_unavailable' | 'cleanup_request_mismatch' | 'cleanup_authority_changed' | 'cleanup_action_failed'): CleanupResult {
+export function unknownResult(reasonCode: 'cleanup_target_unavailable' | 'cleanup_request_mismatch' | 'cleanup_authority_changed' | 'cleanup_action_failed'): CleanupResult {
   return { outcome: 'outcome_unknown', reasonCode, evidenceRefs: [`provider_cleanup:${reasonCode}`] }
 }
-type ConvexCleanupResult = {
+export type ConvexCleanupResult = {
   outcome: ProviderConnectionCleanupOutcome
   responseDigest?: string
   reasonCode?: string
   evidenceRefs: string[]
 }
 
-function convexCleanupResult(result: CleanupResult): ConvexCleanupResult {
+export function convexCleanupResult(result: CleanupResult): ConvexCleanupResult {
   return {
     outcome: result.outcome,
     ...(result.responseDigest === undefined ? {} : { responseDigest: result.responseDigest }),
@@ -158,7 +155,7 @@ type CleanupInvocation = Readonly<{
   resourceAuthority: CleanupResourceAuthority
 }>
 
-async function readCurrentCleanupTarget(
+export async function readCurrentCleanupTarget(
   ctx: Pick<ActionCtx, 'runQuery'> | Pick<MutationCtx, 'runQuery'>,
   args: CleanupInvocation,
 ): Promise<CleanupTarget | null> {
@@ -186,7 +183,7 @@ const cleanupOutcomeValues: Record<ProviderConnectionCleanupOutcome, true> = {
   outcome_unknown: true,
 }
 
-function isCleanupResult(value: unknown): value is CleanupResult {
+export function isCleanupResult(value: unknown): value is CleanupResult {
   if (
     typeof value !== 'object'
     || value === null
@@ -200,127 +197,20 @@ function isCleanupResult(value: unknown): value is CleanupResult {
   return true
 }
 
-function cleanupEndpoint(): string | undefined {
-  const raw = process.env.AE_SITE_URL?.trim()
-  if (raw === undefined) return undefined
-  try {
-    const url = new URL(raw)
-    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
-    return (url.protocol === 'https:' || (url.protocol === 'http:' && loopback))
-      && url.username === ''
-      && url.password === ''
-      && url.pathname === '/'
-      && url.search === ''
-      && url.hash === ''
-      && url.origin === raw
-      ? `${raw}/api/internal/provider-connection-cleanup`
-      : undefined
-  } catch {
-    return undefined
-  }
-}
-
-async function revokeMcpConnection(target: CleanupTarget, requestDigest: string): Promise<CleanupResult> {
-  const endpoint = cleanupEndpoint()
-  const token = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
-  if (endpoint === undefined || token === undefined || token.length < 43 || target.secret === undefined) {
-    return unknownResult('cleanup_action_failed')
-  }
-  let response: Response
-  try {
-    const request = new Request(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        connectionRef: target.connectionRef,
-        adapterId: target.adapterId,
-        requestDigest,
-        secret: target.secret,
-      }),
-      redirect: 'error',
-      signal: AbortSignal.timeout(15_000),
-    })
-    const hostname = new URL(endpoint).hostname
-    response = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
-      ? await fetch(request)
-      : await sendGuardedHttpRequest(request, 16 * 1024)
-  } catch {
-    return unknownResult('cleanup_action_failed')
-  }
-  const declared = Number(response.headers.get('content-length'))
-  if (!response.ok || (Number.isFinite(declared) && declared > 16 * 1024)) {
-    return unknownResult('cleanup_action_failed')
-  }
-  let body: unknown
-  try {
-    const text = await response.text()
-    if (new TextEncoder().encode(text).byteLength > 16 * 1024) return unknownResult('cleanup_action_failed')
-    body = JSON.parse(text)
-  } catch {
-    return unknownResult('cleanup_action_failed')
-  }
-  return isCleanupResult(body) ? body : unknownResult('cleanup_action_failed')
-}
-
 export const run = internalAction({
   args: cleanupArgs,
   returns: workerResult,
-  handler: async (ctx, args) => {
-    try {
-      const targetValue = await readCurrentCleanupTarget(ctx, args)
-      if (targetValue === null) {
-        return { kind: 'cleanup' as const, result: convexCleanupResult(unknownResult('cleanup_target_unavailable')) }
-      }
-      if (args.workKind === 'lease_drain') {
-        return await readCurrentCleanupTarget(ctx, args) === null
-          ? { kind: 'cleanup' as const, result: convexCleanupResult(unknownResult('cleanup_authority_changed')) }
-          : { kind: 'lease_drain' as const }
-      }
-      if (
-        targetValue.revocationRef === undefined
-        || targetValue.cleanupAttempt !== args.cleanupAttempt
-        || providerConnectionCleanupRequestDigest({
-          revocationRef: targetValue.revocationRef,
-          cleanupAttempt: args.cleanupAttempt,
-          connectionRef: args.connectionRef,
-          expectedAuthorityGeneration: args.expectedAuthorityGeneration,
-          expectedAuthorityDigest: args.expectedAuthorityDigest,
-          adapterId: targetValue.adapterId,
-        }) !== args.requestDigest
-      ) return { kind: 'cleanup' as const, result: convexCleanupResult(unknownResult('cleanup_request_mismatch')) }
-      if (await readCurrentCleanupTarget(ctx, args) === null) {
-        return { kind: 'cleanup' as const, result: convexCleanupResult(unknownResult('cleanup_authority_changed')) }
-      }
-      if (isCanonicalCredentiallessX402ProviderConnection(targetValue)) {
-        return {
-          kind: 'cleanup' as const,
-          result: convexCleanupResult({
-            outcome: 'detached',
-            reasonCode: 'local_detached',
-            evidenceRefs: ['provider_cleanup:local_detached'],
-          }),
-        }
-      }
-      if (targetValue.adapterId === 'mcp-jsonrpc:v1') {
-        return {
-          kind: 'cleanup' as const,
-          result: convexCleanupResult(await revokeMcpConnection(targetValue, args.requestDigest)),
-        }
-      }
-      return {
-        kind: 'cleanup' as const,
-        result: convexCleanupResult({
-          outcome: 'unsupported',
-          reasonCode: 'cleanup_adapter_unsupported',
-          evidenceRefs: ['provider_cleanup:adapter_unsupported'],
-        }),
-      }
-    } catch {
-      return { kind: 'cleanup' as const, result: convexCleanupResult(unknownResult('cleanup_action_failed')) }
-    }
+  handler: async (ctx, args): Promise<
+    | { kind: 'lease_drain' }
+    | { kind: 'cleanup'; result: ConvexCleanupResult }
+  > => {
+    const result:
+      | { kind: 'lease_drain' }
+      | { kind: 'cleanup'; result: ConvexCleanupResult } = await ctx.runAction(
+        internal.capabilityProviderConnectionCleanupAction.perform,
+        args,
+      )
+    return result
   },
 })
 

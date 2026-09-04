@@ -30,6 +30,7 @@ import type * as capabilityProviderApprovals from "../capabilityProviderApproval
 import type * as capabilityProviderConnectionAgents from "../capabilityProviderConnectionAgents.js";
 import type * as capabilityProviderConnectionAttempts from "../capabilityProviderConnectionAttempts.js";
 import type * as capabilityProviderConnectionCleanup from "../capabilityProviderConnectionCleanup.js";
+import type * as capabilityProviderConnectionCleanupAction from "../capabilityProviderConnectionCleanupAction.js";
 import type * as capabilityProviderConnectionMigration from "../capabilityProviderConnectionMigration.js";
 import type * as capabilityProviderConnections from "../capabilityProviderConnections.js";
 import type * as capabilityProviderConsequenceJournal from "../capabilityProviderConsequenceJournal.js";
@@ -204,6 +205,7 @@ declare const fullApi: ApiFromModules<{
   capabilityProviderConnectionAgents: typeof capabilityProviderConnectionAgents;
   capabilityProviderConnectionAttempts: typeof capabilityProviderConnectionAttempts;
   capabilityProviderConnectionCleanup: typeof capabilityProviderConnectionCleanup;
+  capabilityProviderConnectionCleanupAction: typeof capabilityProviderConnectionCleanupAction;
   capabilityProviderConnectionMigration: typeof capabilityProviderConnectionMigration;
   capabilityProviderConnections: typeof capabilityProviderConnections;
   capabilityProviderConsequenceJournal: typeof capabilityProviderConsequenceJournal;
