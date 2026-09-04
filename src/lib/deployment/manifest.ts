@@ -84,6 +84,10 @@ const package5ControlledRequirements: readonly RequirementGroup[] = [
       'AE_INFISICAL_CUSTOMER_ENVIRONMENT',
       'AE_INFISICAL_CUSTOMER_SECRET_PATH',
       'AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID',
+      'AE_INFISICAL_PLATFORM_PROJECT_ID',
+      'AE_INFISICAL_PLATFORM_ENVIRONMENT',
+      'AE_INFISICAL_PLATFORM_SECRET_PATH',
+      'AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID',
     ],
     mode: 'all',
   },
@@ -144,8 +148,6 @@ const optionalNames = Object.freeze([
   'AE_CLI_BASE_URL',
   'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE',
   'AE_INFISICAL_CUSTOMER_ORGANIZATION_SLUG',
-  'AE_INFISICAL_PLATFORM_PROJECT_ID', 'AE_INFISICAL_PLATFORM_ENVIRONMENT',
-  'AE_INFISICAL_PLATFORM_SECRET_PATH', 'AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID',
   'AE_INFISICAL_PLATFORM_ORGANIZATION_SLUG',
 ])
 
@@ -229,7 +231,7 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
     Object.freeze({
       id: 'provider-operations-rollout',
       kind: 'controlled-rollout',
-      declaration: 'Package 5 writes, hosted HTTP credentials, MCP OAuth, and Provider offboarding require independent server-side activation. Provider secrets remain in the Infisical customer secret plane.',
+      declaration: 'Package 5 writes, hosted HTTP credentials, MCP OAuth, and Provider offboarding require independent server-side activation. Provider credentials remain in the Infisical customer scope; AE-held consequence-signing material remains in the platform scope.',
     }),
     Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${OPERATION_INVOKE_ACTION_ID}:v1`, httpPath: OPERATION_INVOKE_HTTP_PATH, mcpPath: '/mcp' }),
     Object.freeze({

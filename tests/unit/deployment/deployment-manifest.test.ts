@@ -52,6 +52,10 @@ function productionEnvironment(): Record<string, string> {
     AE_INFISICAL_CUSTOMER_ENVIRONMENT: 'production',
     AE_INFISICAL_CUSTOMER_SECRET_PATH: '/agentic-economy/customer',
     AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID: 'identity-customer',
+    AE_INFISICAL_PLATFORM_PROJECT_ID: 'project-platform',
+    AE_INFISICAL_PLATFORM_ENVIRONMENT: 'production',
+    AE_INFISICAL_PLATFORM_SECRET_PATH: '/agentic-economy/platform',
+    AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID: 'identity-platform',
     AE_LLM_MODEL: 'deepseek/deepseek-v4-flash',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
@@ -133,6 +137,10 @@ describe('deployment manifest validator', () => {
       'AE_INFISICAL_CUSTOMER_ENVIRONMENT',
       'AE_INFISICAL_CUSTOMER_SECRET_PATH',
       'AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID',
+      'AE_INFISICAL_PLATFORM_PROJECT_ID',
+      'AE_INFISICAL_PLATFORM_ENVIRONMENT',
+      'AE_INFISICAL_PLATFORM_SECRET_PATH',
+      'AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID',
     ]))
   })
 
@@ -159,6 +167,31 @@ describe('deployment manifest validator', () => {
         'AE_SUPPLY_MCP_OAUTH_ENABLED',
         'AE_PROVIDER_OFFBOARDING_ENABLED',
       ]))
+  })
+
+  it('requires both Infisical scopes before live Provider Invocation can be enabled', () => {
+    for (const name of [
+      'AE_INFISICAL_CUSTOMER_PROJECT_ID',
+      'AE_INFISICAL_CUSTOMER_ENVIRONMENT',
+      'AE_INFISICAL_CUSTOMER_SECRET_PATH',
+      'AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID',
+      'AE_INFISICAL_PLATFORM_PROJECT_ID',
+      'AE_INFISICAL_PLATFORM_ENVIRONMENT',
+      'AE_INFISICAL_PLATFORM_SECRET_PATH',
+      'AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID',
+    ]) {
+      const result = validateDeploymentManifest({
+        ...productionEnvironment(),
+        [name]: '',
+      }, { nodeMajor: 22 })
+
+      expect(result.findings).toContainEqual({
+        kind: 'missing',
+        code: 'provider_secret_plane_required',
+        names: [name],
+        scope: 'provider-secret-plane',
+      })
+    }
   })
 
   it('reuses canonical source-write authority validation', () => {
