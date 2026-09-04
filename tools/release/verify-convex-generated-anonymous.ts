@@ -38,6 +38,10 @@ function anonymousEnvironment(): NodeJS.ProcessEnv {
     NO_COLOR: '1',
     CONVEX_AGENT_MODE: 'anonymous',
     CLERK_JWT_ISSUER_DOMAIN: anonymousClerkJwtIssuerDomain,
+    npm_config_audit: 'false',
+    npm_config_fund: 'false',
+    npm_config_offline: 'true',
+    npm_config_update_notifier: 'false',
   }
 }
 
@@ -72,18 +76,25 @@ const wait = async (milliseconds: number): Promise<void> => {
   await new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds))
 }
 
-function isolatedProcessIds(isolatedRoot: string): number[] {
-  const result = spawnSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' })
+function isolatedProcessIds(isolatedRoot: string, processGroup?: number): number[] {
+  const result = spawnSync('ps', ['-axo', 'pid=,pgid=,uid=,command='], { encoding: 'utf8' })
   if (result.status !== 0) throw new Error('convex_anonymous_process_inspection_failed')
+  const currentUid = typeof process.getuid === 'function' ? process.getuid() : undefined
   return (result.stdout ?? '')
     .split('\n')
-    .filter((line) => line.includes(isolatedRoot))
-    .map((line) => Number.parseInt(line.trim().split(/\s+/u)[0] ?? '', 10))
+    .map((line) => line.match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/u))
+    .filter((match): match is RegExpMatchArray => match !== null)
+    .filter((match) => {
+      const groupMatches = processGroup !== undefined && Number.parseInt(match[2]!, 10) === processGroup
+      const ownerMatches = currentUid === undefined || Number.parseInt(match[3]!, 10) === currentUid
+      return match[4]!.includes(isolatedRoot) || (groupMatches && ownerMatches)
+    })
+    .map((match) => Number.parseInt(match[1]!, 10))
     .filter((pid) => Number.isSafeInteger(pid) && pid > 0 && pid !== process.pid)
 }
 
-async function terminateIsolatedProcesses(isolatedRoot: string): Promise<void> {
-  const initial = isolatedProcessIds(isolatedRoot)
+async function terminateIsolatedProcesses(isolatedRoot: string, processGroup?: number): Promise<void> {
+  const initial = isolatedProcessIds(isolatedRoot, processGroup)
   for (const pid of initial) {
     try {
       process.kill(pid, 'SIGTERM')
@@ -92,7 +103,7 @@ async function terminateIsolatedProcesses(isolatedRoot: string): Promise<void> {
     }
   }
   if (initial.length > 0) await wait(250)
-  for (const pid of isolatedProcessIds(isolatedRoot)) {
+  for (const pid of isolatedProcessIds(isolatedRoot, processGroup)) {
     try {
       process.kill(pid, 'SIGKILL')
     } catch (error) {
@@ -100,7 +111,7 @@ async function terminateIsolatedProcesses(isolatedRoot: string): Promise<void> {
     }
   }
   if (initial.length > 0) await wait(100)
-  if (isolatedProcessIds(isolatedRoot).length > 0) {
+  if (isolatedProcessIds(isolatedRoot, processGroup).length > 0) {
     throw new Error('convex_anonymous_process_cleanup_failed')
   }
 }
@@ -122,10 +133,12 @@ async function runConvex(isolatedRoot: string, args: readonly string[]): Promise
   let timedOut = false
   const timer = setTimeout(() => {
     timedOut = true
+    child.kill('SIGTERM')
     try {
       process.kill(-child.pid!, 'SIGTERM')
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'ESRCH' && code !== 'EPERM') child.kill('SIGKILL')
     }
   }, 180_000)
   const result = await new Promise<Readonly<{ status: number | null; error?: Error }>>((resolvePromise) => {
@@ -133,12 +146,7 @@ async function runConvex(isolatedRoot: string, args: readonly string[]): Promise
     child.once('close', (status) => resolvePromise({ status }))
   })
   clearTimeout(timer)
-  try {
-    process.kill(-child.pid!, 'SIGTERM')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
-  }
-  await terminateIsolatedProcesses(isolatedRoot)
+  await terminateIsolatedProcesses(isolatedRoot, child.pid)
   if (timedOut) throw new Error(`convex_anonymous_${args[0] ?? 'command'}_failed:timeout`)
   if (result.error !== undefined) {
     throw new Error(`convex_anonymous_${args[0] ?? 'command'}_failed:${result.error.message}`)

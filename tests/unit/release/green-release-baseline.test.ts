@@ -147,6 +147,10 @@ describe('green release baseline', () => {
       'utf8',
     )
     expect(anonymousCodegenProof).toContain("CONVEX_AGENT_MODE: 'anonymous'")
+    expect(anonymousCodegenProof).toContain("npm_config_audit: 'false'")
+    expect(anonymousCodegenProof).toContain("npm_config_fund: 'false'")
+    expect(anonymousCodegenProof).toContain("npm_config_offline: 'true'")
+    expect(anonymousCodegenProof).toContain("npm_config_update_notifier: 'false'")
     expect(anonymousCodegenProof).not.toContain('...process.env')
     expect(anonymousCodegenProof).not.toMatch(/CONVEX_DEPLOYMENT|CONVEX_DEPLOY_KEY|CONVEX_SELF_HOSTED/u)
     expect(anonymousCodegenProof).toContain("rmSync(resolve(isolatedRoot, generatedDirectory, name))")
