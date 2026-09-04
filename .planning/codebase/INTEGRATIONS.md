@@ -1,86 +1,176 @@
-# INTEGRATIONS.md
+# External Integrations
 
-**Analysis Date:** 2026-09-01
+**Analysis Date:** 2026-09-04
 
-## Summary Table
+## APIs & External Services
 
-|Service|Version|Purpose|Primary integration points|
-|---|---|---|---|
-|Clerk|`@clerk/tanstack-react-start 1.5.9`, `@clerk/shared 4.30.2`|Auth: sessions, reverification (step-up), webhooks, JWT issuer for Convex|`src/routes/__root.tsx:2`, `src/lib/server/agent-access-auth.ts:1`, `src/lib/server/clerk-security-webhook.ts:1`, `src/lib/server/require-clerk-server-session.ts:1`, `src/lib/server/clerk-consequence-proof.ts:1`, `src/modules/agent-access/agent-access.functions.ts:1`|
-|Convex|`convex 1.45.0` + components|Backend authority (all data/mutations)|`convex/convex.config.ts`, `convex/schema.ts`, `src/lib/server/convex-source.ts`|
-|Stripe|`stripe ^22.5.0`, `@stripe/stripe-js ^9.13.0`, `@stripe/react-stripe-js ^6.8.1`|Money rail: checkout/top-ups, Connect payouts, webhook evidence|`src/lib/server/stripe-money-provider-config.ts:43-48`, `src/lib/server/stripe-money-webhook.ts:1`, `src/lib/server/stripe-checkout-evidence.ts:1`, `src/lib/server/stripe-connect-evidence.ts:1`, `src/lib/server/stripe-transfer-evidence.ts:1`, `src/components/ae/console/AeCreditTopUpPanel.tsx:75-78`|
-|Autumn|no SDK dep|Secondary billing provider behind provider-host allowlist|`.env.example` (AUTUMN_*), `src/modules/security/source-write-admission.ts:575`|
-|OpenRouter|`@openrouter/ai-sdk-provider ^3.0.0`, `ai ^7.0.44`|The ONLY model gateway|`src/modules/model-gateway/public.ts`|
-|Coinbase CDP / x402|`@coinbase/cdp-sdk 1.55.0`, `@x402/* 2.23.0`, `viem 2.55.2`|Managed x402 payer custody (Server Wallet signing)|`src/modules/capability-supply/internal/cdp-x402-payment-signer.ts:1-3`, `src/lib/deployment/manifest.ts:61`|
-|MCP|`@modelcontextprotocol/sdk 1.30.0`|External agent MCP server + supplier MCP invocation client|server: `src/lib/server/mcp-api.ts:6-17`; client: `src/modules/capability-execution/route-transport-mcp.ts:1-12`, `src/modules/capability-supply/internal/readiness-probe-mcp.ts:1-11`; proto: `src/lib/mcp-protocol.ts:1-3`|
-|Sentry|`@sentry/node`/`@sentry/react ^10.63.0`, `@sentry/vite-plugin ^5.3.0`|Errors (client+server) + build release/sourcemaps|`src/lib/observability/sentry.client.ts:1`, `sentry.server.ts:1`, `src/components/ae/feedback/AeObservabilityErrorBoundary.tsx:1`, `vite.config.ts:5-9,28-43,50`|
-|PostHog|`posthog-node ^5.39.0`, `posthog-js ^1.398.2`|Funnel analytics (client+server)|`src/lib/observability/posthog.client.ts:2`, `posthog.server.ts:1`, shared `funnel-event-props`|
-|Infisical|via `@vercel/oidc 3.2.0` (no SDK dep)|Production secret plane, OIDC-identity-backed|`src/modules/secrets/public.ts:24-32`, `runtime.ts:1`, `vercel-oidc.ts:3`|
-|Svix|NOT a dependency|Only Clerk webhook `svix-id` delivery header|`src/lib/server/clerk-security-webhook.ts:56`|
-|Vercel/Nitro|nitro-nightly 3.0.1-20260628|Deploy preset `vercel`, nodejs22.x|`vite.config.ts:37-50`|
+**Primary application platform:**
+- Convex - Primary product database, actions, scheduled work, realtime subscriptions, HTTP actions, and generated-document file storage.
+  - SDK/Client: `convex` 1.45.0 with `ConvexHttpClient`, `ConvexReactClient`, and generated bindings under `convex/_generated/`.
+  - Auth: Clerk JWTs via `CLERK_JWT_ISSUER_DOMAIN`; trusted Vercel-to-Convex calls also use `AE_CONVEX_SERVER_FUNCTION_TOKEN` in `src/lib/server/convex-source.ts`.
+  - Configuration: `convex.json`, `convex/convex.config.ts`, `convex/auth.config.ts`, `convex/http.ts`, and `convex/crons.ts`.
+  - Installed components: agent, aggregates, rate limiter, workflow, general workpool, and a separate Stripe-webhook workpool in `convex/convex.config.ts`.
 
-## Service Details
+**Human identity:**
+- Clerk - Browser sign-in/sign-up, server sessions, TanStack Start request middleware, Convex JWT issuance, API-key administration, and security lifecycle webhooks.
+  - SDK/Client: `@clerk/tanstack-react-start`, `@clerk/shared`, and server-side Clerk client imports in `src/lib/server/`.
+  - Auth: `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`.
+  - Webhook verification: `CLERK_WEBHOOK_SIGNING_SECRET` through `verifyWebhook` in `src/lib/server/clerk-security-webhook.ts`.
+  - Integration points: `src/start.ts`, `src/routes/__root.tsx`, `src/routes/sign-in.$.tsx`, `src/routes/sign-up.$.tsx`, and `src/routes/api.clerk.webhook.ts`.
 
-### Clerk
-- Provider wraps app root: `ClerkProvider` in `src/routes/__root.tsx:2`; Convex binds via `ConvexProviderWithClerk` (`convex/react-clerk`) + `ConvexReactClient`.
-- Server sessions: `auth, clerkClient` from `@clerk/tanstack-react-start/server` (`src/lib/server/agent-access-auth.ts:1`, `src/modules/agent-access/agent-access.functions.ts:1`); route guards in `src/lib/server/require-clerk-server-session.ts`.
-- Step-up auth: `useReverification` + `isReverificationCancelledError` on owner surfaces (e.g. `src/components/ae/supply/AeSupplyEarningsCard.tsx:2-3`); server `reverificationError` from `@clerk/shared/authorization-errors` (`src/lib/server/clerk-consequence-proof.ts:2`).
-- Security webhooks: `verifyWebhook` from `@clerk/tanstack-react-start/webhooks`; delivery ref from `svix-id`; issuer from `CLERK_JWT_ISSUER_DOMAIN` (`src/lib/server/clerk-security-webhook.ts:1,56-57`).
-- Convex JWT issuer: `clerkUserProviderIdentifier(CLERK_JWT_ISSUER_DOMAIN, userId)` (`src/modules/agent-access/agent-access.functions.ts:398-401`).
-- Local e2e bypass: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` (fails closed in production; `src/lib/server/convex-source.ts:2`).
-- Env: `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET`, `CLERK_JWT_ISSUER_DOMAIN`. Required family at `src/lib/deployment/manifest.ts:57`.
+**Payments and payouts:**
+- Stripe - Hosted AUD credit purchase, asynchronous settlement evidence, refund readback, Connect Provider onboarding, account lifecycle, and transfers/payout evidence.
+  - SDK/Client: `stripe` 22.5.x behind `src/lib/server/stripe-money-provider.ts` and focused adapters in `src/lib/server/stripe-*-evidence.ts`.
+  - Auth: `STRIPE_SECRET_KEY` for commands, `STRIPE_READBACK_KEY` for restricted readback, `STRIPE_WEBHOOK_SECRET` for snapshot events, and `STRIPE_V2_WEBHOOK_SECRET` for Accounts v2 events.
+  - Business configuration: `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID` and optional `STRIPE_CHECKOUT_HOST`, validated in `src/lib/server/stripe-money-provider-config.ts`.
+  - Webhook ingestion: bounded raw-body signature verification in `src/lib/server/stripe-money-webhook.ts`, durable inbox/workpool processing in `convex/moneyStripeWebhookInbox.ts`, `convex/moneyStripeWebhookWorker.ts`, and `convex/stripeWebhookWorkpool.ts`.
 
-### Stripe
-- Server config resolution reads `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`; incomplete config returns a typed refusal (`src/lib/server/stripe-money-provider-config.ts`).
-- Webhook: `src/lib/server/stripe-money-webhook.ts`; destination URL `${AE_CANONICAL_BASE_URL}/api/stripe/webhook` (per `.env.example`).
-- Evidence/digest modules: `stripe-checkout-evidence.ts`, `stripe-connect-evidence.ts`, `stripe-transfer-evidence.ts` — each computes `canonicalDigest` over Stripe objects for Convex-side verification.
-- Account funding redirects to Stripe-hosted Checkout. AE ships no embedded Stripe payment form or browser Stripe SDK.
-- Production validation: live keys only (`sk_live_`/`pk_live_`/`whsec_` patterns) — `src/lib/deployment/manifest.ts:363-375`.
-- Env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`; Autumn family: `AUTUMN_SECRET_KEY`, `AUTUMN_WEBHOOK_SECRET`, `AUTUMN_ENVIRONMENT`, `AUTUMN_PROJECT_ID`, `AUTUMN_API_BASE_URL`, `AUTUMN_API_VERSION`, `AUTUMN_PORTAL_RETURN_BASE_URL`.
+**Money subledger:**
+- Formance Community - Double-entry ledger for AUD buyer credit, treasury/capacity, managed-Call reservations, buyer Charges, separate Provider obligations, settlement, reversal, and statement readback.
+  - SDK/Client: vendored `@formance/formance-sdk` 7.0.0 in `package.json`; the only application adapter is `src/modules/money/formance.ts`.
+  - Auth: Cloudflare Access service-token pair supplied through `AE_FORMANCE_ACCESS_CLIENT_ID` and `AE_FORMANCE_ACCESS_CLIENT_SECRET`.
+  - Connection: `AE_FORMANCE_GATEWAY_URL`, `AE_FORMANCE_LEDGER`, `AE_FORMANCE_ENVIRONMENT`, and `AE_FORMANCE_REQUEST_TIMEOUT_MS`.
+  - Hosting: Formance Gateway/Ledger on private k3s/EC2 with PostgreSQL RDS, provisioned by `infra/package4/modules/release-environment/` and reached through `infra/package4/modules/release-environment/cloudflare.tf`.
 
-### OpenRouter — single model-gateway seam
-`src/modules/model-gateway/` contains exactly one file, `public.ts`, and is the project's only seam onto a language-model provider:
-- "Every AE model call goes through the Vercel AI SDK (`ai`) with this provider. Modules must not open their own HTTP transport to a model provider" (public.ts:8-11).
-- `openRouterGatewayConfig(environment?)` resolves `OPENROUTER_API_KEY`, `AE_LLM_MODEL`, `AE_OPENROUTER_API_BASE_URL`, `SITE_URL`. Convex callers pass Convex's typed `env`; Node hosts fall back to `process.env` (public.ts:39-58). Convex declares these in `convex/convex.config.ts:9-10`.
-- `DEFAULT_OPENROUTER_MODEL = 'deepseek/deepseek-v4-flash'` (public.ts:24).
-- `openRouterModel(config, modelId, options)` builds a `LanguageModelV4` with AE standing options: `usage: { include: true }` always; structured outputs, JSON/JSON-schema response modes, reasoning effort/suppression/surfacing, web plugin `max_results`; wraps with `addToolInputExamplesMiddleware()` (public.ts:107-176).
-- `openRouterCostUsd(metadata)` extracts settled request cost; absence means "cost unavailable", never zero (public.ts:180-189).
-- Provider instances cached per credential set; caller-supplied `fetch` is a test seam, never cached (public.ts:70-92).
+**x402 custody and settlement:**
+- Coinbase Developer Platform - Corporate EVM custody account, policy readback, typed-data signing, and treasury token-balance observation for managed x402 payments.
+  - SDK/Client: `@coinbase/cdp-sdk` 1.55.0 in `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts`.
+  - Auth: `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and `CDP_WALLET_SECRET`.
+  - Control configuration: `AE_X402_CDP_ACCOUNT_NAME`, expected EVM address, account/project policy identifiers, rules digest, credential generation, custody enablement, per-Call/daily atomic limits, and RPC URL set; validation begins in `src/lib/deployment/manifest.ts` and `src/modules/capability-supply/internal/server-credential.ts`.
+- x402 protocol - Discovers paid Operations, validates payment requirements, signs EIP-3009-style EVM authorization, submits Provider requests, and verifies settlement receipts.
+  - SDK/Client: `@x402/core`, `@x402/evm`, and `@x402/extensions` 2.23.0 under `src/modules/capability-supply/internal/`.
+  - Networks/assets: source profiles include Base mainnet USDC and Base Sepolia USDC in `src/modules/capability-supply/internal/x402-payment-profile.ts`; production effects remain gated.
+  - RPC: bounded, allowlisted endpoints supplied by `AE_X402_RPC_URLS_JSON` and used by `src/modules/capability-supply/internal/x402-evm-receipt-reader.ts`.
 
-### Coinbase CDP / x402
-- Signer: `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts` imports `CdpClient` from `@coinbase/cdp-sdk` and `x402Client` from `@x402/core/client` — the managed payer custody seam for x402-paid operations.
-- Custody policy: CDP account + project policy IDs with canonical `AE_X402_CDP_POLICY_RULES_DIGEST` preflight; `.env.example` documents exact 10,000 per-call / 50,000 daily caps. Raw private keys are development-only and rejected by the production gate.
-- RPC: `AE_X402_RPC_URLS_JSON` maps admitted EVM networks to HTTPS JSON-RPC endpoints, e.g. `{"eip155:8453":[...]}`.
-- Env: `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, `CDP_WALLET_SECRET`, `AE_X402_CDP_ACCOUNT_NAME`, `AE_X402_CDP_EXPECTED_EVM_ADDRESS`, `AE_X402_CDP_ACCOUNT_POLICY_ID`, `AE_X402_CDP_PROJECT_POLICY_ID`, `AE_X402_CDP_POLICY_RULES_DIGEST`, `AE_X402_CDP_CREDENTIAL_GENERATION`, `AE_X402_CUSTODY_ENABLED`, `AE_X402_CUSTODY_MAX_ATOMIC`, `AE_X402_CUSTODY_DAILY_MAX_ATOMIC`, `AE_X402_RPC_URLS_JSON`. The `x402-payment` scope requires ALL (`src/lib/deployment/manifest.ts:61`).
+**AI/model provider:**
+- OpenRouter - Language-model access for chat and web-assisted storefront discovery.
+  - SDK/Client: Vercel AI SDK `ai` 7.0.x through `@openrouter/ai-sdk-provider` 3.0.x.
+  - Auth: `OPENROUTER_API_KEY`; model selection is `AE_LLM_MODEL`; optional override is `AE_OPENROUTER_API_BASE_URL`.
+  - Implementation: all model creation, structured-output options, usage capture, and cost extraction stay behind `src/modules/model-gateway/public.ts`.
 
-### MCP (Model Context Protocol)
-- Server surface: `McpServer`/`Server` + `WebStandardStreamableHTTPServerTransport` with bearer/OAuth challenges (`src/lib/server/mcp-api.ts:6-17`) — external agents reach AE's catalog over Streamable HTTP.
-- Client side: supplier operation invocation over MCP Streamable HTTP (`src/modules/capability-execution/route-transport-mcp.ts`, `route-transport-invoke.ts`) and readiness probing (`src/modules/capability-supply/internal/readiness-probe-mcp.ts`) with JSON-Schema validation via `@/modules/capability-contract/public`.
-- Protocol version pinned to SDK `LATEST_PROTOCOL_VERSION` (`src/lib/mcp-protocol.ts`).
+**Canonical supply discovery:**
+- Agentic Market - External metadata source for potential x402 supply and ecosystem display data.
+  - Client: guarded `fetch` plus Zod validation in `src/modules/market/registry-source-adapters.ts` and `src/modules/market/agentic-market-source.ts`.
+  - Auth: none detected for the public read endpoints.
+  - Boundary: imported entries remain external-registry metadata until admission and publication; `PRODUCT.md` and `src/modules/market/registry-source-adapters.ts` enforce that distinction.
+- TREG - External platform/endpoint catalogue used as a second metadata source.
+  - Client: guarded `fetch` and Zod validation in `src/modules/market/registry-source-adapters.ts`.
+  - Auth: none detected for the public read endpoint.
+- Coinbase CDP facilitator discovery and PayAI facilitator discovery - Periodic x402 Bazaar/resource discovery sources.
+  - Client: bounded fetch and deterministic admission in `src/modules/capability-supply/internal/facilitator-discovery-client.ts` and `src/modules/capability-supply/internal/facilitator-discovery-ingest.ts`.
+  - Auth: public discovery reads; paid execution uses the separate x402 custody configuration.
+- Official MCP Registry - Resolves active Streamable HTTP remotes for Provider connections.
+  - Client: guarded fetch to `registry.modelcontextprotocol.io` in `src/modules/capability-supply/internal/mcp-source-discovery.ts`, then MCP protocol inspection using `@modelcontextprotocol/sdk`.
+  - Auth: registry read is public; Provider remotes may advertise OAuth or other connection requirements handled by the supply connection flow.
 
-### Sentry
-- Client init `@sentry/react` (`src/lib/observability/sentry.client.ts`), server init `@sentry/node` (`src/lib/observability/sentry.server.ts`), error boundary `ErrorBoundary` from `@sentry/react` (`src/components/ae/feedback/AeObservabilityErrorBoundary.tsx:1`).
-- Build: `sentryVitePlugin` enabled only when `SENTRY_AUTH_TOKEN`+`SENTRY_ORG`+`SENTRY_PROJECT` set; release name falls back `SENTRY_RELEASE → VERCEL_GIT_COMMIT_SHA → GITHUB_SHA`; sourcemaps enabled when the plugin runs (`vite.config.ts:5-9,28-43,50`).
-- Env: `VITE_SENTRY_DSN`, `SENTRY_DSN`, `VITE_SENTRY_ENVIRONMENT`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`.
+**Provider execution:**
+- HTTP JSON, MCP Streamable HTTP, and x402 Provider endpoints - The Operation adapter set invokes admitted Provider endpoints and captures bounded evidence.
+  - Client: guarded HTTP transport, `@modelcontextprotocol/sdk`, and x402 libraries in `src/modules/capability-supply/internal/transport-adapters.ts`, `route-transport-http-json.ts`, `route-transport-mcp.ts`, and `route-transport-invoke.ts`.
+  - Auth: per-Provider secret references are leased through the secret plane; caller credentials are not stored in catalogue records.
+  - Safety: URL validation, network guard, bounded bodies, idempotency, and effect journals are implemented under `src/modules/network-guard/`, `src/modules/capability-supply/internal/`, and `convex/capabilityProviderConsequenceJournal.ts`.
 
-### PostHog
-- Client (`posthog-js`) and server (`posthog-node`) wrappers share a config reader and funnel-event property builder (`src/lib/observability/posthog.client.ts`, `posthog.server.ts`, `funnel-event-props`).
-- Env: `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` (default `https://us.i.posthog.com`), `POSTHOG_KEY`, `POSTHOG_HOST`, `VITE_POSTHOG_APP_URL`, `POSTHOG_APP_URL`.
+**Secret storage:**
+- Infisical Cloud - Platform/customer secret generations and ephemeral leases for Provider credentials.
+  - SDK/Client: direct bounded REST adapter `InfisicalCloudSecretStore` in `src/modules/secrets/infisical-cloud.ts`.
+  - Auth: short-lived Vercel OIDC exchanged for Infisical machine-identity access by `src/modules/secrets/vercel-oidc.ts`.
+  - Configuration: `AE_INFISICAL_BASE_URL`, scope-specific project/environment/path/machine-identity variables, optional organisation slug, and `AE_SECRET_LIFECYCLE_RPC_TOKEN` in `src/routes/api.internal.secret-lifecycle.ts` and `src/routes/api.internal.provider-consequence.ts`.
+- AWS Secrets Manager - Stores Cloudflare Tunnel and Cloudflare Access credentials for the private Formance environment.
+  - Client: EC2 instance role and AWS CLI bootstrap generated by `infra/package4/modules/release-environment/compute.tf`.
+  - Auth: workload IAM; secret resources and KMS keys are defined in `infra/package4/modules/release-environment/cloudflare.tf`.
 
-### Secrets plane (Infisical via Vercel OIDC)
-- `src/modules/secrets/` exports `InfisicalCloudSecretStore`, `createInfisicalCloudSecretRuntime`, `createProductionSecretRuntime` (`src/modules/secrets/public.ts:24-32`). Identity from a Vercel OIDC token provider (`src/modules/secrets/vercel-oidc.ts`, using `@vercel/oidc`) with minimum-remaining-TTL handling. No Infisical SDK in package.json — the store is implemented in-repo. No Infisical env vars in `.env.example` (values flow through the runtime, not env).
+## Data Storage
 
-### Svix
-- Not a dependency; only the `svix-id` delivery header of Clerk's Standard Webhooks is read (`src/lib/server/clerk-security-webhook.ts:56`).
+**Databases:**
+- Convex managed database - Canonical application records for Operations, authority, Invocation, evidence, chat, money projections, webhook inboxes, and recovery.
+  - Connection: `CONVEX_URL` server-side and `VITE_CONVEX_URL` browser-side.
+  - Client: Convex generated API plus `ConvexHttpClient`/`ConvexReactClient`; schema is assembled in `convex/schema.ts` from module-owned validators under `src/modules/**/convex-schema.ts`.
+- PostgreSQL 16 RDS - Private persistence for the Formance community ledger in the package-4 infrastructure.
+  - Connection: injected into the private k3s Formance deployment from an RDS-managed master secret; application traffic reaches Formance Gateway, not PostgreSQL directly.
+  - Client: Formance SDK in `src/modules/money/formance.ts`; infrastructure is in `infra/package4/modules/release-environment/database.tf`.
+  - Protection: Multi-AZ, KMS encryption, deletion protection, seven-day retention, Performance Insights, CloudWatch logs, AWS Backup, and a cross-region copy are declared in `infra/package4/modules/release-environment/database.tf` and `backup.tf`.
 
-## Cross-Cutting Env Layers (names only, from `.env.example`)
-- Source-write trust envelope (server-only, per-family HKDF keys): `AE_SOURCE_WRITE_SECRET`, `AE_SOURCE_WRITE_KEY_*` / `AE_SOURCE_WRITE_PREVIOUS_KEYS_*` and derived-key IDs for families BILLING, PROTECTED, CATALOG, OPERATOR, REPAIR, SESSION.
-- Server authorities: `AE_CONVEX_SERVER_FUNCTION_TOKEN`, `AE_ROUTE_CALL_SIGNING_SECRET`, `AE_ROUTE_CALL_SIGNING_KEY_ID`.
-- Chat/model: `OPENROUTER_API_KEY`, `AE_LLM_MODEL` (default `deepseek/deepseek-v4-flash`), `AE_CHAT_PROXY_SECRET`, `AE_CHAT_SHARE_SECRET`, `AE_CHAT_SHARE_KEY_ID`.
-- URLs/routing: `VITE_CONVEX_URL`, `SITE_URL`, `AE_SITE_URL`, `AE_CANONICAL_BASE_URL`, `AE_CANONICAL_HOST_ALLOWLIST`, `AE_CSP_REPORT_ONLY`, `AE_ROUTING_PUBLIC_BASE_URL`.
-- External agent/CLI: `AE_CLI_BASE_URL`, `AE_API_KEY`.
-- WBA (Web Bot Auth): `AE_WBA_SIGNATURE_AGENT_ALLOWLIST`, `AE_WBA_DIRECTORY_PUBLIC_JWK_JSON`, `AE_DEV_WBA_*` (dev-only smoke), plus integrity/inquiry secrets (`AE_INQUIRY_ACCESS_SECRET`, `AE_INQUIRY_ACCESS_KEY_ID`, `AE_GOVERNED_SEND_INTEGRITY_*`, `AE_INQUIRY_RECEIPT_KEK*`, `AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY`, `AE_CUSTOMER_REQUEST_JOURNEY_PREVIOUS_PUBLIC_KEYS`).
-- Observability brakes: `AE_DISABLE_OBSERVABILITY`, `VITE_AE_DISABLE_OBSERVABILITY`, `AE_DISABLE_PUBLIC_FUNNEL_SOURCE_SYNC`.
-- Release/gateway smoke: `AE_RELEASE_*`, `AE_GATEWAY_SMOKE_*` (opt-in live-spend smoke, `AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND=false`).
-- E2E: `AE_E2E_OWNER_EMAIL`, `AE_AUTHENTICATED_E2E_BASE_URL`, `AE_REQUIRE_AUTHENTICATED_E2E`.
-- Convex-resident env (declared in `convex/convex.config.ts:8-35`): the OpenRouter, chat-share, Clerk-issuer, route-call-signing, and x402/CDP custody families above — Convex functions read them from the typed `env` object rather than `process.env`.
+**File Storage:**
+- Convex file storage - Rendered HTML and CSV money documents are stored and retrieved in `convex/moneyDocumentRender.ts` and `convex/moneyDocuments.ts`.
+- AWS S3 - Encrypted audit/flow-log retention and OpenTofu remote state, not customer application file serving; resources are in `infra/package4/account-baseline/main.tf`.
+- Local filesystem - Development fixtures, CLI state, test artifacts, and release receipts only; local and generated paths are excluded by `.gitignore`.
+
+**Caching:**
+- No external Redis or dedicated cache service detected.
+- Convex query caching/realtime invalidation supplies application read caching; public HTTP endpoints set explicit cache headers in `src/routes/api.v1.registry.ts`, `src/routes/api.v1.market-metrics.ts`, and discovery routes, while private and money routes use `no-store`.
+- Small process-local caches exist for model provider instances and syntax highlighting in `src/modules/model-gateway/public.ts` and `src/components/ai-elements/code-block.tsx`.
+
+## Authentication & Identity
+
+**Auth Provider:**
+- Clerk for Business Principal/human sessions.
+  - Implementation: TanStack Start middleware in `src/start.ts`, `ClerkProvider` plus Convex bridge in `src/routes/__root.tsx`, Convex JWT provider in `convex/auth.config.ts`, and signed lifecycle webhook handling in `src/lib/server/clerk-security-webhook.ts`.
+- Agentic Economy OAuth 2.0-style device authorization for machine/CLI access.
+  - Implementation: registration, device authorization, browser authorization, token, and revocation routes in `src/routes/oauth.*.ts`; durable grant/token state in `convex/agentAccessOAuth.ts`; CLI connection in `tools/ae/commands/connect.ts`.
+  - Discovery: authorization-server and protected-resource metadata routes live under `src/routes/[.]well-known/`.
+- Vercel workload identity for secret-plane access.
+  - Implementation: `@vercel/oidc` token acquisition and JWT lifetime validation in `src/modules/secrets/vercel-oidc.ts`, exchanged by `src/modules/secrets/infisical-cloud.ts`.
+
+## Monitoring & Observability
+
+**Error Tracking:**
+- Sentry - Optional browser and server exception/tracing capture using `@sentry/react` and `@sentry/node` in `src/lib/observability/sentry.client.ts` and `src/lib/observability/sentry.server.ts`.
+- Sentry source-map upload - Enabled only when `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` form a complete build configuration in `vite.config.ts`.
+- Telemetry boundaries sanitize payloads and block private-record routes before capture in `src/lib/observability/private-route-safety.ts`.
+
+**Logs:**
+- PostHog - Optional pseudonymous funnel and product analytics from browser and server clients in `src/lib/observability/posthog.client.ts` and `posthog.server.ts`; browser persistence is session-only and session recording is disabled.
+- Convex platform logs - Server actions and scheduled workers log within Convex; request correlation is established by `src/start.ts` and `src/lib/server/request-correlation.ts`.
+- AWS CloudWatch - EC2/k3s/cloudflared and RDS logs, host metrics, alarms, and SNS email notifications are defined in `infra/package4/modules/release-environment/observability.tf`.
+- AWS CloudTrail, GuardDuty, Access Analyzer, S3 flow logs, and AWS Backup event alarms - Account/recovery telemetry is defined in `infra/package4/account-baseline/main.tf` and `infra/package4/modules/release-environment/backup.tf`.
+
+## CI/CD & Deployment
+
+**Hosting:**
+- Vercel - Public React/TanStack Start UI and HTTP/MCP/API surface; Nitro emits Node serverless output from `vite.config.ts`.
+- Convex Cloud - Stateful backend deployment connected independently from Vercel; the synthetic release deployment is identified in `docs/operations/deployment-registry.yaml`.
+- AWS + Cloudflare - Private Formance subsystem: EC2/k3s and RDS in Sydney, Cloudflare Tunnel/Access/DNS at the edge, and recovery backups copied to Melbourne; OpenTofu definitions are under `infra/package4/`.
+- Current boundary: `docs/operations/deployment-registry.yaml` records the synthetic package-4 release as deployed but non-production, and the `infra/package4/environments/production/` foundation as declared, locked, and not applied.
+
+**CI Pipeline:**
+- GitHub Actions - `.github/workflows/kernel-release-gate.yml` runs frozen npm installs, codegen checks, source release gates, authenticated E2E, and explicitly opt-in paid gateway smoke stages with retained evidence artifacts.
+- GitHub Actions - `.github/workflows/react-doctor.yml` runs advisory React Doctor analysis on pull requests and `main` pushes.
+- Release gates - `package.json` composes lint, typecheck, Vitest suites, import/architecture contracts, Playwright E2E/accessibility, CLI package tests, Convex generated-code verification, deployment-manifest validation, and Vite build.
+- Infrastructure delivery - OpenTofu uses S3 state and exact AWS/Cloudflare provider pins in `infra/**/versions.tf`; production resources are guarded by an explicit foundation gate in `infra/package4/environments/production/main.tf`.
+
+## Environment Configuration
+
+**Required env vars:**
+- Base/runtime: `AE_CANONICAL_BASE_URL`, `CONVEX_URL` or `VITE_CONVEX_URL`, `AE_CONVEX_SERVER_FUNCTION_TOKEN`, `AE_SITE_URL`, and release identity variables defined in `src/lib/deployment/manifest.ts`.
+- Clerk: `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWT_ISSUER_DOMAIN`, `CLERK_WEBHOOK_SIGNING_SECRET`.
+- Models/chat: `OPENROUTER_API_KEY`, `AE_LLM_MODEL`, `AE_CHAT_PROXY_SECRET`; `AE_OPENROUTER_API_BASE_URL` and `SITE_URL` are optional model-gateway settings.
+- Stripe: `STRIPE_SECRET_KEY`, `STRIPE_READBACK_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_V2_WEBHOOK_SECRET`, `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`; `STRIPE_CHECKOUT_HOST` is optional.
+- Formance: `AE_FORMANCE_ENVIRONMENT`, `AE_FORMANCE_GATEWAY_URL`, `AE_FORMANCE_LEDGER`, `AE_FORMANCE_REQUEST_TIMEOUT_MS`, `AE_FORMANCE_ACCESS_CLIENT_ID`, `AE_FORMANCE_ACCESS_CLIENT_SECRET`.
+- x402/CDP: `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, `CDP_WALLET_SECRET`, the `AE_X402_CDP_*` identity/policy/generation set, `AE_X402_CUSTODY_ENABLED`, `AE_X402_CUSTODY_MAX_ATOMIC`, `AE_X402_CUSTODY_DAILY_MAX_ATOMIC`, and `AE_X402_RPC_URLS_JSON`.
+- Source-write and internal RPC: the six `AE_SOURCE_WRITE_KEY_*` families, `AE_SECRET_LIFECYCLE_RPC_TOKEN`, `AE_PROVIDER_CONSEQUENCE_ORIGIN`, and route-signing configuration when the corresponding path is enabled; `src/lib/deployment/manifest.ts` is authoritative for production completeness.
+- Infisical: `AE_INFISICAL_BASE_URL`, `AE_INFISICAL_PLATFORM_*`, and `AE_INFISICAL_CUSTOMER_*` scope configuration in `src/routes/api.internal.provider-consequence.ts` and `src/routes/api.internal.secret-lifecycle.ts`.
+- Observability: optional `SENTRY_*`, `POSTHOG_*`, browser-safe `VITE_SENTRY_*` / `VITE_POSTHOG_*`, and explicit disable flags read in `src/lib/observability/config.ts`.
+
+**Secrets location:**
+- Vercel and Convex environment configuration hold application runtime secrets, as recorded in `docs/operations/deployment-registry.yaml` and validated by `src/lib/deployment/manifest.ts`.
+- GitHub Actions secrets/variables supply release-gate and live-smoke configuration in `.github/workflows/kernel-release-gate.yml`; workflow installation uses `npm ci --ignore-scripts` when job-level secrets are present.
+- Infisical Cloud holds Provider/platform secret generations reached through Vercel OIDC by `src/modules/secrets/`.
+- AWS Secrets Manager plus KMS hold Cloudflare Tunnel/Access credentials and the RDS-managed master credential defined in `infra/package4/modules/release-environment/`.
+- `.env.example`, `.env.local`, `.vercel/.env.production.local`, and `.vercel/prod-debug.env` exist locally. Their contents are not read or reproduced; `.gitignore` excludes local secret-bearing configuration.
+
+## Webhooks & Callbacks
+
+**Incoming:**
+- `POST /api/stripe/webhook` - Stripe Checkout/refund snapshot events; route in `src/routes/api.stripe.webhook.ts`, verified in `src/lib/server/stripe-money-webhook.ts`, and durably ingested through `convex/moneyStripeWebhookInbox.ts`.
+- `POST /api/stripe/webhook/accounts-v2` - Stripe Accounts v2/Connect account lifecycle destination in `src/routes/api.stripe.webhook.accounts-v2.ts`; signature verification selects the v2 secret in `src/lib/server/stripe-money-webhook.ts`.
+- `POST /api/clerk/webhook` - Clerk user/session/organisation security lifecycle events in `src/routes/api.clerk.webhook.ts` and `src/lib/server/clerk-security-webhook.ts`.
+- `POST /api/internal/provider-consequence` - Internal, authenticated bridge for Provider effect journaling and x402 signing/execution in `src/routes/api.internal.provider-consequence.ts`.
+- `POST /api/internal/secret-lifecycle` and Convex `/internal/secret-lifecycle` - Internal authenticated secret lifecycle RPC implemented by `src/routes/api.internal.secret-lifecycle.ts`, `convex/secretLifecycleHttp.ts`, and `convex/http.ts`.
+- `/_operator/owner/supply/connections/oauth/callback` - OAuth callback for Provider-account connection flows in `src/routes/_operator/owner.supply.connections.oauth.callback.tsx`.
+
+**Outgoing:**
+- No generic outgoing webhook publisher is detected.
+- Outbound service calls go directly through owned adapters: Stripe in `src/lib/server/stripe-money-provider.ts`, Formance in `src/modules/money/formance.ts`, Coinbase/x402 in `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts`, OpenRouter in `src/modules/model-gateway/public.ts`, Infisical in `src/modules/secrets/infisical-cloud.ts`, external registries in `src/modules/market/registry-source-adapters.ts`, and admitted Provider transports under `src/modules/capability-supply/internal/`.
+
+---
+
+*Integration audit: 2026-09-04*

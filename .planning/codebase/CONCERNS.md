@@ -1,127 +1,232 @@
-# Cross-Cutting Concerns
+# Codebase Concerns
 
-**Analysis Date:** 2026-09-01
+**Analysis Date:** 2026-09-04
 
-Source-grounded map of security, request-safety, error/observability, fail-closed, privacy, background-attribution, accessibility, runtime, and secrets concerns. Every claim carries a real file anchor. USE-method data-flow maps exist separately at `.planning/codebase/PROMPT-DATA-FLOW.md` and `.planning/codebase/IA-DATA-FLOW.md`.
+## Tech Debt
 
-## 1. Authority & Consequence Security
+**Oversized security, authority, supply, and money modules:**
+- Issue: Several high-consequence modules combine validation, persistence, state transitions, projections, and provider adapters in one file. The largest maintained examples are `convex/agentAccessOAuth.ts` (1,910 lines), `convex/agentAccessPrincipals.ts` (1,864), `convex/lib/providerConnections/owner.ts` (1,757), `convex/catalogOfferingMutations.ts` (1,745), `src/lib/server/agent-access-oauth-api.ts` (1,601), `convex/moneyAccountFunding.ts` (1,405), `src/modules/money/formance.ts` (1,364), and `src/modules/capability-supply/supply-actions.ts` (1,367).
+- Files: `convex/agentAccessOAuth.ts`, `convex/agentAccessPrincipals.ts`, `convex/lib/providerConnections/owner.ts`, `convex/catalogOfferingMutations.ts`, `src/lib/server/agent-access-oauth-api.ts`, `convex/moneyAccountFunding.ts`, `src/modules/money/formance.ts`, `src/modules/capability-supply/supply-actions.ts`
+- Impact: A small policy or state-machine change has a large review surface and can couple unrelated lifecycle branches. This is most dangerous in OAuth rotation, Account Funding, and Provider publication because each path combines authority and external effects.
+- Fix approach: Split by stable responsibility already visible in the code: pure contracts and validators, command admission, persistence, provider transport, and read projections. Preserve the public entry points and add a second module only where a real caller boundary exists.
 
-The authority kernel is type- and policy-driven, not string-driven:
+**White-box test exception inventory:**
+- Issue: The module-boundary manifest carries a large explicit `whiteBoxTestExceptions` list allowing tests to import internal implementation paths. The runtime exception list is empty, but test coupling remains substantial.
+- Files: `src/modules/module-boundaries.ts`, `src/lib/ui/contract-scans/module-boundaries.ts`, `tests/imports/module-boundaries.test.ts`
+- Impact: Internal refactors can cause broad test churn even when observable behavior is unchanged, weakening the black-box guarantee defined in `AGENTS.md`.
+- Fix approach: Move reusable test setup behind public test harnesses or behavior-level HTTP/Convex adapters, then retire exception entries as each internal import disappears.
 
-- **Consequence action taxonomy**: 17 frozen Package-3 consequence actions with per-action policy (action class, proof policy, confirmation fields, recovery class) in `src/modules/authority/context/consequence-authority.ts:167-208` (`PACKAGE_3_CONSEQUENCE_ACTION_POLICY`). Spend/transfer actions (`funding.top_up`, `payout.transfer`) are `irreversible`; `payout.transfer` and all publish actions require `clerk_reverification` (strict preset, `uniquePerCommand: true`); authority-reduction actions require no proof (safe direction asymmetry, `consequence-authority.ts:216-224`).
-- **Provenance firewall**: `ServerAuthorityResolutionPort` (consequence-authority.ts:262-267) documents that request bodies/credentials/callback payloads "may select a canonical record in the adapter, but can never become the returned Principal, Account or Grant provenance directly" — identity always resolves server-side from persisted bindings.
-- **Two principal classes** with different surfaces: `interactive` vs `workload`; workload surfaces are `callback|worker|job|cron|reconciliation` (`WORKLOAD_AUTHORITY_SURFACES`, consequence-authority.ts:234-241). `AuthorityBoundaryError` carries a closed error-code vocabulary (`authority_surface_invalid|binding_missing|binding_invalid|workload_required|admission_invalid`).
-- **Interactive authority (Convex)**: `convex/interactiveAuthority.ts` resolves Clerk-verified identities through binding→credential→principal→account→ownership chains with a 22-code `InteractiveAuthorityError` vocabulary (interactiveAuthority.ts:32-58). Session window anchored at 60s (`INTERACTIVE_OWNER_SESSION_WINDOW_MS`, :17) because "Convex does not surface the JWT `exp` claim on UserIdentity" (:15-16). Context value includes revision objects (`binding|credential|...`) for stale-binding refusal.
-- **Agent binding authority**: `convex/authorityBoundary.ts:37-41` enforces strict ref patterns (`prn_/acc_/crd_/grt_` + 32 hex), caps required scopes at 64 (:38), and canonical agent bindings carry `grantGeneration` + `snapshotRef` for stale-generation refusal (:64-77). Writes go through `requireSourceWrite` (:8-10).
-- **Clerk reverification hook**: the Clerk dashboard signed claim `{ "reverification_id": "{{session.reverification_id}}" }` is a documented env dependency (`.env.example` Clerk issuer section).
+**Money cutover compatibility stubs:**
+- Issue: Retired Convex credit reads remain callable but return `account_aud_required`; Provider earnings return `not_found` or `source_unavailable`; owner payout transfer paths authenticate and then always return `payout_not_ready`.
+- Files: `convex/moneyLedger.ts`, `src/modules/money/internal/payout-transfer-http.ts`, `src/modules/money/server.ts`
+- Impact: Callers can reach API-shaped paths that look implemented but cannot complete the economic workflow. Compatibility stubs increase the risk of confusing a deliberate refusal with a transient outage.
+- Fix approach: Keep refusals explicit while completing the Formance-backed replacement, then remove retired exports and routes in the same compatibility migration. Do not keep two monetary authorities alive.
 
-## 2. Network Egress Guard (SSRF)
+**Production dependency anchored in a planning spike:**
+- Issue: `@formance/formance-sdk` is installed from a checked-in tarball under `.planning/spikes/001-formance-ledger-package4/vendor/` rather than from a release-oriented vendor location or package registry.
+- Files: `package.json`, `package-lock.json`, `.planning/spikes/001-formance-ledger-package4/vendor/formance-formance-sdk-7.0.0.tgz`
+- Impact: Production installation depends on a planning-artifact path, which makes pruning `.planning/` or extracting the runtime package unsafe. Provenance and upgrade review are harder than for a normal pinned dependency.
+- Fix approach: Move the exact audited tarball to a release-owned vendor directory or publish an internally controlled package. Preserve its digest and pin while changing only the source location.
 
-`src/modules/network-guard/public.ts` implements a full SSRF blocklist:
+**Compiler and framework escape hatches:**
+- Issue: TypeScript skips dependency declaration checking, Nitro uses a dated nightly build, and React Doctor is advisory rather than blocking.
+- Files: `tsconfig.json`, `package.json`, `.github/workflows/react-doctor.yml`
+- Impact: Incompatible dependency types, nightly regressions, or React security/performance findings can reach the main release gate without a dedicated failure signal.
+- Fix approach: Remove `skipLibCheck` after dependency declarations pass, graduate Nitro to a stable pinned release when compatible, and promote React Doctor to a blocking level after the existing baseline is triaged.
 
-- Blocked IPv4 ranges: `0.0.0.0/8, 10/8, 100.64/10 (CGNAT), 127/8, 169.254/16 (link-local), 172.16/12, 192.168/16, 198.18/15 (benchmark), 224/4, 240/4` plus IPv6 `::, ::1, fc00::/7, fec0::/10, fe80::/10, ff00::/8` (public.ts:14-29).
-- **DNS-rebinding defense**: `createGuardedLookup` (public.ts:70-108) is a `LookupFunction` that vetts every resolved address and refuses when *any* resolved address is blocked (not just the first) — all-or-nothing admission, callback rejects with `ECONNREFUSED` ("Storefront importer refused a non-public DNS resolution.", :127-131).
-- Hostname blocklist: `localhost`, `local`, `*.local` (public.ts:145-147); bracketed/trailing-dot host normalization (:131-142); **IPv4-mapped IPv6 unmasking** via `::ffff:` extraction checked against the v4 blocklist (public.ts:168-200) — classic bypass closed.
-- `isPublicHttpTarget` fails closed: DNS error → `false` (public.ts:56-59).
+## Known Bugs
 
-## 3. Source-Write Admission (server-write trust envelope)
+**Recovery objective misses the declared RPO:**
+- Symptoms: The isolated database restore is functionally correct and meets the 60-minute RTO, but the restored point is 308 seconds old against a 300-second RPO.
+- Files: `docs/operations/deployment-maturity.md`, `docs/guides/package-4-release-evidence.md`, `infra/package4/recovery-drill/main.tf`, `infra/package4/recovery-drill/verify-restored-formance.sh`
+- Trigger: Run the Package 4 point-in-time recovery drill against the declared five-minute recovery-point threshold.
+- Workaround: Keep the environment below `RECOVERABLE` and production locked; repeat the drill with a restore point that remains at or below 300 seconds.
 
-All privileged writes (Convex mutations, server fns) pass a signed-admission seam:
+**Deployed Stripe boundary does not match the durable source boundary:**
+- Symptoms: Source defines destination-isolated webhook verification, a durable inbox, and a dedicated Workpool, while the synthetic deployment still runs the synchronous webhook boundary. The live snapshot destination is unversioned and its event set is broader than the declared contract.
+- Files: `src/routes/api.stripe.webhook.accounts-v2.ts`, `src/modules/money/server.ts`, `convex/moneyStripeWebhookInbox.ts`, `convex/moneyStripeWebhookWorker.ts`, `convex/stripeWebhookWorkpool.ts`, `docs/operations/deployment-maturity.md`
+- Trigger: Compare the deployed Stripe destinations and event processing path with the source contract in `docs/operations/deployment-architecture.md`.
+- Workaround: Production remains disabled. Deploy the exact source revision to synthetic, install restricted credentials, replay both destinations, and prove no queued or stranded work before release closure.
 
-- `src/lib/server/source-write-admission.ts` wraps `@/modules/security/source-write-admission`: middleware attaches admission context per serverFn (:14-21); admission requires the *exact Convex command object* — missing command throws `missing_source_write_request` (:34-37). Body digest + command digest bind the signed envelope to the exact bytes/command (:31-44).
-- Key rotation is first-class: per-scope family keys with previous-key and derived-key-ID slots for `BILLING, PROTECTED, CATALOG, OPERATOR, REPAIR, SESSION` families (`.env.example` "Source-write:v2 trust envelope"). Production configures each family as `safeKeyId:at-least-32-byte-secret`; non-production HKDF-derives from `AE_SOURCE_WRITE_SECRET`; "all material is server-only".
-- A cron prunes expired admission nonces hourly (`cleanupExpiredSourceWriteNonces`, convex/crons.ts:38-40).
+**Cost and forecast readback unavailable:**
+- Symptoms: AWS Cost Explorer returns `DataUnavailable`; month-to-date cost and forecast cannot be evidenced even though budgets and anomaly detection exist.
+- Files: `docs/operations/deployment-maturity.md`, `infra/package4/account-baseline/main.tf`
+- Trigger: Query Cost Explorer before the new account has sufficient ingestion history.
+- Workaround: Treat budget amounts as limits rather than observed cost and block production-capacity claims until provider readback returns actual usage and forecast.
 
-## 4. Request Safety Middleware Chain
+## Security Considerations
 
-Middleware order in `src/start.ts:102-113` (deliberately ordered):
+**Synthetic Cloudflare Tunnel credential exposure:**
+- Risk: A locally exposed Tunnel token can authorize an old connector until rotation and forced disconnection are proven. Continued use is accepted only for the synthetic release environment.
+- Files: `docs/operations/deployment-maturity.md`, `docs/guides/package-4-release-evidence.md`, `infra/package4/modules/release-environment/cloudflare.tf`
+- Current mitigation: The synthetic environment is not production, sensitive production data is absent, and the issue is recorded as an accepted release-only risk.
+- Recommendations: Rotate the Tunnel credential, force-disconnect old connectors, bind both replicas to the new generation, and prove old-token denial before production.
 
-1. `requestCorrelationMiddleware` — `X-AE-Request-Id` propagated; incoming header validated against `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` else fresh UUID (`src/lib/server/request-correlation.ts:11,22-25`); WeakMap-scoped, echoed on every response incl. redirects (:54-63).
-2. `apiRequestBoundaryMiddleware` — blocks `/api/*` paths containing `.`/`%2e` dot-segments before TanStack's encoded-segment normalization, returning RFC 9457 404 (`src/lib/server/api-request-boundary.ts:23-29`); reads the raw Node request URL because TanStack normalizes first (:14-16).
-3. `observabilityRequestMiddleware` — Sentry + PostHog, see §6; `/api/health` & `/api/ready` exempt (start.ts:31-33).
-4. `securityHeadersRequestMiddleware` — CSP via `resolveCspModeFromEnv()` (`AE_CSP_REPORT_ONLY` env, start.ts:76-82).
-5. `agentContentNegotiationMiddleware` — markdown agent pages for bots, placed before auth because public reads (start.ts:85-93).
-6. `csrfMiddleware` — TanStack CSRF on `serverFn` handlers only (start.ts:95-97).
-7. `sourceWriteAdmissionMiddleware` (§3).
-8. `clerkMiddleware` with `authorizedParties: [resolveCanonicalOrigin()]` (start.ts:96-99); local-e2e auth bypass removes Clerk entirely and "fails closed if enabled in production" (`.env.example` `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E`).
+**Recovery-drill database credential exposure:**
+- Risk: The isolated restore credential is exposed and the retained drill remains addressable inside the recovery boundary.
+- Files: `docs/operations/deployment-maturity.md`, `docs/guides/package-4-release-evidence.md`, `infra/package4/recovery-drill/main.tf`
+- Current mitigation: The source database credential is rotated, Formance health is re-proven, the drill is isolated, and the exposed drill credential is ineligible for production.
+- Recommendations: Do not retrieve or reuse the credential. Destroy the exact retained drill after evidence approval and create a fresh isolated target for the next recovery exercise.
 
-Body bounds: `readBoundedRequestText` (`src/lib/server/bounded-request-body.ts:33-63`) checks declared `content-length` first, then streams with a running byte counter and cancels the reader on overflow → typed `{ ok: false; code: 'payload_too_large' }` union, never throws on size. Method hygiene: `methodNotAllowed(allowed)` (`src/lib/server/method-guard.ts:10-18`) emits RFC 9457 405 with `Allow` header so "a wrong method doesn't fall through to the SPA shell."
+**Deployment role exceeds steady-state least privilege:**
+- Risk: The MFA-backed deployment role attaches AWS `PowerUserAccess`, increasing the blast radius of a compromised human deployment session.
+- Files: `infra/package4/bootstrap/state-and-deployer.yaml`, `docs/operations/deployment-maturity.md`, `infra/package4/README.md`
+- Current mitigation: Access uses named human login, MFA-backed temporary role assumption, root MFA, and no root access keys.
+- Recommendations: Derive a narrow policy from the declared seven-day CloudTrail usage trace, preserve explicit `iam:PassRole` boundaries, and remove `PowerUserAccess` before production.
 
-Rate limiting (`src/lib/server/rate-limit.ts`): closed name vocabulary `public-read | public-mutation | oauth-issuance | oauth-device-poll | chat-anonymous | chat-anonymous-edge` (:10-17); admission results are a typed union `{ok:true, retryAfter?} | {ok:false, retryAfter}` (:23-25); the edge chat path uses a *service-authenticated* Convex assertion (`createConvexServerFunctionAssertion`, :60-65) rather than trusting the browser. Admission delegates to Convex source mutations (`rateLimit:admitHttp`, :29-30).
+**Production legal and financial perimeter is deliberately unapproved:**
+- Risk: Enabling production funding or mainnet settlement before Australian legal, AML/CTF, tax, and bank-account gates are approved could create regulated stored-value, remittance, GST, privacy, or client-money exposure.
+- Files: `START_LINE.md`, `PRODUCT.md`, `convex/moneyCommercialPolicy.ts`, `src/modules/money/internal/convex-schema.ts`, `infra/package4/environments/production/main.tf`
+- Current mitigation: Production policy supports `disabled_pending_approval`; the production infrastructure root is declared but unapplied; production funding and mainnet effects are disabled.
+- Recommendations: Preserve fail-closed versioned policy admission. Require named external approvals and exact production readback before changing the policy state or applying the production root.
 
-## 5. Error Model (RFC 9457 + google.rpc.Code)
+**Advisory-only React security scan:**
+- Risk: React Doctor reports security, correctness, accessibility, and performance issues but never fails a pull request.
+- Files: `.github/workflows/react-doctor.yml`, `doctor.config.ts`
+- Current mitigation: The kernel release workflow separately runs lint, typecheck, unit, integration, import-boundary, UI-contract, E2E, accessibility, and build checks.
+- Recommendations: Triage the current Doctor baseline and set blocking to `error`; keep the broader source gate as the primary release proof.
 
-Single canonical model in `src/lib/errors.ts`:
+## Performance Bottlenecks
 
-- 14 problem kinds; `no_data` is a *non-error* ok-outcome kind with default status 200 (errors.ts:13-29, 49). Status↔kind bidirectional maps with `kindForStatus` fallback to `UNKNOWN` (:31-55).
-- `buildProblem` (errors.ts:118-137) spreads `extras` FIRST so canonical members always win — callers cannot overwrite reserved keys.
-- **Untrusted-content firewall**: `remoteProblemToProblem` (errors.ts:247-262) never copies remote `title`/`detail` ("arbitrary backend prose... hostile `--base-url`"); only stable `code` (validated by `^[a-z][a-z0-9_:-]{0,95}$`, `isStableProblemCode` :225-227), canonical `kind`, and retryability cross the boundary. Same policy for provider text in `gatewayFailureToProblem` (:273+): "callers receive stable taxonomy and retryability, never content-shaped exceptions."
-- ~41 gateway refusal codes mapped to kinds (errors.ts:157-204): `outcome_unknown → UNAVAILABLE`, `reconciliation_required → FAILED_PRECONDITION`, `budget_exhausted → RESOURCE_EXHAUSTED`, `lease_not_current → FAILED_PRECONDITION`, etc.
-- HTTP projection helper `problem()` in `src/lib/server/problem.ts`; per-route 405 via §4.
+**Unbounded per-owner reads and fan-out:**
+- Problem: `loadOfferingSourceState` collects every offering for a Business and then performs per-offering revision and access-path reads. OAuth family invalidation also collects every active family for a credential or Principal and patches them in parallel.
+- Files: `convex/catalogOfferingMutations.ts`, `convex/agentAccessPrincipals.ts`
+- Cause: `.collect()` and `Promise.all()` scale with total historical owner state rather than a fixed command batch.
+- Improvement path: Add cursor-backed batches with durable continuation state. Keep revocation fail-closed across batches and enforce a maximum active-family policy at issuance.
 
-## 6. Observability & Telemetry Safety
+**Webhook retries can occupy a narrow worker pool for long periods:**
+- Problem: Stripe ingestion has four-way parallelism and up to 13 exponentially backed-off attempts starting at 60 seconds. Provider outages or poison events can create a long-lived queue.
+- Files: `convex/stripeWebhookWorkpool.ts`, `convex/moneyStripeWebhookInbox.ts`, `convex/moneyStripeWebhookWorker.ts`
+- Cause: All Checkout, refund, and Accounts v2 work shares one small pool and retry policy.
+- Improvement path: Measure queue age and depth, alert on oldest queued event, quarantine deterministic refusals immediately, and split pools only when observed traffic or failure domains justify it.
 
-- Wiring is entirely in `src/start.ts:31-63`: lazy dynamic imports, Sentry `withIsolationScope` per request, tags `ae.path` / `ae.request_id` from the correlation context, `captureServerException` in catch, `flushPostHogServer()` in finally with swallow. Config gate: `readObservabilityServerConfig().enabled`; health endpoints exempt; emergency brakes `AE_DISABLE_OBSERVABILITY` / `AE_DISABLE_PUBLIC_FUNNEL_SOURCE_SYNC` (`.env.example` observability section).
-- **Telemetry sanitization** before send: `sanitizeTelemetryValue`/`sanitizeTelemetryError` from `src/lib/observability/private-route-safety` wrap every path/correlation value and error (start.ts:11, 46-52).
-- **Payload redaction**: `src/modules/observability/internal/redaction.ts:8-24` — recursive redaction keyed on `/email|phone|contact|cookie|authorization|secret|token|session/i` → `[redacted]`, with `payloadHash` over the *redacted* payload (`canonicalDigest`) so hashes are stable without storing sensitive material.
-- Audit envelope: Package-3 audit events created via `src/modules/observability/public.ts` (`createPackage3AuditEvent`, :36-39) and persisted in `convex/securityShared.ts` (`persistAuditEvent`, referenced at authorityBoundary.ts:34).
-- Funnel analytics owned by PostHog, errors by Sentry, "Owner activation milestones stay in Convex" (`.env.example`).
+**Large discovery payload baseline:**
+- Problem: The recorded MCP manifest is 221,955 bytes, with 186,908 bytes in output schemas. Contract tests prevent more than 20% growth but do not make the baseline cheap for agents to fetch or parse.
+- Files: `docs/guides/package-4-cutover-evidence.md`, `src/lib/server/mcp-api.ts`, `src/modules/actions/contract.ts`, `tests/unit/server/mcp-api-official-client.test.ts`
+- Cause: A broad action surface publishes complete schemas together even though the managed Call path is intentionally narrow.
+- Improvement path: Keep the canonical generated manifest, but expose compact action-specific discovery and avoid repeating schemas in search, status, and refusal responses.
 
-## 7. Fail-Closed Execution Semantics
+## Fragile Areas
 
-- **Refusal vocabulary is closed and typed**: `operationInvokeRefusalCodeValues` — 30 codes as a zod enum in `src/modules/capability-execution/operation-invoke-contracts.ts:23-53`; input schema is `z.strictObject` with bounded lengths (`operationRef` ≤300, `idempotencyKey` ≤200, :56-60).
-- **Unknown outcomes are never retried automatically**: the retry-class vocabulary includes `reconcile_before_retry` (contracts:73-78), and `reconciliationStateSchema` (:81-88) demands `attemptRef + effectGeneration + evidenceSource` — reconciliation evidence must exist before a retry, `retry` is literally the `'reconcile_before_retry'` literal.
-- **Charge states include `outcome_unknown`** as a first-class settlement state (`chargeStateSchema`: `free_tier|paid|insufficient_credit|outcome_unknown|refunded`, contracts:55-61); receipt states `settled|refunded|reconciliation_required` (:115-119). Money is never silently charged/refunded when the provider outcome is unknown.
-- Public read projections are refused-not-fabricated: `PublicInvocationCommandResult` unions (`cancelled/not_released` vs `reconciliation_required/possibly_released` vs `reconciled` vs `refused`) in `src/modules/action-invocation/operation-public.ts:56-62` — the `possibly_released` fence survives to the public surface.
-- Cross-principal reads refuse with a dedicated code `cross_principal_refused` (operation-public.ts:69, 86-89).
+**Cross-system financial authority:**
+- Files: `docs/operations/deployment-architecture.md`, `src/modules/money/formance.ts`, `src/modules/money/formance-workflows.ts`, `convex/moneyAccountFunding.ts`, `convex/moneyX402PaymentAuthorization.ts`, `convex/moneyDocuments.ts`
+- Why fragile: Stripe owns funding evidence, Formance owns balances and postings, Convex owns authority/Commitment/Invocation/recovery, and x402/CDP owns payment submission evidence. A cached Convex projection must never authorize a financial consequence.
+- Safe modification: Preserve exact durable references and idempotency digests across systems; write through Formance before finalizing Convex projections; treat provider timeouts as `outcome_unknown`; never net AUD and USDC legs.
+- Test coverage: Deterministic and real-Formance tests exist, but the full authenticated funding-refund-managed-Call-document-close journey remains unproved in the synthetic release (`tests/integration/money-formance-boundary.test.ts`, `tests/e2e/authenticated/package4-account-commerce.spec.ts`, `docs/guides/package-4-release-evidence.md`).
 
-## 8. Privacy & Evidence Redaction (public vs owner views)
+**x402 possible-submission and recovery fence:**
+- Files: `src/modules/capability-execution/invocation-worker/x402Authorization.ts`, `src/modules/capability-execution/invocation-worker/runRelease.ts`, `convex/lib/operationInvocations/dispatch.ts`, `convex/moneyX402PaymentAttempts.ts`, `src/routes/api.v1.operations.$invocationRef.reconcile.ts`
+- Why fragile: A timeout after signing or submission cannot be classified as success or failure from transport errors. A blind retry can pay or invoke twice.
+- Safe modification: Persist the possible-submission fence before signing, retain the stable Invocation reference, and require status/reconcile evidence before any new effect generation.
+- Test coverage: Local deterministic tests cover state transitions, but the external Base Sepolia canary is absent from release evidence (`tests/unit/convex/money-x402-payment-attempts.test.ts`, `tests/unit/dev/x402-local-canary.test.ts`, `docs/guides/package-4-release-evidence.md`).
 
-- `readPublicInvocationStatus` (`src/modules/action-invocation/operation-public.ts:73-95`) documents its own contract: "Read a durable invocation without returning owner, source, input, or provider material." Authorization against the persisted owner happens *before* any projection; caps: 100 attempts, 100 history rows (:16-17).
-- Public shapes expose only refs, generations, states, and digests — `PublicInvocationAttempt { attemptRef, attemptNumber, effectGeneration, release, outcome, retry }` (:27-34); no input/output payloads.
-- Observability audit payloads are redacted-by-key-pattern (§6) before hashing.
-- Source-unavailable / authority-reader-unavailable codes (errors.ts:169-176) let reads fail closed rather than degrade to weaker projections.
+**Dual Stripe webhook destinations:**
+- Files: `src/lib/server/stripe-money-webhook.ts`, `src/routes/api.stripe.webhook.ts`, `src/routes/api.stripe.webhook.accounts-v2.ts`, `convex/moneyStripeWebhookInbox.ts`
+- Why fragile: Snapshot events and thin Accounts v2 events require different signatures and disjoint event vocabularies, yet converge on one durable inbox. Destination drift can reject valid events or admit the wrong payload class.
+- Safe modification: Keep per-destination secrets and exact event allowlists, bind destination and payload digest to event identity, and hold conflicting replays for reconciliation.
+- Test coverage: Unit tests cover parsing and inbox replay, while deployed redelivery, destination narrowing, and no-stranded-work evidence remain open (`tests/unit/money/stripe-webhook.test.ts`, `tests/unit/convex/money-stripe-webhook-inbox.test.ts`, `docs/operations/deployment-maturity.md`).
 
-## 9. Background Work Attribution
+**Generated API and route artifacts:**
+- Files: `convex/_generated/api.d.ts`, `convex/_generated/server.d.ts`, `src/routeTree.gen.ts`, `tools/release/verify-convex-generated-anonymous.ts`
+- Why fragile: Route or Convex function changes require regenerated committed artifacts; stale output can compile locally through old declarations while deployment exposes a different contract.
+- Safe modification: Regenerate through the maintained scripts, run the anonymous codegen drift check, and review generated diffs with the source change.
+- Test coverage: CI proves anonymous generation does not mutate `convex/_generated`, but the proof applies only to the committed revision in `.github/workflows/kernel-release-gate.yml`.
 
-- All scheduled work is declared in `convex/crons.ts`: 6xx facilitator reconciliation every 15min; facilitator discovery 12h; Agentic-Market snapshots 6h; API registry 24h; market presence & capability-supply readiness hourly; source-write-nonce + OAuth-grant cleanup hourly; daily supplier settlement `0 0 * * *` (crons.ts:8-52). Comment: "Pre-launch cadence... Tighten these only when the market is actually live" (:6-7).
-- Every cron routes through `internal.workloadCron.*` — a single attribution gate: `admitWorkloadCron` (`convex/workloadCron.ts:55+`) resolves a declared `WorkloadCronSnapshot` (`declarationByName`) and stamps the **system workload principal** (`SYSTEM_WORKLOAD_PRINCIPAL_REF/ACCOUNT_REF/OWNERSHIP_REF/MEMBERSHIP_REF/OWNER_PRINCIPAL_REF`, workloadCron.ts:22-26) plus `WorkloadContextAdmission` — cron work never borrows user identity; it runs as an explicit dedicated workload principal with delegation-service context (`createConvexDelegationStore/ContextPort`, :24-30). Violations raise `WorkloadCronBoundaryError` (workloadCron.ts:28).
-- This pairs with `WORKLOAD_AUTHORITY_SURFACES` (§1): cron/worker surfaces must resolve workload-class authority.
+**Single-host Formance application tier:**
+- Files: `infra/package4/modules/release-environment/compute.tf`, `infra/package4/modules/release-environment/templates/bootstrap.sh.tftpl`, `infra/package4/environments/production/main.tf`
+- Why fragile: Formance components have workload replicas but all run on one `t4g.large` k3s host. RDS is Multi-AZ, but host loss removes the application tier until replacement/bootstrap completes.
+- Safe modification: Treat the single host as synthetic-release architecture. Before production availability claims, prove automated host replacement or move the workload to a multi-node managed control plane.
+- Test coverage: Service restart and database restore are evidenced; full host-loss replacement is not listed as verified in `docs/guides/package-4-release-evidence.md`.
 
-## 10. Accessibility
+## Scaling Limits
 
-`.planning/design-system/ACCESSIBILITY.md` (2026-09-01, refreshed) is a source-grounded map, explicitly "not a runtime certification":
+**External registry ingestion caps:**
+- Current capacity: One source job accepts at most 1,000 total entries, 200 Agentic Market services, eight pages, two sweeps, and a 20-second job deadline.
+- Limit: Larger or slower registries become explicitly incomplete; the canonical market cannot assume the external snapshot is exhaustive.
+- Scaling path: Persist source cursors and continuation checkpoints, retain provenance and incomplete reasons, and graduate entries in bounded batches (`src/modules/market/registry-source-adapters.ts`, `convex/marketExternalRegistryRefresh.ts`).
 
-- **Baseline (from BRAND.md/DESIGN.md)**: AA text contrast, visible two-part focus indicator, semantic tables/headings, complete keyboard operation, 44px mobile touch targets, `prefers-reduced-motion`, explicit loading/empty/error/recovery states.
-- Focus: `--ae-focus-ring` defined as two-layer shadow `0 0 0 2px var(--ae-bg), 0 0 0 4px var(--ae-fg)` in `src/styles/globals.css`; shadcn controls use `focus-visible:ring-[3px]` etc. **Known gap**: the token itself is rarely consumed by components — controls spell out ring utilities, so the central treatment can drift; Dialog/Sheet close buttons use `focus:ring-2` not `focus-visible` and lack 44px sizing.
-- Keyboard: command-panel hotkeys (`useCommandPanelHotKeys.ts` — Cmd/Ctrl-K, `/`, Escape with text-entry guards); Radix primitives own focus traps; skip links in `AePublicShell`/`AeOperatorShell`; operator table uses `@radix-ui/react-roving-focus` (`AeOperatorDataTable.tsx`); real `<table>` with `<caption>`, `aria-sort` headers.
-- Automated coverage is narrow: `tests/e2e/a11y/` has only 3 specs — `engine-product-a11y.spec.ts`, `operator-shell-a11y.spec.ts`, `developer-discovery-a11y.spec.ts`; the doc flags no exhaustive check of operator forms, dialogs/sheets, chat, reduced motion, touch geometry, or measured contrast. Broader e2e suites exist in `tests/e2e/` (`application-recovery.spec.ts`, `local-auth-boundary.spec.ts`, `package3-account-security.spec.ts`, `multi-agent-lifecycle.spec.ts`, authenticated `global.setup.ts`).
+**Facilitator withdrawal scan cap:**
+- Current capacity: Missing-publication withdrawal inspects at most 1,000 current publications for `ae:public` in one call.
+- Limit: Once matching publications exceed the cap, records beyond the first batch can remain current even when absent from the latest source snapshot.
+- Scaling path: Paginate the indexed scan with a durable cursor and complete all pages before declaring refresh success (`convex/facilitatorDiscovery.ts`).
 
-## 11. Runtime & Secrets
+**Convex workpool allocation:**
+- Current capacity: Market dispatch reserves 32 of the documented 100 global Convex workpool slots; Stripe webhook processing uses four parallel workers.
+- Limit: Concurrent refresh, invocation, and webhook bursts can contend for finite global action capacity; retrying provider failures extends slot occupancy.
+- Scaling path: Track per-pool queue age, completion latency, and retry counts; adjust allocations from observed demand and isolate high-consequence financial work when contention appears (`convex/marketDispatchWorkpool.ts`, `convex/stripeWebhookWorkpool.ts`).
 
-- **Node 22 is required** for Convex (memory + repo convention; scripts assume it).
-- `.env.example` is the secrets inventory; all secrets are server-only "never expose to Vite" except `VITE_*` publishable keys. Families:
-  - Auth: Clerk publishable/secret keys, webhook signing secret, JWT issuer domain, reverification claim.
-  - Source-write keyring (§3): 6 families × key/previous-keys/derived-key-ids + base secret.
-  - x402 payer custody: CDP Server Wallet (`CDP_API_KEY_*`, `CDP_WALLET_SECRET`); "Raw private keys are development-only and rejected by the production gate"; exact per-call 10,000 / daily 50,000 caps; non-secret `AE_X402_CDP_POLICY_RULES_DIGEST` gates the signing preflight; custody caps `AE_X402_CUSTODY_MAX_ATOMIC/DAILY_MAX_ATOMIC`; RPC endpoints pinned via `AE_X402_RPC_URLS_JSON` with an EVM-network map.
-  - Billing: Autumn + Stripe, "provider readiness is proven by source-owned readback rows, not env presence"; production host allowlist (api.useautumn.com, api.stripe.com); production accepts live-mode Stripe keys only.
-  - Model/proxy: `OPENROUTER_API_KEY`, `AE_LLM_MODEL=deepseek/deepseek-v4-flash`, `AE_CHAT_PROXY_SECRET`.
-  - Integrity keys: chat-share HMAC, inquiry access/receipt KEK, governed-send integrity, customer-request journey signing — each with key-id rotation slots.
-  - E2E/dev: local auth bypass (`VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E`, production fail-closed), authenticated-e2e gate (`AE_REQUIRE_AUTHENTICATED_E2E` fails closed unless fully configured), destructive paid smoke gated by `AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND=false` default.
-- **Programmatic secret plane** at `src/modules/secrets/`: typed `SecretPlane`/`SecretPointer`/`SecretMaterialLease` abstractions (`public.ts` re-exports `secret-plane.ts`), `InfisicalCloudSecretStore` with Vercel OIDC identity-token provider (`vercel-oidc.ts`), `createProductionSecretRuntime`, `ProductionSecretGenerationValidator` + `ProductionSecretLifecycleService` with journal and rotation (`production-lifecycle.ts`). Ephemeral material is leased via `withEphemeralSecretMaterial` — long-lived plaintext copies are avoided by design.
+**Webhook health counters saturate at 100:**
+- Current capacity: Health reads take at most 100 rows in each of stalled, failed, and reconciliation-required states.
+- Limit: A reported value of 100 means “100 or more,” so operators cannot determine backlog magnitude from the health result.
+- Scaling path: Return a saturation flag or use aggregate counters while preserving bounded reads (`convex/moneyStripeWebhookInbox.ts`).
 
-## 12. Cross-Cutting Invariants (summary)
+## Dependencies at Risk
 
-| Concern | Mechanism | Anchor |
-|---|---|---|
-| Provenance | Identity resolved server-side; request bodies never become provenance | consequence-authority.ts:262-267 |
-| Egress | IPv4+IPv6+CGNAT+link-local blocklist, DNS-rebinding-proof lookup, mapped-v6 unmasking | network-guard/public.ts:14-108,168-200 |
-| Server writes | Signed per-family admission bound to exact command digest; key rotation slots | lib/server/source-write-admission.ts; .env.example |
-| Methods/paths | 405 w/ Allow; API dot-segment boundary pre-TanStack | method-guard.ts:10-18; api-request-boundary.ts:23-29 |
-| Errors | RFC 9457 + google.rpc.Code, no remote prose crossing boundary | lib/errors.ts:118-137,247-262 |
-| Telemetry | Sanitized values/errors, redacted-by-pattern payloads hashed post-redaction | start.ts:44-52; observability/internal/redaction.ts |
-| Fail-closed | Closed refusal enums, `outcome_unknown` charge state, `reconcile_before_retry` mandatory evidence | operation-invoke-contracts.ts:23-88 |
-| Privacy | Public projections exclude owner/input/provider material; auth before projection | operation-public.ts:73-95 |
-| Background | All crons via workload principal admission, never user identity | convex/crons.ts; workloadCron.ts:22-26 |
-| A11y | AA baseline, double-focus token (partially consumed), 3 a11y e2e specs | .planning/design-system/ACCESSIBILITY.md; tests/e2e/a11y/ |
-| Secrets | Server-only env families with rotation slots + programmatic lease-based SecretPlane | .env.example; src/modules/secrets/ |
+**Nitro nightly runtime:**
+- Risk: The Vercel server runtime is pinned to `nitro-nightly@3.0.1-20260628-090458-3df69609`, which has a narrower stability and support expectation than a stable release.
+- Impact: SSR, route handling, webhook raw-body behavior, or deployment output may regress on framework upgrades.
+- Migration plan: Keep the exact pin until a stable Nitro version passes raw-body webhook, route suffix, Clerk SSR, build, and deploy-smoke tests; then replace the nightly alias in `package.json` and `package-lock.json`.
+
+**Vendored Formance SDK tarball:**
+- Risk: Dependency installation relies on a local 928-KB tarball stored in a planning spike.
+- Impact: Repository cleanup, partial checkout, or package extraction can break clean installation; automated vulnerability and provenance tooling has less package metadata context.
+- Migration plan: Move the audited artifact to a release-owned vendor path or controlled registry and keep its exact version/digest (`package.json`, `package-lock.json`, `.planning/spikes/001-formance-ledger-package4/vendor/formance-formance-sdk-7.0.0.tgz`).
+
+**Provider SDK/API coupling across high-consequence paths:**
+- Risk: Stripe, Convex Workpool, Formance, CDP, and x402 packages all participate in the managed Call and funding boundary.
+- Impact: A provider API change can alter signature verification, retry semantics, transaction readback, or payment authorization across more than one subsystem.
+- Migration plan: Keep provider packages pinned on consequence paths, upgrade one provider boundary at a time, and require exact replay/uncertainty tests (`src/lib/server/stripe-money-webhook.ts`, `src/modules/money/formance.ts`, `src/modules/capability-supply/internal/cdp-x402-payment-signer.ts`, `src/modules/capability-supply/internal/route-transport-x402.ts`).
+
+## Missing Critical Features
+
+**Production-ready managed x402 purchase:**
+- Problem: Package 4 is deployed but not release-closed. Required live evidence is absent for durable Stripe replay/refund, managed x402 success/refusal/recovery, Calls/Usage/Spend documents, signed daily close, full protocol parity, strict restore, and Base Sepolia.
+- Blocks: Production funding, production USDC settlement, and the first complete managed Call (`docs/operations/deployment-maturity.md`, `docs/guides/package-4-release-evidence.md`, `START_LINE.md`).
+
+**Complete Australian principal-reseller record:**
+- Problem: Buyer-facing Seller identity, separate Provider obligation, attributed tax facts, business-document evidence, and commercial closure are not one explicit production record.
+- Blocks: A finance team cannot yet rely on one production record to explain the full purchase and remedy chain (`PRODUCT.md`, `CONTEXT.md`, `convex/moneyProviderObligations.ts`, `convex/moneyDocuments.ts`, `convex/capabilityOperationCalls.ts`).
+
+**Provider payout execution:**
+- Problem: The owner payout transfer boundary intentionally returns `payout_not_ready`; earnings reads on the retired money surface do not expose a live payout workflow.
+- Blocks: Provider obligations cannot close through a production payout and recovery path (`src/modules/money/internal/payout-transfer-http.ts`, `convex/moneyLedger.ts`, `convex/moneyProviderObligations.ts`).
+
+**Applied Cloudflare account alerts and production-ready token lifecycle:**
+- Problem: The Cloudflare alert root is declared but unapplied because the available management token lacks the required API authority; the synthetic Tunnel token also requires rotation.
+- Blocks: Cloudflare operations cannot be called observable or production-ready (`infra/cloudflare/account-baseline`, `docs/operations/deployment-maturity.md`).
+
+## Test Coverage Gaps
+
+**Authenticated commerce journey is optional in routine CI:**
+- What's not tested: The normal push/PR source-proof job does not execute the exact-revision authenticated platform job; that job runs only on manual workflow dispatch. The Playwright specs skip when Clerk/owner/application configuration is absent.
+- Files: `.github/workflows/kernel-release-gate.yml`, `tests/e2e/authenticated/environment.ts`, `tests/e2e/authenticated/package4-account-commerce.spec.ts`, `tests/e2e/authenticated/multi-agent-lifecycle.spec.ts`
+- Risk: Identity, Account binding, hosted funding, and authenticated owner UI regressions can pass routine CI.
+- Priority: High
+
+**Real Formance suite is environment-gated:**
+- What's not tested: The real Formance integration suite uses `describe.runIf(AE_FORMANCE_INTEGRATION === 'true')` and otherwise does not run.
+- Files: `tests/integration/money-formance-boundary.test.ts`, `package.json`
+- Risk: SDK, schema, cursor, contention, and exact-reference behavior can diverge from deterministic mocks without failing a standard local run.
+- Priority: High
+
+**External x402 canary lacks release evidence:**
+- What's not tested: No remote HTTPS Base Sepolia Provider/payment-key proof is attached to the Package 4 release; local deterministic transport tests do not prove the external protocol, custody, or network boundary.
+- Files: `tools/dev/x402-local-canary.ts`, `tests/unit/dev/x402-local-canary.test.ts`, `docs/guides/package-4-release-evidence.md`
+- Risk: A real payment challenge, signature, RPC, or Provider incompatibility can appear only after release.
+- Priority: High
+
+**No enforced coverage threshold:**
+- What's not tested: Vitest config defines test locations and setup but no line, branch, function, or statement thresholds; package scripts have no maintained coverage gate.
+- Files: `vitest.config.ts`, `package.json`
+- Risk: High-risk branches can lose coverage without a release-gate failure even though the suite contains hundreds of tests.
+- Priority: Medium
+
+**Host-loss recovery is not verified:**
+- What's not tested: Service restart and database restore are proven, but replacement/bootstrap of the single k3s host after total host loss is not part of the verified release evidence.
+- Files: `infra/package4/modules/release-environment/compute.tf`, `infra/package4/modules/release-environment/templates/bootstrap.sh.tftpl`, `docs/guides/package-4-release-evidence.md`
+- Risk: Application-tier recovery time and secret rehydration remain unknown despite Multi-AZ database protection.
+- Priority: High
+
+---
+
+*Concerns audit: 2026-09-04*
