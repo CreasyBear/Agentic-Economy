@@ -74,6 +74,10 @@ function productionReadinessEnvironment(): Record<string, string> {
     AE_INFISICAL_CUSTOMER_ENVIRONMENT: 'production',
     AE_INFISICAL_CUSTOMER_SECRET_PATH: '/provider-connections',
     AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID: 'customer-machine-identity',
+    AE_INFISICAL_PLATFORM_PROJECT_ID: 'platform-project',
+    AE_INFISICAL_PLATFORM_ENVIRONMENT: 'production',
+    AE_INFISICAL_PLATFORM_SECRET_PATH: '/provider-consequences',
+    AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID: 'platform-machine-identity',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
       `${family}:0123456789abcdef0123456789abcdef`,
