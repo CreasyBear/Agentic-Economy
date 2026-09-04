@@ -494,7 +494,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     commands: manifest.commands,
     coldLoop: ['search', 'inspect', 'call', 'wait', 'receipt', 'reuse'],
     access: {
-      anonymous: 'Search, inspect, and compare current Operations without connecting.',
+      anonymous: 'List, search, describe, and compare current Operations without connecting.',
       connected: 'Run ae connect once; authenticated invocation covers free and paid operations, and consequential operations require approval.',
     },
     account: {
