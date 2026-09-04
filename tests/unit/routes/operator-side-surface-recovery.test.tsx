@@ -5,11 +5,19 @@ import { RouterContextProvider, createMemoryHistory, createRootRoute, createRout
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-const serverMocks = vi.hoisted(() => ({ readDirectory: vi.fn() }))
+const serverMocks = vi.hoisted(() => ({
+  readCalls: vi.fn(),
+  readUsage: vi.fn(),
+  readSpend: vi.fn(),
+}))
 const routeDiagnostics = vi.hoisted(() => ({ capture: vi.fn() }))
 
 vi.mock('@/lib/observability/capture-route-exception', () => ({ captureRouteException: routeDiagnostics.capture }))
-vi.mock('@/lib/server/agent-access-console.functions', () => ({ readAgentDirectoryServer: serverMocks.readDirectory }))
+vi.mock('@/lib/server/call-history.functions', () => ({
+  readOwnerCallsServer: serverMocks.readCalls,
+  readOwnerUsageServer: serverMocks.readUsage,
+  readOwnerSpendServer: serverMocks.readSpend,
+}))
 vi.mock('@/components/ae/layout/AeOperatorShell', () => ({
   AeOperatorShell: ({ children, title }: { children: ReactNode; title: string }) => <main><h1>{title}</h1>{children}</main>,
 }))
@@ -18,7 +26,9 @@ import { Route as ActivityRoute } from '@/routes/_operator/activity'
 
 afterEach(() => {
   cleanup()
-  serverMocks.readDirectory.mockReset()
+  serverMocks.readCalls.mockReset()
+  serverMocks.readUsage.mockReset()
+  serverMocks.readSpend.mockReset()
   routeDiagnostics.capture.mockReset()
 })
 
@@ -36,7 +46,9 @@ function renderActivity(result: unknown) {
 
 describe('Calls side-surface recovery', () => {
   it('projects a source rejection into an in-shell unavailable state', async () => {
-    serverMocks.readDirectory.mockRejectedValue(new Error('source offline'))
+    serverMocks.readCalls.mockRejectedValue(new Error('source offline'))
+    serverMocks.readUsage.mockResolvedValue({ kind: 'unavailable' })
+    serverMocks.readSpend.mockResolvedValue({ kind: 'unavailable' })
     const loader = ActivityRoute.options.loader as () => Promise<unknown>
     await expect(loader()).resolves.toEqual({ kind: 'unavailable' })
     expect(routeDiagnostics.capture).toHaveBeenCalledWith(expect.any(Error), { 'ae.surface': 'operator_activity_loader' })
@@ -46,9 +58,19 @@ describe('Calls side-surface recovery', () => {
   })
 
   it('keeps a successful empty directory explicitly available', async () => {
-    const directory = { items: [], details: [] }
-    serverMocks.readDirectory.mockResolvedValue(directory)
+    const calls = { page: [], isDone: true, continueCursor: null }
+    const usage = { kind: 'available', callCountUnits: '0', completedCountUnits: '0', outcomeUnknownCountUnits: '0' }
+    const spend = { kind: 'available', spendUnits: '0' }
+    serverMocks.readCalls.mockResolvedValue(calls)
+    serverMocks.readUsage.mockResolvedValue(usage)
+    serverMocks.readSpend.mockResolvedValue(spend)
     const loader = ActivityRoute.options.loader as () => Promise<unknown>
-    await expect(loader()).resolves.toEqual({ kind: 'available', directory })
+    await expect(loader()).resolves.toEqual({
+      kind: 'available',
+      calls,
+      usage,
+      spend,
+      periodStart: new Date().toISOString().slice(0, 7),
+    })
   })
 })

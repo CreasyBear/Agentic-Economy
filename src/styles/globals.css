@@ -32,6 +32,8 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
   --color-foreground-subtle: var(--ae-fg-subtle);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
