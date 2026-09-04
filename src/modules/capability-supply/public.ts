@@ -397,6 +397,7 @@ export {
   type GraphPublicationRow,
   type GraphPublishedBusiness,
   type ReadCapabilityProbeTargetResult,
+  type SuppliedCandidateQualification,
   type SuppliedCandidateRef,
 } from './internal/graph'
 export {

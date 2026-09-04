@@ -5,7 +5,7 @@ import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimme
 import type {
   ProviderOAuthCleanupResult,
   SecretPointerInput,
-} from '@/modules/capability-supply/internal/supply-funnel/provider-connection-handoff-contract'
+} from '@/modules/capability-supply/server'
 import { isRecord } from '@/modules/common/is-record'
 
 const MAX_BODY_BYTES = 16 * 1024

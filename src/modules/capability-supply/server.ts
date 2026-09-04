@@ -195,3 +195,8 @@ export {
   type ProviderApprovalDecisionKind,
   type ProviderApprovalRefusalCode,
 } from './provider-approval'
+
+export type {
+  ProviderOAuthCleanupResult,
+  SecretPointerInput,
+} from './internal/supply-funnel/provider-connection-handoff-contract'

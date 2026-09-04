@@ -13,7 +13,7 @@ import {
   x402PaymentProfileForEnvironment,
   type PublishedOperation,
 } from '@/modules/capability-supply/public'
-import type { SuppliedCandidateQualification } from '@/modules/capability-supply/internal/graph/qualify-candidate'
+import type { SuppliedCandidateQualification } from '@/modules/capability-supply/public'
 import { normalizePricingConfig, pricingConfigDigest, type PricingConfig } from '@/modules/money/public'
 
 import type { Doc, Id } from './_generated/dataModel'
