@@ -27,6 +27,7 @@ import {
   filterOwnerSupplyAuthorityOptions,
   readOwnerProviderConnectionsServer,
   resolveSupplyPricing,
+  startOwnerSupplySourceConnectionServer,
 } from "@/modules/capability-supply/supply-funnel.functions";
 
 describe("supply funnel pricing", () => {
@@ -139,5 +140,38 @@ describe("owner supply source read failures", () => {
         expect(result.error.message).not.toContain(backendDetails);
       }
     }
+  });
+});
+
+describe("Package 5 owner connection rollout", () => {
+  it("does not reserve a static-credential ceremony when production rollout is disabled", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AE_PACKAGE5_WRITES_ENABLED", "true");
+    vi.stubEnv("AE_SUPPLY_HTTP_CREDENTIALS_ENABLED", undefined);
+    sourceMocks.callSourceQuery.mockReset();
+
+    const result = await startOwnerSupplySourceConnectionServer({
+      data: {
+        businessId: "business:one",
+        source: {
+          kind: "openapi",
+          definitionUrl: "https://provider.example/openapi.yaml",
+          environment: "production",
+        },
+        expectedSourceDigest: `sha256:${"1".repeat(64)}`,
+        candidateRef: `sha256:${"2".repeat(64)}`,
+        idempotencyKey: "provider-static-disabled",
+      },
+    });
+
+    expect(result).toMatchObject({
+      kind: "action_required",
+      requiredAction: {
+        blockedCapabilities: ["supply.publish"],
+        cta: "/owner/offerings",
+      },
+    });
+    expect(sourceMocks.callSourceQuery).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
   });
 });

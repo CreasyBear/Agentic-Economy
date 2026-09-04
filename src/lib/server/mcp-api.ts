@@ -17,6 +17,8 @@ import { z } from 'zod'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
 import { buildProblem, gatewayFailureToProblem, type ProblemDetails, type ProblemKind } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
+import { package5SupplyActionRolloutDecision } from '@/lib/server/package5-rollout'
+import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { assertHttpAdmission, rateLimitedResponse } from '@/lib/server/rate-limit'
 import { readBoundedRequestJson, readBoundedRequestText, type BoundedRequestTextResult } from '@/lib/server/bounded-request-body'
@@ -68,6 +70,7 @@ export type McpAccessTier = Readonly<{
   accountManagementService?: AccountManagementService
   marketDemandService?: MarketDemandService
   fundingHandoffService?: FundingHandoffService
+  rolloutEnvironment?: StringEnvironment
 }>
 
 type AeServerHandler<T extends AnyObjectSchema> = (
@@ -309,6 +312,16 @@ export function createAeMcpServer(
       async (data: unknown) => {
         const startedAt = Date.now()
         try {
+          const rollout = package5SupplyActionRolloutDecision(action.id, data, access.rolloutEnvironment)
+          if (!rollout.enabled) {
+            return mcpToolError(buildProblem({
+              kind: 'UNAVAILABLE',
+              code: rollout.code,
+              retryable: false,
+              detail: 'This Provider capability is not enabled for the current deployment.',
+              ...(access.correlationId === undefined ? {} : { extras: { correlationId: access.correlationId } }),
+            }))
+          }
           const result = await action.run({
             data,
             context: {
@@ -369,6 +382,7 @@ type McpRequestOptions = Readonly<{
   fundingHandoffService?: FundingHandoffService
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
+  rolloutEnvironment?: StringEnvironment
 }>
 
 /**
@@ -483,6 +497,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           ?? createMarketDemandService(boundedRequest, bounded.bodyText),
         fundingHandoffService: options.fundingHandoffService
           ?? createFundingHandoffService(boundedRequest, bounded.bodyText),
+        ...(options.rolloutEnvironment === undefined ? {} : { rolloutEnvironment: options.rolloutEnvironment }),
       })
       return withRequestCorrelationHeader(await serveMcp(server, boundedRequest), correlationId)
     }

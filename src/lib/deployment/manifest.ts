@@ -63,6 +63,32 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'formance', code: 'formance_configuration_required', names: ['AE_FORMANCE_ENVIRONMENT', 'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_REQUEST_TIMEOUT_MS', 'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET'], mode: 'all' },
 ]
 
+const package5ControlledRequirements: readonly RequirementGroup[] = [
+  {
+    scope: 'package5-rollout',
+    code: 'package5_rollout_required',
+    names: [
+      'AE_PACKAGE5_WRITES_ENABLED',
+      'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+      'AE_SUPPLY_MCP_OAUTH_ENABLED',
+      'AE_PROVIDER_OFFBOARDING_ENABLED',
+    ],
+    mode: 'all',
+  },
+  {
+    scope: 'provider-secret-plane',
+    code: 'provider_secret_plane_required',
+    names: [
+      'AE_INFISICAL_BASE_URL',
+      'AE_INFISICAL_CUSTOMER_PROJECT_ID',
+      'AE_INFISICAL_CUSTOMER_ENVIRONMENT',
+      'AE_INFISICAL_CUSTOMER_SECRET_PATH',
+      'AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID',
+    ],
+    mode: 'all',
+  },
+]
+
 const liveGatewaySmokeNames = [
   'AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND',
   'AE_GATEWAY_SMOKE_RUN_ID',
@@ -117,6 +143,10 @@ const optionalNames = Object.freeze([
   'VITE_POSTHOG_APP_URL', 'POSTHOG_APP_URL',   'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', 'AE_WBA_DIRECTORY_PUBLIC_JWK_JSON',
   'AE_CLI_BASE_URL',
   'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE',
+  'AE_INFISICAL_CUSTOMER_ORGANIZATION_SLUG',
+  'AE_INFISICAL_PLATFORM_PROJECT_ID', 'AE_INFISICAL_PLATFORM_ENVIRONMENT',
+  'AE_INFISICAL_PLATFORM_SECRET_PATH', 'AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID',
+  'AE_INFISICAL_PLATFORM_ORGANIZATION_SLUG',
 ])
 
 const fieldRules: readonly FieldRule[] = [
@@ -135,6 +165,11 @@ const fieldRules: readonly FieldRule[] = [
   { name: 'AE_DISABLE_OBSERVABILITY', kind: 'boolean' }, { name: 'VITE_AE_DISABLE_OBSERVABILITY', kind: 'boolean' },
   { name: 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', kind: 'boolean' }, { name: 'VITE_AE_OPERATOR_ADVANCED_NAV', kind: 'boolean' },
   { name: 'AE_DEV_WBA_SMOKE_ENABLED', kind: 'boolean' },
+  { name: 'AE_PACKAGE5_WRITES_ENABLED', kind: 'boolean' },
+  { name: 'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED', kind: 'boolean' },
+  { name: 'AE_SUPPLY_MCP_OAUTH_ENABLED', kind: 'boolean' },
+  { name: 'AE_PROVIDER_OFFBOARDING_ENABLED', kind: 'boolean' },
+  { name: 'AE_INFISICAL_BASE_URL', kind: 'url' },
 ]
 
 const knownNames = Object.freeze([
@@ -160,7 +195,9 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
   schemaVersion: 'ae.deployment-manifest:v1', version: 1,
   runtime: Object.freeze({ nodeMajor: 22, engine: 'nodejs22.x' }),
   configuration: Object.freeze({
-    requiredProduction: Object.freeze(requiredProduction), conditional: Object.freeze(conditional), optional: optionalNames,
+    requiredProduction: Object.freeze(requiredProduction),
+    controlledPackage5: Object.freeze(package5ControlledRequirements),
+    conditional: Object.freeze(conditional), optional: optionalNames,
     forbiddenProduction: forbiddenProductionNames,
   }),
   resources: Object.freeze([
@@ -170,6 +207,7 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
       kind: 'convex-component-set',
       components: Object.freeze([
         'workpool',
+        'workflow',
         'rate-limiter',
         'agent',
         'aggregate:ownerActivationByStage',
@@ -188,6 +226,11 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
       declaration: 'Fixed AE-owned sandbox principal and exact grant; CDP development custody and Base Sepolia RPC are checked by an internal read-only readiness query.',
     }),
     Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-invocation-worker', 'operation-recovery-worker']) }),
+    Object.freeze({
+      id: 'provider-operations-rollout',
+      kind: 'controlled-rollout',
+      declaration: 'Package 5 writes, hosted HTTP credentials, MCP OAuth, and Provider offboarding require independent server-side activation. Provider secrets remain in the Infisical customer secret plane.',
+    }),
     Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${OPERATION_INVOKE_ACTION_ID}:v1`, httpPath: OPERATION_INVOKE_HTTP_PATH, mcpPath: '/mcp' }),
     Object.freeze({
       id: 'convex-scheduled-jobs',
@@ -224,6 +267,7 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   const envClass = resolveEnvironment(environment, options.environment, add)
   const production = envClass === 'production'
   const package4Release = present(environment, 'AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE') === 'synthetic_vps_fixture'
+  const package5Controlled = production || package4Release
   const compatible = options.nodeMajor === undefined || options.nodeMajor === 22
   if (!compatible) add('runtime', 'node_runtime_incompatible', ['NODE_RUNTIME'], 'runtime')
 
@@ -236,12 +280,14 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
     if (present(environment, name) !== undefined) add('forbidden', 'production_local_or_fixture_configuration', [name], 'environment')
   }
   for (const group of requiredProduction) if (production) requireGroup(environment, group, add)
+  for (const group of package5ControlledRequirements) if (package5Controlled) requireGroup(environment, group, add)
   for (const group of conditional) if (group.trigger?.some((name) => present(environment, name)) === true) requireGroup(environment, group, add)
   if (production) validateProductionClerkCredentials(environment, add, package4Release)
   if (production) validateProductionStripeCredentials(environment, add, package4Release)
   if (production) validateProductionFormanceConfiguration(environment, add, package4Release)
   if (production) validateProductionBrowserSecurity(environment, add)
   if (production) validateSourceWriteAuthority(environment, add)
+  if (package5Controlled) validatePackage5Rollout(environment, add)
   for (const rule of fieldRules) validateField(environment, rule, production, add)
   validateX402Custody(environment, add)
   validateX402RpcUrls(environment, add)
@@ -266,6 +312,7 @@ export function deploymentConfigFingerprint(environment: DeploymentEnvironmentIn
     ...sourceWriteNames,
     ...sourceWriteDerivedNames,
     ...requiredProduction.flatMap((group) => group.names),
+    ...package5ControlledRequirements.flatMap((group) => group.names),
     ...conditional.flatMap((group) => group.names),
   ])].sort()
   const unknownNames = options.unknownNames
@@ -324,6 +371,17 @@ function requireGroup(environment: DeploymentEnvironmentInput, group: Requiremen
     return
   }
   for (const name of missing) add('missing', group.code, [name], group.scope)
+}
+function validatePackage5Rollout(
+  environment: DeploymentEnvironmentInput,
+  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+): void {
+  for (const name of package5ControlledRequirements[0]!.names) {
+    const value = present(environment, name)
+    if (value !== undefined && value !== 'true') {
+      add('malformed', 'package5_rollout_not_enabled', [name], 'package5-rollout')
+    }
+  }
 }
 function validateSourceWriteAuthority(
   environment: DeploymentEnvironmentInput,
@@ -514,6 +572,7 @@ function isKnown(name: string): boolean {
   return fieldRules.some((rule) => rule.name === name)
     || knownNames.includes(name)
     || requiredProduction.some((group) => group.names.includes(name))
+    || package5ControlledRequirements.some((group) => group.names.includes(name))
     || conditional.some((group) => group.names.includes(name))
     || optionalNames.includes(name)
     || /^AE_SOURCE_WRITE_(?:KEY|PREVIOUS_KEYS|DERIVED_KEY_ID|PREVIOUS_DERIVED_KEY_IDS)_(?:BILLING|PROTECTED|CATALOG|OPERATOR|REPAIR|SESSION)$/u.test(name)

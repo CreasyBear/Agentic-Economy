@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   callSourceQuery: vi.fn(),
@@ -63,6 +63,10 @@ describe('Provider connection owner handoff', () => {
       issuedAt: 1,
       signature: 'signed',
     })
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it('reads only the safe owner-facing attempt projection', async () => {
@@ -272,6 +276,26 @@ describe('Provider connection owner handoff', () => {
     expect(mocks.callSourceMutation.mock.calls[1]?.[0]).toEqual({
       name: 'capabilityProviderConnectionAttempts:bindOAuthOwner',
     })
+  })
+
+  it('does not start a new Provider MCP OAuth ceremony when its production rollout is disabled', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AE_PACKAGE5_WRITES_ENABLED', 'true')
+    vi.stubEnv('AE_SUPPLY_MCP_OAUTH_ENABLED', undefined)
+    const beginAuth = vi.fn()
+
+    const result = await startOwnerMcpProviderConnection({
+      data: {
+        attemptRef: 'pca_oauth',
+        idempotencyKey: 'oauth-provider-disabled',
+        callbackUrl: 'https://ae.example/owner/supply/connections/oauth/callback?attempt=pca_oauth',
+      },
+      context: { request: 'owner' },
+    }, { beginAuth })
+
+    expect(result).toEqual({ kind: 'refused', code: 'not_supported' })
+    expect(beginAuth).not.toHaveBeenCalled()
+    expect(mocks.callSourceMutation).not.toHaveBeenCalled()
   })
 
   it('finishes the exact OAuth callback through the SDK transport, reconnects, and finalizes the durable connection', async () => {

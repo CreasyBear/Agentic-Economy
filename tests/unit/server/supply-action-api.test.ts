@@ -177,4 +177,89 @@ describe('supplier action HTTP adapter', () => {
       principal: expect.objectContaining({ scopes: ['market_supply:manage'] }),
     }))
   })
+
+  it('fails Package 5 writes closed in production while preserving source preview', async () => {
+    const withdraw = vi.fn().mockResolvedValue({ kind: 'refused', reason: 'must-not-run' })
+    const rolloutEnvironment = { NODE_ENV: 'production' }
+    const writeResponse = await handleSupplyActionPost(
+      new Request('https://ae.example/api/v1/supply/withdraw', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer hidden-supplier-secret' },
+        body: JSON.stringify({
+          businessId: 'business:one', offeringRef: 'offering:one', offeringRevision: 1,
+          offeringSourceHash: 'source:one', publicationRef: 'publication:one', publicationRevision: 1,
+          idempotencyKey: 'withdraw:one',
+        }),
+      }),
+      'withdraw',
+      { authenticate, resolvePrincipal, supplyManagementService: service({ withdraw }), rolloutEnvironment },
+    )
+
+    expect(writeResponse.status).toBe(503)
+    await expect(writeResponse.json()).resolves.toMatchObject({
+      kind: 'UNAVAILABLE', code: 'package5_writes_disabled', retryable: false,
+    })
+    expect(withdraw).not.toHaveBeenCalled()
+
+    const sourcePreview = vi.fn().mockResolvedValue({
+      kind: 'ready', sourceDigest: `sha256:${'1'.repeat(64)}`,
+      sourceRevision: `openapi:sha256:${'1'.repeat(64)}`,
+      provenance: { sourceKind: 'openapi', sourceUrl: 'https://provider.example/openapi.yaml', authority: 'unverified_public' },
+      authentication: [{ kind: 'public' }], candidates: [],
+    })
+    const previewResponse = await handleSupplyActionPost(
+      new Request('https://ae.example/api/v1/supply/sources/preview', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer hidden-supplier-secret' },
+        body: JSON.stringify({ kind: 'openapi', definitionUrl: 'https://provider.example/openapi.yaml', environment: 'production' }),
+      }),
+      'sourcePreview',
+      { authenticate, resolvePrincipal, supplyManagementService: service({ sourcePreview }), rolloutEnvironment },
+    )
+
+    expect(previewResponse.status).toBe(200)
+    expect(sourcePreview).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    {
+      code: 'supply_http_credentials_disabled',
+      body: {
+        kind: 'http_credential', businessRef: 'business:one',
+        sourceUrl: 'https://provider.example/openapi.yaml',
+        authentication: { kind: 'http_bearer' }, environment: 'production',
+        idempotencyKey: 'connect-http-disabled',
+      },
+      enabled: { AE_PACKAGE5_WRITES_ENABLED: 'true' },
+    },
+    {
+      code: 'supply_mcp_oauth_disabled',
+      body: {
+        kind: 'mcp_oauth', businessRef: 'business:one',
+        serverUrl: 'https://provider.example/mcp', environment: 'production',
+        idempotencyKey: 'connect-mcp-disabled',
+      },
+      enabled: { AE_PACKAGE5_WRITES_ENABLED: 'true' },
+    },
+  ])('keeps $code behind its independent connection start switch', async ({ body, code, enabled }) => {
+    const connectionConnect = vi.fn()
+    const response = await handleSupplyActionPost(
+      new Request('https://ae.example/api/v1/supply/connections/connect', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer hidden-supplier-secret' },
+        body: JSON.stringify(body),
+      }),
+      'connectionConnect',
+      {
+        authenticate,
+        resolvePrincipal,
+        supplyManagementService: service({ connectionConnect }),
+        rolloutEnvironment: { NODE_ENV: 'production', ...enabled },
+      },
+    )
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toMatchObject({ code })
+    expect(connectionConnect).not.toHaveBeenCalled()
+  })
 })

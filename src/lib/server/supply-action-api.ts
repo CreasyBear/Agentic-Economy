@@ -10,6 +10,8 @@ import {
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { response } from '@/lib/server/no-store-response'
 import { problem } from '@/lib/server/problem'
+import { package5SupplyActionRolloutDecision } from '@/lib/server/package5-rollout'
+import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import {
   runWithRequestCorrelation,
   withRequestCorrelationHeader,
@@ -65,6 +67,7 @@ export type SupplyActionHandlerOptions = Readonly<{
   authenticate?: AgentAccessAuthenticationOptions['authenticate']
   resolvePrincipal?: AgentAccessPrincipalResolver
   supplyManagementService?: SupplyManagementService
+  rolloutEnvironment?: StringEnvironment
 }>
 
 function authenticationFailure(request: Request, reason: string, status: number, correlationId: string): Response {
@@ -133,6 +136,17 @@ export async function handleSupplyActionPost(
         kind: 'INVALID_ARGUMENT',
         code: 'invalid_request',
         detail: `The request did not match ${action.invocationContract.version}.`,
+      }), correlationId)
+    }
+
+    const rollout = package5SupplyActionRolloutDecision(action.id, parsed.data, options.rolloutEnvironment)
+    if (!rollout.enabled) {
+      return withRequestCorrelationHeader(problem({
+        status: 503,
+        kind: 'UNAVAILABLE',
+        code: rollout.code,
+        retryable: false,
+        detail: 'This Provider capability is not enabled for the current deployment.',
       }), correlationId)
     }
 

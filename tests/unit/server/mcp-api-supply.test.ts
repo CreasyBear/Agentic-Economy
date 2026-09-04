@@ -221,4 +221,48 @@ describe('MCP host adapter supply', () => {
       input: { connectionRef: 'connection:x402:one' },
     }))
   })
+
+  it('fails Package 5 action writes closed in production without hiding read actions', async () => {
+    const supplyService = {
+      operationsList: vi.fn().mockResolvedValue({ kind: 'not_found' }),
+      status: vi.fn(), publish: vi.fn(),
+      withdraw: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'must-not-run' }),
+      recheck: vi.fn(), republish: vi.fn(), earnings: vi.fn(),
+      ...connectionServiceStubs(),
+    }
+    const options = {
+      authenticate: authenticateWithScopes(['market_supply:manage']),
+      supplyManagementService: supplyService,
+      rolloutEnvironment: { NODE_ENV: 'production' },
+    }
+    const writeResponse = await postMcp({
+      jsonrpc: '2.0', id: 'disabled-supply-write', method: 'tools/call',
+      params: {
+        name: 'ae_supply_withdraw',
+        arguments: {
+          businessId: 'business:one', offeringRef: 'offering:one', offeringRevision: 1,
+          offeringSourceHash: 'source:one', publicationRef: 'publication:one', publicationRevision: 1,
+          idempotencyKey: 'withdraw:one',
+        },
+      },
+    }, options, { authorization: 'Bearer supply-only' })
+
+    expect(writeResponse.status).toBe(200)
+    expect((await readMcpBody(writeResponse)).result).toMatchObject({
+      isError: true,
+      structuredContent: { kind: 'UNAVAILABLE', code: 'package5_writes_disabled', retryable: false },
+    })
+    expect(supplyService.withdraw).not.toHaveBeenCalled()
+
+    const readResponse = await postMcp({
+      jsonrpc: '2.0', id: 'available-supply-read', method: 'tools/call',
+      params: { name: 'ae_supply_operations_list', arguments: { businessRef: 'business:one', limit: 50 } },
+    }, options, { authorization: 'Bearer supply-only' })
+
+    expect(readResponse.status).toBe(200)
+    expect((await readMcpBody(readResponse)).result).toMatchObject({
+      structuredContent: { result: { kind: 'not_found' } },
+    })
+    expect(supplyService.operationsList).toHaveBeenCalledOnce()
+  })
 })

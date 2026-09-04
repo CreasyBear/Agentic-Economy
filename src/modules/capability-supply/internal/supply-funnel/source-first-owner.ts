@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
 import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
+import { package5RolloutDecision } from '@/lib/server/package5-rollout'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
 import { stableStringify } from '@/modules/common/stable-hash'
@@ -224,6 +225,7 @@ export async function previewOwnerSupplySource({
   if (preview.kind !== 'action_required'
     || (data.source.kind !== 'mcp' && data.source.kind !== 'agent_plugin')
     || challengedServerUrl === undefined) return preview
+  if (!package5RolloutDecision('mcpOAuth').enabled) return unavailablePreview()
   return await reserveOwnerSourceConnection({
     businessId: data.businessId,
     sourceKind: 'mcp_oauth',

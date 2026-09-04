@@ -17,6 +17,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ProviderOffboardingStatus } from '@/modules/capability-supply/provider-offboarding'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
+import { package5RolloutDecision } from '@/lib/server/package5-rollout'
 import {
   supplierOperationStatusSchema,
   type SupplierOperationStatus,
@@ -362,6 +363,8 @@ export const startOwnerProviderOffboardingServer = createServerFn({ method: 'POS
   }).parse(data))
   .handler(async ({ data, context }): Promise<OwnerProviderOffboardingResult> => {
     privateOwnerResponse()
+    const rollout = package5RolloutDecision('providerOffboarding')
+    if (!rollout.enabled) return { kind: 'refused', reason: rollout.code }
     const identity = await readCurrentOwnerIdentity()
     if (identity.kind !== 'available') return identity.kind === 'not_found' ? { kind: 'not_found' } : { kind: 'unavailable' }
     const retentionPolicyVersion = readTrimmedEnv(process.env, 'AE_RETENTION_POLICY_VERSION')

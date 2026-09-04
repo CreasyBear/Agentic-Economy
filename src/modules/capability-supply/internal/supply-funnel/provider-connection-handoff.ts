@@ -21,6 +21,7 @@ import {
   sourceQuery,
 } from '@/lib/server/convex-source'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
+import { package5RolloutDecision } from '@/lib/server/package5-rollout'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
@@ -365,6 +366,7 @@ export async function startOwnerMcpProviderConnection(
   },
   runtime: McpOAuthHandoffRuntime = {},
 ): Promise<OwnerMcpProviderConnectionStartResult> {
+  if (!package5RolloutDecision('mcpOAuth').enabled) return startRefusal('not_supported')
   const now = runtime.now ?? Date.now
   const attempt = await safeReadOwnerAttempt(data.attemptRef)
   if (attempt.kind !== 'available') return startRefusal('not_found')

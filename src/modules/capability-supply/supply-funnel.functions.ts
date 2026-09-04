@@ -39,6 +39,7 @@ import {
   startOwnerMcpProviderConnectionInputSchema,
 } from './internal/supply-funnel/provider-connection-handoff-contract'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { package5RolloutDecision } from '@/lib/server/package5-rollout'
 
 export type { OwnerProviderConnectionAttemptReadback } from './internal/supply-funnel/provider-connection-handoff-contract'
 export type {
@@ -159,7 +160,9 @@ export const startOwnerSupplySourceConnectionServer = createServerFn({
   method: 'POST',
 })
   .validator((data) => ownerSourceConnectionInputSchema.parse(data))
-  .handler(startOwnerSupplySourceConnection)
+  .handler(async (input) => package5RolloutDecision('httpCredentials').enabled
+    ? await startOwnerSupplySourceConnection(input)
+    : disabledProviderConnectionPreview())
 
 export const resumeOwnerSupplySourceDraftServer = createServerFn()
   .validator((data) =>
@@ -194,3 +197,19 @@ export const withdrawOwnerCapabilityServer = createServerFn({ method: 'POST' })
 export const republishOwnerCapabilityServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerSupplyMaintenanceInputSchema.parse(data))
   .handler(republishOwnerCapability)
+
+function disabledProviderConnectionPreview() {
+  return {
+    kind: 'action_required' as const,
+    requiredAction: {
+      action: 'supply.source.preview' as const,
+      blockedCapabilities: ['supply.publish'] as const,
+      cta: '/owner/offerings',
+      ctaLabel: 'Return to Operations',
+      description: 'Provider connections are not enabled for this deployment.',
+      iconUrl: null,
+      status: 'required' as const,
+      title: 'Provider connections unavailable',
+    },
+  }
+}

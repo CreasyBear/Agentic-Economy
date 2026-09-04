@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   payoutReadiness: vi.fn(),
   ownerStatus: vi.fn(),
   setResponseHeader: vi.fn(),
+  mutation: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
@@ -23,6 +24,7 @@ vi.mock('@tanstack/react-start/server', () => ({
 vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/convex-source')>()),
   callSourceQuery: mocks.identity,
+  callSourceMutation: mocks.mutation,
 }))
 vi.mock('@/modules/capability-supply/supply-funnel.functions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/capability-supply/supply-funnel.functions')>()),
@@ -49,6 +51,7 @@ import {
   readOwnerOperationsPayoutSummaryThroughSource,
   readOwnerOperationsPublicStatusServer,
   readOwnerOperationsPublicStatusThroughSource,
+  startOwnerProviderOffboardingServer,
 } from '@/components/ae/offerings/owner-operations.functions'
 
 afterEach(() => {
@@ -58,6 +61,8 @@ afterEach(() => {
   mocks.payoutReadiness.mockReset()
   mocks.ownerStatus.mockReset()
   mocks.setResponseHeader.mockReset()
+  mocks.mutation.mockReset()
+  vi.unstubAllEnvs()
 })
 
 describe('narrow owner Operations inventory read', () => {
@@ -165,5 +170,17 @@ describe('narrow owner Operations inventory read', () => {
     expect(mocks.setResponseHeader.mock.calls).toEqual(
       Array.from({ length: 6 }, () => ['cache-control', 'private, no-store']),
     )
+  })
+
+  it('does not start Provider offboarding when its production rollout is disabled', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('AE_PACKAGE5_WRITES_ENABLED', 'true')
+    vi.stubEnv('AE_PROVIDER_OFFBOARDING_ENABLED', undefined)
+
+    await expect(startOwnerProviderOffboardingServer({
+      data: { idempotencyKey: 'offboarding-disabled' },
+    })).resolves.toEqual({ kind: 'refused', reason: 'provider_offboarding_disabled' })
+    expect(mocks.identity).not.toHaveBeenCalled()
+    expect(mocks.mutation).not.toHaveBeenCalled()
   })
 })
