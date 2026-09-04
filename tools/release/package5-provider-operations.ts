@@ -137,6 +137,24 @@ export const package5ProviderOperationsReceiptSchema = z.strictObject({
 
 export type Package5ProviderOperationsReceipt = z.infer<typeof package5ProviderOperationsReceiptSchema>
 
+export class Package5AuthorityReviewRequired extends Error {
+  readonly reviewUrl: string
+  readonly sourceKind: Package5SourceKind
+  readonly operationRef: string
+
+  constructor(input: Readonly<{
+    reviewUrl: string
+    sourceKind: Package5SourceKind
+    operationRef: string
+  }>) {
+    super(`package5_source_authority_review_required:${input.reviewUrl}`)
+    this.name = 'Package5AuthorityReviewRequired'
+    this.reviewUrl = input.reviewUrl
+    this.sourceKind = input.sourceKind
+    this.operationRef = input.operationRef
+  }
+}
+
 type JsonResponse = Readonly<{ status: number; body: unknown }>
 
 function required(env: Readonly<Record<string, string | undefined>>, name: string): string {
@@ -271,7 +289,14 @@ function selectCandidate(fixture: Package5SourceFixture, candidates: readonly Su
 
 async function waitForPublished(
   config: Package5ProviderOperationsConfig,
-  operationRef: string,
+  publication: Readonly<{
+    operationRef: string
+    publicationRef: string
+    publicationRevision: number
+    sourceKind: Package5SourceKind
+    sourceDigest: string
+    sourceUrl: string
+  }>,
 ) {
   const startedAt = config.now()
   const maximumAttempts = config.statusDelayMs === 0
@@ -280,11 +305,26 @@ async function waitForPublished(
   for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
     const response = await post(config, SUPPLY_ACTION_ROUTE_CONTRACTS.status.path, {
       businessRef: config.businessRef,
-      operationRef,
+      operationRef: publication.operationRef,
     }, config.providerApiKey)
     const parsed = supplyStatusResultSchema.safeParse(requireSuccess(response, 'package5_supply_status_failed'))
     if (!parsed.success || parsed.data.kind !== 'available') throw new Error('package5_supply_status_invalid')
     if (parsed.data.status.state === 'Published') return parsed.data.status
+    if (parsed.data.status.state === 'Action required'
+      && parsed.data.status.reasonCodes.includes('provider_authority_unverified')) {
+      const reviewUrl = new URL('/admin/index-health', config.baseUrl)
+      reviewUrl.searchParams.set('publicationRef', publication.publicationRef)
+      reviewUrl.searchParams.set('expectedRevision', String(publication.publicationRevision))
+      reviewUrl.searchParams.set('expectedSourceDigest', publication.sourceDigest)
+      reviewUrl.searchParams.set('operationRef', publication.operationRef)
+      reviewUrl.searchParams.set('sourceKind', publication.sourceKind)
+      reviewUrl.searchParams.set('sourceUrl', publication.sourceUrl)
+      throw new Package5AuthorityReviewRequired({
+        reviewUrl: reviewUrl.toString(),
+        sourceKind: publication.sourceKind,
+        operationRef: publication.operationRef,
+      })
+    }
     if (parsed.data.status.state === 'Action required' || parsed.data.status.state === 'Retired') {
       throw new Error(`package5_supply_status_terminal:${parsed.data.status.state}`)
     }
@@ -357,7 +397,14 @@ async function proveFixture(
   const published = supplyPublishResultSchema.safeParse(requireSuccess(publishResponse, `package5_${fixture.kind}_publish_failed`))
   if (!published.success || published.data.kind === 'refused') throw new Error(`package5_${fixture.kind}_publish_refused`)
 
-  const supplierStatus = await waitForPublished(config, published.data.operationRef)
+  const supplierStatus = await waitForPublished(config, {
+    operationRef: published.data.operationRef,
+    publicationRef: published.data.publicationRef,
+    publicationRevision: published.data.publicationRevision,
+    sourceKind: fixture.kind,
+    sourceDigest: preview.data.sourceDigest,
+    sourceUrl: preview.data.provenance.sourceUrl,
+  })
   if (supplierStatus.source.kind !== fixture.kind
     || supplierStatus.source.revision !== preview.data.sourceRevision
     || supplierStatus.source.digest !== preview.data.sourceDigest

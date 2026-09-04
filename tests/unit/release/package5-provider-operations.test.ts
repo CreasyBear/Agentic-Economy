@@ -245,4 +245,67 @@ describe('Package 5 Provider Operations release harness', () => {
     await expect(runPackage5ProviderOperationsRelease(config(acceptingFetch)))
       .rejects.toThrow('package5_old_invoke_shape_accepted')
   })
+
+  it('returns one hosted authority-review handoff and resumes the same publication after approval', async () => {
+    const requests: Request[] = []
+    const baseFetch = successfulFetch(requests)
+    let reviewed = false
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      if (new URL(request.url).pathname === '/api/v1/supply/status') {
+        const body = JSON.parse(await request.clone().text()) as Record<string, unknown>
+        if (body.operationRef === operationRef(1) && !reviewed) {
+          requests.push(request)
+          return json({
+            kind: 'available',
+            schemaVersion: 'supplier_operations:v1',
+            businessRef: 'business:fixture',
+            status: {
+              ...status('openapi', 0),
+              state: 'Action required',
+              reasonCodes: ['provider_authority_unverified'],
+              routeability: { available: false, reasonCodes: ['provider_authority_unverified'] },
+              authority: { kind: 'unverified' },
+              health: {
+                ...status('openapi', 0).health,
+                operationalConditions: ['provider_authority_unverified'],
+              },
+            },
+          })
+        }
+      }
+      return await baseFetch(input, init)
+    }) as typeof globalThis.fetch
+
+    const firstFailure = await runPackage5ProviderOperationsRelease(config(fetch)).catch((error: unknown) => error)
+    expect(firstFailure).toMatchObject({
+      name: 'Package5AuthorityReviewRequired',
+      sourceKind: 'openapi',
+      operationRef: operationRef(1),
+    })
+    const reviewUrl = new URL((firstFailure as { reviewUrl: string }).reviewUrl)
+    expect(`${reviewUrl.origin}${reviewUrl.pathname}`).toBe('https://staging.agentic-economy.example/admin/index-health')
+    expect(Object.fromEntries(reviewUrl.searchParams)).toEqual({
+      expectedRevision: '1',
+      expectedSourceDigest: sha('1'),
+      operationRef: operationRef(1),
+      publicationRef: 'publication:openapi',
+      sourceKind: 'openapi',
+      sourceUrl: 'https://fixtures.example/source',
+    })
+
+    reviewed = true
+    await expect(runPackage5ProviderOperationsRelease(config(fetch)))
+      .resolves.toMatchObject({ schemaVersion: 'package5-provider-operations-release:v1' })
+    const openApiPublishes = requests.filter((request) => (
+      new URL(request.url).pathname === '/api/v1/supply/publish'
+    ))
+    const replayBodies = await Promise.all(openApiPublishes.map(async (request) => JSON.parse(await request.clone().text()) as Record<string, unknown>))
+    const openApiReplayBodies = replayBodies.filter((body) => (body.source as { kind?: string } | undefined)?.kind === 'openapi')
+    expect(openApiReplayBodies).toHaveLength(2)
+    expect(openApiReplayBodies.map((body) => body.idempotencyKey)).toEqual([
+      'package5:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:openapi',
+      'package5:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:openapi',
+    ])
+  })
 })
