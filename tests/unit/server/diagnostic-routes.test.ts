@@ -54,8 +54,10 @@ function productionReadinessEnvironment(): Record<string, string> {
     AE_X402_CUSTODY_MAX_ATOMIC: '100000000',
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000000',
     AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
-    STRIPE_SECRET_KEY: 'sk_live_example',
+    STRIPE_SECRET_KEY: 'rk_live_command_example',
+    STRIPE_READBACK_KEY: 'rk_live_readback_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_example',
+    STRIPE_V2_WEBHOOK_SECRET: 'whsec_v2_example',
     STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_au_gst_10_inclusive',
     AE_FORMANCE_ENVIRONMENT: 'production',
     AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com',
@@ -118,7 +120,8 @@ describe('operational diagnostics routes', () => {
     ]))
     expect(JSON.stringify(result.diagnostics)).not.toContain('convex.example')
     expect(JSON.stringify(result.diagnostics)).not.toContain('source-write-secret')
-    expect(JSON.stringify(result.diagnostics)).not.toContain('sk_live_example')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('rk_live_command_example')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('rk_live_readback_example')
     expect(JSON.stringify(result.diagnostics)).not.toContain('cdp-key-secret')
     expect(JSON.stringify(result.diagnostics)).not.toContain('cdp-wallet-secret')
     expect(fetchImpl).toHaveBeenCalledOnce()
