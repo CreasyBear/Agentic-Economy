@@ -325,7 +325,7 @@ async function checkMarketRequests(
       return {
         id: 'market_requests', state: 'pass',
         summary: `${matched.length} of ${checked} recent private market ${checked === 1 ? 'request now has' : 'requests now have'} matching Operations.`,
-        nextCommand: continuationCommand(['ae', 'inspect', firstOperation.operationRef]),
+        nextCommand: continuationCommand(['ae', 'describe', firstOperation.operationRef]),
       }
     }
     if (statuses.some((status) => status === undefined || status.kind === 'error' || status.kind === 'not_found')) {

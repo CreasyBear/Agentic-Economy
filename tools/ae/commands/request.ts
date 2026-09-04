@@ -167,7 +167,7 @@ async function requestStatus(args: readonly string[], options: CliOptions): Prom
     })
   }
   const nextCommand = parsed.data.kind === 'matched'
-    ? continuationCommand(['ae', 'inspect', parsed.data.operations[0]?.operationRef ?? ''])
+    ? continuationCommand(['ae', 'describe', parsed.data.operations[0]?.operationRef ?? ''])
     : parsed.data.kind === 'open'
       ? continuationCommand(['ae', 'request', 'status', parsed.data.requestRef])
       : undefined

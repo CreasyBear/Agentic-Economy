@@ -286,16 +286,15 @@ describe('ae doctor', () => {
             kind: 'matched', requestRef, query: savedQuery, createdAt: 10, matchedCount: 1,
             operations: [{
               operationRef, capabilityId: 'document.translate', title: 'Document translation',
-              summary: 'Translate one document.', supplier: { name: 'Reference Services', slug: 'reference' },
-              price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
-              authentication: { kind: 'ae_api_key' }, availability: { posture: 'setup_required' }, navigation: [],
+              description: 'Translate one document.', provider: { name: 'Reference Services', slug: 'reference' },
+              priceLabel: 'USD 0.50', healthStatus: 'operational',
             }],
           })
           return
         }
-        if (request.url === '/api/v1/market-operations/detail') {
+        if (request.url === '/api/v1/market-operations/describe') {
           respondJson(response, {
-            kind: 'found', schemaVersion: 'registry-operations:v1', operation: currentOperation(priorOperationRef),
+            kind: 'found', schemaVersion: 'registry-operations:v2', operation: currentOperation(priorOperationRef),
           })
           return
         }
@@ -317,10 +316,10 @@ describe('ae doctor', () => {
       checks: expect.arrayContaining([expect.objectContaining({
         id: 'market_requests', state: 'pass',
         summary: '1 of 1 recent private market request now has matching Operations.',
-        nextCommand: `ae inspect ${operationRef}`,
+        nextCommand: `ae describe ${operationRef}`,
       }), expect.objectContaining({
         id: 'repeat_use', state: 'pass',
-        nextCommand: `ae inspect ${priorOperationRef}`,
+        nextCommand: `ae describe ${priorOperationRef}`,
       })]),
     })
 
@@ -330,7 +329,7 @@ describe('ae doctor', () => {
     expect(human.stdout).toContain('AE doctor: ready')
     expect(human.stdout).toContain('✓ 1 of 1 recent private market request now has matching Operations.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
-    expect(human.stdout).toContain(`Next: ae inspect ${operationRef}`)
+    expect(human.stdout).toContain(`Next: ae describe ${operationRef}`)
     expect(human.stdout).not.toContain(savedQuery)
     expect(human.stdout).not.toContain(requestRef)
     expect(statusBodies).toEqual([{ requestRef }, { requestRef }])
@@ -383,14 +382,14 @@ describe('ae doctor', () => {
           respondJson(response, { kind: 'available', items: [], hasMore: false })
           return
         }
-        if (request.url === '/api/v1/market-operations/detail') {
+        if (request.url === '/api/v1/market-operations/describe') {
           detailRequests.push({
             ...(request.headers.authorization === undefined ? {} : { authorization: request.headers.authorization }),
             body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
           })
           respondJson(response, current
-            ? { kind: 'found', schemaVersion: 'registry-operations:v1', operation: currentOperation(operationRef) }
-            : { kind: 'not_found', schemaVersion: 'registry-operations:v1', operationRef, navigation: [] })
+            ? { kind: 'found', schemaVersion: 'registry-operations:v2', operation: currentOperation(operationRef) }
+            : { kind: 'not_found', schemaVersion: 'registry-operations:v2', operationRef })
           return
         }
         respondJson(response, { error: 'unexpected' }, 404)
@@ -411,17 +410,17 @@ describe('ae doctor', () => {
       kind: 'ready',
       checks: expect.arrayContaining([{
         id: 'repeat_use', state: 'pass',
-        summary: 'A previously successful Operation is still current and ready to inspect.',
-        nextCommand: `ae inspect ${operationRef}`,
+        summary: 'A previously successful Operation is still in the current catalog.',
+        nextCommand: `ae describe ${operationRef}`,
       }]),
     })
 
     const human = await spawnCli(['doctor', '--base-url', origin], { env: cleanEnvironment(directory) })
     expect(human.status).toBe(0)
     expect(human.stderr).toBe('')
-    expect(human.stdout).toContain('✓ A previously successful Operation is still current and ready to inspect.')
+    expect(human.stdout).toContain('✓ A previously successful Operation is still in the current catalog.')
     expect(human.stdout.match(/^Next: /gmu)).toEqual(['Next: '])
-    expect(human.stdout).toContain(`Next: ae inspect ${operationRef}`)
+    expect(human.stdout).toContain(`Next: ae describe ${operationRef}`)
     expect(human.stdout).not.toContain(invocationRef)
     expect(human.stdout).not.toContain(evidenceHash)
 
@@ -909,29 +908,19 @@ function supplyConnection(connectionRef: string, available: boolean, lifecycle: 
 function currentOperation(operationRef: string) {
   return {
     operationRef,
-    callVia: '/api/v1/operations/call',
-    paymentLane: 'brokered',
-    operationId: 'reference.lookup',
-    contract: {
-      capabilityId: 'reference.lookup', version: 1,
-      inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, customerAnnotations: [],
-    },
-    business: { businessId: 'business:reference', slug: 'reference', name: 'Reference Services' },
-    offering: { offeringRef: 'offering:reference', revision: 1, label: 'Reference lookup', summary: 'Current reference lookup' },
-    summary: 'Current reference lookup',
-    commercial: {
-      price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
-      materialTerms: [], relationship: { kind: 'none', summary: 'No commercial relationship.' },
-    },
-    dataUse: [], effects: [], evidence: [], cancellation: { kind: 'unsupported' },
-    recovery: { idempotency: 'required', recovery: 'retry_safe' },
+    capabilityId: 'reference.lookup',
+    title: 'Reference lookup',
+    description: 'Current reference lookup',
+    provider: { slug: 'reference', name: 'Reference Services' },
+    priceLabel: 'USD 0.00',
+    healthStatus: 'operational',
+    inputJsonSchema: { type: 'object' },
+    outputJsonSchema: { type: 'object' },
+    materialTerms: [],
+    dataUse: [],
+    effects: [],
+    evidence: [],
     authentication: { kind: 'ae_api_key' },
-    transport: {
-      method: 'GET', pathTemplate: '/lookup', responseStatus: 200,
-      responseContentType: 'application/json', requestTimeoutMs: 5_000,
-    },
-    provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
-    availability: { posture: 'setup_required' }, navigation: [],
   }
 }
 

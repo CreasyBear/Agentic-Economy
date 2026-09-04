@@ -63,10 +63,8 @@ function setApiKey(value: string, origin = options.baseUrl): void {
 }
 
 describe('market-terminal authenticated operation invocation', () => {
-  it('checks anonymous availability before suggesting buyer connection', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(
-      callableOperationDetail(operationRef),
-    ), { status: 200, headers: { 'content-type': 'application/json' } }))
+  it('requires the native buyer connection before authenticated inspection', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(runInvokeCommand([operationRef], { ...options, input: '{}' })).rejects.toMatchObject({
@@ -74,32 +72,36 @@ describe('market-terminal authenticated operation invocation', () => {
       code: 'agent_access_key_required',
       nextCommand: 'ae connect',
     } satisfies Partial<CliFailure>)
-    expect(fetchMock).toHaveBeenCalledOnce()
-    const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/market-operations/detail')
-    expect(new Headers(init?.headers).get('Authorization')).toBeNull()
-    expect(JSON.parse(String(init?.body))).toEqual({ operationRef })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('does not suggest connect or retry when supplier setup is incomplete', async () => {
-    const operationRef = `operation:v1:${'b'.repeat(64)}`
+  it('preserves an actionable caller-specific inspection refusal', async () => {
+    setApiKey('ae-test-caller-key')
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'unavailable',
-      schemaVersion: 'registry-operations:v1',
+      kind: 'refused',
       operationRef,
-      reason: 'setup_required',
-      navigation: [],
+      code: 'operation_not_ready',
+      retryable: true,
+      correlationRef: 'correlation:inspection',
+      continuation: {
+        action: 'operation.inspect',
+        method: 'POST',
+        path: '/api/v1/operations/inspect',
+        input: { operationRef, input: {} },
+        retryAfterMs: 5000,
+      },
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(runInvokeCommand([operationRef], { ...options, input: '{}' })).rejects.toMatchObject({
       kind: 'FAILED_PRECONDITION',
-      code: 'setup_required',
-      retryable: undefined,
-      nextCommand: undefined,
-      suggestion: undefined,
+      code: 'operation_not_ready',
+      detail: { correlationRef: 'correlation:inspection' },
     } satisfies Partial<CliFailure>)
     expect(fetchMock).toHaveBeenCalledOnce()
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe('https://market.example/api/v1/operations/inspect')
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
   })
 
   it('rejects a missing JSON positional before requiring the application key', async () => {
@@ -393,39 +395,3 @@ describe('market-terminal authenticated operation invocation', () => {
   })
 
 })
-
-function callableOperationDetail(operationRef: string): Record<string, unknown> {
-  return {
-    kind: 'found',
-    schemaVersion: 'registry-operations:v1',
-    operation: {
-      operationRef,
-      operationId: 'reference.lookup',
-      callVia: '/api/v1/operations/call',
-      paymentLane: 'brokered',
-      contract: {
-        capabilityId: 'reference.lookup', version: 1,
-        inputJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' },
-        customerAnnotations: [],
-      },
-      business: { businessId: 'business:reference', slug: 'reference', name: 'Reference Services' },
-      offering: { offeringRef: 'offering:reference', revision: 1, label: 'Reference lookup', summary: 'Look up a reference.' },
-      summary: 'Look up a reference.',
-      commercial: {
-        price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
-        materialTerms: [], relationship: { kind: 'none', summary: 'No commercial relationship.' },
-      },
-      dataUse: [], effects: [], evidence: [],
-      cancellation: { kind: 'unsupported' },
-      recovery: { idempotency: 'required', recovery: 'retry_safe' },
-      authentication: { kind: 'ae_api_key' },
-      transport: { method: 'GET', pathTemplate: '/lookup', responseStatus: 200, responseContentType: 'application/json', requestTimeoutMs: 5_000 },
-      provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
-      availability: { posture: 'routeable' },
-      navigation: [{
-        relation: 'invoke', pathTemplate: '/api/v1/operations/call', method: 'POST',
-        actionId: 'agentic-economy.operation-invoke', authentication: 'required', surfaces: ['cli'],
-      }],
-    },
-  }
-}

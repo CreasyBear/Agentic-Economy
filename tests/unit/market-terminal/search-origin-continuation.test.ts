@@ -46,15 +46,13 @@ describe('search origin continuations', () => {
         response.writeHead(200, { 'content-type': 'application/json' })
         response.end(JSON.stringify({
           kind: 'ok',
-          schemaVersion: 'registry-operations:v1',
+          schemaVersion: 'registry-operations:v3',
           query: input.query,
+          count: 0,
           items: [],
-          matchedCount: 0,
-          ranking: [],
           pagination: input.cursor === undefined
             ? { limit: 1, hasMore: true, nextCursor }
             : { limit: 1, hasMore: false },
-          navigation: [],
         }))
       })
     })
@@ -101,12 +99,12 @@ describe('search origin continuations', () => {
     const query = "supplier's private lookup"
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'no_candidates',
-      schemaVersion: 'registry-operations:v1',
+      schemaVersion: 'registry-operations:v3',
       query,
-      appliedFilters: {},
-      matchedCount: 0,
-      ranking: [],
-      navigation: [],
+      count: 0,
+      items: [],
+      note: 'No operational Operations matched this search.',
+      pagination: { limit: 10, hasMore: false },
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
     const output = captureStdout()
     const options: CliOptions = {
@@ -126,7 +124,7 @@ describe('search origin continuations', () => {
 
     const result = JSON.parse(output.read()) as { browseCommand: string; nextCommand: string }
     expect(result.nextCommand).toBe(`ae request create 'supplier'\"'\"'s private lookup' --base-url '${origin}' --json`)
-    expect(result.browseCommand).toBe(`ae search --base-url '${origin}' --json`)
+    expect(result.browseCommand).toBe(`ae list --base-url '${origin}' --json`)
     expect(result.browseCommand).not.toContain(query)
     expect(result.nextCommand).not.toMatch(/AE_API_KEY|AE_SUPPLIER_API_KEY|credential|password/iu)
   })
@@ -135,12 +133,12 @@ describe('search origin continuations', () => {
     const origin = 'http://[::1]:3024'
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       kind: 'no_candidates',
-      schemaVersion: 'registry-operations:v1',
+      schemaVersion: 'registry-operations:v3',
       query: 'private lookup',
-      appliedFilters: {},
-      matchedCount: 0,
-      ranking: [],
-      navigation: [],
+      count: 0,
+      items: [],
+      note: 'No operational Operations matched this search.',
+      pagination: { limit: 10, hasMore: false },
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
     const output = captureStdout()
 
@@ -158,7 +156,7 @@ describe('search origin continuations', () => {
     }
 
     expect(output.read()).toContain(`Remember this missing job: ae request create 'private lookup' --base-url '${origin}'`)
-    expect(output.read()).toContain(`Browse all: ae search --base-url '${origin}'`)
+    expect(output.read()).toContain(`Browse all: ae list --base-url '${origin}'`)
     expect(output.read()).not.toContain('--json')
   })
 })

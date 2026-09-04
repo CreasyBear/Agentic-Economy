@@ -109,12 +109,10 @@ describe('private market request CLI', () => {
         operationRef,
         capabilityId: 'invoice.translate',
         title: 'Invoice translation',
-        summary: 'Translate invoices.',
-        supplier: { name: 'Reference Services', slug: 'reference' },
-        price: { kind: 'fixed', amount: { currency: 'USD', units: '50', exponent: 2 } },
-        authentication: { kind: 'ae_api_key' },
-        availability: { posture: 'setup_required' },
-        navigation: [],
+        description: 'Translate invoices.',
+        provider: { name: 'Reference Services', slug: 'reference' },
+        priceLabel: 'USD 0.50',
+        healthStatus: 'operational',
       }],
     })))
     const output = captureStdout()
@@ -126,7 +124,7 @@ describe('private market request CLI', () => {
 
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'matched',
-      nextCommand: `ae inspect ${operationRef}`,
+      nextCommand: `ae describe ${operationRef}`,
     })
   })
 })

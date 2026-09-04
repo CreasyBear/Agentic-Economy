@@ -34,11 +34,11 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('requires a reachable market when browsing without a job query', () => {
+  it('requires a reachable market when browsing the Operation list', () => {
     const result = spawnCliSync([
       '--base-url',
       'http://127.0.0.1:1',
-      'search',
+      'list',
     ])
 
     expect(result.status).toBe(1)

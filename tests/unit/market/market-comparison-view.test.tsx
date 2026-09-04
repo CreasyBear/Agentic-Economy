@@ -27,39 +27,11 @@ const secondRef = `operation:v1:${"b".repeat(64)}`;
 
 const comparison = operationChoiceCompareOutputSchema.parse({
   kind: "ok",
-  schemaVersion: "registry-operations:v1",
+  schemaVersion: "registry-operations:v2",
   operations: [
-    operation(firstRef, "Registry search", "Registry Works", {
-      kind: "fixed",
-      amount: { currency: "USD", units: "25", exponent: 2 },
-    }),
-    operation(secondRef, "Company lookup", "Clear Ledger", {
-      kind: "on_request",
-    }),
+    operation(firstRef, "Registry search", "Registry Works", "USD 0.25", "operational"),
+    operation(secondRef, "Company lookup", "Clear Ledger", "Price confirmed at inspection", "unverified"),
   ],
-  facts: [
-    fact("price", [
-      { operationRef: firstRef, value: { kind: "fixed", amount: { currency: "USD", units: "25", exponent: 2 } }, source: "catalog" },
-      { operationRef: secondRef, value: { kind: "on_request" }, source: "catalog" },
-    ]),
-    fact("availability", [
-      { operationRef: firstRef, value: { posture: "routeable" }, source: "readiness" },
-      { operationRef: secondRef, value: { posture: "setup_required" }, source: "readiness" },
-    ]),
-    fact("dataUse", [
-      { operationRef: firstRef, value: [], source: "contract" },
-      { operationRef: secondRef, value: [{ effectId: "customer", inputPointer: "/company", classification: "personal", phase: "execution", recipient: "selected_binding", purposes: ["lookup"] }], source: "contract" },
-    ]),
-    fact("effects", [
-      { operationRef: firstRef, value: [{ effectId: "release", class: "data_release", authority: "explicit", reversibility: "irreversible" }], source: "contract" },
-      { operationRef: secondRef, value: [{ effectId: "charge", class: "financial_exposure", authority: "mandate_or_explicit", reversibility: "conditional" }], source: "contract" },
-    ]),
-    fact("summary", [
-      { operationRef: firstRef, value: "Private canonical summary", source: "contract" },
-      { operationRef: secondRef, value: "Another summary", source: "contract" },
-    ]),
-  ],
-  navigation: [],
 });
 
 afterEach(cleanup);
@@ -72,7 +44,7 @@ describe("market comparison view", () => {
     expect(container.firstElementChild?.className).toContain("content-start");
   });
 
-  it("renders only approved canonical facts with supplier-qualified identities and inspect links", () => {
+  it("renders the compact canonical comparison with Provider-qualified describe links", () => {
     const returnTo = buildMarketReturnContext({
       window: "30d",
       query: "registry",
@@ -88,19 +60,16 @@ describe("market comparison view", () => {
     expect(within(table).getByText("Registry Works")).toBeTruthy();
     expect(within(table).getByText("Clear Ledger")).toBeTruthy();
     expect(within(table).getByText("USD 0.25")).toBeTruthy();
-    expect(within(table).getByText("Price on request")).toBeTruthy();
-    expect(within(table).getByText("Ready now")).toBeTruthy();
-    expect(within(table).getByText("Setup required")).toBeTruthy();
-    expect(within(table).getByText("Personal data")).toBeTruthy();
-    expect(within(table).getByText("Financial exposure")).toBeTruthy();
-    expect(screen.queryByText("Private canonical summary")).toBeNull();
-    const inspectHref = screen.getByRole("link", {
-      name: "Inspect Registry search by Registry Works",
+    expect(within(table).getByText("Price confirmed at inspection")).toBeTruthy();
+    expect(within(table).getByText("operational")).toBeTruthy();
+    expect(within(table).getByText("unverified")).toBeTruthy();
+    const describeHref = screen.getByRole("link", {
+      name: "Describe Registry search by Registry Works",
     }).getAttribute("href");
-    expect(inspectHref).not.toBeNull();
-    const inspectUrl = new URL(inspectHref!, "https://agentic-economy.example");
-    expect(inspectUrl.pathname).toContain(encodeURIComponent(firstRef));
-    expect(inspectUrl.searchParams.get("from")).toBe(returnTo);
+    expect(describeHref).not.toBeNull();
+    const describeUrl = new URL(describeHref!, "https://agentic-economy.example");
+    expect(describeUrl.pathname).toContain(encodeURIComponent(firstRef));
+    expect(describeUrl.searchParams.get("from")).toBe(returnTo);
   });
 
   it("offers retry, edit, and back recovery for an unavailable comparison", () => {
@@ -127,24 +96,19 @@ describe("market comparison view", () => {
 function operation(
   operationRef: string,
   title: string,
-  supplierName: string,
-  price: MarketComparison extends infer _Comparison ? { kind: "fixed"; amount: { currency: string; units: string; exponent: number } } | { kind: "on_request" } : never,
+  providerName: string,
+  priceLabel: string,
+  healthStatus: "operational" | "degraded" | "unverified",
 ) {
   return {
     operationRef,
     capabilityId: "identity.company_search",
     title,
-    summary: "Look up a company.",
-    supplier: { name: supplierName, slug: supplierName.toLowerCase().replaceAll(" ", "-") },
-    price,
-    authentication: { kind: "unknown" as const },
-    availability: { posture: "routeable" as const },
-    navigation: [],
+    description: "Look up a company.",
+    provider: { name: providerName, slug: providerName.toLowerCase().replaceAll(" ", "-") },
+    priceLabel,
+    healthStatus,
   };
-}
-
-function fact(field: string, values: readonly Record<string, unknown>[]) {
-  return { field, values };
 }
 
 function renderComparison(

@@ -21,27 +21,6 @@ const refs = [
   `operation:v1:${'b'.repeat(64)}`,
 ]
 
-const result = {
-  kind: 'ok' as const,
-  schemaVersion: 'registry-operations:v1' as const,
-  operations: [],
-  facts: [{
-    field: 'dataUse' as const,
-    values: [{
-      operationRef: refs[0]!,
-      value: [{
-        effectId: 'query_release',
-        inputPointer: '/query',
-        classification: 'public' as const,
-        phase: 'execution' as const,
-        recipient: 'selected_binding' as const,
-        purposes: ['lookup_reference'],
-      }],
-      source: 'contract' as const,
-    }],
-  }],
-  navigation: [],
-}
 const operation = {
   operationRef: refs[0]!,
   operationId: 'reference.lookup',
@@ -102,6 +81,7 @@ const humanResult = projectOperationCompareChoices(operationCompareOutputSchema.
   ],
   navigation: [],
 }))
+const result = humanResult
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -130,7 +110,10 @@ describe('anonymous Operation compare CLI', () => {
     expect(JSON.parse(String(init?.body))).toEqual({ operationRefs: refs })
     expect(JSON.parse(output.join(''))).toEqual({
       ...result,
-      nextCommands: [],
+      nextCommands: [{
+        operationRef: operation.operationRef,
+        command: `ae describe ${operation.operationRef} --json --technical`,
+      }],
     })
   })
   it('renders canonical comparison facts and gates technical identity behind --technical', async () => {
@@ -148,17 +131,16 @@ describe('anonymous Operation compare CLI', () => {
     await runCompareCommand(refs, { ...options, json: false })
     const human = output.join('')
     expect(human).toContain('Reference Services — Reference quote')
-    expect(human).toContain('price: USD 1.25')
-    expect(human).toContain('Price:')
-    expect(human).toContain('Choose one supplier, then inspect its exact Operation:')
-    expect(human).toContain(`ae inspect ${operation.operationRef}`)
+    expect(human).toContain('indicative price: USD 1.25')
+    expect(human).toContain('Choose one Provider, then describe its exact Operation:')
+    expect(human).toContain(`ae describe ${operation.operationRef}`)
 
     output.length = 0
     await runCompareCommand(refs, { ...options, json: false, technical: true })
     const technical = output.join('')
     expect(technical).toContain(operation.operationRef)
-    expect(technical).toContain('schema: registry-operations:v1')
-    expect(technical).toContain('source=publication')
+    expect(technical).toContain('schema: registry-operations:v2')
+    expect(technical).toContain('capability=reference.lookup')
   })
 
   it('hands one exact ref to inspect without performing meaningless comparison work', async () => {
@@ -176,8 +158,8 @@ describe('anonymous Operation compare CLI', () => {
     })).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
       code: 'compare-needs-alternative',
-      suggestion: 'Inspect this Operation directly, or search for another supplier to compare.',
-      nextCommand: `ae inspect ${refs[0]} --base-url 'http://[::1]:3024' --json --technical`,
+      suggestion: 'Describe this Operation directly, or search for another Provider to compare.',
+      nextCommand: `ae describe ${refs[0]} --base-url 'http://[::1]:3024' --json --technical`,
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -216,7 +198,7 @@ describe('anonymous Operation compare CLI', () => {
       ...compared,
       nextCommands: refs.map((operationRef) => ({
         operationRef,
-        command: `ae inspect ${operationRef} --base-url 'http://[::1]:3024' --json --technical`,
+        command: `ae describe ${operationRef} --base-url 'http://[::1]:3024' --json --technical`,
       })),
     })
     expect(output.join('')).not.toMatch(/credential|password|secret|idempotency/iu)

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runConnectCommand } from '../../../tools/ae/commands/connect'
 import { runCompareCommand } from '../../../tools/ae/commands/compare'
 import { runDescribeCommand } from '../../../tools/ae/commands/describe'
+import { runListCommand } from '../../../tools/ae/commands/list'
 import { runSearchCommand } from '../../../tools/ae/commands/search'
 import { runStatusCommand } from '../../../tools/ae/commands/status'
 import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
@@ -13,7 +14,7 @@ import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
 import { storeConnection } from '../../../tools/ae/lib/config'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
-import { projectOperationDescription, projectOperationSearchChoices } from '@/modules/registry/operation-choice-contracts'
+import { projectOperationDescription, projectOperationListChoices, projectOperationSearchChoices } from '@/modules/registry/operation-choice-contracts'
 import { operationDetailOutputSchema, operationSearchOutputSchema } from '@/modules/capability-supply/public'
 
 type OperationDescriptorFixture = Readonly<{ operationRef: string; [key: string]: unknown }>
@@ -56,7 +57,11 @@ function operationDescriptor(operationRef: string, summary = 'Current reference 
     authentication: { kind: 'ae_api_key' },
     transport: { method: 'GET', pathTemplate: '/lookup', responseStatus: 200, responseContentType: 'application/json', requestTimeoutMs: 5_000 },
     provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
-    availability: { posture: 'setup_required' },
+    availability: {
+      posture: 'routeable',
+      observedAt: Date.now(),
+      validUntil: Date.now() + 60_000,
+    },
     navigation: [],
   }
 }
@@ -83,6 +88,23 @@ function operationDetailResult(operation: OperationDescriptorFixture) {
     kind: 'found' as const,
     schemaVersion: 'registry-operations:v1' as const,
     operation,
+  }))
+}
+
+function operationListResult(operations: readonly OperationDescriptorFixture[]) {
+  return projectOperationListChoices(operationSearchOutputSchema.parse({
+    kind: 'ok' as const,
+    schemaVersion: 'registry-operations:v1' as const,
+    query: '',
+    items: operations,
+    matchedCount: operations.length,
+    ranking: operations.map((operation, index) => ({
+      operationRef: operation.operationRef,
+      rank: index + 1,
+      score: operations.length - index,
+    })),
+    pagination: { limit: 50, hasMore: false },
+    navigation: [],
   }))
 }
 
@@ -197,7 +219,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(url).toBe('https://market.example/api/v1/market-operations/search')
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
-    expect(JSON.parse(String(init?.body))).toEqual({ query: 'extract invoices' })
+    expect(JSON.parse(String(init?.body))).toEqual({ query: 'extract invoices', limit: 10 })
   })
   it('gives empty search results private demand memory plus a safe browse fallback', async () => {
     const result = projectOperationSearchChoices(operationSearchOutputSchema.parse({
@@ -220,7 +242,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(JSON.parse(jsonOutput.read())).toMatchObject({
       kind: 'no_candidates',
       nextCommand: "ae request create 'invoice extraction' --json",
-      browseCommand: 'ae search --json',
+      browseCommand: 'ae list --json',
       nextHref: 'https://market.example/market',
     })
 
@@ -232,7 +254,7 @@ describe('external-agent Market Operation cold loop', () => {
     }
     expect(humanOutput.read()).toContain('No current Operations match this job.')
     expect(humanOutput.read()).toContain("Remember this missing job: ae request create 'invoice extraction'")
-    expect(humanOutput.read()).toContain('Browse all: ae search')
+    expect(humanOutput.read()).toContain('Browse all: ae list')
     expect(humanOutput.read()).toContain('https://market.example/market')
 
     const technicalOutput = captureStdout()
@@ -240,7 +262,7 @@ describe('external-agent Market Operation cold loop', () => {
       await runSearchCommand(['invoice extraction'], {
         ...options,
         technical: true,
-        filters: JSON.stringify({ availability: ['routeable'] }),
+        filters: JSON.stringify({ healthStatus: ['degraded'] }),
       })
     } finally {
       technicalOutput.restore()
@@ -250,8 +272,8 @@ describe('external-agent Market Operation cold loop', () => {
       nextCommand: string
     }
     expect(technicalResult).toMatchObject({
-      nextCommand: 'ae search --filters \'{"availability":["routeable"]}\' --json --technical',
-      browseCommand: 'ae search --json --technical',
+      nextCommand: 'ae list --filters \'{"healthStatus":["degraded"]}\' --json --technical',
+      browseCommand: 'ae list --json --technical',
     })
     expect(technicalResult.nextCommand).not.toContain('request create')
     expect(technicalResult.browseCommand).not.toContain('--filters')
@@ -261,30 +283,31 @@ describe('external-agent Market Operation cold loop', () => {
       await runSearchCommand(['invoice extraction'], {
         ...options,
         json: false,
-        filters: JSON.stringify({ availability: ['routeable'] }),
+        filters: JSON.stringify({ healthStatus: ['degraded'] }),
       })
     } finally {
       filteredHumanOutput.restore()
     }
     expect(filteredHumanOutput.read()).toContain('No current Operations match these filters.')
-    expect(filteredHumanOutput.read()).toContain('Browse matching filters: ae search --filters \'{"availability":["routeable"]}\'')
+    expect(filteredHumanOutput.read()).toContain('Browse matching filters: ae list --filters \'{"healthStatus":["degraded"]}\'')
     expect(filteredHumanOutput.read()).not.toContain('Remember this missing job')
   })
   it('browses all current Operations when no job is supplied', async () => {
     const operationRef = `operation:v1:${'b'.repeat(64)}`
-    const result = operationSearchResult('', [operationDescriptor(operationRef)])
+    const result = operationListResult([operationDescriptor(operationRef)])
     const output = captureStdout()
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(responseJson(result))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
-      await runSearchCommand([], { ...options, json: false })
+      await runListCommand([], { ...options, json: false })
     } finally {
       output.restore()
     }
 
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ query: '' })
-    expect(output.read()).toContain('Current Market Operations')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://market.example/api/v1/market-operations/list')
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ limit: 50 })
+    expect(output.read()).toContain('Current Operations')
   })
   it('rejects a malformed successful search body with a safe CLI error', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
@@ -318,19 +341,19 @@ describe('external-agent Market Operation cold loop', () => {
       technical: true,
       limit: '3',
       cursor: 'opaque-prior-cursor',
-      filters: JSON.stringify({ availability: ['routeable'] }),
+      filters: JSON.stringify({ healthStatus: ['operational'] }),
     })
 
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       query: 'reference lookup',
       limit: 3,
       cursor: 'opaque-prior-cursor',
-      filters: { availability: ['routeable'] },
+      filters: { healthStatus: ['operational'] },
     })
     expect(JSON.parse(output.read())).toEqual({
       ...result,
-      nextCommand: `ae inspect ${operationRef} --json --technical`,
-      nextPageCommand: `ae search 'reference lookup' --limit 3 --filters '{"availability":["routeable"]}' --cursor opaque-next-cursor --json --technical`,
+      nextCommand: `ae describe ${operationRef} --json --technical`,
+      nextPageCommand: `ae search 'reference lookup' --limit 3 --filters '{"healthStatus":["operational"]}' --cursor opaque-next-cursor --json --technical`,
     })
   })
   it('returns decision-sized JSON by default and keeps the full contract behind technical mode', async () => {
@@ -397,7 +420,7 @@ describe('external-agent Market Operation cold loop', () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runSearchCommand(['x'.repeat(201)], options)).rejects.toMatchObject({
+    await expect(runSearchCommand(['x'.repeat(257)], options)).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
       code: 'search-query-too-long',
     } satisfies Partial<CliFailure>)
@@ -413,7 +436,7 @@ describe('external-agent Market Operation cold loop', () => {
       '--cursor',
       'opaque-cursor',
       '--filters',
-      '{"availability":["routeable"]}',
+      '{"healthStatus":["operational"]}',
     ])
 
     expect(parsed).toMatchObject({
@@ -422,12 +445,12 @@ describe('external-agent Market Operation cold loop', () => {
       options: {
         limit: '3',
         cursor: 'opaque-cursor',
-        filters: '{"availability":["routeable"]}',
+        filters: '{"healthStatus":["operational"]}',
       },
     })
   })
 
-  it('inspects one exact operation anonymously', async () => {
+  it('describes one exact operation anonymously', async () => {
     const operationRef = `operation:v1:${'a'.repeat(64)}`
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(
       operationDetailResult(operationDescriptor(operationRef, 'Extract invoices')),
@@ -443,17 +466,17 @@ describe('external-agent Market Operation cold loop', () => {
 
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'found',
+      schemaVersion: 'registry-operations:v2',
       operation: {
-        callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
-        paymentLane: 'brokered',
+        operationRef,
+        capabilityId: 'reference.lookup',
+        description: 'Extract invoices',
+        provider: { name: 'Reference Services', slug: 'reference' },
+        priceLabel: 'USD 0.00',
+        healthStatus: 'operational',
       },
-      continuation: {
-        label: 'Find callable alternatives',
-        kind: 'navigate',
-        command: `ae search 'Extract invoices' --filters '{"availability":["routeable"]}' --json`,
-      },
-      nextCommand: `ae search 'Extract invoices' --filters '{"availability":["routeable"]}' --json`,
     })
+    expect(JSON.parse(output.read())).not.toHaveProperty('nextCommand')
 
     const [url, init] = fetchMock.mock.calls[0]!
     expect(url).toBe('https://market.example/api/v1/market-operations/describe')
@@ -462,7 +485,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(JSON.parse(String(init?.body))).toEqual({ operationRef })
   })
 
-  it('keeps inspect JSON decision-sized by default and restores navigation in technical mode', async () => {
+  it('keeps describe output canonical and free of duplicated source navigation', async () => {
     const operationRef = `operation:v1:${'9'.repeat(64)}`
     const repeatedInputSchema = {
       type: 'object',
@@ -489,15 +512,10 @@ describe('external-agent Market Operation cold loop', () => {
       defaultOutput.restore()
     }
     const defaultSerialized = defaultOutput.read()
-    const defaultResult = JSON.parse(defaultSerialized) as {
-      operation: Record<string, unknown>
-      nextCommand: string
-    }
+    const defaultResult = JSON.parse(defaultSerialized) as { operation: Record<string, unknown> }
     expect(defaultResult.operation).not.toHaveProperty('navigation')
-    expect(defaultResult.operation).toHaveProperty('contract')
-    expect(defaultResult.nextCommand).toBe(
-      "ae search 'Detailed reference lookup' --filters '{\"availability\":[\"routeable\"]}' --json",
-    )
+    expect(defaultResult.operation).toHaveProperty('inputJsonSchema')
+    expect(defaultResult).not.toHaveProperty('nextCommand')
 
     const technicalOutput = captureStdout()
     try {
@@ -506,240 +524,13 @@ describe('external-agent Market Operation cold loop', () => {
       technicalOutput.restore()
     }
     const technicalSerialized = technicalOutput.read()
-    const technicalResult = JSON.parse(technicalSerialized) as {
-      operation: { navigation: unknown[] }
-      nextCommand: string
-    }
-    expect(technicalResult.operation.navigation).toEqual(navigation)
-    expect(technicalResult.nextCommand).toBe(
-      "ae search 'Detailed reference lookup' --filters '{\"availability\":[\"routeable\"]}' --json --technical",
-    )
-    expect(new TextEncoder().encode(defaultSerialized).length).toBeLessThan(
-      new TextEncoder().encode(technicalSerialized).length * 0.7,
-    )
+    expect(JSON.parse(technicalSerialized)).toEqual(defaultResult)
   })
 
-  it.each([
-    {
-      name: 'wrong scope',
-      accountStatus: 200,
-      scopes: ['market_supply:manage'],
-      expected: 'ae connect',
-    },
-    {
-      name: 'rejected or expired credential',
-      accountStatus: 401,
-      scopes: ['market_operations:invoke'],
-      expected: 'ae connect',
-    },
-    {
-      name: 'current invoke-scoped credential',
-      accountStatus: 200,
-      scopes: ['market_operations:invoke'],
-      expected: 'ae call',
-    },
-  ])('uses server-verified buyer access for the human continuation: $name', async ({
-    accountStatus,
-    scopes,
-    expected,
-  }) => {
-    const operationRef = `operation:v1:${'f'.repeat(64)}`
-    const operation = {
-      ...operationDescriptor(operationRef, 'Verified continuation'),
-      availability: { posture: 'routeable' },
-      navigation: [{
-        relation: 'invoke',
-        pathTemplate: '/api/v1/operations/call',
-        method: 'POST',
-        actionId: 'agentic-economy.operation-invoke',
-        authentication: 'required',
-        surfaces: ['http', 'cli', 'mcp', 'chat'],
-      }],
-    }
-    storeConnection({
-      baseUrl: options.baseUrl,
-      accessToken: 'stored-buyer-secret',
-      scope: 'market_operations:invoke',
-    })
-    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
-      const url = String(input)
-      if (url.endsWith('/api/v1/market-operations/describe')) {
-        return responseJson(operationDetailResult(operation))
-      }
-      if (url.endsWith('/api/v1/account')) {
-        return responseJson({
-          kind: 'authenticated',
-          principalRef: 'principal:buyer',
-          accountRef: 'account:buyer',
-          credentialId: 'credential:buyer',
-          applicationRef: 'application:buyer',
-          environment: 'production',
-          scopes,
-          authorityMode: 'inspect_only',
-        }, accountStatus)
-      }
-      throw new Error(`unexpected route ${url}`)
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    const output = captureStdout()
-
-    try {
-      await runDescribeCommand([operationRef], { ...options, json: false })
-    } finally {
-      output.restore()
-    }
-
-    expect(output.read()).toContain(`next: ${expected}`)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    const accountRequest = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/v1/account'))
-    expect(new Headers(accountRequest?.[1]?.headers).get('Authorization')).toBe('Bearer stored-buyer-secret')
-  })
-
-  it('keeps a zero-price brokered invoke behind the canonical buyer-access rail', async () => {
-    const operationRef = `operation:v1:${'a'.repeat(64)}`
-    const operation = {
-      ...operationDescriptor(operationRef, 'Public continuation'),
-      availability: { posture: 'routeable' },
-      navigation: [{
-        relation: 'invoke',
-        pathTemplate: '/api/v1/operations/call',
-        method: 'POST',
-        actionId: 'agentic-economy.operation-invoke',
-        authentication: 'required',
-        surfaces: ['http', 'cli', 'mcp', 'chat'],
-      }],
-    }
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      responseJson(operationDetailResult(operation)),
-    )
-    vi.stubGlobal('fetch', fetchMock)
-    const output = captureStdout()
-
-    try {
-      await runDescribeCommand([operationRef], { ...options, json: false })
-    } finally {
-      output.restore()
-    }
-
-    expect(output.read()).toContain('next: ae connect')
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('keeps the exact controlled-call command visible while buyer authorization is still required', async () => {
-    const operationRef = `operation:v1:${'d'.repeat(64)}`
-    const operation = {
-      ...operationDescriptor(operationRef, 'Authorized reference quote'),
-      contract: {
-        ...operationDescriptor(operationRef).contract,
-        inputExamples: [{ input: { query: 'reference quote' } }],
-      },
-      availability: { posture: 'routeable' },
-      navigation: [{
-        relation: 'invoke',
-        pathTemplate: '/api/v1/operations/call',
-        method: 'POST',
-        actionId: 'agentic-economy.operation-invoke',
-        authentication: 'required',
-        surfaces: ['http', 'cli', 'mcp', 'chat'],
-      }],
-    }
-    storeConnection({
-      baseUrl: options.baseUrl,
-      accessToken: 'supplier-secret-must-not-leak',
-      scope: 'market_supply:manage',
-      profile: 'supplier',
-    })
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(
-      responseJson(operationDetailResult(operation)),
-    ))
-    const output = captureStdout()
-
-    try {
-      await runDescribeCommand([operationRef], { ...options, technical: true })
-    } finally {
-      output.restore()
-    }
-
-    const callCommand = `ae call ${operationRef} --input '{"query":"reference quote"}' --json`
-    expect(JSON.parse(output.read())).toMatchObject({
-      nextCommand: 'ae connect --json',
-      callCommand,
-      continuation: {
-        label: 'Connect agent',
-        command: 'ae connect --json',
-      },
-    })
-    expect(output.read()).not.toContain('--technical')
-    expect(output.read()).not.toContain('supplier-secret-must-not-leak')
-  })
-
-  it('turns an inspected input example into the exact call continuation for an authorized buyer', async () => {
-    const operationRef = `operation:v1:${'e'.repeat(64)}`
-    const operation = {
-      ...operationDescriptor(operationRef, 'Current reference quote'),
-      contract: {
-        ...operationDescriptor(operationRef).contract,
-        inputExamples: [{ input: { query: 'reference quote' } }],
-      },
-      availability: { posture: 'routeable' },
-      navigation: [{
-        relation: 'invoke',
-        pathTemplate: '/api/v1/operations/call',
-        method: 'POST',
-        actionId: 'agentic-economy.operation-invoke',
-        authentication: 'required',
-        surfaces: ['http', 'cli', 'mcp', 'chat'],
-      }],
-    }
-    storeConnection({
-      baseUrl: options.baseUrl,
-      accessToken: 'stored-buyer-secret',
-      scope: 'market_operations:invoke',
-    })
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation(async (input) => {
-      const url = String(input)
-      if (url.endsWith('/api/v1/market-operations/describe')) {
-        return responseJson(operationDetailResult(operation))
-      }
-      if (url.endsWith('/api/v1/account')) {
-        return responseJson({
-          kind: 'authenticated',
-          principalRef: 'principal:buyer',
-          accountRef: 'account:buyer',
-          credentialId: 'credential:buyer',
-          applicationRef: 'application:buyer',
-          environment: 'production',
-          scopes: ['market_operations:invoke'],
-          authorityMode: 'inspect_only',
-        })
-      }
-      throw new Error(`unexpected route ${url}`)
-    }))
-    const output = captureStdout()
-
-    try {
-      await runDescribeCommand([operationRef], options)
-    } finally {
-      output.restore()
-    }
-
-    const callCommand = `ae call ${operationRef} --input '{"query":"reference quote"}' --json`
-    expect(JSON.parse(output.read())).toMatchObject({
-      nextCommand: callCommand,
-      callCommand,
-      continuation: {
-        label: 'Call Operation',
-        command: callCommand,
-      },
-    })
-    expect(output.read()).not.toContain('stored-buyer-secret')
-  })
-
-  it('keeps a routeable descriptor without an invoke relation inspect-only', async () => {
+  it('keeps anonymous describe factual and sends execution to the connected agent client', async () => {
     const operationRef = `operation:v1:${'b'.repeat(64)}`
     const operation = {
       ...operationDescriptor(operationRef, 'Inspect-only continuation'),
-      availability: { posture: 'routeable' },
     }
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       responseJson(operationDetailResult(operation)),
@@ -753,8 +544,9 @@ describe('external-agent Market Operation cold loop', () => {
       output.restore()
     }
 
-    expect(output.read()).toContain('next: ae search')
-    expect(output.read()).toContain('"availability":["routeable"]')
+    expect(output.read()).toContain('health: operational')
+    expect(output.read()).toContain('Next: use operation.inspect from your connected agent client.')
+    expect(output.read()).not.toContain('ae call')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
@@ -768,7 +560,7 @@ describe('external-agent Market Operation cold loop', () => {
 
     await expect(runDescribeCommand([operationRef], options)).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
-      code: 'operation-detail-result-invalid',
+      code: 'operation-describe-result-invalid',
     } satisfies Partial<CliFailure>)
   })
 
@@ -805,9 +597,8 @@ describe('external-agent Market Operation cold loop', () => {
     }
     const unavailableRead = {
       kind: 'unavailable' as const,
-      schemaVersion: 'registry-operations:v1' as const,
+      schemaVersion: 'registry-operations:v2' as const,
       reason: 'operation_not_found' as const,
-      navigation: [],
     }
     const requests: Array<{
       url: string
@@ -1001,7 +792,7 @@ describe('external-agent Market Operation cold loop', () => {
       'Bearer ae-test-caller-key',
     ])
     expect(requests.map(({ body }) => body)).toEqual([
-      { query: 'bitcoin price' },
+      { query: 'bitcoin price', limit: 10 },
       { operationRef },
       { operationRefs: [operationRef, comparisonRef] },
       { operationRef, input: initialInput },

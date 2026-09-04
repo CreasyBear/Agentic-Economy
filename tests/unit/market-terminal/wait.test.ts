@@ -30,6 +30,7 @@ describe('AE CLI recorded invocation wait', () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({
       kind: 'found',
       invocationRef: 'invocation:one',
+      version: 1,
       operationRef: 'operation:one',
       state: 'terminal',
       result: {
@@ -70,12 +71,14 @@ describe('AE CLI recorded invocation wait', () => {
       .mockResolvedValueOnce(Response.json({
         kind: 'found',
         invocationRef: 'invocation:one',
+        version: 1,
         operationRef: 'operation:one',
         state: 'in_progress',
       }))
       .mockResolvedValueOnce(Response.json({
         kind: 'found',
         invocationRef: 'invocation:one',
+        version: 2,
         operationRef: 'operation:one',
         state: 'reconciliation_required',
       }))

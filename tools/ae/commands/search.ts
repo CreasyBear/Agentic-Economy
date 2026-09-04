@@ -100,8 +100,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     : undefined
   const broadenSearchCommand = result.kind === 'no_candidates' && result.query.length > 0 && hasSearchFilters
     ? continuationCommand([
-        'ae', 'search',
-        ...(options.limit === undefined ? [] : ['--limit', options.limit]),
+        'ae', 'list',
         ...filtersContinuation,
         ...originContinuation,
         ...outputContinuation,
