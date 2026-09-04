@@ -61,6 +61,12 @@ The three failures are attributable to concurrent dirty-tree work:
 
 Focused OAuth/connection/draft/boundary proof after the final reference correction passed **23/23 tests**. Full typecheck reaches only the concurrent `convex/moneyAccountFundingFormance.ts` change.
 
+The public CLI archive was rebuilt from clean committed source rather than the dirty workspace. Its package gate passed under Node 20 and Node 22, blocked programmatic imports, and verified exactly `README.md`, `dist/ae.js` and `package.json`. SHA-256:
+
+```text
+c65ba38bab5c9ae777865d8f607d23e44a515b80fb9b2713edb5133328ec5022
+```
+
 ## Release gates still open
 
 Package 5 is not yet a production or live-market claim. Promotion requires evidence from one deployed revision:
