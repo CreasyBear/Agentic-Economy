@@ -230,12 +230,11 @@ describe('Provider connection owner handoff', () => {
       durableBundle = new TextDecoder().decode(input.material)
       return { kind: 'active' }
     })
-    const authorize = vi.fn().mockImplementation(async (provider) => {
+    const beginAuth = vi.fn().mockImplementation(async ({ authProvider: provider }) => {
       await provider.saveDiscoveryState({ authorizationServerUrl: 'https://login.provider.example' })
       await provider.saveClientInformation({ client_id: 'registered-client', issuer: 'https://login.provider.example' })
       await provider.saveCodeVerifier('pkce-verifier-never-convex-0123456789abcdefghijkl')
       await provider.redirectToAuthorization(new URL('https://login.provider.example/authorize?request=one'))
-      return 'REDIRECT'
     })
 
     const result = await startOwnerMcpProviderConnection({
@@ -246,7 +245,7 @@ describe('Provider connection owner handoff', () => {
       },
       context: { request: 'owner' },
     }, {
-      authorize,
+      beginAuth,
       writeSecret,
       randomState: () => 'oauth-state-never-convex',
     })
@@ -255,9 +254,9 @@ describe('Provider connection owner handoff', () => {
       kind: 'redirect',
       authorizationUrl: 'https://login.provider.example/authorize?request=one',
     })
-    expect(authorize).toHaveBeenCalledWith(expect.any(Object), {
+    expect(beginAuth).toHaveBeenCalledWith({
       serverUrl: 'https://mcp.provider.example/mcp',
-      scope: undefined,
+      authProvider: expect.any(Object),
     })
     expect(writeSecret).toHaveBeenCalledWith(expect.objectContaining({
       action: 'provision',

@@ -139,6 +139,18 @@ describe('capability supply boundaries', () => {
       "publish: 'supply.publish'",
     )
   })
+
+  it('delegates Provider MCP OAuth to the official client transport', () => {
+    const handoff = readFileSync(
+      'src/modules/capability-supply/internal/supply-funnel/provider-connection-handoff.ts',
+      'utf8',
+    )
+
+    expect(handoff).toContain('new StreamableHTTPClientTransport')
+    expect(handoff).toContain('await client.connect(transport')
+    expect(handoff).toContain('await transport.finishAuth(input.callbackParams)')
+    expect(handoff).not.toMatch(/\bauth\s+as\s+authorizeMcp\b/u)
+  })
 })
 
 function sources(): string[] {

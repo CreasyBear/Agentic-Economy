@@ -1,9 +1,8 @@
 import { z } from 'zod'
 import {
-  auth as authorizeMcp,
+  Client,
   StreamableHTTPClientTransport,
-  type AuthOptions,
-  type AuthResult,
+  UnauthorizedError,
   type OAuthClientInformationContext,
   type OAuthClientMetadata,
   type OAuthClientProvider,
@@ -101,7 +100,10 @@ type ProviderConnectionHandoffRuntime = Readonly<{
 }>
 
 type McpOAuthHandoffRuntime = Readonly<{
-  authorize?: (provider: OAuthClientProvider, options: AuthOptions) => Promise<AuthResult>
+  beginAuth?: (input: Readonly<{
+    serverUrl: string
+    authProvider: OAuthClientProvider
+  }>) => Promise<void>
   finishAuth?: (input: Readonly<{
     serverUrl: string
     authProvider: OAuthClientProvider
@@ -410,16 +412,16 @@ export async function startOwnerMcpProviderConnection(
     rotationAuthority: prepared.rotationAuthority,
     rotationIdempotencyRef: prepared.rotationAuthority.idempotencyRef,
   })
-  let authResult: AuthResult
   try {
-    authResult = await (runtime.authorize ?? authorizeMcp)(provider, {
+    await (runtime.beginAuth ?? beginMcpOAuthAuthorization)({
       serverUrl: attempt.attempt.sourceUrl,
+      authProvider: provider,
     })
   } catch {
     return startRefusal('source_unavailable')
   }
   const authorizationUrl = provider.authorizationUrl
-  if (authResult !== 'REDIRECT' || authorizationUrl === undefined || !provider.readyForRedirect()) {
+  if (authorizationUrl === undefined || !provider.readyForRedirect()) {
     return startRefusal('connection_conflict')
   }
   const material = new TextEncoder().encode(provider.serialize())
@@ -1168,6 +1170,38 @@ async function finishMcpOAuthAuthorization(input: Readonly<{
     await transport.finishAuth(input.callbackParams)
   } finally {
     await transport.close().catch(() => undefined)
+  }
+}
+
+async function beginMcpOAuthAuthorization(input: Readonly<{
+  serverUrl: string
+  authProvider: OAuthClientProvider
+}>): Promise<void> {
+  const { createGuardedMcpFetch } = await import('../mcp-source-discovery')
+  const transport = new StreamableHTTPClientTransport(new URL(input.serverUrl), {
+    authProvider: input.authProvider,
+    fetch: createGuardedMcpFetch(),
+    requestInit: { redirect: 'manual' },
+    reconnectionOptions: {
+      initialReconnectionDelay: 10_000,
+      maxReconnectionDelay: 10_000,
+      reconnectionDelayGrowFactor: 1,
+      maxRetries: 0,
+    },
+  })
+  const client = new Client(
+    { name: 'Agentic Economy Provider Connection', version: '1' },
+    { listMaxPages: 1 },
+  )
+  try {
+    await client.connect(transport, { timeout: 10_000, maxTotalTimeout: 10_000 })
+  } catch (error) {
+    if (error instanceof UnauthorizedError || (error instanceof Error && error.name === 'UnauthorizedError')) {
+      return
+    }
+    throw error
+  } finally {
+    await client.close().catch(() => transport.close().catch(() => undefined))
   }
 }
 

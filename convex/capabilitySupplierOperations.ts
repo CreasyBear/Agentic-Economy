@@ -3,6 +3,7 @@ import { v } from 'convex/values'
 
 import { projectSupplierOperationStatus } from '@/modules/capability-supply/supplier-operation-status'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/public'
+import { MAX_ACCESS_PATHS_PER_OFFERING } from '@/modules/catalog/public'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { resolveBusinessActor } from './authz'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
@@ -104,7 +105,7 @@ async function projectIdentity(
   const [offering, revision, paths, publication, admissionCase, offboarding] = await Promise.all([
     ctx.db.query('businessOfferings').withIndex('by_offeringRef', (query) => query.eq('offeringRef', identity.offeringRef)).unique(),
     ctx.db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', (query) => query.eq('offeringRef', identity.offeringRef).eq('revision', identity.offeringRevision)).unique(),
-    ctx.db.query('offeringAccessPaths').withIndex('by_offeringRef_and_offeringRevision', (query) => query.eq('offeringRef', identity.offeringRef).eq('offeringRevision', identity.offeringRevision)).take(100),
+    ctx.db.query('offeringAccessPaths').withIndex('by_offeringRef_and_offeringRevision', (query) => query.eq('offeringRef', identity.offeringRef).eq('offeringRevision', identity.offeringRevision)).take(MAX_ACCESS_PATHS_PER_OFFERING + 1),
     identity.publicationRef === undefined || identity.publicationRevision === undefined
       ? null
       : ctx.db.query('capabilityPublications').withIndex('by_publicationRef_and_revision', (query) => query.eq('publicationRef', identity.publicationRef as string).eq('revision', identity.publicationRevision as number)).unique(),
@@ -293,7 +294,7 @@ export const listOwner = query({
         projectIdentity(ctx, identity, args.now, false),
         ctx.db.query('businessOfferings').withIndex('by_offeringRef', (index) => index.eq('offeringRef', identity.offeringRef)).unique(),
         ctx.db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', (index) => index.eq('offeringRef', identity.offeringRef).eq('revision', identity.offeringRevision)).unique(),
-        ctx.db.query('offeringAccessPaths').withIndex('by_offeringRef_and_offeringRevision', (index) => index.eq('offeringRef', identity.offeringRef).eq('offeringRevision', identity.offeringRevision)).take(100),
+        ctx.db.query('offeringAccessPaths').withIndex('by_offeringRef_and_offeringRevision', (index) => index.eq('offeringRef', identity.offeringRef).eq('offeringRevision', identity.offeringRevision)).take(MAX_ACCESS_PATHS_PER_OFFERING + 1),
       ])
       if (projected === null || offering === null || revision === null || offering.businessId !== args.businessId || revision.businessId !== args.businessId) return null
       return {
