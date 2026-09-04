@@ -17,6 +17,7 @@ describe("hosted Operation gateway smoke status", () => {
     const status = {
       kind: "found" as const,
       invocationRef,
+      version: 1,
       operationRef,
       state: "terminal" as const,
       result: completed(invocationRef),
@@ -39,6 +40,7 @@ describe("hosted Operation gateway smoke status", () => {
     const metadata = {
       kind: "found" as const,
       invocationRef,
+      version: 1,
       operationRef,
       state: "terminal" as const,
       attemptRef: "attempt:provider:1",

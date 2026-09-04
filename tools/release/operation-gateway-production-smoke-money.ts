@@ -188,6 +188,7 @@ export function topupReceipt(
     creditAmount: readback.creditAmount,
     webhookReplay,
     processingFee: readback.processingFee,
+    taxAmount: readback.taxAmount,
     chargeAmount: readback.chargeAmount,
     buyerBalanceBefore: readback.buyerBalanceBefore,
     buyerBalanceAfter: readback.buyerBalanceAfter,

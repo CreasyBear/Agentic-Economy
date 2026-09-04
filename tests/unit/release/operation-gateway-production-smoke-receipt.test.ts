@@ -81,7 +81,7 @@ describe("hosted Operation gateway smoke receipt", () => {
         ...candidate,
         receiptDigest: canonicalDigest(candidate),
       });
-    const differentAmount = { currency: "USD", units: "1", exponent: 2 };
+    const differentAmount = { currency: "AUD", units: "1", exponent: 6 };
 
     const wrongPrincipal = {
       ...material,

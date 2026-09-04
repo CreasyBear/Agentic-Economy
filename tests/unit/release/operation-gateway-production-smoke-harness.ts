@@ -32,7 +32,7 @@ if (!isPublicOperationRef(operationRefCandidate))
 export const operationRef = operationRefCandidate;
 const priceDigest = `sha256:${"b".repeat(64)}`;
 export const observedAt = 1_700_000_000_000;
-export const amount = { currency: "USD", units: "75", exponent: 2 };
+export const amount = { currency: "AUD", units: "750000", exponent: 6 };
 export const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
 export const operation = {
   operationRef,
@@ -103,12 +103,13 @@ export function completed(invocationRef = "invocation:provider:1") {
 }
 
 export function strictReceipt(): GatewayProductionSmokeReceipt {
-  const zero = { currency: "USD", units: "0", exponent: 2 };
-  const net = { currency: "USD", units: "60", exponent: 2 };
-  const rake = { currency: "USD", units: "15", exponent: 2 };
-  const topupAmount = { currency: "USD", units: "500", exponent: 2 };
-  const fee = { currency: "USD", units: "25", exponent: 2 };
-  const topupCharge = { currency: "USD", units: "525", exponent: 2 };
+  const zero = { currency: "AUD", units: "0", exponent: 6 };
+  const net = { currency: "AUD", units: "600000", exponent: 6 };
+  const rake = { currency: "AUD", units: "150000", exponent: 6 };
+  const topupAmount = { currency: "AUD", units: "5000000", exponent: 6 };
+  const fee = { currency: "AUD", units: "250000", exponent: 6 };
+  const tax = { currency: "AUD", units: "30000", exponent: 6 };
+  const topupCharge = { currency: "AUD", units: "5280000", exponent: 6 };
   const sourceRevision = "a".repeat(40);
   const runId = `ae-release-smoke:${sourceRevision}:run-1`;
   const controlRefCandidate = `operation:v1:${"c".repeat(64)}`;
@@ -233,6 +234,7 @@ export function strictReceipt(): GatewayProductionSmokeReceipt {
     transactionRef: "transaction:topup",
     creditAmount: topupAmount,
     processingFee: fee,
+    taxAmount: tax,
     chargeAmount: topupCharge,
     buyerBalanceBefore: zero,
     buyerBalanceAfter: topupAmount,
@@ -419,7 +421,7 @@ export function strictReceipt(): GatewayProductionSmokeReceipt {
         baseline: account(zero),
         afterOwner: account(topupAmount),
         afterReplay: account(topupAmount),
-        afterControl: account({ currency: "USD", units: "425", exponent: 2 }),
+        afterControl: account({ currency: "AUD", units: "4250000", exponent: 6 }),
       },
       supplier: {
         baseline: baselineEarnings,

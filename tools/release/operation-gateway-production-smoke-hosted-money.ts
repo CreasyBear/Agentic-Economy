@@ -363,6 +363,7 @@ export function createHostedMoneyRuntime(
       transactionRef: readString("appliedTransactionRef"),
       creditAmount: amount("principalUnits"),
       processingFee: amount("serviceFeeUnits"),
+      taxAmount: amount("taxUnits"),
       chargeAmount: amount("totalUnits"),
       checkoutCreatedAt: Number(checkoutCreatedAt),
       buyerBalanceBefore: exactAmountSchema.parse(command.buyerBalanceBefore),

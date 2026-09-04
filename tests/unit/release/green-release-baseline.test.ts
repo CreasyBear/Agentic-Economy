@@ -210,7 +210,8 @@ describe('green release baseline', () => {
     expect(authenticated?.environment).toBe('staging')
     expect(authenticated?.steps?.find((step) => step.name === 'Prove the authenticated two-agent lifecycle')?.run)
       .toBe('npm run test:release:authenticated')
-    expect(JSON.stringify(authenticated?.env ?? {})).toContain('AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY')
+    expect(JSON.stringify(authenticated?.steps?.find((step) => step.name === 'Prove the authenticated two-agent lifecycle')?.env ?? {}))
+      .toContain('AE_AUTHENTICATED_E2E_CLERK_SECRET_KEY')
     expect(authenticated?.env?.AE_RELEASE_SOURCE_REVISION).toBe('${{ github.sha }}')
 
     const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
@@ -261,7 +262,6 @@ describe('green release baseline', () => {
     expect(staging?.env).toMatchObject({
       PLAYWRIGHT_BASE_URL: '${{ vars.AE_CHAT_STAGING_BASE_URL }}',
       AE_RELEASE_SOURCE_REVISION: '${{ github.sha }}',
-      VERCEL_AUTOMATION_BYPASS_SECRET: '${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}',
     })
 
     const stagingConfig = JSON.stringify(staging ?? {})
@@ -283,7 +283,9 @@ describe('green release baseline', () => {
 
     const smoke = staging?.steps?.find((step) => step.name === 'Run the exact-revision chat staging smoke')
     expect(smoke?.run).toBe('npm run smoke:chat:staging')
-    expect(smoke?.env).toBeUndefined()
+    expect(smoke?.env).toEqual({
+      VERCEL_AUTOMATION_BYPASS_SECRET: '${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}',
+    })
     const upload = staging?.steps?.find((step) => step.name === 'Upload only the sanitized chat staging result')
     expect(upload?.if).toBe('always()')
     expect(upload?.with).toMatchObject({
@@ -316,6 +318,7 @@ describe('green release baseline', () => {
     const liveEnvironment = workflow.jobs?.['live-gateway-proof']?.env ?? {}
     const requiredNames = DEPLOYMENT_MANIFEST.configuration.requiredProduction
       .flatMap(({ names }) => names)
+      .concat(DEPLOYMENT_MANIFEST.configuration.controlledPackage5.flatMap(({ names }) => names))
 
     expect(Object.keys(liveEnvironment)).toEqual(expect.arrayContaining(requiredNames))
     expect(liveEnvironment).toMatchObject({

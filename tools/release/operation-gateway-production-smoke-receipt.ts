@@ -33,9 +33,9 @@ export const operationRefSchema = z
   .string()
   .regex(/^operation:v1:[0-9a-f]{64}$/u);
 export const APPROVED_EXTERNAL_MOVEMENT_CAP: ExactAmount = Object.freeze({
-  currency: "USD",
-  units: "600",
-  exponent: 2,
+  currency: "AUD",
+  units: "6000000",
+  exponent: AUD_EXPONENT,
 });
 
 export const authenticationSchema = z.union([
@@ -165,6 +165,7 @@ export const topupReceiptSchema = z.strictObject({
   transactionRef: boundedRefSchema,
   creditAmount: exactAmountSchema,
   processingFee: exactAmountSchema,
+  taxAmount: exactAmountSchema,
   chargeAmount: exactAmountSchema,
   buyerBalanceBefore: exactAmountSchema,
   buyerBalanceAfter: exactAmountSchema,
@@ -427,10 +428,20 @@ export const GatewayProductionSmokeReceiptSchema =
             units: expectedTopup.totalUnits.toString(),
             exponent: AUD_EXPONENT,
           } as const);
+    const expectedTopupTax =
+      expectedTopup === undefined
+        ? undefined
+        : ({
+            currency: "AUD",
+            units: expectedTopup.taxUnits.toString(),
+            exponent: AUD_EXPONENT,
+          } as const);
     if (
       expectedTopup === undefined ||
       expectedTopupFee === undefined ||
       !sameAmount(expectedTopupFee, receipt.money.topup.processingFee) ||
+      expectedTopupTax === undefined ||
+      !sameAmount(expectedTopupTax, receipt.money.topup.taxAmount) ||
       expectedTopupTotal === undefined ||
       !sameAmount(expectedTopupTotal, receipt.money.topup.chargeAmount)
     )
@@ -713,8 +724,11 @@ export const GatewayProductionSmokeReceiptSchema =
     if (
       !sameAmount(
         addAmount(
-          receipt.money.topup.creditAmount,
-          receipt.money.topup.processingFee,
+          addAmount(
+            receipt.money.topup.creditAmount,
+            receipt.money.topup.processingFee,
+          ),
+          receipt.money.topup.taxAmount,
         ),
         receipt.money.topup.chargeAmount,
       )
@@ -864,6 +878,7 @@ export type HostedTopupReadback = Readonly<{
   transactionRef: string;
   creditAmount: ExactAmount;
   processingFee: ExactAmount;
+  taxAmount: ExactAmount;
   chargeAmount: ExactAmount;
   checkoutCreatedAt: number;
   buyerBalanceBefore: ExactAmount;
