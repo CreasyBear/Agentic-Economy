@@ -16,7 +16,7 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const COMMITMENT_REF = `operation-commitment:v1:${'0'.repeat(64)}`
-const DECISION_PRICE = { currency: 'AUD', exponent: 6, units: '10000' } as const
+const DECISION_PRICE = { currency: 'AUD', exponent: 6, units: '1000000' } as const
 
 const principal: AgentAccessPrincipal = {
   principalId: 'principal:authority-continuity',
