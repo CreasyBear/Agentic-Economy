@@ -24,7 +24,6 @@ import {
   pricingConfigDigest,
   type PricingConfig,
 } from "@/modules/money/public";
-import type { SupplyEndpointConfigValue } from "@/components/ae/supply/AeSupplyEndpointConfigStep";
 
 export const moneyServerMocks = {
   beginOwnerPayoutTransferServer: vi.fn(),
@@ -135,73 +134,6 @@ export const preparedPublication: PreparedPublicationMaterial = {
   pricingConfigJson: JSON.stringify(pricingConfig),
   priceDigest,
 };
-export const openApiDocument = {
-  openapi: "3.1.0",
-  info: { title: "Quote API", version: "1.0.0" },
-  servers: [{ url: "https://example.test" }],
-  paths: {
-    "/quote": {
-      post: {
-        responses: {
-          "200": {
-            description: "OK",
-            content: { "application/json": { schema: { type: "object" } } },
-          },
-        },
-      },
-    },
-  },
-};
-export const sourceValue: SupplyEndpointConfigValue = {
-  sourceKind: "openapi_http",
-  sourceRevision: "source:one",
-  contract: {
-    contractFormat: "ae.capability-contract:v2",
-    capabilityId: "demo.quote",
-    version: 1,
-    name: "Quote API",
-    description: "Returns a quote.",
-    customerAnnotations: [
-      { document: "input", pointer: "/city", label: "City", role: "request" },
-    ],
-    dataUse: [],
-    effects: [],
-    evidence: [
-      { evidenceId: "quote", outputPointer: "/quote", purpose: "completion" },
-    ],
-    lifecycle: { idempotency: "required", recovery: "retry_safe" },
-  },
-  commercial: {
-    offering: preparedPublication.offering,
-    bindingId: "binding:one",
-  },
-  evidenceRefs: ["evidence:source"],
-  requestTimeoutMs: 5_000,
-  authority: { kind: "public_upstream" },
-  documentJson: JSON.stringify(openApiDocument),
-  operation: { path: "/quote", method: "post" },
-  fixedQuery: [],
-};
-
-export const x402SourceValue: SupplyEndpointConfigValue = {
-  sourceKind: "x402",
-  sourceRevision: "source:x402",
-  contract: sourceValue.contract,
-  commercial: sourceValue.commercial,
-  evidenceRefs: sourceValue.evidenceRefs,
-  requestTimeoutMs: 5_000,
-  authority: { kind: "public_upstream" },
-  resourceJson: JSON.stringify({
-    resourceUrl: "https://example.test/paid-quote",
-    inputSchema: { type: "object", properties: {} },
-    outputSchema: { type: "object", properties: { quote: { type: "number" } } },
-    scheme: "exact",
-    network: "eip155:8453",
-    asset: "USDC",
-    payTo: "0x0000000000000000000000000000000000000000",
-  }),
-};
-
 export function offeringAt(step: SupplyFunnelStep): OwnerSupplyOfferingReadback {
   const stepStates: Readonly<Record<SupplyFunnelStep, SupplyFunnelStepState>> =
     step === "describe"
