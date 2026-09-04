@@ -4,6 +4,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { completeWork, run } from '../../../convex/capabilityProviderConnectionCleanup'
 import { providerConnectionCleanupRequestDigest } from '@/modules/capability-supply/provider-connection'
 
+vi.mock('@/modules/network-guard/server', () => ({
+  sendGuardedHttpRequest: async (request: Request) => await fetch(request.url, {
+    method: request.method,
+    headers: Object.fromEntries(request.headers.entries()),
+    body: await request.text(),
+  }),
+}))
+
 type Mutation = (
   reference: FunctionReference<'mutation', 'internal', Record<string, unknown>, unknown>,
   args: Record<string, unknown>,

@@ -23,10 +23,6 @@ import {
   type SupplySourcePreviewDependencies,
 } from '../../source-preview'
 import type { SupplyPublishResult } from '../../supply-actions'
-import {
-  loadOwnerConnectedOpenApi,
-  previewOwnerMcpProviderConnection,
-} from './provider-connection-handoff'
 import { readOwnerSupplyQuery } from './funnel-owner'
 import type { OwnerSupplyFunnelReadback } from './types'
 
@@ -185,25 +181,31 @@ export async function previewOwnerSupplySource({
       const source = data.source
       return await previewSupplySource(source, {
         mcpAuthentication: { kind: 'mcp_oauth' },
-        discoverMcp: async (discoveryInput) => await previewOwnerMcpProviderConnection({
-          connectionRef: data.connectionRef!,
-          businessRef: data.businessId,
-          ...(discoveryInput.serverUrl === undefined ? {} : { serverUrl: discoveryInput.serverUrl }),
-          ...(discoveryInput.registryName === undefined ? {} : { registryName: discoveryInput.registryName }),
-          ...(discoveryInput.remoteRef === undefined ? {} : { remoteRef: discoveryInput.remoteRef }),
-          environment: discoveryInput.environment,
-        }),
+        discoverMcp: async (discoveryInput) => {
+          const { previewOwnerMcpProviderConnection } = await import('./provider-connection-handoff')
+          return await previewOwnerMcpProviderConnection({
+            connectionRef: data.connectionRef!,
+            businessRef: data.businessId,
+            ...(discoveryInput.serverUrl === undefined ? {} : { serverUrl: discoveryInput.serverUrl }),
+            ...(discoveryInput.registryName === undefined ? {} : { registryName: discoveryInput.registryName }),
+            ...(discoveryInput.remoteRef === undefined ? {} : { remoteRef: discoveryInput.remoteRef }),
+            environment: discoveryInput.environment,
+          })
+        },
       })
     }
     if (data.source.kind === 'openapi') {
       const source = data.source
       return await previewSupplySource(source, {
-        loadOpenApi: async () => await loadOwnerConnectedOpenApi({
-          connectionRef: data.connectionRef!,
-          businessRef: data.businessId,
-          definitionUrl: source.definitionUrl,
-          environment: source.environment,
-        }),
+        loadOpenApi: async () => {
+          const { loadOwnerConnectedOpenApi } = await import('./provider-connection-handoff')
+          return await loadOwnerConnectedOpenApi({
+            connectionRef: data.connectionRef!,
+            businessRef: data.businessId,
+            definitionUrl: source.definitionUrl,
+            environment: source.environment,
+          })
+        },
       })
     }
     return unavailablePreview()
@@ -407,22 +409,28 @@ export async function resumeOwnerSupplySourceDraft({
     ? await previewSupplySource(parsed.data)
     : parsed.data.kind === 'openapi'
       ? await previewSupplySource(parsed.data, {
-          loadOpenApi: async () => await loadOwnerConnectedOpenApi({
-            connectionRef: data.connectionRef!,
-            businessRef: data.businessId,
-            definitionUrl: parsed.data.kind === 'openapi' ? parsed.data.definitionUrl : '',
-            environment: parsed.data.environment,
-          }),
+          loadOpenApi: async () => {
+            const { loadOwnerConnectedOpenApi } = await import('./provider-connection-handoff')
+            return await loadOwnerConnectedOpenApi({
+              connectionRef: data.connectionRef!,
+              businessRef: data.businessId,
+              definitionUrl: parsed.data.kind === 'openapi' ? parsed.data.definitionUrl : '',
+              environment: parsed.data.environment,
+            })
+          },
         })
       : parsed.data.kind === 'mcp' && parsed.data.serverUrl !== undefined
         ? await previewSupplySource(parsed.data, {
             mcpAuthentication: { kind: 'mcp_oauth' },
-            discoverMcp: async () => await previewOwnerMcpProviderConnection({
-              connectionRef: data.connectionRef!,
-              businessRef: data.businessId,
-              serverUrl: parsed.data.kind === 'mcp' ? parsed.data.serverUrl! : '',
-              environment: parsed.data.environment,
-            }),
+            discoverMcp: async () => {
+              const { previewOwnerMcpProviderConnection } = await import('./provider-connection-handoff')
+              return await previewOwnerMcpProviderConnection({
+                connectionRef: data.connectionRef!,
+                businessRef: data.businessId,
+                serverUrl: parsed.data.kind === 'mcp' ? parsed.data.serverUrl! : '',
+                environment: parsed.data.environment,
+              })
+            },
           })
         : undefined
   if (preview === undefined) return { kind: 'source_changed' }
@@ -562,25 +570,31 @@ function connectedSourceDependencies(
 ): SupplySourcePreviewDependencies {
   if (input.source.kind === 'openapi') {
     return {
-      loadOpenApi: async () => await loadOwnerConnectedOpenApi({
-        connectionRef,
-        businessRef: input.businessRef,
-        definitionUrl: input.source.kind === 'openapi' ? input.source.definitionUrl : '',
-        environment: input.environment,
-      }),
+      loadOpenApi: async () => {
+        const { loadOwnerConnectedOpenApi } = await import('./provider-connection-handoff')
+        return await loadOwnerConnectedOpenApi({
+          connectionRef,
+          businessRef: input.businessRef,
+          definitionUrl: input.source.kind === 'openapi' ? input.source.definitionUrl : '',
+          environment: input.environment,
+        })
+      },
     }
   }
   if (input.source.kind === 'mcp' || input.source.kind === 'agent_plugin') {
     return {
       mcpAuthentication: { kind: 'mcp_oauth' },
-      discoverMcp: async ({ serverUrl, registryName, remoteRef, environment }) => await previewOwnerMcpProviderConnection({
+      discoverMcp: async ({ serverUrl, registryName, remoteRef, environment }) => {
+        const { previewOwnerMcpProviderConnection } = await import('./provider-connection-handoff')
+        return await previewOwnerMcpProviderConnection({
             connectionRef,
             businessRef: input.businessRef,
             ...(serverUrl === undefined ? {} : { serverUrl }),
             ...(registryName === undefined ? {} : { registryName }),
             ...(remoteRef === undefined ? {} : { remoteRef }),
             environment,
-          }),
+          })
+      },
     }
   }
   return {}

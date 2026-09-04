@@ -8,6 +8,7 @@ import {
 } from '../src/modules/capability-supply/provider-connection'
 import { isCanonicalDigest } from '../src/modules/common/canonical-digest'
 import { isRecord } from '../src/modules/common/is-record'
+import { sendGuardedHttpRequest } from '../src/modules/network-guard/server'
 import { internal } from './_generated/api'
 import { internalAction, internalMutation, type ActionCtx, type MutationCtx } from './_generated/server'
 import {
@@ -227,7 +228,7 @@ async function revokeMcpConnection(target: CleanupTarget, requestDigest: string)
   }
   let response: Response
   try {
-    response = await fetch(endpoint, {
+    const request = new Request(endpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -242,6 +243,10 @@ async function revokeMcpConnection(target: CleanupTarget, requestDigest: string)
       redirect: 'error',
       signal: AbortSignal.timeout(15_000),
     })
+    const hostname = new URL(endpoint).hostname
+    response = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+      ? await fetch(request)
+      : await sendGuardedHttpRequest(request, 16 * 1024)
   } catch {
     return unknownResult('cleanup_action_failed')
   }

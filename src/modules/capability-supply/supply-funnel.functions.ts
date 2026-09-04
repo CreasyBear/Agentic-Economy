@@ -50,26 +50,24 @@ import {
   publishOwnerSupplySource,
 } from './source-first-owner'
 import {
-  completeOwnerMcpProviderConnection,
   completeOwnerMcpProviderConnectionInputSchema,
-  completeOwnerHttpProviderConnection,
   completeOwnerHttpProviderConnectionInputSchema,
   ownerProviderConnectionAttemptInputSchema,
-  readOwnerProviderConnectionAttempt,
-  startOwnerMcpProviderConnection,
   startOwnerMcpProviderConnectionInputSchema,
-} from './internal/supply-funnel/provider-connection-handoff'
+} from './internal/supply-funnel/provider-connection-handoff-contract'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 
 export type {
   OwnerProviderConnectionAttemptReadback,
-} from './internal/supply-funnel/provider-connection-handoff'
+} from './internal/supply-funnel/provider-connection-handoff-contract'
 export type {
   OwnerProviderConnection,
   OwnerProviderConnectionCommandResult,
+} from "./internal/supply-funnel/connections";
+export type {
   OwnerProviderEarningsAccountReadback,
   OwnerProviderEarningsReadback,
-} from "./internal/supply-funnel/connections";
+} from './internal/supply-funnel/earnings-readback'
 export type {
   SupplyLandingPorts,
   SupplyLandingReadback,
@@ -124,6 +122,7 @@ export const readOwnerProviderConnectionAttemptServer = createServerFn()
   .validator((data) => ownerProviderConnectionAttemptInputSchema.parse(data))
   .handler(async (input) => {
     setResponseHeader('cache-control', 'no-store')
+    const { readOwnerProviderConnectionAttempt } = await import('./internal/supply-funnel/provider-connection-handoff')
     return await readOwnerProviderConnectionAttempt(input)
   })
 
@@ -131,6 +130,7 @@ export const completeOwnerHttpProviderConnectionServer = createServerFn({ method
   .validator((data) => completeOwnerHttpProviderConnectionInputSchema.parse(data))
   .handler(async (input) => {
     setResponseHeader('cache-control', 'no-store')
+    const { completeOwnerHttpProviderConnection } = await import('./internal/supply-funnel/provider-connection-handoff')
     return await completeOwnerHttpProviderConnection(input)
   })
 
@@ -140,6 +140,7 @@ export const startOwnerMcpProviderConnectionServer = createServerFn({ method: 'P
     .parse(data))
   .handler(async (input) => {
     setResponseHeader('cache-control', 'no-store')
+    const { startOwnerMcpProviderConnection } = await import('./internal/supply-funnel/provider-connection-handoff')
     const baseUrl = resolveCanonicalBaseUrl(getRequest()).baseUrl
     const callback = new URL('/owner/supply/connections/oauth/callback', baseUrl)
     callback.searchParams.set('attempt', input.data.attemptRef)
@@ -153,6 +154,7 @@ export const completeOwnerMcpProviderConnectionServer = createServerFn({ method:
   .validator((data) => completeOwnerMcpProviderConnectionInputSchema.parse(data))
   .handler(async (input) => {
     setResponseHeader('cache-control', 'no-store')
+    const { completeOwnerMcpProviderConnection } = await import('./internal/supply-funnel/provider-connection-handoff')
     return await completeOwnerMcpProviderConnection(input)
   })
 

@@ -219,7 +219,7 @@ describe('MCP host adapter tools/list', () => {
         && action.credentialAdmission.anyScopes?.includes('market_supply:manage') !== true)
       .map(mcpToolName)
 
-    expect(supplyActions).toHaveLength(13)
+    expect(supplyActions).toHaveLength(14)
     expect(supplyActions.map((action) => action.id).sort()).toEqual([
       'supply.connection.connect',
       'supply.connection.detail',
@@ -228,6 +228,7 @@ describe('MCP host adapter tools/list', () => {
       'supply.connection.revoke',
       'supply.earnings',
       'supply.offboarding.status',
+      'supply.operations.list',
       'supply.publish',
       'supply.recheck',
       'supply.republish',

@@ -30,7 +30,6 @@ import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
 import type {
   ProviderConnectionCleanupOutcome,
-  ProviderConnectionOwnerProjection,
   ProviderConnectionSourceAuthentication,
 } from '../../provider-connection'
 import type { McpSourceDiscovery } from '../../source-preview'
@@ -42,62 +41,31 @@ import {
   secretGeneration,
   secretRef,
 } from '@/modules/secrets/public'
+import {
+  completeOwnerHttpProviderConnectionInputSchema,
+  completeOwnerMcpProviderConnectionInputSchema,
+  ownerProviderConnectionAttemptInputSchema,
+  startOwnerMcpProviderConnectionInputSchema,
+  type OwnerHttpProviderConnectionResult,
+  type OwnerMcpProviderConnectionStartResult,
+  type OwnerProviderConnectionAttemptReadback,
+  type ProviderOAuthCleanupResult,
+  type SecretPointerInput,
+} from './provider-connection-handoff-contract'
 
-const authenticationSchema = z.discriminatedUnion('kind', [
-  z.strictObject({
-    kind: z.literal('api_key'),
-    location: z.enum(['header', 'query']),
-    name: z.string().min(1).max(200),
-  }),
-  z.strictObject({ kind: z.literal('http_bearer') }),
-  z.strictObject({ kind: z.literal('mcp_oauth') }),
-])
-
-const ownerAttemptSchema = z.strictObject({
-  attemptRef: z.string().min(1).max(300),
-  businessRef: z.string().min(1).max(500),
-  sourceKind: z.enum(['http_credential', 'mcp_oauth']),
-  sourceUrl: z.url().max(2_048),
-  sourceOrigin: z.url().max(2_048),
-  authentication: authenticationSchema,
-  environment: z.enum(['sandbox', 'production']),
-  state: z.enum(['pending', 'consumed', 'expired', 'cancelled']),
-  connectionRef: z.string().min(1).max(300).optional(),
-  draftRef: z.string().min(1).max(300).optional(),
-  expiresAt: z.number().int().nonnegative(),
-})
-
-export const ownerProviderConnectionAttemptInputSchema = z.strictObject({
-  attemptRef: z.string().trim().min(1).max(300),
-})
-
-export const completeOwnerHttpProviderConnectionInputSchema = z.strictObject({
-  attemptRef: z.string().trim().min(1).max(300),
-  // A credential is opaque material. Trimming it would change the Provider secret.
-  credential: z.string().min(1).max(32_768),
-  idempotencyKey: z.string().trim().min(8).max(200),
-})
-
-export const startOwnerMcpProviderConnectionInputSchema = z.strictObject({
-  attemptRef: z.string().trim().min(1).max(300),
-  idempotencyKey: z.string().trim().min(8).max(200),
-  callbackUrl: z.url().max(2_048),
-})
-
-export const completeOwnerMcpProviderConnectionInputSchema = z.strictObject({
-  attemptRef: z.string().trim().min(1).max(300),
-  callbackParameters: z.array(z.tuple([
-    z.string().min(1).max(200),
-    z.string().max(8_192),
-  ])).min(1).max(32),
-})
-
-export type OwnerProviderConnectionAttemptReadback =
-  | Readonly<{
-      kind: 'available'
-      attempt: z.infer<typeof ownerAttemptSchema>
-    }>
-  | Readonly<{ kind: 'not_found' }>
+export {
+  completeOwnerHttpProviderConnectionInputSchema,
+  completeOwnerMcpProviderConnectionInputSchema,
+  ownerProviderConnectionAttemptInputSchema,
+  startOwnerMcpProviderConnectionInputSchema,
+} from './provider-connection-handoff-contract'
+export type {
+  OwnerHttpProviderConnectionResult,
+  OwnerMcpProviderConnectionStartResult,
+  OwnerProviderConnectionAttemptReadback,
+  ProviderOAuthCleanupResult,
+  SecretPointerInput,
+} from './provider-connection-handoff-contract'
 
 type SecretAuthority = Readonly<{
   operation: 'provision' | 'rotate'
@@ -119,23 +87,6 @@ type PrepareResult =
       authority: SecretAuthority
     }>
   | Readonly<{ kind: 'refused'; code: string }>
-
-export type OwnerHttpProviderConnectionResult =
-  | Readonly<{
-      kind: 'connected' | 'replayed'
-      connection: ProviderConnectionOwnerProjection
-    }>
-  | Readonly<{
-      kind: 'refused'
-      code:
-        | 'not_found'
-        | 'attempt_expired'
-        | 'not_supported'
-        | 'reauthentication_required'
-        | 'secret_unavailable'
-        | 'connection_conflict'
-        | 'source_unavailable'
-    }>
 
 type ProvisionInput = Readonly<{
   action?: 'provision' | 'rotate'
@@ -200,19 +151,6 @@ type McpOAuthRevocationRuntime = Readonly<{
   }>) => Promise<Readonly<{ status: number }>>
 }>
 
-export type ProviderOAuthCleanupResult = Readonly<{
-  outcome: ProviderConnectionCleanupOutcome
-  responseDigest?: string
-  reasonCode: string
-  evidenceRefs: string[]
-}>
-
-export type SecretPointerInput = Readonly<{
-  secretRef: string
-  activeGeneration: string
-  pointerRevision: number
-}>
-
 type PrepareOAuthResult =
   | Readonly<{
       kind: 'prepared'
@@ -272,10 +210,6 @@ type HttpRuntimeReadback =
       }>
     }>
   | Readonly<{ kind: 'not_found' }>
-
-export type OwnerMcpProviderConnectionStartResult =
-  | Readonly<{ kind: 'redirect'; authorizationUrl: string }>
-  | Extract<OwnerHttpProviderConnectionResult, { kind: 'refused' }>
 
 const readOwnerAttemptQuery = sourceQuery<
   { attemptRef: string },

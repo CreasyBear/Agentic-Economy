@@ -2,12 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
-import {
-  readActiveCustomerSecret,
-  revokeStoredMcpProviderConnection,
-  type ProviderOAuthCleanupResult,
-  type SecretPointerInput,
-} from '@/modules/capability-supply/provider-connection-handoff'
+import type {
+  ProviderOAuthCleanupResult,
+  SecretPointerInput,
+} from '@/modules/capability-supply/internal/supply-funnel/provider-connection-handoff-contract'
 import { isRecord } from '@/modules/common/is-record'
 
 const MAX_BODY_BYTES = 16 * 1024
@@ -124,7 +122,10 @@ export async function handleProviderConnectionCleanupRequest(
   if (input === undefined) return noStore({ kind: 'unavailable' }, 400)
   let material: Uint8Array
   try {
-    material = await (runtime.readSecret ?? readActiveCustomerSecret)(input.secret)
+    const readSecret = runtime.readSecret ?? (await import(
+      '@/modules/capability-supply/internal/supply-funnel/provider-connection-handoff'
+    )).readActiveCustomerSecret
+    material = await readSecret(input.secret)
   } catch {
     return noStore({
       outcome: 'outcome_unknown',
@@ -133,7 +134,10 @@ export async function handleProviderConnectionCleanupRequest(
     }, 200)
   }
   try {
-    const result = await (runtime.revoke ?? revokeStoredMcpProviderConnection)(material)
+    const revoke = runtime.revoke ?? (await import(
+      '@/modules/capability-supply/internal/supply-funnel/provider-connection-handoff'
+    )).revokeStoredMcpProviderConnection
+    const result = await revoke(material)
     return noStore(result, 200)
   } finally {
     material.fill(0)

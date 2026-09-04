@@ -11,11 +11,11 @@ import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { currencySchema, exactAmountSchema, ProviderEarningsViewSchema } from '@/modules/money/public'
-import {
-  type OwnerProviderEarningsReadback,
-  type OwnerSupplyCommandResult,
-  type OwnerSupplyFunnelReadback,
-} from './supply-funnel.functions'
+import type { OwnerProviderEarningsReadback } from './internal/supply-funnel/earnings-readback'
+import type {
+  OwnerSupplyCommandResult,
+  OwnerSupplyFunnelReadback,
+} from './internal/supply-funnel/types'
 import type { PublishPreparedCapabilityCommandResult } from './internal/publication'
 import { inspectX402SellerEndpoint } from './internal/x402-seller-endpoint-inspector'
 import {

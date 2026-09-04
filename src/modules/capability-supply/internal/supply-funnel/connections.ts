@@ -8,7 +8,6 @@ import {
 } from "@/lib/server/convex-source";
 import { sourceWriteAdmissionFromContext } from "@/lib/server/source-write-admission";
 import { sourceWriteRequestFromAdmission } from "@/modules/security/source-write-admission";
-import type { PayoutStatusView, ProviderEarningsView } from "@/modules/money/public";
 import type { ProviderConnectionOwnerProjection } from "../../provider-connection";
 import {
   inspectX402SellerEndpoint,
@@ -26,6 +25,12 @@ import {
 import { OWNER_SUPPLY_UNAVAILABLE_MESSAGE } from "./types";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import { requireStrictClerkConsequenceProof } from "@/lib/server/clerk-consequence-proof";
+import type { OwnerProviderEarningsReadback } from './earnings-readback'
+
+export type {
+  OwnerProviderEarningsAccountReadback,
+  OwnerProviderEarningsReadback,
+} from './earnings-readback'
 
 export type OwnerProviderConnectionCommandResult =
   | Readonly<{
@@ -35,23 +40,6 @@ export type OwnerProviderConnectionCommandResult =
     }>
   | Readonly<{ kind: "refused"; code: string; correlationRef?: string }>;
 export type OwnerProviderConnection = ProviderConnectionOwnerProjection;
-
-export type OwnerProviderEarningsAccountReadback = Readonly<{
-  currency: string;
-  earnings: Readonly<{ kind: "ok" } & ProviderEarningsView>;
-  payout: Readonly<{ kind: "ok" } & PayoutStatusView>;
-}>;
-
-export type OwnerProviderEarningsReadback = Readonly<
-  | { kind: "error"; code: "unauthenticated" | "source_unavailable" }
-  | { kind: "not_found" }
-  | {
-      kind: "available";
-      businessId: string;
-      accounts: readonly OwnerProviderEarningsAccountReadback[];
-      accountsTruncated: boolean;
-    }
->;
 
 const readOwnerProviderConnectionsQuery = sourceQuery<
   Record<string, never>,
