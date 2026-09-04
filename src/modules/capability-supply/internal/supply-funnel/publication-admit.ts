@@ -146,9 +146,9 @@ function ownerPublicationEndpoint(
     case "mcp":
       return { url: source.serverUrl, method: "POST" };
     case "agent_plugin_mcp": {
-      if (!isRecord(source.manifest) || !isRecord(source.manifest.mcpServers))
+      if (!isRecord(source.mcpJson) || !isRecord(source.mcpJson.mcpServers))
         return undefined;
-      const server = source.manifest.mcpServers[source.serverName];
+      const server = source.mcpJson.mcpServers[source.serverName];
       if (!isRecord(server) || typeof server.url !== "string") return undefined;
       return { url: server.url, method: "POST" };
     }

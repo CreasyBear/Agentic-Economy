@@ -2,7 +2,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js'
 import { describe, expect, it, vi } from 'vitest'
-import { z } from 'zod'
 
 import { listMcpActions, mcpToolName } from '@/modules/actions'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
@@ -77,7 +76,6 @@ describe('MCP host adapter with the official client', () => {
 
     const expectedActions = listMcpActions()
     expect(listed.tools.map(({ name }) => name)).toEqual(expectedActions.map(mcpToolName))
-    expect(listed.tools).toHaveLength(31)
 
     for (const tool of listed.tools) {
       const action = expectedActions.find((candidate) => mcpToolName(candidate) === tool.name)
@@ -86,12 +84,7 @@ describe('MCP host adapter with the official client', () => {
         strictUnions: true,
         pipeStrategy: 'input',
       }))
-      expect(tool.outputSchema).toEqual(toJsonSchemaCompat(z.object({
-        result: action.outputSchema,
-      }), {
-        strictUnions: true,
-        pipeStrategy: 'output',
-      }))
+      expect(tool.outputSchema).toBeUndefined()
     }
 
     const byteLength = (value: unknown): number => new TextEncoder()
@@ -106,14 +99,13 @@ describe('MCP host adapter with the official client', () => {
       0,
     )
 
-    const previousManifest = {
+    const preCompactManifest = {
       toolsBytes: 221_955,
       outputSchemaBytes: 186_908,
-      inputSchemaBytes: 15_221,
     }
-    expect(toolsBytes).toBeLessThanOrEqual(Math.floor(previousManifest.toolsBytes * 1.2))
-    expect(outputSchemaBytes).toBeLessThanOrEqual(Math.floor(previousManifest.outputSchemaBytes * 1.2))
-    expect(inputSchemaBytes).toBeLessThanOrEqual(Math.floor(previousManifest.inputSchemaBytes * 1.2))
+    expect(toolsBytes).toBeLessThanOrEqual(Math.floor(preCompactManifest.toolsBytes * 1.2))
+    expect(outputSchemaBytes).toBe(0)
+    expect(inputSchemaBytes).toBeLessThanOrEqual(expectedActions.length * 800)
   })
 
   it('retains invocationRef across a fresh client and reads the terminal structured result', async () => {

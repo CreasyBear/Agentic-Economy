@@ -212,8 +212,12 @@ describe('current Operation commitment contract', () => {
   it.each([
     ['publication revision', (operation: MutableOperation) => { operation.identity.publicationRevision += 1 }],
     ['price', (operation: MutableOperation) => {
-      if (operation.pricingConfig.kind !== 'managed_x402') throw new Error('test_managed_price_missing')
-      operation.pricingConfig.sourceRequirement.atomicUnits = '2'
+      if (operation.pricingConfig.kind !== 'fixed_aud') throw new Error('test_fixed_price_missing')
+      operation.pricingConfig.amountUnits = '2000000'
+      operation.offering.presentation.price = {
+        kind: 'fixed',
+        amount: { currency: 'AUD', units: '2000000', exponent: 6 },
+      }
     }],
     ['effects', (operation: MutableOperation) => {
       operation.contract.effects[0]!.reversibility = 'reversible'

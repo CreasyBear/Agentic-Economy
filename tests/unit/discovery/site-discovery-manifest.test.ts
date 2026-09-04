@@ -113,9 +113,9 @@ describe('Site discovery manifest', () => {
     expect(pathsByKind.get('business_manifest')).toBeUndefined()
     expect(pathsByKind.get('operation_read')).toEqual([
       '/api/v1/market-operations/search',
-      '/api/v1/market-operations/detail',
+      '/api/v1/market-operations/list',
+      '/api/v1/market-operations/describe',
       '/api/v1/market-operations/compare',
-      '/api/v1/market-operations/inspect-plan',
     ])
     expect(pathsByKind.get('funding_preflight')).toEqual([
       '/api/v1/funding/constraints',
@@ -184,9 +184,9 @@ describe('Site discovery manifest', () => {
 
     expect(operationReads.map((endpoint) => endpoint.path)).toEqual([
       '/api/v1/market-operations/search',
-      '/api/v1/market-operations/detail',
+      '/api/v1/market-operations/list',
+      '/api/v1/market-operations/describe',
       '/api/v1/market-operations/compare',
-      '/api/v1/market-operations/inspect-plan',
     ])
     expect(operationReads.every((endpoint) => endpoint.method === 'POST' && endpoint.authentication === 'none')).toBe(true)
     expect(operationReads.every((endpoint) => endpoint.inputJsonSchema !== undefined)).toBe(true)

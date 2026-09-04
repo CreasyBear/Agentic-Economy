@@ -194,7 +194,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
   supply: {
     summary: 'Inspect and manage owner-bound supplier Operations, provider connections, earnings, and recovery with an owner-issued supplier credential.',
-    args: '<status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|retry-cleanup>',
+    args: '<preview|status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|offboarding>',
     json: true,
     group: 'supply',
     rootOrder: 1,
@@ -203,7 +203,8 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
       'Use status before lifecycle writes and preserve the exact offering and publication revisions it returns.',
     ],
     commands: {
-      status: { summary: 'List supplier Operations or inspect one exact offering lifecycle.', args: '<businessId> [offeringRef]', json: true },
+      preview: { summary: 'Discover candidate Operations from one native Provider source without publishing or invoking.', args: "--input '<json>'", json: true },
+      status: { summary: 'List Provider Operations or read one exact Operation lifecycle.', args: '<businessRef> [operationRef]', json: true },
       publish: { summary: 'Publish one admitted supplier Operation artifact.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       withdraw: { summary: 'Withdraw one exact current supplier publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       recheck: { summary: 'Schedule readiness revalidation for one exact publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
@@ -214,7 +215,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
       connect: { summary: 'Connect one public credentialless x402 endpoint.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       reconnect: { summary: 'Refresh one exact provider connection using its current generation and digest.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
       revoke: { summary: 'Begin revocation and cleanup for one exact provider connection.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
-      'retry-cleanup': { summary: 'Resume eligible cleanup after persisted callback grace expires.', args: "--input '<json>' [--idempotency-key <key>]", json: true },
+      offboarding: { summary: 'Read one durable Provider offboarding case. Starting and resuming remain owner-only.', args: '<businessRef>', json: true },
     },
   },
   fund: {
@@ -507,7 +508,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     },
     supply: {
       connect: 'ae connect --supplier',
-      status: 'ae supply status <businessId> [offeringRef]',
+      status: 'ae supply status <businessRef> [operationRef]',
       connections: 'ae supply connections <businessId>',
       connection: 'ae supply connection <connectionRef>',
       authority: 'Requires a separately owner-approved market_supply:manage credential; buyer and supplier profiles remain independent.',

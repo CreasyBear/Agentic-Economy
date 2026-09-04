@@ -25,12 +25,13 @@ import {
   supplyConnectionDetailAction,
   supplyConnectionListAction,
   supplyConnectionReconnectAction,
-  supplyConnectionRetryCleanupAction,
   supplyConnectionRevokeAction,
   supplyEarningsAction,
+  supplyOffboardingStatusAction,
   supplyPublishAction,
   supplyRecheckAction,
   supplyRepublishAction,
+  supplySourcePreviewAction,
   supplyStatusAction,
   supplyWithdrawAction,
 } from '@/modules/capability-supply/supply-actions'
@@ -92,6 +93,7 @@ const registeredActions: readonly AnyAction[] = [
   operationStatusAction,
   operationCancelAction,
   operationReconcileAction,
+  supplySourcePreviewAction,
   supplyStatusAction,
   supplyPublishAction,
   supplyWithdrawAction,
@@ -103,7 +105,7 @@ const registeredActions: readonly AnyAction[] = [
   supplyConnectionConnectAction,
   supplyConnectionReconnectAction,
   supplyConnectionRevokeAction,
-  supplyConnectionRetryCleanupAction,
+  supplyOffboardingStatusAction,
 ]
 
 assertUniqueActionIds(registeredActions)

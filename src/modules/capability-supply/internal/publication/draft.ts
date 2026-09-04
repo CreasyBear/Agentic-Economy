@@ -39,6 +39,7 @@ import {
   publicationSourceDigest,
   publicationSourceSelector,
 } from './source'
+import { sourceRouteRef } from '../source-route-identity'
 
 const encoder = new TextEncoder()
 const MAX_SOURCE_DESCRIPTOR_BYTES = 262_144
@@ -82,6 +83,8 @@ export type PreparedPublicationMaterial = Readonly<{
   sourceDescriptorJson: string
   sourceRevision: string
   sourceDigest: string
+  sourceRouteRef: string
+  sourceAuthorityState?: 'verified' | 'review_required'
   documentJson: string
   offering: CapabilityPublicationOfferingDraft
   binding: CapabilityPublicationBindingDraft
@@ -220,6 +223,12 @@ export async function preparePublicationDraft(input: Readonly<{
     sourceDescriptorJson,
     sourceRevision: input.sourceRevision,
     sourceDigest,
+    sourceRouteRef: sourceRouteRef({
+      sourceKind: draft.source.kind,
+      sourceSelector,
+      sourceDescriptorJson,
+      endpointUrl: binding.endpointUrl,
+    }) ?? sourceDigest,
     documentJson: encoded.documentJson,
     offering: draft.offering,
     binding: draft.binding,

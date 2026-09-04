@@ -124,6 +124,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): EligiblePublicati
     sourceDigest: doc.sourceDigest,
     publisherRef: doc.publisherRef,
     provenanceDigest: doc.provenanceDigest,
+    ...(doc.sourceAuthorityState === undefined ? {} : { sourceAuthorityState: doc.sourceAuthorityState }),
     registrationEvidenceRefs: [...doc.registrationEvidenceRefs],
     readinessEvidenceRefs: [...doc.readinessEvidenceRefs],
     disposition: doc.disposition,

@@ -31,7 +31,7 @@ import {
   fundingPaymentRequest,
   type AccountFundingCommandView,
   type FundingProviderEvidence,
-} from '@/modules/money/internal/account-funding-http'
+} from '@/modules/money/server'
 import { isMoneyRefusal, type MoneyRefusal } from '@/modules/money/public'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { z } from 'zod'

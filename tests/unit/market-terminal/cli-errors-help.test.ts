@@ -21,10 +21,10 @@ describe('market-terminal CLI error contracts', () => {
       'manifest',
       'config',
       'search',
+      'list',
       'request',
-      'inspect',
+      'describe',
       'compare',
-      'inspect-plan',
       'connect',
       'doctor',
       'account',
@@ -56,7 +56,7 @@ describe('market-terminal CLI error contracts', () => {
       {
         id: 'discover_compare',
         title: 'Discover and compare',
-        commands: ['search', 'inspect', 'compare', 'inspect-plan', 'request'],
+        commands: ['search', 'list', 'describe', 'compare', 'request'],
       },
       {
         id: 'connect_account',
@@ -220,17 +220,17 @@ describe('market-terminal CLI error contracts', () => {
     expect(parsed.positionals).toEqual(['operation:v1:first', 'operation:v1:second'])
   })
 
-  it('advertises and admits technical search output explicitly', () => {
+  it('keeps search compact while still accepting the global technical flag', () => {
     const help = spawnCliSync(['help', 'search', '--json'])
     expect(help.status).toBe(0)
     expect(help.stderr).toBe('')
     expect(JSON.parse(help.stdout)).toMatchObject({
       command: 'search',
-      usage: expect.stringContaining('[--technical]'),
+      usage: 'ae search "<job>" [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\']',
       guidance: [
         expect.any(String),
         expect.any(String),
-        expect.stringContaining('include each Operation\'s navigation'),
+        expect.stringContaining('compact catalog facts'),
       ],
       flags: {
         '--technical': {
@@ -258,15 +258,15 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('advertises and admits technical inspect output explicitly', () => {
+  it('advertises and admits technical describe output explicitly', () => {
     const operationRef = `operation:v1:${'a'.repeat(64)}`
-    const help = spawnCliSync(['help', 'inspect', '--json'])
+    const help = spawnCliSync(['help', 'describe', '--json'])
     expect(help.status).toBe(0)
     expect(help.stderr).toBe('')
     expect(JSON.parse(help.stdout)).toMatchObject({
-      command: 'inspect',
-      usage: 'ae inspect <operation-ref> [--technical]',
-      guidance: [expect.stringContaining('omits duplicated navigation')],
+      command: 'describe',
+      usage: 'ae describe <operation-ref> [--technical]',
+      guidance: [expect.stringContaining('operation.inspect')],
       flags: {
         '--technical': {
           description: expect.stringContaining('inspect results'),
@@ -274,12 +274,12 @@ describe('market-terminal CLI error contracts', () => {
       },
     })
 
-    const parsed = parseArgs(['inspect', operationRef, '--technical', '--json'])
+    const parsed = parseArgs(['describe', operationRef, '--technical', '--json'])
     expect(parsed.options).toMatchObject({ technical: true, json: true })
     expect(parsed.positionals).toEqual([operationRef])
 
     const command = spawnCliSync([
-      'inspect',
+      'describe',
       operationRef,
       '--technical',
       '--json',
@@ -324,7 +324,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(JSON.parse(supplyHelp.stdout)).toMatchObject({
       kind: 'HELP',
       command: 'supply status',
-      usage: 'ae supply status <businessId> [offeringRef]',
+      usage: 'ae supply status <businessRef> [operationRef]',
       auth: {
         scope: 'market_supply:manage',
         deviceFlow: expect.stringContaining('connect --supplier'),
@@ -441,7 +441,7 @@ describe('market-terminal CLI error contracts', () => {
   it('scopes valid command help, keeps text and JSON aligned, and rejects typo paths', () => {
     for (const [args, command] of [
       [['recover', '--json', '--help'], 'recover'],
-      [['inspect-plan', '--json', '--help'], 'inspect-plan'],
+      [['describe', '--json', '--help'], 'describe'],
     ] as const) {
       const json = spawnCliSync(args)
       expect(json.status).toBe(0)
@@ -473,7 +473,6 @@ describe('market-terminal CLI error contracts', () => {
         expect(envelope.guidance?.join(' ')).toContain('canonical evidence')
         expect(text.stdout).toContain('not a replay')
       }
-      if (command === 'inspect-plan') expect(envelope.usage).toContain('inspect-plan')
     }
 
     for (const [args, code] of [

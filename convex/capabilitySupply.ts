@@ -14,6 +14,9 @@ import {
   readCapabilityPublicationArgs,
   readCapabilityPublicationHandler,
   capabilityPublicationValue,
+  verifyCapabilitySourceAuthorityArgs,
+  verifyCapabilitySourceAuthorityHandler,
+  verifyCapabilitySourceAuthorityResultValue,
 } from './capabilitySupplyPublish'
 import {
   observeCapabilityReadinessArgs,
@@ -91,6 +94,12 @@ export const publishPreparedCapability = mutationGeneric({
   args: publishPreparedCapabilityArgs,
   returns: preparedPublicationResultValue,
   handler: publishPreparedCapabilityHandler,
+})
+
+export const verifyCapabilitySourceAuthority = mutationGeneric({
+  args: verifyCapabilitySourceAuthorityArgs,
+  returns: verifyCapabilitySourceAuthorityResultValue,
+  handler: verifyCapabilitySourceAuthorityHandler,
 })
 
 export const stageOwnerX402Capability = mutationGeneric({

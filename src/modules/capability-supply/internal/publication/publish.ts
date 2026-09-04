@@ -26,6 +26,7 @@ import {
   type CapabilityPublicationAuthorityMode,
   type CapabilityPublicationProvenance,
 } from './provenance'
+import { sourceRouteRef } from '../source-route-identity'
 import type { CapabilityPublicationImportRefusal } from '../publication-importers'
 import {
   admitPublicationDraft,
@@ -74,6 +75,7 @@ export type PublishPreparedCapabilityRefusal =
   | 'operation_key_conflict'
   | 'registration_changed'
   | 'connection_authority_stale'
+  | 'source_route_conflict'
 
 export type PublishPreparedCapabilityCommandResult =
   | Readonly<{
@@ -601,6 +603,21 @@ async function commitPreparedPublicationCommand(
     return { kind: 'refused', reason: 'source_invalid' }
   }
 
+  const currentRoutePublications = await ports.loadCurrentPublicationsBySourceRoute?.(
+    prepared.sourceRouteRef,
+  ) ?? []
+  const conflictingRoute = currentRoutePublications.find((publication) => {
+    if (publication.publicationRef === offering.offeringId) return false
+    if (publicationMetadata.authorityMode === 'provider_owned') {
+      return publication.authorityMode === 'provider_owned'
+    }
+    return publication.authorityMode === 'provider_owned'
+      || publication.authorityMode === publicationMetadata.authorityMode
+  })
+  if (conflictingRoute !== undefined) {
+    return { kind: 'refused', reason: 'source_route_conflict' }
+  }
+
   const contractRefusal = await validatePublicationContractContinuity(
     input,
     ports,
@@ -723,6 +740,15 @@ async function commitPreparedPublicationCommand(
       sourceDescriptorJson: prepared.sourceDescriptorJson,
       sourceRevision,
       sourceDigest,
+      sourceRouteRef: sourceRouteRef({
+        sourceKind: prepared.sourceKind,
+        sourceSelector: prepared.sourceSelector,
+        sourceDescriptorJson: prepared.sourceDescriptorJson,
+        endpointUrl: prepared.binding.endpointUrl,
+      }) ?? sourceDigest,
+      ...(prepared.sourceAuthorityState === undefined
+        ? {}
+        : { sourceAuthorityState: prepared.sourceAuthorityState }),
       pricingConfigJson: prepared.pricingConfigJson,
       priceDigest: prepared.priceDigest,
       publisherRef: publicationMetadata.publisherRef,

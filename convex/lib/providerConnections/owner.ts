@@ -1,5 +1,5 @@
 import type { WorkId } from '@convex-dev/workpool'
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 import {
   beginProviderConnectionRevocation,
   createConnectionHealthAuditEvent,
@@ -23,6 +23,11 @@ import {
   DelegationService,
   delegationGrantRef,
 } from '../../../src/modules/authority/delegation/public'
+import { MARKET_SUPPLY_MANAGE_SCOPE } from '../../../src/modules/agent-access/contract'
+import {
+  verifyCustomerRequestServiceAssertion,
+  type CustomerRequestServiceAssertion,
+} from '../../../src/modules/agent-access/service-auth-envelope'
 import type { BusinessActor } from '../../../src/modules/business/public'
 import {
   canonicalEvmAddress,
@@ -45,6 +50,7 @@ import {
 } from './authority'
 import { lifecycle } from './contracts'
 import { resolveBusinessActor } from '../../authz'
+import { serviceAssertion } from '../../serviceAssertion'
 import { accountRef, ownershipRef, principalRef } from '../../../src/modules/principal-account/public'
 import {
   validX402SellerClaimTime,
@@ -63,6 +69,7 @@ import {
   deriveStrictConsequenceProof,
   isValidClerkFactorEvidence,
 } from '../consequenceProof'
+import { providerRouteabilityIsFrozen } from '../providerOffboardingFreeze'
 
 export const ownerProjection = v.object({
   connectionRef: v.string(),
@@ -70,6 +77,17 @@ export const ownerProjection = v.object({
   providerRef: v.string(),
   providerAccountRef: v.string(),
   adapterId: v.string(),
+  sourceOrigin: v.optional(v.string()),
+  sourceEnvironment: v.optional(v.union(v.literal('sandbox'), v.literal('production'))),
+  sourceAuthentication: v.optional(v.union(
+    v.object({
+      kind: v.literal('api_key'),
+      location: v.union(v.literal('header'), v.literal('query')),
+      name: v.string(),
+    }),
+    v.object({ kind: v.literal('http_bearer') }),
+    v.object({ kind: v.literal('mcp_oauth') }),
+  )),
   grantedScopes: v.array(v.string()),
   grantedResources: v.array(v.string()),
   authorityGeneration: v.number(),
@@ -112,6 +130,62 @@ export const readOwnerArgs = {
   connectionRef: v.string(),
 } as const
 export const listOwnerArgs = {} as const
+const prepareOwnerMcpRuntimeArgsValue = v.object({
+  connectionRef: v.string(),
+  correlationRef: v.string(),
+  serviceAuth: serviceAssertion,
+})
+export const prepareOwnerMcpRuntimeArgs = prepareOwnerMcpRuntimeArgsValue.fields
+export const prepareOwnerHttpRuntimeArgs = prepareOwnerMcpRuntimeArgsValue.fields
+export const ownerHttpRuntimeResult = v.union(
+  v.object({
+    kind: v.literal('available'),
+    connection: v.object({
+      connectionRef: v.string(),
+      businessRef: v.string(),
+      sourceUrl: v.string(),
+      sourceOrigin: v.string(),
+      environment: v.union(v.literal('sandbox'), v.literal('production')),
+      authentication: v.union(
+        v.object({
+          kind: v.literal('api_key'),
+          location: v.union(v.literal('header'), v.literal('query')),
+          name: v.string(),
+        }),
+        v.object({ kind: v.literal('http_bearer') }),
+      ),
+      secretRef: v.string(),
+      activeGeneration: v.string(),
+      pointerRevision: v.number(),
+    }),
+  }),
+  v.object({ kind: v.literal('not_found') }),
+)
+export const ownerMcpRuntimeResult = v.union(
+  v.object({
+    kind: v.literal('available'),
+    connection: v.object({
+      connectionRef: v.string(),
+      businessRef: v.string(),
+      sourceUrl: v.string(),
+      secretRef: v.string(),
+      activeGeneration: v.string(),
+      pointerRevision: v.number(),
+      rotationAuthority: v.object({
+        operation: v.literal('rotate'),
+        snapshotRef: v.string(),
+        accountRef: v.string(),
+        actorPrincipalRef: v.string(),
+        grantRef: v.string(),
+        grantGeneration: v.number(),
+        correlationRef: v.string(),
+        idempotencyRef: v.string(),
+        occurredAt: v.number(),
+      }),
+    }),
+  }),
+  v.object({ kind: v.literal('not_found') }),
+)
 export const revokeOwnerArgs = {
   connectionRef: v.string(),
   commandId: v.string(),
@@ -365,6 +439,9 @@ export async function reauthorizeProviderConnectionForActor(
   const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor, false)
   if (owned === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   const { row } = owned
+  if (await providerRouteabilityIsFrozen(ctx, row.businessId)) {
+    return { kind: 'refused' as const, code: 'invalid_transition' as const }
+  }
   const current = toDomain(row)
   const canonicalActor = {
     principalRef: principalRef(actor.canonicalPrincipalRef),
@@ -462,6 +539,222 @@ export async function listOwnerHandler(ctx: QueryCtx) {
       ? [projectOwnerProjection(connection, row.updatedAt)]
       : []
   })
+}
+
+const PREPARE_OWNER_MCP_RUNTIME_OPERATION = 'capabilityProviderConnections.prepareOwnerMcpRuntimeForServer'
+
+async function validOwnerRuntimeAssertion(
+  operation: string,
+  input: Readonly<{ connectionRef: string; correlationRef: string }>,
+  assertion: CustomerRequestServiceAssertion,
+): Promise<boolean> {
+  const key = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+  return key !== undefined
+    && key.length >= 32
+    && assertion.principalId === 'ae:server-function'
+    && assertion.ownerId === 'ae:server-function'
+    && assertion.credentialId === 'ae:server-function'
+    && assertion.scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)
+    && await verifyCustomerRequestServiceAssertion({
+      key,
+      operation,
+      command: input,
+      assertion,
+    })
+}
+
+function mcpRuntimeSource(
+  connection: ProviderConnection,
+  actor: AuthenticatedBusinessActor,
+): Readonly<{ sourceUrl: string; secret: string }> | null {
+  const sourceUrl = connection.grantedResources.length === 1
+    ? connection.grantedResources[0]
+    : undefined
+  const secret = connection.secretRef ?? connection.credentialRef ?? undefined
+  return connection.adapterId !== 'mcp-jsonrpc:v1'
+    || sourceUrl === undefined
+    || secret === undefined
+    || connection.installedByPrincipalRef !== actor.canonicalPrincipalRef
+    ? null
+    : { sourceUrl, secret }
+}
+
+async function readOwnerMcpRuntimeConnection(
+  ctx: MutationCtx,
+  actor: AuthenticatedBusinessActor,
+  connectionRef: string,
+) {
+  const owned = await readProviderConnectionForActor(ctx, connectionRef, actor)
+  if (owned === null) return null
+  const connection = toDomain(owned.row)
+  const source = mcpRuntimeSource(connection, actor)
+  if (source === null) return null
+  const { sourceUrl, secret } = source
+  const pointer = await ctx.db.query('secretPointers')
+    .withIndex('by_secretRef', (query) => query.eq('secretRef', secret))
+    .unique()
+  return pointer === null || pointer.owningAccountRef !== actor.canonicalAccountRef
+    ? null
+    : { connection, sourceUrl, secret, pointer }
+}
+
+async function admitOwnerMcpRotation(
+  ctx: MutationCtx,
+  actor: AuthenticatedBusinessActor,
+  input: Readonly<{
+    connection: ProviderConnection
+    secret: string
+    correlationRef: string
+    idempotencyRef: string
+  }>,
+) {
+  try {
+    return await new DelegationService(
+      createConvexDelegationStore(ctx),
+      createConvexDelegationContextPort(ctx, actor.canonicalPrincipalRef),
+      { now: Date.now },
+    ).admitConsequence({
+      grantRef: delegationGrantRef(input.connection.authorityGrantRef),
+      expectedGeneration: input.connection.authorityGrantGeneration,
+      context: {
+        actorPrincipalRef: actor.canonicalPrincipalRef,
+        activeAccountRef: actor.canonicalAccountRef,
+        correlationRef: input.correlationRef,
+        idempotencyRef: input.idempotencyRef,
+      },
+      requiredScopes: ['secret:rotate'],
+      resourceRefs: [`secret:${input.secret}`],
+      budgetAmount: 0,
+    })
+  } catch {
+    return null
+  }
+}
+
+export async function prepareOwnerMcpRuntimeHandler(
+  ctx: MutationCtx,
+  args: Infer<typeof prepareOwnerMcpRuntimeArgsValue>,
+) {
+  const command = { connectionRef: args.connectionRef, correlationRef: args.correlationRef }
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner'
+    || !await validOwnerRuntimeAssertion(PREPARE_OWNER_MCP_RUNTIME_OPERATION, command, args.serviceAuth)) {
+    return { kind: 'not_found' as const }
+  }
+  const runtime = await readOwnerMcpRuntimeConnection(ctx, actor, args.connectionRef)
+  if (runtime === null) return { kind: 'not_found' as const }
+  const { connection, sourceUrl, secret, pointer } = runtime
+  const idempotencyRef = canonicalDigest({
+    format: 'provider-mcp-runtime-refresh:v1',
+    connectionRef: connection.connectionRef,
+    authorityGeneration: connection.authorityGeneration,
+    pointerRevision: pointer.revision,
+    correlationRef: args.correlationRef,
+  })
+  const snapshot = await admitOwnerMcpRotation(ctx, actor, {
+    connection,
+    secret,
+    correlationRef: args.correlationRef,
+    idempotencyRef,
+  })
+  return snapshot === null
+    ? { kind: 'not_found' as const }
+    : {
+      kind: 'available' as const,
+      connection: {
+        connectionRef: connection.connectionRef,
+        businessRef: connection.businessId,
+        sourceUrl,
+        secretRef: secret,
+        activeGeneration: pointer.activeGeneration,
+        pointerRevision: pointer.revision,
+        rotationAuthority: {
+          operation: 'rotate' as const,
+          snapshotRef: snapshot.snapshotRef,
+          accountRef: snapshot.accountRef,
+          actorPrincipalRef: snapshot.actorPrincipalRef,
+          grantRef: snapshot.grantRef,
+          grantGeneration: snapshot.generation,
+          correlationRef: snapshot.correlationRef,
+          idempotencyRef: snapshot.idempotencyRef,
+          occurredAt: snapshot.admittedAt,
+        },
+      },
+    }
+}
+
+const PREPARE_OWNER_HTTP_RUNTIME_OPERATION = 'capabilityProviderConnections.prepareOwnerHttpRuntimeForServer'
+
+type HttpRuntimeConnection = ProviderConnection & Readonly<{
+  sourceOrigin: string
+  sourceEnvironment: 'sandbox' | 'production'
+  sourceAuthentication:
+    | Readonly<{ kind: 'api_key'; location: 'header' | 'query'; name: string }>
+    | Readonly<{ kind: 'http_bearer' }>
+  secretRef: string
+}>
+
+function isHttpRuntimeConnection(
+  connection: ProviderConnection,
+  actor: AuthenticatedBusinessActor,
+): connection is HttpRuntimeConnection {
+  return [
+    connection.adapterId === 'http-json:v1',
+    connection.grantedResources.length === 1,
+    typeof connection.secretRef === 'string',
+    typeof connection.sourceOrigin === 'string',
+    connection.sourceEnvironment === 'sandbox' || connection.sourceEnvironment === 'production',
+    connection.sourceAuthentication?.kind === 'api_key' || connection.sourceAuthentication?.kind === 'http_bearer',
+    connection.installedByPrincipalRef === actor.canonicalPrincipalRef,
+  ].every(Boolean)
+}
+
+function httpRuntimeSource(connection: ProviderConnection, actor: AuthenticatedBusinessActor) {
+  if (!isHttpRuntimeConnection(connection, actor)) return null
+  return {
+    sourceUrl: connection.grantedResources[0]!,
+    secret: connection.secretRef,
+    sourceOrigin: connection.sourceOrigin,
+    environment: connection.sourceEnvironment,
+    authentication: connection.sourceAuthentication,
+  }
+}
+
+export async function prepareOwnerHttpRuntimeHandler(
+  ctx: MutationCtx,
+  args: Infer<typeof prepareOwnerMcpRuntimeArgsValue>,
+) {
+  const command = { connectionRef: args.connectionRef, correlationRef: args.correlationRef }
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner'
+    || !await validOwnerRuntimeAssertion(PREPARE_OWNER_HTTP_RUNTIME_OPERATION, command, args.serviceAuth)) {
+    return { kind: 'not_found' as const }
+  }
+  const owned = await readProviderConnectionForActor(ctx, args.connectionRef, actor)
+  if (owned === null) return { kind: 'not_found' as const }
+  const connection = toDomain(owned.row)
+  const runtime = httpRuntimeSource(connection, actor)
+  if (runtime === null) return { kind: 'not_found' as const }
+  const pointer = await ctx.db.query('secretPointers')
+    .withIndex('by_secretRef', (query) => query.eq('secretRef', runtime.secret))
+    .unique()
+  if (pointer === null || pointer.owningAccountRef !== actor.canonicalAccountRef) {
+    return { kind: 'not_found' as const }
+  }
+  return {
+    kind: 'available' as const,
+    connection: {
+      connectionRef: connection.connectionRef,
+      businessRef: connection.businessId,
+      sourceUrl: runtime.sourceUrl,
+      sourceOrigin: runtime.sourceOrigin,
+      environment: runtime.environment,
+      authentication: runtime.authentication,
+      secretRef: runtime.secret,
+      activeGeneration: pointer.activeGeneration,
+      pointerRevision: pointer.revision,
+    },
+  }
 }
 
 export async function revokeOwnerHandler(ctx: MutationCtx, args: RevokeOwnerArgs) {
@@ -983,6 +1276,9 @@ async function prepareX402ConnectionClaim(
   const now = Date.now()
   if (ownedBusiness === null || resourceUrl === undefined || resourceUrl.hash !== '') {
     return { kind: 'refused' as const, code: 'invalid_identity' as const }
+  }
+  if (await providerRouteabilityIsFrozen(ctx, args.businessId)) {
+    return { kind: 'refused' as const, code: 'invalid_transition' as const }
   }
   const canonicalResourceUrl = resourceUrl.toString()
   const verification = await verifiedConnectionSellerClaim(args, canonicalResourceUrl, now)

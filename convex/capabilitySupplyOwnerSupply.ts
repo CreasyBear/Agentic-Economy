@@ -45,7 +45,7 @@ const ownerSupplyActionResultValue = v.union(
       v.literal('admission_unproven'), v.literal('conformance_unproven'),
       v.literal('credential_readiness_unobserved'), v.literal('health_unobserved'),
       v.literal('health_unhealthy'), v.literal('health_stale'),
-      v.literal('eligibility_integrity_failure'), v.literal('withdrawn'),
+      v.literal('eligibility_integrity_failure'), v.literal('provider_authority_unverified'), v.literal('withdrawn'),
       v.literal('incompatible_revision'),
       v.literal('canary_admission_refused'),
     ),

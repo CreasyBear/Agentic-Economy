@@ -37,6 +37,7 @@ import {
   workloadCronSnapshotValue,
 } from './workloadCron'
 import { SYSTEM_WORKLOAD_ACCOUNT_REF } from './lib/workloadCron/context'
+import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
 const SOURCE_EVIDENCE = 'source:facilitator-discovery'
 const BUSINESS_SOURCE_KIND = 'facilitator-discovery-business:v1'
 const MAX_RECONCILE_ITEMS = 100
@@ -297,6 +298,7 @@ async function reconcileDraft(
   if (probe.kind === 'refused') return 'skipped'
   const business = await ensureProviderBusiness(ctx, route.host, now)
   if (business === undefined) return 'skipped'
+  if (await providerRouteabilityIsFrozen(ctx, business.businessId)) return 'skipped'
   const connection = await ensureProviderConnection(ctx, business.businessId, route, now)
   if (connection === undefined) {
     if (business.created || business.activated) throw new Error('facilitator_discovery_connection_unavailable')
@@ -403,7 +405,7 @@ function routeIdentity(
   if (rawUrl === undefined
     || (method !== 'GET' && method !== 'POST')
     || typeof payee !== 'string'
-    || !/^0x[0-9a-f]{40}$/u.test(payee)) return undefined
+    || !/^0x[0-9a-f]{40}$/iu.test(payee)) return undefined
   try {
     const parsed = new URL(rawUrl)
     if (parsed.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '' || parsed.hash !== '') return undefined
@@ -424,6 +426,9 @@ async function ensureProviderBusiness(
     if (existingBusiness.suppressedAt !== undefined) return undefined
     if (existingBusiness.businessContext.kind !== 'programmable_provider'
       || existingBusiness.businessContext.providerIdentifier !== `provider:x402:${host}`) return undefined
+    if (await providerRouteabilityIsFrozen(ctx, existingBusiness._id)) {
+      return { businessId: existingBusiness._id, created: false, activated: false }
+    }
     const activated = existingBusiness.publicStatus !== 'published'
     if (activated) await ctx.db.patch(existingBusiness._id, { publicStatus: 'published', updatedAt: now })
     return { businessId: existingBusiness._id, created: false, activated }

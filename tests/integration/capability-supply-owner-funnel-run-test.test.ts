@@ -1,11 +1,9 @@
-import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { probeRequestDigest } from '@/modules/capability-supply/public'
-import { convexModules as modules } from '../helpers/convex-fixtures'
+import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
 import {
   createPublishedBusinessOwner,
   prepareOwnerPublicationCommand,
@@ -16,7 +14,7 @@ import { installProviderConnectionFixture } from './capability-publication-harne
 
 describe('owner supply test', () => {
   it('does not turn an exact fresh no-payment challenge into a paid canary or publication authority', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await createPublishedBusinessOwner(
       backend,
       'owner-x402-test',
@@ -114,6 +112,22 @@ describe('owner supply test', () => {
       kind: 'observed',
       publicationRef: published.publicationRef,
       revision: published.publicationRevision,
+    })
+    const admissionCases = await backend.run(async (ctx) => (
+      await ctx.db.query('capabilitySupplyAdmissionCases')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', published.publicationRef)
+            .eq('publicationRevision', published.publicationRevision)
+        ))
+        .collect()
+    ))
+    expect(admissionCases).toHaveLength(1)
+    expect(admissionCases[0]).toMatchObject({
+      state: 'completed',
+      terminalDecision: 'published',
+      blockerRefs: [],
+      reviewStartedAt: expect.any(Number),
+      completedAt: expect.any(Number),
     })
 
     const readTestState = async () => {

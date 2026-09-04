@@ -80,8 +80,12 @@ const durableTables = [
   'sellerOnboardingCanaryRearmAudits',
   'providerConsequenceJournal',
   'capabilityPublications',
+  'capabilitySupplyAdmissionCases',
   'capabilityTransportBindings',
   'capabilityProviderConnections',
+  'capabilityProviderConnectionAttempts',
+  'capabilityProviderOffboardingCases',
+  'capabilityProviderOffboardingTargets',
   'capabilityProviderConnectionLeases',
   'capabilityProviderApprovals',
   'registeredOperationMappings',
@@ -295,6 +299,14 @@ const requiredIndexes = {
     'by_networkId_and_disposition',
     'by_businessId_and_disposition',
     'by_bindingId_and_disposition',
+    'by_sourceRouteRef_and_disposition',
+  ],
+  capabilitySupplyAdmissionCases: [
+    'by_caseRef',
+    'by_publicationRef_and_revision',
+    'by_operationRef_and_revision',
+    'by_businessId_and_submittedAt',
+    'by_state_and_updatedAt',
   ],
   capabilityOfferings: [
     'by_offeringId',
@@ -303,14 +315,30 @@ const requiredIndexes = {
   ],
   capabilityTransportBindings: [
     'by_bindingId',
+    'by_sourceRouteRef',
     'by_offeringId_and_admission_and_conformance',
     'by_networkId_admission_conformance',
   ],
   capabilityProviderConnections: [
     'by_connectionRef',
     'by_businessId_and_lifecycle',
+    'by_businessId_and_connectionRef',
     'by_providerRef_and_lifecycle',
     'by_connectionRef_and_authorityGeneration',
+  ],
+  capabilityProviderConnectionAttempts: [
+    'by_attemptRef',
+    'by_commandId',
+    'by_lifecycle_and_expiresAt',
+    'by_businessId_and_updatedAt',
+  ],
+  capabilityProviderOffboardingCases: [
+    'by_caseRef',
+    'by_businessId_and_updatedAt',
+    'by_state_and_updatedAt',
+  ],
+  capabilityProviderOffboardingTargets: [
+    'by_caseRef_and_kind_and_targetRef',
   ],
   capabilityProviderApprovals: [
     'by_decisionRef',
@@ -333,7 +361,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(81)
+    expect(durableTables).toHaveLength(85)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

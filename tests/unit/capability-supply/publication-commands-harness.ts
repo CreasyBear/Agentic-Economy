@@ -65,7 +65,7 @@ export function offeringDraft(suffix = 'demo'): CapabilityPublicationOfferingDra
     presentation: {
       label: `${suffix} lookup`,
       summary: 'Returns one structured result.',
-      price: { kind: 'fixed' as const, amount: { currency: 'AUD' as const, units: '1200', exponent: 2 } },
+      price: { kind: 'fixed' as const, amount: { currency: 'AUD' as const, units: '12000000', exponent: 6 } },
       materialTerms: [],
       commercialRelationship: {
         kind: 'none' as const,

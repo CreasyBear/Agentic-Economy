@@ -8,20 +8,16 @@ import {
 import { sourceWriteAdmissionFromRequest, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
-import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { currencySchema, exactAmountSchema, ProviderEarningsViewSchema } from '@/modules/money/public'
 import {
-  ownerPublicationImport,
-  ownerPublicationWithCatalogOrigin,
   type OwnerProviderEarningsReadback,
   type OwnerSupplyCommandResult,
   type OwnerSupplyFunnelReadback,
   type OwnerSupplyOfferingReadback,
 } from './supply-funnel.functions'
-import { preparePublicationDraft, publicationMaterialContainsCredential, type PublishPreparedCapabilityCommandResult } from './internal/publication'
-import { dereferenceOpenApiSchema } from './internal/schema-deref'
+import type { PublishPreparedCapabilityCommandResult } from './internal/publication'
 import { inspectX402SellerEndpoint } from './internal/x402-seller-endpoint-inspector'
 import {
   validX402SellerClaimTime,
@@ -33,6 +29,26 @@ import {
   evmAddressEquals,
   verifyEip191Message,
 } from './internal/x402-evm-protocol'
+import {
+  previewSupplySource,
+  supplySourceInputSchema,
+  supplySourcePreviewSchema,
+  type SupplySourceInput,
+  type SupplySourcePreview,
+} from './source-preview'
+import {
+  prepareSupplyPublicationV2,
+  publishSupplyOperationV2InputSchema,
+  type PublishSupplyOperationV2Input,
+} from './supply-publication-v2'
+import {
+  projectSupplierOperationStatus,
+  supplierOperationStatusSchema,
+  type SupplierOperationStatus,
+} from './supplier-operation-status'
+import {
+  providerOffboardingStatusSchema,
+} from './provider-offboarding'
 
 const publicationLifecycleSchema = z.strictObject({
   state: z.enum(['inactive', 'active', 'withdrawn', 'incompatible']),
@@ -44,6 +60,7 @@ const actionRefusalSchema = z.strictObject({
 })
 
 export const SUPPLY_ACTION_IDS = Object.freeze({
+  sourcePreview: 'supply.source.preview',
   status: 'supply.status',
   publish: 'supply.publish',
   withdraw: 'supply.withdraw',
@@ -55,69 +72,36 @@ export const SUPPLY_ACTION_IDS = Object.freeze({
   connectionConnect: 'supply.connection.connect',
   connectionReconnect: 'supply.connection.reconnect',
   connectionRevoke: 'supply.connection.revoke',
-  connectionRetryCleanup: 'supply.connection.retryCleanup',
+  offboardingStatus: 'supply.offboarding.status',
 } as const)
 
 export const SUPPLY_ACTION_ROUTE_CONTRACTS = Object.freeze({
-  status: Object.freeze({ actionId: SUPPLY_ACTION_IDS.status, contractVersion: 'supply-status:v1', method: 'POST' as const, path: '/api/v1/supply/status', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
-  publish: Object.freeze({ actionId: SUPPLY_ACTION_IDS.publish, contractVersion: 'supply-publication:v1', method: 'POST' as const, path: '/api/v1/supply/publish', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
+  sourcePreview: Object.freeze({ actionId: SUPPLY_ACTION_IDS.sourcePreview, contractVersion: 'supply.source.preview:v1', method: 'POST' as const, path: '/api/v1/supply/sources/preview', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
+  status: Object.freeze({ actionId: SUPPLY_ACTION_IDS.status, contractVersion: 'supply.status:v2', method: 'POST' as const, path: '/api/v1/supply/status', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
+  publish: Object.freeze({ actionId: SUPPLY_ACTION_IDS.publish, contractVersion: 'supply.publish:v2', method: 'POST' as const, path: '/api/v1/supply/publish', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   withdraw: Object.freeze({ actionId: SUPPLY_ACTION_IDS.withdraw, contractVersion: 'supply-withdrawal:v1', method: 'POST' as const, path: '/api/v1/supply/withdraw', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   recheck: Object.freeze({ actionId: SUPPLY_ACTION_IDS.recheck, contractVersion: 'supply-recheck:v1', method: 'POST' as const, path: '/api/v1/supply/recheck', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   republish: Object.freeze({ actionId: SUPPLY_ACTION_IDS.republish, contractVersion: 'supply-republish:v1', method: 'POST' as const, path: '/api/v1/supply/republish', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   earnings: Object.freeze({ actionId: SUPPLY_ACTION_IDS.earnings, contractVersion: 'supply-earnings:v1', method: 'POST' as const, path: '/api/v1/supply/earnings', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionList: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionList, contractVersion: 'supply-connection-list:v1', method: 'POST' as const, path: '/api/v1/supply/connections/list', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionDetail: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionDetail, contractVersion: 'supply-connection-detail:v1', method: 'POST' as const, path: '/api/v1/supply/connections/detail', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
-  connectionConnect: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionConnect, contractVersion: 'supply-connection-connect:v2', method: 'POST' as const, path: '/api/v1/supply/connections/connect', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
+  connectionConnect: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionConnect, contractVersion: 'supply.connection.connect:v3', method: 'POST' as const, path: '/api/v1/supply/connections/connect', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionReconnect: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionReconnect, contractVersion: 'supply-connection-reconnect:v1', method: 'POST' as const, path: '/api/v1/supply/connections/reconnect', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionRevoke: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionRevoke, contractVersion: 'supply-connection-revoke:v1', method: 'POST' as const, path: '/api/v1/supply/connections/revoke', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
-  connectionRetryCleanup: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionRetryCleanup, contractVersion: 'supply-connection-retry-cleanup:v1', method: 'POST' as const, path: '/api/v1/supply/connections/retry-cleanup', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
-})
-
-const funnelStepSchema = z.enum(['describe', 'admission', 'readiness', 'test'])
-const funnelStepStateSchema = z.enum(['not_started', 'in_progress', 'completed', 'refused', 'stale'])
-const supplyStatusOperationSchema = z.strictObject({
-  offeringRef: z.string(),
-  revision: z.number().int().positive(),
-  name: z.string(),
-  summary: z.string(),
-  catalogStatus: z.enum(['draft', 'published', 'paused', 'retired']),
-  lifecycle: publicationLifecycleSchema,
-  readiness: z.strictObject({
-    outcome: z.string(),
-    observedAt: z.number().optional(),
-    validUntil: z.number().optional(),
-  }),
-  live: z.strictObject({
-    available: z.boolean(),
-    reason: z.string().optional(),
-  }),
-  currentStep: funnelStepSchema,
-  stepStates: z.strictObject({
-    describe: funnelStepStateSchema,
-    admission: funnelStepStateSchema,
-    readiness: funnelStepStateSchema,
-    test: funnelStepStateSchema,
-  }),
-  actionableReason: z.string().optional(),
-  publication: z.strictObject({
-    publicationRef: z.string(),
-    publicationRevision: z.number().int().positive(),
-    operationRef: z.string(),
-    state: z.enum(['current', 'withdrawn', 'superseded', 'incompatible']),
-  }).optional(),
+  offboardingStatus: Object.freeze({ actionId: SUPPLY_ACTION_IDS.offboardingStatus, contractVersion: 'supply.offboarding.status:v1', method: 'POST' as const, path: '/api/v1/supply/offboarding/status', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
 })
 
 export const supplyStatusInputSchema = z.strictObject({
-  businessId: z.string().trim().min(1),
-  offeringRef: z.string().trim().min(1).optional(),
+  businessRef: z.string().trim().min(1),
+  operationRef: z.string().trim().min(1).optional(),
 })
 export type SupplyStatusInput = z.infer<typeof supplyStatusInputSchema>
 export const supplyStatusResultSchema = z.union([
   z.strictObject({
     kind: z.literal('available'),
-    businessId: z.string(),
-    business: z.strictObject({ name: z.string(), slug: z.string() }),
-    operations: z.array(supplyStatusOperationSchema),
+    schemaVersion: z.literal('supplier_operations:v1'),
+    businessRef: z.string(),
+    operations: z.array(supplierOperationStatusSchema),
     activityTruncated: z.boolean(),
   }),
   z.strictObject({ kind: z.literal('not_found') }),
@@ -126,24 +110,15 @@ export const supplyStatusResultSchema = z.union([
 ])
 export type SupplyStatusResult = z.infer<typeof supplyStatusResultSchema>
 
-export const supplyPublishInputSchema = z.strictObject({
-  version: z.literal('supply-publication:v1'),
-  businessId: z.string().trim().min(1),
-  offeringRef: z.string().trim().min(1),
-  offeringRevision: z.number().int().positive(),
-  offeringSourceHash: z.string().trim().min(1),
-  source: z.record(z.string(), jsonValueSchema),
-  evidenceRefs: z.array(z.string().trim().min(1)).max(64),
-  idempotencyKey: z.string().trim().min(8).max(200),
-})
-export type SupplyPublishInput = z.infer<typeof supplyPublishInputSchema>
+export const supplyPublishInputSchema = publishSupplyOperationV2InputSchema
+export type SupplyPublishInput = PublishSupplyOperationV2Input
 export const supplyPublishResultSchema = z.union([
   z.strictObject({
-    kind: z.enum(['published', 'replayed']),
+    kind: z.enum(['submitted', 'replayed']),
     publicationRef: z.string(),
     publicationRevision: z.number().int().positive(),
     operationRef: z.string(),
-    lifecycle: publicationLifecycleSchema,
+    state: z.literal('Submitted'),
   }),
   actionRefusalSchema,
 ])
@@ -293,19 +268,83 @@ export type SupplyConnectionDetailResult = z.infer<typeof supplyConnectionDetail
 
 const connectionEvidenceSchema = z.array(z.string().trim().min(1)).max(64)
 const connectionIdempotencySchema = z.string().trim().min(8).max(200)
-export const supplyConnectionConnectInputSchema = z.strictObject({
-  businessId: z.string().trim().min(1),
-  resourceUrl: z.string().url().max(2_048),
-  method: z.enum(['GET', 'POST']),
+export type SupplyConnectionConnectInput =
+  | Readonly<{
+      kind: 'http_credential'
+      businessRef: string
+      sourceUrl: string
+      authentication:
+        | Readonly<{ kind: 'api_key'; location: 'header' | 'query'; name: string }>
+        | Readonly<{ kind: 'http_bearer' }>
+      environment: 'sandbox' | 'production'
+      idempotencyKey: string
+    }>
+  | Readonly<{
+      kind: 'mcp_oauth'
+      businessRef: string
+      serverUrl: string
+      environment: 'sandbox' | 'production'
+      idempotencyKey: string
+    }>
+  | Readonly<{
+      kind: 'x402'
+      businessRef: string
+      resourceUrl: string
+      method: 'GET' | 'POST'
+      environment: 'sandbox' | 'production'
+      observationDigest: string
+      payTo: string
+      claimExpiresAt: number
+      claimSignature: string
+      evidenceRefs?: readonly string[]
+      idempotencyKey: string
+    }>
+
+const supplyConnectionConnectTransportSchema = z.strictObject({
+  kind: z.enum(['http_credential', 'mcp_oauth', 'x402']),
+  businessRef: z.string().trim().min(1),
+  sourceUrl: z.string().url().max(2_048).optional(),
+  authentication: z.union([
+    z.strictObject({
+      kind: z.literal('api_key'),
+      location: z.enum(['header', 'query']),
+      name: z.string().trim().min(1).max(200),
+    }),
+    z.strictObject({ kind: z.literal('http_bearer') }),
+  ]).optional(),
+  serverUrl: z.string().url().max(2_048).optional(),
+  resourceUrl: z.string().url().max(2_048).optional(),
+  method: z.enum(['GET', 'POST']).optional(),
   environment: z.enum(['sandbox', 'production']),
-  observationDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-  payTo: z.string().regex(/^0x[0-9a-fA-F]{40}$/u),
-  claimExpiresAt: z.number().int().nonnegative(),
-  claimSignature: z.string().regex(/^0x[0-9a-fA-F]{130}$/u),
-  evidenceRefs: connectionEvidenceSchema.default([]),
+  observationDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u).optional(),
+  payTo: z.string().regex(/^0x[0-9a-fA-F]{40}$/u).optional(),
+  claimExpiresAt: z.number().int().nonnegative().optional(),
+  claimSignature: z.string().regex(/^0x[0-9a-fA-F]{130}$/u).optional(),
+  evidenceRefs: connectionEvidenceSchema.optional(),
   idempotencyKey: connectionIdempotencySchema,
+}).superRefine((input, context) => {
+  const exact = input.kind === 'http_credential'
+    ? ['sourceUrl', 'authentication'] as const
+    : input.kind === 'mcp_oauth'
+      ? ['serverUrl'] as const
+      : ['resourceUrl', 'method', 'observationDigest', 'payTo', 'claimExpiresAt', 'claimSignature'] as const
+  const laneFields = [
+    'sourceUrl', 'authentication', 'serverUrl', 'resourceUrl', 'method', 'observationDigest',
+    'payTo', 'claimExpiresAt', 'claimSignature', 'evidenceRefs',
+  ] as const
+  const permittedFields = new Set<string>(exact)
+  if (input.kind === 'x402') permittedFields.add('evidenceRefs')
+  for (const field of exact) {
+    if (input[field] === undefined) context.addIssue({ code: 'custom', path: [field], message: `${field} is required for ${input.kind}.` })
+  }
+  for (const field of laneFields) {
+    if (!permittedFields.has(field) && input[field] !== undefined) {
+      context.addIssue({ code: 'custom', path: [field], message: `${field} is not accepted for ${input.kind}.` })
+    }
+  }
 })
-export type SupplyConnectionConnectInput = z.infer<typeof supplyConnectionConnectInputSchema>
+
+export const supplyConnectionConnectInputSchema = supplyConnectionConnectTransportSchema as z.ZodType<SupplyConnectionConnectInput>
 
 export const supplyConnectionTransitionInputSchema = z.strictObject({
   connectionRef: z.string().trim().min(1),
@@ -316,12 +355,6 @@ export const supplyConnectionTransitionInputSchema = z.strictObject({
   idempotencyKey: connectionIdempotencySchema,
 })
 export type SupplyConnectionTransitionInput = z.infer<typeof supplyConnectionTransitionInputSchema>
-
-export const supplyConnectionRetryCleanupInputSchema = z.strictObject({
-  connectionRef: z.string().trim().min(1),
-  idempotencyKey: connectionIdempotencySchema,
-})
-export type SupplyConnectionRetryCleanupInput = z.infer<typeof supplyConnectionRetryCleanupInputSchema>
 
 const providerConnectionRefusalReasonSchema = z.enum([
   'invalid_identity',
@@ -346,8 +379,6 @@ const providerConnectionRefusalReasonSchema = z.enum([
   'inspection_challenge_resource_mismatch',
   'inspection_unsupported',
   'inspection_ambiguous',
-  'inspection_bazaar_missing',
-  'inspection_bazaar_discovery_invalid',
   'inspection_schema_missing',
   'inspection_selector_invalid',
   'inspection_transport_unsupported',
@@ -359,9 +390,33 @@ export const supplyConnectionCommandResultSchema = z.union([
     connection: providerConnectionProjectionSchema,
     commandDigest: z.string(),
   }),
+  z.strictObject({
+    kind: z.literal('action_required'),
+    attemptRef: z.string(),
+    expiresAt: z.number().int().nonnegative(),
+    requiredAction: z.strictObject({
+      action: z.literal('supply.connection.connect'),
+      blockedCapabilities: z.tuple([z.literal('supply.publish')]),
+      cta: z.string(),
+      ctaLabel: z.string(),
+      description: z.string(),
+      iconUrl: z.null(),
+      status: z.literal('required'),
+      title: z.string(),
+    }),
+  }),
   z.strictObject({ kind: z.literal('refused'), reason: providerConnectionRefusalReasonSchema }),
 ])
 export type SupplyConnectionCommandResult = z.infer<typeof supplyConnectionCommandResultSchema>
+export const supplyOffboardingStatusInputSchema = z.strictObject({
+  businessRef: z.string().trim().min(1),
+})
+export type SupplyOffboardingStatusInput = z.infer<typeof supplyOffboardingStatusInputSchema>
+export const supplyOffboardingStatusResultSchema = z.union([
+  z.strictObject({ kind: z.literal('available'), status: providerOffboardingStatusSchema }),
+  z.strictObject({ kind: z.literal('not_found') }),
+])
+export type SupplyOffboardingStatusResult = z.infer<typeof supplyOffboardingStatusResultSchema>
 type SupplyConnectionRefusalReason = Extract<
   SupplyConnectionCommandResult,
   Readonly<{ kind: 'refused' }>
@@ -372,6 +427,7 @@ function connectionRefused(reason: SupplyConnectionRefusalReason): SupplyConnect
 }
 
 export type SupplyManagementService = Readonly<{
+  sourcePreview(input: Readonly<{ input: SupplySourceInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplySourcePreview>
   status(input: Readonly<{ input: SupplyStatusInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyStatusResult>
   publish(input: Readonly<{ input: SupplyPublishInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyPublishResult>
   withdraw(input: Readonly<{ input: SupplyWithdrawInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyWithdrawResult>
@@ -383,7 +439,7 @@ export type SupplyManagementService = Readonly<{
   connectionConnect(input: Readonly<{ input: SupplyConnectionConnectInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyConnectionCommandResult>
   connectionReconnect(input: Readonly<{ input: SupplyConnectionTransitionInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyConnectionCommandResult>
   connectionRevoke(input: Readonly<{ input: SupplyConnectionTransitionInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyConnectionCommandResult>
-  connectionRetryCleanup(input: Readonly<{ input: SupplyConnectionRetryCleanupInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyConnectionCommandResult>
+  offboardingStatus(input: Readonly<{ input: SupplyOffboardingStatusInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyOffboardingStatusResult>
 }>
 
 const supplyReadMutation = sourceMutation<Record<string, unknown>, OwnerSupplyFunnelReadback>('capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel')
@@ -392,6 +448,10 @@ type OwnerPublicationReservationResult =
   | { kind: 'replayed' }
   | { kind: 'refused'; reason: string }
 const publishReservationMutation = sourceMutation<Record<string, unknown>, OwnerPublicationReservationResult>('capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication')
+type SupplyIntegrationDraftSaveResult =
+  | Readonly<{ kind: 'saved' | 'replayed'; offeringRef: string; accessPathRef: string; candidateRef: string; sourceDigest: string }>
+  | Readonly<{ kind: 'refused'; reason: string }>
+const integrationDraftSaveMutation = sourceMutation<Record<string, unknown>, SupplyIntegrationDraftSaveResult>('capabilitySupplyOwnerFunnel:saveAgentSupplyIntegrationDraft')
 const publishMutation = sourceMutation<Record<string, unknown>, PublishPreparedCapabilityCommandResult>('capabilitySupply:publishPreparedCapability')
 const withdrawMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:withdrawOwnerCapability')
 const recheckMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:refreshOwnerCapability')
@@ -403,9 +463,13 @@ type ProviderConnectionBackendCommandResult =
   | Readonly<{ kind: 'applied' | 'duplicate'; connection: ProviderConnectionProjection; commandDigest: string }>
   | Readonly<{ kind: 'refused'; code: z.infer<typeof providerConnectionRefusalReasonSchema> }>
 const connectionConnectMutation = sourceMutation<Record<string, unknown>, ProviderConnectionBackendCommandResult>('capabilityProviderConnectionAgents:connectX402')
+type ProviderConnectionAttemptReservationResult =
+  | Readonly<{ kind: 'reserved' | 'replayed'; attemptRef: string; expiresAt: number }>
+  | Readonly<{ kind: 'refused'; code: 'invalid_identity' | 'invalid_environment' | 'invalid_source' | 'command_identity_conflict' }>
+const connectionAttemptReservationMutation = sourceMutation<Record<string, unknown>, ProviderConnectionAttemptReservationResult>('capabilityProviderConnectionAttempts:reserveAgent')
 const connectionReconnectMutation = sourceMutation<Record<string, unknown>, ProviderConnectionBackendCommandResult>('capabilityProviderConnectionAgents:reconnect')
 const connectionRevokeMutation = sourceMutation<Record<string, unknown>, ProviderConnectionBackendCommandResult>('capabilityProviderConnectionAgents:revoke')
-const connectionRetryCleanupMutation = sourceMutation<Record<string, unknown>, ProviderConnectionBackendCommandResult>('capabilityProviderConnectionAgents:retryCleanup')
+const offboardingStatusMutation = sourceMutation<Record<string, unknown>, SupplyOffboardingStatusResult>('capabilityProviderOffboarding:readAgentStatus')
 
 function commandKey(action: string, principal: AgentAccessPrincipal, idempotencyKey: string): string {
   return canonicalDigest({ action, ownerId: principal.ownerId, idempotencyKey })
@@ -432,12 +496,12 @@ export function createSupplyManagementService(request: Request, bodyText: string
     const operationKey = canonicalDigest({
       action: SUPPLY_ACTION_IDS.status,
       principalId: principal.principalId,
-      businessId: input.businessId,
-      offeringRef: input.offeringRef ?? null,
+      businessRef: input.businessRef,
+      operationRef: input.operationRef ?? null,
       correlationId,
     })
     const readback = await mutate(supplyReadMutation, {
-      businessId: input.businessId,
+      businessId: input.businessRef,
       agentPrincipal: principal,
       operationKey,
       correlationId,
@@ -445,64 +509,114 @@ export function createSupplyManagementService(request: Request, bodyText: string
     if (readback.kind === 'error') return { kind: 'error', code: readback.code }
     if (readback.kind === 'not_found') return { kind: 'not_found' }
     if (readback.kind === 'incomplete') return { kind: 'incomplete' }
-    const selected = input.offeringRef === undefined
+    const selected = input.operationRef === undefined
       ? readback.offerings
-      : readback.offerings.filter((offering) => offering.offeringRef === input.offeringRef)
-    if (input.offeringRef !== undefined && selected.length === 0) return { kind: 'not_found' }
+      : readback.offerings.filter((offering) => (
+          offering.publication?.operationRef === input.operationRef
+          || (offering.publication === undefined && offering.offeringRef === input.operationRef)
+        ))
+    if (input.operationRef !== undefined && selected.length === 0) return { kind: 'not_found' }
     return supplyStatusResultSchema.parse({
       kind: 'available',
-      businessId: readback.businessId,
-      business: readback.business,
-      operations: selected.map(projectSupplyStatusOperation),
+      schemaVersion: 'supplier_operations:v1',
+      businessRef: readback.businessId,
+      operations: selected.map((offering) => projectSupplyStatusOperation(readback.businessId, offering)),
       activityTruncated: readback.activityTruncated,
     })
   }
+  const sourcePreview = async ({ input }: { input: SupplySourceInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplySourcePreview> => (
+    await previewSupplySource(input)
+  )
   const publish = async ({ input, principal, correlationId: _transportCorrelationId }: { input: SupplyPublishInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyPublishResult> => {
-    try {
-      if (new TextEncoder().encode(JSON.stringify(input.source)).byteLength > 300_000) return refused('source_too_large')
-    } catch {
-      return refused('source_invalid')
-    }
-    if (publicationMaterialContainsCredential(input.source)) return refused('source_invalid')
-    const imported = ownerPublicationImport(input.source)
-    if (imported === undefined || publicationMaterialContainsCredential(imported.source)) return refused('source_invalid')
     const baseKey = commandKey('supply.publish', principal, input.idempotencyKey)
     const durableCorrelationId = baseKey
+    let providerAuthority: { kind: 'provider_connection'; connectionRef: string; providerRef: string } | undefined
+    if (input.connectionRef !== undefined) {
+      const connection = await mutate(connectionDetailMutation, {
+        connectionRef: input.connectionRef,
+        agentPrincipal: principal,
+        operationKey: `${baseKey}:connection`,
+        correlationId: durableCorrelationId,
+      }, `${baseKey}:connection`, durableCorrelationId)
+      if (connection.kind !== 'found'
+        || connection.connection.businessId !== input.businessRef
+        || connection.connection.lifecycle !== 'active'
+        || !connection.connection.available) return refused('connection_unavailable')
+      providerAuthority = {
+        kind: 'provider_connection',
+        connectionRef: connection.connection.connectionRef,
+        providerRef: connection.connection.providerRef,
+      }
+    }
+    const preparation = await prepareSupplyPublicationV2(input, {
+      ...(providerAuthority === undefined ? {} : { providerAuthority }),
+    })
+    if (preparation.kind === 'refused') return refused(preparation.reason)
+    const saved = await mutate(integrationDraftSaveMutation, {
+      businessId: input.businessRef,
+      title: input.presentation.name,
+      description: input.presentation.description,
+      category: input.presentation.category,
+      sourceKind: input.source.kind,
+      sourceDescriptorJson: preparation.sourceDescriptorJson,
+      sourceDigest: preparation.sourceDigest,
+      sourceRevision: preparation.sourceRevision,
+      candidateRef: input.candidateRef,
+      sourceSelectorJson: preparation.sourceSelectorJson,
+      ...(input.connectionRef === undefined ? {} : { connectionRef: input.connectionRef }),
+      ...(preparation.validationInputJson === undefined ? {} : { validationInputJson: preparation.validationInputJson }),
+      operationKey: `${baseKey}:draft`,
+      correlationId: durableCorrelationId,
+      agentPrincipal: principal,
+    }, `${baseKey}:draft`, durableCorrelationId)
+    if (saved.kind === 'refused') return refused(saved.reason)
     const readback = await mutate(supplyReadMutation, {
-      businessId: input.businessId,
+      businessId: input.businessRef,
       agentPrincipal: principal,
       operationKey: `${baseKey}:read`,
       correlationId: durableCorrelationId,
     }, `${baseKey}:read`, durableCorrelationId)
     if (readback.kind !== 'available') return refused(readback.kind === 'error' ? readback.code : 'authorization_denied')
-    const offering = readback.offerings.find((candidate) => candidate.offeringRef === input.offeringRef && candidate.revision === input.offeringRevision)
-    if (offering === undefined || offering.sourceHash !== input.offeringSourceHash) return refused('catalog_offering_origin_changed')
-    const sourced = ownerPublicationWithCatalogOrigin(imported.source, offering)
-    if (sourced === undefined) return refused('catalog_offering_invalid')
-    const prepared = await preparePublicationDraft({ source: sourced, sourceRevision: imported.sourceRevision, pricingConfig: imported.pricingConfig, evidenceRefs: input.evidenceRefs, derefSchema: dereferenceOpenApiSchema })
-    if (prepared.kind === 'refused') return refused(prepared.reason)
+    const offering = readback.offerings.find((candidate) => candidate.offeringRef === saved.offeringRef)
+    const accessPath = offering?.accessPaths.find((candidate) => candidate.accessPathRef === saved.accessPathRef)
+    if (offering === undefined || offering.sourceHash === undefined || accessPath === undefined) return refused('catalog_offering_origin_changed')
+    const prepared = {
+      ...preparation.prepared.prepared,
+      sourceAuthorityState: preparation.sourceAuthorityState,
+      offering: {
+        ...preparation.prepared.prepared.offering,
+        origin: {
+          kind: 'catalog_offering' as const,
+          offeringRef: offering.offeringRef,
+          offeringRevision: offering.revision,
+          offeringSourceHash: offering.sourceHash,
+          declaredAccessPathRef: accessPath.accessPathRef,
+          accessPathSourceHash: accessPath.sourceHash,
+        },
+      },
+    }
     const materialDigest = canonicalDigest(input)
     const reservation = await mutate(publishReservationMutation, {
-      businessId: input.businessId,
-      offeringRef: input.offeringRef,
-      offeringRevision: input.offeringRevision,
-      offeringSourceHash: input.offeringSourceHash,
+      businessId: input.businessRef,
+      offeringRef: offering.offeringRef,
+      offeringRevision: offering.revision,
+      offeringSourceHash: offering.sourceHash,
       materialDigest,
       operationKey: baseKey,
       correlationId: durableCorrelationId,
       reasonCode: 'supply.publish',
-      evidenceRefs: [...input.evidenceRefs],
+      evidenceRefs: [preparation.sourceDigest, input.candidateRef],
       agentPrincipal: principal,
     }, baseKey, durableCorrelationId)
     if (reservation.kind !== 'reserved' && reservation.kind !== 'replayed') return refused(reservation.reason ?? 'operation_key_conflict')
     const published = await mutate(publishMutation, {
-      businessId: input.businessId, offeringRef: input.offeringRef, revision: input.offeringRevision, sourceHash: input.offeringSourceHash,
-      runtimeEnvironment: 'production', prepared: prepared.prepared, operationKey: baseKey,
-      correlationId: durableCorrelationId, reasonCode: 'supply.publish', evidenceRefs: [...input.evidenceRefs], agentPrincipal: principal,
+      businessId: input.businessRef, offeringRef: offering.offeringRef, revision: offering.revision, sourceHash: offering.sourceHash,
+      runtimeEnvironment: input.environment, prepared, operationKey: baseKey,
+      correlationId: durableCorrelationId, reasonCode: 'supply.publish', evidenceRefs: [preparation.sourceDigest, input.candidateRef], agentPrincipal: principal,
     }, baseKey, durableCorrelationId)
     if (published.kind === 'refused') return refused(typeof published.reason === 'string' ? published.reason : 'source_unavailable')
-    if ((published.kind !== 'published' && published.kind !== 'replayed') || typeof published.publicationRef !== 'string' || typeof published.operationRef !== 'string' || typeof published.publicationRevision !== 'number' || !isRecordLifecycle(published.lifecycle)) return refused('source_unavailable')
-    return { kind: published.kind, publicationRef: published.publicationRef, publicationRevision: published.publicationRevision, operationRef: published.operationRef, lifecycle: published.lifecycle }
+    if ((published.kind !== 'published' && published.kind !== 'replayed') || typeof published.publicationRef !== 'string' || typeof published.operationRef !== 'string' || typeof published.publicationRevision !== 'number') return refused('source_unavailable')
+    return { kind: published.kind === 'replayed' ? 'replayed' : 'submitted', publicationRef: published.publicationRef, publicationRevision: published.publicationRevision, operationRef: published.operationRef, state: 'Submitted' }
   }
   const withdraw = async ({ input, principal, correlationId: _transportCorrelationId }: { input: SupplyWithdrawInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyWithdrawResult> => {
     const baseKey = commandKey('supply.withdraw', principal, input.idempotencyKey)
@@ -612,8 +726,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
   const runConnectionCommand = async (
     action: typeof SUPPLY_ACTION_IDS.connectionConnect
       | typeof SUPPLY_ACTION_IDS.connectionReconnect
-      | typeof SUPPLY_ACTION_IDS.connectionRevoke
-      | typeof SUPPLY_ACTION_IDS.connectionRetryCleanup,
+      | typeof SUPPLY_ACTION_IDS.connectionRevoke,
     mutation: typeof connectionConnectMutation,
     command: Record<string, unknown>,
     input: Readonly<{ idempotencyKey: string }>,
@@ -632,7 +745,59 @@ export function createSupplyManagementService(request: Request, bodyText: string
     return parsed.success ? parsed.data : { kind: 'refused', reason: 'source_unavailable' }
   }
   const connectionConnect = async ({ input, principal }: { input: SupplyConnectionConnectInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyConnectionCommandResult> => {
-    if (input.environment !== principal.environment || input.evidenceRefs.some((ref) => (
+    if (input.kind !== 'x402') {
+      if (input.environment !== principal.environment) return connectionRefused('invalid_identity')
+      const operationKey = commandKey(SUPPLY_ACTION_IDS.connectionConnect, principal, input.idempotencyKey)
+      const sourceUrl = input.kind === 'mcp_oauth' ? input.serverUrl : input.sourceUrl
+      const authentication = input.kind === 'mcp_oauth'
+        ? { kind: 'mcp_oauth' as const }
+        : input.authentication
+      const inputDigest = canonicalDigest({
+        format: 'provider-connection-attempt-input:v1',
+        sourceKind: input.kind,
+        businessRef: input.businessRef,
+        sourceUrl,
+        authentication,
+        environment: input.environment,
+      })
+      const result = await mutate(connectionAttemptReservationMutation, {
+        businessId: input.businessRef,
+        sourceKind: input.kind,
+        sourceUrl,
+        authentication,
+        environment: input.environment,
+        inputDigest,
+        commandId: operationKey,
+        agentPrincipal: principal,
+        operationKey,
+        correlationId: operationKey,
+      }, operationKey, operationKey)
+      if (result.kind === 'refused') {
+        return connectionRefused(result.code === 'command_identity_conflict'
+          ? 'command_identity_conflict'
+          : 'invalid_identity')
+      }
+      const cta = `/owner/supply/connections/new?attempt=${encodeURIComponent(result.attemptRef)}`
+      return {
+        kind: 'action_required',
+        attemptRef: result.attemptRef,
+        expiresAt: result.expiresAt,
+        requiredAction: {
+          action: SUPPLY_ACTION_IDS.connectionConnect,
+          blockedCapabilities: ['supply.publish'],
+          cta,
+          ctaLabel: 'Connect service',
+          description: input.kind === 'mcp_oauth'
+            ? 'Sign in to the MCP service in your browser, then return to your agent.'
+            : 'Enter the service credential securely in your browser, then return to your agent.',
+          iconUrl: null,
+          status: 'required',
+          title: 'Connect service',
+        },
+      }
+    }
+    const evidenceRefs = input.evidenceRefs ?? []
+    if (input.environment !== principal.environment || evidenceRefs.some((ref) => (
       ref.startsWith('x402-payee-claim:') || ref.startsWith('x402-endpoint-inspection:')
     ))) return connectionRefused('claim_invalid')
 
@@ -646,11 +811,6 @@ export function createSupplyManagementService(request: Request, bodyText: string
     }
     if (inspection.payment.selection.kind !== 'selected') {
       return connectionRefused(`inspection_${inspection.payment.selection.kind}`)
-    }
-    if (inspection.discovery.kind !== 'admitted') {
-      return connectionRefused(inspection.discovery.kind === 'absent'
-        ? 'inspection_bazaar_missing'
-        : `inspection_${inspection.discovery.reason}`)
     }
     const selectedAlternativeId = inspection.payment.selection.alternativeId
     const selected = inspection.payment.accepts.find((candidate) => (
@@ -667,7 +827,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       return connectionRefused('claim_invalid')
     }
     const claim = {
-      businessId: input.businessId,
+      businessId: input.businessRef,
       endpointUrl: inspection.endpoint.url,
       method: input.method,
       observationDigest: inspection.digest,
@@ -687,7 +847,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
     if (!claimVerified) return connectionRefused('claim_invalid')
 
     return await runConnectionCommand(SUPPLY_ACTION_IDS.connectionConnect, connectionConnectMutation, {
-      businessId: input.businessId,
+      businessId: input.businessRef,
       resourceUrl: inspection.endpoint.url,
       method: input.method,
       observationDigest: inspection.digest,
@@ -696,7 +856,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       claimDigest: x402SellerClaimDigest(claim),
       claimSignature: input.claimSignature,
       evidenceRefs: [
-        ...input.evidenceRefs,
+        ...evidenceRefs,
         `x402-endpoint-inspection:${inspection.digest}`,
       ],
     }, input, principal)
@@ -719,12 +879,22 @@ export function createSupplyManagementService(request: Request, bodyText: string
       evidenceRefs: [...input.evidenceRefs],
     }, input, principal)
   )
-  const connectionRetryCleanup = async ({ input, principal }: { input: SupplyConnectionRetryCleanupInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyConnectionCommandResult> => (
-    await runConnectionCommand(SUPPLY_ACTION_IDS.connectionRetryCleanup, connectionRetryCleanupMutation, {
-      connectionRef: input.connectionRef,
-    }, input, principal)
-  )
+  const offboardingStatus = async ({ input, principal, correlationId }: { input: SupplyOffboardingStatusInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyOffboardingStatusResult> => {
+    const operationKey = canonicalDigest({
+      action: SUPPLY_ACTION_IDS.offboardingStatus,
+      principalId: principal.principalId,
+      businessRef: input.businessRef,
+      correlationId,
+    })
+    return await mutate(offboardingStatusMutation, {
+      businessId: input.businessRef,
+      agentPrincipal: principal,
+      operationKey,
+      correlationId,
+    }, operationKey, correlationId)
+  }
   return {
+    sourcePreview,
     status,
     publish,
     withdraw,
@@ -736,42 +906,119 @@ export function createSupplyManagementService(request: Request, bodyText: string
     connectionConnect,
     connectionReconnect,
     connectionRevoke,
-    connectionRetryCleanup,
+    offboardingStatus,
   }
 }
 
-function projectSupplyStatusOperation(offering: OwnerSupplyOfferingReadback): z.infer<typeof supplyStatusOperationSchema> {
-  return {
-    offeringRef: offering.offeringRef,
+function projectSupplyStatusOperation(
+  businessRef: string,
+  offering: OwnerSupplyOfferingReadback,
+): SupplierOperationStatus {
+  const source = offering.source ?? offering.publication?.source
+  const sourceKind = source?.kind === 'openapi_http'
+    ? 'openapi'
+    : source?.kind === 'agent_plugin_mcp'
+      ? 'agent_plugin'
+      : source?.kind === 'ae_envelope'
+        ? 'legacy'
+        : source?.kind ?? 'unavailable'
+  const isBlocked = offering.managementStatus === 'Action needed' || offering.managementStatus === 'Degraded'
+  const blockerCodes = isBlocked
+    ? [...new Set([
+        ...(offering.actionableReason === undefined ? [] : [offering.actionableReason]),
+        ...offering.lifecycle.reasons,
+      ])]
+    : []
+  const freshness = offering.readiness.outcome === 'healthy'
+    ? 'current'
+    : offering.readiness.outcome === 'unobserved'
+      ? 'unobserved'
+      : offering.readiness.validUntil !== undefined && offering.readiness.validUntil <= Date.now()
+        ? 'stale'
+        : 'failed'
+  const validation = offering.admission.state === 'admitted'
+    ? 'passed'
+    : offering.currentStep === 'admission' && offering.stepStates.admission === 'in_progress'
+      ? 'in_progress'
+      : offering.admission.reason === undefined
+        ? 'not_started'
+        : 'failed'
+  const authority = offering.authority === undefined
+    ? { kind: 'unavailable' as const }
+    : offering.authority.kind === 'provider_connection'
+      ? {
+          kind: 'connection' as const,
+          ...(offering.authority.connectionRef === undefined ? {} : { connectionRef: offering.authority.connectionRef }),
+          ...(offering.authority.providerRef === undefined ? {} : { providerRef: offering.authority.providerRef }),
+        }
+      : offering.admission.state === 'admitted'
+          && !offering.lifecycle.reasons.includes('provider_authority_unverified')
+        ? { kind: 'public' as const }
+        : { kind: 'unverified' as const }
+  return projectSupplierOperationStatus({
+    schemaVersion: 'supplier_operations:v1',
+    businessRef,
+    providerRef: offering.authority?.providerRef ?? businessRef,
+    operationRef: offering.publication?.operationRef ?? offering.offeringRef,
     revision: offering.revision,
-    name: offering.name,
-    summary: offering.summary,
-    catalogStatus: offering.status,
-    lifecycle: {
-      state: offering.lifecycle.state,
-      reasons: [...offering.lifecycle.reasons],
+    observedAt: offering.readiness.observedAt ?? Date.now(),
+    ...(offering.readiness.validUntil === undefined ? {} : { validUntil: offering.readiness.validUntil }),
+    draftPresent: true,
+    setupComplete: offering.sourceMaterial !== undefined || source !== undefined,
+    submitted: offering.publication !== undefined,
+    reviewActive: offering.managementStatus === 'Validating',
+    routeable: offering.live.available,
+    paused: offering.status === 'paused' || offering.lifecycle.state === 'withdrawn',
+    retired: offering.status === 'retired',
+    retirementProven: false,
+    blockerCodes,
+    source: {
+      kind: sourceKind,
+      ...(source?.revision === undefined ? {} : { revision: source.revision }),
+      ...(source?.digest === undefined ? {} : { digest: source.digest }),
     },
-    readiness: {
-      outcome: offering.readiness.outcome,
-      ...(offering.readiness.observedAt === undefined ? {} : { observedAt: offering.readiness.observedAt }),
-      ...(offering.readiness.validUntil === undefined ? {} : { validUntil: offering.readiness.validUntil }),
-    },
-    live: {
+    routeability: {
       available: offering.live.available,
-      ...(offering.live.reason === undefined ? {} : { reason: offering.live.reason }),
+      reasonCodes: [...new Set([
+        ...offering.lifecycle.reasons,
+        ...(offering.live.reason === undefined ? [] : [offering.live.reason]),
+      ])],
     },
-    currentStep: offering.currentStep,
-    stepStates: { ...offering.stepStates },
-    ...(offering.actionableReason === undefined ? {} : { actionableReason: offering.actionableReason }),
-    ...(offering.publication === undefined ? {} : {
-      publication: {
-        publicationRef: offering.publication.publicationRef,
-        publicationRevision: offering.publication.publicationRevision,
-        operationRef: offering.publication.operationRef,
-        state: offering.publication.state,
-      },
-    }),
-  }
+    authority,
+    health: {
+      connection: offering.authority?.kind === 'provider_connection'
+        ? (blockerCodes.some((code) => code === 'credential_rejected' || code === 'credential_unavailable' || code === 'authority_stale') ? 'action_required' : 'connected')
+        : offering.authority?.kind === 'public_upstream'
+          ? 'not_required'
+          : 'unknown',
+      validation,
+      publication: offering.status === 'retired'
+        ? 'removed'
+        : offering.status === 'paused' || offering.lifecycle.state === 'withdrawn'
+          ? 'paused'
+          : offering.publication !== undefined
+            ? 'published'
+            : 'not_published',
+      freshness,
+      delivery: offering.operationEvidence?.delivery.kind === 'observed'
+        ? {
+            ...offering.operationEvidence.delivery,
+            windowStartAt: offering.operationEvidence.windowStartAt,
+            windowEndAt: offering.operationEvidence.windowEndAt,
+          }
+        : offering.operationEvidence?.delivery
+          ?? { kind: 'unobserved', provenance: 'canonical_call_receipts' },
+      usefulOutcome: offering.operationEvidence?.usefulOutcome.kind === 'observed'
+        ? {
+            ...offering.operationEvidence.usefulOutcome,
+            windowStartAt: offering.operationEvidence.windowStartAt,
+            windowEndAt: offering.operationEvidence.windowEndAt,
+          }
+        : offering.operationEvidence?.usefulOutcome
+          ?? { kind: 'unobserved', provenance: 'qualified_use_receipts' },
+      operationalConditions: blockerCodes,
+    },
+  })
 }
 
 function isRecordLifecycle(value: unknown): value is { state: 'inactive' | 'active' | 'withdrawn' | 'incompatible'; reasons: string[] } {
@@ -779,14 +1026,18 @@ function isRecordLifecycle(value: unknown): value is { state: 'inactive' | 'acti
 }
 
 const publishParameters: readonly ActionParameter[] = [
-  { name: 'version', type: 'string', description: 'Versioned supply artifact contract.', required: true },
-  { name: 'businessId', type: 'string', description: 'Owner business selected by the authenticated principal.', required: true },
-  { name: 'offeringRef', type: 'string', description: 'Existing catalog offering reference.', required: true },
-  { name: 'offeringRevision', type: 'number', description: 'Current catalog offering revision.', required: true },
-  { name: 'offeringSourceHash', type: 'string', description: 'Current catalog offering source hash.', required: true },
-  { name: 'source', type: 'object', description: 'Admitted owner publication source union.', required: true },
-  { name: 'evidenceRefs', type: 'array', description: 'Durable source evidence references.', required: true },
+  { name: 'businessRef', type: 'string', description: 'Business selected by the authenticated Provider principal.', required: true },
+  { name: 'source', type: 'object', description: 'The same native source supplied to preview.', required: true },
+  { name: 'candidateRef', type: 'string', description: 'Exact candidate returned by preview.', required: true },
+  { name: 'expectedSourceDigest', type: 'string', description: 'Exact preview digest used to reject source drift.', required: true },
+  { name: 'connectionRef', type: 'string', description: 'Stable Provider connection when the source requires authentication.', required: false },
+  { name: 'presentation', type: 'object', description: 'Provider-facing name, description and category.', required: true },
+  { name: 'consequences', type: 'object', description: 'Declared effects, data use and evidence requirements.', required: true },
+  { name: 'pricing', type: 'object', description: 'Free, fixed AUD or source-derived x402 pricing.', required: true },
+  { name: 'validationInput', type: 'object', description: 'Optional source-native validation input.', required: false },
+  { name: 'environment', type: 'enum', enum: ['sandbox', 'production'], description: 'Target environment.', required: true },
   { name: 'idempotencyKey', type: 'string', description: 'Stable replay/conflict command identity.', required: true },
+  { name: 'attestation', type: 'object', description: 'Exact Provider publication attestations.', required: true },
 ]
 const maintenanceParameters: readonly ActionParameter[] = [
   { name: 'businessId', type: 'string', description: 'Owner business selected by the authenticated principal.', required: true },
@@ -816,16 +1067,59 @@ const supplyCredentialAdmission = {
   authority: 'descriptor_classified' as const,
 }
 
+export const supplySourcePreviewAction = defineAction<SupplySourceInput, SupplySourcePreview>({
+  id: SUPPLY_ACTION_IDS.sourcePreview,
+  name: 'Preview Provider source',
+  summary: 'Discover exact candidate Operations from one native Provider source without publishing or invoking them.',
+  boundaries: [
+    ...supplyBoundaries,
+    'Preview is read-only: it creates no Offering, Operation, buyer authority, payment, or Provider effect.',
+    'A public source proves only source contents; Provider authority is established separately.',
+  ],
+  schema: supplySourceInputSchema,
+  outputSchema: supplySourcePreviewSchema,
+  parameters: [
+    { name: 'kind', type: 'enum', enum: ['openapi', 'mcp', 'agent_plugin', 'x402'], description: 'Native Provider source type.', required: true },
+    { name: 'definitionUrl', type: 'string', description: 'Public HTTPS OpenAPI document URL when kind is openapi.', required: false },
+    { name: 'serverUrl', type: 'string', description: 'Public HTTPS streamable HTTP MCP server URL when kind is mcp.', required: false },
+    { name: 'registryName', type: 'string', description: 'Official MCP Registry name when kind is mcp.', required: false },
+    { name: 'pluginJson', type: 'object', description: 'Official Agent Plugins 1.0 plugin.json object when kind is agent_plugin.', required: false },
+    { name: 'mcpJson', type: 'object', description: 'Official Agent Plugins 1.0 mcp.json object when kind is agent_plugin.', required: false },
+    { name: 'resourceUrl', type: 'string', description: 'Public HTTPS x402 resource URL when kind is x402.', required: false },
+    { name: 'method', type: 'enum', enum: ['GET', 'POST'], description: 'x402 resource method.', required: false },
+    { name: 'environment', type: 'enum', enum: ['sandbox', 'production'], description: 'Target environment.', required: true },
+  ],
+  readOnly: true,
+  effect: { class: 'observation', reversible: true, recipientKind: 'provider_system', dataClasses: ['operation_input'], spendExposure: 'none', approval: 'none' },
+  surfaces: supplySurfaces,
+  credentialAdmission: supplyCredentialAdmission,
+  invocationContract: {
+    version: SUPPLY_ACTION_ROUTE_CONTRACTS.sourcePreview.contractVersion,
+    consequenceClass: 'read_only',
+    materialInputPaths: ['kind', 'definitionUrl', 'serverUrl', 'registryName', 'pluginJson', 'mcpJson', 'resourceUrl', 'method', 'environment'],
+    authorityRequirement: 'principal',
+    retryClass: 'replayable',
+    expectedEvidence: ['source_digest', 'source_revision', 'operation_candidates'],
+    safeContinuations: ['supply.connection.connect', 'supply.publish'],
+    invalidationConditions: ['source_changed', 'source_authentication_changed', 'environment_changed'],
+  },
+  run: async ({ data, context }) => {
+    if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
+    if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')
+    return await context.supplyManagementService.sourcePreview({ input: data, principal: context.agentAccessPrincipal, correlationId: context.correlationId ?? globalThis.crypto.randomUUID() })
+  },
+})
+
 export const supplyStatusAction = defineAction<SupplyStatusInput, SupplyStatusResult>({
   id: SUPPLY_ACTION_IDS.status,
-  name: 'Inspect supplier Operation lifecycle',
-  summary: 'List supplier Operations or inspect one exact offering lifecycle, readiness, publication, and next actionable state.',
+  name: 'Read Provider Operation status',
+  summary: 'List Provider Operations or read one exact Operation through the shared eight-state lifecycle and its single safe next action.',
   boundaries: supplyBoundaries,
   schema: supplyStatusInputSchema,
   outputSchema: supplyStatusResultSchema,
   parameters: [
-    { name: 'businessId', type: 'string', description: 'Owner business selected by the authenticated principal.', required: true },
-    { name: 'offeringRef', type: 'string', description: 'Optional exact offering reference.', required: false },
+    { name: 'businessRef', type: 'string', description: 'Business selected by the authenticated Provider principal.', required: true },
+    { name: 'operationRef', type: 'string', description: 'Optional exact Operation reference.', required: false },
   ],
   readOnly: true,
   effect: { class: 'observation', reversible: true, recipientKind: 'business', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'none' },
@@ -834,12 +1128,12 @@ export const supplyStatusAction = defineAction<SupplyStatusInput, SupplyStatusRe
   invocationContract: {
     version: SUPPLY_ACTION_ROUTE_CONTRACTS.status.contractVersion,
     consequenceClass: 'read_only',
-    materialInputPaths: ['businessId', 'offeringRef'],
+    materialInputPaths: ['businessRef', 'operationRef'],
     authorityRequirement: 'principal',
     retryClass: 'replayable',
     expectedEvidence: ['supplier_operation_lifecycle'],
     safeContinuations: ['supply.publish', 'supply.recheck', 'supply.withdraw', 'supply.republish'],
-    invalidationConditions: ['business_changed', 'offering_changed', 'publication_revision_changed'],
+    invalidationConditions: ['business_changed', 'operation_changed', 'publication_revision_changed'],
   },
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
@@ -851,7 +1145,7 @@ export const supplyStatusAction = defineAction<SupplyStatusInput, SupplyStatusRe
 export const supplyPublishAction = defineAction<SupplyPublishInput, SupplyPublishResult>({
   id: SUPPLY_ACTION_IDS.publish,
   name: 'Publish supplier capability',
-  summary: 'Publish one admitted supplier capability from a standard artifact.',
+  summary: 'Submit one exact previewed Provider Operation for validation and automatic publication.',
   boundaries: supplyBoundaries,
   schema: supplyPublishInputSchema,
   outputSchema: supplyPublishResultSchema,
@@ -860,7 +1154,7 @@ export const supplyPublishAction = defineAction<SupplyPublishInput, SupplyPublis
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'business', dataClasses: ['operation_input'], spendExposure: 'none', approval: 'mandate_eligible' },
   surfaces: supplySurfaces,
   credentialAdmission: supplyCredentialAdmission,
-  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.publish.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['version', 'businessId', 'offeringRef', 'offeringRevision', 'offeringSourceHash', 'source', 'evidenceRefs', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['source_publication', 'publication_identity'], safeContinuations: ['supply.status'], invalidationConditions: ['source_changed', 'offering_revision_changed', 'idempotency_key_changed'] },
+  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.publish.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['businessRef', 'source', 'candidateRef', 'expectedSourceDigest', 'connectionRef', 'presentation', 'consequences', 'pricing', 'validationInput', 'environment', 'idempotencyKey', 'attestation'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['source_publication', 'publication_identity'], safeContinuations: ['supply.status'], invalidationConditions: ['source_changed', 'candidate_changed', 'connection_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')
@@ -984,7 +1278,7 @@ export const supplyConnectionDetailAction = defineAction<SupplyConnectionDetailI
   effect: { class: 'observation', reversible: true, recipientKind: 'business', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'none' },
   surfaces: supplySurfaces,
   credentialAdmission: supplyCredentialAdmission,
-  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionDetail.contractVersion, consequenceClass: 'read_only', materialInputPaths: ['connectionRef'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['provider_connection_state'], safeContinuations: ['supply.connection.reconnect', 'supply.connection.revoke', 'supply.connection.retryCleanup'], invalidationConditions: ['authority_generation_changed', 'authority_digest_changed', 'lifecycle_changed'] },
+  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionDetail.contractVersion, consequenceClass: 'read_only', materialInputPaths: ['connectionRef'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['provider_connection_state'], safeContinuations: ['supply.connection.reconnect', 'supply.connection.revoke'], invalidationConditions: ['authority_generation_changed', 'authority_digest_changed', 'lifecycle_changed'] },
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')
@@ -994,28 +1288,32 @@ export const supplyConnectionDetailAction = defineAction<SupplyConnectionDetailI
 
 export const supplyConnectionConnectAction = defineAction<SupplyConnectionConnectInput, SupplyConnectionCommandResult>({
   id: SUPPLY_ACTION_IDS.connectionConnect,
-  name: 'Connect supplier x402 endpoint',
-  summary: 'Reinspect and connect one credentialless x402 endpoint after its payee signs the exact observed seller claim.',
+  name: 'Connect supplier service',
+  summary: 'Open a secure owner handoff for protected HTTP or MCP supply, or verify x402 wallet control without accepting credential material from the agent.',
   boundaries: supplyBoundaries,
   schema: supplyConnectionConnectInputSchema,
   outputSchema: supplyConnectionCommandResultSchema,
   parameters: [
-    { name: 'businessId', type: 'string', description: 'Owner business selected by the authenticated principal.', required: true },
-    { name: 'resourceUrl', type: 'string', description: 'Public HTTPS x402 resource URL without a fragment.', required: true },
-    { name: 'method', type: 'enum', description: 'Exact unpaid request method used to inspect the endpoint.', required: true, enum: ['GET', 'POST'] },
-    { name: 'environment', type: 'enum', description: 'Payment environment, which must match the supplier agent credential.', required: true, enum: ['sandbox', 'production'] },
-    { name: 'observationDigest', type: 'string', description: 'Canonical digest from the exact live x402 inspection being claimed.', required: true },
-    { name: 'payTo', type: 'string', description: 'Exact EVM payee from the selected live x402 payment requirement.', required: true },
-    { name: 'claimExpiresAt', type: 'number', description: 'Short-lived seller-claim expiry timestamp.', required: true },
-    { name: 'claimSignature', type: 'string', description: 'EIP-191 signature by payTo over the exact AE seller-claim message.', required: true },
-    { name: 'evidenceRefs', type: 'array', description: 'Durable non-secret evidence references.', required: true },
+    { name: 'kind', type: 'enum', description: 'Native authentication lane for the selected source.', required: true, enum: ['http_credential', 'mcp_oauth', 'x402'] },
+    { name: 'businessRef', type: 'string', description: 'Business selected by the authenticated Provider principal.', required: true },
+    { name: 'sourceUrl', type: 'string', description: 'Protected OpenAPI source URL for an HTTP credential handoff.', required: false },
+    { name: 'serverUrl', type: 'string', description: 'Protected MCP server URL for an OAuth handoff.', required: false },
+    { name: 'authentication', type: 'object', description: 'HTTP authentication scheme and credential placement, never the credential itself.', required: false },
+    { name: 'resourceUrl', type: 'string', description: 'Public HTTPS x402 resource URL.', required: false },
+    { name: 'method', type: 'enum', description: 'Exact x402 inspection method.', required: false, enum: ['GET', 'POST'] },
+    { name: 'environment', type: 'enum', description: 'Sandbox or Production; it must match the Provider agent credential.', required: true, enum: ['sandbox', 'production'] },
+    { name: 'observationDigest', type: 'string', description: 'Exact live x402 observation being claimed.', required: false },
+    { name: 'payTo', type: 'string', description: 'Exact x402 payee whose wallet proves control.', required: false },
+    { name: 'claimExpiresAt', type: 'number', description: 'Short-lived x402 seller-claim expiry.', required: false },
+    { name: 'claimSignature', type: 'string', description: 'Wallet signature over the exact x402 seller claim.', required: false },
+    { name: 'evidenceRefs', type: 'array', description: 'Durable non-secret x402 evidence references.', required: false },
     { name: 'idempotencyKey', type: 'string', description: 'Stable replay/conflict command identity.', required: true },
   ],
   readOnly: false,
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'provider_system', dataClasses: ['operation_input'], spendExposure: 'none', approval: 'mandate_eligible' },
   surfaces: supplySurfaces,
   credentialAdmission: supplyCredentialAdmission,
-  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionConnect.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['businessId', 'resourceUrl', 'method', 'environment', 'observationDigest', 'payTo', 'claimExpiresAt', 'claimSignature', 'evidenceRefs', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['x402_endpoint_inspection', 'x402_payee_claim', 'provider_connection_identity'], safeContinuations: ['supply.connection.detail', 'supply.publish'], invalidationConditions: ['business_changed', 'resource_url_changed', 'payment_environment_changed', 'observation_changed', 'payee_changed', 'claim_expired', 'idempotency_key_changed'] },
+  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionConnect.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['kind', 'businessRef', 'sourceUrl', 'serverUrl', 'authentication', 'resourceUrl', 'method', 'environment', 'observationDigest', 'payTo', 'claimExpiresAt', 'claimSignature', 'evidenceRefs', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['provider_connection_attempt_or_identity'], safeContinuations: ['supply.connection.detail', 'supply.publish'], invalidationConditions: ['business_changed', 'source_changed', 'authentication_changed', 'environment_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')
@@ -1055,7 +1353,7 @@ export const supplyConnectionRevokeAction = defineAction<SupplyConnectionTransit
   effect: { class: 'external_state_change', reversible: false, recipientKind: 'provider_system', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'mandate_eligible' },
   surfaces: supplySurfaces,
   credentialAdmission: supplyCredentialAdmission,
-  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionRevoke.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['connectionRef', 'expectedAuthorityGeneration', 'expectedAuthorityDigest', 'reasonCode', 'evidenceRefs', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'reconcile_before_retry', expectedEvidence: ['provider_connection_revocation'], safeContinuations: ['supply.connection.detail', 'supply.connection.retryCleanup'], invalidationConditions: ['authority_generation_changed', 'authority_digest_changed', 'idempotency_key_changed'] },
+  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionRevoke.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['connectionRef', 'expectedAuthorityGeneration', 'expectedAuthorityDigest', 'reasonCode', 'evidenceRefs', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'reconcile_before_retry', expectedEvidence: ['provider_connection_revocation'], safeContinuations: ['supply.connection.detail'], invalidationConditions: ['authority_generation_changed', 'authority_digest_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')
@@ -1063,25 +1361,36 @@ export const supplyConnectionRevokeAction = defineAction<SupplyConnectionTransit
   },
 })
 
-export const supplyConnectionRetryCleanupAction = defineAction<SupplyConnectionRetryCleanupInput, SupplyConnectionCommandResult>({
-  id: SUPPLY_ACTION_IDS.connectionRetryCleanup,
-  name: 'Retry supplier connection cleanup',
-  summary: 'Resume cleanup only for a revocation whose persisted callback grace has elapsed and no cleanup work is active.',
-  boundaries: supplyBoundaries,
-  schema: supplyConnectionRetryCleanupInputSchema,
-  outputSchema: supplyConnectionCommandResultSchema,
-  parameters: [
-    { name: 'connectionRef', type: 'string', description: 'Exact provider connection reference.', required: true },
-    { name: 'idempotencyKey', type: 'string', description: 'Stable replay/conflict command identity.', required: true },
+export const supplyOffboardingStatusAction = defineAction<SupplyOffboardingStatusInput, SupplyOffboardingStatusResult>({
+  id: SUPPLY_ACTION_IDS.offboardingStatus,
+  name: 'Read Provider offboarding status',
+  summary: 'Read the durable Provider offboarding case and its one safe next action. Only the Business owner can start or resume offboarding.',
+  boundaries: [
+    ...supplyBoundaries,
+    'This action cannot start, cancel, resume, or widen a Provider offboarding case.',
   ],
-  readOnly: false,
-  effect: { class: 'external_state_change', reversible: false, recipientKind: 'provider_system', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'mandate_eligible' },
+  schema: supplyOffboardingStatusInputSchema,
+  outputSchema: supplyOffboardingStatusResultSchema,
+  parameters: [
+    { name: 'businessRef', type: 'string', description: 'Business selected by the authenticated Provider principal.', required: true },
+  ],
+  readOnly: true,
+  effect: { class: 'observation', reversible: true, recipientKind: 'business', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'none' },
   surfaces: supplySurfaces,
   credentialAdmission: supplyCredentialAdmission,
-  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionRetryCleanup.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['connectionRef', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['provider_connection_cleanup_work'], safeContinuations: ['supply.connection.detail'], invalidationConditions: ['lifecycle_changed', 'cleanup_work_changed', 'idempotency_key_changed'] },
+  invocationContract: {
+    version: SUPPLY_ACTION_ROUTE_CONTRACTS.offboardingStatus.contractVersion,
+    consequenceClass: 'read_only',
+    materialInputPaths: ['businessRef'],
+    authorityRequirement: 'principal',
+    retryClass: 'replayable',
+    expectedEvidence: ['provider_offboarding_case'],
+    safeContinuations: ['supply.offboarding.status'],
+    invalidationConditions: ['business_changed', 'offboarding_case_changed'],
+  },
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')
-    return await context.supplyManagementService.connectionRetryCleanup({ input: data, principal: context.agentAccessPrincipal, correlationId: context.correlationId ?? globalThis.crypto.randomUUID() })
+    return await context.supplyManagementService.offboardingStatus({ input: data, principal: context.agentAccessPrincipal, correlationId: context.correlationId ?? globalThis.crypto.randomUUID() })
   },
 })

@@ -40,6 +40,9 @@ export function toDomain(row: ProviderConnectionAuthorityCompatibilityRow): Prov
 function optionalConnectionFields(connection: ProviderConnection) {
   return Object.fromEntries(Object.entries({
     secretRef: connection.secretRef,
+    sourceOrigin: connection.sourceOrigin,
+    sourceEnvironment: connection.sourceEnvironment,
+    sourceAuthentication: connection.sourceAuthentication,
     expiresAt: connection.expiresAt,
     revocationRef: connection.revocationRef,
     cleanupAttempt: connection.cleanupAttempt,

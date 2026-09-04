@@ -104,6 +104,7 @@ export const refresh = internalMutation({
         operationRef: publication.operationRef,
         businessId: publication.businessId,
         active: publication.disposition === 'current'
+          && publication.sourceAuthorityState !== 'review_required'
           && publication.credentialState === 'ready'
           && publication.healthState === 'healthy'
           && (publication.readinessValidUntil ?? 0) > now,

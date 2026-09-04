@@ -128,7 +128,7 @@ describe('published operation materialization', () => {
         method: 'GET',
         path: '/x402/v3/cryptocurrency/quotes/latest',
       },
-      price: { kind: 'fixed', amount: { currency: 'USD', units: '1', exponent: 2 } },
+      price: { kind: 'fixed', amount: { currency: 'AUD', units: '1000000', exponent: 6 } },
     })
     expect(packet.operation.usageObservation).toMatchObject({
       calls: 8,
@@ -408,7 +408,13 @@ async function buildImportedOperation(method: 'GET' | 'POST') {
       offering: {
         offeringId: source.offering.offeringId,
         networkId: source.offering.networkId,
-        presentation: source.offering.presentation,
+        presentation: {
+          ...source.offering.presentation,
+          price: {
+            kind: 'fixed',
+            amount: { currency: 'USD', units: '1', exponent: 2 },
+          },
+        },
         searchTerms: source.offering.searchTerms,
         registrationEvidenceRefs: source.offering.registrationEvidenceRefs,
       },
@@ -425,6 +431,7 @@ async function buildImportedOperation(method: 'GET' | 'POST') {
     ...imported.draft.offering,
     businessId: source.offering.businessId,
     contractRef: contract.ref,
+    presentation: source.offering.presentation,
   })
   const binding = defineCapabilityTransportBindingRegistration({
     ...imported.draft.binding,

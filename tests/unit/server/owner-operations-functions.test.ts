@@ -182,7 +182,7 @@ describe('narrow owner Operations inventory read', () => {
           kind: 'navigate',
           label: 'View live Operation',
           href: '/operations/operation:one',
-          command: 'ae inspect operation:one',
+          command: 'ae describe operation:one',
         },
       }],
     })

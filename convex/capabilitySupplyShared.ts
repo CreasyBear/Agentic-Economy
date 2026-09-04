@@ -8,6 +8,7 @@ import {
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
+import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
 
 export const contractRefValue = v.object({
   capabilityId: v.string(),
@@ -113,6 +114,7 @@ export const publicationLifecycleValue = v.object({
       v.literal('withdrawn'),
       v.literal('incompatible_revision'),
       v.literal('eligibility_integrity_failure'),
+      v.literal('provider_authority_unverified'),
     ),
   ),
 })
@@ -163,11 +165,13 @@ export async function rebuildCapabilityOriginSupplyProjection(
   now: number,
 ): Promise<void> {
   const db = ctx.db
-  const support = await deriveBusinessOfferingSupportFromCapabilitySupply(
-    db,
-    businessId,
-    now,
-  )
+  const support = await providerRouteabilityIsFrozen(ctx, businessId)
+    ? {}
+    : await deriveBusinessOfferingSupportFromCapabilitySupply(
+        db,
+        businessId,
+        now,
+      )
   await rebuildBusinessSupplyProjectionSnapshotCommand({
     db,
     sourceDb: db,

@@ -119,7 +119,7 @@ export type OperationInvokeIdempotencyReservation = Readonly<{
 
 export type OperationInvokePortRefusal = Readonly<{
   kind: 'refused'
-  code: Extract<OperationInvokeRefusalCode, 'grant_not_found' | 'grant_revoked' | 'grant_expired' | 'grant_generation_stale' | 'environment_mismatch' | 'rate_limited' | 'concurrency_limited' | 'budget_exceeded' | 'insufficient_balance' | 'treasury_capacity_unavailable' | 'commercial_policy_unavailable'>
+  code: Extract<OperationInvokeRefusalCode, 'operation_not_ready' | 'grant_not_found' | 'grant_revoked' | 'grant_expired' | 'grant_generation_stale' | 'environment_mismatch' | 'rate_limited' | 'concurrency_limited' | 'budget_exceeded' | 'insufficient_balance' | 'treasury_capacity_unavailable' | 'commercial_policy_unavailable'>
   retryable: boolean
   nextAction?: string
 }>

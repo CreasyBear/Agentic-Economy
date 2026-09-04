@@ -161,11 +161,10 @@ function mcpTool(value: unknown): value is Record<string, unknown> {
   );
 }
 
-function agentPluginManifest(value: unknown): value is Record<string, unknown> {
+function agentPluginDocument(value: unknown): value is Record<string, unknown> {
   return (
     isRecord(value) &&
-    boundedSourceText(value.name, 200) &&
-    isRecord(value.mcpServers)
+    typeof value.$schema === "string"
   );
 }
 
@@ -307,12 +306,14 @@ export function ownerPublicationImport(source: Record<string, unknown>):
     case "agent_plugin_mcp": {
       const contract = source.contract;
       const commercial = source.commercial;
-      const manifest = source.manifest;
+      const pluginJson = source.pluginJson;
+      const mcpJson = source.mcpJson;
       const serverName = source.serverName;
       const tool = source.tool;
       const protocolVersion = source.protocolVersion;
       if (
-        !agentPluginManifest(manifest) ||
+        !agentPluginDocument(pluginJson) ||
+        !agentPluginDocument(mcpJson) ||
         !boundedSourceText(serverName, 200) ||
         !mcpTool(tool) ||
         !boundedSourceText(protocolVersion, 64) ||
@@ -323,7 +324,8 @@ export function ownerPublicationImport(source: Record<string, unknown>):
       return {
         source: {
           kind: "agent_plugin_mcp",
-          manifest,
+          pluginJson,
+          mcpJson,
           serverName,
           tool,
           protocolVersion,

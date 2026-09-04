@@ -76,7 +76,6 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   'supply connect': ['input', 'idempotency-key'],
   'supply reconnect': ['input', 'idempotency-key'],
   'supply revoke': ['input', 'idempotency-key'],
-  'supply retry-cleanup': ['input', 'idempotency-key'],
   fund: [],
   call: ['input', 'idempotency-key', 'wait'],
   history: ['limit', 'cursor', 'state'],

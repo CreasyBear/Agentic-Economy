@@ -205,6 +205,7 @@ function toPublicationRow(doc: Doc<'capabilityPublications'>): GraphPublicationR
     sourceDigest: doc.sourceDigest,
     publisherRef: doc.publisherRef,
     authorityMode: doc.authorityMode,
+    ...(doc.sourceAuthorityState === undefined ? {} : { sourceAuthorityState: doc.sourceAuthorityState }),
     disposition: doc.disposition,
     credentialState: doc.credentialState,
     healthState: doc.healthState,

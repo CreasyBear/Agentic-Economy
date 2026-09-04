@@ -74,7 +74,7 @@ export function normalizeReasonCode(value: string | undefined):
   return { kind: 'ok', ...(value === undefined ? {} : { value }) }
 }
 
-export function providerConnectionAuthorityDigest(connection: Pick<ProviderConnection, 'connectionRef' | 'owningAccountRef' | 'installedByPrincipalRef' | 'authorityGrantRef' | 'authorityGrantGeneration' | 'secretRef' | 'businessId' | 'providerRef' | 'providerAccountRef' | 'adapterId' | 'credentialRef' | 'x402Method' | 'x402Payee' | 'grantedScopes' | 'grantedResources' | 'authorityGeneration' | 'expiresAt'>): string {
+export function providerConnectionAuthorityDigest(connection: Pick<ProviderConnection, 'connectionRef' | 'owningAccountRef' | 'installedByPrincipalRef' | 'authorityGrantRef' | 'authorityGrantGeneration' | 'secretRef' | 'businessId' | 'providerRef' | 'providerAccountRef' | 'adapterId' | 'credentialRef' | 'sourceOrigin' | 'sourceEnvironment' | 'sourceAuthentication' | 'x402Method' | 'x402Payee' | 'grantedScopes' | 'grantedResources' | 'authorityGeneration' | 'expiresAt'>): string {
   return canonicalDigest({
     connectionRef: connection.connectionRef,
     owningAccountRef: connection.owningAccountRef,
@@ -84,6 +84,9 @@ export function providerConnectionAuthorityDigest(connection: Pick<ProviderConne
     secretRef: connection.secretRef ?? null,
     businessId: connection.businessId, providerRef: connection.providerRef,
     providerAccountRef: connection.providerAccountRef, adapterId: connection.adapterId, credentialRef: connection.credentialRef,
+    ...(connection.sourceOrigin === undefined ? {} : { sourceOrigin: connection.sourceOrigin }),
+    ...(connection.sourceEnvironment === undefined ? {} : { sourceEnvironment: connection.sourceEnvironment }),
+    ...(connection.sourceAuthentication === undefined ? {} : { sourceAuthentication: connection.sourceAuthentication }),
     x402Method: connection.x402Method ?? null, x402Payee: connection.x402Payee ?? null,
     grantedScopes: uniqueSorted(connection.grantedScopes), grantedResources: uniqueSorted(connection.grantedResources),
     authorityGeneration: connection.authorityGeneration, expiresAt: connection.expiresAt ?? null,
@@ -100,6 +103,17 @@ export function stateIntegrity(current: ProviderConnection, now: number): Provid
     || (current.credentialRef !== null && !isProviderConnectionCredentialRef(current.credentialRef))) return 'invalid_identity'
   if (current.x402Method !== undefined && current.x402Method !== 'GET' && current.x402Method !== 'POST') return 'invalid_identity'
   if (current.x402Payee !== undefined && !validIdentity(current.x402Payee)) return 'invalid_identity'
+  const sourceMetadataCount = [current.sourceOrigin, current.sourceEnvironment, current.sourceAuthentication]
+    .filter((value) => value !== undefined).length
+  if (sourceMetadataCount !== 0 && sourceMetadataCount !== 3) return 'invalid_identity'
+  if (current.sourceOrigin !== undefined) {
+    const origin = validSourceOrigin(current.sourceOrigin)
+    if (origin === undefined || origin !== current.sourceOrigin) return 'invalid_resource'
+    if (current.sourceEnvironment !== 'sandbox' && current.sourceEnvironment !== 'production') return 'invalid_identity'
+    if (!validSourceAuthentication(current.sourceAuthentication, current.adapterId)) return 'invalid_identity'
+    if (current.grantedResources.length !== 1
+      || validSourceOrigin(current.grantedResources[0]!) !== current.sourceOrigin) return 'invalid_resource'
+  }
   if (current.healthStatus !== undefined && current.healthStatus !== 'healthy' && current.healthStatus !== 'unhealthy') return 'invalid_transition'
   if (current.healthCheckedAt !== undefined && !validTimestamp(current.healthCheckedAt)) return 'invalid_time'
   if (current.healthSubject !== undefined && !validIdentity(current.healthSubject)) return 'invalid_identity'
@@ -128,6 +142,30 @@ export function stateIntegrity(current: ProviderConnection, now: number): Provid
   if ((current.lifecycle === 'active' || current.lifecycle === 'reauthorization_required') && current.revokedAt !== undefined) return 'invalid_transition'
   if ((current.lifecycle === 'revocation_pending' || current.lifecycle === 'cleanup_required' || current.lifecycle === 'revoked') && current.revokedAt === undefined) return 'invalid_transition'
   return null
+}
+
+function validSourceOrigin(value: string): string | undefined {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.username === '' && url.password === ''
+      ? url.origin
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function validSourceAuthentication(
+  authentication: ProviderConnection['sourceAuthentication'],
+  adapterId: string,
+): boolean {
+  if (authentication?.kind === 'mcp_oauth') return adapterId === 'mcp-jsonrpc:v1'
+  if (authentication?.kind === 'http_bearer') return adapterId === 'http-json:v1'
+  return authentication?.kind === 'api_key'
+    && adapterId === 'http-json:v1'
+    && (authentication.location === 'header' || authentication.location === 'query')
+    && validIdentity(authentication.name, 200)
+    && !/[\r\n]/u.test(authentication.name)
 }
 export function expectedAuthorityIsCurrent(current: ProviderConnection, expectedGeneration: number, expectedDigest: string): ProviderConnectionRefusalCode | null {
   if (!validGeneration(expectedGeneration) || expectedGeneration !== current.authorityGeneration) return 'invalid_generation'

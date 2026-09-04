@@ -334,6 +334,8 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
   const reviewedCapabilityTransportFiles = new Set([
     "src/modules/capability-supply/internal/cdp-x402-payment-signer.ts",
     "src/modules/capability-supply/internal/readiness-probe-mcp.ts",
+    "src/modules/capability-supply/internal/mcp-source-discovery.ts",
+    "src/modules/capability-supply/internal/supply-funnel/provider-connection-handoff.ts",
     "src/modules/capability-supply/internal/route-transport-invoke.ts",
     "src/modules/capability-supply/internal/route-transport-mcp.ts",
     "src/modules/capability-supply/internal/route-transport-x402.ts",
@@ -343,7 +345,7 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
     "src/modules/capability-supply/internal/x402-settlement-verifier.ts",
   ]);
   if (reviewedCapabilityTransportFiles.has(violation.file)) {
-    return /from\s+['"](?:@x402\/[^'"]+|@modelcontextprotocol\/sdk\/[^'"]+|viem(?:\/[^'"]+)?)['"]/.test(violation.excerpt);
+    return /from\s+['"](?:@x402\/[^'"]+|@modelcontextprotocol\/(?:client|sdk\/[^'"]+)|viem(?:\/[^'"]+)?)['"]/.test(violation.excerpt);
   }
   if (
     violation.file ===

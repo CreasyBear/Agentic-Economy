@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   connect: vi.fn(),
   inspect: vi.fn(),
   revoke: vi.fn(),
-  cleanup: vi.fn(),
   useReverification: vi.fn((fetcher: (...args: unknown[]) => Promise<unknown>) => fetcher),
 }))
 
@@ -30,7 +29,6 @@ vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
   checkOwnerX402Server: mocks.check,
   connectOwnerX402Server: mocks.connect,
   inspectOwnerX402Server: mocks.inspect,
-  retryOwnerProviderConnectionCleanupServer: mocks.cleanup,
   revokeOwnerProviderConnectionServer: mocks.revoke,
 }))
 

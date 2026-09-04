@@ -67,6 +67,7 @@ export type SuppliedCandidateQualificationReason =
   | 'operation_map_mismatch'
   | 'pricing_missing_or_invalid'
   | 'source_integrity_failure'
+  | 'provider_authority_unverified'
 
 export type SuppliedCandidateSourceReference = Readonly<{
   kind: 'publication' | 'business' | 'contract' | 'offering' | 'binding' | 'authority' | 'pricing' | 'readiness'
@@ -262,6 +263,7 @@ export async function qualifySuppliedCandidate(
       if (reason === 'health_unhealthy') reasons.push('readiness_unhealthy')
       if (reason === 'health_stale') reasons.push('readiness_stale')
       if (reason === 'eligibility_integrity_failure') reasons.push('source_integrity_failure')
+      if (reason === 'provider_authority_unverified') reasons.push('provider_authority_unverified')
     }
   }
 

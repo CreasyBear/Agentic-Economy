@@ -47,6 +47,8 @@ export type PublicationCommandRow = Readonly<{
   sourceDescriptorJson?: string
   sourceRevision: string
   sourceDigest: string
+  sourceRouteRef?: string
+  sourceAuthorityState?: 'verified' | 'review_required'
   pricingConfigJson?: string
   priceDigest?: string
   publisherRef: string
@@ -81,6 +83,8 @@ export type PublicationInsertInput = Readonly<{
   sourceDescriptorJson: string
   sourceRevision: string
   sourceDigest: string
+  sourceRouteRef: string
+  sourceAuthorityState?: 'verified' | 'review_required'
   pricingConfigJson: string
   priceDigest: string
   publisherRef: string
@@ -114,6 +118,9 @@ export type PublicationCommandPorts = OperationLedgerPorts & Readonly<{
     publicationRef: string,
     revision: number,
   ) => Promise<PublicationCommandRow | null>
+  loadCurrentPublicationsBySourceRoute?: (
+    sourceRouteRef: string,
+  ) => Promise<readonly PublicationCommandRow[]>
   insertPublication: (input: PublicationInsertInput) => Promise<void>
   patchPublicationSuperseded: (publicationId: string, updatedAt: number) => Promise<void>
   patchPublicationWithdrawn: (publicationId: string, updatedAt: number) => Promise<void>

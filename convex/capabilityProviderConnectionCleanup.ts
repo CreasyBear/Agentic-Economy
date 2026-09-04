@@ -78,6 +78,11 @@ type CleanupTarget = Readonly<{
   lifecycle: 'revocation_pending' | 'cleanup_required'
   revocationRef?: string
   cleanupAttempt?: number
+  secret?: Readonly<{
+    secretRef: string
+    activeGeneration: string
+    pointerRevision: number
+  }>
   resourceAuthority: CleanupResourceAuthority
 }>
 
@@ -116,8 +121,17 @@ function isCleanupTarget(value: unknown): value is CleanupTarget {
     && 'lifecycle' in value && (value.lifecycle === 'revocation_pending' || value.lifecycle === 'cleanup_required')
     && (!('revocationRef' in value) || value.revocationRef === undefined || typeof value.revocationRef === 'string')
     && (!('cleanupAttempt' in value) || value.cleanupAttempt === undefined || typeof value.cleanupAttempt === 'number')
+    && (!('secret' in value) || value.secret === undefined || isSecretPointer(value.secret))
     && 'resourceAuthority' in value
     && isCleanupResourceAuthority(value.resourceAuthority)
+}
+
+function isSecretPointer(value: unknown): value is NonNullable<CleanupTarget['secret']> {
+  return isRecord(value)
+    && typeof value.secretRef === 'string'
+    && typeof value.activeGeneration === 'string'
+    && Number.isSafeInteger(value.pointerRevision)
+    && Number(value.pointerRevision) >= 1
 }
 
 function isCleanupResourceAuthority(value: unknown): value is CleanupResourceAuthority {
@@ -185,6 +199,67 @@ function isCleanupResult(value: unknown): value is CleanupResult {
   return true
 }
 
+function cleanupEndpoint(): string | undefined {
+  const raw = process.env.AE_SITE_URL?.trim()
+  if (raw === undefined) return undefined
+  try {
+    const url = new URL(raw)
+    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
+    return (url.protocol === 'https:' || (url.protocol === 'http:' && loopback))
+      && url.username === ''
+      && url.password === ''
+      && url.pathname === '/'
+      && url.search === ''
+      && url.hash === ''
+      && url.origin === raw
+      ? `${raw}/api/internal/provider-connection-cleanup`
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function revokeMcpConnection(target: CleanupTarget, requestDigest: string): Promise<CleanupResult> {
+  const endpoint = cleanupEndpoint()
+  const token = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+  if (endpoint === undefined || token === undefined || token.length < 43 || target.secret === undefined) {
+    return unknownResult('cleanup_action_failed')
+  }
+  let response: Response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        connectionRef: target.connectionRef,
+        adapterId: target.adapterId,
+        requestDigest,
+        secret: target.secret,
+      }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(15_000),
+    })
+  } catch {
+    return unknownResult('cleanup_action_failed')
+  }
+  const declared = Number(response.headers.get('content-length'))
+  if (!response.ok || (Number.isFinite(declared) && declared > 16 * 1024)) {
+    return unknownResult('cleanup_action_failed')
+  }
+  let body: unknown
+  try {
+    const text = await response.text()
+    if (new TextEncoder().encode(text).byteLength > 16 * 1024) return unknownResult('cleanup_action_failed')
+    body = JSON.parse(text)
+  } catch {
+    return unknownResult('cleanup_action_failed')
+  }
+  return isCleanupResult(body) ? body : unknownResult('cleanup_action_failed')
+}
+
 export const run = internalAction({
   args: cleanupArgs,
   returns: workerResult,
@@ -222,6 +297,12 @@ export const run = internalAction({
             reasonCode: 'local_detached',
             evidenceRefs: ['provider_cleanup:local_detached'],
           }),
+        }
+      }
+      if (targetValue.adapterId === 'mcp-jsonrpc:v1') {
+        return {
+          kind: 'cleanup' as const,
+          result: convexCleanupResult(await revokeMcpConnection(targetValue, args.requestDigest)),
         }
       }
       return {

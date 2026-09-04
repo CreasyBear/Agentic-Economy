@@ -321,6 +321,7 @@ export const capabilityOperationInvocationTables = {
     .index('by_accountRef_and_principalRef_and_createdAt', ['accountRef', 'principalRef', 'createdAt'])
     .index('by_accountRef_and_operationRef_and_createdAt', ['accountRef', 'operationRef', 'createdAt'])
     .index('by_accountRef_and_providerRef_and_createdAt', ['accountRef', 'providerRef', 'createdAt'])
+    .index('by_providerRef_and_createdAt', ['providerRef', 'createdAt'])
     .index('by_accountRef_and_applicationRef_and_createdAt', ['accountRef', 'applicationRef', 'createdAt']),
   capabilityOperationCommitments: defineTable({
     commitmentRef: v.string(),
@@ -448,6 +449,7 @@ export const capabilityOperationInvocationTables = {
     .index('by_credentialId_and_state', ['credentialId', 'state'])
     .index('by_credentialId_and_state_and_grantExpiresAt', ['credentialId', 'state', 'grantExpiresAt'])
     .index('by_principalId_and_invocationRef', ['principalId', 'invocationRef'])
+    .index('by_operationRef_and_state', ['operationRef', 'state'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt'])
     .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt']),
   // Append-only proof that a seller canary was re-armed only after either a

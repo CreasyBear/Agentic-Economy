@@ -820,6 +820,12 @@ describe('centralized cross-surface consequence authority', () => {
         confirmationFields: ['actor', 'account', 'target', 'provider_permissions', 'authority_generation', 'consequence', 'recovery'],
         recoveryClass: 'compensatable',
       },
+      'provider.offboard': {
+        actionClass: 'authority_reduction',
+        proofPolicy: { kind: 'clerk_reverification', preset: 'strict', uniquePerCommand: true },
+        confirmationFields: ['actor', 'account', 'target', 'market_visibility', 'provider_permissions', 'consequence', 'recovery'],
+        recoveryClass: 'compensatable',
+      },
       'funding.top_up': {
         actionClass: 'spend_or_transfer',
         proofPolicy: { kind: 'none' },
@@ -904,7 +910,9 @@ describe('centralized cross-surface consequence authority', () => {
           uniquePerCommand: true,
         })
       }
-      if (policy.actionClass === 'authority_reduction' && action !== 'commercial_policy.suspend') {
+      if (policy.actionClass === 'authority_reduction'
+        && action !== 'commercial_policy.suspend'
+        && action !== 'provider.offboard') {
         expect(policy.proofPolicy).toEqual({ kind: 'none' })
       }
     }

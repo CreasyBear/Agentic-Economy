@@ -71,8 +71,14 @@ import {
   checkX402OwnerHandler,
   listOwnerArgs,
   listOwnerHandler,
+  ownerMcpRuntimeResult,
+  ownerHttpRuntimeResult,
   ownerCommandResult,
   ownerProjection,
+  prepareOwnerMcpRuntimeArgs,
+  prepareOwnerMcpRuntimeHandler,
+  prepareOwnerHttpRuntimeArgs,
+  prepareOwnerHttpRuntimeHandler,
   readOwnerArgs,
   readOwnerHandler,
   reauthorizeOwnerArgs,
@@ -219,6 +225,18 @@ export const listOwner = queryGeneric({
   args: listOwnerArgs,
   returns: v.array(ownerProjection),
   handler: listOwnerHandler,
+})
+
+export const prepareOwnerMcpRuntimeForServer = mutationGeneric({
+  args: prepareOwnerMcpRuntimeArgs,
+  returns: ownerMcpRuntimeResult,
+  handler: prepareOwnerMcpRuntimeHandler,
+})
+
+export const prepareOwnerHttpRuntimeForServer = mutationGeneric({
+  args: prepareOwnerHttpRuntimeArgs,
+  returns: ownerHttpRuntimeResult,
+  handler: prepareOwnerHttpRuntimeHandler,
 })
 
 export const revokeOwner = mutationGeneric({

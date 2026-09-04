@@ -97,7 +97,7 @@ export const ownerPublishReservationArgsValue = v.object({
   correlationId: v.string(),
   reasonCode: v.string(),
   evidenceRefs: v.array(v.string()),
-  agentPrincipal: agentAccessPrincipalValue,
+  agentPrincipal: v.optional(agentAccessPrincipalValue),
   ...sourceWriteArgs,
 })
 export const ownerPublishReservationResultValue = v.union(
@@ -111,14 +111,30 @@ export async function reserveOwnerCapabilityPublicationHandler(
 ): Promise<Infer<typeof ownerPublishReservationResultValue>> {
     const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
     if (sourceWrite.kind === 'rejected') return { kind: 'refused', reason: 'authorization_denied' }
-    const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
-    if (admission.kind !== 'allowed' || !(await ownsPublishedBusinessForOwnerId(ctx, args.businessId, admission.ownerId))) {
+    const admission = args.agentPrincipal === undefined
+      ? undefined
+      : await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
+    const ownerActor = args.agentPrincipal === undefined
+      ? await resolveBusinessActor(ctx)
+      : undefined
+    const owned = admission?.kind === 'allowed'
+      ? await ownsPublishedBusinessForOwnerId(ctx, args.businessId, admission.ownerId)
+      : ownerActor?.kind === 'authenticated_owner'
+        && await ownsPublishedBusiness(ctx, args.businessId)
+    if (!owned) {
       return { kind: 'refused', reason: 'authorization_denied' }
     }
     const now = Date.now()
     const operation = await beginOperation(
       publicationPorts(ctx),
-      { kind: 'owner', ref: admission.principalId },
+      {
+        kind: 'owner',
+        ref: admission?.kind === 'allowed'
+          ? admission.principalId
+          : ownerActor?.kind === 'authenticated_owner'
+            ? ownerActor.canonicalPrincipalRef
+            : '',
+      },
       'reserveOwnerCapabilityPublication',
       {
         operationKey: args.operationKey,
@@ -329,6 +345,7 @@ async function reconstructPreparedRepublishMaterial(
       pricingConfigJson: publication.pricingConfigJson,
       priceDigest: publication.priceDigest,
       sourceDigest: publication.sourceDigest,
+      sourceRouteRef: publication.sourceRouteRef ?? publication.sourceDigest,
     },
   }
 }

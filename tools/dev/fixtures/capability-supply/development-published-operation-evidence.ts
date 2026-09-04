@@ -41,15 +41,10 @@ const expectedPayment = {
 } as const
 const pricingConfig = {
   version: 'pricing:v3' as const,
-  kind: 'managed_x402' as const,
-  effectTiming: 'payment_required_before_effect' as const,
-  sourceRequirement: {
-    network: expectedPayment.network,
-    asset: expectedPayment.asset,
-    atomicUnits: '10000',
-  },
-  pricingPolicyRef: 'pricing-policy:sandbox-managed-x402:v1',
-  publicDisplay: 'on_request' as const,
+  kind: 'fixed_aud' as const,
+  currency: 'AUD' as const,
+  exponent: 6 as const,
+  amountUnits: '1000000',
 }
 function developmentProviderAccountRef(providerRef: string): string {
   return `account:${providerRef.replace(/^provider:/u, '')}`
@@ -355,7 +350,10 @@ export function buildDevelopmentPublishedOperationEvidence() {
     presentation: {
       label: 'Latest cryptocurrency quotes',
       summary: 'MOCK/DEVELOPMENT ONLY published endpoint.',
-      price: { kind: 'on_request' },
+      price: {
+        kind: 'fixed',
+        amount: { currency: 'AUD', units: '1000000', exponent: 6 },
+      },
       materialTerms: [{ termId: 'mock:term:fixture', label: 'Environment', value: 'MOCK/DEVELOPMENT ONLY' }],
       commercialRelationship: {
         kind: 'none', summary: 'Fixture only.', influencesEligibility: false,
@@ -582,9 +580,9 @@ export function verifyDevelopmentPublishedOperationEvidence(
     || descriptorDigest !== rebuiltDescriptorDigest
     || packet.operation.identity.endpoint.resource !== `GET ${endpointPath}`
     || packet.operation.identity.price.kind !== 'fixed'
-    || packet.operation.identity.price.amount.currency !== 'USD'
-    || packet.operation.identity.price.amount.units !== '1'
-    || packet.operation.identity.price.amount.exponent !== 2
+    || packet.operation.identity.price.amount.currency !== 'AUD'
+    || packet.operation.identity.price.amount.units !== '1000000'
+    || packet.operation.identity.price.amount.exponent !== 6
     || packet.operation.identity.payment.kind !== 'x402'
     || packet.operation.identity.payment.network !== expectedPayment.network
     || packet.operation.identity.payment.asset !== expectedPayment.asset

@@ -28,10 +28,12 @@ import type * as capabilityOperationLiveX402 from "../capabilityOperationLiveX40
 import type * as capabilityOperationX402AuthorizationExpiry from "../capabilityOperationX402AuthorizationExpiry.js";
 import type * as capabilityProviderApprovals from "../capabilityProviderApprovals.js";
 import type * as capabilityProviderConnectionAgents from "../capabilityProviderConnectionAgents.js";
+import type * as capabilityProviderConnectionAttempts from "../capabilityProviderConnectionAttempts.js";
 import type * as capabilityProviderConnectionCleanup from "../capabilityProviderConnectionCleanup.js";
 import type * as capabilityProviderConnectionMigration from "../capabilityProviderConnectionMigration.js";
 import type * as capabilityProviderConnections from "../capabilityProviderConnections.js";
 import type * as capabilityProviderConsequenceJournal from "../capabilityProviderConsequenceJournal.js";
+import type * as capabilityProviderOffboarding from "../capabilityProviderOffboarding.js";
 import type * as capabilitySupply from "../capabilitySupply.js";
 import type * as capabilitySupplyCanaryFunding from "../capabilitySupplyCanaryFunding.js";
 import type * as capabilitySupplyCanaryFundingPreflight from "../capabilitySupplyCanaryFundingPreflight.js";
@@ -40,6 +42,7 @@ import type * as capabilitySupplyCurrentOperation from "../capabilitySupplyCurre
 import type * as capabilitySupplyEligiblePorts from "../capabilitySupplyEligiblePorts.js";
 import type * as capabilitySupplyGraph from "../capabilitySupplyGraph.js";
 import type * as capabilitySupplyGraphPorts from "../capabilitySupplyGraphPorts.js";
+import type * as capabilitySupplyIntegrationDrafts from "../capabilitySupplyIntegrationDrafts.js";
 import type * as capabilitySupplyLists from "../capabilitySupplyLists.js";
 import type * as capabilitySupplyOperationOriginMap from "../capabilitySupplyOperationOriginMap.js";
 import type * as capabilitySupplyOperationPorts from "../capabilitySupplyOperationPorts.js";
@@ -111,6 +114,7 @@ import type * as lib_providerConnections_contracts from "../lib/providerConnecti
 import type * as lib_providerConnections_leases from "../lib/providerConnections/leases.js";
 import type * as lib_providerConnections_lifecycle from "../lib/providerConnections/lifecycle.js";
 import type * as lib_providerConnections_owner from "../lib/providerConnections/owner.js";
+import type * as lib_providerOffboardingFreeze from "../lib/providerOffboardingFreeze.js";
 import type * as lib_qualifiedUsePayout_authority from "../lib/qualifiedUsePayout/authority.js";
 import type * as lib_qualifiedUsePayout_contracts from "../lib/qualifiedUsePayout/contracts.js";
 import type * as lib_qualifiedUsePayout_identity from "../lib/qualifiedUsePayout/identity.js";
@@ -196,10 +200,12 @@ declare const fullApi: ApiFromModules<{
   capabilityOperationX402AuthorizationExpiry: typeof capabilityOperationX402AuthorizationExpiry;
   capabilityProviderApprovals: typeof capabilityProviderApprovals;
   capabilityProviderConnectionAgents: typeof capabilityProviderConnectionAgents;
+  capabilityProviderConnectionAttempts: typeof capabilityProviderConnectionAttempts;
   capabilityProviderConnectionCleanup: typeof capabilityProviderConnectionCleanup;
   capabilityProviderConnectionMigration: typeof capabilityProviderConnectionMigration;
   capabilityProviderConnections: typeof capabilityProviderConnections;
   capabilityProviderConsequenceJournal: typeof capabilityProviderConsequenceJournal;
+  capabilityProviderOffboarding: typeof capabilityProviderOffboarding;
   capabilitySupply: typeof capabilitySupply;
   capabilitySupplyCanaryFunding: typeof capabilitySupplyCanaryFunding;
   capabilitySupplyCanaryFundingPreflight: typeof capabilitySupplyCanaryFundingPreflight;
@@ -208,6 +214,7 @@ declare const fullApi: ApiFromModules<{
   capabilitySupplyEligiblePorts: typeof capabilitySupplyEligiblePorts;
   capabilitySupplyGraph: typeof capabilitySupplyGraph;
   capabilitySupplyGraphPorts: typeof capabilitySupplyGraphPorts;
+  capabilitySupplyIntegrationDrafts: typeof capabilitySupplyIntegrationDrafts;
   capabilitySupplyLists: typeof capabilitySupplyLists;
   capabilitySupplyOperationOriginMap: typeof capabilitySupplyOperationOriginMap;
   capabilitySupplyOperationPorts: typeof capabilitySupplyOperationPorts;
@@ -279,6 +286,7 @@ declare const fullApi: ApiFromModules<{
   "lib/providerConnections/leases": typeof lib_providerConnections_leases;
   "lib/providerConnections/lifecycle": typeof lib_providerConnections_lifecycle;
   "lib/providerConnections/owner": typeof lib_providerConnections_owner;
+  "lib/providerOffboardingFreeze": typeof lib_providerOffboardingFreeze;
   "lib/qualifiedUsePayout/authority": typeof lib_qualifiedUsePayout_authority;
   "lib/qualifiedUsePayout/contracts": typeof lib_qualifiedUsePayout_contracts;
   "lib/qualifiedUsePayout/identity": typeof lib_qualifiedUsePayout_identity;
@@ -366,6 +374,7 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   workpool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"workpool">;
+  workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
   ownerActivationByStage: import("@convex-dev/aggregate/_generated/component.js").ComponentApi<"ownerActivationByStage">;

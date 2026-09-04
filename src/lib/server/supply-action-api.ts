@@ -22,12 +22,13 @@ import {
   supplyConnectionDetailAction,
   supplyConnectionListAction,
   supplyConnectionReconnectAction,
-  supplyConnectionRetryCleanupAction,
   supplyConnectionRevokeAction,
   supplyEarningsAction,
+  supplyOffboardingStatusAction,
   supplyPublishAction,
   supplyRecheckAction,
   supplyRepublishAction,
+  supplySourcePreviewAction,
   supplyStatusAction,
   supplyWithdrawAction,
   type SupplyManagementService,
@@ -36,6 +37,7 @@ import {
 const MAX_SUPPLY_ACTION_BODY_BYTES = 320 * 1024
 
 export const SUPPLY_HTTP_ACTIONS = Object.freeze({
+  sourcePreview: supplySourcePreviewAction,
   status: supplyStatusAction,
   publish: supplyPublishAction,
   withdraw: supplyWithdrawAction,
@@ -47,7 +49,7 @@ export const SUPPLY_HTTP_ACTIONS = Object.freeze({
   connectionConnect: supplyConnectionConnectAction,
   connectionReconnect: supplyConnectionReconnectAction,
   connectionRevoke: supplyConnectionRevokeAction,
-  connectionRetryCleanup: supplyConnectionRetryCleanupAction,
+  offboardingStatus: supplyOffboardingStatusAction,
 })
 
 export type SupplyHttpActionName = keyof typeof SUPPLY_HTTP_ACTIONS

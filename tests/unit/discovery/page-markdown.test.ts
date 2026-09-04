@@ -61,10 +61,10 @@ describe('site brief markdown', () => {
     expect(body).toContain('ae connect --base-url "https://ae.example"')
     expect(body).not.toContain('ae connect --base-url "https://ae.example" --mcp')
     expect(body.indexOf('ae search "<job>"')).toBeLessThan(body.indexOf('ae connect'))
-    expect(body).toContain('ae inspect "$AE_OPERATION_REF" --base-url "https://ae.example" --json')
-    expect(body).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
+    expect(body).toContain('Call `operation.inspect` with the exact input')
+    expect(body).toContain('Invoke only with the returned Commitment')
     expect(body).toContain('official MCP client')
-    expect(body).toContain('Connect only when the call reports `agent_access_key_required`')
+    expect(body).toContain('If challenged')
   })
 
   it('names the OAuth key boundary, body-only idempotency, and stable recovery identity', () => {
@@ -73,7 +73,7 @@ describe('site brief markdown', () => {
     expect(body).toContain('never contains provider credentials or silently grants payment or consequential authority')
     expect(body).toContain('If the receipt explicitly requires reconciliation')
     expect(body).toContain('the CLI creates and retains it automatically')
-    expect(body).toContain('Search, inspection, and eligible free keyless read calls are public')
+    expect(body).toContain('List, search, describe, compare, and eligible free keyless reads are public')
     expect(body).toContain('Provider and publication records are supporting metadata')
   })
 
@@ -184,7 +184,7 @@ describe('refusal documents', () => {
     expect(body).toContain('https://ae.example/llms.txt')
     expect(body).toContain('https://ae.example/market')
     expect(body).toContain('https://ae.example/api/v1/market-operations/search')
-    expect(body).toContain('https://ae.example/api/v1/market-operations/detail')
+    expect(body).toContain('https://ae.example/api/v1/market-operations/describe')
     expect(body).toContain('https://ae.example/mcp')
     expect(body).toContain('ae search')
     expect(body).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous|X-AE-Turn-Key/u)

@@ -1,8 +1,11 @@
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
+import { z } from 'zod'
 
 import { readOwnerOfferingSupplyThroughSource } from './owner-offering.functions'
-import { callSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
+import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
+import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 import type { BusinessOfferingRecord } from '@/modules/catalog/public'
 import {
@@ -18,6 +21,10 @@ import {
 import { readOwnerConnectReadinessThroughSource } from '@/modules/money/money.functions'
 import { readOwnerStatusThroughSource, type PublicOwnerStatusRouteReadbackResult } from '@/lib/server/owner-status.functions'
 import { supplierContinuationForOffering, type SupplierContinuation } from '@/components/ae/supply/supplier-continuation'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { ProviderOffboardingStatus } from '@/modules/capability-supply/provider-offboarding'
+import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
+import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 
 export type OwnerOperationsInventoryRow = Readonly<{
   offeringRef: string
@@ -99,6 +106,29 @@ export type OwnerOperationsPublicStatusResult =
     }>
   | Readonly<{ kind: 'unavailable' | 'not_applicable' }>
   | Readonly<{ kind: 'conflict'; reason: 'multiple_suppliers' | 'business_mismatch' }>
+
+export type OwnerProviderOffboardingResult =
+  | Readonly<{ kind: 'available'; status: ProviderOffboardingStatus }>
+  | Readonly<{ kind: 'not_found' }>
+  | Readonly<{ kind: 'refused'; reason: string }>
+  | Readonly<{ kind: 'unavailable' }>
+
+const readProviderOffboardingQuery = sourceQuery<
+  { businessId: string },
+  Exclude<OwnerProviderOffboardingResult, { kind: 'unavailable' }>
+>('capabilityProviderOffboarding:readStatus')
+const startProviderOffboardingMutation = sourceMutation<
+  Record<string, unknown>,
+  Exclude<OwnerProviderOffboardingResult, { kind: 'unavailable' }>
+>('capabilityProviderOffboarding:startCase')
+const resumeProviderOffboardingMutation = sourceMutation<
+  Record<string, unknown>,
+  Exclude<OwnerProviderOffboardingResult, { kind: 'unavailable' }>
+>('capabilityProviderOffboarding:resumeCase')
+const cancelProviderOffboardingMutation = sourceMutation<
+  Record<string, unknown>,
+  Exclude<OwnerProviderOffboardingResult, { kind: 'unavailable' }>
+>('capabilityProviderOffboarding:cancelCase')
 
 type CurrentOwnerScope = Readonly<{
   businessId: string
@@ -245,6 +275,102 @@ export const readOwnerOperationsPublicStatusServer = createServerFn().handler(as
   privateOwnerResponse()
   return readOwnerOperationsPublicStatusThroughSource()
 })
+
+export const readOwnerProviderOffboardingServer = createServerFn().handler(async (): Promise<OwnerProviderOffboardingResult> => {
+  privateOwnerResponse()
+  const identity = await readCurrentOwnerIdentity()
+  if (identity.kind !== 'available') return identity.kind === 'not_found' ? { kind: 'not_found' } : { kind: 'unavailable' }
+  try {
+    return await callSourceQuery(readProviderOffboardingQuery, { businessId: identity.businessId })
+  } catch {
+    return { kind: 'unavailable' }
+  }
+})
+
+export const startOwnerProviderOffboardingServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({
+    idempotencyKey: z.string().trim().min(8).max(200),
+  }).parse(data))
+  .handler(async ({ data, context }): Promise<OwnerProviderOffboardingResult> => {
+    privateOwnerResponse()
+    const identity = await readCurrentOwnerIdentity()
+    if (identity.kind !== 'available') return identity.kind === 'not_found' ? { kind: 'not_found' } : { kind: 'unavailable' }
+    const retentionPolicyVersion = readTrimmedEnv(process.env, 'AE_RETENTION_POLICY_VERSION')
+    if (retentionPolicyVersion === undefined) return { kind: 'refused', reason: 'retention_policy_unavailable' }
+    const operationKey = canonicalDigest({ action: 'supply.offboarding.start', businessRef: identity.businessId, idempotencyKey: data.idempotencyKey })
+    const command = {
+      businessId: identity.businessId,
+      idempotencyKey: data.idempotencyKey,
+      retentionPolicyVersion,
+      operationKey,
+      correlationId: operationKey,
+      proof: await requireStrictClerkConsequenceProof(operationKey),
+    }
+    try {
+      const sourceWrite = await sourceWriteAdmissionFromContext({ context, command, scope: 'catalog_publish', operationKey, correlationId: operationKey })
+      return await callSourceMutation(startProviderOffboardingMutation, {
+        ...command,
+        sourceWrite,
+        sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      })
+    } catch {
+      return { kind: 'unavailable' }
+    }
+  })
+
+export const resumeOwnerProviderOffboardingServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({
+    caseRef: z.string().trim().min(1),
+    expectedRevision: z.number().int().positive(),
+    idempotencyKey: z.string().trim().min(8).max(200),
+  }).parse(data))
+  .handler(async ({ data, context }): Promise<OwnerProviderOffboardingResult> => {
+    privateOwnerResponse()
+    const operationKey = canonicalDigest({ action: 'supply.offboarding.resume', ...data })
+    const command = {
+      ...data,
+      operationKey,
+      correlationId: operationKey,
+      proof: await requireStrictClerkConsequenceProof(operationKey),
+    }
+    try {
+      const sourceWrite = await sourceWriteAdmissionFromContext({ context, command, scope: 'catalog_publish', operationKey, correlationId: operationKey })
+      return await callSourceMutation(resumeProviderOffboardingMutation, {
+        ...command,
+        sourceWrite,
+        sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      })
+    } catch {
+      return { kind: 'unavailable' }
+    }
+  })
+
+export const cancelOwnerProviderOffboardingServer = createServerFn({ method: 'POST' })
+  .validator((data) => z.strictObject({
+    caseRef: z.string().trim().min(1),
+    expectedRevision: z.number().int().positive(),
+    idempotencyKey: z.string().trim().min(8).max(200),
+  }).parse(data))
+  .handler(async ({ data, context }): Promise<OwnerProviderOffboardingResult> => {
+    privateOwnerResponse()
+    const operationKey = canonicalDigest({ action: 'supply.offboarding.cancel', ...data })
+    const command = {
+      ...data,
+      operationKey,
+      correlationId: operationKey,
+      proof: await requireStrictClerkConsequenceProof(operationKey),
+    }
+    try {
+      const sourceWrite = await sourceWriteAdmissionFromContext({ context, command, scope: 'catalog_publish', operationKey, correlationId: operationKey })
+      return await callSourceMutation(cancelProviderOffboardingMutation, {
+        ...command,
+        sourceWrite,
+        sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+      })
+    } catch {
+      return { kind: 'unavailable' }
+    }
+  })
 
 export async function readOwnerOperationsPublicStatusThroughSource(): Promise<OwnerOperationsPublicStatusResult> {
   const identity = await readCurrentOwnerIdentity()

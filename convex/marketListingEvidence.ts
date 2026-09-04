@@ -37,6 +37,7 @@ const listingEvidenceValue = v.object({
   ratingCount: v.number(),
   ratingSum: v.number(),
   completedInvocations: v.number(),
+  qualifiedUses: v.number(),
   latencySamplesMs: v.array(v.number()),
 })
 
@@ -147,7 +148,7 @@ async function readOperationEvidence(
   operationRef: string,
   since: number,
 ) {
-  const [category, ratingCount, ratingSum, completedInvocations, latencyRows] = await Promise.all([
+  const [category, ratingCount, ratingSum, completedInvocations, qualifiedUses, latencyRows] = await Promise.all([
     ctx.db.query('marketOperationCategories')
       .withIndex('by_operationRef', (index) => index.eq('operationRef', operationRef))
       .unique(),
@@ -155,6 +156,10 @@ async function readOperationEvidence(
     ratingAggregate.sum(ctx, { namespace: operationRef }),
     operationEvidenceAggregate.count(ctx, {
       namespace: evidenceNamespace('ae_invocation_completed', operationRef),
+      bounds: { lower: { key: since, inclusive: true } },
+    }),
+    operationEvidenceAggregate.count(ctx, {
+      namespace: evidenceNamespace('ae_qualified_use', operationRef),
       bounds: { lower: { key: since, inclusive: true } },
     }),
     ctx.db.query('marketEvidenceFacts')
@@ -172,6 +177,7 @@ async function readOperationEvidence(
     ratingCount,
     ratingSum,
     completedInvocations,
+    qualifiedUses,
     latencySamplesMs: latencyRows.flatMap((row) => (
       row.durationMs === undefined ? [] : [row.durationMs]
     )),

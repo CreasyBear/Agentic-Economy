@@ -32,6 +32,7 @@ import {
   type OperationInspectRefusalCode,
 } from '@/modules/capability-execution/operation-commitment'
 import { resolveAndBindLegalCustomer } from './lib/moneyLegalCustomer'
+import { operationProviderRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
 
 const inspectRefusalCode = v.union(
   v.literal('operation_not_found'),
@@ -242,6 +243,9 @@ async function prepareFinancialSubjectsHandler(
     { kind: 'new_operation', operationRef: args.operationRef },
   )
   if (authority === null) return { kind: 'refused', code: 'grant_not_found' }
+  if (await operationProviderRouteabilityIsFrozen(ctx, args.operationRef)) {
+    return { kind: 'refused', code: 'operation_not_ready' }
+  }
   const operation = await readCurrentPublishedOperation(ctx, args.operationRef, now)
   if (operation === undefined) return { kind: 'refused', code: 'operation_not_found' }
   const pricing = operationPricing(operation, now)
@@ -328,6 +332,9 @@ async function issueCommitmentHandler(
     { kind: 'new_operation', operationRef: args.operationRef },
   )
   if (authority === null) return refuse(args, 'grant_not_found', false)
+  if (await operationProviderRouteabilityIsFrozen(ctx, args.operationRef)) {
+    return refuse(args, 'operation_not_ready', false)
+  }
   const operation = await readCurrentPublishedOperation(ctx, args.operationRef, now)
   if (operation === undefined) return refuse(args, 'operation_not_found', false)
   let descriptor

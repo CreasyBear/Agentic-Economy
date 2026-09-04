@@ -18,6 +18,7 @@ const ownerSupplyLifecycleReasonValue = v.union(
   v.literal('withdrawn'),
   v.literal('incompatible_revision'),
   v.literal('eligibility_integrity_failure'),
+  v.literal('provider_authority_unverified'),
 )
 const ownerSupplyAuthorityValue = v.union(
   v.object({ kind: v.literal('public_upstream') }),
@@ -99,6 +100,34 @@ const ownerSupplyPublicationValue = v.object({
     responseDigest: v.optional(v.string()),
     evidenceRefs: v.array(v.string()),
   }),
+})
+
+const ownerSupplyOperationEvidenceValue = v.object({
+  windowStartAt: v.number(),
+  windowEndAt: v.number(),
+  delivery: v.union(
+    v.object({ kind: v.literal('unobserved'), provenance: v.literal('canonical_call_receipts') }),
+    v.object({ kind: v.literal('unavailable'), reason: v.literal('window_too_large'), provenance: v.literal('canonical_call_receipts') }),
+    v.object({
+      kind: v.literal('observed'),
+      deliveredCount: v.number(),
+      notDeliveredCount: v.number(),
+      unknownCount: v.number(),
+      sampleSize: v.number(),
+      lastObservedAt: v.number(),
+      provenance: v.literal('canonical_call_receipts'),
+    }),
+  ),
+  usefulOutcome: v.union(
+    v.object({ kind: v.literal('unobserved'), provenance: v.literal('qualified_use_receipts') }),
+    v.object({ kind: v.literal('unavailable'), reason: v.literal('window_too_large'), provenance: v.literal('qualified_use_receipts') }),
+    v.object({
+      kind: v.literal('observed'),
+      qualifiedUseCount: v.number(),
+      lastObservedAt: v.number(),
+      provenance: v.literal('qualified_use_receipts'),
+    }),
+  ),
 })
 
 /** Bounded owner readback for the admitted source and single-player panel. */
@@ -230,6 +259,7 @@ export const ownerSupplyFunnelResultValue = v.union(
           ),
         }),
         actionableReason: v.optional(v.string()),
+        operationEvidence: v.optional(ownerSupplyOperationEvidenceValue),
         accessPaths: v.array(
           v.object({
             accessPathRef: v.string(),

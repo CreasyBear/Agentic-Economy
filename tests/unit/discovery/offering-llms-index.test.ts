@@ -15,9 +15,9 @@ describe('Operation-first llms.txt index', () => {
     const result = buildOfferingLlmsTxt(catalogOf(50), { canonicalBaseUrl })
     const markers = [
       '1. Search by outcome:',
-      '2. Inspect one exact result',
-      '3. Call it:',
-      '4. Connect only if the call reports',
+      '2. Describe one exact result:',
+      '3. Call `operation.inspect`',
+      '4. Invoke only with the returned Commitment',
       '5. Keep the receipt:',
       'Canonical catalogue:',
     ]
@@ -30,7 +30,7 @@ describe('Operation-first llms.txt index', () => {
     }
 
     expect(result.body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/search`)
-    expect(result.body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/detail`)
+    expect(result.body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/describe`)
     expect(result.body).toContain(`${canonicalBaseUrl}/market`)
     expect(result.body).not.toMatch(/Published businesses|\/api\/businesses|registry\.search|registry\.detail/u)
     expect(new TextEncoder().encode(result.body).length).toBeLessThan(4096)
@@ -49,8 +49,8 @@ describe('Operation-first llms.txt index', () => {
   it('makes anonymous and authenticated boundaries explicit', () => {
     const body = buildOfferingLlmsTxt([], { canonicalBaseUrl }).body
 
-    expect(body).toContain('Public: search, inspect, and eligible free keyless read calls.')
-    expect(body).toContain('Connect only when a call reports agent_access_key_required.')
+    expect(body).toContain('Public: list, search, describe, and compare.')
+    expect(body).toContain('Connect only when operation.inspect returns the OAuth challenge.')
     expect(body).toContain('The AE key identifies the caller.')
     expect(body).toContain('Never infer fulfilment, payment, deployment, or a receipt')
     expect(body).toContain('Boundary:')

@@ -49,6 +49,7 @@ export function projectProviderManagementStatus(
     readinessValidUntil?: number
     readinessLastHealthyAt?: number
     ownerActionRequired?: boolean
+    authorityReviewRequired?: boolean
   }>,
   now: number,
 ): ProviderManagementStatus {
@@ -61,6 +62,7 @@ export function projectProviderManagementStatus(
     publication.ownerActionRequired === true
     || publication.credentialState === 'unavailable'
   ) return 'Action needed'
+  if (publication.authorityReviewRequired === true) return 'Validating'
   if (
     publication.disposition === 'current'
     && publication.credentialState === 'ready'

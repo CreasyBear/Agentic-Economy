@@ -773,14 +773,7 @@ export function toCapabilityPublicationImport(value: SupplyEndpointConfigValue):
     }
   }
   if (value.sourceKind === 'agent_plugin_mcp') {
-    return {
-      kind: 'agent_plugin_mcp',
-      manifest: parseRequiredObject(value.manifestJson),
-      serverName: value.serverName,
-      tool: parseRequiredObject(value.toolJson),
-      protocolVersion: value.protocolVersion,
-      ...common,
-    }
+    throw new Error('agent_plugin_native_source_required')
   }
   return {
     kind: 'x402',

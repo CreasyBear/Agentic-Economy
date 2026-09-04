@@ -664,13 +664,19 @@ function x402CanaryDisclosure(offering: OwnerSupplyOfferingReadback): X402Canary
   } catch {
     return undefined
   }
-  if (
-    config === undefined
-    || typeof pricing !== 'object'
-    || pricing === null
-    || !('paidAmount' in pricing)
-  ) return undefined
-  const paidAmount = pricing.paidAmount
+  if (config === undefined || typeof pricing !== 'object' || pricing === null) return undefined
+  const paidAmount = 'paidAmount' in pricing
+    ? pricing.paidAmount
+    : 'sourceRequirement' in pricing
+      && typeof pricing.sourceRequirement === 'object'
+      && pricing.sourceRequirement !== null
+      && 'atomicUnits' in pricing.sourceRequirement
+      ? {
+          currency: config.currency,
+          units: pricing.sourceRequirement.atomicUnits,
+          exponent: config.assetAmountExponent,
+        }
+      : undefined
   if (
     typeof paidAmount !== 'object'
     || paidAmount === null

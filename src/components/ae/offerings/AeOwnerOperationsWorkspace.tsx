@@ -1,9 +1,11 @@
 import { Await, Link, useLocation, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
+import { useReverification } from '@clerk/tanstack-react-start'
 import type { SortingState } from '@tanstack/react-table'
-import { Suspense, useCallback, useEffect, useState, type ComponentProps, type ReactNode } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeWorkspaceGeneral } from '@/components/ae/settings/AeWorkspaceGeneral'
@@ -22,8 +24,15 @@ import type {
   OwnerOperationsLifecycleResult,
   OwnerOperationsPayoutResult,
   OwnerOperationsPublicStatusResult,
+  OwnerProviderOffboardingResult,
 } from './owner-operations.functions'
-import { readOwnerOperationsConnectionsDetailServer, readOwnerOperationsIdentityDetailServer } from './owner-operations.functions'
+import {
+  cancelOwnerProviderOffboardingServer,
+  readOwnerOperationsConnectionsDetailServer,
+  readOwnerOperationsIdentityDetailServer,
+  resumeOwnerProviderOffboardingServer,
+  startOwnerProviderOffboardingServer,
+} from './owner-operations.functions'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -43,6 +52,7 @@ type WorkspaceProps = Readonly<{
   connections?: Promise<OwnerOperationsConnectionsResult>
   payouts?: Promise<OwnerOperationsPayoutResult>
   publicStatus?: Promise<OwnerOperationsPublicStatusResult>
+  offboarding?: Promise<OwnerProviderOffboardingResult>
 }>
 
 export function AeOwnerOperationsWorkspace(props: WorkspaceProps) {
@@ -92,6 +102,7 @@ function AvailableWorkspace({
   connections,
   payouts,
   publicStatus,
+  offboarding,
   refresh,
 }: WorkspaceProps & Readonly<{
   inventory: Extract<OwnerOperationsInventoryResult, { kind: 'available' }>
@@ -329,8 +340,163 @@ function AvailableWorkspace({
           <AeSupplyEarningsCard readback={earningsDetail.earnings} connect={earningsDetail.connect} onStatusRefreshed={() => router.invalidate()} />
         ) : null}
       </AeSection>
+      <AeSection id="offboarding" title="Provider offboarding" description="Stop new work, settle outstanding obligations, and retire this Provider safely.">
+        <DeferredSection promise={offboarding} loadingLabel="Loading Provider offboarding" unavailableTitle="Provider offboarding unavailable">
+          {(result) => <ProviderOffboardingCard initial={result} refreshWorkspace={refresh} />}
+        </DeferredSection>
+      </AeSection>
     </div>
   )
+}
+
+function ProviderOffboardingCard({ initial, refreshWorkspace }: Readonly<{
+  initial: OwnerProviderOffboardingResult
+  refreshWorkspace: () => void
+}>) {
+  const startOffboardingRequest = useServerFn(startOwnerProviderOffboardingServer)
+  const startOffboarding = useReverification(startOffboardingRequest)
+  const resumeOffboardingRequest = useServerFn(resumeOwnerProviderOffboardingServer)
+  const resumeOffboarding = useReverification(resumeOffboardingRequest)
+  const cancelOffboardingRequest = useServerFn(cancelOwnerProviderOffboardingServer)
+  const cancelOffboarding = useReverification(cancelOffboardingRequest)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const [result, setResult] = useState(initial)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string>()
+  const startKey = useRef(`provider-offboarding:${globalThis.crypto.randomUUID()}`)
+
+  useEffect(() => setResult(initial), [initial])
+
+  const start = async () => {
+    setPending(true)
+    setError(undefined)
+    try {
+      const next = await startOffboarding({ data: { idempotencyKey: startKey.current } })
+      setResult(next)
+      if (next.kind === 'available') {
+        setConfirmOpen(false)
+        refreshWorkspace()
+      } else if (next.kind === 'refused') {
+        setError(offboardingError(next.reason))
+      } else {
+        setError('Provider offboarding could not be confirmed. Reload status before trying again.')
+      }
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setError('Provider offboarding could not be confirmed. Reload status before trying again.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const resume = async () => {
+    if (result.kind !== 'available') return
+    setPending(true)
+    setError(undefined)
+    try {
+      const next = await resumeOffboarding({ data: {
+        caseRef: result.status.caseRef,
+        expectedRevision: result.status.revision,
+        idempotencyKey: `provider-offboarding-resume:${globalThis.crypto.randomUUID()}`,
+      } })
+      setResult(next)
+      if (next.kind === 'available') refreshWorkspace()
+      else setError(next.kind === 'refused' ? offboardingError(next.reason) : 'Provider offboarding status is unavailable. Reload before trying again.')
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setError('Provider offboarding status is unavailable. Reload before trying again.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const cancel = async () => {
+    if (result.kind !== 'available') return
+    setPending(true)
+    setError(undefined)
+    try {
+      const next = await cancelOffboarding({ data: {
+        caseRef: result.status.caseRef,
+        expectedRevision: result.status.revision,
+        idempotencyKey: `provider-offboarding-cancel:${globalThis.crypto.randomUUID()}`,
+      } })
+      setResult(next)
+      if (next.kind === 'available') refreshWorkspace()
+      else setError(next.kind === 'refused' ? offboardingError(next.reason) : 'Provider offboarding status is unavailable. Reload before trying again.')
+    } catch (cause) {
+      captureClientExceptionOnClient(cause)
+      setError('Provider offboarding status is unavailable. Reload before trying again.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  if (result.kind === 'unavailable') return <UnavailableSummary title="Provider offboarding unavailable" />
+  if (result.kind === 'refused') {
+    return <Alert variant="destructive"><AlertTitle>Provider cannot be retired</AlertTitle><AlertDescription>{offboardingError(result.reason)}</AlertDescription></Alert>
+  }
+  if (result.kind === 'not_found') {
+    return (
+      <div className="grid gap-related rounded-lg border border-border p-related">
+        <div><h3 className="font-semibold">Retire this Provider</h3><p className="text-sm text-muted-foreground">AE freezes new work first, then waits for Calls, obligations and payouts before revoking connections.</p></div>
+        {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Provider was not retired</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+        <Button ref={triggerRef} type="button" variant="destructive" className="justify-self-start min-h-touch" onClick={() => setConfirmOpen(true)}>Start Provider offboarding</Button>
+        <AeConfirmDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          title="Start Provider offboarding?"
+          description="New work will stop first. Outstanding Calls, obligations and payouts must resolve before AE revokes Provider connections and marks the Provider retired. After the freeze, this process can be resumed but not rolled back."
+          confirmLabel="Freeze new work and continue"
+          confirmVariant="destructive"
+          pending={pending}
+          onConfirm={start}
+          returnFocusRef={triggerRef}
+        />
+      </div>
+    )
+  }
+
+  const { status } = result
+  const canResume = status.state === 'Action required'
+  const canCancel = status.state === 'Freezing' && !status.routeabilityFrozen
+  const isTerminal = status.state === 'Retired' || status.state === 'Cancelled'
+  return (
+    <div className="grid gap-related rounded-lg border border-border p-related" aria-live="polite">
+      <div><h3 className="font-semibold">{status.state}</h3><p className="text-sm text-muted-foreground">{status.routeabilityFrozen ? 'New work is frozen.' : 'AE is preparing to freeze new work.'} Case {status.caseRef}</p></div>
+      {status.blockerCodes.length === 0 ? null : (
+        <Alert><AlertTitle>Action required</AlertTitle><AlertDescription>{status.blockerCodes.map(offboardingBlocker).join(' ')}</AlertDescription></Alert>
+      )}
+      {status.state === 'Retired' ? <p className="text-sm text-muted-foreground">Operations are retired, Calls and obligations are clear, and Provider connections are revoked.</p> : null}
+      {status.state === 'Cancelled' ? <p className="text-sm text-muted-foreground">Offboarding was cancelled before new work was frozen. The Provider remains active.</p> : null}
+      {isTerminal ? null : (
+        <div className="flex flex-wrap gap-intra">
+          <Button type="button" variant="secondary" className="min-h-touch" disabled={pending} onClick={canResume ? () => void resume() : refreshWorkspace}>{pending ? 'Checking…' : canResume ? 'Resume offboarding' : 'Refresh status'}</Button>
+          {canCancel ? <Button type="button" variant="outline" className="min-h-touch" disabled={pending} onClick={() => void cancel()}>Cancel offboarding</Button> : null}
+        </div>
+      )}
+      {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Status was not updated</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+    </div>
+  )
+}
+
+function offboardingBlocker(code: string): string {
+  if (code === 'calls_remain') return 'Outstanding Calls must finish or be reconciled.'
+  if (code === 'obligations_remain') return 'Provider obligations must be resolved.'
+  if (code === 'payout_resolution_required') return 'A payout requires attention before retirement can finish.'
+  if (code === 'connections_remain' || code === 'provider_cleanup_pending') return 'Provider connection cleanup must be confirmed.'
+  if (code === 'routeable_operations_remain') return 'One or more Operations are still accepting new work.'
+  if (code === 'retention_policy_unbound') return 'The retained-record policy must be confirmed.'
+  return 'AE could not prove the next retirement gate. Review current Operations and try again.'
+}
+
+function offboardingError(reason: string): string {
+  if (reason === 'retention_policy_unavailable') return 'The retained-record policy is not configured. No Provider state changed.'
+  if (reason === 'offboarding_already_active') return 'Provider offboarding is already active. Reload its current status.'
+  if (reason === 'revision_conflict') return 'The offboarding case changed. Reload its current status before resuming.'
+  if (reason === 'routeability_freeze_accepted') return 'New work is already frozen. Offboarding can now be resumed or corrected, but not cancelled.'
+  if (reason === 'authorization_denied') return 'Sign in again and complete the required verification. No Provider state changed.'
+  return 'AE could not confirm Provider offboarding. Reload status before trying again.'
 }
 
 function DeferredSection<T>({ promise, loadingLabel, unavailableTitle, children }: Readonly<{

@@ -126,7 +126,8 @@ export type CapabilityPublicationImport =
     }>
   | Readonly<{
       kind: "agent_plugin_mcp";
-      manifest: unknown;
+      pluginJson: unknown;
+      mcpJson: unknown;
       serverName: string;
       tool: unknown;
       protocolVersion: string;

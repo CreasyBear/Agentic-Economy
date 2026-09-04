@@ -169,7 +169,7 @@ describe('owner seller canary status', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review one payment retry' }))
     expect(runTest).not.toHaveBeenCalled()
     expect(screen.getByRole('heading', { name: 'Retry with one Base Sepolia payment?' })).toBeDefined()
-    expect(screen.getByText(/USD 0\.01 \(10000 atomic units\)/i)).toBeDefined()
+    expect(screen.getByText(/USD 0\.010000 \(10000 atomic units\)/i)).toBeDefined()
     expect(screen.getByText(/0x1111111111111111111111111111111111111111/i)).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm one Base Sepolia payment' }))

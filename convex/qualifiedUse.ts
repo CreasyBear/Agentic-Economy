@@ -221,6 +221,7 @@ export const recordQualifiedUse = internalMutation({
           'ae_qualified_use',
           decision.receipt.qualifiedUseRef,
           decision.receipt.qualifiedAt,
+          { operationRef: decision.receipt.operationRef },
         )
         return { kind: 'recorded' as const, receipt: toWire(decision.receipt) }
       }

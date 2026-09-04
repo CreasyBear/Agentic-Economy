@@ -91,6 +91,7 @@ export const preparedPublication: PreparedPublicationMaterial = {
   sourceDescriptorJson: '{"openapi":"3.1.0"}',
   sourceRevision: "source:one",
   sourceDigest: sourceHash,
+  sourceRouteRef: sourceHash,
   documentJson: '{"openapi":"3.1.0"}',
   offering: {
     offeringId: "offering:one",

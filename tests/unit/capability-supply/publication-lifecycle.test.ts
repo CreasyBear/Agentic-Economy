@@ -206,6 +206,22 @@ describe('capability-supply publication lifecycle', () => {
       'health_unobserved',
     ]))
   })
+
+  it('keeps a healthy public source inactive until Provider authority is verified', () => {
+    expect(publicationLifecycle(
+      {
+        disposition: 'current',
+        credentialState: 'ready',
+        healthState: 'healthy',
+        readinessObservedAt: 100,
+        readinessValidUntil: 200,
+        sourceAuthorityState: 'review_required',
+      },
+      offeringRow(),
+      { ...bindingRow(), authority: { kind: 'public_upstream' } },
+      100,
+    )).toEqual({ state: 'inactive', reasons: ['provider_authority_unverified'] })
+  })
   it('keeps first observations inactive and rejects stale or unbounded freshness', () => {
     const connection = providerConnection()
     const authority = connectionAuthoritySnapshotFromProviderConnection(connection, operationRef)

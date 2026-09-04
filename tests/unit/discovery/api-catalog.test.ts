@@ -36,9 +36,9 @@ describe('api-catalog document projection', () => {
     const anchors = document.linkset.map((entry) => entry.anchor)
     expect(anchors).toEqual([
       `${origin}/api/v1/market-operations/search`,
-      `${origin}/api/v1/market-operations/detail`,
+      `${origin}/api/v1/market-operations/list`,
+      `${origin}/api/v1/market-operations/describe`,
       `${origin}/api/v1/market-operations/compare`,
-      `${origin}/api/v1/market-operations/inspect-plan`,
       `${origin}${OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path}`,
       `${origin}${MCP_HTTP_ENDPOINT_PATH}`,
     ])

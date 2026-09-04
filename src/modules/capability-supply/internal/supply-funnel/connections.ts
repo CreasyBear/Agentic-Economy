@@ -210,14 +210,6 @@ export async function connectOwnerX402({
         code: `inspection_${inspection.payment.selection.kind}`,
       };
     }
-    if (inspection.discovery.kind !== "admitted") {
-      return {
-        kind: "refused",
-        code: inspection.discovery.kind === "absent"
-          ? "inspection_bazaar_missing"
-          : `inspection_${inspection.discovery.reason}`,
-      };
-    }
     const selectedAlternativeId = inspection.payment.selection.alternativeId;
     const selected = inspection.payment.accepts.find(
       (candidate) => candidate.alternativeId === selectedAlternativeId,
@@ -295,16 +287,6 @@ export async function inspectOwnerX402({
   });
   if (inspection.kind === "refused" || inspection.payment.selection.kind !== "selected") {
     return inspection;
-  }
-  if (inspection.discovery.kind !== "admitted") {
-    return {
-      kind: "refused" as const,
-      reason: inspection.discovery.kind === "absent"
-        ? "bazaar_missing" as const
-        : inspection.discovery.reason,
-      action: "Publish a valid x402 Bazaar declaration with bounded input, output, and example metadata.",
-      probe: inspection.probe,
-    };
   }
   const selectedAlternativeId = inspection.payment.selection.alternativeId;
   const selected = inspection.payment.accepts.find(

@@ -31,6 +31,7 @@ type PublicationLifecycle = {
     | 'withdrawn'
     | 'incompatible_revision'
     | 'eligibility_integrity_failure'
+    | 'provider_authority_unverified'
   >
 }
 type ProbeRecordResult =
@@ -148,6 +149,7 @@ const publicationLifecycleValue = v.object({
     v.literal('withdrawn'),
     v.literal('incompatible_revision'),
     v.literal('eligibility_integrity_failure'),
+    v.literal('provider_authority_unverified'),
   )),
 })
 const probeResultValue = v.union(

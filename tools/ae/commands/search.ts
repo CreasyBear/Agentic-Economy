@@ -4,10 +4,6 @@ import { OPERATION_MARKET_SEARCH_PATH } from '@/modules/registry/operation-entry
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
 import { continuationCommand } from '../lib/continuation-command'
-import {
-  formatOperationAvailability,
-  formatOperationPrice,
-} from '../lib/operation-format'
 import { throwOperationReadFailure } from '../lib/operation-read-failure'
 /** Search current public Market Operations without a caller credential. */
 export async function runSearchCommand(args: readonly string[], options: CliOptions): Promise<void> {

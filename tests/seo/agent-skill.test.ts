@@ -4,6 +4,7 @@ import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 import { buildPublicAgentSkillMarkdown } from '@/modules/discovery/public'
 import { findAction, listMcpActions, listOperationRouteDescriptors, mcpToolName } from '@/modules/actions'
 import { AGENT_ACCOUNT_SELF_ACTION_ID } from '@/modules/agent-access/account.actions'
+import { OPERATION_INSPECT_ACTION_ID } from '@/modules/capability-execution/operation-commitment'
 import handlePublicAgentSkillNitroRequest, { handlePublicAgentSkillRequest } from '@/routes/SKILL[.]md'
 
 const body = buildPublicAgentSkillMarkdown({
@@ -14,12 +15,15 @@ const body = buildPublicAgentSkillMarkdown({
 describe('public agent skill', () => {
   it('teaches the exact Operation market loop in order', () => {
     expect(body).toMatch(/^---\nname: agentic-economy\ndescription: .+\n---\n/u)
+    const inspect = findAction(OPERATION_INSPECT_ACTION_ID)
+    expect(inspect).toBeDefined()
     const commands = [
-      'curl -fsSL https://ae.example/.well-known/ucp',
       'ae search "weather forecast" --json',
-      'ae inspect "$AE_OPERATION_REF" --json',
+      'ae describe "$AE_OPERATION_REF" --json',
+      mcpToolName(inspect!),
+      'codex mcp add agentic-economy --url "https://ae.example/mcp"',
+      'ae_agentAccess_whoami',
       'ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --json',
-      'ae connect --json',
       'ae wait "$AE_INVOCATION_REF" --json',
       'ae recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json',
     ]
@@ -35,19 +39,18 @@ describe('public agent skill', () => {
     expect(whoami).toBeDefined()
     const whoamiToolName = mcpToolName(whoami!)
     const funnelMarkers = [
-      '## 1. Connect the current client',
+      '## 1. Search first — no connection required',
+      '## 2. Inspect exact terms',
       'codex mcp add agentic-economy --url "https://ae.example/mcp"',
       'codex mcp login agentic-economy',
       'claude mcp add --transport http --scope user agentic-economy "https://ae.example/mcp"',
       'open /mcp, select agentic-economy, then choose Authenticate',
       'cursor --add-mcp \'{"name":"agentic-economy","url":"https://ae.example/mcp"}\'',
       'follow its OAuth prompt',
-      'Public search works immediately',
       whoamiToolName,
-      'report the connected Agent Principal and Account',
-      '## 2. Price rule — before any paid call',
-      'state the total price and the required inputs',
-      '## 3. Search by job',
+      'Report the connected Agent Principal and Account',
+      '## 3. Review and invoke',
+      'State the price and required input',
     ]
     let previous = -1
     for (const marker of funnelMarkers) {
@@ -55,8 +58,7 @@ describe('public agent skill', () => {
       expect(current).toBeGreaterThan(previous)
       previous = current
     }
-    expect(body).toContain('Use the native entry for the client already in use')
-    expect(body).toContain('standard OAuth approval')
+    expect(body).toContain('use the native entry for the current client')
     expect(body).toContain('returns to the same task')
     expect(body).not.toContain('the client opens standard OAuth approval')
     expect(body).not.toContain('codex mcp login agentic-economy --scopes')
@@ -65,18 +67,18 @@ describe('public agent skill', () => {
 
   it('gives supplier agents a bounded owner-approved onboarding path', () => {
     expect(body).toContain('## Supplier path')
-    expect(body).toContain('Operation: one job')
     expect(body).toContain('ae connect --supplier --json')
-    expect(body).toContain('ae doctor "$AE_BUSINESS_ID" --supplier --json')
-    expect(body).toContain('never submit provider keys or count setup tests as earnings')
+    expect(body).toContain('ae supply preview --input "$AE_SOURCE_JSON" --json')
+    expect(body).toContain('ae supply publish --input "$AE_PUBLICATION_JSON" --json')
+    expect(body).toContain('ae supply status "$AE_BUSINESS_REF" "$AE_OPERATION_REF" --json')
+    expect(body).toContain('Never put Provider credentials in MCP fields or CLI arguments')
   })
 
-  it('recovers from insufficient credit through the served operator page', () => {
+  it('recovers insufficient balance through the agent funding handoff', () => {
     expect(body).toContain('## If credit runs short')
-    expect(body).toContain('`insufficient_credit`')
-    expect(body).toContain('`retryable: false`')
-    expect(body).toContain('https://ae.example/owner/credit')
-    expect(body).toContain('add credit at https://ae.example/owner/credit')
+    expect(body).toContain('`funding.handoff.create`')
+    expect(body).toContain('`funding.handoff.status`')
+    expect(body).toContain('explicitly resubmit the original Operation')
   })
 
   it('closes on the evidence expectation', () => {
@@ -103,10 +105,11 @@ describe('public agent skill', () => {
 
   it('names the anonymous read and authenticated invoke/recovery routes', () => {
     for (const path of [
+      '/api/v1/market-operations/list',
       '/api/v1/market-operations/search',
-      '/api/v1/market-operations/detail',
+      '/api/v1/market-operations/describe',
       '/api/v1/market-operations/compare',
-      '/api/v1/market-operations/inspect-plan',
+      '/api/v1/operations/inspect',
     ]) {
       expect(body).toContain(`POST https://ae.example${path}`)
     }
@@ -117,9 +120,9 @@ describe('public agent skill', () => {
   })
 
   it('keeps authentication separate from authority and provider credentials', () => {
-    expect(body).toContain('standard OAuth approval')
+    expect(body).toContain('If challenged')
     expect(body).toContain('authenticated account read')
-    expect(body).toContain('report the connected Agent Principal and Account')
+    expect(body).toContain('Report the connected Agent Principal and Account')
     expect(body).toContain('The AE key identifies the caller.')
     expect(body).toMatch(/never contains or grants a provider credential/u)
     expect(body).toMatch(/silent consequential authority/u)
@@ -137,10 +140,10 @@ describe('public agent skill', () => {
       .filter((name): name is string => name !== undefined)
     const projection = `Endpoint: \`https://ae.example/mcp\`. Anonymous tools: ${anonymousToolNames.map((name) => `\`${name}\``).join(', ')}. Authenticated tools: ${authenticatedToolNames.map((name) => `\`${name}\``).join(', ')}.`
     expect(body).toContain(projection)
-    expect(body).toContain('Connect once with AE')
-    expect(body).toContain('price may be zero')
+    expect(body).toContain('If challenged')
+    expect(body).toContain('Price may be zero')
     expect(body).toContain('explicit authority approval')
-    expect(body).toContain('return literal output plus an `evidenceHash`')
+    expect(body).toContain('literal output plus an `evidenceHash`')
   })
   it('documents the installed MCP lifecycle without teaching the legacy business registry', () => {
     expect(body).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)

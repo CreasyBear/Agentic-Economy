@@ -127,7 +127,7 @@ export async function admitProviderSchema(
   };
 }
 
-// --- $ref / allOf / oneOf / anyOf dereferencing (@apidevtools/json-schema-ref-parser) ---------
+// --- $ref / allOf / oneOf / anyOf dereferencing -----------------------------------------------
 
 async function inlineSchemaReferences(
   schema: SchemaRecord,

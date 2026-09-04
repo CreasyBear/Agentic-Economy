@@ -100,16 +100,17 @@ describe('action registry', () => {
       'marketDemand.record', 'marketDemand.list', 'marketDemand.status',
       'operation.inspect', 'operation.invoke', 'operation.list', 'operation.status',
       'operation.cancel', 'operation.reconcile',
-      'supply.status', 'supply.publish', 'supply.withdraw',
+      'supply.source.preview', 'supply.status', 'supply.publish', 'supply.withdraw',
       'supply.recheck', 'supply.republish', 'supply.earnings',
       'supply.connection.list', 'supply.connection.detail',
       'supply.connection.connect', 'supply.connection.reconnect',
-      'supply.connection.revoke', 'supply.connection.retryCleanup',
+      'supply.connection.revoke',
+      'supply.offboarding.status',
     ])
-    expect(exposed.slice(-12).every((action) =>
+    expect(exposed.slice(-13).every((action) =>
       action.credentialAdmission?.scope === 'market_supply:manage'
       && action.surfaces.includes('mcp'))).toBe(true)
-    expect(exposed.slice(-12).every((action) => action.surfaces.includes('cli'))).toBe(true)
+    expect(exposed.slice(-13).every((action) => action.surfaces.includes('cli'))).toBe(true)
     const anonymous = exposed.filter((action) => action.readOnly && action.credentialAdmission === undefined)
     expect(anonymous.map((action) => action.id)).toEqual([
       'registry.operations.list', 'registry.operations.search',
@@ -136,11 +137,12 @@ describe('action registry', () => {
       'ae_marketDemand_record', 'ae_marketDemand_list', 'ae_marketDemand_status',
       'ae_operation_inspect', 'ae_operation_invoke', 'ae_operation_list', 'ae_operation_status',
       'ae_operation_cancel', 'ae_operation_reconcile',
-      'ae_supply_status', 'ae_supply_publish', 'ae_supply_withdraw',
+      'ae_supply_source_preview', 'ae_supply_status', 'ae_supply_publish', 'ae_supply_withdraw',
       'ae_supply_recheck', 'ae_supply_republish', 'ae_supply_earnings',
       'ae_supply_connection_list', 'ae_supply_connection_detail',
       'ae_supply_connection_connect', 'ae_supply_connection_reconnect',
-      'ae_supply_connection_revoke', 'ae_supply_connection_retryCleanup',
+      'ae_supply_connection_revoke',
+      'ae_supply_offboarding_status',
     ])
   })
   it('exposes current agent identity without exposing bearer material', async () => {
@@ -182,6 +184,7 @@ describe('action registry', () => {
     expect(action?.outputSchema.safeParse({ ...result, accessToken: 'secret' }).success).toBe(false)
   })
   it('registers supply actions with narrow inputs and output contracts', () => {
+    const sourcePreview = findAction('supply.source.preview')
     const publish = findAction('supply.publish')
     const withdraw = findAction('supply.withdraw')
     const status = findAction('supply.status')
@@ -193,11 +196,11 @@ describe('action registry', () => {
     const connectionConnect = findAction('supply.connection.connect')
     const connectionReconnect = findAction('supply.connection.reconnect')
     const connectionRevoke = findAction('supply.connection.revoke')
-    const connectionRetryCleanup = findAction('supply.connection.retryCleanup')
-    expect(status?.parameters.map(({ name }) => name)).toEqual(['businessId', 'offeringRef'])
+    expect(status?.parameters.map(({ name }) => name)).toEqual(['businessRef', 'operationRef'])
     expect(publish?.parameters.map(({ name }) => name)).toEqual([
-      'version', 'businessId', 'offeringRef', 'offeringRevision', 'offeringSourceHash',
-      'source', 'evidenceRefs', 'idempotencyKey',
+      'businessRef', 'source', 'candidateRef', 'expectedSourceDigest', 'connectionRef',
+      'presentation', 'consequences', 'pricing', 'validationInput', 'environment',
+      'idempotencyKey', 'attestation',
     ])
     expect(withdraw?.parameters.map(({ name }) => name)).toEqual([
       'businessId', 'offeringRef', 'offeringRevision', 'offeringSourceHash',
@@ -206,19 +209,21 @@ describe('action registry', () => {
     expect(earnings?.parameters.map(({ name }) => name)).toEqual(['currency'])
     expect(recheck?.parameters).toEqual(withdraw?.parameters)
     expect(republish?.parameters).toEqual(withdraw?.parameters)
-    for (const action of [status, publish, withdraw, recheck, republish, earnings, connectionList, connectionDetail, connectionConnect, connectionReconnect, connectionRevoke, connectionRetryCleanup]) {
+    for (const action of [sourcePreview, status, publish, withdraw, recheck, republish, earnings, connectionList, connectionDetail, connectionConnect, connectionReconnect, connectionRevoke]) {
       expect(action?.surfaces).toEqual(['http', 'mcp', 'cli'])
       expect(action?.credentialAdmission?.scope).toBe('market_supply:manage')
     }
     expect(publish?.schema.safeParse({
-      version: 'supply-publication:v1',
-      businessId: 'business_1',
-      offeringRef: 'offering_1',
-      offeringRevision: 1,
-      offeringSourceHash: 'sha256:source',
-      source: {},
-      evidenceRefs: [],
+      businessRef: 'business_1',
+      source: { kind: 'openapi', definitionUrl: 'https://provider.example/openapi.yaml', environment: 'sandbox' },
+      candidateRef: `sha256:${'1'.repeat(64)}`,
+      expectedSourceDigest: `sha256:${'2'.repeat(64)}`,
+      presentation: { name: 'Lookup', description: 'Looks up one reference.', category: 'Research' },
+      consequences: { effects: [], dataUse: [], evidence: [] },
+      pricing: { kind: 'free' },
+      environment: 'sandbox',
       idempotencyKey: 'publish-command-1',
+      attestation: { authorisedToPublish: true, informationAccurate: true, publishAfterSuccessfulValidation: true },
       endpointUrl: 'https://attacker.example',
     }).success).toBe(false)
     expect(publish?.outputSchema).toBeDefined()
@@ -229,7 +234,7 @@ describe('action registry', () => {
     expect(connectionConnect?.readOnly).toBe(false)
     expect(connectionReconnect?.schema).toBe(connectionRevoke?.schema)
     expect(connectionRevoke?.invocationContract.retryClass).toBe('reconcile_before_retry')
-    expect(connectionRetryCleanup?.invocationContract.safeContinuations).toEqual(['supply.connection.detail'])
+    expect(findAction('supply.connection.retryCleanup')).toBeUndefined()
   })
 
   it('describes comparison references from the canonical schema', () => {

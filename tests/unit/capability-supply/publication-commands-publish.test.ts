@@ -22,6 +22,7 @@ import {
   encodedFor,
   preparedPublication,
   preparedWithSourceAdapter,
+  publicationFixture,
 } from './publication-commands-harness'
 
 describe('capability-supply publication commands publish', () => {
@@ -230,6 +231,29 @@ describe('capability-supply publication commands publish', () => {
       findContractDigest: async () => `sha256:${'b'.repeat(64)}`,
     }))
     expect(result).toEqual({ kind: 'refused', reason: 'contract_identity_conflict' })
+  })
+
+  it('refuses a second Provider-owned Business claiming the same canonical source route', async () => {
+    const prepared = await preparedPublication()
+    const fixture = await publicationFixture()
+    const result = await publishPreparedCapabilityCommand({
+      businessId: 'business-2',
+      prepared,
+      ...context,
+      actor,
+      now: 10,
+    }, emptyPorts({
+      loadCurrentPublicationsBySourceRoute: async (sourceRouteRef) => [{
+        ...fixture.publication,
+        businessId: 'business-1',
+        publicationRef: 'publication:existing-owner',
+        sourceRouteRef,
+        authorityMode: 'provider_owned',
+        disposition: 'current',
+      }],
+    }))
+
+    expect(result).toEqual({ kind: 'refused', reason: 'source_route_conflict' })
   })
 
   it('replays prepared publish through the operation ledger', async () => {

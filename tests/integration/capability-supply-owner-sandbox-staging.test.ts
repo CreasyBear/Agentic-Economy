@@ -534,6 +534,7 @@ describe('owner Base Sepolia staging publication', () => {
         sourceDescriptorJson: '{}',
         sourceRevision: 'source:missing',
         sourceDigest: canonicalDigest({ missing: 'source' }),
+        sourceRouteRef: canonicalDigest({ missing: 'route' }),
         documentJson: '{}',
         offering: {
           offeringId: 'missing-offering',

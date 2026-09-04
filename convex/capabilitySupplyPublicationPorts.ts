@@ -62,6 +62,8 @@ export function capabilitySupplyPublicationPorts(
         ...(publication.sourceDescriptorJson === undefined ? {} : { sourceDescriptorJson: publication.sourceDescriptorJson }),
         sourceRevision: publication.sourceRevision,
         sourceDigest: publication.sourceDigest,
+        ...(publication.sourceRouteRef === undefined ? {} : { sourceRouteRef: publication.sourceRouteRef }),
+        ...(publication.sourceAuthorityState === undefined ? {} : { sourceAuthorityState: publication.sourceAuthorityState }),
         ...(publication.pricingConfigJson === undefined ? {} : { pricingConfigJson: publication.pricingConfigJson }),
         ...(publication.priceDigest === undefined ? {} : { priceDigest: publication.priceDigest }),
         publisherRef: publication.publisherRef,
@@ -85,6 +87,55 @@ export function capabilitySupplyPublicationPorts(
         registrationEvidenceRefs: publication.registrationEvidenceRefs,
       }
     },
+    loadCurrentPublicationsBySourceRoute: async (sourceRouteRef) => {
+      const publications = await ctx.db.query('capabilityPublications')
+        .withIndex('by_sourceRouteRef_and_disposition', (index) => (
+          index.eq('sourceRouteRef', sourceRouteRef).eq('disposition', 'current')
+        ))
+        .take(16)
+      return publications.map((publication) => {
+        if (!isPublicOperationRef(publication.operationRef)) {
+          throw new Error('capability_publication_operation_ref_invalid')
+        }
+        return {
+          id: publication._id,
+          operationRef: publication.operationRef,
+          publicationRef: publication.publicationRef,
+          revision: publication.revision,
+          businessId: String(publication.businessId),
+          networkId: publication.networkId,
+          runtimeEnvironment: publication.runtimeEnvironment,
+          offeringId: publication.offeringId,
+          bindingId: publication.bindingId,
+          capabilityId: publication.capabilityId,
+          version: publication.version,
+          contractDigest: publication.contractDigest,
+          sourceKind: publication.sourceKind,
+          ...(publication.sourceSelector === undefined ? {} : { sourceSelector: publication.sourceSelector }),
+          ...(publication.sourceDescriptorJson === undefined ? {} : { sourceDescriptorJson: publication.sourceDescriptorJson }),
+          sourceRevision: publication.sourceRevision,
+          sourceDigest: publication.sourceDigest,
+          ...(publication.sourceRouteRef === undefined ? {} : { sourceRouteRef: publication.sourceRouteRef }),
+          ...(publication.sourceAuthorityState === undefined ? {} : { sourceAuthorityState: publication.sourceAuthorityState }),
+          ...(publication.pricingConfigJson === undefined ? {} : { pricingConfigJson: publication.pricingConfigJson }),
+          ...(publication.priceDigest === undefined ? {} : { priceDigest: publication.priceDigest }),
+          publisherRef: publication.publisherRef,
+          authorityMode: publication.authorityMode,
+          provenanceDigest: publication.provenanceDigest,
+          ...(publication.connectionAuthority === undefined ? {} : { connectionAuthority: publication.connectionAuthority }),
+          ...(publication.supersedesRevision === undefined ? {} : { supersedesRevision: publication.supersedesRevision }),
+          disposition: publication.disposition,
+          credentialState: publication.credentialState,
+          healthState: publication.healthState,
+          ...(publication.readinessOutcome === undefined ? {} : { readinessOutcome: publication.readinessOutcome }),
+          ...(publication.readinessObservedAt === undefined ? {} : { readinessObservedAt: publication.readinessObservedAt }),
+          ...(publication.readinessValidUntil === undefined ? {} : { readinessValidUntil: publication.readinessValidUntil }),
+          ...(publication.readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt: publication.readinessLastHealthyAt }),
+          readinessEvidenceRefs: publication.readinessEvidenceRefs,
+          registrationEvidenceRefs: publication.registrationEvidenceRefs,
+        }
+      })
+    },
     insertPublication: async (input) => {
       const binding = await ctx.db.query('capabilityTransportBindings')
         .withIndex('by_bindingId', (query) => query.eq('bindingId', input.bindingId)).unique()
@@ -92,6 +143,12 @@ export function capabilitySupplyPublicationPorts(
       if (input.connectionAuthority !== undefined
         && !connectionAuthoritySnapshotsEqual(input.connectionAuthority, binding.connectionAuthority)) {
         throw new Error('capability_publication_authority_snapshot_invalid')
+      }
+      if (binding.sourceRouteRef !== undefined && binding.sourceRouteRef !== input.sourceRouteRef) {
+        throw new Error('capability_publication_source_route_conflict')
+      }
+      if (binding.sourceRouteRef === undefined) {
+        await ctx.db.patch(binding._id, { sourceRouteRef: input.sourceRouteRef })
       }
       await ctx.db.insert('capabilityPublications', {
         operationRef: input.operationRef,
@@ -107,6 +164,8 @@ export function capabilitySupplyPublicationPorts(
         sourceKind: input.sourceKind,
         sourceRevision: input.sourceRevision,
         sourceDigest: input.sourceDigest,
+        ...(input.sourceRouteRef === undefined ? {} : { sourceRouteRef: input.sourceRouteRef }),
+        ...(input.sourceAuthorityState === undefined ? {} : { sourceAuthorityState: input.sourceAuthorityState }),
         publisherRef: input.publisherRef,
         authorityMode: input.authorityMode,
         provenanceDigest: input.provenanceDigest,

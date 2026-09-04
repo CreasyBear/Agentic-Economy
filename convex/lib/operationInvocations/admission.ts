@@ -34,6 +34,7 @@ import {
   normalizeStoredAgentAccessGrantForOperation,
   type NormalizedStoredAgentAccessGrant,
 } from '@/modules/agent-access/policy'
+import { operationProviderRouteabilityIsFrozen } from '../providerOffboardingFreeze'
 
 export function assertJsonObject(value: unknown): asserts value is Record<string, JsonValue> {
   if (!isRecord(value) || !isBoundedJsonValue(value)) throw new Error('operation_invocation_json_invalid')
@@ -118,6 +119,7 @@ export type ReserveResult =
         | 'insufficient_balance'
         | 'treasury_capacity_unavailable'
         | 'commercial_policy_unavailable'
+        | 'operation_not_ready'
       retryable: boolean
       nextAction?: string
     }
@@ -469,6 +471,14 @@ export async function reserveHandler(
     .unique()
   const reservation = reservationFromArgs(args)
   if (existing !== null) return await replayExistingReservation(ctx, existing, args)
+  if (await operationProviderRouteabilityIsFrozen(ctx, args.operationRef)) {
+    return {
+      kind: 'refused',
+      code: 'operation_not_ready',
+      retryable: false,
+      nextAction: 'The Provider is offboarding; select another Operation.',
+    }
+  }
 
   const commitment = await loadReservationCommitment(ctx, args)
   if (!commitmentMatchesReservation(commitment, args)) return { kind: 'conflict' }

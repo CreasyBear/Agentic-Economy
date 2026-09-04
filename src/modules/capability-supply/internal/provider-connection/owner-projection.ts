@@ -1,7 +1,12 @@
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 
 import { validTimestamp } from './shared'
-import type { ProviderConnection, ProviderConnectionLifecycle, ProviderConnectionPublicProjection } from './types'
+import type {
+  ProviderConnection,
+  ProviderConnectionLifecycle,
+  ProviderConnectionPublicProjection,
+  ProviderConnectionSourceAuthentication,
+} from './types'
 
 export type ProviderConnectionOwnerProjection = Readonly<{
   connectionRef: string
@@ -9,6 +14,9 @@ export type ProviderConnectionOwnerProjection = Readonly<{
   providerRef: string
   providerAccountRef: string
   adapterId: string
+  sourceOrigin?: string
+  sourceEnvironment?: 'sandbox' | 'production'
+  sourceAuthentication?: ProviderConnectionSourceAuthentication
   grantedScopes: readonly string[]
   grantedResources: readonly string[]
   authorityGeneration: number
@@ -49,6 +57,9 @@ export function projectProviderConnectionOwner(
     providerRef: connection.providerRef,
     providerAccountRef: connection.providerAccountRef,
     adapterId: connection.adapterId,
+    ...(connection.sourceOrigin === undefined ? {} : { sourceOrigin: connection.sourceOrigin }),
+    ...(connection.sourceEnvironment === undefined ? {} : { sourceEnvironment: connection.sourceEnvironment }),
+    ...(connection.sourceAuthentication === undefined ? {} : { sourceAuthentication: connection.sourceAuthentication }),
     grantedScopes: uniqueSorted(connection.grantedScopes),
     grantedResources: uniqueSorted(connection.grantedResources),
     authorityGeneration: connection.authorityGeneration,

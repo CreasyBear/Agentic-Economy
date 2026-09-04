@@ -40,10 +40,12 @@ import {
 } from './capabilitySupplyCommands'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
-import { resolveBusinessActor } from './authz'
+import { internal } from './_generated/api'
+import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import { clerkConsequenceProofValue } from './lib/consequenceProof'
 import { admitAgentPublicationConsequence } from './lib/agentPublicationConsequence'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
+import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
 import {
   authorityValue,
   cancellationValue,
@@ -60,6 +62,123 @@ import {
   publicationLifecycleValue,
   rebuildCapabilityOriginSupplyProjection,
 } from './capabilitySupplyShared'
+
+export const verifyCapabilitySourceAuthorityArgs = {
+  publicationRef: v.string(),
+  expectedRevision: v.number(),
+  expectedSourceDigest: v.string(),
+  evidenceRefs: v.array(v.string()),
+  operationKey: v.string(),
+  correlationId: v.string(),
+  ...sourceWriteArgs,
+} as const
+
+export const verifyCapabilitySourceAuthorityResultValue = v.union(
+  v.object({
+    kind: v.union(v.literal('verified'), v.literal('replayed')),
+    publicationRef: v.string(),
+    revision: v.number(),
+    operationRef: v.string(),
+    sourceAuthorityState: v.literal('verified'),
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(
+      v.literal('authorization_denied'),
+      v.literal('publication_not_found'),
+      v.literal('revision_changed'),
+      v.literal('source_changed'),
+      v.literal('evidence_invalid'),
+    ),
+  }),
+)
+
+export async function verifyCapabilitySourceAuthorityHandler(
+  ctx: MutationCtx,
+  args: Readonly<{
+    publicationRef: string
+    expectedRevision: number
+    expectedSourceDigest: string
+    evidenceRefs: string[]
+    operationKey: string
+    correlationId: string
+    sourceWrite?: unknown
+    sourceWriteRequest?: unknown
+  }>,
+) {
+  const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
+  if (sourceWrite.kind === 'rejected') {
+    return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+  }
+  const admin = await resolveAdminAuthority(ctx, 'register_capability_supply')
+  if (admin.kind !== 'allowed') {
+    return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+  }
+  if (!validEvidenceRefs(args.evidenceRefs) || args.evidenceRefs.length === 0) {
+    return { kind: 'refused' as const, reason: 'evidence_invalid' as const }
+  }
+  const publication = await ctx.db.query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', (query) => query
+      .eq('publicationRef', args.publicationRef)
+      .eq('revision', args.expectedRevision))
+    .unique()
+  if (publication === null || publication.disposition !== 'current') {
+    return { kind: 'refused' as const, reason: 'publication_not_found' as const }
+  }
+  if (publication.revision !== args.expectedRevision) {
+    return { kind: 'refused' as const, reason: 'revision_changed' as const }
+  }
+  if (publication.sourceDigest !== args.expectedSourceDigest) {
+    return { kind: 'refused' as const, reason: 'source_changed' as const }
+  }
+  if (publication.sourceAuthorityState === 'verified') {
+    return {
+      kind: 'replayed' as const,
+      publicationRef: publication.publicationRef,
+      revision: publication.revision,
+      operationRef: publication.operationRef,
+      sourceAuthorityState: 'verified' as const,
+    }
+  }
+  const now = Date.now()
+  const authorityEvidenceRefs = [...new Set([
+    ...(publication.registrationEvidenceRefs ?? []),
+    ...args.evidenceRefs,
+  ])].sort()
+  await ctx.db.patch(publication._id, {
+    sourceAuthorityState: 'verified',
+    registrationEvidenceRefs: authorityEvidenceRefs,
+    updatedAt: now,
+  })
+  const admissionCase = await ctx.db.query('capabilitySupplyAdmissionCases')
+    .withIndex('by_publicationRef_and_revision', (query) => query
+      .eq('publicationRef', publication.publicationRef)
+      .eq('publicationRevision', publication.revision))
+    .unique()
+  if (admissionCase !== null) {
+    await ctx.db.patch(admissionCase._id, {
+      sourceAuthorityState: 'verified',
+      state: 'under_review',
+      terminalDecision: 'pending',
+      blockerRefs: [],
+      evidenceRefs: [...new Set([...admissionCase.evidenceRefs, ...args.evidenceRefs])].sort(),
+      reviewStartedAt: admissionCase.reviewStartedAt ?? now,
+      completedAt: undefined,
+      updatedAt: now,
+    })
+  }
+  await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+    publicationRef: publication.publicationRef,
+    expectedRevision: publication.revision,
+  })
+  return {
+    kind: 'verified' as const,
+    publicationRef: publication.publicationRef,
+    revision: publication.revision,
+    operationRef: publication.operationRef,
+    sourceAuthorityState: 'verified' as const,
+  }
+}
 
 const adapterConfigScalarValue = v.union(
   v.string(),
@@ -110,6 +229,10 @@ export const preparedPublicationMaterialValue = v.object({
   sourceDescriptorJson: v.string(),
   sourceRevision: v.string(),
   sourceDigest: v.string(),
+  sourceRouteRef: v.string(),
+  sourceAuthorityState: v.optional(
+    v.union(v.literal('verified'), v.literal('review_required')),
+  ),
   documentJson: v.string(),
   offering: capabilityPublicationOfferingValue,
   binding: capabilityPublicationBindingValue,
@@ -176,6 +299,7 @@ const preparedPublicationRefusalValue = v.union(
   v.literal('operation_key_conflict'),
   v.literal('registration_changed'),
   v.literal('connection_authority_stale'),
+  v.literal('source_route_conflict'),
 )
 export const preparedPublicationResultValue = v.union(
   v.object({
@@ -247,12 +371,100 @@ function convexPreparedPublicationResult(
   }
 }
 
+async function recordSupplyAdmissionCase(
+  ctx: MutationCtx,
+  args: Readonly<{
+    businessId: Id<'businesses'>
+    operationKey: string
+    correlationId: string
+    evidenceRefs: readonly string[]
+    prepared: Infer<typeof preparedPublicationMaterialValue>
+  }>,
+  result: Exclude<PublishPreparedCapabilityCommandResult, { kind: 'refused' }>,
+  now: number,
+): Promise<void> {
+  const existing = await ctx.db.query('capabilitySupplyAdmissionCases')
+    .withIndex('by_publicationRef_and_revision', (query) => (
+      query.eq('publicationRef', result.publicationRef)
+        .eq('publicationRevision', result.publicationRevision)
+    ))
+    .unique()
+  if (existing !== null) return
+
+  const business = await ctx.db.get(args.businessId)
+  if (business === null) throw new Error('capability_supply_admission_business_missing')
+  const connectionAuthority = result.kind === 'replayed'
+    ? (await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', result.publicationRef)
+            .eq('revision', result.publicationRevision)
+        ))
+        .unique())?.connectionAuthority
+    : undefined
+  const providerRef = connectionAuthority?.providerRef
+    ?? (args.prepared.binding.authority.kind === 'provider_connection'
+      ? args.prepared.binding.authority.providerRef
+      : String(args.businessId))
+  const caseRef = canonicalDigest({
+    kind: 'capability-supply-admission-case:v1',
+    publicationRef: result.publicationRef,
+    publicationRevision: result.publicationRevision,
+  })
+  const commandDigest = canonicalDigest({
+    kind: 'capability-supply-admission-command:v1',
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    businessId: String(args.businessId),
+    operationRef: result.operationRef,
+    publicationRef: result.publicationRef,
+    publicationRevision: result.publicationRevision,
+    sourceDigest: result.sourceDigest,
+    sourceRevision: result.sourceRevision,
+    sourceRouteRef: args.prepared.sourceRouteRef,
+  })
+  await ctx.db.insert('capabilitySupplyAdmissionCases', {
+    caseRef,
+    commandRef: args.operationKey,
+    commandDigest,
+    owningAccountRef: business.owningAccountRef,
+    businessId: args.businessId,
+    providerRef,
+    operationRef: result.operationRef,
+    operationRevision: result.publicationRevision,
+    publicationRef: result.publicationRef,
+    publicationRevision: result.publicationRevision,
+    sourceKind: result.sourceKind,
+    sourceDigest: result.sourceDigest,
+    sourceRevision: result.sourceRevision,
+    sourceRouteRef: args.prepared.sourceRouteRef,
+    ...(args.prepared.sourceAuthorityState === undefined
+      ? {}
+      : { sourceAuthorityState: args.prepared.sourceAuthorityState }),
+    contractDigest: result.contractRef.contractDigest,
+    ...(connectionAuthority === undefined
+      ? {}
+      : {
+          connectionRef: connectionAuthority.connectionRef,
+          authorityDigest: connectionAuthority.authorityDigest,
+        }),
+    scheduledReadbackRefs: [
+      `capability-readiness:${result.publicationRef}:${result.publicationRevision}`,
+    ],
+    state: 'submitted',
+    terminalDecision: 'pending',
+    blockerRefs: [],
+    evidenceRefs: [...args.evidenceRefs],
+    submittedAt: now,
+    updatedAt: now,
+  })
+}
+
 export const publishPreparedCapabilityArgs = {
   businessId: v.id('businesses'),
   offeringRef: v.string(),
   revision: v.number(),
   sourceHash: v.string(),
-  runtimeEnvironment: v.literal('production'),
+  runtimeEnvironment: v.union(v.literal('sandbox'), v.literal('production')),
   prepared: preparedPublicationMaterialValue,
   proof: v.optional(clerkConsequenceProofValue),
   ...contextFields,
@@ -314,7 +526,7 @@ export async function publishPreparedCapabilityHandler(
     offeringRef: string
     revision: number
     sourceHash: string
-    runtimeEnvironment: 'production'
+    runtimeEnvironment: 'sandbox' | 'production'
     prepared: Infer<typeof preparedPublicationMaterialValue>
     proof?: Infer<typeof clerkConsequenceProofValue>
     operationKey: string
@@ -349,6 +561,9 @@ export async function publishPreparedCapabilityHandler(
       kind: 'refused' as const,
       reason: 'authorization_denied' as const,
     }
+  }
+  if (await providerRouteabilityIsFrozen(ctx, args.businessId)) {
+    return { kind: 'refused' as const, reason: 'authorization_denied' as const }
   }
   const [catalogOffering, catalogRevision] = await Promise.all([
     ctx.db
@@ -479,6 +694,7 @@ export async function publishPreparedCapabilityHandler(
   )
   if (result.kind === 'refused')
     return convexPreparedPublicationResult(result)
+  await recordSupplyAdmissionCase(ctx, args, result, Date.now())
   await rebuildCapabilityOriginSupplyProjection(
     ctx,
     args.businessId,

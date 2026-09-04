@@ -129,6 +129,23 @@ describe('owner x402 connection payment environment', () => {
     })
   })
 
+  it('offers the wallet-control claim when Bazaar metadata is absent', async () => {
+    mocks.inspect.mockResolvedValue({ ...observation, discovery: { kind: 'absent' } })
+
+    await expect(inspectOwnerX402({
+      data: {
+        businessId: 'business-1',
+        resourceUrl: endpoint,
+        method: 'POST',
+        environment: 'sandbox',
+      },
+    })).resolves.toMatchObject({
+      kind: 'observed',
+      claim: { payTo },
+      discovery: { kind: 'absent' },
+    })
+  })
+
   it('re-inspects the same environment before saving the signed payee claim', async () => {
     await expect(connectOwnerX402({
       context: {},
@@ -151,7 +168,7 @@ describe('owner x402 connection payment environment', () => {
     expect(mocks.mutation).toHaveBeenCalledOnce()
   })
 
-  it('refuses a seller without admitted Bazaar metadata before any write', async () => {
+  it('uses wallet control and live x402 readback even when Bazaar metadata is absent', async () => {
     mocks.inspect.mockResolvedValue({ ...observation, discovery: { kind: 'absent' } })
 
     await expect(connectOwnerX402({
@@ -165,10 +182,10 @@ describe('owner x402 connection payment environment', () => {
         claimSignature: `0x${'ab'.repeat(65)}`,
         commandId: 'connect-sandbox-seller',
       },
-    })).resolves.toEqual({ kind: 'refused', code: 'inspection_bazaar_missing' })
+    })).resolves.toMatchObject({ kind: 'applied' })
 
-    expect(mocks.sourceWrite).not.toHaveBeenCalled()
-    expect(mocks.mutation).not.toHaveBeenCalled()
+    expect(mocks.sourceWrite).toHaveBeenCalledOnce()
+    expect(mocks.mutation).toHaveBeenCalledOnce()
   })
 
   it('refuses an invalid payee signature before any write', async () => {

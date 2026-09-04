@@ -232,6 +232,28 @@ export function ownerSupplyActionableReason(input: Readonly<{
       : undefined)
 }
 
+function ownerProviderManagementStatus(
+  publication: Doc<'capabilityPublications'> | undefined,
+  actionableReason: OwnerSupplyActionableReason,
+  now: number,
+) {
+  const publicationFacts = publication === undefined ? {} : {
+    disposition: publication.disposition,
+    credentialState: publication.credentialState,
+    healthState: publication.healthState,
+    ...(publication.readinessObservedAt === undefined ? {} : { readinessObservedAt: publication.readinessObservedAt }),
+    ...(publication.readinessValidUntil === undefined ? {} : { readinessValidUntil: publication.readinessValidUntil }),
+    ...(publication.readinessLastHealthyAt === undefined ? {} : { readinessLastHealthyAt: publication.readinessLastHealthyAt }),
+  }
+  return projectProviderManagementStatus({
+    ...publicationFacts,
+    ownerActionRequired: actionableReason === 'credential_rejected'
+      || actionableReason === 'credential_unavailable'
+      || actionableReason === 'authority_stale',
+    authorityReviewRequired: publication?.sourceAuthorityState === 'review_required',
+  }, now)
+}
+
 export function ownerSupplyOfferingResult(input: Readonly<{
   offering: Doc<'businessOfferings'>
   revision: Doc<'businessOfferingRevisions'> | undefined
@@ -280,25 +302,7 @@ export function ownerSupplyOfferingResult(input: Readonly<{
       ['draft', 'published', 'paused', 'retired'] as const,
       'offering status',
     ),
-    managementStatus: projectProviderManagementStatus({
-      ...(publication === undefined ? {} : {
-        disposition: publication.disposition,
-        credentialState: publication.credentialState,
-        healthState: publication.healthState,
-        ...(publication.readinessObservedAt === undefined
-          ? {}
-          : { readinessObservedAt: publication.readinessObservedAt }),
-        ...(publication.readinessValidUntil === undefined
-          ? {}
-          : { readinessValidUntil: publication.readinessValidUntil }),
-        ...(publication.readinessLastHealthyAt === undefined
-          ? {}
-          : { readinessLastHealthyAt: publication.readinessLastHealthyAt }),
-      }),
-      ownerActionRequired: actionableReason === 'credential_rejected'
-        || actionableReason === 'credential_unavailable'
-        || actionableReason === 'authority_stale',
-    }, now),
+    managementStatus: ownerProviderManagementStatus(publication, actionableReason, now),
     ...(sourceHash === undefined ? {} : { sourceHash }),
     ...(sourceMaterial === undefined ? {} : { sourceMaterial }),
     ...(source === undefined ? {} : { source }),

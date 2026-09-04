@@ -12,6 +12,95 @@ import {
 } from './capability-supply-owner-funnel-harness'
 
 describe('owner supply funnel read', () => {
+  it('returns exact Operation-scoped delivery and Qualified Use evidence', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await createPublishedBusinessOwner(
+      backend,
+      'owner-funnel-operation-evidence',
+    )
+    const offeringRef = 'catalog-offering:owner-funnel-operation-evidence'
+    const sourceHash = 'catalog-source:owner-funnel-operation-evidence:v1'
+    await seedCatalogOffering(backend, businessId, offeringRef, 1, 1, sourceHash)
+    const prepared = await prepareOwnerPublicationCommand(
+      backend,
+      businessId,
+      offeringRef,
+      1,
+      sourceHash,
+      openApiSource('owner.operation-evidence'),
+      'owner-supply:owner-funnel-operation-evidence',
+      { kind: 'catalog_offering', offeringRef, offeringRevision: 1, offeringSourceHash: sourceHash },
+    )
+    if (prepared.kind === 'refused') throw new Error(`operation_evidence_prepare_failed:${prepared.reason}`)
+    const published = await owner.mutation(api.capabilitySupply.publishPreparedCapability, prepared.command)
+    if (published.kind === 'refused') throw new Error(`operation_evidence_publish_failed:${published.reason}`)
+    const operationRef = published.operationRef
+    const now = Date.now()
+    await backend.run(async (ctx) => {
+      const baseCall = {
+        accountRef: 'account:buyer',
+        principalRef: 'principal:buyer',
+        credentialRef: 'credential:buyer',
+        applicationRef: 'application:buyer',
+        operationRef,
+        providerRef: String(businessId),
+        operationLabel: 'Evidence lookup',
+        state: 'completed' as const,
+        paymentState: 'settled' as const,
+        latencyMs: 20,
+        createdAt: now - 1_000,
+        updatedAt: now - 500,
+      }
+      await ctx.db.insert('capabilityOperationCallProjections', {
+        ...baseCall,
+        callRef: 'call:delivered',
+        deliveryState: 'delivered',
+      })
+      await ctx.db.insert('capabilityOperationCallProjections', {
+        ...baseCall,
+        callRef: 'call:unknown',
+        deliveryState: 'unknown',
+      })
+      await ctx.db.insert('qualifiedUseReceipts', {
+        qualifiedUseRef: 'qualified-use:operation-evidence',
+        materialDigest: `sha256:${'1'.repeat(64)}`,
+        invocationRef: 'call:delivered',
+        attemptRef: 'attempt:delivered',
+        effectGeneration: 1,
+        businessId: String(businessId),
+        operationRef,
+        publicationRef: published.publicationRef,
+        publicationRevision: published.publicationRevision,
+        contractDigest: `sha256:${'4'.repeat(64)}`,
+        bindingDigest: `sha256:${'5'.repeat(64)}`,
+        principalClass: 'agent_key',
+        requestDigest: `sha256:${'2'.repeat(64)}`,
+        responseDigest: `sha256:${'3'.repeat(64)}`,
+        evidenceRefs: ['receipt:delivery'],
+        environment: 'production',
+        qualifiedAt: now - 400,
+      })
+    })
+
+    const readback = await owner.query(api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel, { businessId })
+    if (readback.kind !== 'available') throw new Error(`operation_evidence_read_failed:${readback.kind}`)
+    expect(readback.offerings[0]?.operationEvidence).toMatchObject({
+      delivery: {
+        kind: 'observed',
+        deliveredCount: 1,
+        notDeliveredCount: 0,
+        unknownCount: 1,
+        sampleSize: 2,
+        provenance: 'canonical_call_receipts',
+      },
+      usefulOutcome: {
+        kind: 'observed',
+        qualifiedUseCount: 1,
+        provenance: 'qualified_use_receipts',
+      },
+    })
+  })
+
   it('does not invent editor source material before an Operation is admitted', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await createPublishedBusinessOwner(

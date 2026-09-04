@@ -49,6 +49,7 @@ export const pricingConfigValue = v.union(
   v.object({
     version: v.literal('pricing:v3'),
     kind: v.literal('managed_x402'),
+    effectTiming: v.literal('payment_required_before_effect'),
     sourceRequirement: v.object({
       network: v.string(),
       asset: v.string(),
@@ -190,6 +191,10 @@ export const capabilitySupplyTables = {
     ),
     sourceRevision: v.string(),
     sourceDigest: v.string(),
+    sourceRouteRef: v.optional(v.string()),
+    sourceAuthorityState: v.optional(
+      v.union(v.literal('verified'), v.literal('review_required')),
+    ),
     sourceSelector: v.optional(capabilityPublicationSourceSelectorValue),
     sourceDescriptorJson: v.optional(v.string()),
     pricingConfigJson: v.optional(v.string()),
@@ -245,7 +250,131 @@ export const capabilitySupplyTables = {
       'disposition',
       'readinessValidUntil',
     ])
-    .index('by_bindingId_and_disposition', ['bindingId', 'disposition']),
+    .index('by_bindingId_and_disposition', ['bindingId', 'disposition'])
+    .index('by_sourceRouteRef_and_disposition', ['sourceRouteRef', 'disposition']),
+
+  capabilitySupplyAdmissionCases: defineTable({
+    caseRef: v.string(),
+    commandRef: v.string(),
+    commandDigest: v.string(),
+    owningAccountRef: v.string(),
+    businessId: v.id('businesses'),
+    providerRef: v.string(),
+    operationRef: v.string(),
+    operationRevision: v.number(),
+    publicationRef: v.string(),
+    publicationRevision: v.number(),
+    sourceKind: v.union(
+      v.literal('ae_envelope'),
+      v.literal('openapi_http'),
+      v.literal('mcp'),
+      v.literal('agent_plugin_mcp'),
+      v.literal('x402'),
+    ),
+    sourceDigest: v.string(),
+    sourceRevision: v.string(),
+    sourceRouteRef: v.string(),
+    sourceAuthorityState: v.optional(
+      v.union(v.literal('verified'), v.literal('review_required')),
+    ),
+    contractDigest: v.string(),
+    connectionRef: v.optional(v.string()),
+    authorityDigest: v.optional(v.string()),
+    scheduledReadbackRefs: v.array(v.string()),
+    state: v.union(
+      v.literal('submitted'),
+      v.literal('under_review'),
+      v.literal('completed'),
+    ),
+    terminalDecision: v.union(
+      v.literal('pending'),
+      v.literal('published'),
+      v.literal('action_required'),
+    ),
+    blockerRefs: v.array(v.string()),
+    evidenceRefs: v.array(v.string()),
+    submittedAt: v.number(),
+    reviewStartedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index('by_caseRef', ['caseRef'])
+    .index('by_publicationRef_and_revision', ['publicationRef', 'publicationRevision'])
+    .index('by_operationRef_and_revision', ['operationRef', 'operationRevision'])
+    .index('by_businessId_and_submittedAt', ['businessId', 'submittedAt'])
+    .index('by_state_and_updatedAt', ['state', 'updatedAt']),
+
+  capabilityProviderOffboardingCases: defineTable({
+    caseRef: v.string(),
+    owningAccountRef: v.string(),
+    businessId: v.id('businesses'),
+    providerRef: v.string(),
+    requestedByPrincipalRef: v.string(),
+    authorityRevision: v.object({
+      binding: v.number(),
+      credential: v.number(),
+      principal: v.number(),
+      account: v.number(),
+      access: v.number(),
+      currentOwnership: v.number(),
+      currentOwnerPrincipal: v.number(),
+    }),
+    authorityProvenance: v.object({
+      providerNamespace: v.literal('clerk/user'),
+      bindingRef: v.string(),
+      credentialRef: v.string(),
+      credentialGeneration: v.number(),
+      accessKind: v.union(v.literal('ownership'), v.literal('membership')),
+      accessRef: v.string(),
+      currentOwnershipRef: v.string(),
+      resolvedAt: v.number(),
+    }),
+    operationTargetCount: v.number(),
+    connectionTargetCount: v.number(),
+    targetSnapshotDigest: v.string(),
+    workflowId: v.optional(v.string()),
+    currentStep: v.union(
+      v.literal('freeze-routeability'),
+      v.literal('drain-calls'),
+      v.literal('settle-obligations'),
+      v.literal('revoke-connections'),
+      v.literal('verify-completion'),
+    ),
+    state: v.union(
+      v.literal('cancelled'),
+      v.literal('freezing'),
+      v.literal('draining'),
+      v.literal('waiting_for_obligations'),
+      v.literal('revoking_connections'),
+      v.literal('verifying_cleanup'),
+      v.literal('action_required'),
+      v.literal('retired'),
+    ),
+    routeabilityFrozenAt: v.optional(v.number()),
+    retentionPolicyVersion: v.string(),
+    blockerCodes: v.array(v.string()),
+    evidenceRefs: v.array(v.string()),
+    revision: v.number(),
+    lastCommandId: v.string(),
+    lastCommandDigest: v.string(),
+    requestedAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index('by_caseRef', ['caseRef'])
+    .index('by_businessId_and_updatedAt', ['businessId', 'updatedAt'])
+    .index('by_state_and_updatedAt', ['state', 'updatedAt']),
+
+  capabilityProviderOffboardingTargets: defineTable({
+    caseRef: v.string(),
+    businessId: v.id('businesses'),
+    kind: v.union(v.literal('operation'), v.literal('connection')),
+    targetRef: v.string(),
+    targetRevision: v.number(),
+    authorityDigest: v.string(),
+    createdAt: v.number(),
+  })
+    .index('by_caseRef_and_kind_and_targetRef', ['caseRef', 'kind', 'targetRef']),
 
   capabilityOfferings: defineTable({
     offeringId: v.string(),
@@ -283,6 +412,7 @@ export const capabilitySupplyTables = {
 
   capabilityTransportBindings: defineTable({
     bindingId: v.string(),
+    sourceRouteRef: v.optional(v.string()),
     offeringId: v.string(),
     networkId: v.string(),
     ...contractRefFields,
@@ -318,6 +448,7 @@ export const capabilitySupplyTables = {
     updatedAt: v.number(),
   })
     .index('by_bindingId', ['bindingId'])
+    .index('by_sourceRouteRef', ['sourceRouteRef'])
     .index('by_offeringId_and_admission_and_conformance', [
       'offeringId',
       'admission',
@@ -340,6 +471,17 @@ export const capabilitySupplyTables = {
     providerAccountRef: v.string(),
     adapterId: v.string(),
     credentialRef: v.union(v.string(), v.null()),
+    sourceOrigin: v.optional(v.string()),
+    sourceEnvironment: v.optional(v.union(v.literal('sandbox'), v.literal('production'))),
+    sourceAuthentication: v.optional(v.union(
+      v.object({
+        kind: v.literal('api_key'),
+        location: v.union(v.literal('header'), v.literal('query')),
+        name: v.string(),
+      }),
+      v.object({ kind: v.literal('http_bearer') }),
+      v.object({ kind: v.literal('mcp_oauth') }),
+    )),
     x402Method: v.optional(v.union(v.literal('GET'), v.literal('POST'))),
     x402Payee: v.optional(v.string()),
     healthStatus: v.optional(v.union(v.literal('healthy'), v.literal('unhealthy'))),
@@ -379,11 +521,51 @@ export const capabilitySupplyTables = {
   })
     .index('by_connectionRef', ['connectionRef'])
     .index('by_businessId_and_lifecycle', ['businessId', 'lifecycle'])
+    .index('by_businessId_and_connectionRef', ['businessId', 'connectionRef'])
     .index('by_providerRef_and_lifecycle', ['providerRef', 'lifecycle'])
     .index('by_connectionRef_and_authorityGeneration', [
       'connectionRef',
       'authorityGeneration',
     ]),
+  capabilityProviderConnectionAttempts: defineTable({
+    attemptRef: v.string(),
+    commandId: v.string(),
+    inputDigest: v.string(),
+    owningAccountRef: v.string(),
+    installedByPrincipalRef: v.string(),
+    businessId: v.id('businesses'),
+    sourceKind: v.union(v.literal('http_credential'), v.literal('mcp_oauth')),
+    sourceUrl: v.string(),
+    sourceOrigin: v.string(),
+    authentication: v.union(
+      v.object({
+        kind: v.literal('api_key'),
+        location: v.union(v.literal('header'), v.literal('query')),
+        name: v.string(),
+      }),
+      v.object({ kind: v.literal('http_bearer') }),
+      v.object({ kind: v.literal('mcp_oauth') }),
+    ),
+    environment: v.union(v.literal('sandbox'), v.literal('production')),
+    lifecycle: v.union(
+      v.literal('pending'),
+      v.literal('consumed'),
+      v.literal('expired'),
+      v.literal('cancelled'),
+    ),
+    stateHash: v.optional(v.string()),
+    pkceSecretRef: v.optional(v.string()),
+    credentialSecretRef: v.optional(v.string()),
+    connectionRef: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    expiresAt: v.number(),
+    consumedAt: v.optional(v.number()),
+  })
+    .index('by_attemptRef', ['attemptRef'])
+    .index('by_commandId', ['commandId'])
+    .index('by_lifecycle_and_expiresAt', ['lifecycle', 'expiresAt'])
+    .index('by_businessId_and_updatedAt', ['businessId', 'updatedAt']),
   capabilityProviderConnectionLeases: defineTable({
     leaseRef: v.string(),
     owningAccountRef: v.string(),

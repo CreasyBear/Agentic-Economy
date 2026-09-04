@@ -334,6 +334,26 @@ describe('provider connection domain', () => {
     })
   })
 
+  it.each(['revoked', 'already_revoked'] as const)('retires credential authority after upstream OAuth reports %s', (outcome) => {
+    const revoked = beginProviderConnectionRevocation(create(), {
+      commandId: `command:revoke:${outcome}`,
+      expectedAuthorityGeneration: 1,
+      expectedAuthorityDigest: create().authorityDigest,
+      evidenceRefs: [],
+    }, 2_000)
+    if (revoked.kind !== 'applied') throw new Error('revocation failed')
+
+    const cleanup = cleanupCommand(revoked.connection, outcome, `command:cleanup:${outcome}`)
+    const result = recordProviderConnectionCleanupResult(cleanup.bound, cleanup.command, 3_000)
+
+    expect(result).toMatchObject({
+      kind: 'applied',
+      connection: { lifecycle: 'revoked', credentialRef: null },
+    })
+    if (result.kind !== 'applied') return
+    expect(result.connection.secretRef).toBeUndefined()
+  })
+
   it('replays exact cleanup callbacks and refuses stale, illegal, or malformed callbacks', () => {
     const revoked = beginProviderConnectionRevocation(create(), {
       commandId: 'command:revoke:fences',

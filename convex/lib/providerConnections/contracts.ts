@@ -24,6 +24,17 @@ export const connectionValue = v.object({
   providerAccountRef: v.string(),
   adapterId: v.string(),
   credentialRef: v.union(v.string(), v.null()),
+  sourceOrigin: v.optional(v.string()),
+  sourceEnvironment: v.optional(v.union(v.literal('sandbox'), v.literal('production'))),
+  sourceAuthentication: v.optional(v.union(
+    v.object({
+      kind: v.literal('api_key'),
+      location: v.union(v.literal('header'), v.literal('query')),
+      name: v.string(),
+    }),
+    v.object({ kind: v.literal('http_bearer') }),
+    v.object({ kind: v.literal('mcp_oauth') }),
+  )),
   grantedScopes: v.array(v.string()),
   grantedResources: v.array(v.string()),
   authorityGeneration: v.number(),
@@ -53,6 +64,17 @@ export const authorityFields = {
   providerAccountRef: v.string(),
   adapterId: v.string(),
   credentialRef: v.union(v.string(), v.null()),
+  sourceOrigin: v.optional(v.string()),
+  sourceEnvironment: v.optional(v.union(v.literal('sandbox'), v.literal('production'))),
+  sourceAuthentication: v.optional(v.union(
+    v.object({
+      kind: v.literal('api_key'),
+      location: v.union(v.literal('header'), v.literal('query')),
+      name: v.string(),
+    }),
+    v.object({ kind: v.literal('http_bearer') }),
+    v.object({ kind: v.literal('mcp_oauth') }),
+  )),
   requestedScopes: v.array(v.string()),
   grantedScopes: v.array(v.string()),
   requestedResources: v.array(v.string()),
@@ -74,6 +96,11 @@ export const cleanupTargetValue = v.object({
   lifecycle,
   revocationRef: v.optional(v.string()),
   cleanupAttempt: v.optional(v.number()),
+  secret: v.optional(v.object({
+    secretRef: v.string(),
+    activeGeneration: v.string(),
+    pointerRevision: v.number(),
+  })),
   resourceAuthority: v.object({
     connectionRef: v.string(),
     authorityGeneration: v.number(),
@@ -250,6 +277,9 @@ export type ProviderConnectionRow = {
   providerAccountRef: string
   adapterId: string
   credentialRef: string | null
+  sourceOrigin?: string
+  sourceEnvironment?: NonNullable<ProviderConnection['sourceEnvironment']>
+  sourceAuthentication?: NonNullable<ProviderConnection['sourceAuthentication']>
   grantedScopes: string[]
   grantedResources: string[]
   authorityGeneration: number
@@ -314,6 +344,9 @@ export type AuthorityCommandArgs = {
   providerAccountRef: string
   adapterId: string
   credentialRef: string | null
+  sourceOrigin?: string
+  sourceEnvironment?: NonNullable<ProviderConnection['sourceEnvironment']>
+  sourceAuthentication?: NonNullable<ProviderConnection['sourceAuthentication']>
   requestedScopes: string[]
   grantedScopes: string[]
   requestedResources: string[]

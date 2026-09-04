@@ -396,7 +396,8 @@ export const moneyTables = {
     .index('by_obligationRef', ['obligationRef'])
     .index('by_invocationRef', ['invocationRef'])
     .index('by_buyerAccountRef_and_createdAt', ['buyerAccountRef', 'createdAt'])
-    .index('by_providerRef_and_createdAt', ['providerRef', 'createdAt']),
+    .index('by_providerRef_and_createdAt', ['providerRef', 'createdAt'])
+    .index('by_providerRef_and_state', ['providerRef', 'state']),
   moneyUsageEvents: defineTable({
     usageRef: identifier,
     principalId: identifier,

@@ -5,12 +5,13 @@ import {
   supplyConnectionDetailAction,
   supplyConnectionListAction,
   supplyConnectionReconnectAction,
-  supplyConnectionRetryCleanupAction,
   supplyConnectionRevokeAction,
   supplyEarningsAction,
+  supplyOffboardingStatusAction,
   supplyPublishAction,
   supplyRecheckAction,
   supplyRepublishAction,
+  supplySourcePreviewAction,
   supplyStatusAction,
   supplyWithdrawAction,
 } from '@/modules/capability-supply/supply-actions'
@@ -29,11 +30,11 @@ import {
 import { usageFailure } from '../lib/help'
 import {
   connectionContinuationForCli,
-  supplierContinuationForCli,
 } from '../lib/suggested-continuation-adapter'
 import { requireAgentAccessKey } from './status'
 
 export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
+  { actionId: supplySourcePreviewAction.id, command: 'supply', subcommand: 'preview', route: SUPPLY_ACTION_ROUTE_CONTRACTS.sourcePreview, action: supplySourcePreviewAction },
   { actionId: supplyStatusAction.id, command: 'supply', subcommand: 'status', route: SUPPLY_ACTION_ROUTE_CONTRACTS.status, action: supplyStatusAction },
   { actionId: supplyPublishAction.id, command: 'supply', subcommand: 'publish', route: SUPPLY_ACTION_ROUTE_CONTRACTS.publish, action: supplyPublishAction },
   { actionId: supplyWithdrawAction.id, command: 'supply', subcommand: 'withdraw', route: SUPPLY_ACTION_ROUTE_CONTRACTS.withdraw, action: supplyWithdrawAction },
@@ -45,7 +46,7 @@ export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
   { actionId: supplyConnectionConnectAction.id, command: 'supply', subcommand: 'connect', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionConnect, action: supplyConnectionConnectAction },
   { actionId: supplyConnectionReconnectAction.id, command: 'supply', subcommand: 'reconnect', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionReconnect, action: supplyConnectionReconnectAction },
   { actionId: supplyConnectionRevokeAction.id, command: 'supply', subcommand: 'revoke', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionRevoke, action: supplyConnectionRevokeAction },
-  { actionId: supplyConnectionRetryCleanupAction.id, command: 'supply', subcommand: 'retry-cleanup', route: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionRetryCleanup, action: supplyConnectionRetryCleanupAction },
+  { actionId: supplyOffboardingStatusAction.id, command: 'supply', subcommand: 'offboarding', route: SUPPLY_ACTION_ROUTE_CONTRACTS.offboardingStatus, action: supplyOffboardingStatusAction },
 ] as const)
 
 type SupplyDescriptor = (typeof SUPPLY_COMMAND_DESCRIPTORS)[number]
@@ -87,12 +88,19 @@ function writeInput(options: CliOptions): Record<string, unknown> {
 
 function inputFor(subcommand: string, args: readonly string[], options: CliOptions): unknown {
   if (subcommand === 'status') {
-    const businessId = args[1]
-    const offeringRef = args[2]
-    if (businessId === undefined || args.length > 3) {
+    const businessRef = args[1]
+    const operationRef = args[2]
+    if (businessRef === undefined || args.length > 3) {
       throw usageFailure('supply status', 'supply-status-usage')
     }
-    return { businessId, ...(offeringRef === undefined ? {} : { offeringRef }) }
+    return { businessRef, ...(operationRef === undefined ? {} : { operationRef }) }
+  }
+  if (subcommand === 'offboarding') {
+    const businessRef = args[1]
+    if (businessRef === undefined || args.length > 2) {
+      throw usageFailure('supply offboarding', 'supply-offboarding-usage')
+    }
+    return { businessRef }
   }
   if (subcommand === 'earnings') {
     const currency = args[1]
@@ -135,34 +143,29 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
     line(`${result.operations.length} Operation${result.operations.length === 1 ? '' : 's'}`)
     for (const operation of result.operations) {
       if (!isRecord(operation)) continue
-      const lifecycle = isRecord(operation.lifecycle) ? operation.lifecycle : undefined
-      const live = isRecord(operation.live) ? operation.live : undefined
-      const publication = isRecord(operation.publication) ? operation.publication : undefined
+      const source = isRecord(operation.source) ? operation.source : undefined
+      const routeability = isRecord(operation.routeability) ? operation.routeability : undefined
+      const health = isRecord(operation.health) ? operation.health : undefined
+      const delivery = isRecord(health?.delivery) ? health.delivery : undefined
+      const usefulOutcome = isRecord(health?.usefulOutcome) ? health.usefulOutcome : undefined
+      const continuation = isRecord(operation.continuation) ? operation.continuation : undefined
+      const ownerHandoff = isRecord(operation.ownerHandoff) ? operation.ownerHandoff : undefined
       table([
-        ['offering', String(operation.offeringRef ?? '')],
-        ['name', String(operation.name ?? '')],
-        ['catalog', String(operation.catalogStatus ?? '')],
-        ['lifecycle', String(lifecycle?.state ?? '')],
-        ['ready', isRecord(operation.readiness) ? String(operation.readiness.outcome ?? '') : ''],
-        ['live', live?.available === true ? 'yes' : 'no'],
+        ['operation', String(operation.operationRef ?? '')],
+        ['state', String(operation.state ?? '')],
+        ['source', String(source?.kind ?? '')],
+        ['routeable', routeability?.available === true ? 'yes' : 'no'],
+        ['connection', String(health?.connection ?? '')],
+        ['validation', String(health?.validation ?? '')],
+        ['delivery', delivery?.kind === 'observed'
+          ? `${String(delivery.deliveredCount ?? 0)}/${String(delivery.sampleSize ?? 0)} delivered; ${String(delivery.notDeliveredCount ?? 0)} not delivered; ${String(delivery.unknownCount ?? 0)} unknown`
+          : String(delivery?.kind ?? 'unobserved')],
+        ['Qualified Use', usefulOutcome?.kind === 'observed'
+          ? String(usefulOutcome.qualifiedUseCount ?? 0)
+          : String(usefulOutcome?.kind ?? 'unobserved')],
       ])
-      if (
-        typeof operation.offeringRef === 'string'
-        && (operation.catalogStatus === 'draft' || operation.catalogStatus === 'published' || operation.catalogStatus === 'paused' || operation.catalogStatus === 'retired')
-        && (lifecycle?.state === 'inactive' || lifecycle?.state === 'active' || lifecycle?.state === 'withdrawn' || lifecycle?.state === 'incompatible')
-      ) {
-        const continuation = supplierContinuationForCli({
-          offeringRef: operation.offeringRef,
-          catalogStatus: operation.catalogStatus,
-          lifecycleState: lifecycle.state,
-          liveAvailable: live?.available === true,
-          ...(publication?.state === 'current' || publication?.state === 'withdrawn' || publication?.state === 'superseded' || publication?.state === 'incompatible'
-            ? { publicationState: publication.state }
-            : {}),
-          ...(typeof publication?.operationRef === 'string' ? { operationRef: publication.operationRef } : {}),
-        })
-        table([['next', continuation.command ?? continuation.href ?? continuation.label]])
-      }
+      if (typeof continuation?.action === 'string') table([['next', continuation.action]])
+      else if (typeof ownerHandoff?.cta === 'string') table([['next', ownerHandoff.cta]])
       line()
     }
     return
@@ -196,6 +199,18 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
       ['available', result.connection.available === true ? 'yes' : 'no'],
       ['generation', String(result.connection.authorityGeneration ?? '')],
       ['authority digest', String(result.connection.authorityDigest ?? '')],
+    ])
+    return
+  }
+  if (result.kind === 'available' && isRecord(result.status)) {
+    const blockers = Array.isArray(result.status.blockerCodes)
+      ? result.status.blockerCodes.join(', ')
+      : ''
+    table([
+      ['case', String(result.status.caseRef ?? '')],
+      ['state', String(result.status.state ?? '')],
+      ['new work frozen', result.status.routeabilityFrozen === true ? 'yes' : 'no'],
+      ['blockers', blockers === '' ? 'none' : blockers],
     ])
     return
   }

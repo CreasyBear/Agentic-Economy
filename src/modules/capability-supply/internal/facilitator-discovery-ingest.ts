@@ -215,7 +215,7 @@ export function decideFacilitatorDiscoveryItem(
         presentation: {
           label: offeringLabel,
           summary: offeringSummary,
-          price: { kind: "on_request" },
+          price: { kind: "fixed", amount: providerPrice },
           materialTerms: [],
           commercialRelationship: {
             kind: "none",

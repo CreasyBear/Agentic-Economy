@@ -20,6 +20,7 @@ export type {
   ProviderConnectionLifecycle,
   ProviderConnectionPublicProjection,
   ProviderConnectionRefusalCode,
+  ProviderConnectionSourceAuthentication,
   ReauthorizeProviderConnectionCommand,
   RecordProviderConnectionCleanupResultCommand,
 } from './internal/provider-connection/types'

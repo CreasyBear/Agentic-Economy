@@ -12,15 +12,14 @@ import {
 import { resolveOpenApiCredential } from './credentials'
 import { resolveOpenApiRecord, validOpenApiPath, type OpenApiRecordResolution } from './document'
 import { analyzeOpenApiOperation, defaultOpenApiParameterExclusions } from './operation'
+import { validateOpenApiDocument, type ValidOpenApiDocument } from './validation'
 
 const OPENAPI_PREFLIGHT_METHODS = [
   'get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace',
 ] as const
 const MAX_OPENAPI_PREFLIGHT_OPERATIONS = 128
 
-type PreflightDocument = Readonly<Record<string, unknown>> & Readonly<{
-  paths: Readonly<Record<string, unknown>>
-}>
+type PreflightDocument = ValidOpenApiDocument
 
 export async function preflightOpenApiHttpDocument(
   document: unknown,
@@ -28,7 +27,7 @@ export async function preflightOpenApiHttpDocument(
 ): Promise<OpenApiDocumentPreflightResult> {
   const bounded = inspectSource(document)
   if (bounded.kind === 'refused') return bounded
-  const admitted = admitPreflightDocument(document)
+  const admitted = await admitPreflightDocument(document)
   if (admitted.kind === 'refused') return admitted
   const outcomes: OpenApiOperationPreflightOutcome[] = []
   const globalUnsafeReason = unsafeDocumentReason(admitted.document)
@@ -41,18 +40,16 @@ export async function preflightOpenApiHttpDocument(
   return { kind: 'preflighted', sourceDigest: bounded.digest, outcomes, truncated }
 }
 
-function admitPreflightDocument(
+async function admitPreflightDocument(
   document: unknown,
-): Readonly<{ kind: 'admitted'; document: PreflightDocument }> | Readonly<{
+): Promise<Readonly<{ kind: 'admitted'; document: PreflightDocument }> | Readonly<{
   kind: 'refused'
   reason: 'source_invalid' | 'source_version_unsupported' | 'schema_missing'
-}> {
-  if (!isRecord(document)) return { kind: 'refused', reason: 'source_invalid' }
-  if (typeof document.openapi !== 'string' || !document.openapi.startsWith('3.1.')) {
-    return { kind: 'refused', reason: 'source_version_unsupported' }
-  }
-  if (!isRecord(document.paths)) return { kind: 'refused', reason: 'schema_missing' }
-  return { kind: 'admitted', document: document as PreflightDocument }
+}>> {
+  const validated = await validateOpenApiDocument(document)
+  return validated.kind === 'valid'
+    ? { kind: 'admitted', document: validated.document }
+    : validated
 }
 
 function unsafeDocumentReason(document: PreflightDocument): CapabilityPublicationImportRefusal | undefined {

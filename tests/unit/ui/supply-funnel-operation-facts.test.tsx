@@ -17,7 +17,7 @@ describe("owner operation control facts", () => {
     expect(screen.getByText(`openapi_http · source:one`)).toBeDefined();
     expect(screen.getAllByText(sourceHash).length).toBeGreaterThan(0);
     expect(screen.getByText("pricing:v3 · fixed_aud")).toBeDefined();
-    expect(screen.getByText("AUD 1.25 · units 125 · exponent 2")).toBeDefined();
+    expect(screen.getByText("AUD 1.250000 · units 1250000 · exponent 6")).toBeDefined();
     expect(screen.getByText(priceDigest)).toBeDefined();
     expect(screen.getByText("evidence:readiness")).toBeDefined();
     expect(screen.getByText("available")).toBeDefined();

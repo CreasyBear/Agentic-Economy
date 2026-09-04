@@ -354,7 +354,7 @@ function keyedDocument(location: 'query' | 'header', name: string) {
 
 function bearerDocument() {
   return {
-    openapi: '3.1.0', servers: [{ url: 'https://provider.example' }], security: [{ bearer: [] }],
+    openapi: '3.1.0', info: { title: 'Bearer provider', version: '1' }, servers: [{ url: 'https://provider.example' }], security: [{ bearer: [] }],
     components: { securitySchemes: { bearer: { type: 'http', scheme: 'bearer' } } },
     paths: {
       '/search': { post: {
@@ -368,7 +368,7 @@ function bearerDocument() {
 function securityDocument(security: unknown, schemes: Record<string, unknown>) {
   const getSecurity = Array.isArray(security) ? security : [security]
   return {
-    openapi: '3.1.0', servers: [{ url: 'https://provider.example' }], security: getSecurity,
+    openapi: '3.1.0', info: { title: 'Credential provider', version: '1' }, servers: [{ url: 'https://provider.example' }], security: getSecurity,
     components: { securitySchemes: schemes },
     paths: {
       '/lookup': { get: {

@@ -56,6 +56,7 @@ export type GraphPublicationRow = CapabilityPublicationLifecycleRow & Readonly<{
   sourceDigest: string
   publisherRef?: string
   authorityMode?: 'provider_owned' | 'observed_external' | 'ae_curated_external' | 'third_party_gateway'
+  sourceAuthorityState?: 'verified' | 'review_required'
   registrationEvidenceRefs: readonly string[]
   readinessEvidenceRefs: readonly string[]
 }>

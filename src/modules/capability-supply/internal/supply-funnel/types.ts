@@ -46,6 +46,7 @@ export type SupplyFunnelRefusal =
   | "health_unhealthy"
   | "health_stale"
   | "eligibility_integrity_failure"
+  | "provider_authority_unverified"
   | "withdrawn"
   | "incompatible_revision"
   | "invalid_offering"
@@ -296,6 +297,32 @@ export type OwnerSupplyReadbackSource = Readonly<{
   digest: string;
 }>;
 
+export type OwnerSupplyOperationEvidence = Readonly<{
+  windowStartAt: number;
+  windowEndAt: number;
+  delivery:
+    | Readonly<{ kind: "unobserved"; provenance: "canonical_call_receipts" }>
+    | Readonly<{ kind: "unavailable"; reason: "window_too_large"; provenance: "canonical_call_receipts" }>
+    | Readonly<{
+        kind: "observed";
+        deliveredCount: number;
+        notDeliveredCount: number;
+        unknownCount: number;
+        sampleSize: number;
+        lastObservedAt: number;
+        provenance: "canonical_call_receipts";
+      }>;
+  usefulOutcome:
+    | Readonly<{ kind: "unobserved"; provenance: "qualified_use_receipts" }>
+    | Readonly<{ kind: "unavailable"; reason: "window_too_large"; provenance: "qualified_use_receipts" }>
+    | Readonly<{
+        kind: "observed";
+        qualifiedUseCount: number;
+        lastObservedAt: number;
+        provenance: "qualified_use_receipts";
+      }>;
+}>;
+
 export type OwnerSupplyOfferingReadback = Readonly<{
   offeringRef: string;
   revision: number;
@@ -417,6 +444,7 @@ export type OwnerSupplyOfferingReadback = Readonly<{
   currentStep: SupplyFunnelStep;
   stepStates: Readonly<Record<SupplyFunnelStep, SupplyFunnelStepState>>;
   actionableReason?: SupplyFunnelRefusal;
+  operationEvidence?: OwnerSupplyOperationEvidence;
   accessPaths: readonly Readonly<{
     accessPathRef: string;
     offeringSourceHash: string;

@@ -1,5 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { normalizePricingConfig, pricingConfigDigest } from '@/modules/money/public'
+import { normalizePricingConfig, pricingConfigDigest, type PricingConfig } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   capabilityOperationId,
@@ -29,6 +29,15 @@ export type RefreshCapabilityCommandInput = RegistrationContext & Readonly<{
   publicationMetadata?: CapabilityPublicationProvenance
 }>
 
+function refreshedPricingConfig(
+  current: PricingConfig,
+  offering: CapabilityPublicationOfferingDraft | undefined,
+): PricingConfig | undefined {
+  if (offering === undefined) return current
+  if (current.kind === 'managed_x402' && offering.presentation.price.kind === 'on_request') return current
+  return pricingConfigForOffering(offering)
+}
+
 export async function refreshCapabilityCommand(
   input: RefreshCapabilityCommandInput,
   ports: PublicationCommandPorts,
@@ -52,9 +61,8 @@ export async function refreshCapabilityCommand(
   if (pricing.kind === 'invalid' || pricingConfigDigest(pricing.config) !== priceDigest) {
     return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
   }
-  const nextPricingConfig = input.offering === undefined
-    ? pricing.config
-    : pricingConfigForOffering(input.offering)
+  const currentPricing = pricing.config
+  const nextPricingConfig = refreshedPricingConfig(currentPricing, input.offering)
   if (nextPricingConfig === undefined) {
     return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
   }
@@ -160,6 +168,7 @@ export async function refreshCapabilityCommand(
       sourceDescriptorJson: material.sourceDescriptorJson,
       sourceRevision: material.sourceRevision,
       sourceDigest: material.sourceDigest,
+      sourceRouteRef: material.sourceRouteRef,
       pricingConfigJson: material.pricingConfigJson,
       priceDigest: material.priceDigest,
       publisherRef: publicationMetadata.publisherRef,
@@ -250,6 +259,7 @@ export async function refreshCapabilityCommand(
     sourceDescriptorJson: material.sourceDescriptorJson,
     sourceRevision: material.sourceRevision,
     sourceDigest: material.sourceDigest,
+    sourceRouteRef: material.sourceRouteRef,
     pricingConfigJson: material.pricingConfigJson,
     priceDigest: material.priceDigest,
     publisherRef: publicationMetadata.publisherRef,

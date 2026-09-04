@@ -17,6 +17,8 @@ const OWNER_SUPPLY_ACCESS_PATHS_READ_CAP = 100
 const OWNER_SUPPLY_PUBLICATIONS_READ_CAP = 100
 const OWNER_SUPPLY_CAPABILITY_OFFERINGS_READ_CAP = 50
 const OWNER_SUPPLY_EVENTS_READ_CAP = 50
+const PROVIDER_EVIDENCE_WINDOW_MS = 30 * 24 * 60 * 60_000
+const PROVIDER_EVIDENCE_READ_CAP = 10_000
 
 import type { OwnerSupplyFunnelResult } from './capabilitySupplyOwnerFunnelProjection/contracts'
 import {
@@ -41,6 +43,58 @@ type OwnerSupplyAvailable = Extract<
 >
 type OwnerSupplyOffering = OwnerSupplyAvailable['offerings'][number]
 type OwnerSupplyPublication = NonNullable<OwnerSupplyOffering['publication']>
+type OwnerOperationEvidence = NonNullable<OwnerSupplyOffering['operationEvidence']>
+
+function projectOperationEvidence(input: Readonly<{
+  operationRef: string
+  windowStartAt: number
+  windowEndAt: number
+  callsOverflow: boolean
+  qualifiedUsesOverflow: boolean
+  calls: readonly Doc<'capabilityOperationCallProjections'>[]
+  qualifiedUses: readonly Doc<'qualifiedUseReceipts'>[]
+}>): OwnerOperationEvidence {
+  const operationCalls = input.calls.filter((row) => row.operationRef === input.operationRef)
+  const operationQualifiedUses = input.qualifiedUses.filter((row) => row.operationRef === input.operationRef)
+  const delivery: OwnerOperationEvidence['delivery'] = input.callsOverflow
+    ? { kind: 'unavailable', reason: 'window_too_large', provenance: 'canonical_call_receipts' }
+    : operationCalls.length === 0
+      ? { kind: 'unobserved', provenance: 'canonical_call_receipts' }
+      : {
+          kind: 'observed',
+          deliveredCount: operationCalls.filter((row) => row.deliveryState === 'delivered').length,
+          notDeliveredCount: operationCalls.filter((row) => row.deliveryState === 'not_delivered').length,
+          unknownCount: operationCalls.filter((row) => row.deliveryState === 'unknown').length,
+          sampleSize: operationCalls.length,
+          lastObservedAt: Math.max(...operationCalls.map((row) => row.updatedAt)),
+          provenance: 'canonical_call_receipts',
+        }
+  const usefulOutcome: OwnerOperationEvidence['usefulOutcome'] = input.qualifiedUsesOverflow
+    ? { kind: 'unavailable', reason: 'window_too_large', provenance: 'qualified_use_receipts' }
+    : operationQualifiedUses.length === 0
+      ? { kind: 'unobserved', provenance: 'qualified_use_receipts' }
+      : {
+          kind: 'observed',
+          qualifiedUseCount: operationQualifiedUses.length,
+          lastObservedAt: Math.max(...operationQualifiedUses.map((row) => row.qualifiedAt)),
+          provenance: 'qualified_use_receipts',
+        }
+  return {
+    windowStartAt: input.windowStartAt,
+    windowEndAt: input.windowEndAt,
+    delivery,
+    usefulOutcome,
+  }
+}
+
+function providerTestCompleted(
+  sourceKind: OwnerSupplyPublication['source']['kind'] | undefined,
+  x402ChallengeObserved: boolean,
+  testObserved: boolean,
+): boolean {
+  if (sourceKind === 'x402') return x402ChallengeObserved
+  return testObserved
+}
 
 async function requestedOwnerSourceMaterial(
   db: QueryCtx['db'] | MutationCtx['db'],
@@ -128,6 +182,8 @@ export async function readOwnerSupplyFunnelProjection(
   business: Doc<'businesses'>,
 ): Promise<OwnerSupplyFunnelResult> {
     const db = ctx.db
+    const now = Date.now()
+    const evidenceWindowStartAt = now - PROVIDER_EVIDENCE_WINDOW_MS
     // `businessOfferings.status` is draft|published|paused|retired — there is no
     // 'active'. Filtering on it returned nothing for every owner, so the funnel
     // home always read "No services yet" while /owner/offerings listed the same
@@ -138,6 +194,8 @@ export async function readOwnerSupplyFunnelProjection(
       accessPaths,
       publications,
       capabilityOfferings,
+      providerCallRows,
+      qualifiedUseRows,
     ] = await Promise.all([
       db
         .query('businessOfferings')
@@ -172,6 +230,18 @@ export async function readOwnerSupplyFunnelProjection(
           q.eq('businessId', business._id),
         )
         .take(OWNER_SUPPLY_CAPABILITY_OFFERINGS_READ_CAP + 1),
+      db
+        .query('capabilityOperationCallProjections')
+        .withIndex('by_providerRef_and_createdAt', (q) =>
+          q.eq('providerRef', String(business._id)).gte('createdAt', evidenceWindowStartAt),
+        )
+        .take(PROVIDER_EVIDENCE_READ_CAP + 1),
+      db
+        .query('qualifiedUseReceipts')
+        .withIndex('by_businessId_and_qualifiedAt', (q) =>
+          q.eq('businessId', String(business._id)).gte('qualifiedAt', evidenceWindowStartAt),
+        )
+        .take(PROVIDER_EVIDENCE_READ_CAP + 1),
     ])
     if (
       offeringRows.length > OWNER_SUPPLY_OFFERINGS_READ_CAP
@@ -285,7 +355,10 @@ export async function readOwnerSupplyFunnelProjection(
         publicationBindings[index],
       ]),
     )
-    const now = Date.now()
+    const providerCallsOverflow = providerCallRows.length > PROVIDER_EVIDENCE_READ_CAP
+    const qualifiedUsesOverflow = qualifiedUseRows.length > PROVIDER_EVIDENCE_READ_CAP
+    const boundedProviderCalls = providerCallRows.slice(0, PROVIDER_EVIDENCE_READ_CAP)
+    const boundedQualifiedUses = qualifiedUseRows.slice(0, PROVIDER_EVIDENCE_READ_CAP)
     const offerings: OwnerSupplyAvailable['offerings'] = await Promise.all(
       offeringRows.map(async (offering): Promise<OwnerSupplyOffering> => {
         const join = offeringJoins.get(offering.offeringRef)
@@ -392,10 +465,11 @@ export async function readOwnerSupplyFunnelProjection(
             'probe:x402_payment_required_valid',
           ),
         ])
-        const testCompleted =
-          publicationDetails?.source.kind === 'x402'
-            ? x402ChallengeObserved
-            : testObserved
+        const testCompleted = providerTestCompleted(
+          publicationDetails?.source.kind,
+          x402ChallengeObserved,
+          testObserved,
+        )
         const { currentStep, stepStates } = ownerSupplyStepProgress({
           hasRevision: revision !== undefined,
           hasPublication: publication !== undefined,
@@ -415,7 +489,7 @@ export async function readOwnerSupplyFunnelProjection(
           offeringRef: offering.offeringRef,
           publication,
         })
-        return ownerSupplyOfferingResult({
+        const baseOffering = ownerSupplyOfferingResult({
           offering,
           revision,
           paths,
@@ -433,6 +507,20 @@ export async function readOwnerSupplyFunnelProjection(
           sourceMaterial,
           now,
         })
+        const operationRef = publication?.operationRef
+        if (operationRef === undefined) return baseOffering
+        return {
+          ...baseOffering,
+          operationEvidence: projectOperationEvidence({
+            operationRef,
+            windowStartAt: evidenceWindowStartAt,
+            windowEndAt: now,
+            callsOverflow: providerCallsOverflow,
+            qualifiedUsesOverflow,
+            calls: boundedProviderCalls,
+            qualifiedUses: boundedQualifiedUses,
+          }),
+        }
       }),
     )
     const fillEvents = events.filter(

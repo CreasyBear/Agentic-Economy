@@ -33,6 +33,7 @@ const OWNER_CONNECTION_SCOPES = Object.freeze([
   'connection:install',
   'connection:refresh',
   'connection:revoke',
+  'secret:rotate',
 ] as const)
 
 const OWNER_CONNECTION_GRANT_RENEWAL_MS = 30 * 24 * 60 * 60 * 1_000

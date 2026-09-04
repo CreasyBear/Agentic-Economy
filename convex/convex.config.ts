@@ -4,6 +4,7 @@ import { defineApp } from 'convex/server'
 import { v } from 'convex/values'
 import rateLimiter from '@convex-dev/rate-limiter/convex.config'
 import workpool from '@convex-dev/workpool/convex.config'
+import workflow from '@convex-dev/workflow/convex.config'
 
 const app = defineApp({
   env: {
@@ -34,10 +35,15 @@ const app = defineApp({
     AE_X402_CUSTODY_MAX_ATOMIC: v.optional(v.string()),
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: v.optional(v.string()),
     AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: v.optional(v.string()),
+    AE_PACKAGE5_WRITES_ENABLED: v.optional(v.string()),
+    AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: v.optional(v.string()),
+    AE_SUPPLY_MCP_OAUTH_ENABLED: v.optional(v.string()),
+    AE_PROVIDER_OFFBOARDING_ENABLED: v.optional(v.string()),
   },
 })
 
 app.use(workpool)
+app.use(workflow)
 app.use(rateLimiter)
 app.use(agent)
 app.use(aggregate, { name: 'ownerActivationByStage' })

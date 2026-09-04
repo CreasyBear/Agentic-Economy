@@ -27,9 +27,9 @@ describe('api-catalog route handler', () => {
     const anchors = body.linkset.map((entry: { anchor: string }) => entry.anchor)
     expect(anchors).toEqual([
       'https://ae.example/api/v1/market-operations/search',
-      'https://ae.example/api/v1/market-operations/detail',
+      'https://ae.example/api/v1/market-operations/list',
+      'https://ae.example/api/v1/market-operations/describe',
       'https://ae.example/api/v1/market-operations/compare',
-      'https://ae.example/api/v1/market-operations/inspect-plan',
       'https://ae.example/api/v1/operations/call',
       'https://ae.example/mcp',
     ])

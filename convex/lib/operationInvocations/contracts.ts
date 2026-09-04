@@ -281,6 +281,7 @@ export const reservationValue = v.object({
   invocationRef: v.string(),
 })
 export const reserveRefusalCode = v.union(
+  v.literal('operation_not_ready'),
   v.literal('grant_not_found'),
   v.literal('grant_revoked'),
   v.literal('grant_expired'),

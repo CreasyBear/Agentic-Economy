@@ -42,6 +42,8 @@ import type { Environment } from './internal/payout-http-runtime'
 
 export {
   beginAccountFundingThroughSource,
+  fundingEvidence,
+  fundingPaymentRequest,
   readAccountFundingThroughSource,
 } from './internal/account-funding-http'
 export {
@@ -49,12 +51,14 @@ export {
   validatePaymentBinding,
 } from './internal/payment-binding'
 export type {
+  AccountFundingCommandView,
   AccountFundingBeginInput,
   AccountFundingBalance,
   AccountFundingOutcomeUnknownResult,
   AccountFundingReadInput,
   AccountFundingServerRuntime,
   AccountFundingStartResult,
+  FundingProviderEvidence,
 } from './internal/account-funding-http'
 export type {
   PaymentBinding,

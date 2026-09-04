@@ -1,4 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server'
+import { z } from 'zod'
 
 import {
   connectOwnerX402,
@@ -11,8 +13,6 @@ import {
   readOwnerProviderConnections,
   readOwnerProviderEarnings,
   reconnectOwnerProviderConnection,
-  retryOwnerProviderConnectionCleanup,
-  retryOwnerProviderConnectionCleanupInputSchema,
   revokeOwnerProviderConnection,
 } from "./internal/supply-funnel/connections";
 import {
@@ -38,7 +38,32 @@ import {
   preflightOwnerCapabilityInputSchema,
   preflightOwnerOpenApiDocument,
 } from "./internal/supply-funnel/publication-admit";
+import {
+  ownerSourcePreviewInputSchema,
+  ownerSourceConnectionInputSchema,
+  ownerSourceDraftInputSchema,
+  ownerSourcePublishInputSchema,
+  previewOwnerSupplySource,
+  startOwnerSupplySourceConnection,
+  resumeOwnerSupplySourceDraft,
+  saveOwnerSupplySourceDraft,
+  publishOwnerSupplySource,
+} from './internal/supply-funnel/source-first-owner'
+import {
+  completeOwnerMcpProviderConnection,
+  completeOwnerMcpProviderConnectionInputSchema,
+  completeOwnerHttpProviderConnection,
+  completeOwnerHttpProviderConnectionInputSchema,
+  ownerProviderConnectionAttemptInputSchema,
+  readOwnerProviderConnectionAttempt,
+  startOwnerMcpProviderConnection,
+  startOwnerMcpProviderConnectionInputSchema,
+} from './internal/supply-funnel/provider-connection-handoff'
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 
+export type {
+  OwnerProviderConnectionAttemptReadback,
+} from './internal/supply-funnel/provider-connection-handoff'
 export type {
   OwnerProviderConnection,
   OwnerProviderConnectionCommandResult,
@@ -95,6 +120,42 @@ export const readOwnerProviderConnectionsServer = createServerFn().handler(
   readOwnerProviderConnections,
 );
 
+export const readOwnerProviderConnectionAttemptServer = createServerFn()
+  .validator((data) => ownerProviderConnectionAttemptInputSchema.parse(data))
+  .handler(async (input) => {
+    setResponseHeader('cache-control', 'no-store')
+    return await readOwnerProviderConnectionAttempt(input)
+  })
+
+export const completeOwnerHttpProviderConnectionServer = createServerFn({ method: 'POST' })
+  .validator((data) => completeOwnerHttpProviderConnectionInputSchema.parse(data))
+  .handler(async (input) => {
+    setResponseHeader('cache-control', 'no-store')
+    return await completeOwnerHttpProviderConnection(input)
+  })
+
+export const startOwnerMcpProviderConnectionServer = createServerFn({ method: 'POST' })
+  .validator((data) => startOwnerMcpProviderConnectionInputSchema
+    .omit({ callbackUrl: true })
+    .parse(data))
+  .handler(async (input) => {
+    setResponseHeader('cache-control', 'no-store')
+    const baseUrl = resolveCanonicalBaseUrl(getRequest()).baseUrl
+    const callback = new URL('/owner/supply/connections/oauth/callback', baseUrl)
+    callback.searchParams.set('attempt', input.data.attemptRef)
+    return await startOwnerMcpProviderConnection({
+      ...input,
+      data: { ...input.data, callbackUrl: callback.toString() },
+    })
+  })
+
+export const completeOwnerMcpProviderConnectionServer = createServerFn({ method: 'POST' })
+  .validator((data) => completeOwnerMcpProviderConnectionInputSchema.parse(data))
+  .handler(async (input) => {
+    setResponseHeader('cache-control', 'no-store')
+    return await completeOwnerMcpProviderConnection(input)
+  })
+
 export const connectOwnerX402Server = createServerFn({ method: "POST" })
   .validator((data) => connectOwnerX402InputSchema.parse(data))
   .handler(connectOwnerX402);
@@ -119,17 +180,32 @@ export const revokeOwnerProviderConnectionServer = createServerFn({
   .validator((data) => ownerConnectionCommandSchema.parse(data))
   .handler(revokeOwnerProviderConnection);
 
-export const retryOwnerProviderConnectionCleanupServer = createServerFn({
-  method: "POST",
-})
-  .validator((data) =>
-    retryOwnerProviderConnectionCleanupInputSchema.parse(data),
-  )
-  .handler(retryOwnerProviderConnectionCleanup);
-
 export const readOwnerProviderEarningsServer = createServerFn().handler(
   readOwnerProviderEarnings,
 );
+
+export const previewOwnerSupplySourceServer = createServerFn({ method: 'POST' })
+  .validator((data) => ownerSourcePreviewInputSchema.parse(data))
+  .handler(previewOwnerSupplySource)
+
+export const startOwnerSupplySourceConnectionServer = createServerFn({ method: 'POST' })
+  .validator((data) => ownerSourceConnectionInputSchema.parse(data))
+  .handler(startOwnerSupplySourceConnection)
+
+export const resumeOwnerSupplySourceDraftServer = createServerFn()
+  .validator((data) => z.strictObject({
+    businessId: z.string().trim().min(1),
+    connectionRef: z.string().trim().min(1).max(300).optional(),
+  }).parse(data))
+  .handler(resumeOwnerSupplySourceDraft)
+
+export const saveOwnerSupplySourceDraftServer = createServerFn({ method: 'POST' })
+  .validator((data) => ownerSourceDraftInputSchema.parse(data))
+  .handler(saveOwnerSupplySourceDraft)
+
+export const publishOwnerSupplySourceServer = createServerFn({ method: 'POST' })
+  .validator((data) => ownerSourcePublishInputSchema.parse(data))
+  .handler(publishOwnerSupplySource)
 
 export const preflightOwnerOpenApiDocumentServer = createServerFn({
   method: "POST",

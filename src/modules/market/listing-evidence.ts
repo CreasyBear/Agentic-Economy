@@ -49,6 +49,7 @@ export type MarketListingEvidenceSource = Readonly<{
   ratingCount: number;
   ratingSum: number;
   completedInvocations: number;
+  qualifiedUses?: number;
   latencySamplesMs: readonly number[];
 }>;
 

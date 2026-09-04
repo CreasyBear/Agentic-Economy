@@ -8,8 +8,10 @@ import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import {
   convexModules as modules,
+  ownerAdmin,
   publishedBusinessOwner,
 } from '../helpers/convex-fixtures'
+import { withSourceWrite } from '../helpers/source-write-admission'
 import {
   capabilityPublicationInput,
   contractMetadata,
@@ -21,6 +23,81 @@ import {
 } from './capability-publication-harness'
 
 describe('capability publication publish', () => {
+  it('keeps public source authority under review until an exact admin decision', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await publishedBusinessOwner(backend, 'authority-review')
+    await seedCatalogOffering(backend, businessId, 'authority-review')
+    await registerProviderConnection(backend, businessId, 'authority-review')
+    const preparedArgs = await preparedPublicationArgs(
+      backend,
+      capabilityPublicationInput(businessId, 'authority-review'),
+    )
+    const { sourceWrite: _sourceWrite, sourceWriteRequest: _sourceWriteRequest, ...unsignedPreparedArgs } = preparedArgs
+    const publishCommand = await withSourceWrite('catalog_publish', {
+      ...unsignedPreparedArgs,
+      prepared: { ...preparedArgs.prepared, sourceAuthorityState: 'review_required' as const },
+    })
+    const published = await owner.mutation(api.capabilitySupply.publishPreparedCapability, publishCommand)
+    if (published.kind === 'refused') throw new Error(`authority_review_publish_failed:${published.reason}`)
+    const publicationBefore = await backend.run((ctx) => ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => query
+        .eq('publicationRef', published.publicationRef)
+        .eq('revision', published.publicationRevision))
+      .unique())
+    if (publicationBefore === null) throw new Error('authority_review_publication_missing')
+    const authorityReviewInput = {
+      publicationRef: published.publicationRef,
+      expectedRevision: published.publicationRevision,
+      expectedSourceDigest: publicationBefore.sourceDigest,
+      evidenceRefs: ['review:source-control:verified'],
+      correlationId: 'authority-review:verify',
+    }
+    const deniedCommand = await withSourceWrite('admin_operator', {
+      ...authorityReviewInput,
+      operationKey: 'authority-review:unauthorized',
+    })
+
+    await expect(owner.mutation(api.capabilitySupply.verifyCapabilitySourceAuthority, deniedCommand))
+      .resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
+
+    const admin = await ownerAdmin(backend, 'user_authority_review_admin')
+    const adminCommand = await withSourceWrite('admin_operator', {
+      ...authorityReviewInput,
+      operationKey: 'authority-review:verify',
+    })
+    const verified = await admin.mutation(api.capabilitySupply.verifyCapabilitySourceAuthority, adminCommand)
+    if (verified.kind === 'refused') throw new Error(`authority_review_verify_failed:${verified.reason}`)
+    expect(verified).toMatchObject({
+        kind: 'verified',
+        publicationRef: published.publicationRef,
+        revision: published.publicationRevision,
+        operationRef: published.operationRef,
+        sourceAuthorityState: 'verified',
+      })
+    const persisted = await backend.run(async (ctx) => ({
+      publication: await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => query
+          .eq('publicationRef', published.publicationRef)
+          .eq('revision', published.publicationRevision))
+        .unique(),
+      admissionCase: await ctx.db.query('capabilitySupplyAdmissionCases')
+        .withIndex('by_publicationRef_and_revision', (query) => query
+          .eq('publicationRef', published.publicationRef)
+          .eq('publicationRevision', published.publicationRevision))
+        .unique(),
+    }))
+    expect(persisted.publication).toMatchObject({
+      sourceAuthorityState: 'verified',
+      registrationEvidenceRefs: expect.arrayContaining(['review:source-control:verified']),
+    })
+    expect(persisted.admissionCase).toMatchObject({
+      sourceAuthorityState: 'verified',
+      state: 'under_review',
+      terminalDecision: 'pending',
+      blockerRefs: [],
+    })
+  })
+
   it('lets the source-bound business owner publish one canonical inactive AE capability', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(
@@ -141,6 +218,7 @@ describe('capability publication publish', () => {
       contracts: await ctx.db.query('capabilityContractDocuments').collect(),
       offerings: await ctx.db.query('capabilityOfferings').collect(),
       bindings: await ctx.db.query('capabilityTransportBindings').collect(),
+      admissionCases: await ctx.db.query('capabilitySupplyAdmissionCases').collect(),
     }))
     expect(persisted).toMatchObject({
       contracts: [
@@ -159,6 +237,20 @@ describe('capability publication publish', () => {
           offeringId: published.offeringId,
           admission: 'admitted',
           conformance: 'conformant',
+        },
+      ],
+      admissionCases: [
+        {
+          businessId,
+          operationRef: published.operationRef,
+          operationRevision: 1,
+          publicationRef: published.publicationRef,
+          publicationRevision: 1,
+          state: 'submitted',
+          terminalDecision: 'pending',
+          scheduledReadbackRefs: [
+            `capability-readiness:${published.publicationRef}:1`,
+          ],
         },
       ],
     })

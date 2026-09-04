@@ -78,6 +78,33 @@ describe("market listing evidence Convex seam", () => {
     });
   });
 
+  it("attributes Qualified Use evidence to the exact Operation only", async () => {
+    const backend = backendWithAggregates();
+    const otherOperationRef = `operation:v1:${"b".repeat(64)}`;
+
+    await backend.run(async (ctx) => {
+      await recordMarketEvidenceFact(
+        ctx,
+        "ae_qualified_use",
+        "qualified-use:exact-operation",
+        2_000,
+        { operationRef },
+      );
+    });
+
+    const evidence = await backend.query(api.marketListingEvidence.read, {
+      operationRefs: [operationRef, otherOperationRef],
+      since: 1_000,
+    });
+    expect(evidence.map((item) => ({
+      operationRef: item.operationRef,
+      qualifiedUses: item.qualifiedUses,
+    }))).toEqual([
+      { operationRef, qualifiedUses: 1 },
+      { operationRef: otherOperationRef, qualifiedUses: 0 },
+    ]);
+  });
+
   it("rejects anonymous ratings and invalid taxonomy assignments", async () => {
     const backend = backendWithAggregates();
     await expect(

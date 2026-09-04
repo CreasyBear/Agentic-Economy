@@ -8,6 +8,7 @@ import {
   readOwnerOperationsLifecycleServer,
   readOwnerOperationsPayoutSummaryServer,
   readOwnerOperationsPublicStatusServer,
+  readOwnerProviderOffboardingServer,
 } from '@/components/ae/offerings/owner-operations.functions'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
@@ -26,6 +27,7 @@ export const Route = createFileRoute('/_operator/owner/offerings')({
       connections: readOwnerOperationsConnectionsSummaryServer().catch(() => ({ kind: 'unavailable' as const })),
       payouts: readOwnerOperationsPayoutSummaryServer().catch(() => ({ kind: 'unavailable' as const })),
       publicStatus: readOwnerOperationsPublicStatusServer().catch(() => ({ kind: 'unavailable' as const })),
+      offboarding: readOwnerProviderOffboardingServer().catch(() => ({ kind: 'unavailable' as const })),
     }
   },
   head: () => ({ meta: [{ title: 'Operations | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),

@@ -23,6 +23,7 @@ import {
 } from './credentials'
 import { ensureTrailingSlash, resolveOpenApiRecord, validOpenApiPath } from './document'
 import { analyzeOpenApiOperation, type OpenApiOperationAnalysis } from './operation'
+import { validateOpenApiDocument } from './validation'
 
 type OpenApiImportInput = Extract<CapabilityPublicationImport, { kind: 'openapi_http' }>
 type Refusal = Readonly<{ kind: 'refused'; reason: CapabilityPublicationImportRefusal }>
@@ -42,7 +43,7 @@ export async function importOpenApiHttpCapability(
   input: OpenApiImportInput,
   derefSchema?: SchemaDereferencer,
 ): Promise<CapabilityPublicationImportResult> {
-  const admittedDocument = admitImportDocument(input)
+  const admittedDocument = await admitImportDocument(input)
   if (admittedDocument.kind === 'refused') return admittedDocument
   const selected = await resolveSelectedOperation(input, admittedDocument.document, derefSchema)
   if (selected.kind === 'refused') return selected
@@ -51,20 +52,19 @@ export async function importOpenApiHttpCapability(
   return await admitAndProject(input, admittedDocument, analysis.analysis, derefSchema)
 }
 
-function admitImportDocument(input: OpenApiImportInput): AdmittedDocument | Refusal {
+async function admitImportDocument(input: OpenApiImportInput): Promise<AdmittedDocument | Refusal> {
   const bounded = inspectSource(input.document)
   if (bounded.kind === 'refused') return bounded
-  if (publicationMaterialContainsCredential(input.document) || !isRecord(input.document)) {
+  if (publicationMaterialContainsCredential(input.document)) {
     return refused('source_invalid')
   }
-  if (typeof input.document.openapi !== 'string' || !input.document.openapi.startsWith('3.1.')) {
-    return refused('source_version_unsupported')
-  }
+  const validated = await validateOpenApiDocument(input.document)
+  if (validated.kind === 'refused') return refused(validated.reason)
   if (!validOpenApiPath(input.operation.path)) return refused('selector_invalid')
-  const baseUrl = singleServerUrl(input.document.servers)
+  const baseUrl = singleServerUrl(validated.document.servers)
   return baseUrl === undefined
     ? refused('transport_unsupported')
-    : { kind: 'admitted', document: input.document, descriptorDigest: bounded.digest, baseUrl }
+    : { kind: 'admitted', document: validated.document, descriptorDigest: bounded.digest, baseUrl }
 }
 
 function singleServerUrl(servers: unknown): string | undefined {

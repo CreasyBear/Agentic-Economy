@@ -67,6 +67,7 @@ import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhoo
 import { Route as ApiObservabilityClientErrorRouteImport } from './routes/api.observability.client-error'
 import { Route as ApiInternalSecretLifecycleRouteImport } from './routes/api.internal.secret-lifecycle'
 import { Route as ApiInternalProviderConsequenceRouteImport } from './routes/api.internal.provider-consequence'
+import { Route as ApiInternalProviderConnectionCleanupRouteImport } from './routes/api.internal.provider-connection-cleanup'
 import { Route as ApiDiscoverySchemaRouteImport } from './routes/api.discovery.schema'
 import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery.examples'
 import { Route as ApiClerkWebhookRouteImport } from './routes/api.clerk.webhook'
@@ -111,8 +112,9 @@ import { Route as OperatorOwnerSettingsDevelopersRouteImport } from './routes/_o
 import { Route as OperatorOwnerSettingsConnectionsRouteImport } from './routes/_operator/owner.settings.connections'
 import { Route as OperatorOwnerOfferingsNewRouteImport } from './routes/_operator/owner.offerings.new'
 import { Route as OperatorOwnerOfferingsOfferingRefRouteImport } from './routes/_operator/owner.offerings.$offeringRef'
+import { Route as ApiV1SupplySourcesPreviewRouteImport } from './routes/api.v1.supply.sources.preview'
+import { Route as ApiV1SupplyOffboardingStatusRouteImport } from './routes/api.v1.supply.offboarding.status'
 import { Route as ApiV1SupplyConnectionsRevokeRouteImport } from './routes/api.v1.supply.connections.revoke'
-import { Route as ApiV1SupplyConnectionsRetryCleanupRouteImport } from './routes/api.v1.supply.connections.retry-cleanup'
 import { Route as ApiV1SupplyConnectionsReconnectRouteImport } from './routes/api.v1.supply.connections.reconnect'
 import { Route as ApiV1SupplyConnectionsListRouteImport } from './routes/api.v1.supply.connections.list'
 import { Route as ApiV1SupplyConnectionsDetailRouteImport } from './routes/api.v1.supply.connections.detail'
@@ -121,7 +123,9 @@ import { Route as ApiV1OperationsInvocationRefReconcileRouteImport } from './rou
 import { Route as ApiV1OperationsInvocationRefCancelRouteImport } from './routes/api.v1.operations.$invocationRef.cancel'
 import { Route as ApiV1AccountFundingConfigRouteImport } from './routes/api.v1.account.funding.config'
 import { Route as ApiV1AccountFundingSessionsFundingSessionIdRouteImport } from './routes/api.v1.account.funding-sessions.$fundingSessionId'
+import { Route as OperatorOwnerSupplyConnectionsNewRouteImport } from './routes/_operator/owner.supply.connections.new'
 import { Route as ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport } from './routes/api.v1.account.funding-sessions.public.$fundingSessionId'
+import { Route as OperatorOwnerSupplyConnectionsOauthCallbackRouteImport } from './routes/_operator/owner.supply.connections.oauth.callback'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -420,6 +424,12 @@ const ApiInternalProviderConsequenceRoute =
     path: '/api/internal/provider-consequence',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiInternalProviderConnectionCleanupRoute =
+  ApiInternalProviderConnectionCleanupRouteImport.update({
+    id: '/api/internal/provider-connection-cleanup',
+    path: '/api/internal/provider-connection-cleanup',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiDiscoverySchemaRoute = ApiDiscoverySchemaRouteImport.update({
   id: '/api/discovery/schema',
   path: '/api/discovery/schema',
@@ -658,16 +668,22 @@ const OperatorOwnerOfferingsOfferingRefRoute =
     path: '/$offeringRef',
     getParentRoute: () => OperatorOwnerOfferingsRoute,
   } as any)
+const ApiV1SupplySourcesPreviewRoute =
+  ApiV1SupplySourcesPreviewRouteImport.update({
+    id: '/api/v1/supply/sources/preview',
+    path: '/api/v1/supply/sources/preview',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SupplyOffboardingStatusRoute =
+  ApiV1SupplyOffboardingStatusRouteImport.update({
+    id: '/api/v1/supply/offboarding/status',
+    path: '/api/v1/supply/offboarding/status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1SupplyConnectionsRevokeRoute =
   ApiV1SupplyConnectionsRevokeRouteImport.update({
     id: '/api/v1/supply/connections/revoke',
     path: '/api/v1/supply/connections/revoke',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiV1SupplyConnectionsRetryCleanupRoute =
-  ApiV1SupplyConnectionsRetryCleanupRouteImport.update({
-    id: '/api/v1/supply/connections/retry-cleanup',
-    path: '/api/v1/supply/connections/retry-cleanup',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiV1SupplyConnectionsReconnectRoute =
@@ -718,11 +734,23 @@ const ApiV1AccountFundingSessionsFundingSessionIdRoute =
     path: '/$fundingSessionId',
     getParentRoute: () => ApiV1AccountFundingSessionsRoute,
   } as any)
+const OperatorOwnerSupplyConnectionsNewRoute =
+  OperatorOwnerSupplyConnectionsNewRouteImport.update({
+    id: '/connections/new',
+    path: '/connections/new',
+    getParentRoute: () => OperatorOwnerSupplyRoute,
+  } as any)
 const ApiV1AccountFundingSessionsPublicFundingSessionIdRoute =
   ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport.update({
     id: '/public/$fundingSessionId',
     path: '/public/$fundingSessionId',
     getParentRoute: () => ApiV1AccountFundingSessionsRoute,
+  } as any)
+const OperatorOwnerSupplyConnectionsOauthCallbackRoute =
+  OperatorOwnerSupplyConnectionsOauthCallbackRouteImport.update({
+    id: '/connections/oauth/callback',
+    path: '/connections/oauth/callback',
+    getParentRoute: () => OperatorOwnerSupplyRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -786,6 +814,7 @@ export interface FileRoutesByFullPath {
   '/api/clerk/webhook': typeof ApiClerkWebhookRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
+  '/api/internal/provider-connection-cleanup': typeof ApiInternalProviderConnectionCleanupRoute
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
@@ -827,6 +856,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/supply/republish': typeof ApiV1SupplyRepublishRoute
   '/api/v1/supply/status': typeof ApiV1SupplyStatusRoute
   '/api/v1/supply/withdraw': typeof ApiV1SupplyWithdrawRoute
+  '/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
@@ -835,8 +865,10 @@ export interface FileRoutesByFullPath {
   '/api/v1/supply/connections/detail': typeof ApiV1SupplyConnectionsDetailRoute
   '/api/v1/supply/connections/list': typeof ApiV1SupplyConnectionsListRoute
   '/api/v1/supply/connections/reconnect': typeof ApiV1SupplyConnectionsReconnectRoute
-  '/api/v1/supply/connections/retry-cleanup': typeof ApiV1SupplyConnectionsRetryCleanupRoute
   '/api/v1/supply/connections/revoke': typeof ApiV1SupplyConnectionsRevokeRoute
+  '/api/v1/supply/offboarding/status': typeof ApiV1SupplyOffboardingStatusRoute
+  '/api/v1/supply/sources/preview': typeof ApiV1SupplySourcesPreviewRoute
+  '/owner/supply/connections/oauth/callback': typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
   '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
 }
 export interface FileRoutesByTo {
@@ -900,6 +932,7 @@ export interface FileRoutesByTo {
   '/api/clerk/webhook': typeof ApiClerkWebhookRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
+  '/api/internal/provider-connection-cleanup': typeof ApiInternalProviderConnectionCleanupRoute
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
@@ -941,6 +974,7 @@ export interface FileRoutesByTo {
   '/api/v1/supply/republish': typeof ApiV1SupplyRepublishRoute
   '/api/v1/supply/status': typeof ApiV1SupplyStatusRoute
   '/api/v1/supply/withdraw': typeof ApiV1SupplyWithdrawRoute
+  '/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
@@ -949,8 +983,10 @@ export interface FileRoutesByTo {
   '/api/v1/supply/connections/detail': typeof ApiV1SupplyConnectionsDetailRoute
   '/api/v1/supply/connections/list': typeof ApiV1SupplyConnectionsListRoute
   '/api/v1/supply/connections/reconnect': typeof ApiV1SupplyConnectionsReconnectRoute
-  '/api/v1/supply/connections/retry-cleanup': typeof ApiV1SupplyConnectionsRetryCleanupRoute
   '/api/v1/supply/connections/revoke': typeof ApiV1SupplyConnectionsRevokeRoute
+  '/api/v1/supply/offboarding/status': typeof ApiV1SupplyOffboardingStatusRoute
+  '/api/v1/supply/sources/preview': typeof ApiV1SupplySourcesPreviewRoute
+  '/owner/supply/connections/oauth/callback': typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
   '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
 }
 export interface FileRoutesById {
@@ -1016,6 +1052,7 @@ export interface FileRoutesById {
   '/api/clerk/webhook': typeof ApiClerkWebhookRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
+  '/api/internal/provider-connection-cleanup': typeof ApiInternalProviderConnectionCleanupRoute
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
@@ -1057,6 +1094,7 @@ export interface FileRoutesById {
   '/api/v1/supply/republish': typeof ApiV1SupplyRepublishRoute
   '/api/v1/supply/status': typeof ApiV1SupplyStatusRoute
   '/api/v1/supply/withdraw': typeof ApiV1SupplyWithdrawRoute
+  '/_operator/owner/supply/connections/new': typeof OperatorOwnerSupplyConnectionsNewRoute
   '/api/v1/account/funding-sessions/$fundingSessionId': typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
   '/api/v1/account/funding/config': typeof ApiV1AccountFundingConfigRoute
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
@@ -1065,8 +1103,10 @@ export interface FileRoutesById {
   '/api/v1/supply/connections/detail': typeof ApiV1SupplyConnectionsDetailRoute
   '/api/v1/supply/connections/list': typeof ApiV1SupplyConnectionsListRoute
   '/api/v1/supply/connections/reconnect': typeof ApiV1SupplyConnectionsReconnectRoute
-  '/api/v1/supply/connections/retry-cleanup': typeof ApiV1SupplyConnectionsRetryCleanupRoute
   '/api/v1/supply/connections/revoke': typeof ApiV1SupplyConnectionsRevokeRoute
+  '/api/v1/supply/offboarding/status': typeof ApiV1SupplyOffboardingStatusRoute
+  '/api/v1/supply/sources/preview': typeof ApiV1SupplySourcesPreviewRoute
+  '/_operator/owner/supply/connections/oauth/callback': typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
   '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
 }
 export interface FileRouteTypes {
@@ -1132,6 +1172,7 @@ export interface FileRouteTypes {
     | '/api/clerk/webhook'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
+    | '/api/internal/provider-connection-cleanup'
     | '/api/internal/provider-consequence'
     | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
@@ -1173,6 +1214,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/republish'
     | '/api/v1/supply/status'
     | '/api/v1/supply/withdraw'
+    | '/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
     | '/api/v1/account/funding/config'
     | '/api/v1/operations/$invocationRef/cancel'
@@ -1181,8 +1223,10 @@ export interface FileRouteTypes {
     | '/api/v1/supply/connections/detail'
     | '/api/v1/supply/connections/list'
     | '/api/v1/supply/connections/reconnect'
-    | '/api/v1/supply/connections/retry-cleanup'
     | '/api/v1/supply/connections/revoke'
+    | '/api/v1/supply/offboarding/status'
+    | '/api/v1/supply/sources/preview'
+    | '/owner/supply/connections/oauth/callback'
     | '/api/v1/account/funding-sessions/public/$fundingSessionId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -1246,6 +1290,7 @@ export interface FileRouteTypes {
     | '/api/clerk/webhook'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
+    | '/api/internal/provider-connection-cleanup'
     | '/api/internal/provider-consequence'
     | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
@@ -1287,6 +1332,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/republish'
     | '/api/v1/supply/status'
     | '/api/v1/supply/withdraw'
+    | '/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
     | '/api/v1/account/funding/config'
     | '/api/v1/operations/$invocationRef/cancel'
@@ -1295,8 +1341,10 @@ export interface FileRouteTypes {
     | '/api/v1/supply/connections/detail'
     | '/api/v1/supply/connections/list'
     | '/api/v1/supply/connections/reconnect'
-    | '/api/v1/supply/connections/retry-cleanup'
     | '/api/v1/supply/connections/revoke'
+    | '/api/v1/supply/offboarding/status'
+    | '/api/v1/supply/sources/preview'
+    | '/owner/supply/connections/oauth/callback'
     | '/api/v1/account/funding-sessions/public/$fundingSessionId'
   id:
     | '__root__'
@@ -1361,6 +1409,7 @@ export interface FileRouteTypes {
     | '/api/clerk/webhook'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
+    | '/api/internal/provider-connection-cleanup'
     | '/api/internal/provider-consequence'
     | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
@@ -1402,6 +1451,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/republish'
     | '/api/v1/supply/status'
     | '/api/v1/supply/withdraw'
+    | '/_operator/owner/supply/connections/new'
     | '/api/v1/account/funding-sessions/$fundingSessionId'
     | '/api/v1/account/funding/config'
     | '/api/v1/operations/$invocationRef/cancel'
@@ -1410,8 +1460,10 @@ export interface FileRouteTypes {
     | '/api/v1/supply/connections/detail'
     | '/api/v1/supply/connections/list'
     | '/api/v1/supply/connections/reconnect'
-    | '/api/v1/supply/connections/retry-cleanup'
     | '/api/v1/supply/connections/revoke'
+    | '/api/v1/supply/offboarding/status'
+    | '/api/v1/supply/sources/preview'
+    | '/_operator/owner/supply/connections/oauth/callback'
     | '/api/v1/account/funding-sessions/public/$fundingSessionId'
   fileRoutesById: FileRoutesById
 }
@@ -1461,6 +1513,7 @@ export interface RootRouteChildren {
   ApiClerkWebhookRoute: typeof ApiClerkWebhookRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
   ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
+  ApiInternalProviderConnectionCleanupRoute: typeof ApiInternalProviderConnectionCleanupRoute
   ApiInternalProviderConsequenceRoute: typeof ApiInternalProviderConsequenceRoute
   ApiInternalSecretLifecycleRoute: typeof ApiInternalSecretLifecycleRoute
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
@@ -1488,8 +1541,9 @@ export interface RootRouteChildren {
   ApiV1SupplyConnectionsDetailRoute: typeof ApiV1SupplyConnectionsDetailRoute
   ApiV1SupplyConnectionsListRoute: typeof ApiV1SupplyConnectionsListRoute
   ApiV1SupplyConnectionsReconnectRoute: typeof ApiV1SupplyConnectionsReconnectRoute
-  ApiV1SupplyConnectionsRetryCleanupRoute: typeof ApiV1SupplyConnectionsRetryCleanupRoute
   ApiV1SupplyConnectionsRevokeRoute: typeof ApiV1SupplyConnectionsRevokeRoute
+  ApiV1SupplyOffboardingStatusRoute: typeof ApiV1SupplyOffboardingStatusRoute
+  ApiV1SupplySourcesPreviewRoute: typeof ApiV1SupplySourcesPreviewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1900,6 +1954,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInternalProviderConsequenceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/internal/provider-connection-cleanup': {
+      id: '/api/internal/provider-connection-cleanup'
+      path: '/api/internal/provider-connection-cleanup'
+      fullPath: '/api/internal/provider-connection-cleanup'
+      preLoaderRoute: typeof ApiInternalProviderConnectionCleanupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/discovery/schema': {
       id: '/api/discovery/schema'
       path: '/api/discovery/schema'
@@ -2208,18 +2269,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerOfferingsOfferingRefRouteImport
       parentRoute: typeof OperatorOwnerOfferingsRoute
     }
+    '/api/v1/supply/sources/preview': {
+      id: '/api/v1/supply/sources/preview'
+      path: '/api/v1/supply/sources/preview'
+      fullPath: '/api/v1/supply/sources/preview'
+      preLoaderRoute: typeof ApiV1SupplySourcesPreviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/supply/offboarding/status': {
+      id: '/api/v1/supply/offboarding/status'
+      path: '/api/v1/supply/offboarding/status'
+      fullPath: '/api/v1/supply/offboarding/status'
+      preLoaderRoute: typeof ApiV1SupplyOffboardingStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/supply/connections/revoke': {
       id: '/api/v1/supply/connections/revoke'
       path: '/api/v1/supply/connections/revoke'
       fullPath: '/api/v1/supply/connections/revoke'
       preLoaderRoute: typeof ApiV1SupplyConnectionsRevokeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/supply/connections/retry-cleanup': {
-      id: '/api/v1/supply/connections/retry-cleanup'
-      path: '/api/v1/supply/connections/retry-cleanup'
-      fullPath: '/api/v1/supply/connections/retry-cleanup'
-      preLoaderRoute: typeof ApiV1SupplyConnectionsRetryCleanupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/supply/connections/reconnect': {
@@ -2278,12 +2346,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1AccountFundingSessionsFundingSessionIdRouteImport
       parentRoute: typeof ApiV1AccountFundingSessionsRoute
     }
+    '/_operator/owner/supply/connections/new': {
+      id: '/_operator/owner/supply/connections/new'
+      path: '/connections/new'
+      fullPath: '/owner/supply/connections/new'
+      preLoaderRoute: typeof OperatorOwnerSupplyConnectionsNewRouteImport
+      parentRoute: typeof OperatorOwnerSupplyRoute
+    }
     '/api/v1/account/funding-sessions/public/$fundingSessionId': {
       id: '/api/v1/account/funding-sessions/public/$fundingSessionId'
       path: '/public/$fundingSessionId'
       fullPath: '/api/v1/account/funding-sessions/public/$fundingSessionId'
       preLoaderRoute: typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport
       parentRoute: typeof ApiV1AccountFundingSessionsRoute
+    }
+    '/_operator/owner/supply/connections/oauth/callback': {
+      id: '/_operator/owner/supply/connections/oauth/callback'
+      path: '/connections/oauth/callback'
+      fullPath: '/owner/supply/connections/oauth/callback'
+      preLoaderRoute: typeof OperatorOwnerSupplyConnectionsOauthCallbackRouteImport
+      parentRoute: typeof OperatorOwnerSupplyRoute
     }
   }
 }
@@ -2347,10 +2429,16 @@ const OperatorOwnerSettingsRouteWithChildren =
 
 interface OperatorOwnerSupplyRouteChildren {
   OperatorOwnerSupplyOfferingRefRoute: typeof OperatorOwnerSupplyOfferingRefRoute
+  OperatorOwnerSupplyConnectionsNewRoute: typeof OperatorOwnerSupplyConnectionsNewRoute
+  OperatorOwnerSupplyConnectionsOauthCallbackRoute: typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
 }
 
 const OperatorOwnerSupplyRouteChildren: OperatorOwnerSupplyRouteChildren = {
   OperatorOwnerSupplyOfferingRefRoute: OperatorOwnerSupplyOfferingRefRoute,
+  OperatorOwnerSupplyConnectionsNewRoute:
+    OperatorOwnerSupplyConnectionsNewRoute,
+  OperatorOwnerSupplyConnectionsOauthCallbackRoute:
+    OperatorOwnerSupplyConnectionsOauthCallbackRoute,
 }
 
 const OperatorOwnerSupplyRouteWithChildren =
@@ -2574,6 +2662,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiClerkWebhookRoute: ApiClerkWebhookRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
   ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,
+  ApiInternalProviderConnectionCleanupRoute:
+    ApiInternalProviderConnectionCleanupRoute,
   ApiInternalProviderConsequenceRoute: ApiInternalProviderConsequenceRoute,
   ApiInternalSecretLifecycleRoute: ApiInternalSecretLifecycleRoute,
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,
@@ -2601,9 +2691,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1SupplyConnectionsDetailRoute: ApiV1SupplyConnectionsDetailRoute,
   ApiV1SupplyConnectionsListRoute: ApiV1SupplyConnectionsListRoute,
   ApiV1SupplyConnectionsReconnectRoute: ApiV1SupplyConnectionsReconnectRoute,
-  ApiV1SupplyConnectionsRetryCleanupRoute:
-    ApiV1SupplyConnectionsRetryCleanupRoute,
   ApiV1SupplyConnectionsRevokeRoute: ApiV1SupplyConnectionsRevokeRoute,
+  ApiV1SupplyOffboardingStatusRoute: ApiV1SupplyOffboardingStatusRoute,
+  ApiV1SupplySourcesPreviewRoute: ApiV1SupplySourcesPreviewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

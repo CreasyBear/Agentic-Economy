@@ -465,7 +465,9 @@ export async function observeCapabilityReadinessHandler(
   await syncMarketOperationPresence(ctx, {
     operationRef: publication.operationRef,
     businessId: publication.businessId,
-    active: args.credentialState === 'ready' && args.healthState === 'healthy',
+    active: publication.sourceAuthorityState !== 'review_required'
+      && args.credentialState === 'ready'
+      && args.healthState === 'healthy',
     now,
   })
   const [offering, binding] = await Promise.all([
@@ -706,8 +708,61 @@ export async function recordCapabilityProbeResultHandler(
               candidateBusinessId: businessId,
             })
           ),
-        },
+      },
   )
+  if (result.kind === 'observed') {
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (query) => (
+        query.eq('publicationRef', result.publicationRef)
+          .eq('revision', result.revision)
+      ))
+      .unique()
+    if (publication !== null) {
+      if (result.lifecycle.state === 'active'
+        && publication.authorityMode === 'provider_owned'
+        && publication.sourceRouteRef !== undefined) {
+        const priorObservations = await ctx.db.query('capabilityPublications')
+          .withIndex('by_sourceRouteRef_and_disposition', (query) => (
+            query.eq('sourceRouteRef', publication.sourceRouteRef)
+              .eq('disposition', 'current')
+          ))
+          .take(16)
+        for (const prior of priorObservations) {
+          if (prior._id === publication._id || prior.authorityMode === 'provider_owned') continue
+          await ctx.db.patch(prior._id, { disposition: 'superseded', updatedAt: Date.now() })
+          await syncMarketOperationPresence(ctx, {
+            operationRef: prior.operationRef,
+            businessId: prior.businessId,
+            active: false,
+            now: Date.now(),
+          })
+        }
+      }
+      await syncMarketOperationPresence(ctx, {
+        operationRef: publication.operationRef,
+        businessId: publication.businessId,
+        active: result.lifecycle.state === 'active',
+        now: Date.now(),
+      })
+    }
+    const admissionCase = await ctx.db.query('capabilitySupplyAdmissionCases')
+      .withIndex('by_publicationRef_and_revision', (query) => (
+        query.eq('publicationRef', result.publicationRef)
+          .eq('publicationRevision', result.revision)
+      ))
+      .unique()
+    if (admissionCase !== null) {
+      const published = result.lifecycle.state === 'active'
+      await ctx.db.patch(admissionCase._id, {
+        state: 'completed',
+        terminalDecision: published ? 'published' : 'action_required',
+        blockerRefs: published ? [] : [...result.lifecycle.reasons],
+        reviewStartedAt: admissionCase.reviewStartedAt ?? args.observedAt,
+        completedAt: args.observedAt,
+        updatedAt: Date.now(),
+      })
+    }
+  }
   return result.kind === 'observed'
     ? { ...result, lifecycle: convexPublicationLifecycle(result.lifecycle) }
     : result

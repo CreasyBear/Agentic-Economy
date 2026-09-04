@@ -15,7 +15,6 @@ import {
   checkOwnerX402Server,
   connectOwnerX402Server,
   inspectOwnerX402Server,
-  retryOwnerProviderConnectionCleanupServer,
   revokeOwnerProviderConnectionServer,
   type OwnerProviderConnection,
 } from '@/modules/capability-supply/supply-funnel.functions'
@@ -40,7 +39,6 @@ export function AeOwnerProviderConnections({
   const checkX402 = useServerFn(checkOwnerX402Server)
   const inspectX402 = useServerFn(inspectOwnerX402Server)
   const revoke = useServerFn(revokeOwnerProviderConnectionServer)
-  const retryCleanup = useServerFn(retryOwnerProviderConnectionCleanupServer)
   const [resourceUrl, setResourceUrl] = useState('')
   const [method, setMethod] = useState<'GET' | 'POST'>('POST')
   const [inspection, setInspection] = useState<Readonly<{
@@ -384,42 +382,6 @@ export function AeOwnerProviderConnections({
     }
   }
 
-  async function retryConnectionCleanup(connection: OwnerProviderConnection) {
-    if (readOnly) return
-    const commandKey = `cleanup:${connection.connectionRef}`
-    setBusy(connection.connectionRef)
-    setNotice(undefined)
-    try {
-      const result = await retryCleanup({
-        data: {
-          connectionRef: connection.connectionRef,
-          commandId: commandIdFor(commandKey),
-        },
-      })
-      if (result.kind === 'refused') {
-        if (result.code === 'source_unavailable') {
-          setRefreshRequired(true)
-          setNotice({ kind: 'error', text: 'The cleanup outcome was not confirmed. Reload current connections before repeating it.' })
-          return
-        }
-        commandIdsRef.current.delete(commandKey)
-        setNotice({ kind: 'error', text: connectionRefusalCopy(result.code, result.correlationRef) })
-        return
-      }
-      commandIdsRef.current.delete(commandKey)
-      await refresh()
-    } catch (cause) {
-      captureClientExceptionOnClient(cause)
-      setRefreshRequired(true)
-      setNotice({
-        kind: 'error',
-        text: 'The cleanup outcome was not confirmed. Reload current connections first; an unchanged retry will reuse the same command reference.',
-      })
-    } finally {
-      setBusy(undefined)
-    }
-  }
-
   function requestRevoke(
     connection: OwnerProviderConnection,
     trigger: HTMLButtonElement,
@@ -525,16 +487,6 @@ export function AeOwnerProviderConnections({
                       Revoke
                     </Button>
                   </div>
-                ) : connection.lifecycle === 'cleanup_required' ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="min-h-touch"
-                    disabled={readOnly || busy !== undefined || refreshRequired}
-                    onClick={() => void retryConnectionCleanup(connection)}
-                  >
-                    Retry cleanup
-                  </Button>
                 ) : null}
               </div>
               {rebindOfferingRef !== undefined && connection.connectionRef === rebindConnectionRef ? (

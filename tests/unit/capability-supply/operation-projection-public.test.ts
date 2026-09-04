@@ -119,6 +119,11 @@ describe('public operation read contract', () => {
     expect(projectProviderManagementStatus({
       disposition: 'current', credentialState: 'ready', healthState: 'healthy',
       readinessObservedAt: 1_900, readinessValidUntil: 2_100,
+      authorityReviewRequired: true,
+    }, now)).toBe('Validating')
+    expect(projectProviderManagementStatus({
+      disposition: 'current', credentialState: 'ready', healthState: 'healthy',
+      readinessObservedAt: 1_900, readinessValidUntil: 2_100,
     }, now)).toBe('Live')
     expect(projectProviderManagementStatus({
       disposition: 'current', credentialState: 'unavailable', healthState: 'unhealthy',

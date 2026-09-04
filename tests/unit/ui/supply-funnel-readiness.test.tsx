@@ -53,7 +53,7 @@ describe("current supply funnel", () => {
       }),
     ).toBeDefined();
     expect(screen.getByText(/eip155:84532/i)).toBeDefined();
-    expect(screen.getByText(/USD 0.01 \(10000 atomic units\)/i)).toBeDefined();
+    expect(screen.getByText(/USD 0.010000 \(10000 atomic units\)/i)).toBeDefined();
     expect(screen.getByText(/0x1111111111111111111111111111111111111111/i)).toBeDefined();
     expect(screen.getByText(/No payment is sent until you confirm/i)).toBeDefined();
 

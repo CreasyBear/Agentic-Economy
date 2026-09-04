@@ -7,7 +7,7 @@ import {
   OPERATION_MARKET_DESCRIBE_PATH,
   OPERATION_MARKET_LIST_PATH,
   OPERATION_MARKET_SEARCH_PATH,
-} from '@/modules/registry/operation-paths'
+} from '@/modules/common/market-operation-paths'
 
 export const OPERATION_INSPECT_ACTION_ID = 'operation.inspect' as const
 export const OPERATION_INSPECT_PATH = '/api/v1/operations/inspect' as const

@@ -62,13 +62,13 @@ describe('discovery files', () => {
     expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route/)
     expect(result.body).toContain('- MCP: https://ae.example/mcp')
     expect(result.body).toContain('1. Search by outcome: `ae search')
-    expect(result.body.indexOf('1. Search by outcome:')).toBeLessThan(result.body.indexOf('4. Connect only if the call reports'))
+    expect(result.body.indexOf('1. Search by outcome:')).toBeLessThan(result.body.indexOf('3. Call `operation.inspect`'))
     expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/search')
-    expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/detail')
-    expect(result.body).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
+    expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/describe')
+    expect(result.body).toContain('Invoke only with the returned Commitment')
     expect(result.body).toContain('ae status "$AE_INVOCATION_REF"')
     expect(result.body).toContain('Use cancel or recover only when that receipt offers the action.')
-    expect(result.body).toContain('Public: search, inspect, and eligible free keyless read calls.')
+    expect(result.body).toContain('Public: list, search, describe, and compare.')
     expect(result.body).toContain('The low-level write API requires `idempotencyKey`; the CLI creates and retains it automatically.')
     expect(result.body).not.toContain('--idempotency-key')
     expect(result.body).not.toContain('Demo listed provider')
@@ -81,7 +81,7 @@ describe('discovery files', () => {
         'https://ae.example/',
         'https://ae.example/demo-listed-provider',
         'https://ae.example/api/v1/market-operations/search',
-        'https://ae.example/api/v1/market-operations/detail',
+        'https://ae.example/api/v1/market-operations/describe',
       ])
     )
     expect(result.urls).not.toEqual(expect.arrayContaining([

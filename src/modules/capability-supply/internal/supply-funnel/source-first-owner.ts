@@ -1,0 +1,562 @@
+import { z } from 'zod'
+
+import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
+import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
+import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
+import { stableStringify } from '@/modules/common/stable-hash'
+
+import type { PreparedPublicationMaterial } from '../publication'
+import type { ProviderConnectionOwnerProjection } from '../../provider-connection'
+import {
+  prepareSupplyPublicationV2,
+  publishSupplyOperationV2InputSchema,
+  selectSupplyProviderAuthority,
+  type PublishSupplyOperationV2Input,
+} from '../../supply-publication-v2'
+import {
+  previewSupplySource,
+  supplySourceInputSchema,
+  type SupplySourceInput,
+  type SupplySourcePreview,
+  type SupplySourcePreviewDependencies,
+} from '../../source-preview'
+import type { SupplyPublishResult } from '../../supply-actions'
+import {
+  loadOwnerConnectedOpenApi,
+  previewOwnerMcpProviderConnection,
+} from './provider-connection-handoff'
+import { readOwnerSupplyQuery } from './funnel-owner'
+import type { OwnerSupplyFunnelReadback } from './types'
+
+const ownerSourcePreviewInputSchema = z.strictObject({
+  businessId: z.string().min(1),
+  source: supplySourceInputSchema,
+  connectionRef: z.string().trim().min(1).max(300).optional(),
+  idempotencyKey: z.string().trim().min(8).max(200),
+})
+
+const ownerSourceConnectionInputSchema = z.strictObject({
+  businessId: z.string().min(1),
+  source: supplySourceInputSchema,
+  expectedSourceDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+  candidateRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+  idempotencyKey: z.string().trim().min(8).max(200),
+})
+
+type OwnerDraftResult =
+  | Readonly<{ kind: 'saved' | 'replayed'; offeringRef: string; accessPathRef: string }>
+  | Readonly<{ kind: 'refused'; reason: string }>
+type OwnerReservationResult =
+  | Readonly<{ kind: 'reserved' | 'replayed' }>
+  | Readonly<{ kind: 'refused'; reason: string }>
+type PublicationResult =
+  | Readonly<{
+      kind: 'published' | 'replayed'
+      publicationRef: string
+      publicationRevision: number
+      operationRef: string
+    }>
+  | Readonly<{ kind: 'refused'; reason: string }>
+
+const saveDraftMutation = sourceMutation<Record<string, unknown>, OwnerDraftResult>(
+  'capabilitySupplyOwnerFunnel:saveOwnerSupplyIntegrationDraft',
+)
+const reservePublicationMutation = sourceMutation<Record<string, unknown>, OwnerReservationResult>(
+  'capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication',
+)
+const publishMutation = sourceMutation<Record<string, unknown>, PublicationResult>(
+  'capabilitySupply:publishPreparedCapability',
+)
+type OwnerConnectionAttemptReservation =
+  | Readonly<{ kind: 'reserved' | 'replayed'; attemptRef: string; expiresAt: number }>
+  | Readonly<{ kind: 'refused'; code: string }>
+const reserveOwnerConnectionAttemptMutation = sourceMutation<
+  Record<string, unknown>,
+  OwnerConnectionAttemptReservation
+>('capabilityProviderConnectionAttempts:reserveOwner')
+type LatestDraftResult =
+  | Readonly<{ kind: 'not_found' }>
+  | Readonly<{
+      kind: 'available'
+      draft: Readonly<{
+        sourceDescriptorJson: string
+        candidateRef: string
+      }>
+    }>
+const readLatestDraftQuery = sourceQuery<
+  { businessId: string },
+  LatestDraftResult
+>('capabilitySupplyOwnerFunnel:readLatestOwnerSupplyIntegrationDraft')
+
+export {
+  ownerSourceConnectionInputSchema,
+  ownerSourcePreviewInputSchema,
+  publishSupplyOperationV2InputSchema as ownerSourcePublishInputSchema,
+}
+
+const ownerSourceDraftInputSchema = z.strictObject({
+  businessRef: z.string().trim().min(1),
+  source: supplySourceInputSchema,
+  sourceDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+  sourceRevision: z.string().trim().min(1),
+  candidate: z.strictObject({
+    candidateRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+    sourceSelector: z.record(z.string(), z.unknown()),
+    title: z.string().trim().min(1),
+    description: z.string().trim().min(1),
+  }),
+})
+export { ownerSourceDraftInputSchema }
+
+export async function saveOwnerSupplySourceDraft({
+  data,
+  context,
+}: {
+  data: z.infer<typeof ownerSourceDraftInputSchema>
+  context: unknown
+}): Promise<OwnerDraftResult> {
+  const operationKey = canonicalDigest({
+    action: 'supply.source.selected',
+    businessRef: data.businessRef,
+    sourceDigest: data.sourceDigest,
+    candidateRef: data.candidate.candidateRef,
+  })
+  const command = {
+    businessId: data.businessRef,
+    title: data.candidate.title,
+    description: data.candidate.description,
+    category: 'Uncategorised',
+    sourceKind: data.source.kind,
+    sourceDescriptorJson: stableStringify(data.source as never),
+    sourceDigest: data.sourceDigest,
+    sourceRevision: data.sourceRevision,
+    candidateRef: data.candidate.candidateRef,
+    sourceSelectorJson: stableStringify(data.candidate.sourceSelector as never),
+    operationKey,
+    correlationId: operationKey,
+  }
+  const sourceWrite = await sourceWriteAdmissionFromContext({
+    context,
+    command,
+    scope: 'catalog_publish',
+    operationKey,
+    correlationId: operationKey,
+  })
+  return await callSourceMutation(saveDraftMutation, {
+    ...command,
+    sourceWrite,
+    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+  })
+}
+
+export async function previewOwnerSupplySource({
+  data,
+  context,
+}: {
+  data: z.infer<typeof ownerSourcePreviewInputSchema>
+  context: unknown
+}): Promise<SupplySourcePreview> {
+  const readback = await callSourceQuery(readOwnerSupplyQuery, { businessId: data.businessId })
+  if (readback.kind !== 'available') return unavailablePreview()
+  if (data.connectionRef !== undefined) {
+    if (data.source.kind === 'mcp' && data.source.serverUrl !== undefined) {
+      const source = data.source
+      return await previewSupplySource(source, {
+        mcpAuthentication: { kind: 'mcp_oauth' },
+        discoverMcp: async () => await previewOwnerMcpProviderConnection({
+          connectionRef: data.connectionRef!,
+          businessRef: data.businessId,
+          serverUrl: source.serverUrl!,
+          environment: source.environment,
+        }),
+      })
+    }
+    if (data.source.kind === 'openapi') {
+      const source = data.source
+      return await previewSupplySource(source, {
+        loadOpenApi: async () => await loadOwnerConnectedOpenApi({
+          connectionRef: data.connectionRef!,
+          businessRef: data.businessId,
+          definitionUrl: source.definitionUrl,
+          environment: source.environment,
+        }),
+      })
+    }
+    return unavailablePreview()
+  }
+  const preview = await previewSupplySource(data.source)
+  if (preview.kind !== 'action_required'
+    || data.source.kind !== 'mcp'
+    || data.source.serverUrl === undefined) return preview
+  return await reserveOwnerSourceConnection({
+    businessId: data.businessId,
+    sourceKind: 'mcp_oauth',
+    sourceUrl: data.source.serverUrl,
+    authentication: { kind: 'mcp_oauth' },
+    environment: data.source.environment,
+    idempotencyKey: data.idempotencyKey,
+    context,
+    title: 'Connect MCP server',
+    description: 'Sign in to the MCP server, then AE will return to this source and continue finding Operations.',
+    ctaLabel: 'Connect server',
+  })
+}
+
+export async function startOwnerSupplySourceConnection({
+  data,
+  context,
+}: {
+  data: z.infer<typeof ownerSourceConnectionInputSchema>
+  context: unknown
+}): Promise<SupplySourcePreview> {
+  const readback = await callSourceQuery(readOwnerSupplyQuery, { businessId: data.businessId })
+  if (readback.kind !== 'available' || data.source.kind !== 'openapi') return unavailablePreview()
+  const preview = await previewSupplySource(data.source)
+  if (preview.kind !== 'ready' || preview.sourceDigest !== data.expectedSourceDigest) return unavailablePreview()
+  const candidate = preview.candidates.find(({ candidateRef }) => candidateRef === data.candidateRef)
+  if (candidate === undefined
+    || candidate.disposition.kind !== 'supported'
+    || (candidate.authentication.kind !== 'api_key' && candidate.authentication.kind !== 'http_bearer')) {
+    return unavailablePreview()
+  }
+  return await reserveOwnerSourceConnection({
+    businessId: data.businessId,
+    sourceKind: 'http_credential',
+    sourceUrl: data.source.definitionUrl,
+    authentication: candidate.authentication,
+    environment: data.source.environment,
+    idempotencyKey: data.idempotencyKey,
+    context,
+    title: 'Connect service',
+    description: 'Enter the service credential securely, then AE will return to this Operation.',
+    ctaLabel: 'Connect service',
+  })
+}
+
+async function reserveOwnerSourceConnection(input: Readonly<{
+  businessId: string
+  sourceKind: 'http_credential' | 'mcp_oauth'
+  sourceUrl: string
+  authentication:
+    | Readonly<{ kind: 'api_key'; location: 'header' | 'query'; name: string }>
+    | Readonly<{ kind: 'http_bearer' }>
+    | Readonly<{ kind: 'mcp_oauth' }>
+  environment: 'sandbox' | 'production'
+  idempotencyKey: string
+  context: unknown
+  title: string
+  description: string
+  ctaLabel: string
+}>): Promise<SupplySourcePreview> {
+  const inputDigest = canonicalDigest({
+    format: 'provider-connection-attempt-input:v1',
+    sourceKind: input.sourceKind,
+    businessRef: input.businessId,
+    sourceUrl: input.sourceUrl,
+    authentication: input.authentication,
+    environment: input.environment,
+  })
+  const operationKey = canonicalDigest({
+    action: 'supply.connection.connect',
+    ownerIdempotencyKey: input.idempotencyKey,
+    inputDigest,
+  })
+  const command = {
+    businessId: input.businessId,
+    sourceKind: input.sourceKind,
+    sourceUrl: input.sourceUrl,
+    authentication: input.authentication,
+    environment: input.environment,
+    inputDigest,
+    commandId: operationKey,
+    operationKey,
+    correlationId: operationKey,
+  }
+  try {
+    const sourceWrite = await sourceWriteAdmissionFromContext({
+      context: input.context,
+      command,
+      scope: 'catalog_publish',
+      operationKey,
+      correlationId: operationKey,
+    })
+    const reserved = await callSourceMutation(reserveOwnerConnectionAttemptMutation, {
+      ...command,
+      sourceWrite,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    })
+    if (reserved.kind === 'refused') return unavailablePreview()
+    return {
+      kind: 'action_required',
+      requiredAction: {
+        action: 'supply.source.preview',
+        blockedCapabilities: ['supply.publish'],
+        cta: `/owner/supply/connections/new?attempt=${encodeURIComponent(reserved.attemptRef)}`,
+        ctaLabel: input.ctaLabel,
+        description: input.description,
+        iconUrl: null,
+        status: 'required',
+        title: input.title,
+      },
+    }
+  } catch {
+    return unavailablePreview()
+  }
+}
+
+export type OwnerSupplySourceResumeResult =
+  | Readonly<{
+      kind: 'available'
+      source: SupplySourceInput
+      preview: Extract<SupplySourcePreview, { kind: 'ready' }>
+      candidateRef: string
+      connectionRef?: string
+    }>
+  | Readonly<{ kind: 'not_found' | 'source_changed' }>
+
+export async function resumeOwnerSupplySourceDraft({
+  data,
+}: {
+  data: Readonly<{ businessId: string; connectionRef?: string | undefined }>
+}): Promise<OwnerSupplySourceResumeResult> {
+  const saved = await callSourceQuery(readLatestDraftQuery, { businessId: data.businessId })
+  if (saved.kind !== 'available') return { kind: 'not_found' }
+  let rawSource: unknown
+  try {
+    rawSource = JSON.parse(saved.draft.sourceDescriptorJson) as unknown
+  } catch {
+    return { kind: 'source_changed' }
+  }
+  const parsed = supplySourceInputSchema.safeParse(rawSource)
+  if (!parsed.success) return { kind: 'source_changed' }
+  const preview = data.connectionRef === undefined
+    ? await previewSupplySource(parsed.data)
+    : parsed.data.kind === 'openapi'
+      ? await previewSupplySource(parsed.data, {
+          loadOpenApi: async () => await loadOwnerConnectedOpenApi({
+            connectionRef: data.connectionRef!,
+            businessRef: data.businessId,
+            definitionUrl: parsed.data.kind === 'openapi' ? parsed.data.definitionUrl : '',
+            environment: parsed.data.environment,
+          }),
+        })
+      : parsed.data.kind === 'mcp' && parsed.data.serverUrl !== undefined
+        ? await previewSupplySource(parsed.data, {
+            mcpAuthentication: { kind: 'mcp_oauth' },
+            discoverMcp: async () => await previewOwnerMcpProviderConnection({
+              connectionRef: data.connectionRef!,
+              businessRef: data.businessId,
+              serverUrl: parsed.data.kind === 'mcp' ? parsed.data.serverUrl! : '',
+              environment: parsed.data.environment,
+            }),
+          })
+        : undefined
+  if (preview === undefined) return { kind: 'source_changed' }
+  if (preview.kind !== 'ready'
+    || !preview.candidates.some(({ candidateRef }) => candidateRef === saved.draft.candidateRef)) {
+    return { kind: 'source_changed' }
+  }
+  return {
+    kind: 'available',
+    source: parsed.data,
+    preview,
+    candidateRef: saved.draft.candidateRef,
+    ...(data.connectionRef === undefined ? {} : { connectionRef: data.connectionRef }),
+  }
+}
+
+export async function publishOwnerSupplySource({
+  data,
+  context,
+}: {
+  data: PublishSupplyOperationV2Input
+  context: unknown
+}): Promise<SupplyPublishResult> {
+  const providerAuthority = data.connectionRef === undefined
+    ? undefined
+    : selectSupplyProviderAuthority(
+        data.businessRef,
+        data.connectionRef,
+        await readOwnerProviderConnectionsForPublication(),
+      )
+  if (data.connectionRef !== undefined && providerAuthority === undefined) {
+    return { kind: 'refused', reason: 'connection_unavailable' }
+  }
+  const sourceDependencies = data.connectionRef === undefined
+    ? {}
+    : connectedSourceDependencies(data, data.connectionRef)
+  const preparation = await prepareSupplyPublicationV2(data, {
+    ...(providerAuthority === undefined ? {} : { providerAuthority }),
+    ...sourceDependencies,
+  })
+  if (preparation.kind === 'refused') return { kind: 'refused', reason: preparation.reason }
+
+  const operationKey = canonicalDigest({
+    action: 'supply.publish',
+    businessRef: data.businessRef,
+    idempotencyKey: data.idempotencyKey,
+  })
+  const correlationId = operationKey
+  const write = async <Result>(
+    command: Record<string, unknown>,
+    mutation: ReturnType<typeof sourceMutation<Record<string, unknown>, Result>>,
+  ): Promise<Result> => {
+    const sourceWrite = await sourceWriteAdmissionFromContext({
+      context,
+      command,
+      scope: 'catalog_publish',
+      operationKey: String(command.operationKey),
+      correlationId,
+    })
+    return await callSourceMutation(mutation, {
+      ...command,
+      sourceWrite,
+      sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
+    })
+  }
+
+  const draft = await write({
+    businessId: data.businessRef,
+    title: data.presentation.name,
+    description: data.presentation.description,
+    category: data.presentation.category,
+    sourceKind: data.source.kind,
+    sourceDescriptorJson: preparation.sourceDescriptorJson,
+    sourceDigest: preparation.sourceDigest,
+    sourceRevision: preparation.sourceRevision,
+    candidateRef: data.candidateRef,
+    sourceSelectorJson: preparation.sourceSelectorJson,
+    ...(data.connectionRef === undefined ? {} : { connectionRef: data.connectionRef }),
+    ...(preparation.validationInputJson === undefined ? {} : { validationInputJson: preparation.validationInputJson }),
+    operationKey: `${operationKey}:draft`,
+    correlationId,
+  }, saveDraftMutation)
+  if (draft.kind === 'refused') return { kind: 'refused', reason: draft.reason }
+
+  const readback = await callSourceQuery(readOwnerSupplyQuery, { businessId: data.businessRef })
+  const origin = publicationOrigin(readback, draft)
+  if (origin === undefined) return { kind: 'refused', reason: 'catalog_offering_origin_changed' }
+  const prepared: PreparedPublicationMaterial = {
+    ...preparation.prepared.prepared,
+    sourceAuthorityState: preparation.sourceAuthorityState,
+    offering: {
+      ...preparation.prepared.prepared.offering,
+      origin,
+    },
+  }
+  const materialDigest = canonicalDigest(data)
+  const reservation = await write({
+    businessId: data.businessRef,
+    offeringRef: origin.offeringRef,
+    offeringRevision: origin.offeringRevision,
+    offeringSourceHash: origin.offeringSourceHash,
+    materialDigest,
+    operationKey,
+    correlationId,
+    reasonCode: 'supply.publish',
+    evidenceRefs: [preparation.sourceDigest, data.candidateRef],
+  }, reservePublicationMutation)
+  if (reservation.kind === 'refused') return { kind: 'refused', reason: reservation.reason }
+
+  const proof = await requireStrictClerkConsequenceProof(operationKey)
+  const published = await write({
+    businessId: data.businessRef,
+    offeringRef: origin.offeringRef,
+    revision: origin.offeringRevision,
+    sourceHash: origin.offeringSourceHash,
+    runtimeEnvironment: data.environment,
+    prepared,
+    proof,
+    operationKey,
+    correlationId,
+    reasonCode: 'supply.publish',
+    evidenceRefs: [preparation.sourceDigest, data.candidateRef],
+  }, publishMutation)
+  if (published.kind === 'refused') return { kind: 'refused', reason: published.reason }
+  return {
+    kind: published.kind === 'replayed' ? 'replayed' : 'submitted',
+    publicationRef: published.publicationRef,
+    publicationRevision: published.publicationRevision,
+    operationRef: published.operationRef,
+    state: 'Submitted',
+  }
+}
+
+function connectedSourceDependencies(
+  input: PublishSupplyOperationV2Input,
+  connectionRef: string,
+): SupplySourcePreviewDependencies {
+  if (input.source.kind === 'openapi') {
+    return {
+      loadOpenApi: async () => await loadOwnerConnectedOpenApi({
+        connectionRef,
+        businessRef: input.businessRef,
+        definitionUrl: input.source.kind === 'openapi' ? input.source.definitionUrl : '',
+        environment: input.environment,
+      }),
+    }
+  }
+  if (input.source.kind === 'mcp' || input.source.kind === 'agent_plugin') {
+    return {
+      mcpAuthentication: { kind: 'mcp_oauth' },
+      discoverMcp: async ({ serverUrl, environment }) => serverUrl === undefined
+        ? { kind: 'refused', reason: 'mcp_registry_connection_unavailable' }
+        : await previewOwnerMcpProviderConnection({
+            connectionRef,
+            businessRef: input.businessRef,
+            serverUrl,
+            environment,
+          }),
+    }
+  }
+  return {}
+}
+
+async function readOwnerProviderConnectionsForPublication(): Promise<readonly ProviderConnectionOwnerProjection[]> {
+  try {
+    return await callSourceQuery(
+      sourceQuery<Record<string, never>, readonly ProviderConnectionOwnerProjection[]>(
+        'capabilityProviderConnections:listOwner',
+      ),
+      {},
+    )
+  } catch {
+    return []
+  }
+}
+
+function publicationOrigin(
+  readback: OwnerSupplyFunnelReadback,
+  draft: Extract<OwnerDraftResult, { kind: 'saved' | 'replayed' }>,
+): Extract<PreparedPublicationMaterial['offering']['origin'], { kind: 'catalog_offering' }> | undefined {
+  if (readback.kind !== 'available') return undefined
+  const offering = readback.offerings.find(({ offeringRef }) => offeringRef === draft.offeringRef)
+  const accessPath = offering?.accessPaths.find(({ accessPathRef }) => accessPathRef === draft.accessPathRef)
+  if (offering?.sourceHash === undefined || accessPath === undefined) return undefined
+  return {
+    kind: 'catalog_offering',
+    offeringRef: offering.offeringRef,
+    offeringRevision: offering.revision,
+    offeringSourceHash: offering.sourceHash,
+    declaredAccessPathRef: accessPath.accessPathRef,
+    accessPathSourceHash: accessPath.sourceHash,
+  }
+}
+
+function unavailablePreview(): SupplySourcePreview {
+  return {
+    kind: 'action_required',
+    requiredAction: {
+      action: 'supply.source.preview',
+      blockedCapabilities: ['supply.publish'],
+      cta: '/owner/offerings',
+      ctaLabel: 'Return to Operations',
+      description: 'The current Business could not be confirmed. Return to Operations and try again.',
+      iconUrl: null,
+      status: 'required',
+      title: 'Business unavailable',
+    },
+  }
+}

@@ -36,10 +36,14 @@ type Env = {
   readonly AE_CONVEX_SERVER_FUNCTION_TOKEN: string | undefined;
   readonly AE_LLM_MODEL: string | undefined;
   readonly AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: string | undefined;
+  readonly AE_PACKAGE5_WRITES_ENABLED: string | undefined;
+  readonly AE_PROVIDER_OFFBOARDING_ENABLED: string | undefined;
   readonly AE_RELEASE_SOURCE_REVISION: string | undefined;
   readonly AE_ROUTE_CALL_SIGNING_KEY_ID: string | undefined;
   readonly AE_ROUTE_CALL_SIGNING_SECRET: string | undefined;
   readonly AE_SITE_URL: string | undefined;
+  readonly AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: string | undefined;
+  readonly AE_SUPPLY_MCP_OAUTH_ENABLED: string | undefined;
   readonly AE_X402_CDP_ACCOUNT_NAME: string | undefined;
   readonly AE_X402_CDP_ACCOUNT_POLICY_ID: string | undefined;
   readonly AE_X402_CDP_CREDENTIAL_GENERATION: string | undefined;

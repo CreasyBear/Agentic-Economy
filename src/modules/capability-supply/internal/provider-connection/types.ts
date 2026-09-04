@@ -28,6 +28,11 @@ export function isProviderConnectionCredentialRef(value: unknown): value is stri
   return typeof value === 'string' && (PRIVATE_CREDENTIAL_REF.test(value) || SECRET_POINTER_REF.test(value))
 }
 
+export type ProviderConnectionSourceAuthentication =
+  | Readonly<{ kind: 'api_key'; location: 'header' | 'query'; name: string }>
+  | Readonly<{ kind: 'http_bearer' }>
+  | Readonly<{ kind: 'mcp_oauth' }>
+
 export type ProviderConnection = Readonly<{
   connectionRef: string
   owningAccountRef: string
@@ -40,6 +45,9 @@ export type ProviderConnection = Readonly<{
   providerAccountRef: string
   adapterId: string
   credentialRef: string | null
+  sourceOrigin?: string
+  sourceEnvironment?: 'sandbox' | 'production'
+  sourceAuthentication?: ProviderConnectionSourceAuthentication
   x402Method?: 'GET' | 'POST'
   x402Payee?: string
   healthStatus?: 'healthy' | 'unhealthy'
@@ -82,6 +90,9 @@ export type AuthorityCommandFields = Readonly<{
   providerAccountRef: string
   adapterId: string
   credentialRef: string | null
+  sourceOrigin?: string
+  sourceEnvironment?: 'sandbox' | 'production'
+  sourceAuthentication?: ProviderConnectionSourceAuthentication
   x402Method?: 'GET' | 'POST'
   x402Payee?: string
   requestedScopes: readonly string[]
