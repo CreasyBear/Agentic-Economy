@@ -5,6 +5,7 @@ import {
   preflightOpenApiHttpDocument,
   type OpenApiOperationPreflightOutcome,
 } from '@/modules/capability-supply/public'
+import { validateOpenApiDocument } from '@/modules/capability-supply/internal/openapi-import/validation'
 const outputSchema = {
   type: 'object',
   properties: { result: { type: 'string' } },
@@ -81,6 +82,15 @@ function mixedOpenApiDocument() {
 }
 
 describe('OpenAPI document preflight', () => {
+  it('accepts the JSON response body read from a public OpenAPI URL', async () => {
+    const responseBody = JSON.stringify(mixedOpenApiDocument())
+
+    await expect(validateOpenApiDocument(responseBody)).resolves.toMatchObject({
+      kind: 'valid',
+      document: { openapi: '3.1.0' },
+    })
+  })
+
   it('accepts maintained OpenAPI 3.0 and 3.1 documents and rejects structurally invalid input', async () => {
     const openApi30 = mixedOpenApiDocument()
     openApi30.openapi = '3.0.3'

@@ -14,23 +14,35 @@ type OpenApiValidation =
     }>
 
 export async function validateOpenApiDocument(document: unknown): Promise<OpenApiValidation> {
-  if (!isRecord(document)) return { kind: 'refused', reason: 'source_invalid' }
-  if (typeof document.openapi !== 'string' || !/^3\.(?:0|1)\./u.test(document.openapi)) {
+  if (typeof document !== 'string' && !isRecord(document)) {
+    return { kind: 'refused', reason: 'source_invalid' }
+  }
+  let result: Awaited<ReturnType<typeof validate>>
+  try {
+    result = await validate(document)
+  } catch {
+    return { kind: 'refused', reason: 'source_invalid' }
+  }
+  const parsed = parsedSpecification(result)
+  if (!isRecord(parsed)) return { kind: 'refused', reason: 'source_invalid' }
+  const parsedRecord = parsed as Record<string, unknown>
+  if (typeof parsedRecord.openapi !== 'string' || !/^3\.(?:0|1)\./u.test(parsedRecord.openapi)) {
     return { kind: 'refused', reason: 'source_version_unsupported' }
   }
-  if (!isRecord(document.paths)) return { kind: 'refused', reason: 'schema_missing' }
+  if (!isRecord(parsedRecord.paths)) return { kind: 'refused', reason: 'schema_missing' }
 
-  const result = await validate(document)
-  const parsed = result.schema ?? result.specification
   const rootInvalid = (result.errors ?? []).some((error) => {
     const path = error.path
     if (path === undefined || path === '') return true
     if (Array.isArray(path)) return path[0] === 'info'
     return path.startsWith('/info')
   })
-  if (!isRecord(parsed) || !isRecord(parsed.paths)
-    || rootInvalid) {
+  if (rootInvalid) {
     return { kind: 'refused', reason: 'source_invalid' }
   }
-  return { kind: 'valid', document: parsed as ValidOpenApiDocument }
+  return { kind: 'valid', document: parsedRecord as ValidOpenApiDocument }
+}
+
+function parsedSpecification(result: Awaited<ReturnType<typeof validate>>): unknown {
+  return result.schema ?? result.specification
 }
