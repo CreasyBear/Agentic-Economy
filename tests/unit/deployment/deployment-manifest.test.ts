@@ -43,6 +43,15 @@ function productionEnvironment(): Record<string, string> {
     AE_FORMANCE_REQUEST_TIMEOUT_MS: '10000',
     AE_FORMANCE_ACCESS_CLIENT_ID: 'access-client-id',
     AE_FORMANCE_ACCESS_CLIENT_SECRET: 'access-client-secret',
+    AE_PACKAGE5_WRITES_ENABLED: 'true',
+    AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: 'true',
+    AE_SUPPLY_MCP_OAUTH_ENABLED: 'true',
+    AE_PROVIDER_OFFBOARDING_ENABLED: 'true',
+    AE_INFISICAL_BASE_URL: 'https://app.infisical.com',
+    AE_INFISICAL_CUSTOMER_PROJECT_ID: 'project-customer',
+    AE_INFISICAL_CUSTOMER_ENVIRONMENT: 'production',
+    AE_INFISICAL_CUSTOMER_SECRET_PATH: '/agentic-economy/customer',
+    AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID: 'identity-customer',
     AE_LLM_MODEL: 'deepseek/deepseek-v4-flash',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
@@ -64,12 +73,14 @@ describe('deployment manifest validator', () => {
       'formance-financial-authority',
       'seller-onboarding-canary-funding',
       'durable-invocation-workpool',
+      'provider-operations-rollout',
       'operation-gateway',
       'convex-scheduled-jobs',
     ])
     const components = result.resources.find((resource) => resource.id === 'convex-components')
     expect((components as { components: readonly string[] }).components).toEqual([
       'workpool',
+      'workflow',
       'rate-limiter',
       'agent',
       'aggregate:ownerActivationByStage',
@@ -113,7 +124,41 @@ describe('deployment manifest validator', () => {
       'STRIPE_SECRET_KEY',
       'STRIPE_WEBHOOK_SECRET',
       'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
+      'AE_PACKAGE5_WRITES_ENABLED',
+      'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+      'AE_SUPPLY_MCP_OAUTH_ENABLED',
+      'AE_PROVIDER_OFFBOARDING_ENABLED',
+      'AE_INFISICAL_BASE_URL',
+      'AE_INFISICAL_CUSTOMER_PROJECT_ID',
+      'AE_INFISICAL_CUSTOMER_ENVIRONMENT',
+      'AE_INFISICAL_CUSTOMER_SECRET_PATH',
+      'AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID',
     ]))
+  })
+
+  it('requires every Package 5 rollout switch to be explicitly enabled in controlled deployments', () => {
+    const production = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_SUPPLY_MCP_OAUTH_ENABLED: 'false',
+    }, { nodeMajor: 22 })
+    expect(production.findings).toContainEqual({
+      kind: 'malformed',
+      code: 'package5_rollout_not_enabled',
+      names: ['AE_SUPPLY_MCP_OAUTH_ENABLED'],
+      scope: 'package5-rollout',
+    })
+
+    const synthetic = validateDeploymentManifest({
+      NODE_ENV: 'test',
+      AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture',
+    }, { environment: 'test', nodeMajor: 22 })
+    expect(synthetic.findings.filter(({ scope }) => scope === 'package5-rollout').flatMap(({ names }) => names))
+      .toEqual(expect.arrayContaining([
+        'AE_PACKAGE5_WRITES_ENABLED',
+        'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
+        'AE_SUPPLY_MCP_OAUTH_ENABLED',
+        'AE_PROVIDER_OFFBOARDING_ENABLED',
+      ]))
   })
 
   it('reuses canonical source-write authority validation', () => {
