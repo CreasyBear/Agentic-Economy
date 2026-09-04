@@ -80,7 +80,9 @@ const durableTables = [
   'sellerOnboardingCanaryRearmAudits',
   'providerConsequenceJournal',
   'capabilityPublications',
+  'capabilitySupplierOperationProjections',
   'capabilitySupplyAdmissionCases',
+  'capabilitySupplySourceDrafts',
   'capabilityTransportBindings',
   'capabilityProviderConnections',
   'capabilityProviderConnectionAttempts',
@@ -239,6 +241,8 @@ const requiredIndexes = {
     'by_accountRef_and_principalRef_and_createdAt',
     'by_accountRef_and_operationRef_and_createdAt',
     'by_accountRef_and_providerRef_and_createdAt',
+    'by_providerRef_and_createdAt',
+    'by_operationRef_and_createdAt',
     'by_accountRef_and_applicationRef_and_createdAt',
   ],
   capabilityOperationCommitments: ['by_commitmentRef', 'by_credentialId_and_createdAt', 'by_state_and_expiresAt'],
@@ -332,6 +336,16 @@ const requiredIndexes = {
     'by_lifecycle_and_expiresAt',
     'by_businessId_and_updatedAt',
   ],
+  capabilitySupplierOperationProjections: [
+    'by_businessId_and_updatedAt',
+    'by_businessId_and_operationRef',
+    'by_businessId_and_offeringRef',
+  ],
+  capabilitySupplySourceDrafts: [
+    'by_draftRef',
+    'by_businessId_and_updatedAt',
+    'by_lifecycle_and_expiresAt',
+  ],
   capabilityProviderOffboardingCases: [
     'by_caseRef',
     'by_businessId_and_updatedAt',
@@ -361,7 +375,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(85)
+    expect(durableTables).toHaveLength(87)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

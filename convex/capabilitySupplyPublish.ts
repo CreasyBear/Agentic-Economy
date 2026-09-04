@@ -46,6 +46,7 @@ import { clerkConsequenceProofValue } from './lib/consequenceProof'
 import { admitAgentPublicationConsequence } from './lib/agentPublicationConsequence'
 import { admitInteractiveOwnerConsequence } from './lib/ownerConsequence'
 import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
+import { upsertSupplierOperationIdentity } from './capabilitySupplierOperationProjection'
 import {
   authorityValue,
   cancellationValue,
@@ -455,6 +456,21 @@ async function recordSupplyAdmissionCase(
     blockerRefs: [],
     evidenceRefs: [...args.evidenceRefs],
     submittedAt: now,
+    updatedAt: now,
+  })
+  const catalogOrigin = args.prepared.offering.origin?.kind === 'catalog_offering'
+    ? args.prepared.offering.origin
+    : undefined
+  await upsertSupplierOperationIdentity(ctx, {
+    businessId: args.businessId,
+    providerRef,
+    operationRef: result.operationRef,
+    offeringRef: catalogOrigin?.offeringRef ?? result.offeringId,
+    offeringRevision: catalogOrigin?.offeringRevision ?? result.publicationRevision,
+    publicationRef: result.publicationRef,
+    publicationRevision: result.publicationRevision,
+    offeringId: result.offeringId,
+    bindingId: result.bindingId,
     updatedAt: now,
   })
 }

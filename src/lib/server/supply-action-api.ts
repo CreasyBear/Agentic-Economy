@@ -25,6 +25,7 @@ import {
   supplyConnectionRevokeAction,
   supplyEarningsAction,
   supplyOffboardingStatusAction,
+  supplyOperationsListAction,
   supplyPublishAction,
   supplyRecheckAction,
   supplyRepublishAction,
@@ -38,6 +39,7 @@ const MAX_SUPPLY_ACTION_BODY_BYTES = 320 * 1024
 
 export const SUPPLY_HTTP_ACTIONS = Object.freeze({
   sourcePreview: supplySourcePreviewAction,
+  operationsList: supplyOperationsListAction,
   status: supplyStatusAction,
   publish: supplyPublishAction,
   withdraw: supplyWithdrawAction,

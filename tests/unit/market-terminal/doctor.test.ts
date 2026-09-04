@@ -481,11 +481,11 @@ describe('ae doctor', () => {
           respondJson(response, { kind: 'available', items: [], hasMore: false })
           return
         }
-        if (request.url === '/api/v1/supply/status') {
+        if (request.url === '/api/v1/supply/operations/list') {
           supplierRequests.push({ path: request.url, body: JSON.parse(bodyText) })
           respondJson(response, {
-            kind: 'available', businessId: 'business:one', business: { name: 'One', slug: 'one' }, activityTruncated: false,
-            operations: [
+            kind: 'available', schemaVersion: 'supplier_operations:v1', businessRef: 'business:one', isDone: true, continueCursor: null,
+            page: [
               supplyOperation('offering:live', true),
               supplyOperation('offering:unready', false),
             ],
@@ -533,13 +533,13 @@ describe('ae doctor', () => {
         {
           id: 'supplier.readiness', state: 'warn',
           summary: 'Supplier business has 2 Operations (1 live, 1 unready) and 2 provider connections (1 ready, 1 needing attention).',
-          nextCommand: 'ae supply status business:one',
+          nextCommand: 'ae supply operations business:one',
         },
       ],
     })
     expect(supplierRequests.toSorted((left, right) => left.path.localeCompare(right.path))).toEqual([
       { path: '/api/v1/supply/connections/list', body: { businessId: 'business:one', limit: 100 } },
-      { path: '/api/v1/supply/status', body: { businessId: 'business:one' } },
+      { path: '/api/v1/supply/operations/list', body: { businessRef: 'business:one', limit: 100 } },
     ])
   })
 
@@ -874,11 +874,26 @@ function writeStoredConfig(directory: string, origin: string, buyerSecret: strin
 
 function supplyOperation(offeringRef: string, live: boolean) {
   return {
-    offeringRef, revision: 1, name: offeringRef, summary: 'Operation', catalogStatus: live ? 'published' : 'draft',
-    lifecycle: { state: live ? 'active' : 'inactive', reasons: [] },
-    readiness: { outcome: live ? 'routeable' : 'not_ready' }, live: { available: live },
-    currentStep: live ? 'test' : 'readiness',
-    stepStates: { describe: 'completed', admission: 'completed', readiness: live ? 'completed' : 'refused', test: live ? 'completed' : 'not_started' },
+    schemaVersion: 'supplier_operations:v1',
+    businessRef: 'business:one',
+    providerRef: 'provider:one',
+    operationRef: offeringRef,
+    revision: 1,
+    state: live ? 'Published' : 'Action required',
+    reasonCodes: live ? [] : ['health_unhealthy'],
+    observedAt: 10,
+    source: { kind: 'openapi' },
+    routeability: { available: live, reasonCodes: live ? [] : ['health_unhealthy'] },
+    authority: { kind: 'public' },
+    health: {
+      connection: 'not_required',
+      validation: live ? 'passed' : 'failed',
+      publication: 'published',
+      freshness: live ? 'current' : 'failed',
+      delivery: { kind: 'unobserved', provenance: 'canonical_call_receipts' },
+      usefulOutcome: { kind: 'unobserved', provenance: 'qualified_use_receipts' },
+      operationalConditions: live ? [] : ['health_unhealthy'],
+    },
   }
 }
 

@@ -34,6 +34,8 @@ import type * as capabilityProviderConnectionMigration from "../capabilityProvid
 import type * as capabilityProviderConnections from "../capabilityProviderConnections.js";
 import type * as capabilityProviderConsequenceJournal from "../capabilityProviderConsequenceJournal.js";
 import type * as capabilityProviderOffboarding from "../capabilityProviderOffboarding.js";
+import type * as capabilitySupplierOperationProjection from "../capabilitySupplierOperationProjection.js";
+import type * as capabilitySupplierOperations from "../capabilitySupplierOperations.js";
 import type * as capabilitySupply from "../capabilitySupply.js";
 import type * as capabilitySupplyCanaryFunding from "../capabilitySupplyCanaryFunding.js";
 import type * as capabilitySupplyCanaryFundingPreflight from "../capabilitySupplyCanaryFundingPreflight.js";
@@ -206,6 +208,8 @@ declare const fullApi: ApiFromModules<{
   capabilityProviderConnections: typeof capabilityProviderConnections;
   capabilityProviderConsequenceJournal: typeof capabilityProviderConsequenceJournal;
   capabilityProviderOffboarding: typeof capabilityProviderOffboarding;
+  capabilitySupplierOperationProjection: typeof capabilitySupplierOperationProjection;
+  capabilitySupplierOperations: typeof capabilitySupplierOperations;
   capabilitySupply: typeof capabilitySupply;
   capabilitySupplyCanaryFunding: typeof capabilitySupplyCanaryFunding;
   capabilitySupplyCanaryFundingPreflight: typeof capabilitySupplyCanaryFundingPreflight;

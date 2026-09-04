@@ -113,6 +113,7 @@ import { Route as OperatorOwnerSettingsConnectionsRouteImport } from './routes/_
 import { Route as OperatorOwnerOfferingsNewRouteImport } from './routes/_operator/owner.offerings.new'
 import { Route as OperatorOwnerOfferingsOfferingRefRouteImport } from './routes/_operator/owner.offerings.$offeringRef'
 import { Route as ApiV1SupplySourcesPreviewRouteImport } from './routes/api.v1.supply.sources.preview'
+import { Route as ApiV1SupplyOperationsListRouteImport } from './routes/api.v1.supply.operations.list'
 import { Route as ApiV1SupplyOffboardingStatusRouteImport } from './routes/api.v1.supply.offboarding.status'
 import { Route as ApiV1SupplyConnectionsRevokeRouteImport } from './routes/api.v1.supply.connections.revoke'
 import { Route as ApiV1SupplyConnectionsReconnectRouteImport } from './routes/api.v1.supply.connections.reconnect'
@@ -674,6 +675,12 @@ const ApiV1SupplySourcesPreviewRoute =
     path: '/api/v1/supply/sources/preview',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1SupplyOperationsListRoute =
+  ApiV1SupplyOperationsListRouteImport.update({
+    id: '/api/v1/supply/operations/list',
+    path: '/api/v1/supply/operations/list',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1SupplyOffboardingStatusRoute =
   ApiV1SupplyOffboardingStatusRouteImport.update({
     id: '/api/v1/supply/offboarding/status',
@@ -867,6 +874,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/supply/connections/reconnect': typeof ApiV1SupplyConnectionsReconnectRoute
   '/api/v1/supply/connections/revoke': typeof ApiV1SupplyConnectionsRevokeRoute
   '/api/v1/supply/offboarding/status': typeof ApiV1SupplyOffboardingStatusRoute
+  '/api/v1/supply/operations/list': typeof ApiV1SupplyOperationsListRoute
   '/api/v1/supply/sources/preview': typeof ApiV1SupplySourcesPreviewRoute
   '/owner/supply/connections/oauth/callback': typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
   '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
@@ -985,6 +993,7 @@ export interface FileRoutesByTo {
   '/api/v1/supply/connections/reconnect': typeof ApiV1SupplyConnectionsReconnectRoute
   '/api/v1/supply/connections/revoke': typeof ApiV1SupplyConnectionsRevokeRoute
   '/api/v1/supply/offboarding/status': typeof ApiV1SupplyOffboardingStatusRoute
+  '/api/v1/supply/operations/list': typeof ApiV1SupplyOperationsListRoute
   '/api/v1/supply/sources/preview': typeof ApiV1SupplySourcesPreviewRoute
   '/owner/supply/connections/oauth/callback': typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
   '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
@@ -1105,6 +1114,7 @@ export interface FileRoutesById {
   '/api/v1/supply/connections/reconnect': typeof ApiV1SupplyConnectionsReconnectRoute
   '/api/v1/supply/connections/revoke': typeof ApiV1SupplyConnectionsRevokeRoute
   '/api/v1/supply/offboarding/status': typeof ApiV1SupplyOffboardingStatusRoute
+  '/api/v1/supply/operations/list': typeof ApiV1SupplyOperationsListRoute
   '/api/v1/supply/sources/preview': typeof ApiV1SupplySourcesPreviewRoute
   '/_operator/owner/supply/connections/oauth/callback': typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
   '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
@@ -1225,6 +1235,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/connections/reconnect'
     | '/api/v1/supply/connections/revoke'
     | '/api/v1/supply/offboarding/status'
+    | '/api/v1/supply/operations/list'
     | '/api/v1/supply/sources/preview'
     | '/owner/supply/connections/oauth/callback'
     | '/api/v1/account/funding-sessions/public/$fundingSessionId'
@@ -1343,6 +1354,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/connections/reconnect'
     | '/api/v1/supply/connections/revoke'
     | '/api/v1/supply/offboarding/status'
+    | '/api/v1/supply/operations/list'
     | '/api/v1/supply/sources/preview'
     | '/owner/supply/connections/oauth/callback'
     | '/api/v1/account/funding-sessions/public/$fundingSessionId'
@@ -1462,6 +1474,7 @@ export interface FileRouteTypes {
     | '/api/v1/supply/connections/reconnect'
     | '/api/v1/supply/connections/revoke'
     | '/api/v1/supply/offboarding/status'
+    | '/api/v1/supply/operations/list'
     | '/api/v1/supply/sources/preview'
     | '/_operator/owner/supply/connections/oauth/callback'
     | '/api/v1/account/funding-sessions/public/$fundingSessionId'
@@ -1543,6 +1556,7 @@ export interface RootRouteChildren {
   ApiV1SupplyConnectionsReconnectRoute: typeof ApiV1SupplyConnectionsReconnectRoute
   ApiV1SupplyConnectionsRevokeRoute: typeof ApiV1SupplyConnectionsRevokeRoute
   ApiV1SupplyOffboardingStatusRoute: typeof ApiV1SupplyOffboardingStatusRoute
+  ApiV1SupplyOperationsListRoute: typeof ApiV1SupplyOperationsListRoute
   ApiV1SupplySourcesPreviewRoute: typeof ApiV1SupplySourcesPreviewRoute
 }
 
@@ -2276,6 +2290,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SupplySourcesPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/supply/operations/list': {
+      id: '/api/v1/supply/operations/list'
+      path: '/api/v1/supply/operations/list'
+      fullPath: '/api/v1/supply/operations/list'
+      preLoaderRoute: typeof ApiV1SupplyOperationsListRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/supply/offboarding/status': {
       id: '/api/v1/supply/offboarding/status'
       path: '/api/v1/supply/offboarding/status'
@@ -2693,6 +2714,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1SupplyConnectionsReconnectRoute: ApiV1SupplyConnectionsReconnectRoute,
   ApiV1SupplyConnectionsRevokeRoute: ApiV1SupplyConnectionsRevokeRoute,
   ApiV1SupplyOffboardingStatusRoute: ApiV1SupplyOffboardingStatusRoute,
+  ApiV1SupplyOperationsListRoute: ApiV1SupplyOperationsListRoute,
   ApiV1SupplySourcesPreviewRoute: ApiV1SupplySourcesPreviewRoute,
 }
 export const routeTree = rootRouteImport

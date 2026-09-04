@@ -100,17 +100,17 @@ describe('action registry', () => {
       'marketDemand.record', 'marketDemand.list', 'marketDemand.status',
       'operation.inspect', 'operation.invoke', 'operation.list', 'operation.status',
       'operation.cancel', 'operation.reconcile',
-      'supply.source.preview', 'supply.status', 'supply.publish', 'supply.withdraw',
+      'supply.source.preview', 'supply.operations.list', 'supply.status', 'supply.publish', 'supply.withdraw',
       'supply.recheck', 'supply.republish', 'supply.earnings',
       'supply.connection.list', 'supply.connection.detail',
       'supply.connection.connect', 'supply.connection.reconnect',
       'supply.connection.revoke',
       'supply.offboarding.status',
     ])
-    expect(exposed.slice(-13).every((action) =>
+    expect(exposed.slice(-14).every((action) =>
       action.credentialAdmission?.scope === 'market_supply:manage'
       && action.surfaces.includes('mcp'))).toBe(true)
-    expect(exposed.slice(-13).every((action) => action.surfaces.includes('cli'))).toBe(true)
+    expect(exposed.slice(-14).every((action) => action.surfaces.includes('cli'))).toBe(true)
     const anonymous = exposed.filter((action) => action.readOnly && action.credentialAdmission === undefined)
     expect(anonymous.map((action) => action.id)).toEqual([
       'registry.operations.list', 'registry.operations.search',
@@ -137,7 +137,7 @@ describe('action registry', () => {
       'ae_marketDemand_record', 'ae_marketDemand_list', 'ae_marketDemand_status',
       'ae_operation_inspect', 'ae_operation_invoke', 'ae_operation_list', 'ae_operation_status',
       'ae_operation_cancel', 'ae_operation_reconcile',
-      'ae_supply_source_preview', 'ae_supply_status', 'ae_supply_publish', 'ae_supply_withdraw',
+      'ae_supply_source_preview', 'ae_supply_operations_list', 'ae_supply_status', 'ae_supply_publish', 'ae_supply_withdraw',
       'ae_supply_recheck', 'ae_supply_republish', 'ae_supply_earnings',
       'ae_supply_connection_list', 'ae_supply_connection_detail',
       'ae_supply_connection_connect', 'ae_supply_connection_reconnect',
@@ -185,6 +185,7 @@ describe('action registry', () => {
   })
   it('registers supply actions with narrow inputs and output contracts', () => {
     const sourcePreview = findAction('supply.source.preview')
+    const operationsList = findAction('supply.operations.list')
     const publish = findAction('supply.publish')
     const withdraw = findAction('supply.withdraw')
     const status = findAction('supply.status')
@@ -196,7 +197,9 @@ describe('action registry', () => {
     const connectionConnect = findAction('supply.connection.connect')
     const connectionReconnect = findAction('supply.connection.reconnect')
     const connectionRevoke = findAction('supply.connection.revoke')
+    expect(operationsList?.parameters.map(({ name }) => name)).toEqual(['businessRef', 'limit', 'cursor'])
     expect(status?.parameters.map(({ name }) => name)).toEqual(['businessRef', 'operationRef'])
+    expect(status?.parameters.find(({ name }) => name === 'operationRef')?.required).toBe(true)
     expect(publish?.parameters.map(({ name }) => name)).toEqual([
       'businessRef', 'source', 'candidateRef', 'expectedSourceDigest', 'connectionRef',
       'presentation', 'consequences', 'pricing', 'validationInput', 'environment',
@@ -209,7 +212,7 @@ describe('action registry', () => {
     expect(earnings?.parameters.map(({ name }) => name)).toEqual(['currency'])
     expect(recheck?.parameters).toEqual(withdraw?.parameters)
     expect(republish?.parameters).toEqual(withdraw?.parameters)
-    for (const action of [sourcePreview, status, publish, withdraw, recheck, republish, earnings, connectionList, connectionDetail, connectionConnect, connectionReconnect, connectionRevoke]) {
+    for (const action of [sourcePreview, operationsList, status, publish, withdraw, recheck, republish, earnings, connectionList, connectionDetail, connectionConnect, connectionReconnect, connectionRevoke]) {
       expect(action?.surfaces).toEqual(['http', 'mcp', 'cli'])
       expect(action?.credentialAdmission?.scope).toBe('market_supply:manage')
     }

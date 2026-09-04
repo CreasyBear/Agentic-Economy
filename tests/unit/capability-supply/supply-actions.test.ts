@@ -189,69 +189,61 @@ beforeEach(() => {
 })
 
 describe('supply action runtime boundaries', () => {
-  it('projects one canonical lifecycle status without endpoint or provider authority material', async () => {
-    mocks.callPublicSourceMutation.mockResolvedValue({
-      kind: 'available',
-      businessId: 'business:supply-actions',
-      business: { name: 'Supplier', slug: 'supplier' },
-      offerings: [{
-        offeringRef: 'offering:one',
-        revision: 1,
-        name: 'Lookup',
-        summary: 'Look something up.',
-        status: 'published',
-        endpointUrl: 'https://private-provider.example/lookup',
-        authority: { kind: 'provider_connection', providerRef: 'provider:secret' },
-        admission: { state: 'admitted' },
-        publication: {
-          state: 'current',
-          publicationRef: 'publication:one',
-          publicationRevision: 1,
-          operationRef: 'operation:one',
-        },
-        lifecycle: { state: 'active', reasons: [] },
-        readiness: { outcome: 'healthy', observedAt: 10, validUntil: 20, evidenceRefs: [] },
-        live: { available: true },
-        currentStep: 'test',
-        stepStates: { describe: 'completed', admission: 'completed', readiness: 'completed', test: 'completed' },
-        operationEvidence: {
-          windowStartAt: 1,
-          windowEndAt: 20,
-          delivery: {
-            kind: 'observed',
-            deliveredCount: 7,
-            notDeliveredCount: 1,
-            unknownCount: 2,
-            sampleSize: 10,
-            lastObservedAt: 19,
-            provenance: 'canonical_call_receipts',
-          },
-          usefulOutcome: {
-            kind: 'observed',
-            qualifiedUseCount: 6,
-            lastObservedAt: 18,
-            provenance: 'qualified_use_receipts',
-          },
-        },
-        accessPaths: [],
-      }],
-      callLog: [],
-      activityTruncated: false,
-      liquidity: { fillCount: 0, zeroCount: 0, depthSamples: 0, environment: 'production' },
-    })
+  it('separates the paginated Provider directory from one exact lifecycle status', async () => {
+    const projectedStatus = {
+      schemaVersion: 'supplier_operations:v1',
+      businessRef: 'business:supply-actions',
+      providerRef: 'business:supply-actions',
+      operationRef: 'operation:one',
+      revision: 1,
+      state: 'Published',
+      reasonCodes: [],
+      observedAt: 20,
+      source: { kind: 'mcp' },
+      routeability: { available: true, reasonCodes: [] },
+      authority: { kind: 'connection', connectionRef: 'connection:one', providerRef: 'business:supply-actions' },
+      health: {
+        connection: 'connected',
+        validation: 'passed',
+        publication: 'published',
+        freshness: 'current',
+        delivery: { kind: 'observed', deliveredCount: 7, notDeliveredCount: 1, unknownCount: 2, sampleSize: 10, lastObservedAt: 19, windowStartAt: 1, windowEndAt: 20, provenance: 'canonical_call_receipts' },
+        usefulOutcome: { kind: 'observed', qualifiedUseCount: 6, lastObservedAt: 18, windowStartAt: 1, windowEndAt: 20, provenance: 'qualified_use_receipts' },
+        operationalConditions: [],
+      },
+    }
+    mocks.callPublicSourceMutation.mockImplementation(async (mutation: { name: string }) => mutation.name === 'capabilitySupplierOperations:listAgent'
+      ? { kind: 'available', page: [{ statusJson: JSON.stringify(projectedStatus) }], isDone: true, continueCursor: '' }
+      : { kind: 'available', statusJson: JSON.stringify(projectedStatus) })
     const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
 
-    const result = await service.status({
+    const directory = await service.operationsList({
+      input: { businessRef: 'business:supply-actions', limit: 50 },
+      principal,
+      correlationId: 'list:one',
+    })
+    const status = await service.status({
       input: { businessRef: 'business:supply-actions', operationRef: 'operation:one' },
       principal,
       correlationId: 'status:one',
     })
 
-    expect(result).toMatchObject({
+    expect(directory).toMatchObject({
       kind: 'available',
       schemaVersion: 'supplier_operations:v1',
       businessRef: 'business:supply-actions',
-      operations: [{
+      page: [{
+        operationRef: 'operation:one',
+        state: 'Published',
+      }],
+      isDone: true,
+      continueCursor: null,
+    })
+    expect(status).toMatchObject({
+      kind: 'available',
+      schemaVersion: 'supplier_operations:v1',
+      businessRef: 'business:supply-actions',
+      status: {
         operationRef: 'operation:one',
         state: 'Published',
         routeability: { available: true },
@@ -276,10 +268,10 @@ describe('supply action runtime boundaries', () => {
             provenance: 'qualified_use_receipts',
           },
         },
-      }],
+      },
     })
-    expect(JSON.stringify(result)).not.toContain('private-provider')
-    expect(JSON.stringify(result)).not.toContain('publication:one')
+    expect(JSON.stringify([directory, status])).not.toContain('private-provider')
+    expect(JSON.stringify([directory, status])).not.toContain('publication:one')
   })
 
   it('persists the selected native-source draft before submitting exact prepared material', async () => {

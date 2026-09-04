@@ -15,7 +15,6 @@ import {
   type OwnerProviderEarningsReadback,
   type OwnerSupplyCommandResult,
   type OwnerSupplyFunnelReadback,
-  type OwnerSupplyOfferingReadback,
 } from './supply-funnel.functions'
 import type { PublishPreparedCapabilityCommandResult } from './internal/publication'
 import { inspectX402SellerEndpoint } from './internal/x402-seller-endpoint-inspector'
@@ -41,11 +40,7 @@ import {
   publishSupplyOperationV2InputSchema,
   type PublishSupplyOperationV2Input,
 } from './supply-publication-v2'
-import {
-  projectSupplierOperationStatus,
-  supplierOperationStatusSchema,
-  type SupplierOperationStatus,
-} from './supplier-operation-status'
+import { supplierOperationStatusSchema } from './supplier-operation-status'
 import {
   providerOffboardingStatusSchema,
 } from './provider-offboarding'
@@ -61,6 +56,7 @@ const actionRefusalSchema = z.strictObject({
 
 export const SUPPLY_ACTION_IDS = Object.freeze({
   sourcePreview: 'supply.source.preview',
+  operationsList: 'supply.operations.list',
   status: 'supply.status',
   publish: 'supply.publish',
   withdraw: 'supply.withdraw',
@@ -77,23 +73,45 @@ export const SUPPLY_ACTION_IDS = Object.freeze({
 
 export const SUPPLY_ACTION_ROUTE_CONTRACTS = Object.freeze({
   sourcePreview: Object.freeze({ actionId: SUPPLY_ACTION_IDS.sourcePreview, contractVersion: 'supply.source.preview:v1', method: 'POST' as const, path: '/api/v1/supply/sources/preview', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
+  operationsList: Object.freeze({ actionId: SUPPLY_ACTION_IDS.operationsList, contractVersion: 'supply.operations.list:v1', method: 'POST' as const, path: '/api/v1/supply/operations/list', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   status: Object.freeze({ actionId: SUPPLY_ACTION_IDS.status, contractVersion: 'supply.status:v2', method: 'POST' as const, path: '/api/v1/supply/status', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   publish: Object.freeze({ actionId: SUPPLY_ACTION_IDS.publish, contractVersion: 'supply.publish:v2', method: 'POST' as const, path: '/api/v1/supply/publish', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   withdraw: Object.freeze({ actionId: SUPPLY_ACTION_IDS.withdraw, contractVersion: 'supply-withdrawal:v1', method: 'POST' as const, path: '/api/v1/supply/withdraw', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   recheck: Object.freeze({ actionId: SUPPLY_ACTION_IDS.recheck, contractVersion: 'supply-recheck:v1', method: 'POST' as const, path: '/api/v1/supply/recheck', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   republish: Object.freeze({ actionId: SUPPLY_ACTION_IDS.republish, contractVersion: 'supply-republish:v1', method: 'POST' as const, path: '/api/v1/supply/republish', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   earnings: Object.freeze({ actionId: SUPPLY_ACTION_IDS.earnings, contractVersion: 'supply-earnings:v1', method: 'POST' as const, path: '/api/v1/supply/earnings', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
-  connectionList: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionList, contractVersion: 'supply-connection-list:v1', method: 'POST' as const, path: '/api/v1/supply/connections/list', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
-  connectionDetail: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionDetail, contractVersion: 'supply-connection-detail:v1', method: 'POST' as const, path: '/api/v1/supply/connections/detail', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
+  connectionList: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionList, contractVersion: 'supply.connection.list:v2', method: 'POST' as const, path: '/api/v1/supply/connections/list', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
+  connectionDetail: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionDetail, contractVersion: 'supply.connection.detail:v2', method: 'POST' as const, path: '/api/v1/supply/connections/detail', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   connectionConnect: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionConnect, contractVersion: 'supply.connection.connect:v3', method: 'POST' as const, path: '/api/v1/supply/connections/connect', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
-  connectionReconnect: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionReconnect, contractVersion: 'supply-connection-reconnect:v1', method: 'POST' as const, path: '/api/v1/supply/connections/reconnect', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
-  connectionRevoke: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionRevoke, contractVersion: 'supply-connection-revoke:v1', method: 'POST' as const, path: '/api/v1/supply/connections/revoke', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
+  connectionReconnect: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionReconnect, contractVersion: 'supply.connection.reconnect:v2', method: 'POST' as const, path: '/api/v1/supply/connections/reconnect', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
+  connectionRevoke: Object.freeze({ actionId: SUPPLY_ACTION_IDS.connectionRevoke, contractVersion: 'supply.connection.revoke:v2', method: 'POST' as const, path: '/api/v1/supply/connections/revoke', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
   offboardingStatus: Object.freeze({ actionId: SUPPLY_ACTION_IDS.offboardingStatus, contractVersion: 'supply.offboarding.status:v1', method: 'POST' as const, path: '/api/v1/supply/offboarding/status', scope: MARKET_SUPPLY_MANAGE_SCOPE }),
 })
 
+export const supplyOperationsListInputSchema = z.strictObject({
+  businessRef: z.string().trim().min(1),
+  limit: z.number().int().min(1).max(100).default(50),
+  cursor: z.string().trim().min(1).optional(),
+})
+export type SupplyOperationsListInput = z.infer<typeof supplyOperationsListInputSchema>
+export const supplyOperationsListResultSchema = z.union([
+  z.strictObject({
+    kind: z.literal('available'),
+    schemaVersion: z.literal('supplier_operations:v1'),
+    businessRef: z.string(),
+    page: z.array(supplierOperationStatusSchema),
+    isDone: z.boolean(),
+    continueCursor: z.string().nullable(),
+  }),
+  z.strictObject({ kind: z.literal('not_found') }),
+  z.strictObject({ kind: z.literal('incomplete') }),
+  z.strictObject({ kind: z.literal('error'), code: z.enum(['unauthenticated', 'source_unavailable']) }),
+])
+export type SupplyOperationsListResult = z.infer<typeof supplyOperationsListResultSchema>
+
 export const supplyStatusInputSchema = z.strictObject({
   businessRef: z.string().trim().min(1),
-  operationRef: z.string().trim().min(1).optional(),
+  operationRef: z.string().trim().min(1),
 })
 export type SupplyStatusInput = z.infer<typeof supplyStatusInputSchema>
 export const supplyStatusResultSchema = z.union([
@@ -101,8 +119,7 @@ export const supplyStatusResultSchema = z.union([
     kind: z.literal('available'),
     schemaVersion: z.literal('supplier_operations:v1'),
     businessRef: z.string(),
-    operations: z.array(supplierOperationStatusSchema),
-    activityTruncated: z.boolean(),
+    status: supplierOperationStatusSchema,
   }),
   z.strictObject({ kind: z.literal('not_found') }),
   z.strictObject({ kind: z.literal('incomplete') }),
@@ -428,6 +445,7 @@ function connectionRefused(reason: SupplyConnectionRefusalReason): SupplyConnect
 
 export type SupplyManagementService = Readonly<{
   sourcePreview(input: Readonly<{ input: SupplySourceInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplySourcePreview>
+  operationsList(input: Readonly<{ input: SupplyOperationsListInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyOperationsListResult>
   status(input: Readonly<{ input: SupplyStatusInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyStatusResult>
   publish(input: Readonly<{ input: SupplyPublishInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyPublishResult>
   withdraw(input: Readonly<{ input: SupplyWithdrawInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<SupplyWithdrawResult>
@@ -443,6 +461,15 @@ export type SupplyManagementService = Readonly<{
 }>
 
 const supplyReadMutation = sourceMutation<Record<string, unknown>, OwnerSupplyFunnelReadback>('capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel')
+type SupplierOperationAgentRead = Readonly<{ kind: 'available'; statusJson: string }> | Readonly<{ kind: 'not_found' }>
+type SupplierOperationAgentList = Readonly<{
+  kind: 'available'
+  page: readonly Readonly<{ statusJson: string }>[]
+  isDone: boolean
+  continueCursor: string
+}> | Readonly<{ kind: 'not_found' }>
+const supplierOperationReadMutation = sourceMutation<Record<string, unknown>, SupplierOperationAgentRead>('capabilitySupplierOperations:readAgent')
+const supplierOperationListMutation = sourceMutation<Record<string, unknown>, SupplierOperationAgentList>('capabilitySupplierOperations:listAgent')
 type OwnerPublicationReservationResult =
   | { kind: 'reserved' }
   | { kind: 'replayed' }
@@ -497,31 +524,52 @@ export function createSupplyManagementService(request: Request, bodyText: string
       action: SUPPLY_ACTION_IDS.status,
       principalId: principal.principalId,
       businessRef: input.businessRef,
-      operationRef: input.operationRef ?? null,
+      operationRef: input.operationRef,
       correlationId,
     })
-    const readback = await mutate(supplyReadMutation, {
+    const readback = await mutate(supplierOperationReadMutation, {
       businessId: input.businessRef,
+      operationRef: input.operationRef,
       agentPrincipal: principal,
       operationKey,
       correlationId,
     }, operationKey, correlationId)
-    if (readback.kind === 'error') return { kind: 'error', code: readback.code }
     if (readback.kind === 'not_found') return { kind: 'not_found' }
-    if (readback.kind === 'incomplete') return { kind: 'incomplete' }
-    const selected = input.operationRef === undefined
-      ? readback.offerings
-      : readback.offerings.filter((offering) => (
-          offering.publication?.operationRef === input.operationRef
-          || (offering.publication === undefined && offering.offeringRef === input.operationRef)
-        ))
-    if (input.operationRef !== undefined && selected.length === 0) return { kind: 'not_found' }
+    const projected = supplierOperationStatusSchema.safeParse(JSON.parse(readback.statusJson) as unknown)
+    if (!projected.success) return { kind: 'error', code: 'source_unavailable' }
     return supplyStatusResultSchema.parse({
       kind: 'available',
       schemaVersion: 'supplier_operations:v1',
-      businessRef: readback.businessId,
-      operations: selected.map((offering) => projectSupplyStatusOperation(readback.businessId, offering)),
-      activityTruncated: readback.activityTruncated,
+      businessRef: input.businessRef,
+      status: projected.data,
+    })
+  }
+  const operationsList = async ({ input, principal, correlationId }: { input: SupplyOperationsListInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyOperationsListResult> => {
+    const operationKey = canonicalDigest({
+      action: SUPPLY_ACTION_IDS.operationsList,
+      principalId: principal.principalId,
+      businessRef: input.businessRef,
+      limit: input.limit,
+      cursor: input.cursor ?? null,
+      correlationId,
+    })
+    const readback = await mutate(supplierOperationListMutation, {
+      businessId: input.businessRef,
+      paginationOpts: { numItems: input.limit, cursor: input.cursor ?? null },
+      agentPrincipal: principal,
+      operationKey,
+      correlationId,
+    }, operationKey, correlationId)
+    if (readback.kind === 'not_found') return { kind: 'not_found' }
+    const page = readback.page.map(({ statusJson }) => supplierOperationStatusSchema.safeParse(JSON.parse(statusJson) as unknown))
+    if (page.some((item) => !item.success)) return { kind: 'error', code: 'source_unavailable' }
+    return supplyOperationsListResultSchema.parse({
+      kind: 'available',
+      schemaVersion: 'supplier_operations:v1',
+      businessRef: input.businessRef,
+      page: page.flatMap((item) => item.success ? [item.data] : []),
+      isDone: readback.isDone,
+      continueCursor: readback.isDone ? null : readback.continueCursor,
     })
   }
   const sourcePreview = async ({ input }: { input: SupplySourceInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplySourcePreview> => (
@@ -895,6 +943,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
   }
   return {
     sourcePreview,
+    operationsList,
     status,
     publish,
     withdraw,
@@ -908,117 +957,6 @@ export function createSupplyManagementService(request: Request, bodyText: string
     connectionRevoke,
     offboardingStatus,
   }
-}
-
-function projectSupplyStatusOperation(
-  businessRef: string,
-  offering: OwnerSupplyOfferingReadback,
-): SupplierOperationStatus {
-  const source = offering.source ?? offering.publication?.source
-  const sourceKind = source?.kind === 'openapi_http'
-    ? 'openapi'
-    : source?.kind === 'agent_plugin_mcp'
-      ? 'agent_plugin'
-      : source?.kind === 'ae_envelope'
-        ? 'legacy'
-        : source?.kind ?? 'unavailable'
-  const isBlocked = offering.managementStatus === 'Action needed' || offering.managementStatus === 'Degraded'
-  const blockerCodes = isBlocked
-    ? [...new Set([
-        ...(offering.actionableReason === undefined ? [] : [offering.actionableReason]),
-        ...offering.lifecycle.reasons,
-      ])]
-    : []
-  const freshness = offering.readiness.outcome === 'healthy'
-    ? 'current'
-    : offering.readiness.outcome === 'unobserved'
-      ? 'unobserved'
-      : offering.readiness.validUntil !== undefined && offering.readiness.validUntil <= Date.now()
-        ? 'stale'
-        : 'failed'
-  const validation = offering.admission.state === 'admitted'
-    ? 'passed'
-    : offering.currentStep === 'admission' && offering.stepStates.admission === 'in_progress'
-      ? 'in_progress'
-      : offering.admission.reason === undefined
-        ? 'not_started'
-        : 'failed'
-  const authority = offering.authority === undefined
-    ? { kind: 'unavailable' as const }
-    : offering.authority.kind === 'provider_connection'
-      ? {
-          kind: 'connection' as const,
-          ...(offering.authority.connectionRef === undefined ? {} : { connectionRef: offering.authority.connectionRef }),
-          ...(offering.authority.providerRef === undefined ? {} : { providerRef: offering.authority.providerRef }),
-        }
-      : offering.admission.state === 'admitted'
-          && !offering.lifecycle.reasons.includes('provider_authority_unverified')
-        ? { kind: 'public' as const }
-        : { kind: 'unverified' as const }
-  return projectSupplierOperationStatus({
-    schemaVersion: 'supplier_operations:v1',
-    businessRef,
-    providerRef: offering.authority?.providerRef ?? businessRef,
-    operationRef: offering.publication?.operationRef ?? offering.offeringRef,
-    revision: offering.revision,
-    observedAt: offering.readiness.observedAt ?? Date.now(),
-    ...(offering.readiness.validUntil === undefined ? {} : { validUntil: offering.readiness.validUntil }),
-    draftPresent: true,
-    setupComplete: offering.sourceMaterial !== undefined || source !== undefined,
-    submitted: offering.publication !== undefined,
-    reviewActive: offering.managementStatus === 'Validating',
-    routeable: offering.live.available,
-    paused: offering.status === 'paused' || offering.lifecycle.state === 'withdrawn',
-    retired: offering.status === 'retired',
-    retirementProven: false,
-    blockerCodes,
-    source: {
-      kind: sourceKind,
-      ...(source?.revision === undefined ? {} : { revision: source.revision }),
-      ...(source?.digest === undefined ? {} : { digest: source.digest }),
-    },
-    routeability: {
-      available: offering.live.available,
-      reasonCodes: [...new Set([
-        ...offering.lifecycle.reasons,
-        ...(offering.live.reason === undefined ? [] : [offering.live.reason]),
-      ])],
-    },
-    authority,
-    health: {
-      connection: offering.authority?.kind === 'provider_connection'
-        ? (blockerCodes.some((code) => code === 'credential_rejected' || code === 'credential_unavailable' || code === 'authority_stale') ? 'action_required' : 'connected')
-        : offering.authority?.kind === 'public_upstream'
-          ? 'not_required'
-          : 'unknown',
-      validation,
-      publication: offering.status === 'retired'
-        ? 'removed'
-        : offering.status === 'paused' || offering.lifecycle.state === 'withdrawn'
-          ? 'paused'
-          : offering.publication !== undefined
-            ? 'published'
-            : 'not_published',
-      freshness,
-      delivery: offering.operationEvidence?.delivery.kind === 'observed'
-        ? {
-            ...offering.operationEvidence.delivery,
-            windowStartAt: offering.operationEvidence.windowStartAt,
-            windowEndAt: offering.operationEvidence.windowEndAt,
-          }
-        : offering.operationEvidence?.delivery
-          ?? { kind: 'unobserved', provenance: 'canonical_call_receipts' },
-      usefulOutcome: offering.operationEvidence?.usefulOutcome.kind === 'observed'
-        ? {
-            ...offering.operationEvidence.usefulOutcome,
-            windowStartAt: offering.operationEvidence.windowStartAt,
-            windowEndAt: offering.operationEvidence.windowEndAt,
-          }
-        : offering.operationEvidence?.usefulOutcome
-          ?? { kind: 'unobserved', provenance: 'qualified_use_receipts' },
-      operationalConditions: blockerCodes,
-    },
-  })
 }
 
 function isRecordLifecycle(value: unknown): value is { state: 'inactive' | 'active' | 'withdrawn' | 'incompatible'; reasons: string[] } {
@@ -1113,13 +1051,13 @@ export const supplySourcePreviewAction = defineAction<SupplySourceInput, SupplyS
 export const supplyStatusAction = defineAction<SupplyStatusInput, SupplyStatusResult>({
   id: SUPPLY_ACTION_IDS.status,
   name: 'Read Provider Operation status',
-  summary: 'List Provider Operations or read one exact Operation through the shared eight-state lifecycle and its single safe next action.',
+  summary: 'Read one exact Provider Operation through the shared eight-state lifecycle and its single safe next action.',
   boundaries: supplyBoundaries,
   schema: supplyStatusInputSchema,
   outputSchema: supplyStatusResultSchema,
   parameters: [
     { name: 'businessRef', type: 'string', description: 'Business selected by the authenticated Provider principal.', required: true },
-    { name: 'operationRef', type: 'string', description: 'Optional exact Operation reference.', required: false },
+    { name: 'operationRef', type: 'string', description: 'Exact Operation reference.', required: true },
   ],
   readOnly: true,
   effect: { class: 'observation', reversible: true, recipientKind: 'business', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'none' },
@@ -1139,6 +1077,39 @@ export const supplyStatusAction = defineAction<SupplyStatusInput, SupplyStatusRe
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')
     return await context.supplyManagementService.status({ input: data, principal: context.agentAccessPrincipal, correlationId: context.correlationId ?? globalThis.crypto.randomUUID() })
+  },
+})
+
+export const supplyOperationsListAction = defineAction<SupplyOperationsListInput, SupplyOperationsListResult>({
+  id: SUPPLY_ACTION_IDS.operationsList,
+  name: 'List Provider Operations',
+  summary: 'List one bounded page of Provider Operations through the shared eight-state lifecycle.',
+  boundaries: supplyBoundaries,
+  schema: supplyOperationsListInputSchema,
+  outputSchema: supplyOperationsListResultSchema,
+  parameters: [
+    { name: 'businessRef', type: 'string', description: 'Business selected by the authenticated Provider principal.', required: true },
+    { name: 'limit', type: 'number', description: 'Page size from 1 through 100; defaults to 50.', required: false },
+    { name: 'cursor', type: 'string', description: 'Opaque cursor returned by the previous page.', required: false },
+  ],
+  readOnly: true,
+  effect: { class: 'observation', reversible: true, recipientKind: 'business', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'none' },
+  surfaces: supplySurfaces,
+  credentialAdmission: supplyCredentialAdmission,
+  invocationContract: {
+    version: SUPPLY_ACTION_ROUTE_CONTRACTS.operationsList.contractVersion,
+    consequenceClass: 'read_only',
+    materialInputPaths: ['businessRef', 'limit', 'cursor'],
+    authorityRequirement: 'principal',
+    retryClass: 'replayable',
+    expectedEvidence: ['supplier_operation_collection'],
+    safeContinuations: ['supply.status', 'supply.publish'],
+    invalidationConditions: ['business_changed', 'cursor_changed'],
+  },
+  run: async ({ data, context }) => {
+    if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
+    if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')
+    return await context.supplyManagementService.operationsList({ input: data, principal: context.agentAccessPrincipal, correlationId: context.correlationId ?? globalThis.crypto.randomUUID() })
   },
 })
 

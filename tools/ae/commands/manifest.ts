@@ -194,7 +194,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
   supply: {
     summary: 'Inspect and manage owner-bound supplier Operations, provider connections, earnings, and recovery with an owner-issued supplier credential.',
-    args: '<preview|status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|offboarding>',
+    args: '<preview|operations|status|publish|withdraw|recheck|republish|earnings|connections|connection|connect|reconnect|revoke|offboarding>',
     json: true,
     group: 'supply',
     rootOrder: 1,
@@ -508,7 +508,8 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     },
     supply: {
       connect: 'ae connect --supplier',
-      status: 'ae supply status <businessRef> [operationRef]',
+      operations: 'ae supply operations <businessRef>',
+      status: 'ae supply status <businessRef> <operationRef>',
       connections: 'ae supply connections <businessId>',
       connection: 'ae supply connection <connectionRef>',
       authority: 'Requires a separately owner-approved market_supply:manage credential; buyer and supplier profiles remain independent.',

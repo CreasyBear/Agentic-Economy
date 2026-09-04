@@ -24,7 +24,7 @@ import { OPERATION_MARKET_DESCRIBE_PATH } from '@/modules/registry/operation-ent
 import {
   SUPPLY_ACTION_ROUTE_CONTRACTS,
   supplyConnectionListAction,
-  supplyStatusAction,
+  supplyOperationsListAction,
 } from '@/modules/capability-supply/supply-actions'
 
 import {
@@ -186,10 +186,10 @@ async function checkSupplierReadiness(
 ): Promise<DoctorCheck> {
   try {
     const [statusOutcome, connectionsOutcome] = await Promise.all([
-      callJson(baseUrl, SUPPLY_ACTION_ROUTE_CONTRACTS.status.path, {
-        method: SUPPLY_ACTION_ROUTE_CONTRACTS.status.method,
+      callJson(baseUrl, SUPPLY_ACTION_ROUTE_CONTRACTS.operationsList.path, {
+        method: SUPPLY_ACTION_ROUTE_CONTRACTS.operationsList.method,
         headers,
-        body: JSON.stringify({ businessId }),
+        body: JSON.stringify({ businessRef: businessId, limit: 100 }),
       }),
       callJson(baseUrl, SUPPLY_ACTION_ROUTE_CONTRACTS.connectionList.path, {
         method: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionList.method,
@@ -197,18 +197,18 @@ async function checkSupplierReadiness(
         body: JSON.stringify({ businessId, limit: 100 }),
       }),
     ])
-    const status = supplyStatusAction.outputSchema.safeParse(statusOutcome.body)
+    const status = supplyOperationsListAction.outputSchema.safeParse(statusOutcome.body)
     const connections = supplyConnectionListAction.outputSchema.safeParse(connectionsOutcome.body)
     if (!statusOutcome.ok || !connectionsOutcome.ok || !status.success || !connections.success
       || status.data.kind !== 'available' || connections.data.kind !== 'available') {
       return {
         id: 'supplier.readiness', state: 'fail',
         summary: 'Supplier Operation or provider readiness is unavailable.',
-        nextCommand: `ae supply status ${businessId}`,
+        nextCommand: `ae supply operations ${businessId}`,
       }
     }
-    const operationCount = status.data.operations.length
-    const liveCount = status.data.operations.filter((operation) => operation.live.available).length
+    const operationCount = status.data.page.length
+    const liveCount = status.data.page.filter((operation) => operation.routeability.available).length
     const connectionCount = connections.data.connections.length
     const readyConnectionCount = connections.data.connections.filter((connection) => connection.available).length
     const unreadyCount = operationCount - liveCount
@@ -219,13 +219,13 @@ async function checkSupplierReadiness(
     }
     return {
       id: 'supplier.readiness', state: 'warn', summary,
-      nextCommand: `ae supply status ${businessId}`,
+      nextCommand: `ae supply operations ${businessId}`,
     }
   } catch {
     return {
       id: 'supplier.readiness', state: 'fail',
       summary: 'Supplier Operation or provider readiness could not be read.',
-      nextCommand: `ae supply status ${businessId}`,
+      nextCommand: `ae supply operations ${businessId}`,
     }
   }
 }

@@ -8,6 +8,7 @@ import {
   supplyConnectionRevokeAction,
   supplyEarningsAction,
   supplyOffboardingStatusAction,
+  supplyOperationsListAction,
   supplyPublishAction,
   supplyRecheckAction,
   supplyRepublishAction,
@@ -35,6 +36,7 @@ import { requireAgentAccessKey } from './status'
 
 export const SUPPLY_COMMAND_DESCRIPTORS = Object.freeze([
   { actionId: supplySourcePreviewAction.id, command: 'supply', subcommand: 'preview', route: SUPPLY_ACTION_ROUTE_CONTRACTS.sourcePreview, action: supplySourcePreviewAction },
+  { actionId: supplyOperationsListAction.id, command: 'supply', subcommand: 'operations', route: SUPPLY_ACTION_ROUTE_CONTRACTS.operationsList, action: supplyOperationsListAction },
   { actionId: supplyStatusAction.id, command: 'supply', subcommand: 'status', route: SUPPLY_ACTION_ROUTE_CONTRACTS.status, action: supplyStatusAction },
   { actionId: supplyPublishAction.id, command: 'supply', subcommand: 'publish', route: SUPPLY_ACTION_ROUTE_CONTRACTS.publish, action: supplyPublishAction },
   { actionId: supplyWithdrawAction.id, command: 'supply', subcommand: 'withdraw', route: SUPPLY_ACTION_ROUTE_CONTRACTS.withdraw, action: supplyWithdrawAction },
@@ -87,13 +89,20 @@ function writeInput(options: CliOptions): Record<string, unknown> {
 }
 
 function inputFor(subcommand: string, args: readonly string[], options: CliOptions): unknown {
+  if (subcommand === 'operations') {
+    const businessRef = args[1]
+    if (businessRef === undefined || args.length > 2) {
+      throw usageFailure('supply operations', 'supply-operations-usage')
+    }
+    return { businessRef }
+  }
   if (subcommand === 'status') {
     const businessRef = args[1]
     const operationRef = args[2]
-    if (businessRef === undefined || args.length > 3) {
+    if (businessRef === undefined || operationRef === undefined || args.length > 3) {
       throw usageFailure('supply status', 'supply-status-usage')
     }
-    return { businessRef, ...(operationRef === undefined ? {} : { operationRef }) }
+    return { businessRef, operationRef }
   }
   if (subcommand === 'offboarding') {
     const businessRef = args[1]
@@ -139,9 +148,14 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
     return
   }
   heading(`Supplier ${subcommand}`)
-  if (result.kind === 'available' && Array.isArray(result.operations)) {
-    line(`${result.operations.length} Operation${result.operations.length === 1 ? '' : 's'}`)
-    for (const operation of result.operations) {
+  const operations = result.kind === 'available' && Array.isArray(result.page)
+    ? result.page
+    : result.kind === 'available' && isRecord(result.status) && result.status.schemaVersion === 'supplier_operations:v1'
+      ? [result.status]
+      : undefined
+  if (operations !== undefined) {
+    line(`${operations.length} Operation${operations.length === 1 ? '' : 's'}`)
+    for (const operation of operations) {
       if (!isRecord(operation)) continue
       const source = isRecord(operation.source) ? operation.source : undefined
       const routeability = isRecord(operation.routeability) ? operation.routeability : undefined

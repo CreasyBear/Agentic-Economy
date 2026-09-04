@@ -23,6 +23,7 @@ import {
   persistOfferingSourceState,
 } from './catalogOfferingMutations'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+import { upsertSupplierOperationIdentity } from './capabilitySupplierOperationProjection'
 
 const sourceKindValue = v.union(
   v.literal('openapi'),
@@ -268,6 +269,14 @@ async function saveSupplyIntegrationDraft(
   await ctx.db.patch(path._id, {
     integrationDraft: normalized.draft,
     integrationDraftUpdatedAt: normalized.draft.updatedAt,
+  })
+  await upsertSupplierOperationIdentity(ctx, {
+    businessId: args.businessId,
+    providerRef: String(args.businessId),
+    operationRef: refs.offeringRef,
+    offeringRef: refs.offeringRef,
+    offeringRevision: offering.currentRevision,
+    updatedAt: now,
   })
   await succeedOperation(publicationPorts(ctx), operation.operationId, expected, [refs.offeringRef, refs.accessPathRef], now)
   return expected

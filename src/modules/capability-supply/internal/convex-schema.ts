@@ -304,6 +304,22 @@ export const capabilitySupplyTables = {
     .index('by_businessId_and_submittedAt', ['businessId', 'submittedAt'])
     .index('by_state_and_updatedAt', ['state', 'updatedAt']),
 
+  capabilitySupplierOperationProjections: defineTable({
+    businessId: v.id('businesses'),
+    providerRef: v.string(),
+    operationRef: v.string(),
+    offeringRef: v.string(),
+    offeringRevision: v.number(),
+    publicationRef: v.optional(v.string()),
+    publicationRevision: v.optional(v.number()),
+    offeringId: v.optional(v.string()),
+    bindingId: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index('by_businessId_and_updatedAt', ['businessId', 'updatedAt'])
+    .index('by_businessId_and_operationRef', ['businessId', 'operationRef'])
+    .index('by_businessId_and_offeringRef', ['businessId', 'offeringRef']),
+
   capabilityProviderOffboardingCases: defineTable({
     caseRef: v.string(),
     owningAccountRef: v.string(),

@@ -54,6 +54,7 @@ describe('MCP host adapter supply', () => {
     expect(requestBytes).toBeLessThan(320 * 1024)
 
     const supplyService = {
+      operationsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'boundary_probe' }),
       withdraw: vi.fn(),
@@ -79,6 +80,7 @@ describe('MCP host adapter supply', () => {
 
   it('rejects an operation-only principal from calling a supplier action without invoking its service', async () => {
     const supplyService = {
+      operationsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
@@ -111,6 +113,7 @@ describe('MCP host adapter supply', () => {
 
   it('rejects an anonymous principal from calling a supplier action without invoking its service', async () => {
     const supplyService = {
+      operationsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
@@ -149,6 +152,7 @@ describe('MCP host adapter supply', () => {
 
   it('dispatches a supplier action for a supply-only principal', async () => {
     const supplyService = {
+      operationsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),
@@ -185,6 +189,7 @@ describe('MCP host adapter supply', () => {
 
   it('dispatches provider connection inspection for a supply-only principal', async () => {
     const supplyService = {
+      operationsList: vi.fn(),
       status: vi.fn(),
       publish: vi.fn(),
       withdraw: vi.fn(),

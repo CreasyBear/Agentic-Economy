@@ -18,6 +18,7 @@ function service(overrides: Partial<SupplyManagementService> = {}): SupplyManage
       ctaLabel: 'Check source', description: 'Check source.', iconUrl: null,
       status: 'required', title: 'Source unavailable',
     } }),
+    operationsList: vi.fn().mockResolvedValue({ kind: 'not_found' }),
     status: vi.fn().mockResolvedValue({ kind: 'not_found' }),
     publish: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'unused' }),
     withdraw: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'unused' }),
@@ -87,7 +88,7 @@ describe('supplier action HTTP adapter', () => {
       new Request('https://ae.example/api/v1/supply/status', {
         method: 'POST',
         headers: { Authorization: 'Bearer hidden-supplier-secret' },
-        body: JSON.stringify({ businessRef: 'business:one' }),
+        body: JSON.stringify({ businessRef: 'business:one', operationRef: 'operation:one' }),
       }),
       'status',
       { authenticate, resolvePrincipal, supplyManagementService: service({ status }) },
@@ -98,8 +99,27 @@ describe('supplier action HTTP adapter', () => {
     expect(response.headers.get('x-ae-request-id')).toBeTruthy()
     await expect(response.json()).resolves.toEqual({ kind: 'not_found' })
     expect(status).toHaveBeenCalledWith(expect.objectContaining({
-      input: { businessRef: 'business:one' },
+      input: { businessRef: 'business:one', operationRef: 'operation:one' },
       principal: expect.objectContaining({ scopes: ['market_supply:manage'] }),
+    }))
+  })
+
+  it('dispatches the bounded Provider Operation directory independently of exact status', async () => {
+    const operationsList = vi.fn().mockResolvedValue({ kind: 'not_found' })
+    const response = await handleSupplyActionPost(
+      new Request('https://ae.example/api/v1/supply/operations/list', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer hidden-supplier-secret' },
+        body: JSON.stringify({ businessRef: 'business:one', limit: 50 }),
+      }),
+      'operationsList',
+      { authenticate, resolvePrincipal, supplyManagementService: service({ operationsList }) },
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ kind: 'not_found' })
+    expect(operationsList).toHaveBeenCalledWith(expect.objectContaining({
+      input: { businessRef: 'business:one', limit: 50 },
     }))
   })
 

@@ -90,7 +90,7 @@ describe('AE CLI supplier Operation lifecycle', () => {
         kind: 'available',
         schemaVersion: 'supplier_operations:v1',
         businessRef: 'business:one',
-        operations: [{
+        status: {
           schemaVersion: 'supplier_operations:v1',
           businessRef: 'business:one',
           providerRef: 'provider:one',
@@ -111,8 +111,7 @@ describe('AE CLI supplier Operation lifecycle', () => {
             usefulOutcome: { kind: 'unobserved', provenance: 'qualified_use_receipts' },
             operationalConditions: [],
           },
-        }],
-        activityTruncated: false,
+        },
       })
     })
     vi.stubGlobal('fetch', fetch)
@@ -122,7 +121,7 @@ describe('AE CLI supplier Operation lifecycle', () => {
 
     expect(fetch).toHaveBeenCalledOnce()
     const output = write.mock.calls.map(([value]) => String(value)).join('')
-    expect(JSON.parse(output)).toMatchObject({ kind: 'available', operations: [{ operationRef: 'operation:one', state: 'Published' }] })
+    expect(JSON.parse(output)).toMatchObject({ kind: 'available', status: { operationRef: 'operation:one', state: 'Published' } })
     expect(output).not.toContain('hidden-supplier-secret')
   })
 
@@ -164,7 +163,7 @@ describe('AE CLI supplier Operation lifecycle', () => {
       kind: 'available',
       schemaVersion: 'supplier_operations:v1',
       businessRef: 'business:one',
-      operations: [{
+      page: [{
         schemaVersion: 'supplier_operations:v1',
         businessRef: 'business:one',
         providerRef: 'provider:one',
@@ -204,12 +203,13 @@ describe('AE CLI supplier Operation lifecycle', () => {
         },
         continuation: { action: 'supply.status' },
       }],
-      activityTruncated: false,
+      isDone: true,
+      continueCursor: null,
     }))
     vi.stubGlobal('fetch', fetch)
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    await runSupplyCommand(['status', 'business:one'], { ...baseOptions, json: false })
+    await runSupplyCommand(['operations', 'business:one'], { ...baseOptions, json: false })
 
     const output = write.mock.calls.flat().join('')
     expect(output).toContain('next  supply.status')

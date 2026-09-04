@@ -77,7 +77,7 @@ function connectPending(details: ConnectDetails): JsonRecord {
 }
 
 function connectedNextAction(supplier: boolean): string {
-  if (supplier) return 'Run ae supply status <businessRef>.'
+  if (supplier) return 'Run ae supply operations <businessRef>.'
   return 'Run ae search "what you need".'
 }
 
@@ -106,7 +106,7 @@ function printConnectResult(value: JsonRecord, options: CliOptions): void {
   if (value.kind === 'connected') {
     line('Your agent is connected. The origin-bound key is stored with user-only file permissions.')
     line(`Next: ${value.profile === 'supplier'
-      ? 'ae supply status <businessRef>.'
+      ? 'ae supply operations <businessRef>.'
       : 'ae search "what you need", then ae describe <operation> and ae call <operation> --input \'{...}\'.'}`)
   } else if (typeof value.nextAction === 'string') {
     line(value.nextAction)

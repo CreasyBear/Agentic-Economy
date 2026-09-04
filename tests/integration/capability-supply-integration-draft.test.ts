@@ -120,6 +120,41 @@ describe('Provider source integration draft', () => {
         sourceSelectorJson: stableStringify(selector),
       },
     })
+    if (resumed.kind !== 'available') throw new Error('integration_draft_not_available')
+    const directoryCommand = {
+      businessId,
+      paginationOpts: { numItems: 50, cursor: null },
+      agentPrincipal: principal,
+      operationKey: 'supplier-operations:list:one',
+      correlationId: 'supplier-operations:list:one',
+    }
+    const directory = await backend.mutation(
+      api.capabilitySupplierOperations.listAgent,
+      await withSourceWrite('catalog_publish', directoryCommand),
+    )
+    expect(directory).toMatchObject({ kind: 'available', isDone: true })
+    if (directory.kind !== 'available') throw new Error('supplier_operation_directory_unavailable')
+    expect(directory.page.map(({ statusJson }) => JSON.parse(statusJson))).toMatchObject([{
+      schemaVersion: 'supplier_operations:v1',
+      businessRef: String(businessId),
+      operationRef: resumed.offeringRef,
+      state: 'Draft',
+    }])
+    const exact = await backend.mutation(
+      api.capabilitySupplierOperations.readAgent,
+      await withSourceWrite('catalog_publish', {
+        businessId,
+        operationRef: resumed.offeringRef,
+        agentPrincipal: principal,
+        operationKey: 'supplier-operations:read:one',
+        correlationId: 'supplier-operations:read:one',
+      }),
+    )
+    expect(exact.kind === 'available' ? JSON.parse(exact.statusJson) : exact).toMatchObject({
+      schemaVersion: 'supplier_operations:v1',
+      operationRef: resumed.offeringRef,
+      state: 'Draft',
+    })
     await expect(foreignOwner.query(
       api.capabilitySupplyOwnerFunnel.readOwnerSupplyIntegrationDraft,
       { businessId, candidateRef },
