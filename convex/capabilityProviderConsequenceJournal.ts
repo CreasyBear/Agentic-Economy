@@ -828,7 +828,6 @@ export const abortProviderConsequence = internalMutationGeneric({
 })
 
 const providerConsequenceX402Operation = v.union(
-  v.literal('reserve_external_spend'),
   v.literal('prepare_authorization'),
   v.literal('read_authorization'),
   v.literal('read_authorization_by_digest'),
@@ -838,7 +837,6 @@ const providerConsequenceX402Operation = v.union(
 )
 
 type X402Operation =
-  | 'reserve_external_spend'
   | 'prepare_authorization'
   | 'read_authorization'
   | 'read_authorization_by_digest'
@@ -933,7 +931,7 @@ export async function authorizeProviderConsequenceX402RpcHandler(
   const postRelease = input.operation === 'observe_attempt'
   if (!postRelease && Date.now() >= row.expiresAt) return { kind: 'unavailable' as const }
   const identityBoundOperations: readonly X402Operation[] = [
-    'reserve_external_spend', 'prepare_authorization',
+    'prepare_authorization',
   ]
   if (!identityBoundOperations.includes(input.operation)
     && !await matchingStoredAttempt(ctx, args, row)) return { kind: 'unavailable' as const }

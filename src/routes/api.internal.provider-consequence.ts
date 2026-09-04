@@ -425,12 +425,6 @@ function x402RuntimeFactory(
           || paymentRequest.effectGeneration !== authority.effectGeneration
           || paymentRequest.paymentIdentifier !== authority.operationKeyDigest
           || paymentRequest.credential !== credentialRef) return undefined
-        const reservation = await x402Rpc(request, origin, 'reserve_external_spend', {
-          paymentIdentifier: paymentRequest.paymentIdentifier,
-          challengeDigest: paymentRequest.challengeDigest,
-          amount: paymentRequest.paymentAmount,
-        })
-        if (!isRecord(reservation) || reservation.kind !== 'accepted' || !isRecord(reservation.reservation)) return undefined
         const prepared = await x402Rpc(request, origin, 'prepare_authorization', {
           paymentIdentifier: paymentRequest.paymentIdentifier,
           operationKeyDigest: authority.operationKeyDigest,
@@ -445,7 +439,6 @@ function x402RuntimeFactory(
           amountUnits: paymentRequest.paymentAmount.units,
           currency: paymentRequest.paymentAmount.currency,
           exponent: paymentRequest.paymentAmount.exponent,
-          reservationRef: reservation.reservation.reservationRef,
         })
         return isRecord(prepared)
           && typeof prepared.custodyRef === 'string'

@@ -297,7 +297,6 @@ describe('provider consequence route coverage gaps', () => {
       await expect(runtime.prepareX402PaymentAuthorization({ ...paymentRequest, attemptRef: 'attempt:attacker' }))
         .resolves.toBeUndefined()
       await expect(runtime.prepareX402PaymentAuthorization(paymentRequest)).resolves.toBeUndefined()
-      await expect(runtime.prepareX402PaymentAuthorization(paymentRequest)).resolves.toBeUndefined()
       const prepared = await runtime.prepareX402PaymentAuthorization(paymentRequest)
       expect(prepared).toMatchObject({ custodyRef: 'custody:test', authorizationDigest: DIGEST('a') })
       if (prepared === undefined) throw new Error('x402_prepared_missing')
@@ -825,7 +824,6 @@ function probeFetch(
   canonicalTicket: CanonicalProviderConsequenceTicket,
   routeInvocation: RouteTransportInvocation,
 ) {
-  let reserveCalls = 0
   let readCalls = 0
   let prepareCalls = 0
   let markCalls = 0
@@ -865,12 +863,6 @@ function probeFetch(
     if (url.pathname.endsWith('/x402')) {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>
       const operation = String(body.operation)
-      if (operation === 'reserve_external_spend') {
-        reserveCalls += 1
-        return reserveCalls === 1
-          ? Response.json({ kind: 'result', value: { kind: 'unavailable' } })
-          : Response.json({ kind: 'result', value: { kind: 'accepted', reservation: { reservationRef: 'reservation:test' } } })
-      }
       if (operation === 'prepare_authorization') {
         prepareCalls += 1
         return prepareCalls === 1

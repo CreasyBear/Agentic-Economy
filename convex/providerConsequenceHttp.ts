@@ -231,6 +231,7 @@ function canonicalX402Args(
     inputDigest: string
     providerRef: string
   }>,
+  reservationRef?: string,
 ): Record<string, unknown> {
   if (operation === 'prepare_authorization') {
     const {
@@ -243,6 +244,7 @@ function canonicalX402Args(
       custodyBudgetRef: _custodyBudgetRef,
       custodyGeneration: _custodyGeneration,
       custodyDailyMaximumUnits: _custodyDailyMaximumUnits,
+      reservationRef: _reservationRef,
       ...material
     } = supplied
     void _dispatchRef
@@ -254,6 +256,7 @@ function canonicalX402Args(
     void _custodyBudgetRef
     void _custodyGeneration
     void _custodyDailyMaximumUnits
+    void _reservationRef
     return {
       ...material,
       dispatchRef: authority.invocationRef,
@@ -262,6 +265,7 @@ function canonicalX402Args(
       attemptRef: authority.attemptRef,
       effectGeneration: authority.effectGeneration,
       credentialRef: authority.credentialRef,
+      ...(reservationRef === undefined ? {} : { reservationRef }),
     }
   }
   return supplied
@@ -285,7 +289,18 @@ export const providerConsequenceX402Rpc = httpActionGeneric(async (ctx, request)
       { ticketRef: body.ticketRef, journalTokenDigest: digest, operation, args: body.args as never },
     )
     if (authorization.kind !== 'authorized') return json({ kind: 'unavailable' }, 409)
-    const args = canonicalX402Args(operation, body.args, authorization)
+    let reservationRef: string | undefined
+    if (operation === 'prepare_authorization') {
+      const reservation = await ctx.runQuery(
+        internal.moneyManagedCallLifecycle.readReservation,
+        { invocationRef: authorization.invocationRef },
+      )
+      if (reservation === null || reservation.state !== 'reserved') {
+        return json({ kind: 'result', value: null })
+      }
+      reservationRef = reservation.treasuryReservationRef ?? reservation.reservationRef
+    }
+    const args = canonicalX402Args(operation, body.args, authorization, reservationRef)
     return json({ kind: 'result', value: await runX402Operation(ctx, operation, args) })
   } catch {
     return json({ kind: 'unavailable' }, 503)

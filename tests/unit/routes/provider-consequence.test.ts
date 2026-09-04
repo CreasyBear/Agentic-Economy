@@ -430,7 +430,7 @@ describe('internal provider consequence route', () => {
     expect(responseBody).not.toContain(JOURNAL_TOKEN)
   })
 
-  it('runs provider-direct x402 through existing reserve/prepare/sign/mark/observe ports without custody or secret leakage', async () => {
+  it('runs provider-direct x402 through managed prepare/sign/mark/observe ports without custody or secret leakage', async () => {
     const routeInvocation = x402Invocation()
     const canonicalTicket = ticket(routeInvocation)
     const convexBodies: string[] = []
@@ -476,19 +476,11 @@ describe('internal provider consequence route', () => {
           const operation = String(body.operation)
           operations.push(operation)
           const rpcArgs = body.args as Record<string, unknown>
-          if (operation === 'reserve_external_spend') {
-            expect(rpcArgs).not.toHaveProperty('custodyRef')
-            expect(rpcArgs).not.toHaveProperty('custodyGeneration')
-            expect(rpcArgs).not.toHaveProperty('custodyDailyMaximum')
-            return Response.json({
-              kind: 'result',
-              value: { kind: 'accepted', reservation: { reservationRef: 'external-spend:test' } },
-            })
-          }
           if (operation === 'prepare_authorization') {
             expect(rpcArgs).not.toHaveProperty('custodyBudgetRef')
             expect(rpcArgs).not.toHaveProperty('custodyGeneration')
             expect(rpcArgs).not.toHaveProperty('custodyDailyMaximumUnits')
+            expect(rpcArgs).not.toHaveProperty('reservationRef')
             return Response.json({
               kind: 'result',
               value: { custodyRef: 'attempt:test', authorizationDigest: DIGEST('a') },
@@ -538,7 +530,6 @@ describe('internal provider consequence route', () => {
       paymentSubmissionStatus: 'observed',
     })
     expect(operations).toEqual([
-      'reserve_external_spend',
       'prepare_authorization',
       'read_authorization',
       'record_signature_digest',
