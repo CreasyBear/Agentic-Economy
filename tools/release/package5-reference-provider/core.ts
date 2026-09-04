@@ -1,7 +1,3 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { pathToFileURL } from 'node:url'
-import { resolve } from 'node:path'
-
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { x402ResourceServer, HTTPFacilitatorClient, type FacilitatorClient } from '@x402/core/server'
@@ -10,14 +6,10 @@ import { registerExactEvmScheme } from '@x402/evm/exact/server'
 import { bazaarResourceServerExtension, declareDiscoveryExtension } from '@x402/extensions/bazaar'
 import { z } from 'zod'
 
-import { canonicalDigest } from '../../src/modules/common/canonical-digest'
-import type { SupplySourceInput } from '../../src/modules/capability-supply/source-preview'
-
 const BASE_SEPOLIA_NETWORK = 'eip155:84532' as const
 const BASE_SEPOLIA_USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as const
 const X402_AMOUNT = '1000' as const
 const X402_ROUTE = 'POST /x402/execute' as const
-const MAX_REQUEST_BYTES = 1_048_576
 
 const inputSchema = {
   type: 'object',
@@ -46,20 +38,6 @@ const toolOutput = z.strictObject({
 
 type SourceKind = 'openapi' | 'mcp' | 'agent_plugin' | 'x402'
 
-export type Package5ReferenceFixtureDefinition = Readonly<{
-  kind: SourceKind
-  source: SupplySourceInput
-  candidateMatch:
-    | Readonly<{ path: '/openapi/execute'; method: 'post' }>
-    | Readonly<{ toolName: 'package5_mcp_execute' | 'package5_agent_plugin_execute' }>
-    | Readonly<{ resourceUrl: string; method: 'POST' }>
-  presentation: Readonly<{ name: string; description: string; category: 'release-proof' }>
-  consequences: Readonly<{ effects: readonly []; dataUse: readonly []; evidence: readonly [] }>
-  pricing: Readonly<{ kind: 'free' | 'source_x402' }>
-  validationInput: Readonly<{ value: string }>
-  invokeInput: Readonly<{ value: string }>
-}>
-
 export type Package5ReferenceProvider = Readonly<{
   fetch: typeof globalThis.fetch
 }>
@@ -71,55 +49,16 @@ export type Package5ReferenceProviderOptions = Readonly<{
   facilitatorUrl?: string
 }>
 
-export function package5ReferenceFixtureDefinitions(originValue: string): readonly Package5ReferenceFixtureDefinition[] {
+export function package5ReferenceProviderDescriptor(originValue: string) {
   const origin = publicOrigin(originValue)
   const mcpUrl = `${origin}/mcp`
-  const remoteRef = canonicalDigest({
-    format: 'agent-plugin-mcp-remote:v1',
-    name: 'package5-reference-provider',
-    transport: 'streamable-http',
-    serverUrl: mcpUrl,
-  })
-  const common = (kind: SourceKind) => ({
-    kind,
-    presentation: {
-      name: `Package 5 ${kind.replace('_', ' ')} reference Operation`,
-      description: `Deterministic ${kind.replace('_', ' ')} Provider Operation for Package 5 release proof.`,
-      category: 'release-proof' as const,
-    },
-    consequences: { effects: [], dataUse: [], evidence: [] } as const,
-    pricing: { kind: kind === 'x402' ? 'source_x402' as const : 'free' as const },
-    validationInput: { value: `${kind}-validation` },
-    invokeInput: { value: `${kind}-invocation` },
-  })
-  return [
-    {
-      ...common('openapi'),
-      source: { kind: 'openapi', definitionUrl: `${origin}/openapi.json`, environment: 'sandbox' },
-      candidateMatch: { path: '/openapi/execute', method: 'post' },
-    },
-    {
-      ...common('mcp'),
-      source: { kind: 'mcp', serverUrl: mcpUrl, environment: 'sandbox' },
-      candidateMatch: { toolName: 'package5_mcp_execute' },
-    },
-    {
-      ...common('agent_plugin'),
-      source: {
-        kind: 'agent_plugin',
-        pluginJson: pluginDocument(),
-        mcpJson: mcpDocument(mcpUrl),
-        remoteRef,
-        environment: 'sandbox',
-      },
-      candidateMatch: { toolName: 'package5_agent_plugin_execute' },
-    },
-    {
-      ...common('x402'),
-      source: { kind: 'x402', resourceUrl: `${origin}/x402/execute`, method: 'POST', environment: 'sandbox' },
-      candidateMatch: { resourceUrl: `${origin}/x402/execute`, method: 'POST' },
-    },
-  ]
+  return {
+    openApiUrl: `${origin}/openapi.json`,
+    mcpUrl,
+    x402Url: `${origin}/x402/execute`,
+    pluginJson: pluginDocument(),
+    mcpJson: mcpDocument(mcpUrl),
+  } as const
 }
 
 export async function createPackage5ReferenceProvider(
@@ -172,7 +111,7 @@ export async function createPackage5ReferenceProvider(
         return json(200, { status: 'ok', provider: 'package5-reference-provider' })
       }
       if (request.method === 'GET' && url.pathname === '/release-fixtures') {
-        return json(200, { fixtures: package5ReferenceFixtureDefinitions(origin) })
+        return json(200, package5ReferenceProviderDescriptor(origin))
       }
       if (request.method === 'GET' && url.pathname === '/openapi.json') {
         return json(200, openApiDocument(origin))
@@ -352,63 +291,3 @@ function publicHttpsUrl(value: string | undefined, name: string): string {
   }
   return url.toString()
 }
-
-async function nodeRequest(request: IncomingMessage, publicOriginValue: string): Promise<Request> {
-  const chunks: Buffer[] = []
-  let length = 0
-  for await (const chunk of request) {
-    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    length += bytes.length
-    if (length > MAX_REQUEST_BYTES) throw new Error('fixture_request_too_large')
-    chunks.push(bytes)
-  }
-  const url = new URL(request.url ?? '/', publicOriginValue)
-  const method = request.method ?? 'GET'
-  return new Request(url, {
-    method,
-    headers: nodeRequestHeaders(request),
-    ...(method === 'GET' || method === 'HEAD' ? {} : { body: Buffer.concat(chunks) }),
-  })
-}
-
-function nodeRequestHeaders(request: IncomingMessage): Headers {
-  const headers = new Headers()
-  for (const [name, value] of Object.entries(request.headers)) {
-    if (Array.isArray(value)) {
-      for (const item of value) headers.append(name, item)
-    } else if (value !== undefined) {
-      headers.set(name, value)
-    }
-  }
-  return headers
-}
-
-async function writeNodeResponse(response: ServerResponse, result: Response): Promise<void> {
-  response.writeHead(result.status, Object.fromEntries(result.headers.entries()))
-  response.end(Buffer.from(await result.arrayBuffer()))
-}
-
-async function main(): Promise<void> {
-  const origin = publicOrigin(process.env.AE_PACKAGE5_FIXTURE_PUBLIC_ORIGIN ?? '')
-  const facilitatorUrl = process.env.AE_PACKAGE5_FIXTURE_X402_FACILITATOR_URL
-  const provider = await createPackage5ReferenceProvider({
-    origin,
-    payTo: process.env.AE_PACKAGE5_FIXTURE_X402_PAY_TO ?? '',
-    ...(facilitatorUrl === undefined ? {} : { facilitatorUrl }),
-  })
-  const port = Number(process.env.PORT ?? '3000')
-  if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) throw new Error('PORT must be between 1 and 65535')
-  const server = createServer((request, response) => {
-    void nodeRequest(request, origin)
-      .then(provider.fetch)
-      .then(async (result) => await writeNodeResponse(response, result))
-      .catch((error: unknown) => {
-        if (!response.headersSent) response.writeHead(500, { 'content-type': 'application/json' })
-        response.end(JSON.stringify({ code: error instanceof Error ? error.message : 'fixture_error' }))
-      })
-  })
-  server.listen(port, '0.0.0.0')
-}
-
-const entrypoint = process.argv[1]
-if (entrypoint !== undefined && import.meta.url === pathToFileURL(resolve(entrypoint)).href) await main()

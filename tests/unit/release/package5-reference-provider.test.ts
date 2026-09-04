@@ -15,11 +15,33 @@ import { validateOpenApiDocument } from '@/modules/capability-supply/internal/op
 import { previewSupplySource } from '@/modules/capability-supply/source-preview'
 import {
   createPackage5ReferenceProvider,
-  package5ReferenceFixtureDefinitions,
-} from '../../../tools/release/package5-reference-provider'
+} from '../../../tools/release/package5-reference-provider/core'
+import { createPackage5ReferenceProviderVercelHandler } from '../../../tools/release/package5-reference-provider/api/fixture'
+import { package5ReferenceFixtureDefinitions } from '../../../tools/release/package5-reference-provider-fixtures'
 import { package5ProviderOperationsConfigFromEnvironment } from '../../../tools/release/package5-provider-operations'
 
 const ORIGIN = 'https://package5-provider.example'
+
+async function deployedProvider() {
+  const provider = await createPackage5ReferenceProvider({
+    origin: ORIGIN,
+    payTo: '0x000000000000000000000000000000000000dEaD',
+    facilitator: fixtureFacilitator(),
+  })
+  const handler = createPackage5ReferenceProviderVercelHandler({
+    origin: ORIGIN,
+    loadProvider: async () => provider,
+  })
+  const fetch: typeof globalThis.fetch = async (resource, init) => {
+    const request = new Request(resource, init)
+    const incoming = new URL(request.url)
+    const rewritten = new URL('/api/fixture', ORIGIN)
+    rewritten.searchParams.set('fixturePath', incoming.pathname)
+    for (const [name, value] of incoming.searchParams) rewritten.searchParams.append(name, value)
+    return await handler.fetch(new Request(rewritten, request))
+  }
+  return { fetch }
+}
 
 function fixtureFacilitator(): FacilitatorClient {
   return {
@@ -51,11 +73,7 @@ function fixtureFacilitator(): FacilitatorClient {
 
 describe('Package 5 reference Provider fixture', () => {
   it('is admitted through AE source preview for all four supported source families', async () => {
-    const provider = await createPackage5ReferenceProvider({
-      origin: ORIGIN,
-      payTo: '0x000000000000000000000000000000000000dEaD',
-      facilitator: fixtureFacilitator(),
-    })
+    const provider = await deployedProvider()
     const definitions = package5ReferenceFixtureDefinitions(ORIGIN)
     const loadOpenApi = async (definitionUrl: string) => {
       const response = await provider.fetch(new Request(definitionUrl))
@@ -96,11 +114,7 @@ describe('Package 5 reference Provider fixture', () => {
   })
 
   it('executes both MCP Operations through the official MCP client', async () => {
-    const provider = await createPackage5ReferenceProvider({
-      origin: ORIGIN,
-      payTo: '0x000000000000000000000000000000000000dEaD',
-      facilitator: fixtureFacilitator(),
-    })
+    const provider = await deployedProvider()
     const client = new Client({ name: 'package5-release-proof', version: '1.0.0' })
     const transport = new StreamableHTTPClientTransport(new URL(`${ORIGIN}/mcp`), { fetch: provider.fetch })
     await client.connect(transport as unknown as Parameters<Client['connect']>[0])
@@ -152,11 +166,7 @@ describe('Package 5 reference Provider fixture', () => {
   })
 
   it('executes the x402 Operation through the official client payment flow', async () => {
-    const provider = await createPackage5ReferenceProvider({
-      origin: ORIGIN,
-      payTo: '0x000000000000000000000000000000000000dEaD',
-      facilitator: fixtureFacilitator(),
-    })
+    const provider = await deployedProvider()
     const core = new x402Client()
     registerExactEvmScheme(core, {
       signer: privateKeyToAccount(`0x${'11'.repeat(32)}`),
@@ -184,6 +194,28 @@ describe('Package 5 reference Provider fixture', () => {
       sourceKind: 'x402',
       value: 'paid-release-proof',
       provider: 'package5-reference-provider',
+    })
+  })
+
+  it('routes every public fixture document through the Vercel fetch adapter', async () => {
+    const provider = await deployedProvider()
+    const paths = [
+      '/health',
+      '/release-fixtures',
+      '/openapi.json',
+      '/agent-plugin/plugin.json',
+      '/agent-plugin/mcp.json',
+    ]
+
+    const responses = await Promise.all(paths.map(async (path) => await provider.fetch(`${ORIGIN}${path}`)))
+
+    expect(responses.map(({ status }) => status)).toEqual([200, 200, 200, 200, 200])
+    expect(await responses[3]!.json()).toMatchObject({
+      $schema: 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
+      name: 'package5-reference-provider',
+    })
+    expect(await responses[4]!.json()).toMatchObject({
+      $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json',
     })
   })
 })

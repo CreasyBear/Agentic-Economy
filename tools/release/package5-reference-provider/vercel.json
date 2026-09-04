@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/health", "destination": "/api/fixture?fixturePath=/health" },
+    { "source": "/release-fixtures", "destination": "/api/fixture?fixturePath=/release-fixtures" },
+    { "source": "/openapi.json", "destination": "/api/fixture?fixturePath=/openapi.json" },
+    { "source": "/openapi/execute", "destination": "/api/fixture?fixturePath=/openapi/execute" },
+    { "source": "/mcp", "destination": "/api/fixture?fixturePath=/mcp" },
+    { "source": "/agent-plugin/plugin.json", "destination": "/api/fixture?fixturePath=/agent-plugin/plugin.json" },
+    { "source": "/agent-plugin/mcp.json", "destination": "/api/fixture?fixturePath=/agent-plugin/mcp.json" },
+    { "source": "/x402/execute", "destination": "/api/fixture?fixturePath=/x402/execute" }
+  ]
+}
