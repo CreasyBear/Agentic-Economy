@@ -29,7 +29,7 @@ function copyReleaseSource(target: string): void {
   symlinkSync(nodeModules, resolve(target, 'node_modules'), 'dir')
 }
 
-function anonymousEnvironment(): NodeJS.ProcessEnv {
+function anonymousEnvironment(isolatedRoot: string): NodeJS.ProcessEnv {
   return {
     ...(process.env.HOME === undefined ? {} : { HOME: process.env.HOME }),
     ...(process.env.PATH === undefined ? {} : { PATH: process.env.PATH }),
@@ -39,9 +39,15 @@ function anonymousEnvironment(): NodeJS.ProcessEnv {
     CONVEX_AGENT_MODE: 'anonymous',
     CLERK_JWT_ISSUER_DOMAIN: anonymousClerkJwtIssuerDomain,
     npm_config_audit: 'false',
+    npm_config_cache: resolve(isolatedRoot, '.npm-cache'),
+    npm_config_fetch_retries: '2',
+    npm_config_fetch_retry_maxtimeout: '10000',
+    npm_config_fetch_retry_mintimeout: '1000',
+    npm_config_fetch_timeout: '30000',
     npm_config_fund: 'false',
-    npm_config_offline: 'true',
+    npm_config_prefer_offline: 'true',
     npm_config_update_notifier: 'false',
+    npm_config_userconfig: resolve(isolatedRoot, '.npmrc'),
   }
 }
 
@@ -121,7 +127,7 @@ async function runConvex(isolatedRoot: string, args: readonly string[]): Promise
   const child = spawn(process.execPath, [convexCli, ...args], {
     cwd: isolatedRoot,
     detached: true,
-    env: anonymousEnvironment(),
+    env: anonymousEnvironment(isolatedRoot),
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let stdout = ''
