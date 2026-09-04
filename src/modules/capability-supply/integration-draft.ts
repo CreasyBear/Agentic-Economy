@@ -133,21 +133,33 @@ function normalizeSourceInput(value: unknown): SupplySourceInput | undefined {
         ? { kind: 'openapi', definitionUrl: value.definitionUrl, environment: value.environment }
         : undefined
     case 'mcp': {
-      if (!exactKeys(value, ['kind', 'serverUrl', 'registryName', 'environment'], true)) return undefined
+      if (!exactKeys(value, ['kind', 'serverUrl', 'registryName', 'remoteRef', 'environment'], true)) return undefined
       const serverUrl = validUrl(value.serverUrl) ? value.serverUrl : undefined
       const registryName = boundedTextValue(value.registryName, 255)
+      const remoteRef = sha256Ref(value.remoteRef)
       if ((serverUrl === undefined) === (registryName === undefined)) return undefined
+      if (serverUrl !== undefined && value.remoteRef !== undefined) return undefined
+      if (value.remoteRef !== undefined && remoteRef === undefined) return undefined
       return {
         kind: 'mcp',
         ...(serverUrl === undefined ? {} : { serverUrl }),
         ...(registryName === undefined ? {} : { registryName }),
+        ...(remoteRef === undefined ? {} : { remoteRef }),
         environment: value.environment,
       }
     }
     case 'agent_plugin':
-      return exactKeys(value, ['kind', 'pluginJson', 'mcpJson', 'environment'])
+      return exactKeys(value, ['kind', 'pluginJson', 'mcpJson', 'remoteRef', 'environment'], true)
+        && Object.hasOwn(value, 'pluginJson') && Object.hasOwn(value, 'mcpJson')
         && isRecord(value.pluginJson) && isRecord(value.mcpJson)
-        ? { kind: 'agent_plugin', pluginJson: value.pluginJson as never, mcpJson: value.mcpJson as never, environment: value.environment }
+        && (value.remoteRef === undefined || sha256Ref(value.remoteRef) !== undefined)
+        ? {
+            kind: 'agent_plugin',
+            pluginJson: value.pluginJson as never,
+            mcpJson: value.mcpJson as never,
+            ...(typeof value.remoteRef === 'string' ? { remoteRef: value.remoteRef } : {}),
+            environment: value.environment,
+          }
         : undefined
     case 'x402':
       return exactKeys(value, ['kind', 'resourceUrl', 'method', 'environment'])
@@ -177,6 +189,10 @@ function validUrl(value: unknown): value is string {
   } catch {
     return false
   }
+}
+
+function sha256Ref(value: unknown): string | undefined {
+  return typeof value === 'string' && SHA256_REF.test(value) ? value : undefined
 }
 
 function boundedTextValue(value: unknown, maximum: number): string | undefined {

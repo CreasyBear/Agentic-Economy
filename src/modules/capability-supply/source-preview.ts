@@ -35,12 +35,14 @@ export type SupplySourceInput =
       kind: 'mcp'
       serverUrl?: string | undefined
       registryName?: string | undefined
+      remoteRef?: string | undefined
       environment: 'sandbox' | 'production'
     }>
   | Readonly<{
       kind: 'agent_plugin'
       pluginJson: Readonly<Record<string, JsonValue>>
       mcpJson: Readonly<Record<string, JsonValue>>
+      remoteRef?: string | undefined
       environment: 'sandbox' | 'production'
     }>
   | Readonly<{
@@ -97,6 +99,14 @@ export type SupplySourcePreview =
       candidates: readonly SupplyOperationCandidate[]
     }>
   | Readonly<{
+      kind: 'remote_selection_required'
+      sourceKind: 'mcp' | 'agent_plugin'
+      sourceDigest: string
+      sourceRevision: string
+      registryName?: string | undefined
+      remotes: readonly SupplyMcpRemote[]
+    }>
+  | Readonly<{
       kind: 'action_required'
       requiredAction: Readonly<{
         action: 'supply.source.preview'
@@ -110,6 +120,12 @@ export type SupplySourcePreview =
       }>
     }>
 
+export type SupplyMcpRemote = Readonly<{
+  remoteRef: string
+  name: string
+  serverUrl: string
+}>
+
 export type SupplySourcePreviewDependencies = Readonly<{
   loadOpenApi?: (definitionUrl: string) => Promise<ValidOpenApiDocument>
   inspectX402?: (input: Readonly<{
@@ -120,6 +136,7 @@ export type SupplySourcePreviewDependencies = Readonly<{
   discoverMcp?: (input: Readonly<{
     serverUrl?: string
     registryName?: string
+    remoteRef?: string
     environment: 'sandbox' | 'production'
   }>) => Promise<McpSourceDiscovery>
   mcpAuthentication?: Extract<SourceAuthenticationRequirement, { kind: 'public' | 'mcp_oauth' }>
@@ -146,6 +163,13 @@ export type McpSourceDiscovery =
       authenticationUrl: string
     }>
   | Readonly<{
+      kind: 'remote_selection_required'
+      registryName: string
+      sourceDigest: string
+      sourceRevision: string
+      remotes: readonly SupplyMcpRemote[]
+    }>
+  | Readonly<{
       kind: 'refused'
       reason: string
     }>
@@ -157,6 +181,7 @@ const supplySourceTransportSchema = z.strictObject({
   definitionUrl: z.string().url().max(2_048).optional(),
   serverUrl: z.string().url().max(2_048).optional(),
   registryName: z.string().trim().min(1).max(255).optional(),
+  remoteRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u).optional(),
   pluginJson: transportJsonObjectSchema.optional(),
   mcpJson: transportJsonObjectSchema.optional(),
   resourceUrl: z.string().url().max(2_048).optional(),
@@ -181,7 +206,7 @@ const supplySourceTransportSchema = z.strictObject({
   }
 
   if (value.kind === 'openapi') {
-    requireOnly(['definitionUrl'], ['serverUrl', 'registryName', 'pluginJson', 'mcpJson', 'resourceUrl', 'method'])
+    requireOnly(['definitionUrl'], ['serverUrl', 'registryName', 'remoteRef', 'pluginJson', 'mcpJson', 'resourceUrl', 'method'])
     return
   }
   if (value.kind === 'agent_plugin') {
@@ -189,7 +214,7 @@ const supplySourceTransportSchema = z.strictObject({
     return
   }
   if (value.kind === 'x402') {
-    requireOnly(['resourceUrl', 'method'], ['definitionUrl', 'serverUrl', 'registryName', 'pluginJson', 'mcpJson'])
+    requireOnly(['resourceUrl', 'method'], ['definitionUrl', 'serverUrl', 'registryName', 'remoteRef', 'pluginJson', 'mcpJson'])
     return
   }
   requireOnly([], ['definitionUrl', 'pluginJson', 'mcpJson', 'resourceUrl', 'method'])
@@ -198,6 +223,13 @@ const supplySourceTransportSchema = z.strictObject({
       code: 'custom',
       path: ['serverUrl'],
       message: 'Provide exactly one of serverUrl or registryName.',
+    })
+  }
+  if (present('serverUrl') && present('remoteRef')) {
+    context.addIssue({
+      code: 'custom',
+      path: ['remoteRef'],
+      message: 'remoteRef is accepted only with a Registry source.',
     })
   }
 })
@@ -268,6 +300,18 @@ export const supplySourcePreviewSchema: z.ZodType<SupplySourcePreview> = z.union
     }),
     authentication: z.array(authenticationSchema),
     candidates: z.array(candidateSchema).max(128),
+  }),
+  z.strictObject({
+    kind: z.literal('remote_selection_required'),
+    sourceKind: z.enum(['mcp', 'agent_plugin']),
+    sourceDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+    sourceRevision: z.string(),
+    registryName: z.string().optional(),
+    remotes: z.array(z.strictObject({
+      remoteRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+      name: z.string().trim().min(1),
+      serverUrl: z.string().url(),
+    })).min(1).max(8),
   }),
   z.strictObject({
     kind: z.literal('action_required'),
@@ -346,68 +390,89 @@ async function previewAgentPluginSource(
     )
   }
 
+  const remotes = validated.servers.map((server): SupplyMcpRemote => ({
+    remoteRef: canonicalDigest({
+      format: 'agent-plugin-mcp-remote:v1',
+      name: server.name,
+      transport: 'streamable-http',
+      serverUrl: server.url,
+    }),
+    name: server.name,
+    serverUrl: server.url,
+  }))
+  if (input.remoteRef === undefined) {
+    return {
+      kind: 'remote_selection_required',
+      sourceKind: 'agent_plugin',
+      sourceDigest: bounded.digest,
+      sourceRevision: `agent-plugin-1.0:${bounded.digest}`,
+      remotes,
+    }
+  }
+  const selectedRemote = remotes.find(({ remoteRef }) => remoteRef === input.remoteRef)
+  if (selectedRemote === undefined) {
+    return sourceCorrection(
+      'Agent Plugin server changed',
+      'Select one current remote MCP server from the Agent Plugin files, then continue.',
+    )
+  }
+
   const discover = dependencies.discoverMcp
     ?? (await import('./internal/mcp-source-discovery')).discoverMcpSource
-  const discoveries: { serverName: string; discovery: McpSourceDiscovery }[] = []
-  for (const server of validated.servers) {
-    let discovery: McpSourceDiscovery
-    try {
-      discovery = await discover({ serverUrl: server.url, environment: input.environment })
-    } catch {
-      return sourceCorrection(
-        'Agent Plugin server unavailable',
-        'Make the declared MCP server available at the same public HTTPS URL, then preview the bundle again.',
-      )
-    }
-    if (discovery.kind === 'authentication_required') {
-      return sourceCorrection(
-        'Connect MCP server',
-        `Connect ${server.name}, then return to continue previewing its tools.`,
-        discovery.authenticationUrl,
-        'Connect server',
-      )
-    }
-    if (discovery.kind === 'refused') {
-      return sourceCorrection(
-        'Agent Plugin server needs attention',
-        `Correct ${server.name} at its source, then preview the bundle again.`,
-      )
-    }
-    discoveries.push({ serverName: server.name, discovery })
+  let discovery: McpSourceDiscovery
+  try {
+    discovery = await discover({ serverUrl: selectedRemote.serverUrl, environment: input.environment })
+  } catch {
+    return sourceCorrection(
+      'Agent Plugin server unavailable',
+      'Make the selected MCP server available at the same public HTTPS URL, then preview the bundle again.',
+    )
+  }
+  if (discovery.kind === 'authentication_required') {
+    return sourceCorrection(
+      'Connect MCP server',
+      `Connect ${selectedRemote.name}, then return to continue previewing its tools.`,
+      discovery.authenticationUrl,
+      'Connect server',
+    )
+  }
+  if (discovery.kind === 'remote_selection_required') {
+    return sourceCorrection('Agent Plugin server changed', 'Select the current MCP server again, then continue.')
+  }
+  if (discovery.kind === 'refused') {
+    return sourceCorrection(
+      'Agent Plugin server needs attention',
+      `Correct ${selectedRemote.name} at its source, then preview the bundle again.`,
+    )
   }
 
   const sourceDigest = canonicalDigest({
     bundleDigest: bounded.digest,
-    remotes: discoveries.map(({ serverName, discovery }) => ({
-      serverName,
-      sourceDigest: discovery.kind === 'ready' ? discovery.sourceDigest : '',
-    })),
+    selectedRemoteRef: selectedRemote.remoteRef,
+    remoteDigest: discovery.sourceDigest,
   })
   const candidates: SupplyOperationCandidate[] = []
-  for (const { serverName, discovery } of discoveries) {
-    if (discovery.kind !== 'ready') continue
-    for (const tool of discovery.tools) {
-      if (candidates.length >= 128) break
-      const selector = {
-        serverName,
-        serverUrl: discovery.serverUrl,
-        toolName: tool.name,
-        protocolVersion: discovery.protocolVersion,
-      }
-      candidates.push({
-        candidateRef: canonicalDigest({ sourceDigest, selector }),
-        sourceSelector: selector,
-        title: boundedText(tool.title) ?? tool.name,
-        description: boundedText(tool.description) ?? tool.name,
-        inputSchema: tool.inputSchema,
-        ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
-        authentication,
-        validationExampleAvailable: false,
-        disposition: tool.outputSchema === undefined
-          ? { kind: 'unsupported', reason: 'schema_missing' }
-          : { kind: 'supported' },
-      })
+  for (const tool of discovery.tools) {
+    if (candidates.length >= 128) break
+    const selector = {
+      serverName: selectedRemote.name,
+      serverUrl: discovery.serverUrl,
+      toolName: tool.name,
+      protocolVersion: discovery.protocolVersion,
     }
+    candidates.push({
+      candidateRef: canonicalDigest({ sourceDigest, selector }),
+      sourceSelector: selector,
+      title: boundedText(tool.title) ?? tool.name,
+      description: boundedText(tool.description) ?? tool.name,
+      inputSchema: tool.inputSchema,
+      ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
+      authentication,
+      validationExampleAvailable: false,
+      disposition: tool.outputSchema === undefined
+        ? { kind: 'unsupported', reason: 'schema_missing' }
+        : { kind: 'supported' },
+    })
   }
   return {
     kind: 'ready',
@@ -415,7 +480,7 @@ async function previewAgentPluginSource(
     sourceRevision: `agent-plugin-1.0:${sourceDigest}`,
     provenance: {
       sourceKind: 'agent_plugin',
-      sourceUrl: validated.servers[0]?.url ?? 'https://agent-plugins.org',
+      sourceUrl: selectedRemote.serverUrl,
       authority: 'unverified_public',
     },
     authentication: [authentication],
@@ -435,6 +500,7 @@ async function previewMcpSource(
     discovery = await discover({
       ...(input.serverUrl === undefined ? {} : { serverUrl: input.serverUrl }),
       ...(input.registryName === undefined ? {} : { registryName: input.registryName }),
+      ...(input.remoteRef === undefined ? {} : { remoteRef: input.remoteRef }),
       environment: input.environment,
     })
   } catch {
@@ -450,6 +516,16 @@ async function previewMcpSource(
       discovery.authenticationUrl,
       'Connect server',
     )
+  }
+  if (discovery.kind === 'remote_selection_required') {
+    return {
+      kind: 'remote_selection_required',
+      sourceKind: 'mcp',
+      sourceDigest: discovery.sourceDigest,
+      sourceRevision: discovery.sourceRevision,
+      registryName: discovery.registryName,
+      remotes: discovery.remotes,
+    }
   }
   if (discovery.kind === 'refused') {
     return sourceCorrection(

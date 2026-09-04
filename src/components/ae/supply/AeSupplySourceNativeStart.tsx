@@ -15,6 +15,7 @@ import { captureClientExceptionOnClient } from '@/lib/observability/capture-clie
 import type { ProviderConnectionOwnerProjection } from '@/modules/capability-supply/provider-connection'
 import type {
   SupplyOperationCandidate,
+  SupplyMcpRemote,
   SupplySourceInput,
   SupplySourcePreview,
 } from '@/modules/capability-supply/source-preview'
@@ -71,9 +72,11 @@ export function AeSupplySourceNativeStart({
   const [registryName, setRegistryName] = useState(initial?.source.kind === 'mcp' ? initial.source.registryName ?? '' : '')
   const [pluginJson, setPluginJson] = useState(initial?.source.kind === 'agent_plugin' ? JSON.stringify(initial.source.pluginJson, null, 2) : '')
   const [mcpJson, setMcpJson] = useState(initial?.source.kind === 'agent_plugin' ? JSON.stringify(initial.source.mcpJson, null, 2) : '')
+  const [selectedRemoteRef, setSelectedRemoteRef] = useState(initial?.source.kind === 'mcp' || initial?.source.kind === 'agent_plugin' ? initial.source.remoteRef ?? '' : '')
   const [resourceUrl, setResourceUrl] = useState(initial?.source.kind === 'x402' ? initial.source.resourceUrl : '')
   const [x402Method, setX402Method] = useState<'GET' | 'POST'>(initial?.source.kind === 'x402' ? initial.source.method : 'POST')
   const [preview, setPreview] = useState<Extract<SupplySourcePreview, { kind: 'ready' }> | undefined>(initial?.preview)
+  const [remoteSelection, setRemoteSelection] = useState<Extract<SupplySourcePreview, { kind: 'remote_selection_required' }>>()
   const [selectedRef, setSelectedRef] = useState(initial?.candidateRef ?? '')
   const [name, setName] = useState(initialCandidate?.title ?? '')
   const [description, setDescription] = useState(initialCandidate?.description ?? '')
@@ -109,6 +112,7 @@ export function AeSupplySourceNativeStart({
     registryName,
     pluginJson,
     mcpJson,
+    remoteRef: selectedRemoteRef,
     resourceUrl,
     x402Method,
   })
@@ -127,14 +131,22 @@ export function AeSupplySourceNativeStart({
   function changeSourceKind(next: string) {
     setSourceKind(next as SourceKind)
     setPreview(undefined)
+    setRemoteSelection(undefined)
+    setSelectedRemoteRef('')
     setSelectedRef('')
     setError(undefined)
     setRequiredAction(undefined)
     setSuccess(undefined)
   }
 
-  async function findOperations() {
-    if (source === undefined) {
+  async function findOperations(remoteRefOverride?: string) {
+    const currentSource = remoteRefOverride === undefined
+      ? source
+      : sourceInput({
+          sourceKind, environment, definitionUrl, mcpLocator, serverUrl, registryName,
+          pluginJson, mcpJson, remoteRef: remoteRefOverride, resourceUrl, x402Method,
+        })
+    if (currentSource === undefined) {
       setError(sourceInputError(sourceKind, mcpLocator))
       return
     }
@@ -142,13 +154,22 @@ export function AeSupplySourceNativeStart({
     setError(undefined)
     setSuccess(undefined)
     try {
-      const result = await onPreview(source, previewIdempotencyKey.current)
+      const result = await onPreview(currentSource, previewIdempotencyKey.current)
       if (result.kind === 'action_required') {
         setPreview(undefined)
+        setRemoteSelection(undefined)
         setRequiredAction(result.requiredAction)
         return
       }
+      if (result.kind === 'remote_selection_required') {
+        setPreview(undefined)
+        setRequiredAction(undefined)
+        setRemoteSelection(result)
+        setSelectedRemoteRef('')
+        return
+      }
       setRequiredAction(undefined)
+      setRemoteSelection(undefined)
       setPreview(result)
       setSelectedRef('')
       if (result.candidates.length === 0) setError('No Operations were found in this source.')
@@ -332,16 +353,51 @@ export function AeSupplySourceNativeStart({
             </Tabs>
             <FieldDescription>AE reads the source. You do not need to recreate its schemas or payment metadata.</FieldDescription>
           </Field>
-          <EnvironmentField value={environment} disabled={pending !== undefined} onChange={setEnvironment} />
+          <EnvironmentField value={environment} disabled={pending !== undefined} onChange={(next) => {
+            setEnvironment(next)
+            setRemoteSelection(undefined)
+            setSelectedRemoteRef('')
+          }} />
           {sourceKind === 'openapi' ? <TextField id="supply-native-openapi-url" label="OpenAPI URL" value={definitionUrl} type="url" onChange={setDefinitionUrl} description="OpenAPI 3.0 or 3.1, JSON or YAML, at a public HTTPS URL." /> : null}
-          {sourceKind === 'mcp' ? <McpSourceFields locator={mcpLocator} serverUrl={serverUrl} registryName={registryName} onLocatorChange={setMcpLocator} onServerUrlChange={setServerUrl} onRegistryNameChange={setRegistryName} /> : null}
-          {sourceKind === 'agent_plugin' ? <AgentPluginFields pluginJson={pluginJson} mcpJson={mcpJson} onPluginJsonChange={setPluginJson} onMcpJsonChange={setMcpJson} /> : null}
+          {sourceKind === 'mcp' ? <McpSourceFields locator={mcpLocator} serverUrl={serverUrl} registryName={registryName} onLocatorChange={(next) => {
+            setMcpLocator(next)
+            setRemoteSelection(undefined)
+            setSelectedRemoteRef('')
+          }} onServerUrlChange={(next) => {
+            setServerUrl(next)
+            setRemoteSelection(undefined)
+            setSelectedRemoteRef('')
+          }} onRegistryNameChange={(next) => {
+            setRegistryName(next)
+            setRemoteSelection(undefined)
+            setSelectedRemoteRef('')
+          }} /> : null}
+          {sourceKind === 'agent_plugin' ? <AgentPluginFields pluginJson={pluginJson} mcpJson={mcpJson} onPluginJsonChange={(next) => {
+            setPluginJson(next)
+            setRemoteSelection(undefined)
+            setSelectedRemoteRef('')
+          }} onMcpJsonChange={(next) => {
+            setMcpJson(next)
+            setRemoteSelection(undefined)
+            setSelectedRemoteRef('')
+          }} onError={setError} /> : null}
           {sourceKind === 'x402' ? <X402SourceFields resourceUrl={resourceUrl} method={x402Method} onResourceUrlChange={setResourceUrl} onMethodChange={setX402Method} /> : null}
           <Button type="button" className="min-h-touch justify-self-start" disabled={pending !== undefined} aria-busy={pending === 'preview' || undefined} onClick={() => void findOperations()}>
             {pending === 'preview' ? 'Finding Operations…' : 'Find Operations'}
           </Button>
         </FieldGroup>
       </AeSection>
+
+      {remoteSelection === undefined ? null : (
+        <AeSection title="Select MCP server" description="Choose the exact remote server AE should inspect. AE will not contact another server or fail over silently.">
+          <FieldGroup className="gap-4">
+            <RemoteSelectionField remotes={remoteSelection.remotes} value={selectedRemoteRef} onChange={setSelectedRemoteRef} />
+            <Button type="button" className="min-h-touch justify-self-start" disabled={pending !== undefined || selectedRemoteRef === ''} onClick={() => void findOperations(selectedRemoteRef)}>
+              Continue with selected server
+            </Button>
+          </FieldGroup>
+        </AeSection>
+      )}
 
       {preview === undefined ? null : (
         <AeSection title="Select an Operation" description={`${preview.candidates.length} candidate${preview.candidates.length === 1 ? '' : 's'} found. Unsupported source methods remain visible with their correction.`}>
@@ -397,6 +453,7 @@ type SourceFieldState = Readonly<{
   registryName: string
   pluginJson: string
   mcpJson: string
+  remoteRef: string
   resourceUrl: string
   x402Method: 'GET' | 'POST'
 }>
@@ -405,12 +462,23 @@ function sourceInput(value: SourceFieldState): SupplySourceInput | undefined {
   if (value.sourceKind === 'openapi') return value.definitionUrl.trim() === '' ? undefined : { kind: 'openapi', definitionUrl: value.definitionUrl.trim(), environment: value.environment }
   if (value.sourceKind === 'mcp') {
     if (value.mcpLocator === 'url') return value.serverUrl.trim() === '' ? undefined : { kind: 'mcp', serverUrl: value.serverUrl.trim(), environment: value.environment }
-    return value.registryName.trim() === '' ? undefined : { kind: 'mcp', registryName: value.registryName.trim(), environment: value.environment }
+    return value.registryName.trim() === '' ? undefined : {
+      kind: 'mcp',
+      registryName: value.registryName.trim(),
+      ...(value.remoteRef === '' ? {} : { remoteRef: value.remoteRef }),
+      environment: value.environment,
+    }
   }
   if (value.sourceKind === 'agent_plugin') {
     const plugin = parseObject(value.pluginJson)
     const mcp = parseObject(value.mcpJson)
-    return plugin === undefined || mcp === undefined ? undefined : { kind: 'agent_plugin', pluginJson: plugin, mcpJson: mcp, environment: value.environment }
+    return plugin === undefined || mcp === undefined ? undefined : {
+      kind: 'agent_plugin',
+      pluginJson: plugin,
+      mcpJson: mcp,
+      ...(value.remoteRef === '' ? {} : { remoteRef: value.remoteRef }),
+      environment: value.environment,
+    }
   }
   return value.resourceUrl.trim() === '' ? undefined : { kind: 'x402', resourceUrl: value.resourceUrl.trim(), method: value.x402Method, environment: value.environment }
 }
@@ -482,8 +550,24 @@ function McpSourceFields({ locator, serverUrl, registryName, onLocatorChange, on
     : <TextField id="supply-native-mcp-registry" label="MCP Registry name" value={registryName} onChange={onRegistryNameChange} description="The exact published Registry name." />}</>
 }
 
-function AgentPluginFields({ pluginJson, mcpJson, onPluginJsonChange, onMcpJsonChange }: Readonly<{ pluginJson: string; mcpJson: string; onPluginJsonChange: (value: string) => void; onMcpJsonChange: (value: string) => void }>) {
-  return <><TextAreaField id="supply-native-plugin-json" label="plugin.json" value={pluginJson} onChange={onPluginJsonChange} description="Official Agent Plugins 1.0 plugin.json." /><TextAreaField id="supply-native-mcp-json" label="mcp.json" value={mcpJson} onChange={onMcpJsonChange} description="Official Agent Plugins 1.0 mcp.json with a remote streamable-http server." /></>
+function AgentPluginFields({ pluginJson, mcpJson, onPluginJsonChange, onMcpJsonChange, onError }: Readonly<{ pluginJson: string; mcpJson: string; onPluginJsonChange: (value: string) => void; onMcpJsonChange: (value: string) => void; onError: (value: string) => void }>) {
+  return <><JsonFileField id="supply-native-plugin-json" label="plugin.json" loaded={pluginJson !== ''} onChange={onPluginJsonChange} onError={onError} /><JsonFileField id="supply-native-mcp-json" label="mcp.json" loaded={mcpJson !== ''} onChange={onMcpJsonChange} onError={onError} /></>
+}
+
+function JsonFileField({ id, label, loaded, onChange, onError }: Readonly<{ id: string; label: string; loaded: boolean; onChange: (value: string) => void; onError: (value: string) => void }>) {
+  return <Field><FieldLabel htmlFor={id}>{label}</FieldLabel><Input id={id} type="file" accept=".json,application/json" onChange={(event) => {
+    const file = event.currentTarget.files?.[0]
+    if (file === undefined) return
+    if (file.size > 262_144) {
+      onError(`${label} must be 256 KB or smaller.`)
+      return
+    }
+    void file.text().then(onChange).catch(() => onError(`${label} could not be read.`))
+  }} /><FieldDescription>{loaded ? `${label} loaded. Choose another file to replace it.` : `Choose the official Agent Plugins 1.0 ${label} file.`}</FieldDescription></Field>
+}
+
+function RemoteSelectionField({ remotes, value, onChange }: Readonly<{ remotes: readonly SupplyMcpRemote[]; value: string; onChange: (value: string) => void }>) {
+  return <Field><FieldLabel>Remote MCP server</FieldLabel><RadioGroup value={value} onValueChange={onChange}>{remotes.map((remote) => <Label key={remote.remoteRef} className="min-h-touch rounded-md border border-border p-3"><RadioGroupItem value={remote.remoteRef} aria-label={`Select ${remote.name}`} /><span className="grid min-w-0"><span className="font-medium">{remote.name}</span><span className="break-all text-sm text-muted-foreground">{remote.serverUrl}</span></span></Label>)}</RadioGroup><FieldDescription>Only this exact endpoint will be contacted.</FieldDescription></Field>
 }
 
 function X402SourceFields({ resourceUrl, method, onResourceUrlChange, onMethodChange }: Readonly<{ resourceUrl: string; method: 'GET' | 'POST'; onResourceUrlChange: (value: string) => void; onMethodChange: (value: 'GET' | 'POST') => void }>) {

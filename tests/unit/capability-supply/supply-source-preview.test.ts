@@ -339,7 +339,7 @@ describe('supply source preview', () => {
             }],
             nextCursor: 'page:2',
           },
-        })
+        }, { headers: { 'Mcp-Session-Id': 'session:registry-preview' } })
       }
       if (body.method === 'tools/list' && body.params?.cursor === 'page:2') {
         return Response.json({
@@ -349,7 +349,7 @@ describe('supply source preview', () => {
               name: 'second', inputSchema: { type: 'object' }, outputSchema: responseSchema,
             }],
           },
-        })
+        }, { headers: { 'Mcp-Session-Id': 'session:registry-preview' } })
       }
       throw new Error(`unexpected MCP request: ${body.method ?? request.method}`)
     })
@@ -418,6 +418,82 @@ describe('supply source preview', () => {
     })
   })
 
+  it('reads Registry metadata without contacting an endpoint until one exact remote is selected', async () => {
+    const endpointRequests: string[] = []
+    const send = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.hostname === 'registry.modelcontextprotocol.io') {
+        return Response.json({
+          server: {
+            $schema: 'https://static.modelcontextprotocol.io/schemas/2026-07-29/server.schema.json',
+            name: 'io.example/reference-tools',
+            version: '1.0.0',
+            remotes: [
+              { type: 'streamable-http', url: 'https://east.tools.example/mcp' },
+              { type: 'streamable-http', url: 'https://west.tools.example/mcp' },
+            ],
+          },
+          _meta: { 'io.modelcontextprotocol.registry/official': { status: 'active' } },
+        })
+      }
+      endpointRequests.push(request.url)
+      if (request.method === 'DELETE') return new Response(null, { status: 200 })
+      const body = JSON.parse(await request.text()) as { id?: number; method?: string }
+      if (body.method === 'initialize') {
+        return Response.json({
+          jsonrpc: '2.0', id: body.id,
+          result: {
+            protocolVersion: '2025-11-25',
+            capabilities: { tools: {} },
+            serverInfo: { name: 'reference', version: '1' },
+          },
+        }, { headers: { 'Mcp-Session-Id': 'session:registry-preview' } })
+      }
+      if (body.method === 'notifications/initialized') return new Response(null, { status: 202 })
+      if (body.method === 'tools/list') {
+        return Response.json({
+          jsonrpc: '2.0', id: body.id,
+          result: { tools: [{ name: 'lookup', inputSchema: { type: 'object' }, outputSchema: responseSchema }] },
+        })
+      }
+      throw new Error(`unexpected request ${request.method} ${request.url}`)
+    })
+
+    const metadata = await discoverMcpSource({
+      registryName: 'io.example/reference-tools',
+      environment: 'production',
+    }, { isPublicTarget: async () => true, send })
+
+    expect(metadata).toMatchObject({
+      kind: 'remote_selection_required',
+      registryName: 'io.example/reference-tools',
+      remotes: [
+        { remoteRef: expect.stringMatching(/^sha256:/u), serverUrl: 'https://east.tools.example/mcp' },
+        { remoteRef: expect.stringMatching(/^sha256:/u), serverUrl: 'https://west.tools.example/mcp' },
+      ],
+    })
+    expect(endpointRequests).toEqual([])
+    if (metadata.kind !== 'remote_selection_required') return
+
+    const selected = metadata.remotes[1]
+    if (selected === undefined) throw new Error('expected second Registry remote')
+    const discovered = await discoverMcpSource({
+      registryName: 'io.example/reference-tools',
+      remoteRef: selected.remoteRef,
+      environment: 'production',
+    }, { isPublicTarget: async () => true, send })
+
+    expect(discovered).toMatchObject({
+      kind: 'ready',
+      serverUrl: 'https://west.tools.example/mcp',
+      registryName: 'io.example/reference-tools',
+      verifiedNamespace: true,
+      tools: [{ name: 'lookup' }],
+    })
+    expect(endpointRequests.length).toBeGreaterThan(0)
+    expect(endpointRequests.every((url) => url.startsWith('https://west.tools.example/mcp'))).toBe(true)
+  })
+
   it('validates an official Agent Plugins 1.0 bundle and reuses MCP discovery for its remote server', async () => {
     const discoverMcp = vi.fn().mockResolvedValue({
       kind: 'ready',
@@ -432,7 +508,7 @@ describe('supply source preview', () => {
       }],
     })
 
-    const result = await previewSupplySource({
+    const source = {
       kind: 'agent_plugin',
       pluginJson: {
         $schema: 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
@@ -446,6 +522,20 @@ describe('supply source preview', () => {
         },
       },
       environment: 'production',
+    } as const
+
+    const metadata = await previewSupplySource(source, { discoverMcp })
+    expect(metadata).toMatchObject({
+      kind: 'remote_selection_required',
+      sourceKind: 'agent_plugin',
+      remotes: [{ name: 'remote', serverUrl: 'https://tools.example/mcp' }],
+    })
+    expect(discoverMcp).not.toHaveBeenCalled()
+    if (metadata.kind !== 'remote_selection_required') return
+
+    const result = await previewSupplySource({
+      ...source,
+      remoteRef: metadata.remotes[0]?.remoteRef,
     }, { discoverMcp })
 
     expect(result).toMatchObject({
@@ -464,6 +554,44 @@ describe('supply source preview', () => {
       }],
     })
     expect(discoverMcp).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a valid Agent Plugin remote when an invalid or configured-header sibling is present', async () => {
+    const discoverMcp = vi.fn().mockResolvedValue({
+      kind: 'ready',
+      serverUrl: 'https://good.tools.example/mcp',
+      protocolVersion: '2026-07-28',
+      sourceDigest: `sha256:${'7'.repeat(64)}`,
+      tools: [{ name: 'lookup', inputSchema: { type: 'object' }, outputSchema: responseSchema }],
+    })
+    const source = {
+      kind: 'agent_plugin' as const,
+      pluginJson: {
+        $schema: 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
+        name: 'reference-tools',
+      },
+      mcpJson: {
+        $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json',
+        mcpServers: {
+          good: { type: 'streamable-http', url: 'https://good.tools.example/mcp' },
+          configured: {
+            type: 'streamable-http',
+            url: 'https://configured.tools.example/mcp',
+            headers: { Authorization: '${PROVIDER_TOKEN}' },
+          },
+          malformed: { type: 'streamable-http', url: 42 },
+        },
+      },
+      environment: 'production' as const,
+    }
+
+    const metadata = await previewSupplySource(source, { discoverMcp })
+
+    expect(metadata).toMatchObject({
+      kind: 'remote_selection_required',
+      remotes: [{ name: 'good', serverUrl: 'https://good.tools.example/mcp' }],
+    })
+    expect(discoverMcp).not.toHaveBeenCalled()
   })
 
   it('rejects Agent Plugin credentials and legacy remote transports instead of importing them', async () => {

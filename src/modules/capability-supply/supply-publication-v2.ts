@@ -176,6 +176,18 @@ export async function prepareSupplyPublicationV2(
       },
     }
   }
+  if (preview.kind === 'remote_selection_required') {
+    return {
+      kind: 'refused',
+      reason: 'source_action_required',
+      requiredAction: {
+        title: 'Select MCP server',
+        description: 'Select one exact remote MCP server from the current source metadata, then submit again.',
+        cta: null,
+        ctaLabel: 'Select server',
+      },
+    }
+  }
   if (preview.sourceDigest !== input.expectedSourceDigest) return refused('source_changed')
   const candidate = preview.candidates.find(({ candidateRef }) => candidateRef === input.candidateRef)
   if (candidate === undefined) return refused('candidate_changed')

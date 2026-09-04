@@ -24,6 +24,7 @@ const MAXIMUM_RESPONSE_BYTES = 262_144
 export async function discoverMcpSource(input: Readonly<{
   serverUrl?: string
   registryName?: string
+  remoteRef?: string
   environment: 'sandbox' | 'production'
 }>, dependencies: Readonly<{
   isPublicTarget?: (target: URL) => Promise<boolean>
@@ -31,8 +32,9 @@ export async function discoverMcpSource(input: Readonly<{
   authProvider?: OAuthClientProvider
 }> = {}): Promise<McpSourceDiscovery> {
   if (input.registryName !== undefined) {
-    const registry = await resolveMcpRegistryRemote(input.registryName, dependencies.send)
+    const registry = await resolveMcpRegistryRemote(input.registryName, input.remoteRef, dependencies.send)
     if (registry.kind === 'refused') return registry
+    if (registry.kind === 'remote_selection_required') return registry
     const discovered = await discoverMcpSource({
       serverUrl: registry.serverUrl,
       environment: input.environment,
@@ -183,6 +185,7 @@ export async function discoverMcpSource(input: Readonly<{
 
 async function resolveMcpRegistryRemote(
   registryName: string,
+  selectedRemoteRef?: string,
   injectedSend?: ((request: Request) => Promise<Response>) | undefined,
 ): Promise<Readonly<{
   kind: 'ready'
@@ -190,6 +193,14 @@ async function resolveMcpRegistryRemote(
   version: string
   schema: string
   serverUrl: string
+  remoteRef: string
+  metadataDigest: string
+}> | Readonly<{
+  kind: 'remote_selection_required'
+  registryName: string
+  sourceDigest: string
+  sourceRevision: string
+  remotes: readonly Readonly<{ remoteRef: string; name: string; serverUrl: string }>[]
 }> | Readonly<{ kind: 'refused'; reason: string }>> {
   const normalizedName = registryName.trim()
   if (!/^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/u.test(normalizedName)) {
@@ -233,28 +244,51 @@ async function resolveMcpRegistryRemote(
     || !Array.isArray(server.remotes)) {
     return { kind: 'refused', reason: 'mcp_registry_entry_inactive' }
   }
-  const remotes = server.remotes.filter((remote) => (
-    isRecord(remote)
-    && remote.type === 'streamable-http'
-    && typeof remote.url === 'string'
-    && remote.headers === undefined
-  ))
-  if (remotes.length !== 1) {
-    return { kind: 'refused', reason: remotes.length === 0
-      ? 'mcp_registry_remote_missing'
-      : 'mcp_registry_remote_selection_required' }
+  const remotes = server.remotes.flatMap((remote) => {
+    if (!isRecord(remote) || remote.type !== 'streamable-http'
+      || typeof remote.url !== 'string' || remote.headers !== undefined) return []
+    const serverUrl = validHttpsUrl(remote.url)
+    if (serverUrl === undefined) return []
+    return [{
+      remoteRef: canonicalDigest({
+        format: 'mcp-registry-remote:v1',
+        registryName: normalizedName,
+        version: server.version,
+        schema: server.$schema,
+        transport: 'streamable-http',
+        serverUrl,
+      }),
+      name: new URL(serverUrl).host + new URL(serverUrl).pathname,
+      serverUrl,
+    }]
+  })
+  if (remotes.length === 0) return { kind: 'refused', reason: 'mcp_registry_remote_missing' }
+  if (remotes.length > 8) return { kind: 'refused', reason: 'mcp_registry_remote_limit_exceeded' }
+  const metadataDigest = canonicalDigest({
+    registryName: normalizedName,
+    registryVersion: server.version,
+    registrySchema: server.$schema,
+    remotes,
+  })
+  if (selectedRemoteRef === undefined) {
+    return {
+      kind: 'remote_selection_required',
+      registryName: normalizedName,
+      sourceDigest: metadataDigest,
+      sourceRevision: `mcp-registry:${metadataDigest}`,
+      remotes,
+    }
   }
-  const remote = remotes[0]
-  const serverUrl = remote === undefined || typeof remote.url !== 'string'
-    ? undefined
-    : validHttpsUrl(remote.url)
-  if (serverUrl === undefined) return { kind: 'refused', reason: 'mcp_registry_remote_invalid' }
+  const selected = remotes.find(({ remoteRef }) => remoteRef === selectedRemoteRef)
+  if (selected === undefined) return { kind: 'refused', reason: 'mcp_registry_remote_selection_invalid' }
   return {
     kind: 'ready',
     registryName: normalizedName,
     version: server.version,
     schema: server.$schema,
-    serverUrl,
+    serverUrl: selected.serverUrl,
+    remoteRef: selected.remoteRef,
+    metadataDigest,
   }
 }
 

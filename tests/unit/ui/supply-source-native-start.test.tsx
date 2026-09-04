@@ -255,4 +255,76 @@ describe('source-native Provider start', () => {
     expect(action.getAttribute('href')).toBe('/owner/supply/connections/new?attempt=pca_one')
     expect(screen.queryByText(/could not inspect/i)).toBeNull()
   })
+
+  it('requires one exact Registry remote before finding Operations', async () => {
+    const remoteRef = `sha256:${'d'.repeat(64)}`
+    const onPreview = vi.fn()
+      .mockResolvedValueOnce({
+        kind: 'remote_selection_required',
+        sourceKind: 'mcp',
+        sourceDigest: `sha256:${'e'.repeat(64)}`,
+        sourceRevision: `mcp-registry:sha256:${'e'.repeat(64)}`,
+        registryName: 'io.example/reference-tools',
+        remotes: [{
+          remoteRef,
+          name: 'west.tools.example/mcp',
+          serverUrl: 'https://west.tools.example/mcp',
+        }],
+      })
+      .mockResolvedValueOnce({
+        kind: 'ready',
+        sourceDigest: `sha256:${'f'.repeat(64)}`,
+        sourceRevision: `mcp:sha256:${'f'.repeat(64)}`,
+        provenance: {
+          sourceKind: 'mcp',
+          sourceUrl: 'https://west.tools.example/mcp',
+          authority: 'verified_registry',
+        },
+        authentication: [{ kind: 'public' }],
+        candidates: [candidate],
+      })
+
+    render(
+      <AeSupplySourceNativeStart
+        businessRef="business:one"
+        initial={{
+          source: { kind: 'mcp', registryName: 'io.example/reference-tools', environment: 'sandbox' },
+          preview: {
+            kind: 'ready',
+            sourceDigest: `sha256:${'c'.repeat(64)}`,
+            sourceRevision: `mcp:sha256:${'c'.repeat(64)}`,
+            provenance: { sourceKind: 'mcp', sourceUrl: 'https://placeholder.example/mcp', authority: 'verified_registry' },
+            authentication: [{ kind: 'public' }],
+            candidates: [],
+          },
+          candidateRef: '',
+        }}
+        onPreview={onPreview}
+        onConnect={vi.fn()}
+        onSelectCandidate={vi.fn()}
+        onPublish={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Find Operations' }))
+
+    expect(await screen.findByText('Select MCP server')).toBeTruthy()
+    expect(onPreview).toHaveBeenNthCalledWith(1, {
+      kind: 'mcp',
+      registryName: 'io.example/reference-tools',
+      environment: 'sandbox',
+    }, expect.any(String))
+    expect(screen.queryByText('Reference lookup')).toBeNull()
+
+    fireEvent.click(screen.getByRole('radio', { name: /west\.tools\.example/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with selected server' }))
+
+    expect(await screen.findByText('Reference lookup')).toBeTruthy()
+    expect(onPreview).toHaveBeenNthCalledWith(2, {
+      kind: 'mcp',
+      registryName: 'io.example/reference-tools',
+      remoteRef,
+      environment: 'sandbox',
+    }, expect.any(String))
+  })
 })

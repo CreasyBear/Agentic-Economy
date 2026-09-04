@@ -9,6 +9,12 @@ const PLUGIN_SCHEMA_ID = 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.
 const MCP_SCHEMA_ID = 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json'
 const MAX_REMOTE_SERVERS = 8
 
+const mcpServerSchema = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $defs: (mcpSchema as Readonly<Record<string, unknown>>).$defs,
+  $ref: '#/$defs/server',
+}
+
 export type AgentPluginRemoteServer = Readonly<{
   name: string
   url: string
@@ -27,7 +33,7 @@ export function validateAgentPluginSource(
   pluginJson: unknown,
   mcpJson: unknown,
 ): AgentPluginSourceValidation {
-  if (!matchesSchema(pluginSchema, pluginJson) || !matchesSchema(mcpSchema, mcpJson)) {
+  if (!matchesSchema(pluginSchema, pluginJson) || !validMcpEnvelope(mcpJson)) {
     return { kind: 'refused', reason: 'agent_plugin_schema_invalid' }
   }
   if (!isRecord(pluginJson) || !isRecord(mcpJson)) {
@@ -42,25 +48,36 @@ export function validateAgentPluginSource(
 
   const servers: AgentPluginRemoteServer[] = []
   const unsupportedServerNames: string[] = []
-  for (const [name, server] of Object.entries(mcpJson.mcpServers)) {
-    if (!isRecord(server) || server.type !== 'streamable-http') {
+  const entries = Object.entries(mcpJson.mcpServers)
+  if (entries.length > MAX_REMOTE_SERVERS) {
+    return { kind: 'refused', reason: 'agent_plugin_server_limit_exceeded' }
+  }
+  for (const [name, server] of entries) {
+    if (!matchesSchema(mcpServerSchema, server) || !isRecord(server) || server.type !== 'streamable-http') {
       unsupportedServerNames.push(name)
       continue
     }
     if (server.headers !== undefined) {
-      return { kind: 'refused', reason: 'agent_plugin_embedded_credentials' }
+      unsupportedServerNames.push(name)
+      continue
     }
     const url = typeof server.url === 'string' ? validHttpsUrl(server.url) : undefined
     if (url === undefined) {
-      return { kind: 'refused', reason: 'agent_plugin_remote_invalid' }
+      unsupportedServerNames.push(name)
+      continue
     }
     servers.push({ name, url })
-    if (servers.length > MAX_REMOTE_SERVERS) {
-      return { kind: 'refused', reason: 'agent_plugin_server_limit_exceeded' }
-    }
   }
   if (servers.length === 0) return { kind: 'refused', reason: 'agent_plugin_remote_missing' }
   return { kind: 'valid', pluginName: pluginJson.name, servers, unsupportedServerNames }
+}
+
+function validMcpEnvelope(value: unknown): value is Readonly<{
+  $schema: string
+  mcpServers: Readonly<Record<string, unknown>>
+}> {
+  if (!isRecord(value) || value.$schema !== MCP_SCHEMA_ID || !isRecord(value.mcpServers)) return false
+  return Object.keys(value).every((key) => key === '$schema' || key === 'mcpServers')
 }
 
 function matchesSchema(schema: unknown, value: unknown): boolean {
