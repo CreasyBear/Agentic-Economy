@@ -38,6 +38,25 @@ const listResultValue = v.union(
   v.object({ kind: v.literal('not_found') }),
 )
 
+const ownerListResultValue = v.union(
+  v.object({
+    kind: v.literal('available'),
+    page: v.array(v.object({
+      offeringRef: v.string(),
+      currentRevision: v.number(),
+      name: v.string(),
+      category: v.string(),
+      summary: v.string(),
+      status: v.union(v.literal('draft'), v.literal('published'), v.literal('paused'), v.literal('retired')),
+      accessPathCount: v.number(),
+      statusJson: v.string(),
+    })),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+  }),
+  v.object({ kind: v.literal('not_found') }),
+)
+
 const agentReadArgs = {
   businessId: v.id('businesses'),
   agentPrincipal: agentAccessPrincipalValue,
@@ -196,6 +215,52 @@ export const readOwner = query({
       kind: 'available' as const,
       statusJson: JSON.stringify(status),
       ...(resumeCandidateRef === undefined ? {} : { resumeCandidateRef }),
+    }
+  },
+})
+
+export const listOwner = query({
+  args: {
+    businessId: v.id('businesses'),
+    paginationOpts: paginationOptsValidator,
+    now: v.number(),
+  },
+  returns: ownerListResultValue,
+  handler: async (ctx, args) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') return { kind: 'not_found' as const }
+    const business = await ctx.db.get(args.businessId)
+    if (business === null || business.owningAccountRef !== actor.canonicalAccountRef) {
+      return { kind: 'not_found' as const }
+    }
+    const rows = await ctx.db.query('capabilitySupplierOperationProjections')
+      .withIndex('by_businessId_and_updatedAt', (index) => index.eq('businessId', args.businessId))
+      .order('desc')
+      .paginate(args.paginationOpts)
+    const page = await Promise.all(rows.page.map(async (identity) => {
+      const [projected, offering, revision, paths] = await Promise.all([
+        projectIdentity(ctx, identity, args.now, false),
+        ctx.db.query('businessOfferings').withIndex('by_offeringRef', (index) => index.eq('offeringRef', identity.offeringRef)).unique(),
+        ctx.db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', (index) => index.eq('offeringRef', identity.offeringRef).eq('revision', identity.offeringRevision)).unique(),
+        ctx.db.query('offeringAccessPaths').withIndex('by_offeringRef_and_offeringRevision', (index) => index.eq('offeringRef', identity.offeringRef).eq('offeringRevision', identity.offeringRevision)).take(100),
+      ])
+      if (projected === null || offering === null || revision === null || offering.businessId !== args.businessId || revision.businessId !== args.businessId) return null
+      return {
+        offeringRef: identity.offeringRef,
+        currentRevision: offering.currentRevision,
+        name: revision.name,
+        category: revision.category,
+        summary: revision.summary,
+        status: offering.status,
+        accessPathCount: paths.filter((path) => path.status !== 'withdrawn').length,
+        statusJson: JSON.stringify(projected),
+      }
+    }))
+    return {
+      kind: 'available' as const,
+      page: page.flatMap((item) => item === null ? [] : [item]),
+      isDone: rows.isDone,
+      continueCursor: rows.continueCursor,
     }
   },
 })

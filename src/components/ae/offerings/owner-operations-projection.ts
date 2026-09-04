@@ -4,7 +4,9 @@ import type {
   OwnerOperationsLifecycleResult,
   OwnerOperationsLifecycleRow,
 } from './owner-operations.functions'
-import type { SupplierContinuation } from '@/components/ae/supply/supplier-continuation'
+import {
+  supplierOperationReasonPresentation,
+} from '@/modules/capability-supply/supplier-operation-status'
 
 export type OwnerOperationAvailability = 'available' | 'unavailable' | 'unknown'
 
@@ -12,7 +14,7 @@ export type OwnerOperationsProjectionRow = OwnerOperationsInventoryRow & Readonl
   lifecycleLabel: string
   availability: OwnerOperationAvailability
   blocker?: string
-  continuation: SupplierContinuation
+  continuation: Readonly<{ kind: 'navigate'; label: string; href: string }>
   lifecyclePending?: boolean
 }>
 
@@ -40,143 +42,73 @@ export function projectOwnerOperations(
   if (lifecycle.kind === 'available' && hasDuplicate(lifecycle.value, (row) => row.offeringRef)) {
     return { kind: 'conflict', reason: 'duplicate_supply' }
   }
-
-  const lifecycleByRef = new Map(
+  const statusByOffering = new Map(
     lifecycle.kind === 'available'
       ? lifecycle.value.map((row) => [row.offeringRef, row] as const)
       : [],
   )
-  const inventoryRefs = new Set(inventory.operations.map((row) => row.offeringRef))
-  const supplyOnly = lifecycle.kind === 'available'
-    ? lifecycle.value.filter((row) => !inventoryRefs.has(row.offeringRef)).length
-    : 0
-
-  const rows = inventory.operations.map((row) => projectRow(row, lifecycleByRef.get(row.offeringRef), lifecycle.kind))
+  const rows = inventory.operations.map((row) => projectRow(row, statusByOffering.get(row.offeringRef), lifecycle.kind))
   const blockers = rows.flatMap((row) => row.blocker === undefined ? [] : [row.blocker])
-  const missingSupply = lifecycle.kind === 'not_applicable'
-    ? inventory.operations.length
-    : rows.filter((row) => row.lifecyclePending === true).length
   return {
     kind: 'available',
     rows,
     attentionCount: blockers.length,
     ...(blockers[0] === undefined ? {} : { firstBlocker: blockers[0] }),
-    inconsistencyCount: supplyOnly + missingSupply,
+    inconsistencyCount: rows.filter((row) => row.lifecyclePending === true).length,
   }
 }
 
 function projectRow(
   definition: OwnerOperationsInventoryRow,
-  supply: OwnerOperationsLifecycleRow | undefined,
+  lifecycle: OwnerOperationsLifecycleRow | undefined,
   lifecycleKind: OwnerOperationsLifecycleResult['kind'],
 ): OwnerOperationsProjectionRow {
-  const edit: SupplierContinuation = {
-    kind: 'navigate',
-    label: 'Edit Operation',
-    href: `/owner/offerings/${encodeURIComponent(definition.offeringRef)}`,
+  const detail = {
+    kind: 'navigate' as const,
+    label: 'View status',
+    href: `/owner/supply/${encodeURIComponent(definition.offeringRef)}`,
   }
-  if (supply === undefined) {
-    if (lifecycleKind === 'not_applicable') {
-      return {
-        ...definition,
-        lifecycleLabel: 'Preparation required',
-        availability: 'unknown',
-        blocker: 'This Operation has not entered the supplier lifecycle.',
-        continuation: edit,
-      }
+  if (lifecycle === undefined) {
+    return {
+      ...definition,
+      lifecycleLabel: lifecycleKind === 'unavailable' ? 'Status unavailable' : 'Updating',
+      availability: 'unknown',
+      blocker: lifecycleKind === 'unavailable'
+        ? 'Lifecycle status is temporarily unavailable.'
+        : 'The canonical Operation status is still catching up.',
+      continuation: detail,
+      ...(lifecycleKind === 'unavailable' ? {} : { lifecyclePending: true }),
     }
-    if (lifecycleKind === 'unavailable') {
-      return {
-        ...definition,
-        lifecycleLabel: 'Status unavailable',
-        availability: 'unknown',
-        blocker: 'Lifecycle status is temporarily unavailable.',
-        continuation: edit,
-      }
-    }
+  }
+  const status = lifecycle.status
+  if (status.revision !== undefined && status.revision !== definition.currentRevision) {
     return {
       ...definition,
       lifecycleLabel: 'Updating',
       availability: 'unknown',
-      blocker: 'Supply facts are still catching up.',
-      continuation: edit,
+      blocker: 'The canonical status belongs to an earlier Operation revision.',
+      continuation: detail,
       lifecyclePending: true,
     }
   }
-  if (supply.revision !== definition.currentRevision) {
-    return {
-      ...definition,
-      lifecycleLabel: 'Updating',
-      availability: 'unknown',
-      blocker: 'The published lifecycle is for an earlier revision.',
-      continuation: edit,
-      lifecyclePending: true,
-    }
+  const firstReason = status.reasonCodes[0]
+  const blocker = firstReason === undefined
+    ? undefined
+    : supplierOperationReasonPresentation(firstReason).description
+  const continuation = status.ownerHandoff === undefined
+    ? detail
+    : {
+        kind: 'navigate' as const,
+        label: status.ownerHandoff.ctaLabel,
+        href: status.ownerHandoff.cta,
+      }
+  return {
+    ...definition,
+    lifecycleLabel: status.state,
+    availability: status.routeability.available ? 'available' : 'unavailable',
+    ...(blocker === undefined ? {} : { blocker }),
+    continuation,
   }
-
-  const continuation = supply.continuation
-  if (definition.status === 'retired' || supply.publicationState === 'superseded') {
-    return projected(definition, 'Retired', 'unavailable', continuation)
-  }
-  if (supply.publicationState === 'incompatible' || supply.lifecycleState === 'incompatible') {
-    return projected(definition, 'Incompatible', 'unavailable', continuation, 'This Operation no longer matches its published contract.')
-  }
-  if (supply.publicationState === 'withdrawn' || supply.lifecycleState === 'withdrawn') {
-    return projected(definition, 'Withdrawn', 'unavailable', continuation, 'This Operation is withdrawn from the market.')
-  }
-  if (definition.status === 'paused') {
-    return projected(definition, 'Paused', 'unavailable', continuation, 'This Operation is paused.')
-  }
-  if (definition.status === 'draft' || supply.currentStep === 'describe') {
-    return projected(definition, 'Draft', 'unavailable', continuation, 'Finish describing this Operation.')
-  }
-  if (isAuthorityOrCredentialFailure(supply)) {
-    return projected(definition, 'Connection needs attention', 'unavailable', continuation, 'Provider authority or credentials need attention.')
-  }
-  if (supply.currentStep === 'admission') {
-    return projected(definition, 'Setup required', 'unavailable', continuation, 'Connect and admit a provider source.')
-  }
-  if (supply.readinessState === 'not_started') {
-    return projected(definition, 'Readiness not started', 'unknown', continuation, 'Readiness has not been checked.')
-  }
-  if (supply.readinessState === 'in_progress') {
-    return projected(definition, 'Checking readiness', 'unknown', continuation)
-  }
-  if (
-    supply.readinessState === 'refused'
-    || supply.readinessState === 'stale'
-    || (!supply.liveAvailable && supply.liveReason !== undefined)
-  ) {
-    return projected(definition, 'Not ready', 'unavailable', continuation, 'Readiness must be restored before this Operation is available.')
-  }
-  if (
-    definition.status === 'published'
-    && supply.publicationState === 'current'
-    && supply.lifecycleState === 'active'
-    && supply.readinessOutcome === 'healthy'
-    && supply.liveAvailable
-  ) {
-    return projected(definition, 'Published', 'available', continuation)
-  }
-  return projected(definition, 'Status unavailable', 'unknown', edit, 'AE could not confirm the current lifecycle state.')
-}
-
-function projected(
-  row: OwnerOperationsInventoryRow,
-  lifecycleLabel: string,
-  availability: OwnerOperationAvailability,
-  continuation: SupplierContinuation,
-  blocker?: string,
-): OwnerOperationsProjectionRow {
-  return { ...row, lifecycleLabel, availability, continuation, ...(blocker === undefined ? {} : { blocker }) }
-}
-
-function isAuthorityOrCredentialFailure(row: OwnerOperationsLifecycleRow): boolean {
-  return row.actionableReason === 'authority_stale'
-    || row.actionableReason === 'credential_unavailable'
-    || row.actionableReason === 'credential_rejected'
-    || row.readinessOutcome === 'credential_unavailable'
-    || row.readinessOutcome === 'credential_rejected'
 }
 
 function hasDuplicate<T>(items: readonly T[], key: (item: T) => string): boolean {

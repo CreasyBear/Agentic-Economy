@@ -51,7 +51,7 @@ vi.mock('@/components/ae/settings/AeWorkspaceGeneral', () => ({ AeWorkspaceGener
 
 import { AeOwnerOperationsWorkspace } from '@/components/ae/offerings/AeOwnerOperationsWorkspace'
 
-const inventory = { kind: 'available', supplier: { name: 'Supplier' }, operations: [], projection: 'current' } as const
+const inventory = { kind: 'available', supplier: { name: 'Supplier' }, operations: [], projection: 'current', isDone: true, continueCursor: '' } as const
 const unavailable = Promise.resolve({ kind: 'not_applicable' as const })
 
 afterEach(() => {

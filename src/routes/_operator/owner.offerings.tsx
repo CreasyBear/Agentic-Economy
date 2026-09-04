@@ -4,8 +4,7 @@ import { AeOwnerOperationsWorkspace } from '@/components/ae/offerings/AeOwnerOpe
 import { AeOwnerOfferingsList } from '@/components/ae/offerings/AeOwnerOfferings'
 import {
   readOwnerOperationsConnectionsSummaryServer,
-  readOwnerOperationsInventoryServer,
-  readOwnerOperationsLifecycleServer,
+  readOwnerOperationsPageServer,
   readOwnerOperationsPayoutSummaryServer,
   readOwnerOperationsPublicStatusServer,
   readOwnerProviderOffboardingServer,
@@ -17,13 +16,15 @@ import { parseOwnerOperationsCompatibilitySearch } from '@/lib/operator/supply-c
 export const Route = createFileRoute('/_operator/owner/offerings')({
   ...operatorRouteOptions,
   validateSearch: parseOwnerOperationsCompatibilitySearch,
+  loaderDeps: ({ search }) => ({ cursor: search.cursor }),
   pendingComponent: OwnerOfferingsPending,
-  loader: async () => {
-    const inventory = await readOwnerOperationsInventoryServer()
+  loader: async ({ deps }) => {
+    const page = await readOwnerOperationsPageServer({ data: deps.cursor === undefined ? {} : { cursor: deps.cursor } })
+    const inventory = page.inventory
     if (inventory.kind !== 'available') return { inventory }
     return {
       inventory,
-      lifecycle: readOwnerOperationsLifecycleServer().catch(() => ({ kind: 'unavailable' as const })),
+      lifecycle: Promise.resolve(page.lifecycle ?? { kind: 'unavailable' as const }),
       connections: readOwnerOperationsConnectionsSummaryServer().catch(() => ({ kind: 'unavailable' as const })),
       payouts: readOwnerOperationsPayoutSummaryServer().catch(() => ({ kind: 'unavailable' as const })),
       publicStatus: readOwnerOperationsPublicStatusServer().catch(() => ({ kind: 'unavailable' as const })),

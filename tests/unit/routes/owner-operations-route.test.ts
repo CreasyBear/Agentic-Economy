@@ -1,12 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  inventory: vi.fn(), lifecycle: vi.fn(), connections: vi.fn(), payouts: vi.fn(), publicStatus: vi.fn(), offboarding: vi.fn(),
+  page: vi.fn(), connections: vi.fn(), payouts: vi.fn(), publicStatus: vi.fn(), offboarding: vi.fn(),
 }))
 
 vi.mock('@/components/ae/offerings/owner-operations.functions', () => ({
-  readOwnerOperationsInventoryServer: mocks.inventory,
-  readOwnerOperationsLifecycleServer: mocks.lifecycle,
+  readOwnerOperationsPageServer: mocks.page,
   readOwnerOperationsConnectionsSummaryServer: mocks.connections,
   readOwnerOperationsPayoutSummaryServer: mocks.payouts,
   readOwnerOperationsPublicStatusServer: mocks.publicStatus,
@@ -19,21 +18,21 @@ vi.mock('@/components/ae/layout/AeOperatorShell', () => ({ AeOperatorShell: () =
 import { Route } from '@/routes/_operator/owner.offerings'
 
 describe('Operations route loader', () => {
-  it('returns inventory without awaiting secondary reads', async () => {
-    const inventory = { kind: 'available', supplier: { name: 'One' }, operations: [], projection: 'current' } as const
-    mocks.inventory.mockResolvedValue(inventory)
+  it('returns one canonical Operation page without awaiting secondary reads', async () => {
+    const inventory = { kind: 'available', supplier: { name: 'One' }, operations: [], projection: 'current', isDone: true, continueCursor: '' } as const
+    const lifecycle = { kind: 'available', value: [] } as const
+    mocks.page.mockResolvedValue({ inventory, lifecycle })
     const never = new Promise<never>(() => undefined)
-    mocks.lifecycle.mockReturnValue(never)
     mocks.connections.mockReturnValue(never)
     mocks.payouts.mockReturnValue(never)
     mocks.publicStatus.mockReturnValue(never)
     mocks.offboarding.mockReturnValue(never)
 
-    const loader = Route.options.loader as () => Promise<Record<string, unknown>>
-    const result = await loader()
+    const loader = Route.options.loader as (input: { deps: { cursor?: string } }) => Promise<Record<string, unknown>>
+    const result = await loader({ deps: { cursor: 'cursor:one' } })
     expect(result.inventory).toBe(inventory)
     expect(result.lifecycle).toBeInstanceOf(Promise)
-    expect(mocks.lifecycle).toHaveBeenCalledTimes(1)
+    expect(mocks.page).toHaveBeenCalledWith({ data: { cursor: 'cursor:one' } })
     expect(mocks.connections).toHaveBeenCalledTimes(1)
     expect(mocks.payouts).toHaveBeenCalledTimes(1)
     expect(mocks.publicStatus).toHaveBeenCalledTimes(1)
@@ -41,15 +40,13 @@ describe('Operations route loader', () => {
   })
 
   it('does not start secondary reads when inventory is unavailable', async () => {
-    mocks.inventory.mockResolvedValue({ kind: 'unavailable' })
-    mocks.lifecycle.mockReset()
+    mocks.page.mockResolvedValue({ inventory: { kind: 'unavailable' } })
     mocks.connections.mockReset()
     mocks.payouts.mockReset()
     mocks.publicStatus.mockReset()
     mocks.offboarding.mockReset()
-    const loader = Route.options.loader as () => Promise<Record<string, unknown>>
-    await expect(loader()).resolves.toEqual({ inventory: { kind: 'unavailable' } })
-    expect(mocks.lifecycle).not.toHaveBeenCalled()
+    const loader = Route.options.loader as (input: { deps: { cursor?: string } }) => Promise<Record<string, unknown>>
+    await expect(loader({ deps: {} })).resolves.toEqual({ inventory: { kind: 'unavailable' } })
     expect(mocks.connections).not.toHaveBeenCalled()
   })
 })

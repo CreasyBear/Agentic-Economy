@@ -134,7 +134,7 @@ function AvailableWorkspace({
     ...row,
     lifecycleLabel: 'Loading',
     availability: 'unknown',
-    continuation: { kind: 'navigate', label: 'Edit Operation', href: `/owner/offerings/${encodeURIComponent(row.offeringRef)}` },
+    continuation: { kind: 'navigate', label: 'View status', href: `/owner/supply/${encodeURIComponent(row.offeringRef)}` },
     lifecyclePending: true,
   }))
 
@@ -274,6 +274,20 @@ function AvailableWorkspace({
               )
             }}</Await>
           </Suspense>
+        )}
+        {inventory.isDone && compatibilitySearch.cursor === undefined ? null : (
+          <nav aria-label="Operation pages" className="flex flex-wrap gap-intra">
+            {compatibilitySearch.cursor === undefined ? null : (
+              <Button asChild variant="secondary" className="min-h-touch">
+                <a href="/owner/offerings">First 50 Operations</a>
+              </Button>
+            )}
+            {inventory.isDone ? null : (
+              <Button asChild variant="secondary" className="min-h-touch">
+                <a href={`/owner/offerings?cursor=${encodeURIComponent(inventory.continueCursor)}`}>Next 50 Operations</a>
+              </Button>
+            )}
+          </nav>
         )}
       </AeSection>
       <AeSection id="supplier-connections" title="Supplier readiness" description="Provider connections and current public availability.">

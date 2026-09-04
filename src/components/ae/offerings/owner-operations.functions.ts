@@ -2,25 +2,17 @@ import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
-import { readOwnerOfferingSupplyThroughSource } from './owner-offering.functions'
 import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
-import type { BusinessOfferingRecord } from '@/modules/catalog/public'
 import {
   readOwnerProviderConnections,
   readOwnerProviderEarnings,
-  readOwnerSupplyFunnel,
   type OwnerProviderConnection,
-  type OwnerSupplyOfferingReadback,
-  type SupplyFunnelRefusal,
-  type SupplyFunnelStep,
-  type SupplyFunnelStepState,
 } from '@/modules/capability-supply/supply-funnel.functions'
 import { readOwnerConnectReadinessThroughSource } from '@/modules/money/money.functions'
 import { readOwnerStatusThroughSource, type PublicOwnerStatusRouteReadbackResult } from '@/lib/server/owner-status.functions'
-import { supplierContinuationForOffering, type SupplierContinuation } from '@/components/ae/supply/supplier-continuation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ProviderOffboardingStatus } from '@/modules/capability-supply/provider-offboarding'
 import { sourceWriteRequestFromAdmission } from '@/modules/security/source-write-admission'
@@ -36,7 +28,7 @@ export type OwnerOperationsInventoryRow = Readonly<{
   name: string
   category: string
   summary: string
-  status: BusinessOfferingRecord['status']
+  status: 'draft' | 'published' | 'paused' | 'retired'
   accessPathCount: number
 }>
 
@@ -46,6 +38,8 @@ export type OwnerOperationsInventoryResult =
       supplier: Readonly<{ name: string }>
       operations: readonly OwnerOperationsInventoryRow[]
       projection: 'current' | 'pending'
+      isDone: boolean
+      continueCursor: string
     }>
   | Readonly<{ kind: 'not_found' }>
   | Readonly<{ kind: 'conflict'; reason: 'multiple_suppliers' | 'business_mismatch' }>
@@ -53,18 +47,7 @@ export type OwnerOperationsInventoryResult =
 
 export type OwnerOperationsLifecycleRow = Readonly<{
   offeringRef: string
-  revision: number
-  status: OwnerSupplyOfferingReadback['status']
-  currentStep: SupplyFunnelStep
-  readinessState: SupplyFunnelStepState
-  publicationState?: NonNullable<OwnerSupplyOfferingReadback['publication']>['state']
-  operationRef?: string
-  lifecycleState: OwnerSupplyOfferingReadback['lifecycle']['state']
-  readinessOutcome: OwnerSupplyOfferingReadback['readiness']['outcome']
-  liveAvailable: boolean
-  liveReason?: SupplyFunnelRefusal
-  actionableReason?: SupplyFunnelRefusal
-  continuation: SupplierContinuation
+  status: SupplierOperationStatus
 }>
 
 export type OwnerOperationsLifecycleResult =
@@ -142,11 +125,6 @@ const cancelProviderOffboardingMutation = sourceMutation<
   Exclude<OwnerProviderOffboardingResult, { kind: 'unavailable' }>
 >('capabilityProviderOffboarding:cancelCase')
 
-type CurrentOwnerScope = Readonly<{
-  businessId: string
-  inventory: Extract<OwnerOperationsInventoryResult, { kind: 'available' }>
-}>
-
 type CurrentOwnerIdentityResult =
   | Readonly<{ kind: 'available'; businessId: string; name: string; slug: string; publicStatus: 'unpublished' | 'published' | 'suppressed' }>
   | Readonly<{ kind: 'not_found' }>
@@ -161,20 +139,72 @@ const readOwnerSupplierOperationQuery = sourceQuery<
   | { kind: 'available'; statusJson: string; resumeCandidateRef?: string }
   | { kind: 'not_found' }
 >('capabilitySupplierOperations:readOwner')
+type OwnerSupplierOperationDirectoryReadback =
+  | Readonly<{
+      kind: 'available'
+      page: readonly Readonly<OwnerOperationsInventoryRow & { statusJson: string }>[]
+      isDone: boolean
+      continueCursor: string
+    }>
+  | Readonly<{ kind: 'not_found' }>
+const listOwnerSupplierOperationsQuery = sourceQuery<
+  { businessId: string; now: number; paginationOpts: { numItems: number; cursor: string | null } },
+  OwnerSupplierOperationDirectoryReadback
+>('capabilitySupplierOperations:listOwner')
 
 export type OwnerOperationsIdentityDetailResult =
   | Extract<CurrentOwnerIdentityResult, { kind: 'available' }>
   | Readonly<{ kind: 'unavailable' | 'not_applicable' }>
   | Readonly<{ kind: 'conflict'; reason: 'multiple_suppliers' }>
 
-export const readOwnerOperationsInventoryServer = createServerFn().handler(async (): Promise<OwnerOperationsInventoryResult> => {
-  privateOwnerResponse()
-  return readOwnerOperationsInventoryThroughSource()
-})
+export type OwnerOperationsPageResult = Readonly<{
+  inventory: OwnerOperationsInventoryResult
+  lifecycle?: OwnerOperationsLifecycleResult
+}>
 
-export async function readOwnerOperationsInventoryThroughSource(): Promise<OwnerOperationsInventoryResult> {
-  const scope = await readCurrentOwnerScope()
-  return 'inventory' in scope ? scope.inventory : scope
+export const readOwnerOperationsPageServer = createServerFn()
+  .validator((data) => z.strictObject({ cursor: z.string().min(1).max(10_000).optional() }).parse(data))
+  .handler(async ({ data }): Promise<OwnerOperationsPageResult> => {
+    privateOwnerResponse()
+    return readOwnerOperationsPageThroughSource(data.cursor === undefined ? {} : { cursor: data.cursor })
+  })
+
+export async function readOwnerOperationsPageThroughSource(
+  data: Readonly<{ cursor?: string }> = {},
+): Promise<OwnerOperationsPageResult> {
+  const identity = await readCurrentOwnerIdentity()
+  if (identity.kind === 'not_found') return { inventory: { kind: 'not_found' } }
+  if (identity.kind === 'conflict') return { inventory: { kind: 'conflict', reason: 'multiple_suppliers' } }
+  if (identity.kind !== 'available') return { inventory: { kind: 'unavailable' } }
+  try {
+    const result = await callSourceQuery(listOwnerSupplierOperationsQuery, {
+      businessId: identity.businessId,
+      now: Date.now(),
+      paginationOpts: { numItems: 50, cursor: data.cursor ?? null },
+    })
+    if (result.kind === 'not_found') return { inventory: { kind: 'not_found' } }
+    const lifecycle: OwnerOperationsLifecycleRow[] = []
+    for (const row of result.page) {
+      const parsed = supplierOperationStatusSchema.safeParse(JSON.parse(row.statusJson) as unknown)
+      if (!parsed.success || parsed.data.businessRef !== identity.businessId) {
+        return { inventory: { kind: 'unavailable' } }
+      }
+      lifecycle.push({ offeringRef: row.offeringRef, status: parsed.data })
+    }
+    return {
+      inventory: {
+        kind: 'available',
+        supplier: { name: identity.name },
+        operations: result.page.map(({ statusJson: _statusJson, ...row }) => row),
+        projection: 'current',
+        isDone: result.isDone,
+        continueCursor: result.continueCursor,
+      },
+      lifecycle: { kind: 'available', value: lifecycle },
+    }
+  } catch {
+    return { inventory: { kind: 'unavailable' } }
+  }
 }
 
 export const readOwnerOperationsIdentityDetailServer = createServerFn().handler(async (): Promise<OwnerOperationsIdentityDetailResult> => {
@@ -182,11 +212,6 @@ export const readOwnerOperationsIdentityDetailServer = createServerFn().handler(
   const identity = await readCurrentOwnerIdentity()
   if (identity.kind === 'available') return identity
   return secondaryFromIdentity(identity)
-})
-
-export const readOwnerOperationsLifecycleServer = createServerFn().handler(async (): Promise<OwnerOperationsLifecycleResult> => {
-  privateOwnerResponse()
-  return readOwnerOperationsLifecycleThroughSource()
 })
 
 export const readOwnerSupplierOperationStatusServer = createServerFn()
@@ -213,20 +238,6 @@ export const readOwnerSupplierOperationStatusServer = createServerFn()
       return { kind: 'unavailable' }
     }
   })
-
-export async function readOwnerOperationsLifecycleThroughSource(): Promise<OwnerOperationsLifecycleResult> {
-  const identity = await readCurrentOwnerIdentity()
-  if (identity.kind !== 'available') return secondaryFromIdentity(identity)
-  try {
-    const result = await readOwnerSupplyFunnel({ data: { businessId: identity.businessId } })
-    if (result.kind === 'not_found') return { kind: 'not_applicable' }
-    if (result.kind !== 'available') return { kind: 'unavailable' }
-    if (result.businessId !== identity.businessId) return { kind: 'conflict', reason: 'business_mismatch' }
-    return { kind: 'available', value: result.offerings.map(toLifecycleRow) }
-  } catch {
-    return { kind: 'unavailable' }
-  }
-}
 
 export const readOwnerOperationsConnectionsSummaryServer = createServerFn().handler(async (): Promise<OwnerOperationsConnectionsResult> => {
   privateOwnerResponse()
@@ -429,34 +440,6 @@ export async function readOwnerOperationsPublicStatusThroughSource(): Promise<Ow
   return { kind: 'available', value: result.readback }
 }
 
-async function readCurrentOwnerScope(): Promise<CurrentOwnerScope | Exclude<OwnerOperationsInventoryResult, { kind: 'available' }>> {
-  const identity = await readCurrentOwnerIdentity()
-  if (identity.kind === 'not_found') return { kind: 'not_found' }
-  if (identity.kind === 'conflict') return { kind: 'conflict', reason: 'multiple_suppliers' }
-  if (identity.kind !== 'available') return { kind: 'unavailable' }
-  const result = await readOwnerOfferingSupplyThroughSource()
-  if (result.kind === 'not_found') return { kind: 'not_found' }
-  if (result.kind !== 'available') return { kind: 'unavailable' }
-  if (result.businessId !== identity.businessId) return { kind: 'conflict', reason: 'business_mismatch' }
-  return {
-    businessId: result.businessId,
-    inventory: {
-      kind: 'available',
-      supplier: { name: result.business.name },
-      operations: result.offerings.map((item) => ({
-        offeringRef: item.offeringRef,
-        currentRevision: item.currentRevision,
-        name: item.revision?.name ?? item.offeringRef,
-        category: item.revision?.category ?? 'Unavailable',
-        summary: item.revision?.summary ?? 'The current Operation revision is unavailable.',
-        status: item.status,
-        accessPathCount: item.accessPaths.filter((path) => path.status !== 'withdrawn').length,
-      })),
-      projection: result.projection.status === 'current' ? 'current' : 'pending',
-    },
-  }
-}
-
 async function readCurrentOwnerIdentity(): Promise<CurrentOwnerIdentityResult> {
   try {
     return await callSourceQuery(readCurrentOwnerIdentityQuery, {})
@@ -472,26 +455,6 @@ function secondaryFromIdentity(
   if (result.kind === 'not_found') return { kind: 'not_applicable' }
   if (result.kind === 'conflict') return { kind: 'conflict', reason: 'multiple_suppliers' }
   return { kind: 'unavailable' }
-}
-
-function toLifecycleRow(offering: OwnerSupplyOfferingReadback): OwnerOperationsLifecycleRow {
-  return {
-    offeringRef: offering.offeringRef,
-    revision: offering.revision,
-    status: offering.status,
-    currentStep: offering.currentStep,
-    readinessState: offering.stepStates.readiness,
-    ...(offering.publication === undefined ? {} : {
-      publicationState: offering.publication.state,
-      operationRef: offering.publication.operationRef,
-    }),
-    lifecycleState: offering.lifecycle.state,
-    readinessOutcome: offering.readiness.outcome,
-    liveAvailable: offering.live.available,
-    ...(offering.live.reason === undefined ? {} : { liveReason: offering.live.reason }),
-    ...(offering.actionableReason === undefined ? {} : { actionableReason: offering.actionableReason }),
-    continuation: supplierContinuationForOffering(offering),
-  }
 }
 
 function privateOwnerResponse(): void {

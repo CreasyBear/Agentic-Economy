@@ -6,6 +6,7 @@ export type SupplyCompatibilityIntent = Readonly<{
 export type OwnerOperationsCompatibilitySearch = Readonly<{
   rebind?: string
   connect?: 'return' | 'refresh'
+  cursor?: string
 }>
 
 export function parseOwnerOperationsCompatibilitySearch(
@@ -16,6 +17,9 @@ export function parseOwnerOperationsCompatibilitySearch(
   }
   if (typeof search.rebind === 'string' && isSafeReference(search.rebind) && Object.keys(search).length === 1) {
     return { rebind: search.rebind }
+  }
+  if (typeof search.cursor === 'string' && search.cursor.length > 0 && search.cursor.length <= 10_000 && Object.keys(search).length === 1) {
+    return { cursor: search.cursor }
   }
   return {}
 }

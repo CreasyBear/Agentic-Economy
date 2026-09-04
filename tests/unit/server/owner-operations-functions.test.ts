@@ -3,10 +3,8 @@ import type * as TanstackReactStartModule from '@tanstack/react-start'
 
 const mocks = vi.hoisted(() => ({
   identity: vi.fn(),
-  offerings: vi.fn(),
   connections: vi.fn(),
   earnings: vi.fn(),
-  lifecycle: vi.fn(),
   payoutReadiness: vi.fn(),
   ownerStatus: vi.fn(),
   setResponseHeader: vi.fn(),
@@ -26,15 +24,10 @@ vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/convex-source')>()),
   callSourceQuery: mocks.identity,
 }))
-vi.mock('@/components/ae/offerings/owner-offering.functions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/components/ae/offerings/owner-offering.functions')>()),
-  readOwnerOfferingSupplyThroughSource: mocks.offerings,
-}))
 vi.mock('@/modules/capability-supply/supply-funnel.functions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/capability-supply/supply-funnel.functions')>()),
   readOwnerProviderConnections: mocks.connections,
   readOwnerProviderEarnings: mocks.earnings,
-  readOwnerSupplyFunnel: mocks.lifecycle,
 }))
 vi.mock('@/modules/money/money.functions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/money/money.functions')>()),
@@ -50,10 +43,8 @@ import {
   readOwnerOperationsConnectionsSummaryServer,
   readOwnerOperationsConnectionsSummaryThroughSource,
   readOwnerOperationsIdentityDetailServer,
-  readOwnerOperationsInventoryServer,
-  readOwnerOperationsInventoryThroughSource,
-  readOwnerOperationsLifecycleServer,
-  readOwnerOperationsLifecycleThroughSource,
+  readOwnerOperationsPageServer,
+  readOwnerOperationsPageThroughSource,
   readOwnerOperationsPayoutSummaryServer,
   readOwnerOperationsPayoutSummaryThroughSource,
   readOwnerOperationsPublicStatusServer,
@@ -62,10 +53,8 @@ import {
 
 afterEach(() => {
   mocks.identity.mockReset()
-  mocks.offerings.mockReset()
   mocks.connections.mockReset()
   mocks.earnings.mockReset()
-  mocks.lifecycle.mockReset()
   mocks.payoutReadiness.mockReset()
   mocks.ownerStatus.mockReset()
   mocks.setResponseHeader.mockReset()
@@ -74,46 +63,43 @@ afterEach(() => {
 describe('narrow owner Operations inventory read', () => {
   it('fails closed for no supplier, duplicate ownership, and source rejection', async () => {
     mocks.identity.mockResolvedValueOnce({ kind: 'not_found' })
-    await expect(readOwnerOperationsInventoryThroughSource()).resolves.toEqual({ kind: 'not_found' })
+    await expect(readOwnerOperationsPageThroughSource()).resolves.toEqual({ inventory: { kind: 'not_found' } })
 
     mocks.identity.mockResolvedValueOnce({ kind: 'conflict', code: 'multiple_businesses' })
-    await expect(readOwnerOperationsInventoryThroughSource()).resolves.toEqual({ kind: 'conflict', reason: 'multiple_suppliers' })
+    await expect(readOwnerOperationsPageThroughSource()).resolves.toEqual({ inventory: { kind: 'conflict', reason: 'multiple_suppliers' } })
 
     mocks.identity.mockRejectedValueOnce(new Error('private source failure'))
-    await expect(readOwnerOperationsInventoryThroughSource()).resolves.toEqual({ kind: 'unavailable' })
+    await expect(readOwnerOperationsPageThroughSource()).resolves.toEqual({ inventory: { kind: 'unavailable' } })
 
     mocks.identity.mockResolvedValueOnce({ kind: 'error', code: 'unauthenticated' })
-    await expect(readOwnerOperationsInventoryThroughSource()).resolves.toEqual({ kind: 'unavailable' })
+    await expect(readOwnerOperationsPageThroughSource()).resolves.toEqual({ inventory: { kind: 'unavailable' } })
   })
 
-  it('rejects mixed-business source results', async () => {
-    mocks.identity.mockResolvedValue({ kind: 'available', businessId: 'biz:one', name: 'One', slug: 'one', publicStatus: 'unpublished' })
-    mocks.offerings.mockResolvedValue({ kind: 'available', businessId: 'biz:other' })
-    await expect(readOwnerOperationsInventoryThroughSource()).resolves.toEqual({ kind: 'conflict', reason: 'business_mismatch' })
-  })
-
-  it('returns only the inventory field allowlist', async () => {
-    mocks.identity.mockResolvedValue({ kind: 'available', businessId: 'biz:one', name: 'One', slug: 'one', publicStatus: 'published' })
-    mocks.offerings.mockResolvedValue({
+  it('returns one bounded canonical directory page without internal source evidence', async () => {
+    mocks.identity
+      .mockResolvedValueOnce({ kind: 'available', businessId: 'biz:one', name: 'One', slug: 'one', publicStatus: 'published' })
+      .mockResolvedValueOnce({
       kind: 'available',
-      businessId: 'biz:one',
-      business: { name: 'One', slug: 'one', publicStatus: 'published', businessContext: { kind: 'online' }, secret: 'no' },
-      offerings: [{
-        offeringRef: 'offering:one', businessId: 'biz:one', currentRevision: 3, status: 'published', createdAt: 1, updatedAt: 2,
-        revision: { offeringRef: 'offering:one', businessId: 'biz:one', revision: 3, name: 'Search', category: 'tools', summary: 'Search safely', sourceHash: 'sha256:private', createdAt: 1 },
-        accessPaths: [{ accessPathRef: 'path:one', businessId: 'biz:one', offeringRef: 'offering:one', offeringRevision: 3, offeringSourceHash: 'sha256:private', status: 'published', descriptor: { kind: 'external_operation' }, sourceHash: 'sha256:private', createdAt: 1, updatedAt: 1 }],
+      isDone: false,
+      continueCursor: 'cursor:next',
+      page: [{
+        offeringRef: 'offering:one', currentRevision: 3, status: 'published', name: 'Search', category: 'tools', summary: 'Search safely', accessPathCount: 1,
+        statusJson: JSON.stringify({
+          schemaVersion: 'supplier_operations:v1', businessRef: 'biz:one', providerRef: 'provider:one', operationRef: 'operation:one', revision: 3,
+          state: 'Published', reasonCodes: [], observedAt: 1, source: { kind: 'openapi' }, routeability: { available: true, reasonCodes: [] }, authority: { kind: 'public' },
+          health: { connection: 'not_required', validation: 'passed', publication: 'published', freshness: 'current', delivery: { kind: 'unobserved', provenance: 'canonical_call_receipts' }, usefulOutcome: { kind: 'unobserved', provenance: 'qualified_use_receipts' }, operationalConditions: [] },
+        }),
       }],
-      projection: { status: 'current', observedAt: 1, disposition: 'current', authorityDigest: 'sha256:private' },
     })
 
-    const result = await readOwnerOperationsInventoryThroughSource()
-    expect(result).toEqual({
-      kind: 'available',
-      supplier: { name: 'One' },
+    const result = await readOwnerOperationsPageThroughSource({ cursor: 'cursor:current' })
+    expect(result.inventory).toEqual({
+      kind: 'available', supplier: { name: 'One' }, projection: 'current', isDone: false, continueCursor: 'cursor:next',
       operations: [{ offeringRef: 'offering:one', currentRevision: 3, name: 'Search', category: 'tools', summary: 'Search safely', status: 'published', accessPathCount: 1 }],
-      projection: 'current',
     })
-    expect(JSON.stringify(result)).not.toMatch(/businessId|sourceHash|Digest|descriptor|secret/)
+    expect(result.lifecycle).toMatchObject({ kind: 'available', value: [{ offeringRef: 'offering:one', status: { state: 'Published', operationRef: 'operation:one' } }] })
+    expect(mocks.identity.mock.calls[1]?.[1]).toMatchObject({ paginationOpts: { numItems: 50, cursor: 'cursor:current' } })
+    expect(JSON.stringify(result)).not.toMatch(/sourceHash|descriptor|secret/)
   })
 
   it('returns connection counts without sending rich connection records', async () => {
@@ -137,56 +123,6 @@ describe('narrow owner Operations inventory read', () => {
     })
 
     await expect(readOwnerOperationsPublicStatusThroughSource()).resolves.toEqual({ kind: 'conflict', reason: 'business_mismatch' })
-  })
-
-  it('returns only lifecycle fields needed by the Operations projector', async () => {
-    mocks.identity.mockResolvedValue({ kind: 'available', businessId: 'biz:one', name: 'One', slug: 'one', publicStatus: 'published' })
-    mocks.lifecycle.mockResolvedValue({
-      kind: 'available',
-      businessId: 'biz:one',
-      offerings: [{
-        offeringRef: 'offering:one',
-        revision: 3,
-        name: 'Search',
-        summary: 'Search safely',
-        status: 'published',
-        currentStep: 'test',
-        stepStates: { describe: 'completed', admission: 'completed', readiness: 'completed', test: 'completed' },
-        admission: { state: 'admitted', evidenceRefs: ['evidence:private'] },
-        authority: { kind: 'provider_connection', mode: 'provider_owned', connectionRef: 'connection:private', providerRef: 'provider:private' },
-        readiness: { outcome: 'healthy', evidenceRefs: ['evidence:private'] },
-        publication: { state: 'current', operationRef: 'operation:one', revision: 3, authorityDigest: 'sha256:private' },
-        lifecycle: { state: 'active', reasons: [] },
-        live: { available: true },
-        grantedResources: ['resource:private'],
-        credentialRef: 'credential:private',
-      }],
-    })
-
-    const result = await readOwnerOperationsLifecycleThroughSource()
-
-    expect(result).toEqual({
-      kind: 'available',
-      value: [{
-        offeringRef: 'offering:one',
-        revision: 3,
-        status: 'published',
-        currentStep: 'test',
-        readinessState: 'completed',
-        publicationState: 'current',
-        operationRef: 'operation:one',
-        lifecycleState: 'active',
-        readinessOutcome: 'healthy',
-        liveAvailable: true,
-        continuation: {
-          kind: 'navigate',
-          label: 'View live Operation',
-          href: '/operations/operation:one',
-          command: 'ae describe operation:one',
-        },
-      }],
-    })
-    expect(JSON.stringify(result)).not.toMatch(/connectionRef|providerRef|credentialRef|evidence|Digest|grantedResources|private/)
   })
 
   it('returns payout counts without Stripe or payout account identifiers', async () => {
@@ -217,8 +153,7 @@ describe('narrow owner Operations inventory read', () => {
     mocks.identity.mockResolvedValue({ kind: 'not_found' })
 
     await Promise.all([
-      readOwnerOperationsInventoryServer(),
-      readOwnerOperationsLifecycleServer(),
+      readOwnerOperationsPageServer({ data: {} }),
       readOwnerOperationsConnectionsSummaryServer(),
       readOwnerOperationsConnectionsDetailServer(),
       readOwnerOperationsPayoutSummaryServer(),
@@ -226,9 +161,9 @@ describe('narrow owner Operations inventory read', () => {
       readOwnerOperationsIdentityDetailServer(),
     ])
 
-    expect(mocks.setResponseHeader).toHaveBeenCalledTimes(7)
+    expect(mocks.setResponseHeader).toHaveBeenCalledTimes(6)
     expect(mocks.setResponseHeader.mock.calls).toEqual(
-      Array.from({ length: 7 }, () => ['cache-control', 'private, no-store']),
+      Array.from({ length: 6 }, () => ['cache-control', 'private, no-store']),
     )
   })
 })

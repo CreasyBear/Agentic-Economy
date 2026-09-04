@@ -165,9 +165,28 @@ describe('Provider source integration draft', () => {
       state: 'Draft',
     })
     expect(ownerExact).toMatchObject({ kind: 'available', resumeCandidateRef: candidateRef })
+    const ownerDirectory = await owner.query(
+      api.capabilitySupplierOperations.listOwner,
+      { businessId, now: 1_000, paginationOpts: { numItems: 50, cursor: null } },
+    )
+    expect(ownerDirectory).toMatchObject({
+      kind: 'available',
+      isDone: true,
+      page: [{
+        offeringRef: resumed.offeringRef,
+        name: 'Reference lookup',
+        status: 'draft',
+      }],
+    })
+    expect(ownerDirectory.kind === 'available' ? JSON.parse(ownerDirectory.page[0]!.statusJson) : ownerDirectory)
+      .toMatchObject({ schemaVersion: 'supplier_operations:v1', state: 'Draft' })
     await expect(foreignOwner.query(
       api.capabilitySupplierOperations.readOwner,
       { businessId, offeringRef: resumed.offeringRef, now: 1_000 },
+    )).resolves.toEqual({ kind: 'not_found' })
+    await expect(foreignOwner.query(
+      api.capabilitySupplierOperations.listOwner,
+      { businessId, now: 1_000, paginationOpts: { numItems: 50, cursor: null } },
     )).resolves.toEqual({ kind: 'not_found' })
     await backend.run(async (ctx) => {
       const rows = await ctx.db.query('capabilitySupplierOperationProjections').take(10)
@@ -324,6 +343,66 @@ describe('Provider source integration draft', () => {
     )).resolves.toMatchObject({
       kind: 'available',
       draft: { candidateRef: exactCandidateRef },
+    })
+  })
+
+  it('keeps a 10,000-Operation Provider directory bounded to one native page', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await createPublishedBusinessOwner(
+      backend,
+      'supplier-operation-directory-capacity',
+    )
+
+    for (let batchStart = 0; batchStart < 10_000; batchStart += 500) {
+      await backend.run(async (ctx) => {
+        for (let index = batchStart; index < batchStart + 500; index += 1) {
+          const offeringRef = `offering:supplier-capacity:${index}`
+          await ctx.db.insert('capabilitySupplierOperationProjections', {
+            businessId,
+            providerRef: 'provider:supplier-capacity',
+            operationRef: `operation:supplier-capacity:${index}`,
+            offeringRef,
+            offeringRevision: 1,
+            updatedAt: index,
+          })
+          if (index < 9_950) continue
+          await ctx.db.insert('businessOfferings', {
+            offeringRef,
+            businessId,
+            currentRevision: 1,
+            status: 'draft',
+            createdAt: index,
+            updatedAt: index,
+          })
+          await ctx.db.insert('businessOfferingRevisions', {
+            offeringRef,
+            businessId,
+            revision: 1,
+            name: `Capacity Operation ${index}`,
+            category: 'Capacity proof',
+            summary: 'Proves the Provider directory hydrates only the requested native page.',
+            sourceHash: `source:supplier-capacity:${index}`,
+            createdAt: index,
+          })
+        }
+      })
+    }
+
+    const firstPage = await owner.query(
+      api.capabilitySupplierOperations.listOwner,
+      { businessId, now: 10_000, paginationOpts: { numItems: 50, cursor: null } },
+    )
+    expect(firstPage).toMatchObject({ kind: 'available', isDone: false })
+    if (firstPage.kind !== 'available') throw new Error('supplier_operation_directory_unavailable')
+    expect(firstPage.page).toHaveLength(50)
+    expect(firstPage.continueCursor).not.toBe('')
+    expect(firstPage.page[0]).toMatchObject({
+      offeringRef: 'offering:supplier-capacity:9999',
+      name: 'Capacity Operation 9999',
+    })
+    expect(firstPage.page.at(-1)).toMatchObject({
+      offeringRef: 'offering:supplier-capacity:9950',
+      name: 'Capacity Operation 9950',
     })
   })
 })
