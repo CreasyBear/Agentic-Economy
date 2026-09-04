@@ -281,14 +281,14 @@ describe('seller onboarding canary funding readiness', () => {
       { now: NOW },
     )).resolves.toMatchObject({
       kind: 'not_ready',
-      codes: ['canary_policy_stale', 'canary_principal_stale'],
+      codes: ['canary_grant_material_invalid', 'canary_principal_stale'],
     })
     await expect(backend.mutation(
       internal.capabilitySupplyCanaryFunding.provisionSellerOnboardingCanaryFunding,
       { now: NOW + 1 },
     )).resolves.toMatchObject({
       kind: 'conflict',
-      codes: ['canary_policy_stale', 'canary_principal_stale'],
+      codes: ['canary_grant_material_invalid', 'canary_principal_stale'],
     })
 
     const stillDrifted = await backend.run(async (ctx) => await ctx.db.query('agentAccessGrants')

@@ -9,6 +9,7 @@ import {
   type CanonicalAgentBinding,
 } from '../../../convex/authorityBoundary'
 import schema from '../../../convex/schema'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { DelegationService } from '@/modules/authority/delegation/public'
 import {
   createSourceWriteAdmission,
@@ -37,6 +38,29 @@ const GRANT_REF = `grt_${'7'.repeat(32)}`
 const PARENT_GRANT_REF = `grt_${'a'.repeat(32)}`
 const OWNERSHIP_REF = `own_${'9'.repeat(32)}`
 const SECRET = 'authority-boundary-source-write-secret-32-bytes'
+const ACCESS_POLICY = {
+  format: 'ae.agent-access-policy:v2' as const,
+  operationAccess: 'all_admitted' as const,
+  operationRefs: [] as string[],
+  environment: 'production' as const,
+  budget: {
+    budgetPolicyRef: 'budget:authority-boundary',
+    generation: 4,
+    currency: 'USD',
+    exponent: 2,
+    maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+    maximumDailySpend: { currency: 'USD', units: '1000', exponent: 2 },
+    maximumMonthlySpend: { currency: 'USD', units: '10000', exponent: 2 },
+    maximumConcurrentInvocations: 2,
+  },
+  rate: {
+    ratePolicyRef: 'rate:authority-boundary',
+    generation: 4,
+    maximumCallsPerMinute: 10,
+    maximumCallsPerHour: 100,
+  },
+}
+const ACCESS_POLICY_DIGEST = canonicalDigest(ACCESS_POLICY as never)
 
 type MutationArgs = Readonly<{
   credentialId: string
@@ -61,6 +85,7 @@ type SeedOverrides = Readonly<{
   secondGrant?: Readonly<Record<string, unknown>> | null
   account?: Readonly<Record<string, unknown>> | null
   admission?: Readonly<Record<string, unknown>> | null
+  accessGrant?: Readonly<Record<string, unknown>> | null
 }>
 
 afterEach(() => {
@@ -317,7 +342,7 @@ describe('canonical agent authority boundary', () => {
     },
   )
 
-  it('fails closed when more than one current grant can authorize the consequence', async () => {
+  it('uses the exact current access grant when another delegation also authorizes the consequence', async () => {
     const backend = testBackend()
     await seedCanonicalChain(backend, {
       secondGrant: {
@@ -326,7 +351,12 @@ describe('canonical agent authority boundary', () => {
       },
     })
 
-    await expect(runResolver(backend)).resolves.toBeNull()
+    await expect(runResolver(backend)).resolves.toMatchObject({
+      principalId: PRINCIPAL_REF,
+      ownerId: ACCOUNT_REF,
+      grantRef: GRANT_REF,
+      grantGeneration: 4,
+    })
   })
 
   it.each([
@@ -590,16 +620,38 @@ async function seedCanonicalChain(
       scopes: ['operations:invoke'],
       authorityMode: 'bounded_mandate',
       grantGeneration: 4,
-      policyDigest: 'sha256:canonical-agent-policy',
+      policyDigest: ACCESS_POLICY_DIGEST,
       lifecycle: 'active',
       expiresAt: NOW + 60_000,
       recordedAt: NOW - 9_000,
       lastSeenAt: NOW - 9_000,
     }, overrides.admission)
+    const accessGrant = mergeRow({
+      format: 'ae.agent-access-grant:v2',
+      grantRef: GRANT_REF,
+      principalId: PRINCIPAL_REF,
+      ownerId: ACCOUNT_REF,
+      applicationRef: 'agent-application',
+      credentialId: 'ak_live_locator',
+      environment: 'production',
+      operationAccess: 'all_admitted',
+      operationRefs: [],
+      authorityMode: 'bounded_mandate',
+      policy: ACCESS_POLICY,
+      budgetPolicyRef: ACCESS_POLICY.budget.budgetPolicyRef,
+      ratePolicyRef: ACCESS_POLICY.rate.ratePolicyRef,
+      lifecycle: 'active',
+      generation: 4,
+      policyDigest: ACCESS_POLICY_DIGEST,
+      createdAt: NOW - 9_000,
+      updatedAt: NOW - 9_000,
+      expiresAt: NOW + 7_200_000,
+    }, overrides.accessGrant)
 
     if (binding !== null) await ctx.db.insert('externalIdentityBindings', binding as never)
     if (credential !== null) await ctx.db.insert('credentials', credential as never)
     if (admission !== null) await ctx.db.insert('agentAccessPrincipals', admission as never)
+    if (accessGrant !== null) await ctx.db.insert('agentAccessGrants', accessGrant as never)
     if (principal !== null) await ctx.db.insert('principals', principal as never)
     if (parentGrant !== null) await ctx.db.insert('authorityDelegationGrants', parentGrant as never)
     if (grant !== null) await ctx.db.insert('authorityDelegationGrants', grant as never)

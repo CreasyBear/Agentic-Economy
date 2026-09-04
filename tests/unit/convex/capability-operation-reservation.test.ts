@@ -28,6 +28,8 @@ type QueryBuilder = {
 
 type Query = {
   withIndex: (name: string, build: (query: QueryBuilder) => QueryBuilder) => Query
+  order: (direction: 'asc' | 'desc') => Query
+  first: () => Promise<Row | null>
   unique: () => Promise<Row | null>
   take: (limit: number) => Promise<Row[]>
 }
@@ -67,6 +69,8 @@ class MemoryDb {
         build(builder)
         return query
       },
+      order: () => query,
+      first: async () => rows()[0] ?? null,
       unique: async () => {
         const matches = rows()
         if (matches.length > 1) throw new Error('expected_unique')

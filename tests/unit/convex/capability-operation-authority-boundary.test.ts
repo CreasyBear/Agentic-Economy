@@ -143,11 +143,25 @@ function path(reference: unknown): string {
   return typeof reference === 'string' ? reference : getFunctionName(reference as never)
 }
 
-function agentContext(result: typeof canonicalPrincipal | null = canonicalPrincipal) {
+function agentContext(
+  result: typeof canonicalPrincipal | null = canonicalPrincipal,
+  committedOperationRef = OPERATION_REF,
+) {
   return {
     runMutation: vi.fn(async (reference: unknown, _args: Record<string, unknown>) => {
+      if (path(reference) === 'capabilityOperationCommitments:admitInvocation') return true
       if (path(reference) === 'capabilityOperationInvocations:resolveInvocationAgentAuthority') return result
       throw new Error(`unexpected_mutation:${path(reference)}`)
+    }),
+    runQuery: vi.fn(async (reference: unknown) => {
+      if (path(reference) === 'capabilityOperationCommitments:readForInvocation') return {
+        operationRef: committedOperationRef,
+        input: { query: 'btc' },
+        decisionPrice: { currency: 'AUD', exponent: 6, units: '0' },
+        commitmentRef: COMMITMENT_REF,
+        evidenceDigest: `sha256:${'d'.repeat(64)}`,
+      }
+      throw new Error(`unexpected_query:${path(reference)}`)
     }),
   }
 }
@@ -157,8 +171,7 @@ function agentArgs() {
     operationKey: 'surface:http:agent-operation-invoke',
     correlationId: 'correlation:operation:1',
     principal: callerPrincipal,
-    operationRef: OPERATION_REF,
-    input: { query: 'btc' },
+    commitmentRef: COMMITMENT_REF,
     idempotencyKey: 'idempotency:operation:1',
   }
 }
@@ -229,6 +242,7 @@ const GRANT_REF = `grt_${'7'.repeat(32)}`
 const OWNERSHIP_REF = `own_${'8'.repeat(32)}`
 const OPERATION_REF = `operation:v1:${'a'.repeat(64)}`
 const OTHER_OPERATION_REF = `operation:v1:${'b'.repeat(64)}`
+const COMMITMENT_REF = `operation-commitment:v1:${'c'.repeat(64)}`
 const PARENT_GRANT_REF = `grt_${'9'.repeat(32)}`
 const AUTHORITY_POLICY = {
   format: 'ae.agent-access-policy:v1' as const,
@@ -368,15 +382,29 @@ function authorityRows(overrides: Readonly<{
   }
 }
 
-function liveAgentActionContext(rows: ReturnType<typeof authorityRows>) {
+function liveAgentActionContext(
+  rows: ReturnType<typeof authorityRows>,
+  committedOperationRef = OPERATION_REF,
+) {
   const db = new AuthorityMemoryDb(rows)
   return {
     db,
     runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+      if (path(reference) === 'capabilityOperationCommitments:admitInvocation') return true
       if (path(reference) === 'capabilityOperationInvocations:resolveInvocationAgentAuthority') {
         return await resolveAgentBoundary({ db }, args)
       }
       throw new Error(`unexpected_mutation:${path(reference)}`)
+    }),
+    runQuery: vi.fn(async (reference: unknown) => {
+      if (path(reference) === 'capabilityOperationCommitments:readForInvocation') return {
+        operationRef: committedOperationRef,
+        input: { query: 'btc' },
+        decisionPrice: { currency: 'AUD', exponent: 6, units: '0' },
+        commitmentRef: COMMITMENT_REF,
+        evidenceDigest: `sha256:${'d'.repeat(64)}`,
+      }
+      throw new Error(`unexpected_query:${path(reference)}`)
     }),
   }
 }
@@ -560,11 +588,9 @@ describe('capability operation canonical authority boundary', () => {
     const unselectedContext = liveAgentActionContext(authorityRows({
       ...selectedAccessGrant([OPERATION_REF]),
       delegation: { resourceRefs: [OPERATION_REF, OTHER_OPERATION_REF] },
-    }))
-    await expect(invokeBoundary(unselectedContext, {
-      ...agentArgs(),
-      operationRef: OTHER_OPERATION_REF,
-    })).resolves.toMatchObject({ kind: 'refused', code: 'grant_not_found' })
+    }), OTHER_OPERATION_REF)
+    await expect(invokeBoundary(unselectedContext, agentArgs()))
+      .resolves.toMatchObject({ kind: 'refused', code: 'grant_not_found' })
     expect(mocks.invoke).not.toHaveBeenCalled()
   })
 
@@ -970,15 +996,23 @@ describe('capability operation canonical authority boundary', () => {
       retry: 'reconcile_before_retry', evidenceSource: 'test',
     } })).resolves.toMatchObject({ kind: 'found' })
 
-    for (const call of [mocks.invoke, mocks.readStatus, mocks.cancel, mocks.reconcile]) {
+    expect(mocks.invoke).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ principal: canonicalPrincipal }),
+      true,
+    )
+    for (const call of [mocks.readStatus, mocks.cancel, mocks.reconcile]) {
       expect(call).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ principal: canonicalPrincipal }))
     }
-    expect(ctx.runMutation).toHaveBeenCalledTimes(4)
+    expect(ctx.runMutation).toHaveBeenCalledTimes(5)
     expect(ctx.runMutation).toHaveBeenNthCalledWith(1, expect.anything(), {
+      ...agentArgs(),
+    })
+    expect(ctx.runMutation).toHaveBeenNthCalledWith(2, expect.anything(), {
       principal: canonicalPrincipal,
       operationRef: OPERATION_REF,
     })
-    for (const call of ctx.runMutation.mock.calls.slice(1)) {
+    for (const call of ctx.runMutation.mock.calls.slice(2)) {
       expect(call[1]).toEqual({ principal: canonicalPrincipal, invocationRef: 'invocation:1' })
     }
   })

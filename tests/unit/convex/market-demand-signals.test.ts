@@ -44,13 +44,19 @@ async function issueBuyerAgent(
     scopes: ['market_operations:invoke'],
     authorityMode: 'inspect_only' as const,
     policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
+    operationAccess: 'all_admitted' as const,
+    operationRefs: [],
     createdAt: now,
     expiresAt: now + 600_000,
   }
   const serviceAuth = await createCustomerRequestServiceAssertion({
     key: SERVICE_KEY,
     operation: REGISTER_OPERATION,
-    command: toStableHashValue({ ...input, scopes: [...input.scopes] }),
+    command: toStableHashValue({
+      ...input,
+      scopes: [...input.scopes],
+      operationRefs: [...input.operationRefs],
+    }),
     principal: {
       principalId: 'ae:server-function', ownerId: 'ae:server-function',
       credentialId: 'ae:server-function', scopes: ['market_operations:invoke'],

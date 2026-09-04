@@ -11,6 +11,7 @@ import {
   convexModules as modules,
   publishedBusinessOwner,
 } from '../../helpers/convex-fixtures'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('capability supply readiness authority', () => {
   it('derives readiness authority only from the current resource owner and pinned publisher', async () => {
@@ -163,8 +164,30 @@ describe('capability supply readiness authority', () => {
       const owningAccountRef = business.owningAccountRef
       const principalId = 'agent:readiness-publisher'
       const grantRef = 'agent-grant:readiness-publisher'
-      const policyDigest = `sha256:${'4'.repeat(64)}`
       const expiresAt = now + 300_000
+      const policy = {
+        format: 'ae.agent-access-policy:v2' as const,
+        operationAccess: 'all_admitted' as const,
+        operationRefs: [] as string[],
+        environment: 'production' as const,
+        budget: {
+          budgetPolicyRef: 'budget:readiness-publisher',
+          generation: 7,
+          currency: 'AUD',
+          exponent: 2,
+          maximumSpendPerInvocation: { currency: 'AUD', units: '0', exponent: 2 },
+          maximumDailySpend: { currency: 'AUD', units: '0', exponent: 2 },
+          maximumMonthlySpend: { currency: 'AUD', units: '0', exponent: 2 },
+          maximumConcurrentInvocations: 1,
+        },
+        rate: {
+          ratePolicyRef: 'rate:readiness-publisher',
+          generation: 7,
+          maximumCallsPerMinute: 1,
+          maximumCallsPerHour: 1,
+        },
+      }
+      const policyDigest = canonicalDigest(policy as never)
       const agentId = await ctx.db.insert('agentAccessPrincipals', {
         principalId,
         ownerId: owningAccountRef,
@@ -181,7 +204,7 @@ describe('capability supply readiness authority', () => {
         lastSeenAt: 1,
       })
       const grantId = await ctx.db.insert('agentAccessGrants', {
-        format: 'ae.agent-access-grant:v1',
+        format: 'ae.agent-access-grant:v2',
         grantRef,
         principalId,
         ownerId: owningAccountRef,
@@ -189,28 +212,9 @@ describe('capability supply readiness authority', () => {
         credentialId: 'credential:readiness-publisher',
         environment: 'production',
         operationAccess: 'all_admitted',
+        operationRefs: [],
         authorityMode: 'bounded_mandate',
-        policy: {
-          format: 'ae.agent-access-policy:v1',
-          operationAccess: 'all_admitted',
-          environment: 'production',
-          budget: {
-            budgetPolicyRef: 'budget:readiness-publisher',
-            generation: 7,
-            currency: 'AUD',
-            exponent: 2,
-            maximumSpendPerInvocation: { currency: 'AUD', units: '0', exponent: 2 },
-            maximumDailySpend: { currency: 'AUD', units: '0', exponent: 2 },
-            maximumMonthlySpend: { currency: 'AUD', units: '0', exponent: 2 },
-            maximumConcurrentInvocations: 1,
-          },
-          rate: {
-            ratePolicyRef: 'rate:readiness-publisher',
-            generation: 7,
-            maximumCallsPerMinute: 1,
-            maximumCallsPerHour: 1,
-          },
-        },
+        policy,
         budgetPolicyRef: 'budget:readiness-publisher',
         ratePolicyRef: 'rate:readiness-publisher',
         lifecycle: 'active',

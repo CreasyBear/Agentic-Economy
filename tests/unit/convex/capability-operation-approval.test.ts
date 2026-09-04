@@ -57,6 +57,7 @@ type QueryBuilder = {
 type Query = {
   withIndex: (name: string, build: (query: QueryBuilder) => QueryBuilder) => Query
   order: (direction: 'asc' | 'desc') => Query
+  first: () => Promise<Row | null>
   unique: () => Promise<Row | null>
   take: (limit: number) => Promise<Row[]>
 }
@@ -103,6 +104,7 @@ class MemoryDb {
         direction = nextDirection
         return query
       },
+      first: async () => queryRows()[0] ?? null,
       unique: async () => {
         const matches = queryRows()
         if (matches.length > 1) throw new Error('expected_unique')
@@ -164,6 +166,7 @@ mocks.readCurrentPublishedOperation.mockResolvedValue(operation)
 const input = { symbol: 'BTC', convert: 'USD' }
 const now = operation.readiness.observedAt + 1_000
 const grantExpiresAt = now + 60_000
+const commitmentRef = `operation-commitment:v1:${'c'.repeat(64)}`
 const owner = `acc_${'2'.repeat(32)}`
 const ownerIdentity: AuthIdentity = { subject: 'user_123', tokenIdentifier: 'clerk|user_123' }
 const principal: AgentAccessPrincipal = {
@@ -175,6 +178,29 @@ const principal: AgentAccessPrincipal = {
   scopes: ['market_operations:invoke'],
   authorityMode: 'approve_each',
 }
+const approvalPolicy = {
+  format: 'ae.agent-access-policy:v2' as const,
+  operationAccess: 'all_admitted' as const,
+  operationRefs: [] as string[],
+  environment: 'sandbox' as const,
+  budget: {
+    budgetPolicyRef: 'budget:approval-policy',
+    generation: 1,
+    currency: 'AUD',
+    exponent: 6,
+    maximumSpendPerInvocation: { currency: 'AUD', units: '1000000', exponent: 6 },
+    maximumDailySpend: { currency: 'AUD', units: '10000000', exponent: 6 },
+    maximumMonthlySpend: { currency: 'AUD', units: '100000000', exponent: 6 },
+    maximumConcurrentInvocations: 1,
+  },
+  rate: {
+    ratePolicyRef: 'rate:approval-policy',
+    generation: 1,
+    maximumCallsPerMinute: 20,
+    maximumCallsPerHour: 100,
+  },
+}
+const approvalPolicyDigest = canonicalDigest(approvalPolicy as never)
 beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(now)
 })
@@ -186,6 +212,8 @@ afterEach(() => {
 function grant(overrides: Record<string, unknown> = {}): Row {
   return {
     _id: 'agentAccessGrants:approval',
+    _creationTime: now - 1_000,
+    format: 'ae.agent-access-grant:v2',
     grantRef: 'grant:approval',
     principalId: principal.principalId,
     ownerId: principal.ownerId,
@@ -195,13 +223,15 @@ function grant(overrides: Record<string, unknown> = {}): Row {
     lifecycle: 'active',
     authorityMode: 'approve_each',
     generation: 1,
-    policyDigest: 'sha256:approval-policy',
+    policyDigest: approvalPolicyDigest,
     expiresAt: grantExpiresAt,
     operationAccess: 'all_admitted',
-    policy: {
-      rate: { maximumCallsPerMinute: 20, maximumCallsPerHour: 100 },
-      budget: { maximumConcurrentInvocations: 1 },
-    },
+    operationRefs: [],
+    policy: approvalPolicy,
+    budgetPolicyRef: approvalPolicy.budget.budgetPolicyRef,
+    ratePolicyRef: approvalPolicy.rate.ratePolicyRef,
+    createdAt: now - 1_000,
+    updatedAt: now - 1_000,
     ...overrides,
   }
 }
@@ -239,7 +269,7 @@ function invocation(overrides: Record<string, unknown> = {}): Row {
     environment: 'sandbox',
     grantRef: 'grant:approval',
     grantGeneration: 1,
-    policyDigest: 'sha256:approval-policy',
+    policyDigest: approvalPolicyDigest,
     grantExpiresAt,
     state: 'pending',
     dispatchState: 'pending',
@@ -391,7 +421,28 @@ describe('capability operation approval Convex handlers', () => {
       dispatchState: 'failed',
       result: { kind: 'refused', code: 'authority_denied' },
     })
+    const nextInput = { next: true }
+    const nextInputDigest = canonicalDigest(nextInput)
+    ctx.db.seed('capabilityOperationCommitments', {
+      _id: 'capabilityOperationCommitments:next',
+      commitmentRef,
+      state: 'issued',
+      expiresAt: grantExpiresAt,
+      principalId: principal.principalId,
+      accountRef: principal.ownerId,
+      credentialId: principal.credentialId,
+      applicationRef: principal.applicationRef,
+      environment: principal.environment,
+      grantRef: 'grant:approval',
+      grantGeneration: 1,
+      grantPolicyDigest: approvalPolicyDigest,
+      operationRef,
+      inputDigest: nextInputDigest,
+      operationJson: JSON.stringify(operation),
+      normalizedInputJson: JSON.stringify(nextInput),
+    })
     const next = await reserveHandler(ctx, {
+      commitmentRef,
       invocationRef: 'operation-invocation:v1:next',
       principalId: principal.principalId,
       ownerId: principal.ownerId,
@@ -401,13 +452,13 @@ describe('capability operation approval Convex handlers', () => {
       grantRef: 'grant:approval',
       operationRef,
       idempotencyKey: 'idempotency:next',
-      inputDigest: canonicalDigest({ next: true }),
-      requestDigest: canonicalDigest({ operationRef, input: { next: true } }),
+      inputDigest: nextInputDigest,
+      requestDigest: canonicalDigest({ operationRef, input: nextInput }),
       grantGeneration: 1,
-      policyDigest: 'sha256:approval-policy',
+      policyDigest: approvalPolicyDigest,
       grantExpiresAt,
       operationJson: JSON.stringify(operation),
-      inputJson: JSON.stringify({ next: true }),
+      inputJson: JSON.stringify(nextInput),
       now: 1_500_000,
     })
     expect(next).toMatchObject({ kind: 'reserved' })
@@ -420,6 +471,7 @@ describe('bounded mandate invocation dispatch', () => {
     const grantRow = grant()
     let dispatchedAuthority: Record<string, unknown> | undefined
     const reservation = {
+      commitmentRef,
       principalId: boundedPrincipal.principalId,
       credentialId: boundedPrincipal.credentialId,
       applicationRef: boundedPrincipal.applicationRef,
@@ -437,8 +489,8 @@ describe('bounded mandate invocation dispatch', () => {
     const ctx = {
       runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
         switch (functionPath(reference)) {
-          case 'capabilityOperationInvocations:admit':
-            return { kind: 'accepted' }
+          case 'capabilityOperationCommitments:admitInvocation':
+            return true
           case 'capabilityOperationInvocations:resolveInvocationAgentAuthority':
             return args.principal
           case 'capabilityOperationInvocations:reserve':
@@ -454,10 +506,20 @@ describe('bounded mandate invocation dispatch', () => {
       }),
       runQuery: vi.fn(async (reference: unknown) => {
         switch (functionPath(reference)) {
+          case 'capabilityOperationCommitments:readForInvocation':
+            return {
+              operationRef,
+              input,
+              decisionPrice: { currency: 'AUD', exponent: 6, units: '1000000' },
+              commitmentRef,
+              evidenceDigest: `sha256:${'a'.repeat(64)}`,
+            }
           case 'capabilitySupplyOperations:readCurrentPublishedOperationSnapshot':
             return { operationJson: JSON.stringify(operation) }
           case 'agentAccessPolicy:readActiveGrant':
             return grantRow
+          case 'moneyManagedCall:readBooking':
+            return { kind: 'not_required' }
           default:
             throw new Error(`unexpected_query:${functionPath(reference)}`)
         }
@@ -467,8 +529,7 @@ describe('bounded mandate invocation dispatch', () => {
       operationKey: 'operation-invoke:bounded',
       correlationId: 'correlation:bounded',
       principal: boundedPrincipal,
-      operationRef,
-      input,
+      commitmentRef,
       idempotencyKey: 'idempotency:bounded',
     })
 
@@ -494,6 +555,7 @@ describe('invocation admission after an empty pending replay', () => {
     for (const scenario of scenarios) {
       const grantRow = grant()
       const reservation = {
+        commitmentRef,
         principalId: principal.principalId,
         credentialId: principal.credentialId,
         applicationRef: principal.applicationRef,
@@ -512,8 +574,8 @@ describe('invocation admission after an empty pending replay', () => {
       let abandoned: Record<string, unknown> | undefined
       const runMutation = vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
         switch (functionPath(reference)) {
-          case 'capabilityOperationInvocations:admit':
-            return { kind: 'accepted' }
+          case 'capabilityOperationCommitments:admitInvocation':
+            return true
           case 'capabilityOperationInvocations:resolveInvocationAgentAuthority':
             return args.principal
           case 'capabilityOperationInvocations:reserve':
@@ -532,6 +594,14 @@ describe('invocation admission after an empty pending replay', () => {
       })
       const runQuery = vi.fn(async (reference: unknown) => {
         switch (functionPath(reference)) {
+          case 'capabilityOperationCommitments:readForInvocation':
+            return {
+              operationRef,
+              input,
+              decisionPrice: { currency: 'AUD', exponent: 6, units: '1000000' },
+              commitmentRef,
+              evidenceDigest: `sha256:${'b'.repeat(64)}`,
+            }
           case 'capabilitySupplyOperations:readCurrentPublishedOperationSnapshot':
             if (scenario.snapshotError) throw new Error('source_unavailable')
             return scenario.snapshot
@@ -539,6 +609,8 @@ describe('invocation admission after an empty pending replay', () => {
             return grantRow
           case 'capabilityOperationInvocations:readReplay':
             return { operationRef, state: 'pending' }
+          case 'moneyManagedCall:readBooking':
+            return { kind: 'not_required' }
           default:
             throw new Error(`unexpected_query:${functionPath(reference)}`)
         }
@@ -547,8 +619,7 @@ describe('invocation admission after an empty pending replay', () => {
         operationKey: `operation-invoke:empty-replay:${scenario.code}`,
         correlationId: `correlation:empty-replay:${scenario.code}`,
         principal,
-        operationRef,
-        input,
+        commitmentRef,
         idempotencyKey: reservation.idempotencyKey,
       })
       expect(result).toMatchObject({ kind: 'refused', operationRef, code: scenario.code })
