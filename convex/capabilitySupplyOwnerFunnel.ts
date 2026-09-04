@@ -19,7 +19,6 @@ import {
 } from './capabilitySupplyOwnerFunnelCommands'
 import {
   readOwnerSupplyIntegrationDraftHandler,
-  readLatestOwnerSupplyIntegrationDraftHandler,
   readOwnerSupplyIntegrationDraftResultValue,
   saveAgentSupplyIntegrationDraftArgsValue,
   saveAgentSupplyIntegrationDraftHandler,
@@ -68,12 +67,6 @@ export const readOwnerSupplyIntegrationDraft = queryGeneric({
   },
   returns: readOwnerSupplyIntegrationDraftResultValue,
   handler: readOwnerSupplyIntegrationDraftHandler,
-})
-
-export const readLatestOwnerSupplyIntegrationDraft = queryGeneric({
-  args: { businessId: v.id('businesses') },
-  returns: readOwnerSupplyIntegrationDraftResultValue,
-  handler: readLatestOwnerSupplyIntegrationDraftHandler,
 })
 
 export const withdrawOwnerCapability = mutationGeneric({

@@ -295,27 +295,3 @@ export async function readOwnerSupplyIntegrationDraftHandler(
     draft: path.integrationDraft,
   }
 }
-
-export async function readLatestOwnerSupplyIntegrationDraftHandler(
-  ctx: QueryCtx,
-  args: Readonly<{ businessId: SaveArgs['businessId'] }>,
-): Promise<Infer<typeof readOwnerSupplyIntegrationDraftResultValue>> {
-  const actor = await resolveBusinessActor(ctx)
-  if (actor.kind !== 'authenticated_owner') return { kind: 'not_found' }
-  const business = await ctx.db.get(args.businessId)
-  if (business === null || business.owningAccountRef !== actor.canonicalAccountRef) return { kind: 'not_found' }
-  const path = await ctx.db.query('offeringAccessPaths')
-    .withIndex('by_businessId_and_integrationDraftUpdatedAt', (query) => (
-      query.eq('businessId', args.businessId)
-    ))
-    .order('desc')
-    .filter((query) => query.neq(query.field('integrationDraftUpdatedAt'), undefined))
-    .first()
-  if (path?.integrationDraft === undefined) return { kind: 'not_found' }
-  return {
-    kind: 'available',
-    offeringRef: path.offeringRef,
-    accessPathRef: path.accessPathRef,
-    draft: path.integrationDraft,
-  }
-}

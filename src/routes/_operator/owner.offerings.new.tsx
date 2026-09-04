@@ -23,29 +23,35 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
   validateSearch: z.object({
     connection: z.string().trim().min(1).max(300).optional(),
     environment: z.enum(['sandbox', 'production']).optional(),
+    draft: z.string().trim().min(1).max(300).optional(),
   }),
-  loaderDeps: ({ search }) => ({ connectionRef: search.connection, environment: search.environment }),
+  loaderDeps: ({ search }) => ({ connectionRef: search.connection, environment: search.environment, draftRef: search.draft }),
   loader: async ({ deps }) => {
     const offerings = await readOwnerOfferingSupplyServer()
     const connections = offerings.kind === 'available'
       ? await readOwnerProviderConnectionsServer()
       : []
     let resume: Awaited<ReturnType<typeof resumeOwnerSupplySourceDraftServer>> = { kind: 'not_found' }
-    if (offerings.kind === 'available' && deps.connectionRef !== undefined && deps.environment !== undefined) {
+    if (offerings.kind === 'available'
+      && deps.draftRef !== undefined
+      && deps.connectionRef !== undefined) {
       const connection = connections.find((candidate) => (
         candidate.connectionRef === deps.connectionRef
         && candidate.businessId === offerings.businessId
         && candidate.available
-        && candidate.sourceEnvironment === deps.environment
       ))
       if (connection !== undefined) {
         resume = await resumeOwnerSupplySourceDraftServer({ data: {
           businessId: offerings.businessId,
+          draftRef: deps.draftRef,
           connectionRef: connection.connectionRef,
         } })
       }
-    } else if (offerings.kind === 'available') {
-      resume = await resumeOwnerSupplySourceDraftServer({ data: { businessId: offerings.businessId } })
+    } else if (offerings.kind === 'available' && deps.draftRef !== undefined) {
+      resume = await resumeOwnerSupplySourceDraftServer({ data: {
+        businessId: offerings.businessId,
+        draftRef: deps.draftRef,
+      } })
     }
     return { offerings, connections, resume }
   },
@@ -55,6 +61,7 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
 
 function NewOwnerOfferingRoute() {
   const { offerings, connections, resume } = Route.useLoaderData()
+  const navigate = Route.useNavigate()
   const preview = useServerFn(previewOwnerSupplySourceServer)
   const connect = useServerFn(startOwnerSupplySourceConnectionServer)
   const publishRequest = useServerFn(publishOwnerSupplySourceServer)
@@ -71,6 +78,15 @@ function NewOwnerOfferingRoute() {
           onPreview={(source, idempotencyKey) => preview({ data: { businessId: offerings.businessId, source, idempotencyKey } })}
           onConnect={(input) => connect({ data: input })}
           onSelectCandidate={(input) => saveDraft({ data: input })}
+          onDraftSaved={async (candidateRef, connectionRef) => {
+            await navigate({
+              search: {
+                draft: candidateRef,
+                ...(connectionRef === undefined ? {} : { connection: connectionRef }),
+              },
+              replace: true,
+            })
+          }}
           onPublish={(input) => publish({ data: input })}
         />
       )}

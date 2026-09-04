@@ -557,6 +557,8 @@ export const capabilitySupplyTables = {
     pkceSecretRef: v.optional(v.string()),
     credentialSecretRef: v.optional(v.string()),
     connectionRef: v.optional(v.string()),
+    draftRef: v.optional(v.string()),
+    expectedSourceDigest: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     expiresAt: v.number(),
@@ -566,6 +568,34 @@ export const capabilitySupplyTables = {
     .index('by_commandId', ['commandId'])
     .index('by_lifecycle_and_expiresAt', ['lifecycle', 'expiresAt'])
     .index('by_businessId_and_updatedAt', ['businessId', 'updatedAt']),
+  capabilitySupplySourceDrafts: defineTable({
+    draftRef: v.string(),
+    owningAccountRef: v.string(),
+    createdByPrincipalRef: v.string(),
+    businessId: v.id('businesses'),
+    commandId: v.string(),
+    sourceKind: v.union(v.literal('mcp'), v.literal('agent_plugin')),
+    sourceDescriptorJson: v.string(),
+    expectedSourceDigest: v.string(),
+    sourceRevision: v.string(),
+    sourceUrl: v.string(),
+    remoteRef: v.optional(v.string()),
+    environment: v.union(v.literal('sandbox'), v.literal('production')),
+    lifecycle: v.union(
+      v.literal('pending'),
+      v.literal('connected'),
+      v.literal('consumed'),
+      v.literal('expired'),
+      v.literal('cancelled'),
+    ),
+    connectionRef: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index('by_draftRef', ['draftRef'])
+    .index('by_businessId_and_updatedAt', ['businessId', 'updatedAt'])
+    .index('by_lifecycle_and_expiresAt', ['lifecycle', 'expiresAt']),
   capabilityProviderConnectionLeases: defineTable({
     leaseRef: v.string(),
     owningAccountRef: v.string(),

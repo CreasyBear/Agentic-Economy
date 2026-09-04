@@ -77,7 +77,7 @@ export function normalizeSupplyIntegrationDraft(
   } catch {
     return { kind: 'refused', reason: 'draft_invalid' }
   }
-  const source = normalizeSourceInput(sourceValue)
+  const source = normalizeSupplySourceDescriptor(sourceValue)
   if (source === undefined || source.kind !== input.sourceKind || !isRecord(selectorValue)) {
     return { kind: 'refused', reason: 'draft_invalid' }
   }
@@ -125,7 +125,7 @@ export function normalizeSupplyIntegrationDraft(
   }
 }
 
-function normalizeSourceInput(value: unknown): SupplySourceInput | undefined {
+export function normalizeSupplySourceDescriptor(value: unknown): SupplySourceInput | undefined {
   if (!isRecord(value) || (value.environment !== 'sandbox' && value.environment !== 'production')) return undefined
   switch (value.kind) {
     case 'openapi':

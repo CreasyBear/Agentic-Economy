@@ -161,6 +161,7 @@ export type McpSourceDiscovery =
   | Readonly<{
       kind: 'authentication_required'
       authenticationUrl: string
+      serverUrl: string
     }>
   | Readonly<{
       kind: 'remote_selection_required'

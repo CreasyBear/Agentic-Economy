@@ -6,6 +6,7 @@ import schema from '../../convex/schema'
 import { convexModules as modules } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import { createCustomerRequestServiceAssertion } from '../../src/modules/agent-access/service-auth-envelope'
+import { stableStringify } from '../../src/modules/common/stable-hash'
 import {
   createPublishedBusinessOwner,
   seedSupplyAgentPrincipal,
@@ -15,10 +16,17 @@ describe('Provider connection attempts', () => {
   it('lets the authenticated Business owner reserve the same credential-free OAuth handoff', async () => {
     const backend = convexTest(schema, modules)
     const fixture = await createPublishedBusinessOwner(backend, 'provider-owner-oauth-attempt')
+    const sourceDescriptorJson = stableStringify({
+      environment: 'production',
+      kind: 'mcp',
+      registryName: 'example/provider',
+      remoteRef: `sha256:${'6'.repeat(64)}`,
+    })
     const command = {
       businessId: fixture.businessId,
       sourceKind: 'mcp_oauth' as const,
       sourceUrl: 'https://mcp.provider.example/mcp',
+      sourceDescriptorJson,
       authentication: { kind: 'mcp_oauth' as const },
       environment: 'production' as const,
       inputDigest: `sha256:${'7'.repeat(64)}`,
@@ -32,7 +40,11 @@ describe('Provider connection attempts', () => {
       await withSourceWrite('catalog_publish', command),
     )
 
-    expect(reserved).toMatchObject({ kind: 'reserved', attemptRef: expect.stringMatching(/^pca_/u) })
+    expect(reserved).toMatchObject({
+      kind: 'reserved',
+      attemptRef: expect.stringMatching(/^pca_/u),
+      draftRef: expect.stringMatching(/^sds_/u),
+    })
     const row = await backend.run(async (ctx) => (
       await ctx.db.query('capabilityProviderConnectionAttempts')
         .withIndex('by_commandId', (query) => query.eq('commandId', command.commandId))
@@ -44,6 +56,25 @@ describe('Provider connection attempts', () => {
       businessId: fixture.businessId,
       sourceKind: 'mcp_oauth',
       lifecycle: 'pending',
+      draftRef: reserved.kind === 'reserved' ? reserved.draftRef : undefined,
+      expectedSourceDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
+    })
+    expect(row).not.toHaveProperty('sourceDescriptorJson')
+    if (reserved.kind === 'refused' || reserved.draftRef === undefined) {
+      throw new Error('expected exact source draft')
+    }
+    await expect(fixture.owner.query(
+      api.capabilityProviderConnectionAttempts.readOwnerSourceDraft,
+      { draftRef: reserved.draftRef },
+    )).resolves.toMatchObject({
+      kind: 'available',
+      draft: {
+        draftRef: reserved.draftRef,
+        businessRef: String(fixture.businessId),
+        sourceDescriptorJson,
+        sourceUrl: 'https://mcp.provider.example/mcp',
+        state: 'pending',
+      },
     })
   })
 

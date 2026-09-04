@@ -46,7 +46,7 @@ describe('Provider connection handoff route', () => {
     const connected = { kind: 'connected', connection: { connectionRef: 'connection:mcp' } }
     mocks.readAttempt.mockResolvedValue({
       kind: 'available',
-      attempt: { attemptRef: 'pca_oauth', environment: 'production' },
+      attempt: { attemptRef: 'pca_oauth', environment: 'production', draftRef: 'sds_exact_source' },
     })
     mocks.completeMcp.mockResolvedValue(connected)
     const loader = CallbackRoute.options.loader as (input: { deps: {
@@ -55,32 +55,52 @@ describe('Provider connection handoff route', () => {
       code?: string
       iss?: string
       error?: string
-    } }) => Promise<unknown>
+      provider_parameter?: string
+    }; location: { searchStr: string } }) => Promise<unknown>
 
-    await expect(loader({ deps: {
-      attempt: 'pca_oauth',
-      state: 'oauth-state-never-forwarded',
-      code: 'oauth-code-never-forwarded',
-      iss: 'https://login.provider.example',
-    } })).rejects.toMatchObject({
+    await expect(loader({
+      deps: {
+        attempt: 'pca_oauth',
+        state: 'oauth-state-never-forwarded',
+        code: 'oauth-code-never-forwarded',
+        iss: 'https://login.provider.example',
+        provider_parameter: 'preserved',
+      },
+      location: {
+        searchStr: '?attempt=pca_oauth&state=oauth-state-never-forwarded&code=oauth-code-never-forwarded&iss=https%3A%2F%2Flogin.provider.example&provider_parameter=preserved',
+      },
+    })).rejects.toMatchObject({
       options: {
         to: '/owner/offerings/new',
-        search: { connection: 'connection:mcp', environment: 'production' },
+        search: { connection: 'connection:mcp', environment: 'production', draft: 'sds_exact_source' },
         replace: true,
       },
     })
     expect(mocks.completeMcp).toHaveBeenCalledWith({ data: {
       attemptRef: 'pca_oauth',
-      state: 'oauth-state-never-forwarded',
-      code: 'oauth-code-never-forwarded',
-      iss: 'https://login.provider.example',
+      callbackParameters: [
+        ['attempt', 'pca_oauth'],
+        ['state', 'oauth-state-never-forwarded'],
+        ['code', 'oauth-code-never-forwarded'],
+        ['iss', 'https://login.provider.example'],
+        ['provider_parameter', 'preserved'],
+      ],
     } })
 
     mocks.completeMcp.mockClear()
-    await expect(loader({ deps: {
-      attempt: 'pca_oauth',
-      error: 'access_denied',
-    } })).resolves.toEqual({ kind: 'refused', code: 'authorization_denied' })
-    expect(mocks.completeMcp).not.toHaveBeenCalled()
+    mocks.completeMcp.mockResolvedValue({ kind: 'refused', code: 'connection_conflict' })
+    await expect(loader({
+      deps: { attempt: 'pca_oauth', state: 'oauth-state-never-forwarded', error: 'access_denied' },
+      location: { searchStr: '?attempt=pca_oauth&state=oauth-state-never-forwarded&error=access_denied&error_description=never-forward-this' },
+    })).resolves.toEqual({ kind: 'refused', code: 'connection_conflict' })
+    expect(mocks.completeMcp).toHaveBeenCalledWith({ data: {
+      attemptRef: 'pca_oauth',
+      callbackParameters: [
+        ['attempt', 'pca_oauth'],
+        ['state', 'oauth-state-never-forwarded'],
+        ['error', 'access_denied'],
+        ['error_description', 'never-forward-this'],
+      ],
+    } })
   })
 })

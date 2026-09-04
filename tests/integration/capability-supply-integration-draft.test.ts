@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
+import { supplyIntegrationDraftRefs } from '@/modules/capability-supply/integration-draft'
 import { convexModules as modules } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import {
@@ -119,20 +120,9 @@ describe('Provider source integration draft', () => {
         sourceSelectorJson: stableStringify(selector),
       },
     })
-    await expect(owner.query(
-      api.capabilitySupplyOwnerFunnel.readLatestOwnerSupplyIntegrationDraft,
-      { businessId },
-    )).resolves.toMatchObject({
-      kind: 'available',
-      draft: { candidateRef, sourceDigest },
-    })
     await expect(foreignOwner.query(
       api.capabilitySupplyOwnerFunnel.readOwnerSupplyIntegrationDraft,
       { businessId, candidateRef },
-    )).resolves.toEqual({ kind: 'not_found' })
-    await expect(foreignOwner.query(
-      api.capabilitySupplyOwnerFunnel.readLatestOwnerSupplyIntegrationDraft,
-      { businessId },
     )).resolves.toEqual({ kind: 'not_found' })
 
     const ownerFunnel = await owner.query(
@@ -210,13 +200,13 @@ describe('Provider source integration draft', () => {
     expect(JSON.stringify(drafts)).not.toContain('secret')
   })
 
-  it('resumes the latest Provider draft without a fixed Business-wide read cap', async () => {
+  it('resumes an exact Provider draft without a fixed Business-wide read cap', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await createPublishedBusinessOwner(
       backend,
       'integration-draft-many',
     )
-    let latestCandidateRef = ''
+    let exactCandidateRef = ''
     await backend.run(async (ctx) => {
       for (let index = 0; index < 101; index += 1) {
         const source = {
@@ -231,12 +221,13 @@ describe('Provider source integration draft', () => {
         }
         const sourceDigest = canonicalDigest({ source: `provider-openapi-${index}` })
         const candidateRef = canonicalDigest({ sourceDigest, selector })
-        latestCandidateRef = candidateRef
+        const refs = supplyIntegrationDraftRefs(String(businessId), candidateRef)
+        if (index === 0) exactCandidateRef = candidateRef
         const updatedAt = index + 1
         await ctx.db.insert('offeringAccessPaths', {
-          accessPathRef: `access:supply-draft:${index}`,
+          accessPathRef: refs.accessPathRef,
           businessId,
-          offeringRef: `offering:supply-draft:${index}`,
+          offeringRef: refs.offeringRef,
           offeringRevision: 1,
           offeringSourceHash: `source:${index}`,
           status: 'draft',
@@ -266,11 +257,11 @@ describe('Provider source integration draft', () => {
     })
 
     await expect(owner.query(
-      api.capabilitySupplyOwnerFunnel.readLatestOwnerSupplyIntegrationDraft,
-      { businessId },
+      api.capabilitySupplyOwnerFunnel.readOwnerSupplyIntegrationDraft,
+      { businessId, candidateRef: exactCandidateRef },
     )).resolves.toMatchObject({
       kind: 'available',
-      draft: { candidateRef: latestCandidateRef },
+      draft: { candidateRef: exactCandidateRef },
     })
   })
 })

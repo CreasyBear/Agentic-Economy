@@ -36,6 +36,7 @@ export function AeSupplySourceNativeStart({
   onPreview,
   onConnect,
   onSelectCandidate,
+  onDraftSaved,
   onPublish,
 }: Readonly<{
   businessRef: string
@@ -61,6 +62,7 @@ export function AeSupplySourceNativeStart({
     sourceRevision: string
     candidate: Pick<SupplyOperationCandidate, 'candidateRef' | 'sourceSelector' | 'title' | 'description'>
   }>) => Promise<Readonly<{ kind: 'saved' | 'replayed' }> | Readonly<{ kind: 'refused'; reason: string }>>
+  onDraftSaved?: (candidateRef: string, connectionRef?: string) => Promise<void> | void
   onPublish: (input: PublishSupplyOperationV2Input) => Promise<SupplyPublishResult>
 }>) {
   const initialCandidate = initial?.preview.candidates.find(({ candidateRef }) => candidateRef === initial.candidateRef)
@@ -212,6 +214,7 @@ export function AeSupplySourceNativeStart({
         && connection.adapterId === requiredAdapterId
       )) ? current : '')
       setPricingKind(candidate.x402 === undefined ? 'free' : 'source_x402')
+      await onDraftSaved?.(candidate.candidateRef, connectionRef === '' ? undefined : connectionRef)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       setError('AE could not save this selection. Find Operations again, then try again.')

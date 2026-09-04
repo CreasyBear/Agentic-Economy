@@ -48,7 +48,7 @@ import {
   resumeOwnerSupplySourceDraft,
   saveOwnerSupplySourceDraft,
   publishOwnerSupplySource,
-} from './internal/supply-funnel/source-first-owner'
+} from './source-first-owner'
 import {
   completeOwnerMcpProviderConnection,
   completeOwnerMcpProviderConnectionInputSchema,
@@ -195,6 +195,7 @@ export const startOwnerSupplySourceConnectionServer = createServerFn({ method: '
 export const resumeOwnerSupplySourceDraftServer = createServerFn()
   .validator((data) => z.strictObject({
     businessId: z.string().trim().min(1),
+    draftRef: z.string().trim().min(1).max(300),
     connectionRef: z.string().trim().min(1).max(300).optional(),
   }).parse(data))
   .handler(resumeOwnerSupplySourceDraft)

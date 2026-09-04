@@ -11,7 +11,7 @@ import {
   readOwnerProviderConnectionAttemptServer,
 } from '@/modules/capability-supply/supply-funnel.functions'
 
-const callbackSearchSchema = z.object({
+const callbackSearchSchema = z.looseObject({
   attempt: z.string().trim().min(1).max(300).optional(),
   state: z.string().min(16).max(500).optional(),
   code: z.string().min(1).max(8_192).optional(),
@@ -23,20 +23,15 @@ export const Route = createFileRoute('/_operator/owner/supply/connections/oauth/
   ...operatorRouteOptions,
   validateSearch: callbackSearchSchema,
   loaderDeps: ({ search }) => search,
-  loader: async ({ deps }) => {
-    if (deps.error !== undefined
-      || deps.attempt === undefined
-      || deps.state === undefined
-      || deps.code === undefined) {
+  loader: async ({ deps, location }) => {
+    if (deps.attempt === undefined) {
       return { kind: 'refused' as const, code: 'authorization_denied' as const }
     }
     const attempt = await readOwnerProviderConnectionAttemptServer({ data: { attemptRef: deps.attempt } })
     if (attempt.kind !== 'available') return { kind: 'refused' as const, code: 'not_found' as const }
     const result = await completeOwnerMcpProviderConnectionServer({ data: {
       attemptRef: deps.attempt,
-      state: deps.state,
-      code: deps.code,
-      ...(deps.iss === undefined ? {} : { iss: deps.iss }),
+      callbackParameters: [...new URLSearchParams(location.searchStr).entries()],
     } })
     if (result.kind === 'connected' || result.kind === 'replayed') {
       throw redirect({
@@ -44,6 +39,7 @@ export const Route = createFileRoute('/_operator/owner/supply/connections/oauth/
         search: {
           connection: result.connection.connectionRef,
           environment: attempt.attempt.environment,
+          ...(attempt.attempt.draftRef === undefined ? {} : { draft: attempt.attempt.draftRef }),
         },
         replace: true,
       })

@@ -30,8 +30,10 @@ import { invalidateActiveLeases, toDomain, toRow } from './lib/providerConnectio
 import { ownerProjection, projectOwnerProjection } from './lib/providerConnections/owner'
 import { persistAuditEvent } from './securityShared'
 import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
+import { normalizeSupplySourceSelectionDraft } from '../src/modules/capability-supply/source-selection-draft'
 
 const ATTEMPT_TTL_MS = 10 * 60_000
+const SOURCE_DRAFT_TTL_MS = 24 * 60 * 60_000
 
 const authenticationValue = v.union(
   v.object({
@@ -47,6 +49,7 @@ const reserveAttemptFields = {
   businessId: v.id('businesses'),
   sourceKind: v.union(v.literal('http_credential'), v.literal('mcp_oauth')),
   sourceUrl: v.string(),
+  sourceDescriptorJson: v.optional(v.string()),
   authentication: authenticationValue,
   environment: v.union(v.literal('sandbox'), v.literal('production')),
   inputDigest: v.string(),
@@ -71,6 +74,7 @@ const reservationResultValue = v.union(
     kind: v.union(v.literal('reserved'), v.literal('replayed')),
     attemptRef: v.string(),
     expiresAt: v.number(),
+    draftRef: v.optional(v.string()),
   }),
   v.object({
     kind: v.literal('refused'),
@@ -99,11 +103,39 @@ const ownerAttemptValue = v.object({
   ),
   connectionRef: v.optional(v.string()),
   expiresAt: v.number(),
+  draftRef: v.optional(v.string()),
 })
 
 const readOwnerResultValue = v.union(
   v.object({ kind: v.literal('available'), attempt: ownerAttemptValue }),
   v.object({ kind: v.literal('not_found') }),
+)
+
+const readOwnerSourceDraftResultValue = v.union(
+  v.object({ kind: v.literal('not_found') }),
+  v.object({
+    kind: v.literal('available'),
+    draft: v.object({
+      draftRef: v.string(),
+      businessRef: v.string(),
+      sourceKind: v.union(v.literal('mcp'), v.literal('agent_plugin')),
+      sourceDescriptorJson: v.string(),
+      expectedSourceDigest: v.string(),
+      sourceRevision: v.string(),
+      sourceUrl: v.string(),
+      remoteRef: v.optional(v.string()),
+      environment: v.union(v.literal('sandbox'), v.literal('production')),
+      state: v.union(
+        v.literal('pending'),
+        v.literal('connected'),
+        v.literal('consumed'),
+        v.literal('expired'),
+        v.literal('cancelled'),
+      ),
+      connectionRef: v.optional(v.string()),
+      expiresAt: v.number(),
+    }),
+  }),
 )
 
 const strictProofValue = v.object({
@@ -255,6 +287,14 @@ function attemptRef(commandId: string, owningAccountRef: string): string {
   }).slice('sha256:'.length, 'sha256:'.length + 40)}`
 }
 
+function sourceDraftRef(commandId: string, owningAccountRef: string): string {
+  return `sds_${canonicalDigest({
+    format: 'supply-source-draft-ref:v1',
+    owningAccountRef,
+    commandId,
+  }).slice('sha256:'.length, 'sha256:'.length + 40)}`
+}
+
 function canonicalSource(value: string): URL | undefined {
   const parsed = validPublicHttpsEndpoint(value)
   if (parsed === undefined || parsed.hash !== '' || parsed.search !== '') return undefined
@@ -313,6 +353,16 @@ async function reserveAttempt(
   if (source === undefined || !validAuthentication(args) || !isCanonicalDigest(args.inputDigest)) {
     return { kind: 'refused' as const, code: 'invalid_source' as const }
   }
+  const selectedSource = args.sourceDescriptorJson === undefined
+    ? undefined
+    : normalizeSupplySourceSelectionDraft({
+        sourceDescriptorJson: args.sourceDescriptorJson,
+        sourceUrl: source.href,
+      })
+  if (selectedSource?.kind === 'refused'
+    || (selectedSource !== undefined && args.sourceKind !== 'mcp_oauth')) {
+    return { kind: 'refused' as const, code: 'invalid_source' as const }
+  }
 
   const existing = await ctx.db.query('capabilityProviderConnectionAttempts')
     .withIndex('by_commandId', (query) => query.eq('commandId', args.commandId))
@@ -323,13 +373,35 @@ async function reserveAttempt(
       && existing.installedByPrincipalRef === actor.installedByPrincipalRef
       && existing.businessId === args.businessId
     return matches
-      ? { kind: 'replayed' as const, attemptRef: existing.attemptRef, expiresAt: existing.expiresAt }
+      ? {
+          kind: 'replayed' as const,
+          attemptRef: existing.attemptRef,
+          expiresAt: existing.expiresAt,
+          ...(existing.draftRef === undefined ? {} : { draftRef: existing.draftRef }),
+        }
       : { kind: 'refused' as const, code: 'command_identity_conflict' as const }
   }
 
   const now = Date.now()
   const expiresAt = now + ATTEMPT_TTL_MS
   const ref = attemptRef(args.commandId, actor.owningAccountRef)
+  const draftRef = selectedSource?.kind === 'valid'
+    ? sourceDraftRef(args.commandId, actor.owningAccountRef)
+    : undefined
+  if (selectedSource?.kind === 'valid' && draftRef !== undefined) {
+    await ctx.db.insert('capabilitySupplySourceDrafts', {
+      draftRef,
+      owningAccountRef: actor.owningAccountRef,
+      createdByPrincipalRef: actor.installedByPrincipalRef,
+      businessId: args.businessId,
+      commandId: args.commandId,
+      ...selectedSource.draft,
+      lifecycle: 'pending',
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: now + SOURCE_DRAFT_TTL_MS,
+    })
+  }
   await ctx.db.insert('capabilityProviderConnectionAttempts', {
     attemptRef: ref,
     commandId: args.commandId,
@@ -343,11 +415,20 @@ async function reserveAttempt(
     authentication: args.authentication,
     environment: args.environment,
     lifecycle: 'pending',
+    ...(draftRef === undefined || selectedSource?.kind !== 'valid' ? {} : {
+      draftRef,
+      expectedSourceDigest: selectedSource.draft.expectedSourceDigest,
+    }),
     createdAt: now,
     updatedAt: now,
     expiresAt,
   })
-  return { kind: 'reserved' as const, attemptRef: ref, expiresAt }
+  return {
+    kind: 'reserved' as const,
+    attemptRef: ref,
+    expiresAt,
+    ...(draftRef === undefined ? {} : { draftRef }),
+  }
 }
 
 export const reserveAgent = mutationGeneric({
@@ -386,6 +467,43 @@ export const readOwner = queryGeneric({
         sourceUrl: row.sourceUrl,
         sourceOrigin: row.sourceOrigin,
         authentication: row.authentication,
+        environment: row.environment,
+        state,
+        ...(row.connectionRef === undefined ? {} : { connectionRef: row.connectionRef }),
+        expiresAt: row.expiresAt,
+        ...(row.draftRef === undefined ? {} : { draftRef: row.draftRef }),
+      },
+    }
+  },
+})
+
+export const readOwnerSourceDraft = queryGeneric({
+  args: { draftRef: v.string() },
+  returns: readOwnerSourceDraftResultValue,
+  handler: async (ctx, args) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') return { kind: 'not_found' as const }
+    const row = await ctx.db.query('capabilitySupplySourceDrafts')
+      .withIndex('by_draftRef', (query) => query.eq('draftRef', args.draftRef))
+      .unique()
+    if (row === null || row.owningAccountRef !== actor.canonicalAccountRef) {
+      return { kind: 'not_found' as const }
+    }
+    const state = (row.lifecycle === 'pending' || row.lifecycle === 'connected')
+      && row.expiresAt <= Date.now()
+      ? 'expired' as const
+      : row.lifecycle
+    return {
+      kind: 'available' as const,
+      draft: {
+        draftRef: row.draftRef,
+        businessRef: String(row.businessId),
+        sourceKind: row.sourceKind,
+        sourceDescriptorJson: row.sourceDescriptorJson,
+        expectedSourceDigest: row.expectedSourceDigest,
+        sourceRevision: row.sourceRevision,
+        sourceUrl: row.sourceUrl,
+        ...(row.remoteRef === undefined ? {} : { remoteRef: row.remoteRef }),
         environment: row.environment,
         state,
         ...(row.connectionRef === undefined ? {} : { connectionRef: row.connectionRef }),
@@ -872,6 +990,18 @@ export const finalizeOwner = mutationGeneric({
       consumedAt: now,
       updatedAt: now,
     })
+    if (attempt.draftRef !== undefined) {
+      const draft = await ctx.db.query('capabilitySupplySourceDrafts')
+        .withIndex('by_draftRef', (query) => query.eq('draftRef', attempt.draftRef!))
+        .unique()
+      if (draft !== null && draft.owningAccountRef === actor.canonicalAccountRef) {
+        await ctx.db.patch(draft._id, {
+          lifecycle: 'connected',
+          connectionRef,
+          updatedAt: now,
+        })
+      }
+    }
     return {
       kind: result.kind === 'duplicate' ? 'replayed' as const : 'connected' as const,
       connection: serializableOwnerProjection(result.connection, now),

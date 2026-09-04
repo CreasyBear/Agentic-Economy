@@ -275,7 +275,7 @@ describe('Provider connection owner handoff', () => {
     })
   })
 
-  it('exchanges the callback, proves MCP tools, rotates the secret, and finalizes the durable connection', async () => {
+  it('finishes the exact OAuth callback through the SDK transport, reconnects, and finalizes the durable connection', async () => {
     const state = 'oauth-state-never-convex'
     const storedBundle = new TextEncoder().encode(JSON.stringify({
       version: 'ae.mcp-oauth-session:v1',
@@ -305,7 +305,12 @@ describe('Provider connection owner handoff', () => {
       kind: 'connected',
       connection: { connectionRef: 'connection:mcp', lifecycle: 'active' },
     })
-    const authorize = vi.fn().mockImplementation(async (provider) => {
+    const finishAuth = vi.fn().mockImplementation(async ({ authProvider, callbackParams }) => {
+      expect(callbackParams).toBeInstanceOf(URLSearchParams)
+      expect(callbackParams.get('code')).toBe('authorization-code-never-convex')
+      expect(callbackParams.get('iss')).toBe('https://login.provider.example')
+      expect(callbackParams.get('provider_parameter')).toBe('preserved')
+      const provider = authProvider
       expect(await provider.codeVerifier()).toBe('pkce-verifier-never-convex-0123456789abcdefghijkl')
       await provider.saveTokens({
         access_token: 'access-token-never-convex',
@@ -313,7 +318,6 @@ describe('Provider connection owner handoff', () => {
         refresh_token: 'refresh-token-never-convex',
         issuer: 'https://login.provider.example',
       })
-      return 'AUTHORIZED'
     })
     let rotatedBundle = ''
     const writeSecret = vi.fn().mockImplementation(async (input) => {
@@ -331,24 +335,26 @@ describe('Provider connection owner handoff', () => {
     const result = await completeOwnerMcpProviderConnection({
       data: {
         attemptRef: 'pca_oauth',
-        state,
-        code: 'authorization-code-never-convex',
-        iss: 'https://login.provider.example',
+        callbackParameters: [
+          ['state', state],
+          ['code', 'authorization-code-never-convex'],
+          ['iss', 'https://login.provider.example'],
+          ['provider_parameter', 'preserved'],
+        ],
       },
       context: { request: 'owner' },
     }, {
-      authorize,
+      finishAuth,
       readSecret: vi.fn().mockResolvedValue(storedBundle),
       writeSecret,
       verifyMcp,
     })
 
     expect(result).toMatchObject({ kind: 'connected', connection: { connectionRef: 'connection:mcp' } })
-    expect(authorize).toHaveBeenCalledWith(expect.any(Object), {
+    expect(finishAuth).toHaveBeenCalledWith({
       serverUrl: 'https://mcp.provider.example/mcp',
-      authorizationCode: 'authorization-code-never-convex',
-      iss: 'https://login.provider.example',
-      scope: undefined,
+      authProvider: expect.any(Object),
+      callbackParams: expect.any(URLSearchParams),
     })
     expect(verifyMcp).toHaveBeenCalledWith(expect.objectContaining({
       serverUrl: 'https://mcp.provider.example/mcp',

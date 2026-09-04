@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   auth as authorizeMcp,
+  StreamableHTTPClientTransport,
   type AuthOptions,
   type AuthResult,
   type OAuthClientInformationContext,
@@ -62,6 +63,7 @@ const ownerAttemptSchema = z.strictObject({
   environment: z.enum(['sandbox', 'production']),
   state: z.enum(['pending', 'consumed', 'expired', 'cancelled']),
   connectionRef: z.string().min(1).max(300).optional(),
+  draftRef: z.string().min(1).max(300).optional(),
   expiresAt: z.number().int().nonnegative(),
 })
 
@@ -84,9 +86,10 @@ export const startOwnerMcpProviderConnectionInputSchema = z.strictObject({
 
 export const completeOwnerMcpProviderConnectionInputSchema = z.strictObject({
   attemptRef: z.string().trim().min(1).max(300),
-  state: z.string().min(16).max(500),
-  code: z.string().min(1).max(8_192),
-  iss: z.url().max(2_048).optional(),
+  callbackParameters: z.array(z.tuple([
+    z.string().min(1).max(200),
+    z.string().max(8_192),
+  ])).min(1).max(32),
 })
 
 export type OwnerProviderConnectionAttemptReadback =
@@ -148,10 +151,17 @@ type ProviderConnectionHandoffRuntime = Readonly<{
 
 type McpOAuthHandoffRuntime = Readonly<{
   authorize?: (provider: OAuthClientProvider, options: AuthOptions) => Promise<AuthResult>
+  finishAuth?: (input: Readonly<{
+    serverUrl: string
+    authProvider: OAuthClientProvider
+    callbackParams: URLSearchParams
+  }>) => Promise<void>
   writeSecret?: (input: ProvisionInput) => Promise<Readonly<{ kind: 'active' | 'unavailable' }>>
   readSecret?: (pointer: SecretPointerInput) => Promise<Uint8Array>
   verifyMcp?: (input: Readonly<{
     serverUrl: string
+    registryName?: string
+    remoteRef?: string
     environment: 'sandbox' | 'production'
     authProvider: OAuthClientProvider
   }>) => Promise<McpSourceDiscovery>
@@ -601,7 +611,9 @@ export async function previewOwnerMcpProviderConnection(
   input: Readonly<{
     connectionRef: string
     businessRef: string
-    serverUrl: string
+    serverUrl?: string
+    registryName?: string
+    remoteRef?: string
     environment: 'sandbox' | 'production'
   }>,
   runtime: McpOAuthPreviewRuntime = {},
@@ -618,7 +630,8 @@ export async function previewOwnerMcpProviderConnection(
   }
   if (prepared.kind !== 'available'
     || prepared.connection.businessRef !== input.businessRef
-    || prepared.connection.sourceUrl !== input.serverUrl) {
+    || (input.serverUrl !== undefined && prepared.connection.sourceUrl !== input.serverUrl)
+    || (input.serverUrl === undefined && input.registryName === undefined)) {
     return { kind: 'refused', reason: 'mcp_connection_unavailable' }
   }
   let material: Uint8Array
@@ -639,14 +652,16 @@ export async function previewOwnerMcpProviderConnection(
   } finally {
     material.fill(0)
   }
-  if (provider.serverUrl !== input.serverUrl || provider.environment !== input.environment) {
+  if (provider.serverUrl !== prepared.connection.sourceUrl || provider.environment !== input.environment) {
     return { kind: 'refused', reason: 'mcp_connection_unavailable' }
   }
   const before = provider.serialize()
   let discovery: McpSourceDiscovery
   try {
     discovery = await (runtime.verifyMcp ?? defaultVerifyMcp)({
-      serverUrl: input.serverUrl,
+      serverUrl: prepared.connection.sourceUrl,
+      ...(input.registryName === undefined ? {} : { registryName: input.registryName }),
+      ...(input.remoteRef === undefined ? {} : { remoteRef: input.remoteRef }),
       environment: input.environment,
       authProvider: provider,
     })
@@ -699,11 +714,15 @@ export async function completeOwnerMcpProviderConnection(
   runtime: McpOAuthHandoffRuntime = {},
 ): Promise<OwnerHttpProviderConnectionResult> {
   const now = runtime.now ?? Date.now
+  const callbackParams = new URLSearchParams(data.callbackParameters)
+  const states = callbackParams.getAll('state')
+  if (states.length !== 1 || !validOAuthState(states[0]!)) return refusal('not_found')
+  const state = states[0]!
   let callback: OAuthCallbackReadback
   try {
     callback = await callSourceQuery(readOwnerOAuthCallbackQuery, {
       attemptRef: data.attemptRef,
-      stateHash: oauthStateHash(data.state),
+      stateHash: oauthStateHash(state),
       observedAt: now(),
     })
   } catch {
@@ -732,20 +751,19 @@ export async function completeOwnerMcpProviderConnection(
   }
   if (provider.attemptRef !== data.attemptRef
     || provider.serverUrl !== callback.attempt.sourceUrl
-    || oauthStateHash(provider.oauthState) !== oauthStateHash(data.state)) {
+    || oauthStateHash(provider.oauthState) !== oauthStateHash(state)) {
     return refusal('not_found')
   }
-  let authResult: AuthResult
   try {
-    authResult = await (runtime.authorize ?? authorizeMcp)(provider, {
+    await (runtime.finishAuth ?? finishMcpOAuthAuthorization)({
       serverUrl: callback.attempt.sourceUrl,
-      authorizationCode: data.code,
-      ...(data.iss === undefined ? {} : { iss: data.iss }),
+      authProvider: provider,
+      callbackParams,
     })
   } catch {
     return refusal('connection_conflict')
   }
-  if (authResult !== 'AUTHORIZED' || provider.currentTokens === undefined) {
+  if (provider.currentTokens === undefined) {
     return refusal('connection_conflict')
   }
   const verifyMcp = runtime.verifyMcp ?? defaultVerifyMcp
@@ -1186,14 +1204,37 @@ function startRefusal(
 
 async function defaultVerifyMcp(input: Readonly<{
   serverUrl: string
+  registryName?: string
+  remoteRef?: string
   environment: 'sandbox' | 'production'
   authProvider: OAuthClientProvider
 }>): Promise<McpSourceDiscovery> {
   const { discoverMcpSource } = await import('../mcp-source-discovery')
   return await discoverMcpSource({
-    serverUrl: input.serverUrl,
+    ...(input.registryName === undefined ? { serverUrl: input.serverUrl } : {
+      registryName: input.registryName,
+      ...(input.remoteRef === undefined ? {} : { remoteRef: input.remoteRef }),
+    }),
     environment: input.environment,
-  }, { authProvider: input.authProvider })
+  }, { authProvider: input.authProvider, requiredServerUrl: input.serverUrl })
+}
+
+async function finishMcpOAuthAuthorization(input: Readonly<{
+  serverUrl: string
+  authProvider: OAuthClientProvider
+  callbackParams: URLSearchParams
+}>): Promise<void> {
+  const { createGuardedMcpFetch } = await import('../mcp-source-discovery')
+  const transport = new StreamableHTTPClientTransport(new URL(input.serverUrl), {
+    authProvider: input.authProvider,
+    fetch: createGuardedMcpFetch(),
+    requestInit: { redirect: 'manual' },
+  })
+  try {
+    await transport.finishAuth(input.callbackParams)
+  } finally {
+    await transport.close().catch(() => undefined)
+  }
 }
 
 function requiredSecretEnvironment(name: string): string {

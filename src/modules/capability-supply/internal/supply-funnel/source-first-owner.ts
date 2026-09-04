@@ -76,7 +76,7 @@ const reserveOwnerConnectionAttemptMutation = sourceMutation<
   Record<string, unknown>,
   OwnerConnectionAttemptReservation
 >('capabilityProviderConnectionAttempts:reserveOwner')
-type LatestDraftResult =
+type CandidateDraftResult =
   | Readonly<{ kind: 'not_found' }>
   | Readonly<{
       kind: 'available'
@@ -85,10 +85,30 @@ type LatestDraftResult =
         candidateRef: string
       }>
     }>
-const readLatestDraftQuery = sourceQuery<
-  { businessId: string },
-  LatestDraftResult
->('capabilitySupplyOwnerFunnel:readLatestOwnerSupplyIntegrationDraft')
+const readCandidateDraftQuery = sourceQuery<
+  { businessId: string; candidateRef: string },
+  CandidateDraftResult
+>('capabilitySupplyOwnerFunnel:readOwnerSupplyIntegrationDraft')
+type SourceSelectionDraftResult =
+  | Readonly<{ kind: 'not_found' }>
+  | Readonly<{
+      kind: 'available'
+      draft: Readonly<{
+        draftRef: string
+        businessRef: string
+        sourceDescriptorJson: string
+        expectedSourceDigest: string
+        sourceRevision: string
+        sourceUrl: string
+        environment: 'sandbox' | 'production'
+        state: 'pending' | 'connected' | 'consumed' | 'expired' | 'cancelled'
+        connectionRef?: string
+      }>
+    }>
+const readSourceSelectionDraftQuery = sourceQuery<
+  { draftRef: string },
+  SourceSelectionDraftResult
+>('capabilityProviderConnectionAttempts:readOwnerSourceDraft')
 
 export {
   ownerSourceConnectionInputSchema,
@@ -161,15 +181,17 @@ export async function previewOwnerSupplySource({
   const readback = await callSourceQuery(readOwnerSupplyQuery, { businessId: data.businessId })
   if (readback.kind !== 'available') return unavailablePreview()
   if (data.connectionRef !== undefined) {
-    if (data.source.kind === 'mcp' && data.source.serverUrl !== undefined) {
+    if (data.source.kind === 'mcp' || data.source.kind === 'agent_plugin') {
       const source = data.source
       return await previewSupplySource(source, {
         mcpAuthentication: { kind: 'mcp_oauth' },
-        discoverMcp: async () => await previewOwnerMcpProviderConnection({
+        discoverMcp: async (discoveryInput) => await previewOwnerMcpProviderConnection({
           connectionRef: data.connectionRef!,
           businessRef: data.businessId,
-          serverUrl: source.serverUrl!,
-          environment: source.environment,
+          ...(discoveryInput.serverUrl === undefined ? {} : { serverUrl: discoveryInput.serverUrl }),
+          ...(discoveryInput.registryName === undefined ? {} : { registryName: discoveryInput.registryName }),
+          ...(discoveryInput.remoteRef === undefined ? {} : { remoteRef: discoveryInput.remoteRef }),
+          environment: discoveryInput.environment,
         }),
       })
     }
@@ -186,14 +208,25 @@ export async function previewOwnerSupplySource({
     }
     return unavailablePreview()
   }
-  const preview = await previewSupplySource(data.source)
+  let challengedServerUrl: string | undefined
+  const preview = data.source.kind === 'mcp' || data.source.kind === 'agent_plugin'
+    ? await previewSupplySource(data.source, {
+        discoverMcp: async (input) => {
+          const { discoverMcpSource } = await import('../mcp-source-discovery')
+          const discovery = await discoverMcpSource(input)
+          if (discovery.kind === 'authentication_required') challengedServerUrl = discovery.serverUrl
+          return discovery
+        },
+      })
+    : await previewSupplySource(data.source)
   if (preview.kind !== 'action_required'
-    || data.source.kind !== 'mcp'
-    || data.source.serverUrl === undefined) return preview
+    || (data.source.kind !== 'mcp' && data.source.kind !== 'agent_plugin')
+    || challengedServerUrl === undefined) return preview
   return await reserveOwnerSourceConnection({
     businessId: data.businessId,
     sourceKind: 'mcp_oauth',
-    sourceUrl: data.source.serverUrl,
+    sourceUrl: challengedServerUrl,
+    sourceDescriptorJson: stableStringify(data.source as never),
     authentication: { kind: 'mcp_oauth' },
     environment: data.source.environment,
     idempotencyKey: data.idempotencyKey,
@@ -239,6 +272,7 @@ async function reserveOwnerSourceConnection(input: Readonly<{
   businessId: string
   sourceKind: 'http_credential' | 'mcp_oauth'
   sourceUrl: string
+  sourceDescriptorJson?: string
   authentication:
     | Readonly<{ kind: 'api_key'; location: 'header' | 'query'; name: string }>
     | Readonly<{ kind: 'http_bearer' }>
@@ -257,6 +291,7 @@ async function reserveOwnerSourceConnection(input: Readonly<{
     sourceUrl: input.sourceUrl,
     authentication: input.authentication,
     environment: input.environment,
+    ...(input.sourceDescriptorJson === undefined ? {} : { sourceDescriptorJson: input.sourceDescriptorJson }),
   })
   const operationKey = canonicalDigest({
     action: 'supply.connection.connect',
@@ -267,6 +302,7 @@ async function reserveOwnerSourceConnection(input: Readonly<{
     businessId: input.businessId,
     sourceKind: input.sourceKind,
     sourceUrl: input.sourceUrl,
+    ...(input.sourceDescriptorJson === undefined ? {} : { sourceDescriptorJson: input.sourceDescriptorJson }),
     authentication: input.authentication,
     environment: input.environment,
     inputDigest,
@@ -319,9 +355,45 @@ export type OwnerSupplySourceResumeResult =
 export async function resumeOwnerSupplySourceDraft({
   data,
 }: {
-  data: Readonly<{ businessId: string; connectionRef?: string | undefined }>
+  data: Readonly<{ businessId: string; draftRef: string; connectionRef?: string | undefined }>
 }): Promise<OwnerSupplySourceResumeResult> {
-  const saved = await callSourceQuery(readLatestDraftQuery, { businessId: data.businessId })
+  const selectedSource = await callSourceQuery(readSourceSelectionDraftQuery, { draftRef: data.draftRef })
+  if (selectedSource.kind === 'available') {
+    if (selectedSource.draft.businessRef !== data.businessId
+      || selectedSource.draft.state !== 'connected'
+      || selectedSource.draft.connectionRef === undefined
+      || selectedSource.draft.connectionRef !== data.connectionRef) {
+      return { kind: 'not_found' }
+    }
+    let rawSource: unknown
+    try {
+      rawSource = JSON.parse(selectedSource.draft.sourceDescriptorJson) as unknown
+    } catch {
+      return { kind: 'source_changed' }
+    }
+    const parsed = supplySourceInputSchema.safeParse(rawSource)
+    if (!parsed.success || (parsed.data.kind !== 'mcp' && parsed.data.kind !== 'agent_plugin')) {
+      return { kind: 'source_changed' }
+    }
+    const preview = await previewSupplySource(parsed.data, connectedSourceDependencies({
+      source: parsed.data,
+      businessRef: data.businessId,
+      environment: parsed.data.environment,
+    }, selectedSource.draft.connectionRef))
+    if (preview.kind !== 'ready') return { kind: 'source_changed' }
+    return {
+      kind: 'available',
+      source: parsed.data,
+      preview,
+      candidateRef: '',
+      connectionRef: selectedSource.draft.connectionRef,
+    }
+  }
+  if (!/^sha256:[0-9a-f]{64}$/u.test(data.draftRef)) return { kind: 'not_found' }
+  const saved = await callSourceQuery(readCandidateDraftQuery, {
+    businessId: data.businessId,
+    candidateRef: data.draftRef,
+  })
   if (saved.kind !== 'available') return { kind: 'not_found' }
   let rawSource: unknown
   try {
@@ -485,7 +557,7 @@ export async function publishOwnerSupplySource({
 }
 
 function connectedSourceDependencies(
-  input: PublishSupplyOperationV2Input,
+  input: Pick<PublishSupplyOperationV2Input, 'source' | 'businessRef' | 'environment'>,
   connectionRef: string,
 ): SupplySourcePreviewDependencies {
   if (input.source.kind === 'openapi') {
@@ -501,12 +573,12 @@ function connectedSourceDependencies(
   if (input.source.kind === 'mcp' || input.source.kind === 'agent_plugin') {
     return {
       mcpAuthentication: { kind: 'mcp_oauth' },
-      discoverMcp: async ({ serverUrl, environment }) => serverUrl === undefined
-        ? { kind: 'refused', reason: 'mcp_registry_connection_unavailable' }
-        : await previewOwnerMcpProviderConnection({
+      discoverMcp: async ({ serverUrl, registryName, remoteRef, environment }) => await previewOwnerMcpProviderConnection({
             connectionRef,
             businessRef: input.businessRef,
-            serverUrl,
+            ...(serverUrl === undefined ? {} : { serverUrl }),
+            ...(registryName === undefined ? {} : { registryName }),
+            ...(remoteRef === undefined ? {} : { remoteRef }),
             environment,
           }),
     }

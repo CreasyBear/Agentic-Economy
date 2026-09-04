@@ -21,6 +21,35 @@ import type { McpSourceDiscovery } from '../source-preview'
 const REQUEST_TIMEOUT_MS = 10_000
 const MAXIMUM_RESPONSE_BYTES = 262_144
 
+export function createGuardedMcpFetch(
+  injectedSend?: (request: Request) => Promise<Response>,
+): FetchLike {
+  return async (resource, init) => {
+    const method = (init?.method ?? 'GET').toUpperCase()
+    const requestSignal = init?.signal
+    const signal = requestSignal === undefined || requestSignal === null || requestSignal.aborted
+      ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      : AbortSignal.any([requestSignal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
+    const request = new Request(resource, {
+      method,
+      redirect: 'manual',
+      signal,
+      ...(init?.headers === undefined ? {} : { headers: init.headers }),
+      ...(init?.body === undefined || method === 'GET' || method === 'HEAD'
+        ? {}
+        : { body: init.body }),
+    })
+    const send = injectedSend ?? (async (guardedRequest: Request) => {
+      const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
+      return await sendGuardedHttpRequest(guardedRequest, MAXIMUM_RESPONSE_BYTES)
+    })
+    const response = await send(request)
+    const bounded = await readBoundedRequestText(response, MAXIMUM_RESPONSE_BYTES)
+    if (!bounded.ok) throw Object.assign(new Error('payload_too_large'), { name: 'PayloadTooLarge' })
+    return new Response(bounded.text, { status: response.status, headers: response.headers })
+  }
+}
+
 export async function discoverMcpSource(input: Readonly<{
   serverUrl?: string
   registryName?: string
@@ -30,6 +59,7 @@ export async function discoverMcpSource(input: Readonly<{
   isPublicTarget?: (target: URL) => Promise<boolean>
   send?: (request: Request) => Promise<Response>
   authProvider?: OAuthClientProvider
+  requiredServerUrl?: string
 }> = {}): Promise<McpSourceDiscovery> {
   if (input.registryName !== undefined) {
     const registry = await resolveMcpRegistryRemote(input.registryName, input.remoteRef, dependencies.send)
@@ -53,6 +83,9 @@ export async function discoverMcpSource(input: Readonly<{
   }
   const serverUrl = input.serverUrl === undefined ? undefined : validHttpsUrl(input.serverUrl)
   if (serverUrl === undefined) return { kind: 'refused', reason: 'mcp_server_url_invalid' }
+  if (dependencies.requiredServerUrl !== undefined && serverUrl !== dependencies.requiredServerUrl) {
+    return { kind: 'refused', reason: 'mcp_connection_resource_mismatch' }
+  }
   const target = new URL(serverUrl)
   const isPublicTarget = dependencies.isPublicTarget ?? (async (candidate: URL) => {
     const { defaultDnsResolver, isPublicHttpTarget } = await import('@/modules/network-guard/public')
@@ -62,33 +95,8 @@ export async function discoverMcpSource(input: Readonly<{
     return { kind: 'refused', reason: 'mcp_server_url_not_public' }
   }
 
-  const fetchThroughGuard: FetchLike = async (resource, init) => {
-    const method = (init?.method ?? 'GET').toUpperCase()
-    const requestSignal = init?.signal
-    const signal = requestSignal === undefined || requestSignal === null || requestSignal.aborted
-      ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-      : AbortSignal.any([requestSignal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
-    const request = new Request(resource, {
-      method,
-      redirect: 'manual',
-      signal,
-      ...(init?.headers === undefined ? {} : { headers: init.headers }),
-      ...(init?.body === undefined || method === 'GET' || method === 'HEAD'
-        ? {}
-        : { body: init.body }),
-    })
-    const send = dependencies.send ?? (async (guardedRequest: Request) => {
-      const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
-      return await sendGuardedHttpRequest(guardedRequest, MAXIMUM_RESPONSE_BYTES)
-    })
-    const response = await send(request)
-    const bounded = await readBoundedRequestText(response, MAXIMUM_RESPONSE_BYTES)
-    if (!bounded.ok) throw Object.assign(new Error('payload_too_large'), { name: 'PayloadTooLarge' })
-    return new Response(bounded.text, { status: response.status, headers: response.headers })
-  }
-
   const transport = new StreamableHTTPClientTransport(target, {
-    fetch: fetchThroughGuard,
+    fetch: createGuardedMcpFetch(dependencies.send),
     ...(dependencies.authProvider === undefined ? {} : { authProvider: dependencies.authProvider }),
     requestInit: { redirect: 'manual' },
     reconnectionOptions: {
@@ -113,6 +121,7 @@ export async function discoverMcpSource(input: Readonly<{
         return {
           kind: 'authentication_required',
           authenticationUrl: `/owner/supply?source=mcp&serverUrl=${encodeURIComponent(serverUrl)}`,
+          serverUrl,
         }
       }
       return { kind: 'refused', reason: 'mcp_initialize_failed' }
@@ -134,6 +143,7 @@ export async function discoverMcpSource(input: Readonly<{
           return {
             kind: 'authentication_required',
             authenticationUrl: `/owner/supply?source=mcp&serverUrl=${encodeURIComponent(serverUrl)}`,
+            serverUrl,
           }
         }
         return { kind: 'refused', reason: 'mcp_tools_list_failed' }
