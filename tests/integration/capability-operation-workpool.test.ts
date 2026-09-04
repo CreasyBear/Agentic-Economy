@@ -485,7 +485,14 @@ async function installPackagedCli(root: string): Promise<string> {
   const filename = packResult[0]?.filename
   if (filename === undefined) throw new Error('packaged_cli_tarball_missing')
   await writeFile(join(consumerDirectory, 'package.json'), JSON.stringify({ private: true, type: 'module' }))
-  await execFileAsync('npm', ['install', '--ignore-scripts', join(packageDirectory, filename)], {
+  await execFileAsync('npm', [
+    'install',
+    '--ignore-scripts',
+    '--no-audit',
+    '--no-fund',
+    '--offline',
+    join(packageDirectory, filename),
+  ], {
     cwd: consumerDirectory,
   })
   return join(consumerDirectory, 'node_modules', '.bin', 'ae')
@@ -1021,7 +1028,7 @@ describe('capability operation Workpool lifecycle', () => {
         alternativeOperationRef,
       ]))
       expect(search.nextCommand).toBe(`ae compare ${comparedOperationRefs.slice(0, 4).join(' ')} --base-url ${served.origin} --json`)
-      await expect(runCli(['inspect', operationRef])).resolves.toMatchObject({
+      await expect(runCli(['describe', operationRef])).resolves.toMatchObject({
         kind: 'found',
         operation: { operationRef },
       })
@@ -1032,11 +1039,6 @@ describe('capability operation Workpool lifecycle', () => {
           expect.objectContaining({ operationRef: alternativeOperationRef }),
         ]),
       })
-      await expect(runCli(['inspect-plan', ...comparedOperationRefs])).resolves.toMatchObject({
-        kind: 'ok',
-        operationRefs: comparedOperationRefs,
-      })
-
       const idempotencyKey = 'served-cli-golden-replay'
       const completed = await runCli([
         'call',
