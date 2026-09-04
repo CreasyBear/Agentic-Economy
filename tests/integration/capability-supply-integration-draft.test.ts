@@ -1,7 +1,7 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { api } from '../../convex/_generated/api'
+import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
@@ -155,6 +155,19 @@ describe('Provider source integration draft', () => {
       operationRef: resumed.offeringRef,
       state: 'Draft',
     })
+    await backend.run(async (ctx) => {
+      const rows = await ctx.db.query('capabilitySupplierOperationProjections').take(10)
+      await Promise.all(rows.map((row) => ctx.db.delete(row._id)))
+    })
+    await expect(backend.mutation(
+      internal.capabilitySupplierOperations.backfillDraftPage,
+      { paginationOpts: { numItems: 100, cursor: null } },
+    )).resolves.toMatchObject({ processed: 1, isDone: true })
+    const restored = await backend.mutation(
+      api.capabilitySupplierOperations.listAgent,
+      await withSourceWrite('catalog_publish', { ...directoryCommand, operationKey: 'supplier-operations:list:restored' }),
+    )
+    expect(restored.kind === 'available' ? restored.page : []).toHaveLength(1)
     await expect(foreignOwner.query(
       api.capabilitySupplyOwnerFunnel.readOwnerSupplyIntegrationDraft,
       { businessId, candidateRef },

@@ -5,8 +5,9 @@ import { projectSupplierOperationStatus } from '@/modules/capability-supply/supp
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/public'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
+import { upsertSupplierOperationIdentity } from './capabilitySupplierOperationProjection'
 import type { Doc } from './_generated/dataModel'
-import { mutation, type MutationCtx } from './_generated/server'
+import { internalMutation, mutation, type MutationCtx } from './_generated/server'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 
 const EVIDENCE_WINDOW_MS = 30 * 24 * 60 * 60_000
@@ -183,5 +184,70 @@ export const readAgent = mutation({
     if (identity === null) return { kind: 'not_found' as const }
     const status = await projectIdentity(ctx, identity, Date.now(), true)
     return status === null ? { kind: 'not_found' as const } : { kind: 'available' as const, statusJson: JSON.stringify(status) }
+  },
+})
+
+const backfillResultValue = v.object({
+  processed: v.number(),
+  isDone: v.boolean(),
+  continueCursor: v.string(),
+})
+
+export const backfillDraftPage = internalMutation({
+  args: { paginationOpts: paginationOptsValidator },
+  returns: backfillResultValue,
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query('offeringAccessPaths').paginate(args.paginationOpts)
+    let processed = 0
+    for (const path of rows.page) {
+      if (path.integrationDraft === undefined) continue
+      const offering = await ctx.db.query('businessOfferings')
+        .withIndex('by_offeringRef', (query) => query.eq('offeringRef', path.offeringRef))
+        .unique()
+      if (offering === null || offering.businessId !== path.businessId) continue
+      await upsertSupplierOperationIdentity(ctx, {
+        businessId: path.businessId,
+        providerRef: String(path.businessId),
+        operationRef: path.offeringRef,
+        offeringRef: path.offeringRef,
+        offeringRevision: path.offeringRevision,
+        updatedAt: path.integrationDraft.updatedAt,
+      })
+      processed += 1
+    }
+    return { processed, isDone: rows.isDone, continueCursor: rows.continueCursor }
+  },
+})
+
+export const backfillAdmissionPage = internalMutation({
+  args: { paginationOpts: paginationOptsValidator },
+  returns: backfillResultValue,
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query('capabilitySupplyAdmissionCases').paginate(args.paginationOpts)
+    let processed = 0
+    for (const admission of rows.page) {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => query.eq('publicationRef', admission.publicationRef).eq('revision', admission.publicationRevision))
+        .unique()
+      const canonicalOffering = publication === null
+        ? null
+        : await ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId)).unique()
+      const origin = canonicalOffering?.origin
+      if (publication === null || canonicalOffering === null || origin?.kind !== 'catalog_offering') continue
+      await upsertSupplierOperationIdentity(ctx, {
+        businessId: admission.businessId,
+        providerRef: admission.providerRef,
+        operationRef: admission.operationRef,
+        offeringRef: origin.offeringRef,
+        offeringRevision: origin.offeringRevision,
+        publicationRef: admission.publicationRef,
+        publicationRevision: admission.publicationRevision,
+        offeringId: publication.offeringId,
+        bindingId: publication.bindingId,
+        updatedAt: admission.updatedAt,
+      })
+      processed += 1
+    }
+    return { processed, isDone: rows.isDone, continueCursor: rows.continueCursor }
   },
 })
