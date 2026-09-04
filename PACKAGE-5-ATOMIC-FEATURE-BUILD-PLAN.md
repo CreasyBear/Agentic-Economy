@@ -857,7 +857,7 @@ Implementation comments must preserve two non-obvious diagrams at the owning cod
 - [x] **P5-2 (P1)** — Qualified Use is keyed to exact Operations and health windows are bounded, provenance-bearing and independently projected.
 - [x] **P5-3 (P1)** — Current prerequisite loss fails routeability closed and returns one shared correction.
 - [x] **P5-4 (P1)** — Strictly authorised, paged Provider offboarding uses official Workflow and authoritative child readbacks.
-- [ ] **P5-5 (P1)** — Source migration and deterministic Package 5 proof are complete. Staging publication/Invocation for all four source families, deployed Infisical/MCP OAuth, backup restoration, packaged CLI and actual-client proof remain required before release closure.
+- [ ] **P5-5 (P1)** — Source migration and deterministic Package 5 proof are complete, including the clean-source packaged CLI. Staging publication/Invocation for all four source families, deployed Infisical/MCP OAuth, backup restoration and actual-client proof remain required before release closure.
 
 No `TODOS.md` exists and this plan intentionally creates no deferred TODO. Anything not required for Package 5 is listed in `NOT in scope`; any newly discovered blocker stops the affected PR rather than becoming an unowned follow-up.
 
@@ -870,7 +870,7 @@ No `TODOS.md` exists and this plan intentionally creates no deferred TODO. Anyth
 - Reference pass: Whop, Locus and Nevermined converted into an exact adopt/adapt/prohibit matrix; TREG, AgentMuxer and executor.sh retained as substrate evidence with explicit non-equivalence.
 - Migration: additive schema/indexes, inert component first, measured consumer migration, then removal.
 - Acceptance: black-box supplier journeys, exact recovery/readback, 10,000-row bounds, restore/rollback and external gates.
-- Planning mutation: this plan and its research artifact only; no source, dependency, deployment or shared-state change.
+- Implementation closeout: source, contracts, tests, generated public CLI and evidence are committed; deployed external proof remains deliberately open.
 
 ## 22. Engineering review completion
 
