@@ -847,7 +847,11 @@ Package 4 completes when the managed x402 start line passes as one system:
 12. every production money path remains disabled until its Australian legal,
    tax, accounting and operational approval is current.
 
-## 5. Supplier operations — planned
+## 5. Supplier operations — implemented locally, release gated
+
+Package 5's source implementation is complete on `main`: source-native preview for OpenAPI, MCP, Agent Plugins 1.0 and x402; durable Provider connections; one admission-controlled publication path; one eight-state Supplier Operation projection; current health/delivery/Qualified Use evidence; and paged, routeability-first Provider offboarding. The former Offering-first editor, manual source JSON, separate readiness/test/promotion ceremonies and 100-Offering fleet ceiling have been removed from the golden path.
+
+Release credit remains gated on one staging revision proving all four source families through normal Provider admission and buyer `search → inspect → invoke`, deployed Infisical-backed credential rotation/revocation, active-case backup restoration, packaged CLI and actual supported clients. Production paid supply also remains gated by Package 4.
 
 ### Package 5A — Supplier onboarding
 
