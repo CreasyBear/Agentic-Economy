@@ -27,10 +27,7 @@ const deepenedFolders = [
 
 describe('capability supply boundaries', () => {
   it('keeps CDP native loading isolated from optional x402 SVM peers', () => {
-    const signer = readFileSync(
-      'src/modules/capability-supply/internal/cdp-x402-payment-signer.ts',
-      'utf8',
-    )
+    const signer = readFileSync('src/modules/capability-supply/internal/cdp-x402-payment-signer.ts', 'utf8')
     const convexConfiguration = JSON.parse(readFileSync('convex.json', 'utf8')) as {
       node?: { externalPackages?: unknown }
     }
@@ -48,13 +45,15 @@ describe('capability supply boundaries', () => {
 
   it('does not import or fall back to V1 Request, catalog or routing binding authorities', () => {
     for (const source of sources()) {
-      const legacyAuthorityImport = /from\s+['"][^'"]*(?:customer-request|catalog|routing-kernel|routingKernelBindings)[^'"]*['"]/
+      const legacyAuthorityImport =
+        /from\s+['"][^'"]*(?:customer-request|catalog|routing-kernel|routingKernelBindings)[^'"]*['"]/
       expect(source).not.toMatch(legacyAuthorityImport)
     }
   })
 
   it('does not inspect adapter configuration keys in neutral registration or eligibility code', () => {
-    const keyInspection = /(?:Object\.(?:keys|entries)|Reflect\.get)\([^)]*config|JSON\.parse\([^)]*config|\.config\s*(?:\[|\.)/
+    const keyInspection =
+      /(?:Object\.(?:keys|entries)|Reflect\.get)\([^)]*config|JSON\.parse\([^)]*config|\.config\s*(?:\[|\.)/
     for (const source of sources()) expect(source).not.toMatch(keyInspection)
   })
 
@@ -72,7 +71,9 @@ describe('capability supply boundaries', () => {
     expect(seed).toContain('rebuildBusinessSupplyProjectionSnapshotCommand')
     expect(seed).not.toContain('claimBusinessCommand')
     expect(seed).not.toContain('publishBusinessCatalogCommand')
-    expect(seed).not.toMatch(/(?:ctx\.db|db)\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/)
+    expect(seed).not.toMatch(
+      /(?:ctx\.db|db)\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/,
+    )
   })
 
   it('keeps publication importers production-owned and fixture-independent', () => {
@@ -104,6 +105,7 @@ describe('capability supply boundaries', () => {
 
   it('ships one source-native Provider writer instead of the retired Offering editor contract', () => {
     const catalog = readFileSync('convex/catalog.ts', 'utf8')
+    const serverSurface = readFileSync('src/modules/capability-supply/supply-funnel.functions.ts', 'utf8')
     const retiredPublicNames = [
       'createBusinessOffering',
       'reviseBusinessOffering',
@@ -112,15 +114,30 @@ describe('capability supply boundaries', () => {
       'withdrawOfferingAccessPath',
       'retryBusinessSupplyProjection',
       'getCurrentOwnerOfferingSupply',
+      'promoteX402SellerCanary',
+    ]
+    const retiredCeremonies = [
+      'preflightOwnerOpenApiDocumentServer',
+      'preflightOwnerCapabilityServer',
+      'admitOwnerCapabilityServer',
+      'runOwnerSupplyReadinessServer',
+      'runOwnerSupplyTestServer',
+      'readOwnerSellerCanaryStatusServer',
+      'promoteOwnerSellerCanaryServer',
     ]
 
     for (const name of retiredPublicNames) {
       expect(catalog).not.toMatch(new RegExp(`export const ${name}\\b`, 'u'))
     }
-    expect(readFileSync('src/routes/_operator/owner.offerings.$offeringRef.tsx', 'utf8'))
-      .toContain("to: '/owner/supply/$offeringRef'")
-    expect(readFileSync('src/modules/capability-supply/supply-actions.ts', 'utf8'))
-      .toContain("publish: 'supply.publish'")
+    for (const name of retiredCeremonies) {
+      expect(serverSurface).not.toMatch(new RegExp(`export const ${name}\\b`, 'u'))
+    }
+    expect(readFileSync('src/routes/_operator/owner.offerings.$offeringRef.tsx', 'utf8')).toContain(
+      "to: '/owner/supply/$offeringRef'",
+    )
+    expect(readFileSync('src/modules/capability-supply/supply-actions.ts', 'utf8')).toContain(
+      "publish: 'supply.publish'",
+    )
   })
 })
 
