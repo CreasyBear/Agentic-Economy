@@ -1,5 +1,10 @@
 # Package 4 cutover evidence
 
+> Historical product cutover evidence only. It does not establish the current
+> AWS baseline or production readiness; use
+> `../operations/aws-foundation.md`, `../operations/deployment-registry.yaml`
+> and `../operations/deployment-maturity.md` for live operational status.
+
 Captured on 2026-09-02 before Package 4 release closure. Counts were read with
 the maintained Convex CLI; no row contents or secret values were copied into
 this record.

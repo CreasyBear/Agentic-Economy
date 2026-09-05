@@ -31,8 +31,10 @@ graphify-out/
 /PAPERCUTS.md
 /CLAUDE.md
 /RULES.MD
-/UBIQUITOUS_LANGUAGE.md
 /docs/*
+!/docs/guides/
+/docs/guides/*
+!/docs/guides/package-6-plugin-release.md
 !/docs/adr/
 !/docs/adr/*.md
 !/docs/operations/

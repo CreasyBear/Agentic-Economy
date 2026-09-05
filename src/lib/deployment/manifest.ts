@@ -59,7 +59,7 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'chat-proxy', code: 'required_configuration_missing', names: ['AE_CHAT_PROXY_SECRET'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
   { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_POLICY_RULES_DIGEST', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
-  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], mode: 'all' },
+  { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'], mode: 'all' },
   { scope: 'formance', code: 'formance_configuration_required', names: ['AE_FORMANCE_ENVIRONMENT', 'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_REQUEST_TIMEOUT_MS', 'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET'], mode: 'all' },
 ]
 
@@ -188,7 +188,7 @@ const knownNames = Object.freeze([
   'POSTHOG_KEY', 'VERCEL_ENV', 'VERCEL_DEPLOYMENT_ID', 'VERCEL_URL', 'AE_RELEASE_DEPLOYMENT_ID', 'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
   'AE_DEV_WBA_SMOKE_SECRET', 'AE_DEV_WBA_SIGNATURE_AGENT', 'AE_LOCAL_DEV_VITE_ARGS', 'AE_KERNEL_PROOF_MANIFEST_JSON',
   'AE_KERNEL_PROOF_MANIFEST_PATH', 'AE_CLI_BASE_URL',
-  'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
+  'STRIPE_SECRET_KEY', 'STRIPE_READBACK_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_V2_WEBHOOK_SECRET', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
   'AE_FORMANCE_ENVIRONMENT', 'AE_FORMANCE_GATEWAY_URL', 'AE_FORMANCE_LEDGER', 'AE_FORMANCE_REQUEST_TIMEOUT_MS',
   'AE_FORMANCE_ACCESS_CLIENT_ID', 'AE_FORMANCE_ACCESS_CLIENT_SECRET',
 ])
@@ -209,6 +209,7 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
       kind: 'convex-component-set',
       components: Object.freeze([
         'workpool',
+        'workpool:stripeWebhookWorkpool',
         'workflow',
         'rate-limiter',
         'agent',
@@ -228,6 +229,13 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
       declaration: 'Fixed AE-owned sandbox principal and exact grant; CDP development custody and Base Sepolia RPC are checked by an internal read-only readiness query.',
     }),
     Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-invocation-worker', 'operation-recovery-worker']) }),
+    Object.freeze({
+      id: 'durable-stripe-webhook-inbox',
+      kind: 'convex-workpool',
+      components: Object.freeze(['stripeWebhookWorkpool', 'moneyStripeWebhookInbox', 'moneyStripeWebhookWorker']),
+      workerEnvironment: Object.freeze(['STRIPE_READBACK_KEY', 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID']),
+      declaration: 'Parallelism 4; 13 attempts; 60-second exponential backoff; Stripe API 2026-07-29.dahlia.',
+    }),
     Object.freeze({
       id: 'provider-operations-rollout',
       kind: 'controlled-rollout',
@@ -431,14 +439,22 @@ function validateProductionStripeCredentials(
   add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
   sandboxRelease: boolean,
 ): void {
-  const secretPattern = sandboxRelease ? /^sk_test_[A-Za-z0-9_-]+$/u : /^sk_live_[A-Za-z0-9_-]+$/u
+  const secretPattern = sandboxRelease ? /^rk_test_[A-Za-z0-9_-]+$/u : /^rk_live_[A-Za-z0-9_-]+$/u
   const secretKey = present(environment, 'STRIPE_SECRET_KEY')
   if (secretKey !== undefined && !secretPattern.test(secretKey)) {
     add('malformed', 'stripe_secret_key_invalid', ['STRIPE_SECRET_KEY'], 'stripe-money')
   }
+  const readbackKey = present(environment, 'STRIPE_READBACK_KEY')
+  if (readbackKey !== undefined && !secretPattern.test(readbackKey)) {
+    add('malformed', 'stripe_readback_key_invalid', ['STRIPE_READBACK_KEY'], 'stripe-money')
+  }
   const webhookSecret = present(environment, 'STRIPE_WEBHOOK_SECRET')
   if (webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(webhookSecret)) {
     add('malformed', 'stripe_webhook_secret_invalid', ['STRIPE_WEBHOOK_SECRET'], 'stripe-money')
+  }
+  const v2WebhookSecret = present(environment, 'STRIPE_V2_WEBHOOK_SECRET')
+  if (v2WebhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(v2WebhookSecret)) {
+    add('malformed', 'stripe_v2_webhook_secret_invalid', ['STRIPE_V2_WEBHOOK_SECRET'], 'stripe-money')
   }
   const taxRateId = present(environment, 'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID')
   if (taxRateId !== undefined && !/^txr_[A-Za-z0-9_]+$/u.test(taxRateId)) {
@@ -561,6 +577,7 @@ function isSecretDeploymentName(name: string): boolean {
   ) return false
   if (name === 'AE_X402_RPC_URLS_JSON') return true
   return name === 'STRIPE_WEBHOOK_SECRET'
+    || name === 'STRIPE_V2_WEBHOOK_SECRET'
     || name.startsWith('AE_SOURCE_WRITE_KEY_')
     || name.startsWith('AE_SOURCE_WRITE_PREVIOUS_KEYS_')
     || name.includes('TOKEN')

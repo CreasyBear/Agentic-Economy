@@ -103,6 +103,8 @@ describe('MCP host adapter with the official client', () => {
       toolsBytes: 221_955,
       outputSchemaBytes: 186_908,
     }
+    const currentAuthenticatedToolsBaselineBytes = 45_783
+    expect(toolsBytes).toBeLessThanOrEqual(Math.floor(currentAuthenticatedToolsBaselineBytes * 1.1))
     expect(toolsBytes).toBeLessThanOrEqual(Math.floor(preCompactManifest.toolsBytes * 1.2))
     expect(outputSchemaBytes).toBe(0)
     expect(inputSchemaBytes).toBeLessThanOrEqual(expectedActions.length * 800)

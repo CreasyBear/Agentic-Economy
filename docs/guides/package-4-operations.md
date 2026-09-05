@@ -8,6 +8,9 @@ Invocations, evidence, documents and operator cases.
 Production funding and mainnet settlement remain disabled unless every
 effective-dated approval and infrastructure control is current.
 
+AWS account operation, the current restore result and production gates are
+owned by `../operations/aws-foundation.md`. This runbook does not override them.
+
 ## Operating invariants
 
 - Diagnose with durable `commandRef`, `transactionRef`, `commitmentRef`,
@@ -156,6 +159,10 @@ Signal: a scoped discrepancy case blocks funding or paid Calls.
    isolated stack.
 4. Verify schema version, transaction references, balances and idempotent
    replays. Resume only after evidence meets RPO 5 minutes and RTO 60 minutes.
+5. Keep the restored database and isolated Formance namespace until evidence is
+   approved. Then run the checked-in exact-name Formance cleanup before the
+   reviewed OpenTofu destroy plan. Never point the authoritative environment at
+   the drill.
 
 ## Unsafe SDK range
 
@@ -170,7 +177,9 @@ reaches A$1 billion at six decimals, or SDK exactness tests drift.
 
 ## Secret or diagnostic exposure
 
-Immediately suspend the affected credential, rotate it through its owning
-system, remove the exposed diagnostic from circulation, and open a security
-event containing references only. Do not copy the secret into the event,
-support ticket or this runbook.
+Contain the affected credential and record its scope without copying the value.
+For production or value-bearing authority, suspend the affected path and rotate
+through the owning system before resuming. For an explicitly accepted,
+isolated synthetic or drill exposure, keep it gated from production and do not
+retrieve or reuse it; rotate or destroy it only when Joel authorises that work.
+Remove exposed diagnostics from circulation and retain references only.

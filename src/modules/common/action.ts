@@ -51,6 +51,19 @@ export type ActionCredentialAdmission = Readonly<{
   authority: 'descriptor_classified'
 }>
 
+/**
+ * MCP-only facts that cannot be inferred from retry guidance.  In particular,
+ * idempotence answers whether repeating identical arguments adds an effect;
+ * it does not tell a caller whether an uncertain outcome may be retried.
+ */
+export type ActionMcpMetadata = Readonly<{
+  idempotent: boolean
+  /** The action can interact with external entities. */
+  openWorld: boolean
+  /** The action can remove, overwrite, or invalidate state. */
+  destructive: boolean
+}>
+
 export type ActionAgentIdentity = {
   kind: 'identity'
   signatureAgent: string
@@ -235,6 +248,8 @@ export type ActionDefinition<
 > = {
   readonly id: string
   readonly credentialAdmission?: ActionCredentialAdmission
+  /** Required for non-observation MCP actions. */
+  readonly mcp?: ActionMcpMetadata
 
   readonly name: string
   readonly summary: string
@@ -268,6 +283,23 @@ export function defineAction<Input, Result extends ActionResult>(
 /** Return the action's declared invocation contract without deriving metadata. */
 export function resolveActionContract(action: AnyAction): ActionInvocationContract {
   return action.invocationContract
+}
+
+/**
+ * Project the standard MCP tool facts from the action contract.  A missing
+ * idempotence declaration fails closed for effects; read-only observations
+ * are safe by definition.  OAuth scopes remain owned by credential admission.
+ */
+export function describeActionMcpMetadata(action: AnyAction): Readonly<{
+  idempotent: boolean
+  openWorld: boolean
+  destructive: boolean
+}> {
+  return {
+    idempotent: action.effect.class === 'observation' ? true : action.mcp?.idempotent ?? false,
+    openWorld: action.mcp?.openWorld ?? false,
+    destructive: action.mcp?.destructive ?? false,
+  }
 }
 
 /** Machine-readable description of an action. */

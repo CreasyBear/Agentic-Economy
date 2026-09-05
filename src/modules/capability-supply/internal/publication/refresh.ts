@@ -168,7 +168,7 @@ export async function refreshCapabilityCommand(
       sourceDescriptorJson: material.sourceDescriptorJson,
       sourceRevision: material.sourceRevision,
       sourceDigest: material.sourceDigest,
-      sourceRouteRef: material.sourceRouteRef,
+      sourceRouteRef: publication.sourceRouteRef ?? material.sourceRouteRef,
       pricingConfigJson: material.pricingConfigJson,
       priceDigest: material.priceDigest,
       publisherRef: publicationMetadata.publisherRef,

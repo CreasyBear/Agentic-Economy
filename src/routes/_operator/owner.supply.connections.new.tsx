@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { isReverificationCancelledError } from '@clerk/tanstack-react-start/errors'
@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
+  cancelOwnerProviderConnectionAttemptServer,
   completeOwnerHttpProviderConnectionServer,
   readOwnerProviderConnectionAttemptServer,
   startOwnerMcpProviderConnectionServer,
@@ -40,10 +41,35 @@ function OwnerProviderConnectionHandoffRoute() {
   const loaded = Route.useLoaderData()
   const completeRequest = useServerFn(completeOwnerHttpProviderConnectionServer)
   const complete = useReverification(completeRequest)
+  const readAttempt = useServerFn(readOwnerProviderConnectionAttemptServer)
+  const cancelRequest = useServerFn(cancelOwnerProviderConnectionAttemptServer)
+  const cancel = useReverification(cancelRequest)
   const idempotencyKey = useRef<string | undefined>(undefined)
   const [credential, setCredential] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+
+  async function cancelAttempt(attempt: Extract<OwnerProviderConnectionAttemptReadback, { kind: 'available' }>['attempt']) {
+    if (busy) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      const result = await cancel({ data: { attemptRef: attempt.attemptRef, idempotencyKey: `cancel:${crypto.randomUUID()}` } })
+      if (result.kind === 'refused') {
+        setError('AE could not confirm cancellation. Reload this connection request before taking another action.')
+        return
+      }
+      const draftRef = attempt.draftRef ?? attempt.candidateDraftRef
+      window.location.assign(result.state === 'consumed' && attempt.connectionRef !== undefined
+        ? connectionReturnUrl(attempt.connectionRef, attempt.environment, draftRef)
+        : `/owner/offerings/new${draftRef === undefined ? '' : `?draft=${encodeURIComponent(draftRef)}`}`)
+    } catch (cause) {
+      if (!isReverificationCancelledError(cause)) {
+        captureClientExceptionOnClient(cause)
+        setError('AE could not confirm cancellation. Reload this connection request before taking another action.')
+      }
+    } finally { setBusy(false) }
+  }
 
   if (loaded.kind !== 'available') {
     return (
@@ -60,7 +86,7 @@ function OwnerProviderConnectionHandoffRoute() {
   }
 
   if (loaded.attempt.sourceKind === 'mcp_oauth') {
-    return <McpOAuthHandoff attempt={loaded.attempt} />
+    return <McpOAuthHandoff attempt={loaded.attempt} onCancel={cancelAttempt} cancelBusy={busy} cancelError={error} />
   }
 
   if (loaded.attempt.state !== 'pending') {
@@ -74,6 +100,7 @@ function OwnerProviderConnectionHandoffRoute() {
             <ReturnToAddService
               connectionRef={loaded.attempt.connectionRef}
               environment={loaded.attempt.environment}
+              draftRef={loaded.attempt.draftRef ?? loaded.attempt.candidateDraftRef}
             />
             </AlertDescription>
           </Alert>
@@ -82,7 +109,7 @@ function OwnerProviderConnectionHandoffRoute() {
             <AlertTitle>This connection request has expired</AlertTitle>
             <AlertDescription>
               <p>Return to Add service and start the connection again.</p>
-              <ReturnToAddService />
+              <ReturnToAddService draftRef={loaded.attempt.draftRef ?? loaded.attempt.candidateDraftRef} />
             </AlertDescription>
           </Alert>
         )}
@@ -91,6 +118,7 @@ function OwnerProviderConnectionHandoffRoute() {
   }
 
   const attempt = loaded.attempt
+  idempotencyKey.current ??= `provider-http:${attempt.attemptRef}`
   const credentialLabel = attempt.authentication.kind === 'api_key'
     ? `${attempt.authentication.name} API key`
     : 'Bearer token'
@@ -98,7 +126,6 @@ function OwnerProviderConnectionHandoffRoute() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (busy || credential.length === 0) return
-    idempotencyKey.current ??= crypto.randomUUID()
     setBusy(true)
     setError(undefined)
     try {
@@ -112,6 +139,7 @@ function OwnerProviderConnectionHandoffRoute() {
         window.location.assign(connectionReturnUrl(
           result.connection.connectionRef,
           result.connection.sourceEnvironment ?? attempt.environment,
+          attempt.draftRef ?? attempt.candidateDraftRef,
         ))
         return
       }
@@ -120,7 +148,18 @@ function OwnerProviderConnectionHandoffRoute() {
       setCredential('')
       if (!isReverificationCancelledError(cause)) {
         captureClientExceptionOnClient(cause)
-        setError('AE could not confirm the connection. Try again with the same credential.')
+        try {
+          const readback = await readAttempt({ data: { attemptRef: attempt.attemptRef } })
+          if (readback.kind === 'available' && readback.attempt.state === 'consumed' && readback.attempt.connectionRef !== undefined) {
+            window.location.assign(connectionReturnUrl(readback.attempt.connectionRef, readback.attempt.environment, readback.attempt.draftRef ?? readback.attempt.candidateDraftRef))
+            return
+          }
+          setError(readback.kind === 'available' && readback.attempt.state === 'pending'
+            ? 'AE could not confirm whether the connection is still completing. Reload this request to check its status before submitting again.'
+            : 'AE could not confirm the connection. Reload this request to check its current status.')
+        } catch {
+          setError('AE could not confirm the connection or read its current status. Reload this request before submitting again.')
+        }
       }
     } finally {
       setBusy(false)
@@ -162,21 +201,22 @@ function OwnerProviderConnectionHandoffRoute() {
             <Button type="submit" disabled={busy || credential.length === 0}>
               {busy ? 'Connecting…' : 'Connect service'}
             </Button>
-            <Button asChild type="button" variant="secondary">
-              <Link to="/owner/offerings/new">Cancel</Link>
-            </Button>
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => void cancelAttempt(attempt)}>Cancel</Button>
           </div>
       </form>
     </Shell>
   )
 }
 
-function McpOAuthHandoff({ attempt }: Readonly<{
+function McpOAuthHandoff({ attempt, onCancel, cancelBusy, cancelError }: Readonly<{
   attempt: Extract<OwnerProviderConnectionAttemptReadback, { kind: 'available' }>['attempt']
+  onCancel: (attempt: Extract<OwnerProviderConnectionAttemptReadback, { kind: 'available' }>['attempt']) => Promise<void>
+  cancelBusy: boolean
+  cancelError?: string | undefined
 }>) {
   const startRequest = useServerFn(startOwnerMcpProviderConnectionServer)
   const start = useReverification(startRequest)
-  const idempotencyKey = useRef(`provider-mcp-oauth:${crypto.randomUUID()}`)
+  const idempotencyKey = useRef(`provider-mcp-oauth:${attempt.attemptRef}`)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
 
@@ -189,7 +229,7 @@ function McpOAuthHandoff({ attempt }: Readonly<{
             <p>{attempt.state === 'consumed'
               ? 'Return to Add service. AE will resume with the connected source.'
               : 'Return to Add service and start the connection again.'}</p>
-            <ReturnToAddService />
+            <ReturnToAddService connectionRef={attempt.connectionRef} environment={attempt.environment} draftRef={attempt.draftRef ?? attempt.candidateDraftRef} />
           </AlertDescription>
         </Alert>
       </Shell>
@@ -226,19 +266,17 @@ function McpOAuthHandoff({ attempt }: Readonly<{
         <p className="text-sm text-muted-foreground">
           Sign in to {attempt.sourceOrigin}. The service controls its consent screen; AE stores the resulting connection securely and returns you to Add service.
         </p>
-        {error === undefined ? null : (
+        {(error ?? cancelError) === undefined ? null : (
           <Alert variant="destructive" role="alert">
             <AlertTitle>Sign-in not started</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{error ?? cancelError}</AlertDescription>
           </Alert>
         )}
         <div className="flex flex-wrap gap-3">
           <Button type="button" disabled={busy} onClick={() => void begin()}>
             {busy ? 'Opening sign-in…' : 'Continue to sign in'}
           </Button>
-          <Button asChild type="button" variant="secondary">
-            <Link to="/owner/offerings/new">Cancel</Link>
-          </Button>
+          <Button type="button" variant="secondary" disabled={busy || cancelBusy} onClick={() => void onCancel(attempt)}>Cancel</Button>
         </div>
       </div>
     </Shell>
@@ -259,20 +297,23 @@ function Shell({ children }: Readonly<{ children: React.ReactNode }>) {
   )
 }
 
-function connectionReturnUrl(connectionRef: string, environment: 'sandbox' | 'production'): string {
+function connectionReturnUrl(connectionRef: string, environment: 'sandbox' | 'production', draftRef?: string): string {
   const search = new URLSearchParams({ connection: connectionRef, environment })
+  if (draftRef !== undefined) search.set('draft', draftRef)
   return `/owner/offerings/new?${search.toString()}`
 }
 
-function ReturnToAddService({ connectionRef, environment }: Readonly<{
+function ReturnToAddService({ connectionRef, environment, draftRef }: Readonly<{
   connectionRef?: string | undefined
   environment?: 'sandbox' | 'production' | undefined
+  draftRef?: string | undefined
 }> = {}) {
+  const draftQuery = draftRef === undefined ? '' : `?draft=${encodeURIComponent(draftRef)}`
   return (
     <Button asChild variant="secondary" className="mt-4 min-h-touch">
       <a href={connectionRef === undefined || environment === undefined
-        ? '/owner/offerings/new'
-        : connectionReturnUrl(connectionRef, environment)}>Return to Add service</a>
+        ? `/owner/offerings/new${draftQuery}`
+        : connectionReturnUrl(connectionRef, environment, draftRef)}>Return to Add service</a>
     </Button>
   )
 }

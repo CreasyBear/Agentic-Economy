@@ -39,12 +39,16 @@ export const Route = createFileRoute('/_operator/owner/supply/connections/oauth/
         search: {
           connection: result.connection.connectionRef,
           environment: attempt.attempt.environment,
-          ...(attempt.attempt.draftRef === undefined ? {} : { draft: attempt.attempt.draftRef }),
+          ...((attempt.attempt.draftRef ?? attempt.attempt.candidateDraftRef) === undefined
+            ? {}
+            : { draft: attempt.attempt.draftRef ?? attempt.attempt.candidateDraftRef }),
         },
         replace: true,
       })
     }
-    return result
+    return result.kind === 'refused'
+      ? { ...result, continuationDraftRef: attempt.attempt.draftRef ?? attempt.attempt.candidateDraftRef }
+      : result
   },
   head: () => ({ meta: [
     { title: 'Service connection | Agentic Economy' },
@@ -57,6 +61,7 @@ export const Route = createFileRoute('/_operator/owner/supply/connections/oauth/
 function OwnerMcpOAuthCallbackRoute() {
   const result = Route.useLoaderData()
   const connected = result.kind === 'connected' || result.kind === 'replayed'
+  const statusUnavailable = result.kind === 'refused' && result.code === 'source_unavailable'
   return (
     <AeOperatorShell
       operatorRole="owner"
@@ -71,13 +76,15 @@ function OwnerMcpOAuthCallbackRoute() {
     >
       <AeSettingsStack>
         <Alert variant={connected ? 'default' : 'destructive'}>
-          <AlertTitle>{connected ? 'Service connected' : 'Service not connected'}</AlertTitle>
+          <AlertTitle>{connected ? 'Service connected' : statusUnavailable ? 'Connection status unavailable' : 'Service not connected'}</AlertTitle>
           <AlertDescription>
             <p>{connected
               ? 'AE verified the live MCP source and stored its connection. Return to Add service to continue.'
-              : 'No Provider connection or publication authority changed. Return to Add service and start sign-in again.'}</p>
-            <Button asChild variant="secondary" className="mt-4 min-h-touch">
-              <Link to="/owner/offerings/new">Return to Add service</Link>
+              : 'AE could not confirm the source connection. Return to Add service to review the saved source and current connection status before retrying.'}</p>
+              <Button asChild variant="secondary" className="mt-4 min-h-touch">
+              <Link to="/owner/offerings/new" search={'continuationDraftRef' in result && result.continuationDraftRef !== undefined
+                ? { draft: result.continuationDraftRef }
+                : {}}>Return to Add service</Link>
             </Button>
           </AlertDescription>
         </Alert>

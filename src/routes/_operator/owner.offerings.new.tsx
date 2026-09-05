@@ -28,11 +28,13 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
   loaderDeps: ({ search }) => ({ connectionRef: search.connection, environment: search.environment, draftRef: search.draft }),
   loader: async ({ deps }) => {
     const identity = await readOwnerOperationsIdentityDetailServer()
-    const connections = identity.kind === 'available'
-      ? await readOwnerProviderConnectionsServer()
-      : []
+    let sourceUnavailable = false
+    let connections: Awaited<ReturnType<typeof readOwnerProviderConnectionsServer>> = []
+    if (identity.kind === 'available') {
+      try { connections = await readOwnerProviderConnectionsServer() } catch { sourceUnavailable = true }
+    }
     let resume: Awaited<ReturnType<typeof resumeOwnerSupplySourceDraftServer>> = { kind: 'not_found' }
-    if (identity.kind === 'available'
+    try { if (!sourceUnavailable && identity.kind === 'available'
       && deps.draftRef !== undefined
       && deps.connectionRef !== undefined) {
       const connection = connections.find((candidate) => (
@@ -47,20 +49,20 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
           connectionRef: connection.connectionRef,
         } })
       }
-    } else if (identity.kind === 'available' && deps.draftRef !== undefined) {
+    } else if (!sourceUnavailable && identity.kind === 'available' && deps.draftRef !== undefined) {
       resume = await resumeOwnerSupplySourceDraftServer({ data: {
         businessId: identity.businessId,
         draftRef: deps.draftRef,
       } })
-    }
-    return { identity, connections, resume }
+    } } catch { sourceUnavailable = true }
+    return { identity, connections, resume, resumeRequested: deps.draftRef !== undefined, sourceUnavailable }
   },
   head: () => ({ meta: [{ title: 'Add service | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: NewOwnerOfferingRoute,
 })
 
 function NewOwnerOfferingRoute() {
-  const { identity, connections, resume } = Route.useLoaderData()
+  const { identity, connections, resume, resumeRequested, sourceUnavailable } = Route.useLoaderData()
   const navigate = Route.useNavigate()
   const preview = useServerFn(previewOwnerSupplySourceServer)
   const connect = useServerFn(startOwnerSupplySourceConnectionServer)
@@ -70,7 +72,12 @@ function NewOwnerOfferingRoute() {
 
   return (
     <AeOperatorShell operatorRole="owner" title="Add service" description="Connect the interface you already operate. AE discovers the Operations and validates the one you submit." currentPath="/owner/offerings/new" breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add service' }]}>
-      {identity.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Provider workspace unavailable</AlertTitle><AlertDescription>AE could not confirm the current Business. Return to Operations and try again.</AlertDescription></Alert> : (
+      {identity.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Provider workspace unavailable</AlertTitle><AlertDescription>AE could not confirm the current Business. Return to Operations and try again.</AlertDescription></Alert> : sourceUnavailable ? (
+        <Alert variant="destructive"><AlertTitle>Saved source unavailable</AlertTitle><AlertDescription>AE could not read the saved source or current connections. Reload before starting or submitting another connection.</AlertDescription></Alert>
+      ) : (<>
+        {resumeRequested && resume.kind !== 'available' ? (
+          <Alert variant="destructive" className="mb-5"><AlertTitle>Saved source could not be resumed</AlertTitle><AlertDescription>The saved source is unavailable or changed. Review it from Add service before starting another connection.</AlertDescription></Alert>
+        ) : null}
         <AeSupplySourceNativeStart
           businessRef={identity.businessId}
           connections={filterOwnerSupplyAuthorityOptions(identity.businessId, connections)}
@@ -89,7 +96,7 @@ function NewOwnerOfferingRoute() {
           }}
           onPublish={(input) => publish({ data: input })}
         />
-      )}
+      </>)}
     </AeOperatorShell>
   )
 }

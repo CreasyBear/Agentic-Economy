@@ -204,6 +204,7 @@ function assertUniqueActionIds(registry: readonly AnyAction[]): void {
 export {
   defineAction,
   describeActionForAgent,
+  describeActionMcpMetadata,
   resolveActionContract,
   type Action,
   type ActionAgentAccessPrincipal,
@@ -212,6 +213,7 @@ export {
   type ActionContext,
   type ActionCredentialAdmission,
   type ActionInvocationContract,
+  type ActionMcpMetadata,
   type ActionParameter,
   type ActionRetryClass,
   type ActionSurface,

@@ -23,6 +23,7 @@ import {
 } from "./stripe-idempotency";
 import {
   readStripeMoneyProviderConfig,
+  readStripeMoneyReadbackProviderConfig,
   resolveStripeMoneyProviderContext,
   type StripeMoneyClient,
   type StripeMoneyMode,
@@ -58,6 +59,7 @@ export {
   mapStripeFundingRefundEvidence,
   mapStripeTransferEvidence,
   readStripeMoneyProviderConfig,
+  readStripeMoneyReadbackProviderConfig,
   resolveStripeMoneyProviderContext,
   readStripeTransfersByGroup,
   readStripeTransfersByIdentity,

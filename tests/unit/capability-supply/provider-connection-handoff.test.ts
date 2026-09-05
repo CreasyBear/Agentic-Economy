@@ -298,6 +298,22 @@ describe('Provider connection owner handoff', () => {
     expect(mocks.callSourceMutation).not.toHaveBeenCalled()
   })
 
+  it('reports an MCP attempt read outage without classifying it as missing or starting OAuth', async () => {
+    mocks.callSourceQuery.mockRejectedValue(new Error('source unavailable'))
+    const beginAuth = vi.fn()
+
+    await expect(startOwnerMcpProviderConnection({
+      data: {
+        attemptRef: 'pca_oauth',
+        idempotencyKey: 'oauth-provider-outage',
+        callbackUrl: 'https://ae.example/owner/supply/connections/oauth/callback?attempt=pca_oauth',
+      },
+      context: { request: 'owner' },
+    }, { beginAuth })).resolves.toEqual({ kind: 'refused', code: 'source_unavailable' })
+    expect(beginAuth).not.toHaveBeenCalled()
+    expect(mocks.callSourceMutation).not.toHaveBeenCalled()
+  })
+
   it('finishes the exact OAuth callback through the SDK transport, reconnects, and finalizes the durable connection', async () => {
     const state = 'oauth-state-never-convex'
     const storedBundle = new TextEncoder().encode(JSON.stringify({
@@ -487,7 +503,7 @@ describe('Provider connection owner handoff', () => {
       discoveryState: {
         authorizationServerUrl: 'https://login.provider.example',
         authorizationServerMetadata: {
-          issuer: 'https://login.provider.example',
+          ...authorizationServerMetadata(),
           revocation_endpoint: 'https://login.provider.example/revoke',
         },
       },
@@ -535,21 +551,41 @@ describe('Provider connection owner handoff', () => {
     }))
 
     await expect(revokeStoredMcpProviderConnection(session({
-      issuer: 'https://login.provider.example',
+      ...authorizationServerMetadata(),
     }), { revoke: vi.fn() })).resolves.toMatchObject({
       outcome: 'unsupported',
       reasonCode: 'oauth_revocation_unsupported',
     })
 
     await expect(revokeStoredMcpProviderConnection(session({
-      issuer: 'https://login.provider.example',
+      ...authorizationServerMetadata(),
       revocation_endpoint: 'https://login.provider.example/revoke',
     }), { revoke: vi.fn().mockRejectedValue(new Error('lost response')) })).resolves.toMatchObject({
       outcome: 'outcome_unknown',
       reasonCode: 'oauth_revocation_unknown',
     })
+
+    const revokeMalformed = vi.fn()
+    const malformed = session({ issuer: null })
+    await expect(revokeStoredMcpProviderConnection(malformed, {
+      revoke: revokeMalformed,
+    })).resolves.toMatchObject({
+      outcome: 'outcome_unknown',
+      reasonCode: 'oauth_credential_unavailable',
+    })
+    expect(revokeMalformed).not.toHaveBeenCalled()
+    expect(malformed.every((byte) => byte === 0)).toBe(true)
   })
 })
+
+function authorizationServerMetadata() {
+  return {
+    issuer: 'https://login.provider.example',
+    authorization_endpoint: 'https://login.provider.example/authorize',
+    token_endpoint: 'https://login.provider.example/token',
+    response_types_supported: ['code'],
+  }
+}
 
 function authority(operation: 'provision' | 'rotate', idempotencyRef: string) {
   return {

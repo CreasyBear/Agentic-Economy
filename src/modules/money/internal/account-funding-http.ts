@@ -446,10 +446,6 @@ export function fundingWebhookReadbackRefusal(
       ? evidence.status === 'pending'
         && evidence.checkoutStatus === 'complete'
         && evidence.paymentStatus !== 'paid'
-      : event.status === 'expired'
-      ? evidence.status === 'failed'
-        && evidence.checkoutStatus === 'expired'
-        && evidence.paymentStatus !== 'paid'
       : evidence.status !== 'succeeded' && evidence.paymentStatus !== 'paid'
   if (event.commandRef !== command.commandRef
     || event.externalRef !== event.sessionId

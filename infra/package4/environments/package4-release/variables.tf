@@ -25,3 +25,10 @@ variable "previous_cloudflare_access_secret_expires_at" {
   type    = string
   default = null
 }
+
+variable "cloudflare_tunnel_token_override" {
+  description = "Existing tunnel token supplied through the environment for an AWS-only plan."
+  type        = string
+  sensitive   = true
+  default     = null
+}

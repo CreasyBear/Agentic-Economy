@@ -10,6 +10,7 @@ import {
 } from '../../convex/capabilitySupply'
 import type { Id } from '../../convex/_generated/dataModel'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   type listIntegratedCapabilitySupply,
   type CapabilityOfferingRegistration,
@@ -33,7 +34,18 @@ export async function preparedPublicationArgs(
   backend: ConvexFixtureBackend,
   input: PublicationFixtureInput,
 ): Promise<PublishPreparedCapabilityArgs> {
-  return await withSourceWrite('catalog_publish', await prepareCapabilityPublicationMutation(backend, input))
+  const args = await prepareCapabilityPublicationMutation(backend, input)
+  return await withSourceWrite('catalog_publish', {
+    ...args,
+    proof: {
+      reverificationId: `test:${canonicalDigest({
+        operationKey: args.operationKey,
+        correlationId: args.correlationId,
+      })}`,
+      firstFactorAgeMinutes: 0,
+      secondFactorAgeMinutes: -1,
+    },
+  })
 }
 
 type IntegratedSupply = Extract<Awaited<ReturnType<typeof listIntegratedCapabilitySupply>>, { kind: 'available' }>['supplies'][number]

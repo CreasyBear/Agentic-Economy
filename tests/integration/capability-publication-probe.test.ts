@@ -494,6 +494,7 @@ describe('capability publication probe', () => {
           kind: 'openapi_http' as const,
           document: {
             openapi: '3.1.0',
+            info: { title: 'Effectful probe fixture', version: '1.0.0' },
             servers: [{ url: `https://${suffix}.example.test` }],
             components: {
               securitySchemes: {

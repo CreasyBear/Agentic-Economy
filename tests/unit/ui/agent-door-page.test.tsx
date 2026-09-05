@@ -29,8 +29,8 @@ describe('agent door page', () => {
     expect(screen.getByRole('heading', { level: 1, name: AGENT_PAGE.heading })).toBeTruthy()
     expect(screen.getByText(AGENT_PAGE.harnesses)).toBeTruthy()
     expect(screen.getByText(AGENT_PAGE.subhead)).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Add Agentic Economy' })).toBeTruthy()
-    expect(screen.getByRole('tablist', { name: 'Agent client' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Connect with Codex' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Browse Operations' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Copy Codex MCP command' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Copy Claude Code MCP command' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Copy Cursor MCP command' })).toBeNull()
@@ -38,21 +38,21 @@ describe('agent door page', () => {
     expect(document.querySelector('[data-slot="ae-site-browser"]')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy Codex MCP command' }))
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Claude Code' }), { button: 0 })
+    fireEvent.click(screen.getByRole('button', { name: 'Use Claude Code or Cursor' }))
     fireEvent.click(screen.getByRole('button', { name: 'Copy Claude Code MCP command' }))
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Cursor' }), { button: 0 })
     fireEvent.click(screen.getByRole('button', { name: 'Copy Cursor MCP command' }))
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(3))
     expect(writeText).toHaveBeenNthCalledWith(1, [
-      `codex mcp add agentic-economy --url "${window.location.origin}/mcp"`,
+      'codex mcp add agentic-economy --url "https://ae.example/mcp"',
       'codex mcp login agentic-economy',
     ].join('\n'))
-    expect(writeText).toHaveBeenNthCalledWith(2, `claude mcp add --transport http --scope user agentic-economy "${window.location.origin}/mcp"`)
-    expect(writeText).toHaveBeenNthCalledWith(3, `cursor --add-mcp '{"name":"agentic-economy","url":"${window.location.origin}/mcp"}'`)
+    expect(writeText).toHaveBeenNthCalledWith(2, 'claude mcp add --transport http --scope user agentic-economy "https://ae.example/mcp"')
+    expect(writeText).toHaveBeenNthCalledWith(3, `cursor --add-mcp '{"name":"agentic-economy","url":"https://ae.example/mcp"}'`)
 
     const pageText = document.body.textContent ?? ''
-    expect(pageText).toContain('Public search works immediately')
+    expect(pageText).toContain('browse Operations before connecting')
+    expect(pageText).toContain('Account connection does not grant spending permission')
     expect(pageText).toContain('Enable agentic-economy in Cursor, then follow its OAuth prompt.')
-    expect(pageText).not.toMatch(/whoami|Agent Principal|token exchange|scope|bearer|api key|ae connect|npm install|add-mcp@/iu)
+    expect(pageText).not.toMatch(/whoami|Agent Principal|token exchange|bearer|api key|ae connect|npm install|add-mcp@/iu)
   })
 })

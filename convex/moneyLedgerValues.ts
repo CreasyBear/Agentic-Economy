@@ -46,7 +46,6 @@ export const checkoutEventArg = v.object({
     v.literal('checkout.session.completed'),
     v.literal('checkout.session.async_payment_succeeded'),
     v.literal('checkout.session.async_payment_failed'),
-    v.literal('checkout.session.expired'),
   ),
   externalRef: identifier,
   sessionId: identifier,
@@ -58,7 +57,6 @@ export const checkoutEventArg = v.object({
     v.literal('paid'),
     v.literal('processing'),
     v.literal('failed'),
-    v.literal('expired'),
   ),
   amount: exactAmount,
   metadataDigest: identifier,
@@ -69,7 +67,6 @@ export const accountUpdatedEventArg = v.object({
   kind: v.literal('account'),
   stripeEventId: identifier,
   eventType: v.union(
-    v.literal('account.updated'),
     v.literal('v2.core.account.created'),
     v.literal('v2.core.account.updated'),
     v.literal('v2.core.account.closed'),

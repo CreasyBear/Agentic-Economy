@@ -20,6 +20,7 @@ await build({
   platform: "node",
   format: "esm",
   target: "node20",
+  loader: { ".md": "text" },
   // Coinbase's SDK advertises Solana support through an optional dynamic peer.
   // Preserve that boundary instead of forcing every AE CLI install to ship the
   // SVM stack when AE's configured payment lane is Base USDC.

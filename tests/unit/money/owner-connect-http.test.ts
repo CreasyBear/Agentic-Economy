@@ -1,16 +1,13 @@
 import {
-  config,
   connectRuntime,
   ownerProjection,
   payoutAccount,
   sourceMocks,
-  stripeMocks,
   type Provider,
 } from './owner-payout-server-harness'
 import { describe, expect, it, vi } from 'vitest'
 import { SourceWriteAdmissionError } from '@/modules/security/source-write-admission'
 import {
-  applyVerifiedStripeEventThroughSource,
   createOwnerConnectAccountThroughSource,
   updateOwnerPayoutAuthorityThroughSource,
 } from '@/modules/money/server'
@@ -610,60 +607,5 @@ describe('owner Connect account reservation', () => {
     })
     expect(createOrRecoverConnectAccount).not.toHaveBeenCalled()
     expect(sourceMocks.callSourceMutation).toHaveBeenCalledOnce()
-  })
-})
-describe('verified Connect account readback', () => {
-  it('refuses provider currency drift before admitting a binding mutation', async () => {
-    const readConnectAccount = vi.fn().mockResolvedValue({
-      provider: 'stripe',
-      businessId: 'business-1',
-      currency: 'EUR',
-      stripeAccountId: 'acct_1',
-      detailsSubmitted: true,
-      recipientCapabilityActive: true,
-      restricted: false,
-      requirementsDigest: 'sha256:requirements',
-      evidenceRef: 'stripe:account:acct_1',
-      observedAt: 10,
-      providerObjectDigest: 'sha256:provider-object',
-    })
-    stripeMocks.createStripeMoneyProvider.mockReturnValue({
-      readConnectAccount,
-    })
-    sourceMocks.createConvexServerFunctionAssertion.mockResolvedValue({})
-    sourceMocks.callPublicSourceQuery.mockResolvedValue([payoutAccount])
-
-    const result = await applyVerifiedStripeEventThroughSource({
-      event: {
-        kind: 'account',
-        stripeEventId: 'evt-account-1',
-        eventType: 'account.updated',
-        externalRef: 'acct_1',
-        stripeAccountId: 'acct_1',
-        providerObjectDigest: 'sha256:event-object',
-        payloadDigest: 'sha256:event-payload',
-        observedAt: 10,
-      },
-      rawBody: '{}',
-      request: new Request('https://ae.test/api/stripe/webhook', {
-        method: 'POST',
-        body: '{}',
-      }),
-      config,
-    })
-
-    expect(result).toEqual({
-      kind: 'refused',
-      code: 'payment_binding_invalid',
-      retryable: false,
-    })
-    expect(readConnectAccount).toHaveBeenCalledOnce()
-    expect(readConnectAccount).toHaveBeenCalledWith({
-      businessId: 'business-1',
-      currency: 'USD',
-      stripeAccountId: 'acct_1',
-    })
-    expect(sourceMocks.sourceWriteAdmissionFromRequest).not.toHaveBeenCalled()
-    expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
   })
 })

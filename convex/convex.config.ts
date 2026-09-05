@@ -39,10 +39,14 @@ const app = defineApp({
     AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: v.optional(v.string()),
     AE_SUPPLY_MCP_OAUTH_ENABLED: v.optional(v.string()),
     AE_PROVIDER_OFFBOARDING_ENABLED: v.optional(v.string()),
+    STRIPE_READBACK_KEY: v.optional(v.string()),
+    STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: v.optional(v.string()),
+    STRIPE_CHECKOUT_HOST: v.optional(v.string()),
   },
 })
 
 app.use(workpool)
+app.use(workpool, { name: 'stripeWebhookWorkpool' })
 app.use(workflow)
 app.use(rateLimiter)
 app.use(agent)

@@ -15,14 +15,13 @@ export type StripeCheckoutWebhookEvent = Readonly<{
     | 'checkout.session.completed'
     | 'checkout.session.async_payment_succeeded'
     | 'checkout.session.async_payment_failed'
-    | 'checkout.session.expired'
   externalRef: string
   sessionId: string
   commandRef: string
   paymentId?: string
   checkoutSessionDigest: string
   paymentIntentDigest?: string
-  status: 'paid' | 'processing' | 'failed' | 'expired'
+  status: 'paid' | 'processing' | 'failed'
   amount: ExactAmount
   metadataDigest: string
   payloadDigest: string
@@ -48,7 +47,6 @@ export type StripeAccountUpdatedWebhookEvent = Readonly<{
   kind: 'account'
   stripeEventId: string
   eventType:
-    | 'account.updated'
     | 'v2.core.account.created'
     | 'v2.core.account.updated'
     | 'v2.core.account.closed'
@@ -69,24 +67,31 @@ export type StripeMoneyWebhookEvent =
 
 export type StripeWebhookVerification = StripeMoneyWebhookEvent | MoneyRefusal
 
+export type StripeWebhookAdmission = Readonly<{
+  kind: 'accepted'
+  status: 'queued' | 'replayed' | 'reconciliation_required'
+}>
+
 export type StripeWebhookApplication = Readonly<{
   kind: 'accepted'
-  status: 'applied' | 'replayed' | 'ignored'
-  appliedRef?: string
+  status: 'applied' | 'replayed'
+  appliedRef: string
 }>
+
+export type StripeWebhookDestination = 'snapshot' | 'accounts_v2'
 
 export type StripeWebhookVerifier = Readonly<{
   verify: (input: Readonly<{ rawBody: string; signature: string }>) => Promise<StripeWebhookVerification>
 }>
 
-export type StripeWebhookApplier = Readonly<{
-  apply: (input: Readonly<{ event: StripeMoneyWebhookEvent; rawBody: string }>) => Promise<StripeWebhookApplication | MoneyRefusal>
+export type StripeWebhookIngester = Readonly<{
+  ingest: (input: Readonly<{ event: StripeMoneyWebhookEvent; rawBody: string }>) => Promise<StripeWebhookAdmission | MoneyRefusal>
 }>
 
 export async function handleStripeWebhookRequest(input: Readonly<{
   request: Request
   verifier: StripeWebhookVerifier
-  applier: StripeWebhookApplier
+  ingester: StripeWebhookIngester
 }>): Promise<Response> {
   const boundedBody = await readBoundedRequestText(input.request, MAX_STRIPE_WEBHOOK_BODY_BYTES)
   if (!boundedBody.ok) return problem({ status: 413, kind: kindForStatus(413), code: 'request_too_large', detail: 'request_too_large' })
@@ -104,28 +109,27 @@ export async function handleStripeWebhookRequest(input: Readonly<{
   }
   if (isMoneyRefusal(verified)) return refusalResponse(verified, 'verify')
 
-  let applied: StripeWebhookApplication | MoneyRefusal
+  let admitted: StripeWebhookAdmission | MoneyRefusal
   try {
-    applied = await input.applier.apply({ event: verified, rawBody })
+    admitted = await input.ingester.ingest({ event: verified, rawBody })
   } catch {
     return problem(
       { status: 503, kind: kindForStatus(503), code: 'credit_topup_pending', detail: 'credit_topup_pending' },
       { 'Retry-After': String(RETRY_AFTER_SECONDS) },
     )
   }
-  if (isMoneyRefusal(applied)) return refusalResponse(applied, 'apply')
+  if (isMoneyRefusal(admitted)) return refusalResponse(admitted, 'ingest')
   return jsonResponse({
     kind: 'accepted',
-    status: applied.status,
-    ...(applied.appliedRef === undefined ? {} : { appliedRef: applied.appliedRef }),
+    status: admitted.status,
   }, 200)
 }
 
-function refusalResponse(refusal: MoneyRefusal, phase: 'verify' | 'apply'): Response {
+function refusalResponse(refusal: MoneyRefusal, phase: 'verify' | 'ingest'): Response {
   const retryable = refusal.retryable || refusal.code === 'credit_topup_pending'
   const status = phase === 'verify'
     ? refusal.code === 'stripe_setup_required' ? 503 : 400
-    : refusal.code === 'stripe_setup_required' || retryable ? 503 : 409
+    : 503
   return problem(
     { status, kind: kindForStatus(status), code: refusal.code, detail: refusal.code },
     retryable ? { 'Retry-After': String(RETRY_AFTER_SECONDS) } : {},

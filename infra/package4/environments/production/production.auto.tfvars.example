@@ -1,0 +1,7 @@
+cloudflare_account_id = "replace-with-cloudflare-account-id"
+cloudflare_zone_id    = "replace-with-cloudflare-zone-id"
+source_revision       = "0000000000000000000000000000000000000000"
+
+# Keep false until every gate in docs/operations/aws-foundation.md is backed by
+# current live evidence. Set true only for the reviewed plan that creates production.
+foundation_gates_passed = false

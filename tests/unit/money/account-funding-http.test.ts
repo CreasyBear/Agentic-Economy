@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   beginAccountFundingThroughSource,
-  applyVerifiedStripeEventThroughSource,
+  ingestVerifiedStripeEventThroughSource,
   readAccountFundingThroughSource,
 } from '@/modules/money/server'
 import { createFundingHandoffService } from '@/lib/server/funding-handoff-api'
@@ -216,7 +216,7 @@ describe('Account AUD funding HTTP boundary', () => {
     expect(provider.readCreditPayment).not.toHaveBeenCalled()
   })
 
-  it('uses verified Stripe readback and the Account funding mutation for webhook settlement', async () => {
+  it('durably admits a verified Stripe event without synchronous provider work', async () => {
     const durable = command({ externalRef: 'cs_account_funding_webhook' })
     const evidence = {
       provider: 'stripe' as const,
@@ -250,54 +250,37 @@ describe('Account AUD funding HTTP boundary', () => {
       payloadDigest: `sha256:${'9'.repeat(64)}`,
       observedAt: 100,
     }
-    sourceMocks.createConvexServerFunctionAssertion.mockResolvedValueOnce({
-      principalId: 'server', ownerId: 'server', credentialId: 'server',
-      scopes: ['money:funding_webhook_read'], issuedAt: 100, signature: 'redacted',
-    })
-    sourceMocks.callPublicSourceQuery.mockResolvedValueOnce({ kind: 'accepted', command: durable })
-    stripeMocks.createStripeMoneyProvider.mockReturnValueOnce({
-      createOrRecoverCreditPayment: vi.fn(),
-      readCreditPayment: vi.fn(async () => ({
-        kind: 'hosted_redirect' as const,
-        evidence,
-        expiresAt: durable.checkoutExpiresAt,
-      })),
-    })
     sourceMocks.sourceWriteAdmissionFromRequest.mockResolvedValueOnce({
       version: 'source-write:v2',
-      keyId: 'test', scope: 'billing', operationKey: 'moneyAccountFunding:applyVerifiedEvent',
+      keyId: 'test', scope: 'billing', operationKey: 'moneyStripeWebhookInbox:ingest',
       correlationId: event.stripeEventId, commandDigest: `sha256:${'a'.repeat(64)}`,
       nonce: 'test', issuedAt: 100, method: 'POST', initiatorOrigin: 'https://stripe.test',
       targetOrigin: 'https://ae.test', targetPath: '/api/stripe/webhook', targetQuery: '',
       bodyDigest: `sha256:${'b'.repeat(64)}`, signature: 'redacted',
       signatureInput: 'test-signature-input',
     })
-    sourceMocks.callPublicSourceAction.mockResolvedValueOnce({
-      kind: 'accepted', status: 'applied', appliedRef: 'journal:funding:one',
-    })
+    sourceMocks.callPublicSourceMutation.mockResolvedValueOnce({ kind: 'accepted', status: 'queued' })
 
-    await expect(applyVerifiedStripeEventThroughSource({
+    await expect(ingestVerifiedStripeEventThroughSource({
+      destination: 'snapshot',
       event,
       rawBody: '{}',
       request: new Request('https://ae.test/api/stripe/webhook', { method: 'POST' }),
-      config: {
-        secretKey: 'sk_test_redacted', webhookSecret: 'whsec_redacted',
-        mode: 'test',
-      },
     })).resolves.toEqual({
-      kind: 'accepted', status: 'applied', appliedRef: 'journal:funding:one',
+      kind: 'accepted', status: 'queued',
     })
-    expect(sourceMocks.createConvexServerFunctionAssertion).toHaveBeenCalledWith(expect.objectContaining({
-      operation: 'moneyAccountFunding:readWebhookCommand',
-      scope: 'money:funding_webhook_read',
+    expect(sourceMocks.sourceWriteAdmissionFromRequest).toHaveBeenCalledWith(expect.objectContaining({
+      operationKey: 'moneyStripeWebhookInbox:ingest',
+      correlationId: event.stripeEventId,
     }))
-    expect(sourceMocks.callPublicSourceAction).toHaveBeenCalledWith(
+    expect(sourceMocks.callPublicSourceMutation).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
+        destination: 'snapshot',
         event,
-        readback: expect.objectContaining({ amount: evidence.amount }),
-        operationKey: 'moneyAccountFunding:applyVerifiedEvent',
+        operationKey: 'moneyStripeWebhookInbox:ingest',
       }),
     )
+    expect(stripeMocks.createStripeMoneyProvider).not.toHaveBeenCalled()
   })
 })

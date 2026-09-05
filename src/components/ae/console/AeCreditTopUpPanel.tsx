@@ -51,6 +51,7 @@ export function AeAccountFundingPanel({
   const [pending, setPending] = useState(false)
   const [checking, setChecking] = useState(false)
   const [amountText, setAmountText] = useState('')
+  const [amountInvalid, setAmountInvalid] = useState(false)
   const [session, setSession] = useState<CreditPaymentSession>()
   const [paymentStatus, setPaymentStatus] = useState<CreditPaymentStatus>()
   const [errorMessage, setErrorMessage] = useState<string>()
@@ -116,7 +117,7 @@ export function AeAccountFundingPanel({
     if (pending || port === undefined) return
     const units = canonicalAudUnits(amountText)
     if (units === undefined) {
-      setErrorMessage('Enter a valid AUD funding amount before starting payment.')
+      setAmountInvalid(true)
       return
     }
     const nextIdempotencyKey = idempotencyKey.current ?? `account-funding:${randomId()}`
@@ -196,12 +197,17 @@ export function AeAccountFundingPanel({
               inputMode="decimal"
               autoComplete="off"
               value={amountText}
-              onChange={(event) => setAmountText(event.target.value)}
+              onChange={(event) => {
+                setAmountText(event.target.value)
+                if (canonicalAudUnits(event.target.value) !== undefined) setAmountInvalid(false)
+              }}
               disabled={pending || checking}
               placeholder="10.00"
-              aria-describedby="account-funding-amount-help"
+              aria-invalid={amountInvalid}
+              aria-describedby={amountInvalid ? 'account-funding-amount-help account-funding-amount-error' : 'account-funding-amount-help'}
             />
             <p id="account-funding-amount-help" className="text-xs text-muted-foreground">The configured minimum and maximum are enforced by the authenticated server.</p>
+            {amountInvalid ? <p id="account-funding-amount-error" className="text-sm text-destructive" role="alert">Enter a valid AUD funding amount before starting payment.</p> : null}
             {preview === undefined ? null : (
               <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-sm">
                 <p className="m-0 text-muted-foreground">

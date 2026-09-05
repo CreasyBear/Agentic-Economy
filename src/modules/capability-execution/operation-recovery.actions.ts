@@ -274,6 +274,7 @@ export const operationCancelAction = defineAction<OperationCancelActionInput, Op
     approval: 'none',
   },
   surfaces: ['http', 'mcp', 'cli'],
+  mcp: { idempotent: true, openWorld: false, destructive: true },
   credentialAdmission,
   invocationContract: {
     version: OPERATION_INVOKE_ROUTE_CONTRACT.cancel.contractVersion,
@@ -315,6 +316,7 @@ export const operationReconcileAction = defineAction<OperationReconcileActionInp
     approval: 'none',
   },
   surfaces: ['http', 'mcp', 'cli'],
+  mcp: { idempotent: true, openWorld: false, destructive: false },
   credentialAdmission,
   invocationContract: {
     version: OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.contractVersion,

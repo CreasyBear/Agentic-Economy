@@ -1,0 +1,2 @@
+cloudflare_account_id = "replace-with-cloudflare-account-id"
+alert_email           = "joel@agentic-economy.ai"

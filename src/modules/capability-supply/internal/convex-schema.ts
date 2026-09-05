@@ -575,6 +575,7 @@ export const capabilitySupplyTables = {
     credentialSecretRef: v.optional(v.string()),
     connectionRef: v.optional(v.string()),
     draftRef: v.optional(v.string()),
+    candidateDraftRef: v.optional(v.string()),
     expectedSourceDigest: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),

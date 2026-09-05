@@ -26,11 +26,16 @@ export const ownerProviderConnectionAttemptSchema = z.strictObject({
   state: z.enum(['pending', 'consumed', 'expired', 'cancelled']),
   connectionRef: z.string().min(1).max(300).optional(),
   draftRef: z.string().min(1).max(300).optional(),
+  candidateDraftRef: z.string().regex(/^sha256:[0-9a-f]{64}$/u).optional(),
   expiresAt: z.number().int().nonnegative(),
 })
 
 export const ownerProviderConnectionAttemptInputSchema = z.strictObject({
   attemptRef: z.string().trim().min(1).max(300),
+})
+export const cancelOwnerProviderConnectionAttemptInputSchema = z.strictObject({
+  attemptRef: z.string().trim().min(1).max(300),
+  idempotencyKey: z.string().trim().min(8).max(200),
 })
 
 export const completeOwnerHttpProviderConnectionInputSchema = z.strictObject({
@@ -76,6 +81,10 @@ export type OwnerHttpProviderConnectionResult =
         | 'connection_conflict'
         | 'source_unavailable'
     }>
+
+export type CancelOwnerProviderConnectionAttemptResult =
+  | Readonly<{ kind: 'cancelled' | 'unchanged'; state: 'cancelled' | 'consumed' | 'expired' }>
+  | Readonly<{ kind: 'refused'; code: 'not_found' | 'reauthentication_required' | 'source_unavailable' }>
 
 export type ProviderOAuthCleanupResult = Readonly<{
   outcome: ProviderConnectionCleanupOutcome

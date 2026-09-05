@@ -161,5 +161,8 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { id: 'test-whitebox-66', importers: ['tests/unit/capability-supply/readiness-probe-quote.test.ts', 'tests/unit/capability-supply/readiness-probe-http-json.test.ts'], to: 'capability-supply', entry: 'internal/readiness-probe-shared.ts', owner: 'source-tests' },
     { id: 'test-whitebox-68', importers: ['tests/unit/money/executable-rate.test.ts'], to: 'money', entry: 'internal/executable-rate.ts', owner: 'source-tests' },
     { id: 'test-whitebox-69', importers: ['tests/unit/money/owner-payout-transfer-http.test.ts'], to: 'money', entry: 'internal/payout-transfer-http.ts', owner: 'source-tests' },
+    { id: 'test-whitebox-70', importers: ['tests/unit/capability-supply/openapi-preflight.test.ts', 'tests/unit/release/package5-reference-provider.test.ts'], to: 'capability-supply', entry: 'internal/openapi-import/validation.ts', owner: 'source-tests' },
+    { id: 'test-whitebox-71', importers: ['tests/unit/release/package5-reference-provider.test.ts'], to: 'capability-supply', entry: 'internal/mcp-source-discovery.ts', owner: 'source-tests' },
+    { id: 'test-whitebox-72', importers: ['tests/unit/release/package5-reference-provider.test.ts'], to: 'capability-supply', entry: 'internal/x402-seller-endpoint-inspector.ts', owner: 'source-tests' },
   ],
 }

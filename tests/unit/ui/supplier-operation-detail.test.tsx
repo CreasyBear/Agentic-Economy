@@ -85,6 +85,26 @@ it('renders the single source correction from the shared status contract', async
   await waitFor(() => expect(recheck).toHaveBeenCalledTimes(1))
 })
 
+it('keeps a pending Provider review on status readback instead of starting another source check', () => {
+  const refresh = vi.fn(async () => ({ kind: 'applied' as const, message: 'Status refreshed.' }))
+  render(<AeSupplierOperationDetail
+    name="Reference lookup"
+    status={{
+      ...status,
+      state: 'Under review',
+      reasonCodes: ['provider_authority_unverified', 'health_unobserved'],
+      routeability: { available: false, reasonCodes: ['provider_authority_unverified', 'health_unobserved'] },
+      health: { ...status.health, validation: 'in_progress', freshness: 'unobserved', operationalConditions: ['provider_authority_unverified', 'health_unobserved'] },
+      continuation: { action: 'supply.status' },
+    }}
+    onRefresh={refresh}
+    onRecheck={vi.fn()}
+  />)
+
+  expect(screen.getByText('Provider authority under review')).toBeTruthy()
+  expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Refresh status'])
+})
+
 it('sends connection repair to the hosted owner handoff', () => {
   render(<AeSupplierOperationDetail
     name="Reference lookup"

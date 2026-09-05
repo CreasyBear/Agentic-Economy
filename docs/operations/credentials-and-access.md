@@ -32,10 +32,13 @@ names below to locate a secret through its owning system.
 | Vercel deployment identity | Vercel login/OIDC | Vercel CLI and deployment | `.vercel/project.json`; ignored local token | Vercel |
 | Convex deployment identity | Convex login/deploy key | Convex CLI and Vercel server calls | `.env.local`, `convex.json`, deployment manifest | Convex |
 | Clerk application secrets | Clerk test instance | Vercel, Convex authentication, webhook verifier | Clerk variable names in deployment manifest | Clerk |
-| Stripe API and webhook secrets | Stripe sandbox account | Vercel Checkout/webhook boundary | Stripe variable names in deployment manifest | Stripe |
+| Stripe command key | Stripe sandbox/live restricted key | Vercel Checkout, Transfer, Accounts v2 and Account Link commands | `STRIPE_SECRET_KEY`; deployed manifests reject `sk_*` | Stripe |
+| Stripe readback key | Stripe sandbox/live read-only restricted key | Convex webhook worker | `STRIPE_READBACK_KEY` | Stripe |
+| Stripe signing secrets | Stripe event destinations | Vercel destination-specific signature verification | `STRIPE_WEBHOOK_SECRET`, `STRIPE_V2_WEBHOOK_SECRET` | Stripe |
 | CDP custody credentials | Coinbase Developer Platform | Consequential x402 Node runtime only | CDP/x402 variable names in deployment manifest | CDP |
 | Source-write key families | AE release environment | Narrow signed source-write scopes | `AE_SOURCE_WRITE_KEY_*` families | AE deployment operator |
 | Server-function token | AE release environment | Vercel-to-Convex protected calls | `AE_CONVEX_SERVER_FUNCTION_TOKEN` | AE deployment operator |
+| Infisical target custody | Infisical purpose-built projects | Future platform and customer workload identities | Separate platform/customer projects, environments and non-root paths | Infisical machine identity after project setup |
 
 Public keys, project IDs, deployment names, URLs, and secret ARNs are
 identifiers, not authenticators. They may be recorded in the deployment
@@ -43,18 +46,21 @@ registry. Secret values and recovery material may not.
 
 ## Current access finding
 
-At the 2026-09-03 capture:
+At the 2026-09-04 capture, `aws login --profile package4-release-user` creates
+the named human session and `package4-release-deployer` resolves to an
+`assumed-role/Package4ReleaseOpenTofu` STS identity. Root MFA is enabled and the
+account reports zero root access keys. Root is not part of the routine path.
 
-- the local `package4-release` AWS profile resolves to the AWS account root and
-  uses long-lived shared credentials;
-- the intended `package4-release-deployer` profile cannot assume
-  `Package4ReleaseOpenTofu`;
-- the `package4-release-user` profile resolves to the named human IAM user.
+The deployment role still carries broad `PowerUserAccess` for bootstrap. After
+seven days of CloudTrail evidence, derive a narrower production deployment
+policy, prove an unchanged OpenTofu plan with it, then remove broad access.
 
-The root profile is bootstrap-only and is not acceptable for routine operation.
-Do not give it to a junior engineer or use it in automation. Repair the role
-trust/permission path, prove MFA-backed assumption, then remove the root
-credential from the local AWS credential store. This is a production blocker.
+Infisical CLI access is authenticated, but the only discovered secret-management
+project is an `Example Project` containing sample values. It is not an approved
+AE custody boundary. Do not migrate provider secrets into it. Keep current
+Stripe and Cloudflare values in their existing provider-managed Vercel, Convex,
+AWS and Cloudflare stores until separate platform/customer projects and
+workload identities exist.
 
 ## Junior engineer operating boundary
 
@@ -108,13 +114,31 @@ old connections, and prove the protected hostname remains healthy. The current
 synthetic release token has an explicitly accepted temporary exposure; it must
 be rotated before production.
 
+### RDS managed master credential
+
+Rotate through RDS-managed Secrets Manager, update the matching Formance
+`<stack>-postgres` Setting without printing its value, force a fresh Ledger API
+and worker rollout, then prove the gateway health and expected ledger catalog.
+The synthetic source credential was rotated on 2026-09-04 and passed this
+readback. A separate credential exposed for the isolated recovery drill remains
+temporarily accepted at the user's direction. Do not retrieve, reuse or rotate
+it during stabilisation. Destroy the exact drill after evidence approval; it is
+never eligible for production use.
+
 ### Stripe
 
-Create or roll the sandbox/live restricted key in Stripe, bind the successor to
-the exact environment, deploy, run hosted Checkout plus signed webhook
-readback, then revoke the predecessor. A webhook signing-secret change requires
-updating the endpoint consumer before the old secret is removed. Never copy
-PaymentMethod or card data into AE.
+Use separate restricted keys: the Vercel command key receives only Checkout
+Session, Transfer, Accounts v2 and Account Link permissions exercised by the
+application; the Convex readback key receives read access for Checkout,
+PaymentIntent, Price, Tax Rate, Refund and Accounts v2. Stage the Accounts v2
+destination disabled, install its signing secret, deploy the route, then enable
+and canary it. Never copy PaymentMethod, card data, a raw webhook body, or one
+destination's signing secret into the other consumer.
+
+The broader previously exposed credential set remains recorded and deferred at
+the user's direction during stabilisation. This does not waive the restricted
+Stripe-key migration required here or permit any exposed credential in
+production.
 
 ### Clerk
 

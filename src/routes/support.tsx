@@ -4,135 +4,80 @@ import { ArrowUpRightIcon } from 'lucide-react'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
+import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 const ISSUE_URL = 'https://github.com/CreasyBear/Agentic-Economy/issues/new/choose'
+const SUPPORT_EMAIL = 'mailto:support@aecon.ai'
 
 export const Route = createFileRoute('/support')({
+  loader: () => readCanonicalBaseUrlServer(),
   head: () => buildPublicPageHead({
     path: '/support',
     title: 'Get help | Agentic Economy',
-    description: 'Diagnose an Agentic Economy connection, continue supplier setup, or report a problem with a request reference.',
+    description: 'Check a Call, continue Provider setup, or contact private support with a safe request reference.',
   }),
   component: SupportRoute,
 })
 
 function SupportRoute() {
+  const canonicalBaseUrl = Route.useLoaderData()
   return (
     <AePublicPage
       kind="document"
       eyebrow="Support"
-      title="Get unstuck."
-      description="Start with the path that failed. Keep any request reference shown in the error—it lets us trace the exact attempt without sharing credentials or private inputs."
+      title="Get help"
+      description="Keep the request or Call reference shown with the problem. It helps us find the right record without asking you to share private inputs."
       actions={
         <Button asChild className="min-h-touch">
-          <a href={ISSUE_URL} target="_blank" rel="noreferrer">
-            Report a problem <ArrowUpRightIcon aria-hidden="true" />
-          </a>
+          <a href={SUPPORT_EMAIL}>Email support</a>
         </Button>
       }
     >
       <div className="ae-rail grid gap-section pb-page">
         <AeSection
           id="message-troubleshooting"
-          title="Match the message you saw"
-          description="Find the exact message, then take the one immediate action shown. Never copy or share secrets, inputs, or private references."
+          title="Continue from the current status"
+          description="The original Call or Operation shows its current state and next action. If the result is uncertain, check that record before trying again."
         >
-          <ul className="grid gap-related md:grid-cols-2">
-            <li className="grid min-w-0 content-start gap-related rounded-md border border-border p-gutter">
-              <div className="grid gap-intra">
-                <h3 className="font-medium text-foreground">No matching credential is selected</h3>
-                <p className="text-sm text-muted-foreground">Connect the installed CLI to this origin.</p>
-              </div>
-              <AeCopyCommand compact label="connect command" code={'ae connect --base-url "$ORIGIN"'} />
-            </li>
-
-            <li className="grid min-w-0 content-start gap-related rounded-md border border-border p-gutter">
-              <div className="grid gap-intra">
-                <h3 className="font-medium text-foreground">Buyer balance is empty / Call declined for insufficient credit</h3>
-                <p className="text-sm text-muted-foreground">Add credit to the buyer account.</p>
-              </div>
-              <Button asChild variant="outline" className="min-h-touch">
-                <Link to="/owner/credit" hash="fund">Add credit</Link>
-              </Button>
-            </li>
-
-            <li className="grid min-w-0 content-start gap-related rounded-md border border-border p-gutter">
-              <div className="grid gap-intra">
-                <h3 className="font-medium text-foreground">Operation is not currently callable</h3>
-                <p className="text-sm text-muted-foreground">
-                  Choose another current Operation. Retrying will not restore supplier readiness.
-                </p>
-              </div>
-              <Button asChild variant="outline" className="min-h-touch">
-                <Link to="/market" search={{ window: '30d' }} hash="operations">
-                  Choose another Operation
-                </Link>
-              </Button>
-            </li>
-
-            <li className="grid min-w-0 content-start gap-related rounded-md border border-border p-gutter">
-              <div className="grid gap-intra">
-                <h3 className="font-medium text-foreground">Payment being verified / Reconciliation required</h3>
-                <p className="text-sm text-muted-foreground">
-                  Inspect the exact receipt in Calls. Do not retry the call.
-                </p>
-              </div>
-              <Button asChild variant="outline" className="min-h-touch">
-                <Link to="/activity">Open Calls</Link>
-              </Button>
-            </li>
-          </ul>
+          <div className="flex flex-wrap gap-related">
+            <Button asChild className="min-h-touch"><Link to="/activity">Open Calls</Link></Button>
+            <Button asChild variant="outline" className="min-h-touch"><Link to="/owner/offerings">Continue Provider setup</Link></Button>
+            <Button asChild variant="outline" className="min-h-touch"><Link to="/owner/credit">Review account credit</Link></Button>
+          </div>
         </AeSection>
-
-        <div className="grid gap-section lg:grid-cols-3">
-          <AeSection
-            title="Agent connection"
-            description="Check the configured origin, server readiness, account, balance, and recovery state in one read-only command."
-          >
-            <AeCopyCommand
-              comfortable
-              label="diagnostic command"
-              code={'ae doctor --base-url "$ORIGIN"'}
-            />
-            <Button asChild variant="outline" className="mt-related min-h-touch">
-              <Link to="/for-agents">Review agent setup</Link>
-            </Button>
-          </AeSection>
-
-          <AeSection
-            title="Supplier setup"
-            description="Resume the existing Operation. Its status page shows the next unfinished setup or readiness action."
-          >
-            <Button asChild className="min-h-touch">
-              <Link to="/owner/offerings">Continue supplier setup</Link>
-            </Button>
-            <Button asChild variant="outline" className="mt-related min-h-touch">
-              <Link to="/for-providers">Review supplier requirements</Link>
-            </Button>
-          </AeSection>
-
-          <AeSection
-            title="Report a problem"
-            description="Include the page or command, what you expected, what happened, and the safe request reference from the error. Never include keys, wallet material, raw inputs, or private results."
-          >
-            <Button asChild className="min-h-touch">
-              <a href={ISSUE_URL} target="_blank" rel="noreferrer">
-                Open issue form <ArrowUpRightIcon aria-hidden="true" />
-              </a>
-            </Button>
-            <p className="mt-related text-sm text-muted-foreground">
-              Listing correction or removal has a separate privacy-safe path.
-            </p>
-            <Link
-              to="/privacy/remove-business"
-              className="mt-intra inline-flex min-h-touch items-center font-medium underline underline-offset-4"
-            >
-              Request a listing correction
-            </Link>
-          </AeSection>
-        </div>
+        <AeSection
+          title="Agent connection"
+          description="Use your client's account connection, then return to your task. Connection and spending permission are separate."
+        >
+          <Button asChild variant="outline" className="min-h-touch"><Link to="/for-agents">Review agent setup</Link></Button>
+          <Accordion type="single" collapsible className="mt-related">
+            <AccordionItem value="diagnostics">
+              <AccordionTrigger>Advanced connection diagnostics</AccordionTrigger>
+              <AccordionContent className="grid gap-related">
+                <p>If you use the AE CLI, this read-only check reports the configured server and account status.</p>
+                <AeCopyCommand comfortable label="diagnostic command" code={`ae doctor --base-url "${canonicalBaseUrl}"`} />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </AeSection>
+        <AeSection
+          title="Contact support privately"
+          description="For account, billing, security or Call problems, email support@aecon.ai with what you expected, what happened and a safe request reference. Do not include credentials, raw inputs or private results."
+        >
+          <p className="text-sm text-muted-foreground">
+            GitHub issues are public. Use them only for non-sensitive developer reports.
+          </p>
+          <Button asChild variant="outline" className="mt-related min-h-touch">
+            <a href={ISSUE_URL} target="_blank" rel="noreferrer">Open a public developer issue <ArrowUpRightIcon aria-hidden="true" /></a>
+          </Button>
+          <div className="mt-related flex flex-wrap gap-related">
+            <Link to="/for-providers" className="inline-flex min-h-touch items-center underline underline-offset-4">Review Provider requirements</Link>
+            <Link to="/privacy/remove-business" className="inline-flex min-h-touch items-center underline underline-offset-4">Request a listing correction</Link>
+          </div>
+        </AeSection>
       </div>
     </AePublicPage>
   )

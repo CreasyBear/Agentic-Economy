@@ -10,6 +10,12 @@ import {
   type StoredOAuthClientInformation,
   type StoredOAuthTokens,
 } from '@modelcontextprotocol/client'
+import {
+  OAuthMetadataSchema,
+  OAuthProtectedResourceMetadataSchema,
+  OpenIdProviderDiscoveryMetadataSchema,
+  SafeUrlSchema,
+} from '@modelcontextprotocol/sdk/shared/auth.js'
 import * as oauth from 'oauth4webapi'
 
 import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
@@ -42,11 +48,13 @@ import {
   secretRef,
 } from '@/modules/secrets/public'
 import {
+  cancelOwnerProviderConnectionAttemptInputSchema,
   completeOwnerHttpProviderConnectionInputSchema,
   completeOwnerMcpProviderConnectionInputSchema,
   ownerProviderConnectionAttemptInputSchema,
   startOwnerMcpProviderConnectionInputSchema,
   type OwnerHttpProviderConnectionResult,
+  type CancelOwnerProviderConnectionAttemptResult,
   type OwnerMcpProviderConnectionStartResult,
   type OwnerProviderConnectionAttemptReadback,
   type ProviderOAuthCleanupResult,
@@ -54,12 +62,14 @@ import {
 } from './provider-connection-handoff-contract'
 
 export {
+  cancelOwnerProviderConnectionAttemptInputSchema,
   completeOwnerHttpProviderConnectionInputSchema,
   completeOwnerMcpProviderConnectionInputSchema,
   ownerProviderConnectionAttemptInputSchema,
   startOwnerMcpProviderConnectionInputSchema,
 } from './provider-connection-handoff-contract'
 export type {
+  CancelOwnerProviderConnectionAttemptResult,
   OwnerHttpProviderConnectionResult,
   OwnerMcpProviderConnectionStartResult,
   OwnerProviderConnectionAttemptReadback,
@@ -228,6 +238,19 @@ const finalizeOwnerAttemptMutation = sourceMutation<
   Record<string, unknown>,
   OwnerHttpProviderConnectionResult
 >('capabilityProviderConnectionAttempts:finalizeOwner')
+const cancelOwnerAttemptMutation = sourceMutation<Record<string, unknown>, CancelOwnerProviderConnectionAttemptResult>('capabilityProviderConnectionAttempts:cancelOwner')
+
+export async function cancelOwnerProviderConnectionAttempt({ data, context }: {
+  data: z.infer<typeof cancelOwnerProviderConnectionAttemptInputSchema>
+  context: unknown
+}): Promise<CancelOwnerProviderConnectionAttemptResult> {
+  const operationKey = canonicalDigest({ action: 'supply.connection.cancel', attemptRef: data.attemptRef, idempotencyKey: data.idempotencyKey })
+  let proof: Awaited<ReturnType<typeof requireStrictClerkConsequenceProof>>
+  try { proof = await requireStrictClerkConsequenceProof(operationKey) } catch { return { kind: 'refused', code: 'reauthentication_required' } }
+  try {
+    return await admittedMutation(cancelOwnerAttemptMutation, { attemptRef: data.attemptRef, commandId: operationKey, operationKey, correlationId: operationKey, proof }, context, operationKey)
+  } catch { return { kind: 'refused', code: 'source_unavailable' } }
+}
 
 const prepareOwnerOAuthAttemptMutation = sourceMutation<
   Record<string, unknown>,
@@ -368,7 +391,8 @@ export async function startOwnerMcpProviderConnection(
 ): Promise<OwnerMcpProviderConnectionStartResult> {
   if (!package5RolloutDecision('mcpOAuth').enabled) return startRefusal('not_supported')
   const now = runtime.now ?? Date.now
-  const attempt = await safeReadOwnerAttempt(data.attemptRef)
+  let attempt: OwnerProviderConnectionAttemptReadback
+  try { attempt = await readOwnerProviderConnectionAttempt({ data: { attemptRef: data.attemptRef } }) } catch { return startRefusal('source_unavailable') }
   if (attempt.kind !== 'available') return startRefusal('not_found')
   if (attempt.attempt.sourceKind !== 'mcp_oauth') return startRefusal('not_supported')
   if (attempt.attempt.state === 'expired' || attempt.attempt.expiresAt <= now()) {
@@ -654,8 +678,10 @@ export async function completeOwnerMcpProviderConnection(
   const now = runtime.now ?? Date.now
   const callbackParams = new URLSearchParams(data.callbackParameters)
   const states = callbackParams.getAll('state')
-  if (states.length !== 1 || !validOAuthState(states[0]!)) return refusal('not_found')
-  const state = states[0]!
+  const state = states[0]
+  if (states.length !== 1 || state === undefined || !validOAuthState(state)) {
+    return refusal('not_found')
+  }
   let callback: OAuthCallbackReadback
   try {
     callback = await callSourceQuery(readOwnerOAuthCallbackQuery, {
@@ -805,14 +831,6 @@ async function writeThroughExistingSecretLifecycle(
   }
 }
 
-async function safeReadOwnerAttempt(attemptRef: string): Promise<OwnerProviderConnectionAttemptReadback> {
-  try {
-    return await readOwnerProviderConnectionAttempt({ data: { attemptRef } })
-  } catch {
-    return { kind: 'not_found' }
-  }
-}
-
 function canonicalOAuthCallback(value: string, attemptRef: string): string | undefined {
   try {
     const url = new URL(value)
@@ -870,6 +888,29 @@ const secretAuthoritySchema = z.strictObject({
   occurredAt: z.number().int().nonnegative(),
 })
 
+const oauthDiscoveryStateSchema = z.looseObject({
+  authorizationServerUrl: SafeUrlSchema,
+  authorizationServerMetadata: OAuthMetadataSchema
+    .or(OpenIdProviderDiscoveryMetadataSchema)
+    .optional(),
+  resourceMetadata: OAuthProtectedResourceMetadataSchema.optional(),
+  resourceMetadataUrl: SafeUrlSchema.optional(),
+}).transform(({
+  authorizationServerUrl,
+  authorizationServerMetadata,
+  resourceMetadata,
+  resourceMetadataUrl,
+  ...extensions
+}) => ({
+  ...extensions,
+  authorizationServerUrl,
+  ...(authorizationServerMetadata === undefined
+    ? {}
+    : { authorizationServerMetadata }),
+  ...(resourceMetadata === undefined ? {} : { resourceMetadata }),
+  ...(resourceMetadataUrl === undefined ? {} : { resourceMetadataUrl }),
+})) satisfies z.ZodType<OAuthDiscoveryState>
+
 const storedSessionSchema = z.strictObject({
   version: z.literal('ae.mcp-oauth-session:v1'),
   attemptRef: z.string().min(1).max(300),
@@ -880,7 +921,7 @@ const storedSessionSchema = z.strictObject({
   codeVerifier: z.string().min(43).max(128).optional(),
   clientInformation: z.record(z.string(), z.unknown()).optional(),
   tokens: z.record(z.string(), z.unknown()).optional(),
-  discoveryState: z.record(z.string(), z.unknown()).optional(),
+  discoveryState: oauthDiscoveryStateSchema.optional(),
   resourceUrl: z.url().max(2_048).optional(),
   rotationAuthority: secretAuthoritySchema,
   rotationIdempotencyRef: z.string().min(1).max(200),
@@ -992,7 +1033,7 @@ class StoredMcpOAuthProvider implements OAuthClientProvider {
       }),
       ...(parsed.tokens === undefined ? {} : { tokens: parsed.tokens as StoredOAuthTokens }),
       ...(parsed.discoveryState === undefined ? {} : {
-        discoveryState: parsed.discoveryState as unknown as OAuthDiscoveryState,
+        discoveryState: parsed.discoveryState,
       }),
       ...(parsed.resourceUrl === undefined ? {} : { resourceUrl: parsed.resourceUrl }),
       rotationAuthority: parsed.rotationAuthority,

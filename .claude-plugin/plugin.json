@@ -3,7 +3,7 @@
   "name": "agentic-economy",
   "displayName": "Agentic Economy",
   "version": "0.1.0",
-  "description": "One connection for your agent: search the Operation catalog, inspect exact inputs and price, then call Operations per use from one wallet.",
+  "description": "Find an outside service, review its terms, and make an authorized Call through Agentic Economy.",
   "author": {
     "name": "Agentic Economy"
   },

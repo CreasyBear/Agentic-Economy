@@ -193,6 +193,7 @@ describe('owner x402 connection onboarding', () => {
         'connection:install',
         'connection:refresh',
         'connection:revoke',
+        'secret:rotate',
       ],
       resourceRefs: expect.arrayContaining([
         'connection-provider:x402',

@@ -67,6 +67,31 @@ function listedVitestFiles(name: string): string[] {
 }
 
 describe('green release baseline', () => {
+  it('keeps local and Convex Node runtimes on the same project major', () => {
+    const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
+    const convex = JSON.parse(readFileSync(resolve(root, 'convex.json'), 'utf8'))
+    const major = readFileSync(resolve(root, '.nvmrc'), 'utf8').trim()
+    expect(major).toBe('22')
+    expect(manifest.engines.node).toBe(`${major}.x`)
+    expect(convex.node.nodeVersion).toBe(major)
+    expect(manifest.packageManager).toBe('npm@11.5.1')
+  })
+
+  it('runs a guarded command on Node 22 and preserves its exit status', () => {
+    const result = spawnSync(process.execPath, [
+      'tools/dev/require-supported-node.mjs', '--', 'node', '-e',
+      'console.log(process.versions.node); process.exit(17)',
+    ], { cwd: root, encoding: 'utf8' })
+    if (process.versions.node.startsWith('22.')) {
+      expect(result.stdout.trim()).toBe(process.versions.node)
+      expect(result.status).toBe(17)
+    } else {
+      expect(result.status).toBe(1)
+      expect(result.stdout).toBe('')
+      expect(result.stderr).toContain('this project requires Node 22')
+    }
+  })
+
   it('fails closed when an explicit conformance test path is missing', () => {
     for (const scriptName of ['test:conformance', 'test:chat:conformance']) {
       const files = listedVitestFiles(scriptName)

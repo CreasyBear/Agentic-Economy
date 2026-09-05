@@ -49,6 +49,7 @@ export const operationInvokeAction = defineAction<OperationInvokeInput, Operatio
     approval: 'mandate_eligible',
   },
   surfaces: ['http', 'mcp', 'cli', 'chat'],
+  mcp: { idempotent: true, openWorld: true, destructive: true },
   credentialAdmission: {
     scope: OPERATION_INVOKE_ROUTE_CONTRACT.scope,
     authority: 'descriptor_classified',

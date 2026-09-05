@@ -262,9 +262,12 @@ export async function startOwnerSupplySourceConnection({
     businessId: data.businessId,
     sourceKind: 'http_credential',
     sourceUrl: data.source.definitionUrl,
+    sourceDescriptorJson: stableStringify(data.source as never),
     authentication: candidate.authentication,
     environment: data.source.environment,
     idempotencyKey: data.idempotencyKey,
+    candidateDraftRef: data.candidateRef,
+    candidateSourceDigest: data.expectedSourceDigest,
     context,
     title: 'Connect service',
     description: 'Enter the service credential securely, then AE will return to this Operation.',
@@ -287,6 +290,8 @@ async function reserveOwnerSourceConnection(input: Readonly<{
   title: string
   description: string
   ctaLabel: string
+  candidateDraftRef?: string
+  candidateSourceDigest?: string
 }>): Promise<SupplySourcePreview> {
   const inputDigest = canonicalDigest({
     format: 'provider-connection-attempt-input:v1',
@@ -296,6 +301,8 @@ async function reserveOwnerSourceConnection(input: Readonly<{
     authentication: input.authentication,
     environment: input.environment,
     ...(input.sourceDescriptorJson === undefined ? {} : { sourceDescriptorJson: input.sourceDescriptorJson }),
+    ...(input.candidateDraftRef === undefined ? {} : { candidateDraftRef: input.candidateDraftRef }),
+    ...(input.candidateSourceDigest === undefined ? {} : { candidateSourceDigest: input.candidateSourceDigest }),
   })
   const operationKey = canonicalDigest({
     action: 'supply.connection.connect',
@@ -313,6 +320,8 @@ async function reserveOwnerSourceConnection(input: Readonly<{
     commandId: operationKey,
     operationKey,
     correlationId: operationKey,
+    ...(input.candidateDraftRef === undefined ? {} : { candidateDraftRef: input.candidateDraftRef }),
+    ...(input.candidateSourceDigest === undefined ? {} : { candidateSourceDigest: input.candidateSourceDigest }),
   }
   try {
     const sourceWrite = await sourceWriteAdmissionFromContext({
@@ -350,7 +359,7 @@ export type OwnerSupplySourceResumeResult =
   | Readonly<{
       kind: 'available'
       source: SupplySourceInput
-      preview: Extract<SupplySourcePreview, { kind: 'ready' }>
+      preview?: Extract<SupplySourcePreview, { kind: 'ready' }>
       candidateRef: string
       connectionRef?: string
     }>
@@ -363,12 +372,12 @@ export async function resumeOwnerSupplySourceDraft({
 }): Promise<OwnerSupplySourceResumeResult> {
   const selectedSource = await callSourceQuery(readSourceSelectionDraftQuery, { draftRef: data.draftRef })
   if (selectedSource.kind === 'available') {
-    if (selectedSource.draft.businessRef !== data.businessId
-      || selectedSource.draft.state !== 'connected'
-      || selectedSource.draft.connectionRef === undefined
-      || selectedSource.draft.connectionRef !== data.connectionRef) {
+    if (selectedSource.draft.businessRef !== data.businessId) {
       return { kind: 'not_found' }
     }
+    if (selectedSource.draft.state === 'connected'
+      && (selectedSource.draft.connectionRef === undefined
+        || selectedSource.draft.connectionRef !== data.connectionRef)) return { kind: 'not_found' }
     let rawSource: unknown
     try {
       rawSource = JSON.parse(selectedSource.draft.sourceDescriptorJson) as unknown
@@ -379,18 +388,25 @@ export async function resumeOwnerSupplySourceDraft({
     if (!parsed.success || (parsed.data.kind !== 'mcp' && parsed.data.kind !== 'agent_plugin')) {
       return { kind: 'source_changed' }
     }
+    if (selectedSource.draft.state !== 'connected') {
+      return data.connectionRef === undefined
+        ? { kind: 'available', source: parsed.data, candidateRef: '' }
+        : { kind: 'not_found' }
+    }
+    const connectionRef = selectedSource.draft.connectionRef
+    if (connectionRef === undefined) return { kind: 'not_found' }
     const preview = await previewSupplySource(parsed.data, connectedSourceDependencies({
       source: parsed.data,
       businessRef: data.businessId,
       environment: parsed.data.environment,
-    }, selectedSource.draft.connectionRef))
+    }, connectionRef))
     if (preview.kind !== 'ready') return { kind: 'source_changed' }
     return {
       kind: 'available',
       source: parsed.data,
       preview,
       candidateRef: '',
-      connectionRef: selectedSource.draft.connectionRef,
+      connectionRef,
     }
   }
   if (!/^sha256:[0-9a-f]{64}$/u.test(data.draftRef)) return { kind: 'not_found' }

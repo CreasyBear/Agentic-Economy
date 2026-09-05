@@ -1,4 +1,4 @@
 interface:
   display_name: "Deployment Operations"
-  short_description: "Trace, operate, and assess AE deployments"
-  default_prompt: "Use $deployment-operations to inventory this environment, trace its service and credential links, assess maturity, and identify the safest next operational action."
+  short_description: "Stabilise, operate, and recover AE deployments"
+  default_prompt: "Use $deployment-operations to verify the live baseline, trace this environment's service and credential boundaries, enforce AWS foundation gates, and take the safest evidence-backed operational action."

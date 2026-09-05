@@ -1,4 +1,5 @@
 export {
+  cancelOwnerProviderConnectionAttempt,
   completeOwnerHttpProviderConnection,
   loadOwnerConnectedOpenApi,
   completeOwnerMcpProviderConnection,

@@ -71,7 +71,7 @@ describe('sign-up account entry', () => {
 
     render(<Component />)
 
-    expect(screen.getByRole('heading', { name: 'Create a supplier account' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Create a Provider account' })).toBeTruthy()
     expect(screen.getByText('After you create your account, you’ll continue to the Operation publishing workspace.')).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/owner/supply',
@@ -87,7 +87,7 @@ describe('sign-up account entry', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Create an account to connect an agent' })).toBeTruthy()
-    expect(screen.getByText('After you create your account, you’ll return to Access and create a caller identity.')).toBeTruthy()
+    expect(screen.getByText('After you create your account, you’ll return to the agent connection you started.')).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/agent-access',
       signInUrl: '/sign-in',

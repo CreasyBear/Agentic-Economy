@@ -8,7 +8,6 @@ import {
   type StripeMoneyWebhookEvent,
 } from "@/modules/money/public";
 import { readCheckoutSessionMaterial } from "./stripe-checkout-evidence";
-import { accountObjectDigest } from "./stripe-connect-evidence";
 import { refundMaterial } from "./stripe-refund-evidence";
 import {
   refusal,
@@ -23,13 +22,9 @@ import {
 type CheckoutWebhookEventType =
   | "checkout.session.completed"
   | "checkout.session.async_payment_succeeded"
-  | "checkout.session.async_payment_failed"
-  | "checkout.session.expired";
+  | "checkout.session.async_payment_failed";
 
-type StripeV2AccountEventType = Exclude<
-  StripeAccountUpdatedWebhookEvent["eventType"],
-  "account.updated"
->;
+type StripeV2AccountEventType = StripeAccountUpdatedWebhookEvent["eventType"];
 type StripeV2AccountEventNotification = Extract<
   Stripe.V2.Core.EventNotification,
   { type: StripeV2AccountEventType }
@@ -55,12 +50,9 @@ export function mapStripeMoneyWebhookEvent(
     return refusal("payment_binding_invalid", false);
   }
   switch (event.type) {
-    case "account.updated":
-      return mapAccountUpdatedWebhookEvent(event, input.config);
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded":
     case "checkout.session.async_payment_failed":
-    case "checkout.session.expired":
       return mapCheckoutSessionWebhookEvent(event, input.config);
     case "refund.created":
     case "refund.updated":
@@ -116,6 +108,7 @@ export async function verifyStripeMoneyWebhook(
     Readonly<{
       rawBody: string;
       signature: string;
+      destination?: "snapshot" | "accounts_v2";
     }>,
 ): Promise<StripeMoneyWebhookEvent | MoneyRefusal> {
   const context = resolveStripeMoneyProviderContext(input);
@@ -126,15 +119,18 @@ export async function verifyStripeMoneyWebhook(
   )
     return refusal("payment_binding_invalid", false);
   try {
-    const envelope = JSON.parse(input.rawBody) as unknown;
-    if (isV2EventEnvelope(envelope)) {
+    if (input.destination === "accounts_v2") {
+      if (context.config.v2WebhookSecret === undefined)
+        return refusal("stripe_setup_required", false);
       const notification = context.client.parseEventNotification(
         input.rawBody,
         input.signature,
-        context.config.webhookSecret,
+        context.config.v2WebhookSecret,
       );
       return mapStripeV2AccountNotification(notification, context.config);
     }
+    if (context.config.webhookSecret === undefined)
+      return refusal("stripe_setup_required", false);
     const event = context.client.webhooks.constructEvent(
       input.rawBody,
       input.signature,
@@ -173,8 +169,6 @@ function mapCheckoutSessionWebhookEvent(
     session.payment_status !== "paid"
   )
     return refusal("payment_binding_invalid", false);
-  if (event.type === "checkout.session.expired" && session.status !== "expired")
-    return refusal("payment_binding_invalid", false);
   const payloadDigest = canonicalDigest({
     format: "stripe-webhook-payload:v1",
     event,
@@ -204,10 +198,8 @@ function mapCheckoutSessionWebhookEvent(
 function checkoutWebhookStatus(
   eventType: CheckoutWebhookEventType,
   session: Stripe.Checkout.Session,
-): "expired" | "failed" | "processing" | "paid" {
+): "failed" | "processing" | "paid" {
   switch (eventType) {
-    case "checkout.session.expired":
-      return "expired";
     case "checkout.session.async_payment_failed":
       return "failed";
     case "checkout.session.completed":
@@ -219,42 +211,6 @@ function checkoutWebhookStatus(
       return exhaustive;
     }
   }
-}
-
-function mapAccountUpdatedWebhookEvent(
-  event: Stripe.AccountUpdatedEvent,
-  config: StripeMoneyProviderConfig,
-): StripeMoneyWebhookEvent | MoneyRefusal {
-  const account = event.data.object;
-  if (
-    !validIdentifier(account.id) ||
-    !sessionMatchesMode(event.livemode, config.mode)
-  )
-    return refusal("payment_binding_invalid", false);
-  return {
-    kind: "account",
-    stripeEventId: event.id,
-    eventType: "account.updated",
-    externalRef: account.id,
-    stripeAccountId: account.id,
-    providerObjectDigest: accountObjectDigest(account),
-    payloadDigest: canonicalDigest({
-      eventId: event.id,
-      eventType: event.type,
-      created: event.created,
-      livemode: event.livemode,
-      account: {
-        id: account.id,
-        object: account.object,
-        chargesEnabled: account.charges_enabled,
-        payoutsEnabled: account.payouts_enabled,
-        detailsSubmitted: account.details_submitted,
-        capabilities: account.capabilities ?? null,
-        requirements: account.requirements ?? null,
-      },
-    }),
-    observedAt: event.created * 1000,
-  };
 }
 
 function mapStripeV2AccountNotification(
@@ -295,17 +251,6 @@ function mapStripeV2AccountNotification(
     payloadDigest,
     observedAt,
   };
-}
-
-function isV2EventEnvelope(
-  value: unknown,
-): value is Readonly<{ object: "v2.core.event" }> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "object" in value &&
-    value.object === "v2.core.event"
-  );
 }
 
 function isV2AccountEventNotification(

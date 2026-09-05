@@ -1,86 +1,77 @@
 # Agentic Economy
 
-Agentic Economy is the market and commercial boundary for just-in-time service
-procurement by software agents.
+Agentic Economy helps Australian businesses connect their agents to paid tools
+and services through one account, with AUD credit, spending controls, clear usage
+and billing records, and recovery when something goes wrong. x402 services are
+the first supported supply.
 
-An agent can encounter a capability gap after work has begun, compare outside
-Providers and buy one bounded contribution without moving the larger project
-into another platform. For supported purchases, Agentic Economy is the fixed
-buyer-facing Seller. It preserves the authority, exact service, buyer
-consideration, Provider obligation, delivery evidence and remedy needed to make
-the event explainable to the business behind the agent.
+**The current goal is a mature Australian equivalent of the familiar Locus and
+Nevermined experience, not a unique or differentiated product yet.** Follow proven
+setup, account management, publishing, payment and developer patterns. Adapt
+where Australia or a concrete correctness requirement calls for it.
 
-The market unit is the **Operation**: one versioned, callable contribution with
-fixed inputs, price, terms, effects, readiness and evidence.
+An agent stays in its existing app or framework. It finds a service when needed,
+checks the price and terms, and makes a Call within its spending policy. AE does
+not own the agent's larger project, planning, memory or orchestration.
 
-Read the [product charter](./PRODUCT.md) for the active product and
-[the Australian whitepaper](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md) for the
-institutional argument.
+Read [PRODUCT.md](./PRODUCT.md) for the active direction,
+[CONTEXT.md](./CONTEXT.md) for familiar product terms and their existing code/API
+names, and the [Australian whitepaper](./AGENTIC_ECONOMY_AUSTRALIA_WHITEPAPER.md)
+for the institutional thesis.
 
 ## The product loop
 
 ```text
-capability gap
-    -> resolution
-    -> commitment
-    -> invocation
-    -> delivery or uncertainty
-    -> remedy if required
-    -> commercial closure
-    -> outcome evidence
-    -> agent continues
+find and compare services -> quote and spending checks -> Call
+    -> result or pending outcome -> recovery or refund if required
+    -> resolved purchase -> agent continues
 ```
 
-The Commitment binds the Business Principal, acting Agent Principal, delegated
-authority, exact Operation, Provider, Seller, price ceiling, terms, data use,
-effects and retry rule before anything consequential happens.
+A quote binds the customer, agent, spending policy, exact service, Provider,
+Seller, inputs, price ceiling, terms, data use, effects and retry rule before a
+paid Call. Calls with uncertain delivery or payment remain open for recovery;
+a successful payment alone does not establish delivery.
 
-Commercial closure is the terminal explainable state of the purchase. Delivered,
-failed, adjusted and refunded purchases may be closed. An uncertain purchase
-remains open until its delivery, settlement or external effect can be reconciled.
+For supported resale purchases, AE is the buyer-facing Seller. The Provider
+performs the service, and the amount AE owes the Provider is recorded separately
+from the customer's charge. AUD customer credit is not a crypto wallet.
 
-Agentic Economy does not own the agent's project, planning, memory, harness or
-general orchestration. It owns the admitted market boundary and the bounded
-purchase record.
-
-For the managed x402 lane, one shared AUD Account balance may serve several
-durable Agent Principals under separate hard limits. Authentication resolves
-the Account. The recommended machine path is `search -> operation.inspect ->
-operation.invoke -> result`; status or reconcile appears only when required.
-Public detail, comparison, whoami and balance remain optional reads. The agent
-never supplies a wallet or Account reference, coordinates treasury, calculates
-FX, writes ledger entries or guesses whether an uncertain payment is safe to
-retry.
+One shared account balance can serve several agents under separate hard limits.
+Authentication resolves the account. The supported machine path remains
+`registry.operations.search -> operation.inspect -> operation.invoke -> result`.
+Status and recovery appear only when needed. Public detail, comparison, whoami
+and balance are optional reads. Agents do not coordinate treasury, calculate
+foreign exchange, write ledger entries or guess whether payment can be retried.
 
 ## Current stage
 
-The implemented foundation includes canonical Operations, comparison,
-Commitment, brokered Invocation, prepaid buyer credit, Charges, Provider
+The implemented foundation includes canonical services, comparison,
+quotes, brokered Calls, prepaid buyer credit, Charges, Provider
 earnings, refunds, status and recovery.
 
 The complete Australian principal-reseller record is the next product milestone.
 Buyer-facing Seller identity, a separate Provider obligation, attributed tax
-facts, business-document evidence and commercial closure are not yet one
+facts, business-document evidence and purchase resolution are not yet one
 explicit production record. Source and tests remain the authority for current
 behaviour.
 
 ## Current product entrances
 
-- `/market` exposes the public Operation catalogue and comparison flow.
+- `/market` exposes the public service catalogue and comparison flow.
 - `/t/new` provides a thin natural-language entrance to the same market.
 - `/api/v1/market-operations/*` exposes canonical discovery and inspection.
-- `/api/v1/operations/call` accepts consequential Invocation.
+- `/api/v1/operations/call` accepts paid or consequential Calls.
 - `/mcp`, `/llms.txt` and `/SKILL.md` support machine discovery.
-- `@agentic-economy/cli` supports search, inspection, Invocation, status and
+- `@agentic-economy/cli` supports search, inspection, Calls, status and
   recovery.
-- `/for-providers` admits and publishes Provider Operations.
+- `/for-providers` admits and publishes Provider services.
 
 Chat exposes only search, detail, comparison, inspection and eligible keyless
 execution. Paid or consequential work remains on the authenticated HTTP, MCP
 and CLI purchase plane.
 
 The external registry discovers possible supply at metadata authority only. An
-imported record is not an Operation and cannot be invoked until Agentic Economy
+imported record is not a service and cannot be invoked until Agentic Economy
 admits and publishes it.
 
 ## Documentation authority
@@ -100,11 +91,13 @@ admits and publishes it.
 Dated research, comparison papers, gauntlets and working ledgers inform the
 product but do not override these documents.
 
-## Publish an x402 Operation
+<a id="publish-an-x402-operation"></a>
+
+## Publish an x402 service
 
 Use the [x402 Provider onboarding guide](./X402_SELLER_ONBOARDING.md) to admit a
 hosted x402 service. The guide covers an unpaid protocol inspection, Provider
-ownership proof, Operation staging, one explicitly authorised Base Sepolia
+ownership proof, service staging, one explicitly authorised Base Sepolia
 canary and reconciliation without duplicate payment.
 
 An x402 payee is a payment recipient. The wallet address does not, by itself,
@@ -115,9 +108,19 @@ establish the commercial Seller or Provider.
 Use Node.js 22 and npm 11.5.1.
 
 ```sh
+nvm install
+nvm use
+npm install --global npm@11.5.1 --ignore-scripts
 npm ci
 npm run dev:local
 ```
+
+`.nvmrc`, `package.json` and `convex.json` select Node 22; CI uses the same
+Node major and npm version. With NVM's project auto-switching enabled, entering
+this checkout selects Node 22 without changing other projects' defaults.
+For an agent shell that does not load NVM, use its supplied runner from the
+project directory: `NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npm run check:convex-codegen`.
+Restart existing terminals or select Node 22 explicitly after changing shell setup.
 
 Open `http://127.0.0.1:3024/market` for the catalogue or
 `http://127.0.0.1:3024/t/new` for chat.
@@ -125,8 +128,9 @@ Open `http://127.0.0.1:3024/market` for the catalogue or
 ## Stripe production setup
 
 Use one Stripe live-mode account for credit purchases and Provider payouts. Set
-`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and
-`STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`. The Tax Rate must be active,
+`STRIPE_SECRET_KEY`, `STRIPE_READBACK_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`STRIPE_V2_WEBHOOK_SECRET`, and `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`.
+The API keys must be restricted and the Tax Rate must be active,
 inclusive, Australian, and exactly 10%; AE verifies that evidence before
 returning a hosted Checkout link. Production readiness rejects test-mode or
 malformed values.
@@ -166,6 +170,6 @@ ae --version
 ae search "weather forecast" --base-url "$AE_ORIGIN" --limit 5
 npx --yes add-mcp@2.3.0 "$AE_ORIGIN/mcp" --name agentic-economy --transport http --global --agent "<codex|claude-code|cursor>" --yes
 ae doctor --base-url "$AE_ORIGIN" --json
-ae inspect <operationRef> --base-url "$AE_ORIGIN"
+ae describe <operationRef> --base-url "$AE_ORIGIN"
 ae call <operationRef> --input '{"city":"Perth"}' --base-url "$AE_ORIGIN"
 ```

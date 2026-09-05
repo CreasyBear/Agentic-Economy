@@ -4,6 +4,7 @@ Start here when operating or handing off an Agentic Economy environment.
 
 | Document | Use it for |
 | --- | --- |
+| `aws-foundation.md` | Operate the AWS baseline, startup constraints, recovery proof and production gate. |
 | `deployment-architecture.md` | Understand service boundaries, authority, request flows, and environment lifecycle. |
 | `deployment-registry.yaml` | Find the last verified environment IDs, links, versions, credential custody, and blockers. |
 | `credentials-and-access.md` | Identify key ownership, safe custody, rotation, revocation, and compromise response. |

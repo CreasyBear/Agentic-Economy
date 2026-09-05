@@ -111,8 +111,9 @@ export function stateIntegrity(current: ProviderConnection, now: number): Provid
     if (origin === undefined || origin !== current.sourceOrigin) return 'invalid_resource'
     if (current.sourceEnvironment !== 'sandbox' && current.sourceEnvironment !== 'production') return 'invalid_identity'
     if (!validSourceAuthentication(current.sourceAuthentication, current.adapterId)) return 'invalid_identity'
-    if (current.grantedResources.length !== 1
-      || validSourceOrigin(current.grantedResources[0]!) !== current.sourceOrigin) return 'invalid_resource'
+    const [grantedResource] = current.grantedResources
+    if (current.grantedResources.length !== 1 || grantedResource === undefined
+      || validSourceOrigin(grantedResource) !== current.sourceOrigin) return 'invalid_resource'
   }
   if (current.healthStatus !== undefined && current.healthStatus !== 'healthy' && current.healthStatus !== 'unhealthy') return 'invalid_transition'
   if (current.healthCheckedAt !== undefined && !validTimestamp(current.healthCheckedAt)) return 'invalid_time'

@@ -36,5 +36,6 @@ locals {
     gateway_version        = "v2.3.1@sha256:239926753312410ee9a602aa0bffe1e5c89cd340540a98a6df58694f3d6e4165"
     caddy_image            = "docker.io/library/caddy:2.7.6-alpine@sha256:2e1d4592f1718bb47645da5a83a846fe19094f18e6c921fdf56d174f05c63213"
     cloudflared_image      = "cloudflare/cloudflared:2026.7.2@sha256:4f6655284ab3d252b7f28fedb19fe6c8fc82ee5b1295c20ac74d475e5398a52d"
+    cloudwatch_agent       = "1.300072.0b1766"
   }
 }

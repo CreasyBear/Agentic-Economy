@@ -572,7 +572,14 @@ function assertNoClientExposedSourceWriteKeys(env: Env): void {
 }
 
 function assertNotProviderSecret(secret: string, env: Env, envName: string): void {
-  const providerSecretNames = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'AUTUMN_SECRET_KEY', 'AUTUMN_WEBHOOK_SECRET']
+  const providerSecretNames = [
+    'STRIPE_SECRET_KEY',
+    'STRIPE_READBACK_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'STRIPE_V2_WEBHOOK_SECRET',
+    'AUTUMN_SECRET_KEY',
+    'AUTUMN_WEBHOOK_SECRET',
+  ]
   for (const providerName of providerSecretNames) {
     const providerSecret = readTrimmedEnv(env, providerName)
     if (providerSecret !== undefined && constantTimeStringEqual(secret, providerSecret)) {

@@ -396,6 +396,38 @@ export async function refreshCapabilityThroughTestSeam(
   binding: CapabilityPublicationBindingDraft | undefined,
   context: PublicationOperationContext,
 ) {
+  const explicitOrigin = offering?.origin
+  let preparationOffering: CapabilityPublicationOfferingDraft | undefined
+  if (offering !== undefined) {
+    const { origin: _origin, ...offeringWithoutOrigin } = offering
+    preparationOffering = offeringWithoutOrigin
+  }
+  const preparationSource = source.kind === 'ae_envelope'
+    && preparationOffering !== undefined
+    && binding !== undefined
+    ? { ...source, offering: preparationOffering, binding }
+    : source
+  const fixture = await prepareCapabilityPublicationMutation(backend, {
+    businessId,
+    source: preparationSource,
+    ...(preparationOffering === undefined
+      ? {}
+      : { offering: preparationOffering }),
+    ...(binding === undefined ? {} : { binding }),
+    ...context,
+  })
+  const preparedOffering = {
+    ...fixture.prepared.offering,
+    ...(explicitOrigin === undefined ? {} : { origin: explicitOrigin }),
+  }
+  const preparedBinding = fixture.prepared.binding
+  const preparedSource = source.kind === 'ae_envelope'
+    ? {
+        ...source,
+        offering: preparedOffering,
+        binding: preparedBinding,
+      }
+    : source
   return await backend.run(async (ctx) => {
     const ports = publicationPorts(ctx)
     const publication = await ports.loadPublicationAtRevision(
@@ -404,12 +436,21 @@ export async function refreshCapabilityThroughTestSeam(
     )
     if (publication === null)
       throw new Error('refresh_test_publication_missing')
+    const currentOffering = await ports.loadOfferingByOfferingId(
+      publication.offeringId,
+    )
+    if (currentOffering === null)
+      throw new Error('refresh_test_offering_missing')
+    if (
+      explicitOrigin === undefined
+      && canonicalDigest(preparedOffering.origin) !== canonicalDigest(currentOffering.origin)
+    ) throw new Error('refresh_test_offering_origin_changed')
     const result = await refreshCapabilityCommand(
       {
         publication,
-        source,
-        offering,
-        binding,
+        source: preparedSource,
+        offering: undefined,
+        binding: preparedBinding,
         ...context,
         now: Date.now(),
       },

@@ -131,13 +131,7 @@ export async function createOrRecoverTransfer(
       await client.transfers.create(params, { idempotencyKey }),
     );
   } catch {
-    try {
-      created = responseData(
-        await client.transfers.create(params, { idempotencyKey }),
-      );
-    } catch {
-      return refusal("payout_outcome_unknown", true);
-    }
+    return refusal("payout_outcome_unknown", true);
   }
   if (!validTransferId(created.id))
     return refusal("payment_binding_invalid", false);

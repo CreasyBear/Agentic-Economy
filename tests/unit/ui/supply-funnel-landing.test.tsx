@@ -7,26 +7,25 @@ import { describe, expect, it } from "vitest";
 import { AeSupplyLanding } from "@/components/ae/supply/AeSupplyLanding";
 
 describe("supply landing", () => {
-  it("leads with the supplier path and published Operation rows", () => {
+  it("leads with a plain-language Provider fit decision and published Operation rows", () => {
     renderWithRouter(<AeSupplyLanding tools={[tool]} operations={[operation]} />);
     expect(
-      screen.getByRole("heading", { name: "Publish an Operation." }),
+      screen.getByRole("heading", { name: "List a service." }),
     ).toBeDefined();
     expect(screen.getByText("Suppliers")).toBeDefined();
     expect(
       screen
-        .getByRole("link", { name: "Create or continue an Operation" })
+        .getByRole("link", { name: "List a service" })
         .getAttribute("href"),
     ).toBe("/owner/offerings");
-    expect(screen.getByRole("heading", { name: "Know what AE will ask for." })).toBeDefined();
-    expect(screen.getByText(/one callable job an agent can search/i)).toBeDefined();
-    expect(screen.getByText(/OpenAPI 3\.1 GET or POST/i)).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Check whether your service is a fit." })).toBeDefined();
+    expect(screen.getByText(/List one service an agent can search/i)).toBeDefined();
+    expect(screen.getByText(/supported OpenAPI document, remote MCP server/i)).toBeDefined();
     expect(screen.getByText(/Never paste a raw key/i)).toBeDefined();
-    expect(screen.getByText(/method plus path for OpenAPI/i)).toBeDefined();
-    expect(screen.getByText(/USD 0\.50 is units 50, exponent 2/i)).toBeDefined();
-    expect(screen.getByText(/Readiness tests may reach the configured upstream/i)).toBeDefined();
-    expect(screen.getByText(/only creates credentialless x402 connections/i)).toBeDefined();
-    expect(screen.getByRole("link", { name: "Read the supplier agent path" }).getAttribute("href")).toBe("/SKILL.md#supplier-path");
+    expect(screen.getByText(/may consume provider quota or cost/i)).toBeDefined();
+    expect(screen.getByText(/does not publish the service, create earnings, or guarantee delivery/i)).toBeDefined();
+    expect(screen.getByText(/Publication means the current service passed/i)).toBeDefined();
+    expect(screen.getByRole("link", { name: "x402 Provider requirements" }).getAttribute("href")).toBe("https://github.com/CreasyBear/Agentic-Economy/blob/main/X402_SELLER_ONBOARDING.md");
     expect(screen.getByRole("heading", { name: "What agents can inspect" })).toBeDefined();
     expect(screen.getByText("Quote API")).toBeDefined();
     expect(screen.getByText(/AUD 0\.00/i)).toBeDefined();
@@ -40,5 +39,24 @@ describe("supply landing", () => {
   it("renders the honest empty state", () => {
     renderWithRouter(<AeSupplyLanding tools={[]} operations={[]} />);
     expect(screen.getByText(/No Operations are published yet/)).toBeDefined();
+  });
+
+  it("does not present an unavailable catalogue as empty", () => {
+    renderWithRouter(
+      <AeSupplyLanding
+        tools={[]}
+        operations={[]}
+        sourceError="Supplier information is temporarily unavailable. Try again."
+      />,
+    );
+
+    expect(screen.getByText("Supplier information is unavailable")).toBeDefined();
+    expect(
+      screen.getByText("Supplier information is temporarily unavailable. Try again."),
+    ).toBeDefined();
+    expect(screen.queryByText(/No Operations are published yet/)).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "What agents can inspect" }),
+    ).toBeNull();
   });
 });

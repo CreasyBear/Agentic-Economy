@@ -16,6 +16,7 @@ import type { StripeMoneyProviderConfig } from '../../../src/lib/server/stripe-m
 const config: StripeMoneyProviderConfig = {
   secretKey: 'sk_test_adapter',
   webhookSecret: 'whsec_adapter',
+  v2WebhookSecret: 'whsec_v2_adapter',
   mode: 'test',
 }
 
@@ -268,27 +269,17 @@ describe('Stripe money provider adapter', () => {
     })
     expect(create).toHaveBeenCalledOnce()
   })
-  it('creates one Connect Transfer with a scoped key and recovers the same transfer after a lost response', async () => {
-    const transfer = stripeTransfer()
-    const transferCreate = vi.fn()
-      .mockRejectedValueOnce(new Error('response lost after provider effect'))
-      .mockResolvedValueOnce({ data: transfer })
-    const transferRetrieve = vi.fn().mockResolvedValue({ data: transfer })
+  it('makes one explicit Transfer call and surfaces a lost response as outcome unknown', async () => {
+    const transferCreate = vi.fn().mockRejectedValue(new Error('response lost after provider effect'))
+    const transferRetrieve = vi.fn()
     const provider = createStripeMoneyProvider({ config, client: fakeClient({ transferCreate, transferRetrieve }) })
 
     const result = await provider.createOrRecoverTransfer(payoutRequest())
 
-    expect(result).toMatchObject({
-      provider: 'stripe',
-      transferId: 'tr_test_1',
-      destinationAccountId: 'acct_test_1',
-      amount: amount('USD', '1050', 2),
-      status: 'succeeded',
-    })
-    expect(transferCreate).toHaveBeenCalledTimes(2)
-    expect(transferCreate.mock.calls[0]?.[0]).toEqual(transferCreate.mock.calls[1]?.[0])
+    expect(result).toMatchObject({ kind: 'refused', code: 'payout_outcome_unknown', retryable: true })
+    expect(transferCreate).toHaveBeenCalledOnce()
     expect(transferCreate.mock.calls[0]?.[1]).toEqual({ idempotencyKey: 'ae:money:payout:payout-idempotency-1' })
-    expect(transferRetrieve).toHaveBeenCalledWith('tr_test_1')
+    expect(transferRetrieve).not.toHaveBeenCalled()
   })
   it('rescales a USD exponent-one payout before creating the transfer', async () => {
     const transfer = stripeTransfer({ amount: 100 })
@@ -507,7 +498,7 @@ describe('Stripe money provider adapter', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('uses the Stripe SDK signature parser and maps paid, failed, expired, and account events without client secrets', async () => {
+  it('isolates snapshot and Accounts v2 signatures while mapping the exact allowlists', async () => {
     const signedEvent = (type: string, sessionOverrides: Record<string, unknown> = {}) => {
       const payload = JSON.stringify({
         id: `evt_${type.replaceAll('.', '_')}`,
@@ -520,7 +511,7 @@ describe('Stripe money provider adapter', () => {
         type,
         data: { object: hostedCheckoutSession(sessionOverrides) },
       })
-      const signature = new Stripe(config.secretKey).webhooks.generateTestHeaderString({ payload, secret: config.webhookSecret, timestamp: Math.floor(Date.now() / 1000) })
+      const signature = new Stripe(config.secretKey).webhooks.generateTestHeaderString({ payload, secret: config.webhookSecret!, timestamp: Math.floor(Date.now() / 1000) })
       return { rawBody: payload, signature }
     }
 
@@ -535,14 +526,14 @@ describe('Stripe money provider adapter', () => {
       eventType: 'checkout.session.completed',
     })
     const alteredPayload = JSON.stringify({ ...(JSON.parse(paid.rawBody) as Record<string, unknown>), pending_webhooks: 2 })
-    const alteredSignature = new Stripe(config.secretKey).webhooks.generateTestHeaderString({ payload: alteredPayload, secret: config.webhookSecret, timestamp: Math.floor(Date.now() / 1000) })
+    const alteredSignature = new Stripe(config.secretKey).webhooks.generateTestHeaderString({ payload: alteredPayload, secret: config.webhookSecret!, timestamp: Math.floor(Date.now() / 1000) })
     const altered = await verifyStripeMoneyWebhook({ rawBody: alteredPayload, signature: alteredSignature, config })
     if (!('payloadDigest' in paidResult) || !('payloadDigest' in altered)) throw new Error('expected checkout payload digests')
     expect(altered.payloadDigest).not.toBe(paidResult.payloadDigest)
     const reformattedPayload = JSON.stringify(JSON.parse(paid.rawBody), null, 2)
     const reformattedSignature = new Stripe(config.secretKey).webhooks.generateTestHeaderString({
       payload: reformattedPayload,
-      secret: config.webhookSecret,
+      secret: config.webhookSecret!,
       timestamp: Math.floor(Date.now() / 1000),
     })
     const reformatted = await verifyStripeMoneyWebhook({
@@ -554,24 +545,7 @@ describe('Stripe money provider adapter', () => {
     expect(reformatted.payloadDigest).toBe(paidResult.payloadDigest)
 
     const failed = signedEvent('checkout.session.async_payment_failed', { payment_status: 'unpaid' })
-    expect(mapStripeMoneyWebhookEvent({ event: new Stripe(config.secretKey).webhooks.constructEvent(failed.rawBody, failed.signature, config.webhookSecret), config, rawBody: failed.rawBody })).toMatchObject({ kind: 'checkout', status: 'failed', observedAt: 1_700_000_000_000 })
-
-    const expired = signedEvent('checkout.session.expired', { status: 'expired', payment_status: 'unpaid' })
-    expect(mapStripeMoneyWebhookEvent({ event: new Stripe(config.secretKey).webhooks.constructEvent(expired.rawBody, expired.signature, config.webhookSecret), config, rawBody: expired.rawBody })).toMatchObject({ kind: 'checkout', status: 'expired', observedAt: 1_700_000_000_000 })
-
-    const accountPayload = JSON.stringify({
-      id: 'evt_account_updated',
-      object: 'event',
-      api_version: Stripe.API_VERSION,
-      created: 1_700_000_001,
-      livemode: false,
-      pending_webhooks: 1,
-      request: null,
-      type: 'account.updated',
-      data: { object: { id: 'acct_test_1', object: 'account', livemode: false, charges_enabled: false, payouts_enabled: false, details_submitted: false, capabilities: {}, requirements: {} } },
-    })
-    const accountSignature = new Stripe(config.secretKey).webhooks.generateTestHeaderString({ payload: accountPayload, secret: config.webhookSecret, timestamp: Math.floor(Date.now() / 1000) })
-    expect(await verifyStripeMoneyWebhook({ rawBody: accountPayload, signature: accountSignature, config })).toMatchObject({ kind: 'account', stripeAccountId: 'acct_test_1', eventType: 'account.updated' })
+    expect(mapStripeMoneyWebhookEvent({ event: new Stripe(config.secretKey).webhooks.constructEvent(failed.rawBody, failed.signature, config.webhookSecret!), config, rawBody: failed.rawBody })).toMatchObject({ kind: 'checkout', status: 'failed', observedAt: 1_700_000_000_000 })
 
     const v2AccountPayload = JSON.stringify({
       id: 'evt_v2_account_updated',
@@ -581,8 +555,12 @@ describe('Stripe money provider adapter', () => {
       type: 'v2.core.account[configuration.recipient].capability_status_updated',
       related_object: { id: 'acct_test_1', type: 'v2.core.account', url: '/v2/core/accounts/acct_test_1' },
     })
-    const v2AccountSignature = new Stripe(config.secretKey).webhooks.generateTestHeaderString({ payload: v2AccountPayload, secret: config.webhookSecret, timestamp: Math.floor(Date.now() / 1000) })
-    await expect(verifyStripeMoneyWebhook({ rawBody: v2AccountPayload, signature: v2AccountSignature, config })).resolves.toMatchObject({
+    const v2AccountSignature = new Stripe(config.secretKey).webhooks.generateTestHeaderString({ payload: v2AccountPayload, secret: config.v2WebhookSecret!, timestamp: Math.floor(Date.now() / 1000) })
+    await expect(verifyStripeMoneyWebhook({ rawBody: v2AccountPayload, signature: v2AccountSignature, destination: 'snapshot', config })).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'payment_binding_invalid',
+    })
+    await expect(verifyStripeMoneyWebhook({ rawBody: v2AccountPayload, signature: v2AccountSignature, destination: 'accounts_v2', config })).resolves.toMatchObject({
       kind: 'account',
       stripeAccountId: 'acct_test_1',
       eventType: 'v2.core.account[configuration.recipient].capability_status_updated',

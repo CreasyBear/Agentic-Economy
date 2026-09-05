@@ -456,7 +456,7 @@ export function createHostedMoneyRuntime(
             );
           const signature = stripe.webhooks.generateTestHeaderString({
             payload: rawBody,
-            secret: stripeConfig.webhookSecret,
+            secret: stripeConfig.webhookSecret!,
           });
           if (
             new TextEncoder().encode(signature).byteLength >

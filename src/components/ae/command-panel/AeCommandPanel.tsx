@@ -86,7 +86,7 @@ export function AeCommandPanel() {
       >
         <DialogTitle className="sr-only">Command console</DialogTitle>
         <DialogDescription className="sr-only">
-          Search the Operation catalog, inspect one Operation, and take its next action.
+          Search the Operation catalog, describe one Operation, and take its next action.
         </DialogDescription>
         {panel.pageCount > 1 ? (
           <div className="flex min-h-touch shrink-0 items-center justify-between border-b border-border px-gutter">

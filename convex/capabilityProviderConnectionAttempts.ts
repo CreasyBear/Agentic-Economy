@@ -31,6 +31,10 @@ import { ownerProjection, projectOwnerProjection } from './lib/providerConnectio
 import { persistAuditEvent } from './securityShared'
 import { providerRouteabilityIsFrozen } from './lib/providerOffboardingFreeze'
 import { normalizeSupplySourceSelectionDraft } from '../src/modules/capability-supply/source-selection-draft'
+import {
+  normalizeSupplySourceDescriptor,
+  supplyIntegrationDraftRefs,
+} from '../src/modules/capability-supply/integration-draft'
 
 const ATTEMPT_TTL_MS = 10 * 60_000
 const SOURCE_DRAFT_TTL_MS = 24 * 60 * 60_000
@@ -56,6 +60,8 @@ const reserveAttemptFields = {
   commandId: v.string(),
   operationKey: v.string(),
   correlationId: v.string(),
+  candidateDraftRef: v.optional(v.string()),
+  candidateSourceDigest: v.optional(v.string()),
 } as const
 
 const reserveAgentArgsValue = v.object({
@@ -75,6 +81,7 @@ const reservationResultValue = v.union(
     attemptRef: v.string(),
     expiresAt: v.number(),
     draftRef: v.optional(v.string()),
+    candidateDraftRef: v.optional(v.string()),
   }),
   v.object({
     kind: v.literal('refused'),
@@ -104,6 +111,7 @@ const ownerAttemptValue = v.object({
   connectionRef: v.optional(v.string()),
   expiresAt: v.number(),
   draftRef: v.optional(v.string()),
+  candidateDraftRef: v.optional(v.string()),
 })
 
 const readOwnerResultValue = v.union(
@@ -152,6 +160,11 @@ const prepareOwnerArgsValue = v.object({
   proof: strictProofValue,
   ...sourceWriteArgs,
 })
+const cancelOwnerResultValue = v.union(
+  v.object({ kind: v.literal('cancelled'), state: v.literal('cancelled') }),
+  v.object({ kind: v.literal('unchanged'), state: v.union(v.literal('cancelled'), v.literal('consumed'), v.literal('expired')) }),
+  v.object({ kind: v.literal('refused'), code: v.literal('not_found') }),
+)
 
 const secretAuthorityValue = v.object({
   operation: v.union(v.literal('provision'), v.literal('rotate')),
@@ -353,7 +366,36 @@ async function reserveAttempt(
   if (source === undefined || !validAuthentication(args) || !isCanonicalDigest(args.inputDigest)) {
     return { kind: 'refused' as const, code: 'invalid_source' as const }
   }
-  const selectedSource = args.sourceDescriptorJson === undefined
+
+  // A retry must remain resumable even after the saved draft progresses to a
+  // connected lifecycle. Check its original command identity before validating
+  // the currently mutable draft record.
+  const existing = await ctx.db.query('capabilityProviderConnectionAttempts')
+    .withIndex('by_commandId', (query) => query.eq('commandId', args.commandId))
+    .unique()
+  if (existing !== null) {
+    const matches = existing.inputDigest === args.inputDigest
+      && existing.owningAccountRef === actor.owningAccountRef
+      && existing.installedByPrincipalRef === actor.installedByPrincipalRef
+      && existing.businessId === args.businessId
+      && existing.sourceKind === args.sourceKind
+      && existing.sourceUrl === source.href
+      && canonicalDigest(existing.authentication) === canonicalDigest(args.authentication)
+      && existing.environment === args.environment
+      && existing.candidateDraftRef === args.candidateDraftRef
+      && (args.candidateDraftRef === undefined || existing.expectedSourceDigest === args.candidateSourceDigest)
+    return matches
+      ? {
+          kind: 'replayed' as const,
+          attemptRef: existing.attemptRef,
+          expiresAt: existing.expiresAt,
+          ...(existing.draftRef === undefined ? {} : { draftRef: existing.draftRef }),
+          ...(existing.candidateDraftRef === undefined ? {} : { candidateDraftRef: existing.candidateDraftRef }),
+        }
+      : { kind: 'refused' as const, code: 'command_identity_conflict' as const }
+  }
+
+  const selectedSource = args.sourceDescriptorJson === undefined || args.candidateDraftRef !== undefined
     ? undefined
     : normalizeSupplySourceSelectionDraft({
         sourceDescriptorJson: args.sourceDescriptorJson,
@@ -364,22 +406,35 @@ async function reserveAttempt(
     return { kind: 'refused' as const, code: 'invalid_source' as const }
   }
 
-  const existing = await ctx.db.query('capabilityProviderConnectionAttempts')
-    .withIndex('by_commandId', (query) => query.eq('commandId', args.commandId))
-    .unique()
-  if (existing !== null) {
-    const matches = existing.inputDigest === args.inputDigest
-      && existing.owningAccountRef === actor.owningAccountRef
-      && existing.installedByPrincipalRef === actor.installedByPrincipalRef
-      && existing.businessId === args.businessId
-    return matches
-      ? {
-          kind: 'replayed' as const,
-          attemptRef: existing.attemptRef,
-          expiresAt: existing.expiresAt,
-          ...(existing.draftRef === undefined ? {} : { draftRef: existing.draftRef }),
-        }
-      : { kind: 'refused' as const, code: 'command_identity_conflict' as const }
+  if (args.candidateDraftRef !== undefined) {
+    const refs = supplyIntegrationDraftRefs(String(args.businessId), args.candidateDraftRef)
+    const path = await ctx.db.query('offeringAccessPaths')
+      .withIndex('by_accessPathRef', (query) => query.eq('accessPathRef', refs.accessPathRef))
+      .unique()
+    const draft = path?.integrationDraft
+    let draftSource: ReturnType<typeof normalizeSupplySourceDescriptor>
+    try {
+      draftSource = draft === undefined
+        ? undefined
+        : normalizeSupplySourceDescriptor(JSON.parse(draft.sourceDescriptorJson) as unknown)
+    } catch {
+      draftSource = undefined
+    }
+    if (args.sourceKind !== 'http_credential'
+      || args.candidateSourceDigest === undefined
+      || !isCanonicalDigest(args.candidateSourceDigest)
+      || args.sourceDescriptorJson === undefined
+      || path === null || path.businessId !== args.businessId || draft === undefined
+      || draft.candidateRef !== args.candidateDraftRef
+      || draft.sourceDigest !== args.candidateSourceDigest
+      || draft.sourceDescriptorJson !== args.sourceDescriptorJson
+      || draft.sourceKind !== 'openapi'
+      || draft.connectionRef !== undefined
+      || draftSource?.kind !== 'openapi'
+      || canonicalSource(draftSource.definitionUrl)?.href !== source.href
+      || draftSource.environment !== args.environment) {
+      return { kind: 'refused' as const, code: 'invalid_source' as const }
+    }
   }
 
   const now = Date.now()
@@ -419,6 +474,10 @@ async function reserveAttempt(
       draftRef,
       expectedSourceDigest: selectedSource.draft.expectedSourceDigest,
     }),
+    ...(args.candidateDraftRef === undefined ? {} : { candidateDraftRef: args.candidateDraftRef }),
+    ...(args.candidateDraftRef === undefined || args.candidateSourceDigest === undefined
+      ? {}
+      : { expectedSourceDigest: args.candidateSourceDigest }),
     createdAt: now,
     updatedAt: now,
     expiresAt,
@@ -428,6 +487,7 @@ async function reserveAttempt(
     attemptRef: ref,
     expiresAt,
     ...(draftRef === undefined ? {} : { draftRef }),
+    ...(args.candidateDraftRef === undefined ? {} : { candidateDraftRef: args.candidateDraftRef }),
   }
 }
 
@@ -472,8 +532,31 @@ export const readOwner = queryGeneric({
         ...(row.connectionRef === undefined ? {} : { connectionRef: row.connectionRef }),
         expiresAt: row.expiresAt,
         ...(row.draftRef === undefined ? {} : { draftRef: row.draftRef }),
+        ...(row.candidateDraftRef === undefined ? {} : { candidateDraftRef: row.candidateDraftRef }),
       },
     }
+  },
+})
+
+export const cancelOwner = mutationGeneric({
+  args: prepareOwnerArgsValue.fields,
+  returns: cancelOwnerResultValue,
+  handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
+    const actor = await resolveBusinessActor(ctx)
+    if (sourceWrite.kind === 'rejected' || actor.kind !== 'authenticated_owner') return { kind: 'refused' as const, code: 'not_found' as const }
+    const attempt = await ctx.db.query('capabilityProviderConnectionAttempts').withIndex('by_attemptRef', (query) => query.eq('attemptRef', args.attemptRef)).unique()
+    if (attempt === null || attempt.owningAccountRef !== actor.canonicalAccountRef) return { kind: 'refused' as const, code: 'not_found' as const }
+    const now = Date.now()
+    if (attempt.lifecycle === 'pending' && attempt.expiresAt > now) {
+      await ctx.db.patch(attempt._id, { lifecycle: 'cancelled', updatedAt: now })
+      return { kind: 'cancelled' as const, state: 'cancelled' as const }
+    }
+    const state = attempt.lifecycle === 'pending' ? 'expired' as const : attempt.lifecycle
+    if (attempt.lifecycle === 'pending') await ctx.db.patch(attempt._id, { lifecycle: 'expired', updatedAt: now })
+    return state === 'cancelled' || state === 'consumed' || state === 'expired'
+      ? { kind: 'unchanged' as const, state }
+      : { kind: 'refused' as const, code: 'not_found' as const }
   },
 })
 
@@ -812,15 +895,16 @@ export const readOAuthCallbackOwner = queryGeneric({
     const attempt = await ctx.db.query('capabilityProviderConnectionAttempts')
       .withIndex('by_attemptRef', (query) => query.eq('attemptRef', args.attemptRef))
       .unique()
+    const pkceSecretRef = attempt?.pkceSecretRef
     if (attempt === null
       || attempt.owningAccountRef !== actor.canonicalAccountRef
       || attempt.sourceKind !== 'mcp_oauth'
       || attempt.lifecycle !== 'pending'
       || attempt.expiresAt <= args.observedAt
       || attempt.stateHash !== args.stateHash
-      || attempt.pkceSecretRef === undefined) return { kind: 'not_found' as const }
+      || pkceSecretRef === undefined) return { kind: 'not_found' as const }
     const pointer = await ctx.db.query('secretPointers')
-      .withIndex('by_secretRef', (query) => query.eq('secretRef', attempt.pkceSecretRef!))
+      .withIndex('by_secretRef', (query) => query.eq('secretRef', pkceSecretRef))
       .unique()
     if (pointer === null || pointer.owningAccountRef !== actor.canonicalAccountRef) {
       return { kind: 'not_found' as const }
@@ -857,9 +941,10 @@ export const finalizeOwner = mutationGeneric({
     if (attempt === null || attempt.owningAccountRef !== actor.canonicalAccountRef) {
       return { kind: 'refused' as const, code: 'not_found' as const }
     }
-    if (attempt.lifecycle === 'consumed' && attempt.connectionRef !== undefined) {
+    const consumedConnectionRef = attempt.connectionRef
+    if (attempt.lifecycle === 'consumed' && consumedConnectionRef !== undefined) {
       const replay = await ctx.db.query('capabilityProviderConnections')
-        .withIndex('by_connectionRef', (query) => query.eq('connectionRef', attempt.connectionRef!))
+        .withIndex('by_connectionRef', (query) => query.eq('connectionRef', consumedConnectionRef))
         .unique()
       return replay === null
         ? { kind: 'refused' as const, code: 'connection_conflict' as const }
@@ -990,9 +1075,10 @@ export const finalizeOwner = mutationGeneric({
       consumedAt: now,
       updatedAt: now,
     })
-    if (attempt.draftRef !== undefined) {
+    const draftRef = attempt.draftRef
+    if (draftRef !== undefined) {
       const draft = await ctx.db.query('capabilitySupplySourceDrafts')
-        .withIndex('by_draftRef', (query) => query.eq('draftRef', attempt.draftRef!))
+        .withIndex('by_draftRef', (query) => query.eq('draftRef', draftRef))
         .unique()
       if (draft !== null && draft.owningAccountRef === actor.canonicalAccountRef) {
         await ctx.db.patch(draft._id, {

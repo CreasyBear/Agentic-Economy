@@ -6,6 +6,63 @@ const exponent = v.number()
 const units = v.string()
 const identifier = v.string()
 const evidenceRefs = v.array(v.string())
+const stripeWebhookEvent = v.union(
+  v.object({
+    kind: v.literal('checkout'),
+    stripeEventId: identifier,
+    eventType: v.union(
+      v.literal('checkout.session.completed'),
+      v.literal('checkout.session.async_payment_succeeded'),
+      v.literal('checkout.session.async_payment_failed'),
+    ),
+    externalRef: identifier,
+    sessionId: identifier,
+    commandRef: identifier,
+    paymentId: v.optional(identifier),
+    checkoutSessionDigest: identifier,
+    paymentIntentDigest: v.optional(identifier),
+    status: v.union(v.literal('paid'), v.literal('processing'), v.literal('failed')),
+    amount: v.object({ currency, units, exponent }),
+    metadataDigest: identifier,
+    payloadDigest: identifier,
+    observedAt: v.number(),
+  }),
+  v.object({
+    kind: v.literal('refund'),
+    stripeEventId: identifier,
+    eventType: v.union(
+      v.literal('refund.created'),
+      v.literal('refund.updated'),
+      v.literal('refund.failed'),
+    ),
+    externalRef: identifier,
+    refundId: identifier,
+    paymentId: identifier,
+    chargeId: identifier,
+    refundDigest: identifier,
+    status: v.union(v.literal('pending'), v.literal('succeeded'), v.literal('failed')),
+    amount: v.object({ currency, units, exponent }),
+    payloadDigest: identifier,
+    observedAt: v.number(),
+  }),
+  v.object({
+    kind: v.literal('account'),
+    stripeEventId: identifier,
+    eventType: v.union(
+      v.literal('v2.core.account.created'),
+      v.literal('v2.core.account.updated'),
+      v.literal('v2.core.account.closed'),
+      v.literal('v2.core.account[configuration.recipient].updated'),
+      v.literal('v2.core.account[configuration.recipient].capability_status_updated'),
+    ),
+    externalRef: identifier,
+    stripeAccountId: identifier,
+    providerObjectDigest: identifier,
+    providerObjectVersion: v.optional(v.number()),
+    payloadDigest: identifier,
+    observedAt: v.number(),
+  }),
+)
 export const commercialPolicyControlValue = v.union(
   v.object({
     family: v.literal('commercial_perimeter'),
@@ -111,6 +168,29 @@ export const x402PaymentAuthorizationFailureDetailValue = v.union(
   v.literal('authority_read_failed'),
 )
 export const moneyTables = {
+  moneyStripeWebhookInbox: defineTable({
+    stripeEventId: identifier,
+    eventType: identifier,
+    destination: v.union(v.literal('snapshot'), v.literal('accounts_v2')),
+    event: stripeWebhookEvent,
+    payloadDigest: identifier,
+    state: v.union(
+      v.literal('queued'),
+      v.literal('applied'),
+      v.literal('ignored'),
+      v.literal('reconciliation_required'),
+      v.literal('failed'),
+    ),
+    workId: v.optional(identifier),
+    conflictPayloadDigest: v.optional(identifier),
+    failureCode: v.optional(identifier),
+    appliedRef: v.optional(identifier),
+    receivedAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index('by_stripeEventId', ['stripeEventId'])
+    .index('by_state_and_receivedAt', ['state', 'receivedAt']),
   moneyCommercialPolicies: defineTable({
     policyRef: identifier,
     family: v.union(

@@ -3,7 +3,8 @@
 This is the operating map for engineers changing or diagnosing Agentic
 Economy environments. It describes the intended boundaries. The dated live
 identities are in `deployment-registry.yaml`; current evidence and gaps are in
-`deployment-maturity.md`.
+`deployment-maturity.md`. The account baseline, recovery proof and production
+gate are in `aws-foundation.md`.
 
 ## System boundary
 
@@ -100,8 +101,22 @@ new invoke action.
 ## Deployment definition
 
 `infra/package4/modules/release-environment` owns the reusable AWS/Cloudflare
-module. `infra/package4/environments/package4-release` is its synthetic release
-instance. It declares:
+module. Four roots divide authority so an environment change cannot silently
+become an account-wide or recovery change:
+
+| Root | Authority |
+| --- | --- |
+| `account-baseline` | Account-wide audit, safe defaults, detection, flow logs, alert subscription and budgets |
+| `environments/package4-release` | Synthetic release infrastructure and telemetry |
+| `recovery-drill` | One isolated point-in-time restore with its own dated state |
+| `environments/production` | Fresh production boundary; declared and hard-gated, not deployed |
+
+`infra/cloudflare/account-baseline` is a fifth, provider-specific root. It owns
+only the account-wide Tunnel-health and service-token-expiry notification
+policies. Tunnel, DNS and Access runtime resources remain in the environment
+root, so alert maintenance cannot rotate or replace runtime credentials.
+
+The reusable environment module declares:
 
 - private Sydney VPC application and database subnets;
 - an ARM64 Ubuntu 24.04 k3s host reachable through AWS Systems Manager;
@@ -112,6 +127,25 @@ instance. It declares:
 
 The deployment intentionally excludes Formance Payments, Auth, Console,
 Wallets, Flows, Webhooks, and Reconciliation.
+
+## Stripe event boundary
+
+The snapshot endpoint accepts only Checkout completion/async outcome and refund
+events. The Accounts v2 endpoint accepts only the five thin account lifecycle
+events. Each destination has its own signing secret. After signature
+verification, both routes write a normalized event to
+`moneyStripeWebhookInbox`, enqueue the dedicated four-wide Workpool, and
+acknowledge; Stripe readback and Formance/Connect mutation happen only in the
+worker. Raw request bodies are never persisted.
+
+Exact event replays reuse the original work. Conflicting evidence for an event
+ID is acknowledged and held for reconciliation. Exhausted work remains visible
+and blocks the strict snapshot.
+
+Every AWS provider is restricted to account `197716152388`. The production
+root also requires an explicit, one-plan `foundation_gates_passed` acknowledgment
+after the live criteria in `aws-foundation.md` are evidenced. It does not bind
+application traffic.
 
 ## Change contract
 

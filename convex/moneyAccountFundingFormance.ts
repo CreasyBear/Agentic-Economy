@@ -1,9 +1,8 @@
 import { v, type Infer } from 'convex/values'
 
 import { internal } from './_generated/api'
-import { action } from './_generated/server'
+import { action, internalAction, type ActionCtx } from './_generated/server'
 import { exactAmount, stripeMoneyWebhookEventArg } from './moneyLedgerValues'
-import { sourceWriteArgs } from './sourceWriteAdmission'
 
 const fundingStateValue = v.union(
   v.literal('pending'),
@@ -22,6 +21,10 @@ const fundingProviderEvidenceArg = v.object({
   paymentIntentDigest: v.optional(v.string()),
   evidenceDigest: v.string(),
   paymentId: v.optional(v.string()),
+  checkoutStatus: v.optional(v.union(v.literal('open'), v.literal('complete'), v.literal('expired'))),
+  paymentStatus: v.optional(v.union(v.literal('unpaid'), v.literal('paid'), v.literal('no_payment_required'))),
+  checkoutMode: v.optional(v.literal('hosted_page')),
+  checkoutExpiresAt: v.optional(v.number()),
 })
 const fundingRefundEvidenceArg = v.object({
   refundId: v.string(),
@@ -40,7 +43,6 @@ const applyArgs = v.object({
   refundReadback: v.optional(fundingRefundEvidenceArg),
   operationKey: v.string(),
   correlationId: v.string(),
-  ...sourceWriteArgs,
 })
 const applyResult = v.union(
   v.object({
@@ -70,11 +72,14 @@ const refused = (code: string, retryable = false): ApplyResult => ({
   kind: 'refused', code, retryable,
 })
 
-export const applyVerifiedEvent = action({
-  args: applyArgs.fields,
-  returns: applyResult,
-  handler: async (ctx, args): Promise<ApplyResult> => {
-    const prepared = await ctx.runMutation(internal.moneyAccountFunding.prepareVerifiedEvent, args)
+async function applyVerifiedEventCore(
+  ctx: ActionCtx,
+  args: Infer<typeof applyArgs>,
+): Promise<ApplyResult> {
+    const prepared = await ctx.runMutation(
+      internal.moneyAccountFunding.prepareVerifiedEventFromInbox,
+      args,
+    )
     if (prepared.kind !== 'prepared') return prepared
     const booked = prepared.bookingKind === 'settlement'
       ? await ctx.runAction(internal.moneyFormance.bookFundingSettlement, prepared.booking)
@@ -82,10 +87,10 @@ export const applyVerifiedEvent = action({
     if (booked.kind === 'completed') {
       if (booked.transactionRefs.length !== 1) return refused('formance_reference_invalid')
       return prepared.bookingKind === 'settlement'
-        ? await ctx.runMutation(internal.moneyAccountFunding.finalizeVerifiedEvent, {
+        ? await ctx.runMutation(internal.moneyAccountFunding.finalizeVerifiedEventFromInbox, {
             ...args, formanceTransactionRef: booked.transactionRefs[0]!,
           })
-        : await ctx.runMutation(internal.moneyAccountFunding.finalizeVerifiedRefund, {
+        : await ctx.runMutation(internal.moneyAccountFunding.finalizeVerifiedRefundFromInbox, {
             ...args, formanceTransactionRef: booked.transactionRefs[0]!,
           })
     }
@@ -110,7 +115,12 @@ export const applyVerifiedEvent = action({
       booked.kind === 'refused' ? booked.code : 'credit_topup_pending',
       booked.kind !== 'refused',
     )
-  },
+}
+
+export const applyVerifiedEventFromInbox = internalAction({
+  args: applyArgs.fields,
+  returns: applyResult,
+  handler: applyVerifiedEventCore,
 })
 
 export const readBalance = action({

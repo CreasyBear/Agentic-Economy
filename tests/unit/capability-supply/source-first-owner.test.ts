@@ -114,4 +114,32 @@ describe('owner source-first resumption', () => {
     })).resolves.toEqual({ kind: 'not_found' })
     expect(mocks.previewOwnerMcpProviderConnection).not.toHaveBeenCalled()
   })
+
+  it.each(['pending', 'cancelled', 'expired'] as const)('restores the exact owner-bound MCP source after a %s handoff without claiming a connection', async (state) => {
+    const source = {
+      kind: 'mcp' as const,
+      registryName: 'example/provider',
+      remoteRef: `sha256:${'6'.repeat(64)}`,
+      environment: 'production' as const,
+    }
+    mocks.callSourceQuery.mockResolvedValue({
+      kind: 'available',
+      draft: {
+        draftRef: 'sds_exact_source',
+        businessRef: 'business:one',
+        sourceDescriptorJson: stableStringify(source),
+        expectedSourceDigest: `sha256:${'1'.repeat(64)}`,
+        sourceRevision: `source-selection:sha256:${'1'.repeat(64)}`,
+        sourceUrl: 'https://mcp.provider.example/mcp',
+        environment: 'production',
+        state,
+        expiresAt: Date.now() + 60_000,
+      },
+    })
+
+    await expect(resumeOwnerSupplySourceDraft({
+      data: { businessId: 'business:one', draftRef: 'sds_exact_source' },
+    })).resolves.toEqual({ kind: 'available', source, candidateRef: '' })
+    expect(mocks.previewOwnerMcpProviderConnection).not.toHaveBeenCalled()
+  })
 })

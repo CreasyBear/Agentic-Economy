@@ -95,6 +95,8 @@ direction, gstack internals or shared instructions are separate goals.
 
 ## Current work and installation
 
+- [Rationalise vocabulary across the platform](work/WF-20260905-vocabulary.md)
+- [Package 7: pre-launch trust and account lifecycle](work/WF-20260905-package-7.md)
 - [Build and validate this workflow](work/WF-20260905-workflow.md)
 - [Validation and known limits](validation.md)
 - [Cleanup candidates](../../TODOS.md)

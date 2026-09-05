@@ -156,6 +156,10 @@ const applyFundingEventArgsValue = v.object({
   correlationId: v.string(),
   ...sourceWriteArgs,
 })
+const trustedApplyFundingEventArgsValue = applyFundingEventArgsValue.omit(
+  'sourceWrite',
+  'sourceWriteRequest',
+)
 const readFundingArgsValue = v.object({
   commandRef: v.optional(v.string()),
   externalRef: v.optional(v.string()),
@@ -254,6 +258,7 @@ const prepareFundingEventResultValue = v.union(
 type ReserveFundingArgs = Infer<typeof reserveFundingArgsValue>
 type BindFundingArgs = Infer<typeof bindFundingArgsValue>
 type ApplyFundingEventArgs = Infer<typeof applyFundingEventArgsValue>
+type TrustedApplyFundingEventArgs = Infer<typeof trustedApplyFundingEventArgsValue>
 type FundingResult = Infer<typeof fundingResultValue>
 type ApplyFundingEventResult = Infer<typeof applyFundingEventResultValue>
 
@@ -830,7 +835,7 @@ async function prepareFundingEventHandler(
 
 async function prepareFundingSettlementEvent(
   ctx: MutationCtx,
-  args: ApplyFundingEventArgs,
+  args: TrustedApplyFundingEventArgs,
 ): Promise<Infer<typeof prepareFundingEventResultValue>> {
   if (args.event.kind !== 'checkout' || args.readback === undefined || args.refundReadback !== undefined) {
     return refused('payment_binding_invalid')
@@ -897,7 +902,7 @@ async function prepareFundingSettlementEvent(
         ...(args.readback.paymentStatus === undefined ? {} : {
           providerPaymentStatus: args.readback.paymentStatus,
         }),
-        terminalReason: event.status === 'expired' ? 'expired' : 'async_payment_failed',
+        terminalReason: 'async_payment_failed',
         updatedAt: event.observedAt,
       })
     }
@@ -931,7 +936,7 @@ async function prepareFundingSettlementEvent(
 
 async function prepareFundingRefundEvent(
   ctx: MutationCtx,
-  args: ApplyFundingEventArgs,
+  args: TrustedApplyFundingEventArgs,
 ): Promise<Infer<typeof prepareFundingEventResultValue>> {
   if (args.event.kind !== 'refund' || args.refundReadback === undefined || args.readback !== undefined) {
     return refused('payment_binding_invalid')
@@ -1049,7 +1054,7 @@ async function prepareFundingRefundEvent(
 
 async function finalizeFundingEventHandler(
   ctx: MutationCtx,
-  args: ApplyFundingEventArgs & Readonly<{ formanceTransactionRef: string }>,
+  args: TrustedApplyFundingEventArgs & Readonly<{ formanceTransactionRef: string }>,
 ): Promise<ApplyFundingEventResult> {
   if (args.event.kind !== 'checkout' || args.event.status !== 'paid' || args.readback === undefined) {
     return refused('payment_binding_invalid')
@@ -1159,7 +1164,7 @@ async function recordFundingReversalDocument(
 
 async function finalizeFundingRefundHandler(
   ctx: MutationCtx,
-  args: ApplyFundingEventArgs & Readonly<{ formanceTransactionRef: string }>,
+  args: TrustedApplyFundingEventArgs & Readonly<{ formanceTransactionRef: string }>,
 ): Promise<ApplyFundingEventResult> {
   if (args.event.kind !== 'refund'
     || args.event.status !== 'succeeded'
@@ -1296,6 +1301,33 @@ export const readWebhookRefundCommand = query({
   handler: readWebhookRefundFundingHandler,
 })
 
+export const readWebhookCommandForWorker = internalQuery({
+  args: { commandRef: v.string(), externalRef: v.string() },
+  returns: fundingResultValue,
+  handler: async (ctx, args): Promise<FundingResult> => {
+    const command = await ctx.db.query('moneyFundingCommands')
+      .withIndex('by_commandRef', (builder) => builder.eq('commandRef', args.commandRef))
+      .unique()
+    return command === null
+      || (command.externalRef !== undefined && command.externalRef !== args.externalRef)
+      ? refused('funding_pending', true)
+      : { kind: 'accepted', command: fundingCommandView(command) }
+  },
+})
+
+export const readWebhookRefundCommandForWorker = internalQuery({
+  args: { paymentId: v.string() },
+  returns: fundingResultValue,
+  handler: async (ctx, args): Promise<FundingResult> => {
+    const command = await ctx.db.query('moneyFundingCommands')
+      .withIndex('by_paymentId', (builder) => builder.eq('paymentId', args.paymentId))
+      .unique()
+    return command === null
+      ? refused('funding_pending', true)
+      : { kind: 'accepted', command: fundingCommandView(command) }
+  },
+})
+
 export const markOutcomeUnknown = mutation({
   args: markFundingUnknownArgsValue.fields,
   returns: fundingResultValue,
@@ -1317,14 +1349,36 @@ export const prepareVerifiedEvent = internalMutation({
   handler: prepareFundingEventHandler,
 })
 
+export const prepareVerifiedEventFromInbox = internalMutation({
+  args: trustedApplyFundingEventArgsValue.fields,
+  returns: prepareFundingEventResultValue,
+  handler: async (ctx, args) => {
+    if (args.event.kind === 'checkout') return await prepareFundingSettlementEvent(ctx, args)
+    if (args.event.kind === 'refund') return await prepareFundingRefundEvent(ctx, args)
+    return refused('payment_binding_invalid')
+  },
+})
+
 export const finalizeVerifiedEvent = internalMutation({
   args: { ...applyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
   returns: applyFundingEventResultValue,
   handler: finalizeFundingEventHandler,
 })
 
+export const finalizeVerifiedEventFromInbox = internalMutation({
+  args: { ...trustedApplyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
+  returns: applyFundingEventResultValue,
+  handler: finalizeFundingEventHandler,
+})
+
 export const finalizeVerifiedRefund = internalMutation({
   args: { ...applyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
+  returns: applyFundingEventResultValue,
+  handler: finalizeFundingRefundHandler,
+})
+
+export const finalizeVerifiedRefundFromInbox = internalMutation({
+  args: { ...trustedApplyFundingEventArgsValue.fields, formanceTransactionRef: v.string() },
   returns: applyFundingEventResultValue,
   handler: finalizeFundingRefundHandler,
 })

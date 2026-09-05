@@ -1,4 +1,4 @@
-import { SiteDiscoveryManifestSchemaVersion } from '@/modules/discovery/public'
+import { SiteDiscoveryManifestSchemaVersion } from '@/modules/discovery/site-manifest-version'
 import { isRecord } from '@/modules/common/is-record'
 import { listMcpActions, mcpToolName } from '@/modules/actions'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'

@@ -67,6 +67,7 @@ const durableTables = [
   'moneyUsageEvents',
   'moneyCredentialUsageSummaries',
   'moneyX402PaymentAttempts',
+  'moneyStripeWebhookInbox',
   'moneyStripeEvents',
   'moneyPayoutAccounts',
   'moneyPayouts',
@@ -211,6 +212,7 @@ const requiredIndexes = {
   moneyTreasuryObservations: ['by_observationRef', 'by_custody_and_observedAt'],
   moneyLegalCustomerBindings: ['by_accountRef', 'by_legalCustomerRef_and_state'],
   moneyProviderObligations: ['by_obligationRef', 'by_invocationRef', 'by_buyerAccountRef_and_createdAt', 'by_providerRef_and_createdAt'],
+  moneyStripeWebhookInbox: ['by_stripeEventId', 'by_state_and_receivedAt'],
   moneyStripeEvents: ['by_stripeEventId'],
   moneyPayoutAccounts: ['by_businessId_and_currency', 'by_stripeAccountId'],
   moneyPayouts: ['by_businessId_and_currency_and_state', 'by_businessId_and_currency_and_state_and_updatedAt', 'by_periodStart_and_state', 'by_stripeTransferId', 'by_payoutRef', 'by_businessId_and_currency_and_updatedAt', 'by_businessId_and_currency_and_cadence_and_updatedAt'],
@@ -375,7 +377,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(87)
+    expect(durableTables).toHaveLength(88)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

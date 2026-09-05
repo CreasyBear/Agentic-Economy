@@ -23,6 +23,12 @@ Your endpoint must:
 
 Keep the resource URL, HTTP method, payee address, input example, and current source material handy. Do not paste wallet private keys or buyer credentials into Agentic Economy.
 
+The protocol inspection and readiness check can reach your configured endpoint.
+Use an example that is safe there and assume it may consume the endpoint's
+normal quota or cost. A successful check does not publish the Operation, create
+Provider earnings, or prove delivery. Agentic Economy does not promise a review
+or publication time: read the current status after submission.
+
 The payee address proves control of a payment destination. It does not, by
 itself, establish the Provider, buyer-facing Seller or upstream contracting
 party. Agentic Economy records those roles separately.
@@ -37,8 +43,10 @@ party. Agentic Economy records those roles separately.
    observation, expiry and Provider business; it is neither purchase authority
    nor proof that the payee is the buyer-facing Seller.
 5. Complete the explicitly disclosed testnet verification. It does not charge a buyer or create Provider earnings.
-6. Wait for settlement and output validation, then publish the sealed revision.
-7. Open the returned Operation reference and confirm its readiness is **Ready now** before giving it to buyers.
+6. Submit the sealed revision, then wait for settlement and output validation.
+7. Read the returned Operation status. Only a current **Published** and routeable
+   revision is ready to share with agents. Submission, a successful check, or
+   publication does not itself guarantee demand, delivery, earnings, or payout.
 
 If verification has an uncertain outcome, use the supplied status or reconciliation action. Do not submit a second payment. If the source, price, payee, schema, or revision changed, inspect and admit the new material instead of reusing old evidence.
 

@@ -169,6 +169,7 @@ export const fundingHandoffCreateAction = defineAction<CreateFundingHandoffInput
   readOnly: false,
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'provider_system', dataClasses: ['payment_handoff'], spendExposure: 'none', approval: 'none' },
   surfaces: ['http', 'mcp'],
+  mcp: { idempotent: true, openWorld: true, destructive: false },
   credentialAdmission: { scope: 'market_operations:invoke', authority: 'descriptor_classified' },
   invocationContract: {
     version: 'funding-handoff-create:v1', consequenceClass: 'external_effect', materialInputPaths: ['principalAmount', 'idempotencyKey'],

@@ -1,7 +1,7 @@
 import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
-import { mutation, query } from './_generated/server'
+import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import {
   authorizeConnectOnboardingArgs,
   authorizeConnectOnboardingHandler,
@@ -16,7 +16,10 @@ import {
   readOwnerPayoutAccountHandler,
   readPayoutAccountByStripeIdArgs,
   readPayoutAccountByStripeIdHandler,
+  readPayoutAccountByStripeIdForWorkerHandler,
   recordConnectAccountEventArgs,
+  recordConnectAccountEventFromInboxArgs,
+  recordConnectAccountEventFromInboxHandler,
   recordConnectAccountEventHandler,
   reserveConnectAccountArgs,
   reserveConnectAccountHandler,
@@ -68,6 +71,18 @@ export const recordConnectAccountEvent = mutation({
   args: recordConnectAccountEventArgs,
   returns: connectAccountResultValue,
   handler: recordConnectAccountEventHandler,
+})
+
+export const readPayoutAccountByStripeIdForWorker = internalQuery({
+  args: { stripeAccountId: v.string() },
+  returns: v.array(payoutBindingViewValue),
+  handler: async (ctx, args) => await readPayoutAccountByStripeIdForWorkerHandler(ctx, args.stripeAccountId),
+})
+
+export const recordConnectAccountEventFromInbox = internalMutation({
+  args: recordConnectAccountEventFromInboxArgs,
+  returns: connectAccountResultValue,
+  handler: recordConnectAccountEventFromInboxHandler,
 })
 
 const retiredCreditRefusal = { kind: 'refused' as const, code: 'account_aud_required' as const }

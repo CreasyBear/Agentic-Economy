@@ -182,17 +182,18 @@ describe('assistant access components', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     render(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example/" />)
 
-    expect(screen.getByRole('heading', { name: 'Add Agentic Economy' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Connect with Codex' })).toBeTruthy()
     expect(document.body.textContent).toContain('codex mcp add agentic-economy --url "https://ae.example/mcp"')
     expect(document.body.textContent).toContain('codex mcp login agentic-economy')
-    expect(screen.getByText(/Public search works immediately/u)).toBeTruthy()
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Claude Code' }), { button: 0 })
+    expect(screen.getByText(/browse Operations before connecting/u)).toBeTruthy()
+    expect(screen.getByText(/A live result confirms the connection; installing it alone does not/u)).toBeTruthy()
+    expect(screen.queryByText('claude mcp add --transport http --scope user agentic-economy "https://ae.example/mcp"')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use Claude Code or Cursor' }))
     expect(screen.getByText('claude mcp add --transport http --scope user agentic-economy "https://ae.example/mcp"')).toBeTruthy()
     expect(screen.getByText(/open \/mcp, select agentic-economy, then choose Authenticate/u)).toBeTruthy()
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Cursor' }), { button: 0 })
     expect(screen.getByText('cursor --add-mcp \'{"name":"agentic-economy","url":"https://ae.example/mcp"}\'')).toBeTruthy()
     expect(screen.getByText(/follow its OAuth prompt/u)).toBeTruthy()
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Codex' }), { button: 0 })
     expect(document.body.textContent).not.toContain('ae_agentAccess_whoami')
     expect(screen.queryByRole('button', { name: 'Create agent access key' })).toBeNull()
     expect(document.body.textContent).not.toMatch(/npm install|ae doctor|ae connect|AE_API_KEY=/u)
@@ -201,7 +202,7 @@ describe('assistant access components', () => {
     fireEvent.click(copyButton)
 
     expect(writeText).toHaveBeenCalledWith([
-      `codex mcp add agentic-economy --url "${window.location.origin}/mcp"`,
+      'codex mcp add agentic-economy --url "https://ae.example/mcp"',
       'codex mcp login agentic-economy',
     ].join('\n'))
     const status = await screen.findByText('Codex MCP command copied.')
@@ -214,9 +215,9 @@ describe('assistant access components', () => {
     render(<AeAssistantInstallFunnel canonicalBaseUrl="https://AE.Example:443/" />)
 
     expect(document.body.textContent).toContain('codex mcp add agentic-economy --url "https://AE.Example:443/mcp"')
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Cursor' }), { button: 0 })
+    fireEvent.click(screen.getByRole('button', { name: 'Use Claude Code or Cursor' }))
     fireEvent.click(screen.getByRole('button', { name: 'Copy Cursor MCP command' }))
-    expect(writeText).toHaveBeenCalledWith(`cursor --add-mcp '{"name":"agentic-economy","url":"${window.location.origin}/mcp"}'`)
+    expect(writeText).toHaveBeenCalledWith('cursor --add-mcp \'{"name":"agentic-economy","url":"https://AE.Example:443/mcp"}\'')
     expect(screen.queryByText(/ae_secret/u)).toBeNull()
     expect(screen.queryByRole('link', { name: /agent-access\.json/u })).toBeNull()
   })
@@ -257,7 +258,12 @@ describe('assistant access components', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }))
+    expect(screen.getByText('Enter a valid AUD funding amount before starting payment.')).toBeTruthy()
+    expect(begin).not.toHaveBeenCalled()
+
     fireEvent.change(screen.getByLabelText(/account funding amount/i), { target: { value: '10.00' } })
+    expect(screen.queryByText('Enter a valid AUD funding amount before starting payment.')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /continue to stripe/i }))
 
     await waitFor(() => expect(redirectToCheckout).toHaveBeenCalledWith(session.checkoutUrl))

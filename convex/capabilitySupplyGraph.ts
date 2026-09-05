@@ -151,6 +151,7 @@ const capabilityGraphNodeValue = v.object({
     ),
     observedAt: v.optional(v.number()),
     validUntil: v.optional(v.number()),
+    lastHealthyAt: v.optional(v.number()),
     stale: v.boolean(),
   }),
   routability: v.object({

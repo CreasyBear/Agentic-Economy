@@ -1,0 +1,275 @@
+# Reconcile current documentation
+
+Type: task
+Label: wayfinder:task
+Mode: AFK
+Status: open
+Assignee: Luna Max / Current documentation owner
+Assigned role: Luna Max / maintained product, roadmap, guide, runbook and About-copy owner
+Parent: ../map.md
+Blocked by: 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 29, 30
+
+## Outcome
+
+After the implementation owners have supplied their literal receipts, reconcile
+the maintained current documentation with the approved Tool/Quote/Call
+vocabulary and the source, HTTP/MCP, discovery, CLI and screen contracts they
+actually delivered. This is a post-implementation documentation task: names
+that are still present before those receipts land are not a plan failure. Do
+not claim a cutover, package completion, hosted proof or Australian
+principal-reseller record that the source, tests and evidence do not establish.
+
+Keep the existing Agentic Economy commercial chain, familiar Locus/Nevermined/
+Whop-inspired market steer, package scope, acceptance criteria, production and
+legal holds, and all financial/identity distinctions unchanged. Update only
+current person-facing prose, examples, links, accessibility/copyable
+instructions and explicitly transitional compatibility notes. Historical
+evidence is issue 28's boundary; generated/discovery/plugin/CLI producers and
+application source are their owning issues.
+
+## Fixed mappings and protected boundaries
+
+Use these mappings only when the owning implementation receipt proves the
+corresponding boundary. Do not infer route names or turn this ticket into a
+second API or source rename.
+
+| Existing current wording or contract | Required current wording/cross-reference | Protection |
+| --- | --- | --- |
+| Operation as the admitted callable unit | Tool; a Tool version remains distinct | Preserve Offering, Publication, Listing, Source and portfolio Service as distinct records. |
+| Commitment / buyer consideration | Quote | A Quote is consideration and validity, not payment, settlement or delivery. |
+| Purchased operation invocation | Call | Preserve `toolRef`, `quoteRef`, `callRef`, opaque IDs, snapshots and canonical hash material. |
+| `registry.operations.*` | `registry.tools.*` | This is the registry/catalogue namespace only; do not map call history into the catalogue. |
+| `registry.operations.describe` / anonymous `ae describe` | `registry.tools.describe` / `ae describe` | This is anonymous Tool detail. It is not caller-specific `tool.quote`; do not describe `describe` as obtaining a Quote. |
+| Authenticated `operation.inspect` / caller quote flow | `tool.quote` | Preserve the existing call-mediated quote flow: `ae call` obtains a Quote and then Calls; do not promote anonymous describe to a caller-specific quote. |
+| `operation.invoke` | `tool.call` | Preserve the canonical `operationKeyFor` `operation.invoke` bytes and upstream protocol identifiers. |
+| `operation.list` history | `call.list` | Do not confuse Call history with the `registry.tools` catalogue. |
+| `operation.status`, `operation.cancel`, `operation.reconcile` | `call.status`, `call.cancel`, `call.reconcile` | Keep delivery, payment and purchase resolution/status as separate facts. |
+| `/api/v1/market-operations/*` | `/api/v1/market-tools/*` | Use only the exact route receipt from issue 19; do not invent web routes. |
+| `/api/v1/operations/inspect` and `/api/v1/operations/call` | `/api/v1/tools/quote` and `/api/v1/tools/call` | Preserve authentication, request-reference, idempotency, error and recovery semantics from issue 19. |
+| `GET /api/v1/operations` and operation recovery paths | `GET /api/v1/calls` and the issue 19 `calls/{callRef}` paths | Use the coordinator's exact route/import receipt, including `call-api.ts`; do not hand-edit generated route output. |
+| `maximumSpendPerInvocation` / `maximumConcurrentInvocations` | `maximumSpendPerCall` / `maximumConcurrentCalls` | Funding is not authority; preserve amount, exponent, policy digest, approval and concurrency semantics. |
+| `inspect_only`, `approve_each`, `bounded_mandate`, `full_yolo`, `mandate_eligible` | `read_only`, `approval_required`, `spending_policy`, `unrestricted_test_only`, `policy_eligible` | Keep permission modes and test-only safety boundaries explicit. |
+| `market_operations:invoke` and related request suffixes | `market_tools:call` and corresponding call suffixes | Preserve scopes, auth failures and opaque input/reference fields. |
+| `supplier_operations:v1` | `provider_tools:v1` | Preserve the external seller/provider protocol fields and namespaces where they are not AE-owned. |
+| CLI `--supplier` | `--provider` | Keep familiar CLI verbs, including `describe` and `call`; do not add aliases or redesign the CLI. |
+
+Always retain generic IAM `Principal`, `Account`, `Business`, `User`,
+`Credential` and `DelegationGrant`; Customer, Agent, Provider, AE Seller and
+payment recipient roles; Charge, Provider obligation, payable amount and
+Payout; and external OpenAPI `operationId`, MCP methods, OAuth/x402 fields,
+opaque identifier prefixes, hashes/signatures and external financial
+namespaces. Never substitute old-looking words inside opaque Tool or Provider
+input merely because they match a display term.
+
+## Finite documentation allowlist
+
+Every writable path is literal. The worker may edit only the named sections or
+export below, after the relevant handoff. A path listed as read-only is an
+anchor for status/provenance checks, not a permission to edit it.
+
+### Current authority and public introduction
+
+Writable current prose/examples and compatibility notes, only where source and
+test receipts now match:
+
+- `README.md`
+- `START_LINE.md`
+- `IMPLEMENTATION_ROADMAP.md`
+- `PRODUCT.md` — current implementation/compatibility examples only; preserve
+  the product charter, commercial chain and implementation truth.
+- `CONTEXT.md` — current examples and compatibility notes only; preserve the
+  canonical glossary and protected distinctions.
+- `AGENTS.md` — current Product boundary/Implementation truth references only;
+  leave Node/Convex startup and safety instructions unchanged unless an exact
+  path reference is stale.
+- `DESIGN.md`
+- `src/content/brand-copy.ts` — only the `ABOUT` export. Issue 23 owns
+  `AGENT_INSTRUCTION`, `AGENT_DOOR` and `AGENT_PAGE`; issue 24 owns `HOME`;
+  issue 25 owns `BUSINESS_DOOR`. Do not rewrite the module wholesale.
+
+`README.md` and `START_LINE.md` retain their current milestone, package scope,
+acceptance, release gates and limitations. `IMPLEMENTATION_ROADMAP.md` keeps
+its current package status and subordinate-authority rule; terminology updates
+must not become a status promotion.
+
+### Current guides and runbooks
+
+- `X402_SELLER_ONBOARDING.md` — current AE-facing Provider/Tool prose and
+  examples only; retain the x402/upstream seller claim field and protocol
+  meaning.
+- `tools/ae/README.md` — maintained `ae` developer-guide prose and examples
+  only, after issue 20's CLI receipt; preserve CLI verbs, provider flag,
+  auth/origin/error/recovery behavior and the single package boundary.
+- `docs/guides/package-4-operations.md` — current Quote/Call operational
+  instructions only; preserve Formance, charge/reserve, delivery, payment,
+  recovery and reconciliation semantics.
+- `docs/guides/package-6-plugin-release.md` — issue 27 is the sole writer for
+  current terminology/procedure paragraphs after issue 20/21/22 receipts;
+  preserve its local-prepared/not-submitted/not-published status, verification
+  output, 23-item closeout table, issue 02 hold, blockers, rollback and native
+  publication procedure. Issue 28 treats this file as read-only evidence.
+- `docs/operations/README.md`
+- `docs/operations/aws-foundation.md`
+- `docs/operations/credentials-and-access.md`
+- `docs/operations/deployment-architecture.md`
+- `docs/operations/deployment-commands.md`
+- `docs/operations/deployment-maturity.md`
+
+Update only AE-owned explanatory language in the operations files. Do not
+change deployment targets, command safety, secrets, status evidence, registry
+state or external system behavior.
+
+### Active design and contributor instructions
+
+- `docs/designs/agent-operating-contract.md` — active lifecycle/prose only;
+  preserve the architecture and acceptance contract.
+- `docs/designs/operation-kernel-wayfinder.md` — current implementation
+  references only; preserve kernel rationale and historical context.
+- `.agents/skills/deployment-operations/SKILL.md` — current AE-owned wording
+  only; preserve official tooling, target/activity safety, secret handling and
+  recovery rules.
+
+The following Package 6/7 anchors are read-only evidence for current status and
+holds, not writable documentation in this ticket:
+
+- `PACKAGE-6-ATOMIC-FEATURE-BUILD-PLAN.md`
+- `PACKAGE-6-REVIEW.md`
+- `PACKAGE-6-REVIEW-REQUIREMENTS.md`
+- `PACKAGE-6-REVIEW-IMPLEMENTATION.md`
+- `PACKAGE-6-REVIEW-NATIVE-CHALLENGE.md`
+- `docs/designs/package-7-trust-and-lifecycle.md`
+- `docs/workflow/work/WF-20260905-package-7.md`
+
+`docs/operations/vocabulary-cutover-preflight.md` is issue 31's read-only
+operational evidence and is not editable here.
+
+### Checks and producer handoffs
+
+These existing checks may be run; their source and producer files remain owned
+by their other tickets:
+
+- `tests/seo`
+- `tests/unit/discovery/page-markdown.test.ts`
+- `tests/unit/discovery/developer-discovery-parity.test.ts`
+
+Issue 20 owns `packages/cli/README.md`, CLI source, package metadata and
+installed-client checks. Issue 21 owns `/llms.txt`, `/SKILL.md`, discovery,
+plugin and machine-copy producers. Issue 22 owns generated route/API/Convex,
+CLI dist and public archive outputs. This ticket consumes their exact receipts
+and does not edit those paths.
+
+## Handoff and sequencing
+
+1. Receive literal completion receipts from issues 10–18 for source contracts,
+   fields, events, storage/codec behavior, Call/Quote semantics and preserved
+   opaque inputs.
+2. Receive issue 19's exact HTTP/MCP route/action/import mapping, including the
+   `operationKeyFor` protection and the anonymous `registry.tools.describe` vs
+   caller `tool.quote` boundary.
+3. Receive issue 20/21/22 receipts for CLI, discovery, plugin, generated,
+   installed and public surfaces. Do not treat a generated or bundled artifact
+   as a source of truth over its producer.
+4. Receive serialized screen receipts from issues 23–26 before changing shared
+   current examples or About copy. The `ABOUT` export is the only
+   `brand-copy.ts` slice in this ticket.
+5. Reconcile the allowlisted docs, record every changed path and current
+   mapping, then hand the evidence to issue 36. Do not close Package 6/7 or
+   remove an existing hold by association.
+
+## Explicit exclusions
+
+- No source, schema, route, API/MCP producer, action adapter, CLI source or
+  package README changes; no generated artifact, dist/public archive,
+  discovery/plugin producer, machine-copy, test-fixture or deployment-registry
+  edits.
+- No edits to the Wayfinder map, work record, any issue other than this file's
+  future implementation, JSONL tracker, `docs/operations/vocabulary-cutover-preflight.md`,
+  or external/live systems.
+- No route invention, API redesign, SDK, alias, new dependency, codemod,
+  infrastructure, free-tier/onboarding feature, financial/legal assertion or
+  new commercial object.
+- No broad old-name search-and-replace. Compatibility/protocol names,
+  upstream OpenAPI/MCP/OAuth/x402 identifiers, opaque IDs/hash material,
+  historical evidence and package acceptance/status may remain exactly as
+  required.
+- No Package 4/5/6/7 status promotion, publication claim, hosted proof or
+  “all Australian principal-reseller” implementation claim without the owning
+  evidence.
+
+## Verification commands and expected results
+
+Run from this checkout with the project-pinned Node 22 and npm 11.5.1. Do not
+run the downloaded-runtime CLI matrix or generators from this ticket.
+
+```sh
+NODE_VERSION=22 "$HOME/.nvm/nvm-exec" node --version
+NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npm --version
+NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npx vitest run --no-file-parallelism \
+  tests/seo \
+  tests/unit/discovery/page-markdown.test.ts \
+  tests/unit/discovery/developer-discovery-parity.test.ts
+NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npm run typecheck
+git diff --check -- \
+  README.md START_LINE.md IMPLEMENTATION_ROADMAP.md PRODUCT.md CONTEXT.md \
+  AGENTS.md DESIGN.md X402_SELLER_ONBOARDING.md tools/ae/README.md \
+  docs/guides/package-4-operations.md docs/guides/package-6-plugin-release.md \
+  docs/operations/README.md docs/operations/aws-foundation.md \
+  docs/operations/credentials-and-access.md \
+  docs/operations/deployment-architecture.md \
+  docs/operations/deployment-commands.md docs/operations/deployment-maturity.md \
+  docs/designs/agent-operating-contract.md \
+  docs/designs/operation-kernel-wayfinder.md \
+  .agents/skills/deployment-operations/SKILL.md src/content/brand-copy.ts
+```
+
+Expected results are Node 22.x, npm 11.5.1, the focused discovery/SEO checks
+and typecheck green with no new regression, and clean whitespace on only the
+allowlisted paths. Existing baseline failures remain recorded rather than
+silenced. Verify with `rg` or the focused tests that current examples use the
+actual issue 19–22 receipts, that anonymous `registry.tools.describe` is not
+called a Quote, and that Package 4/5/6/7 status/hold wording is unchanged.
+
+## Acceptance
+
+- Each changed current document has a short path-specific mapping note or
+  example receipt; no unexplained stale AE-owned vocabulary remains in the
+  maintained current surfaces, while explicit compatibility/protocol notes
+  remain intact.
+- README, START_LINE, roadmap, Product, Context, AGENTS, active design and
+  operations guidance all describe the same Tool → Quote → Call chain and
+  preserve Customer/Agent/Provider/Seller/payment-recipient, authority/funding,
+  delivery/payment/purchase-status and Outcome-record distinctions.
+- Current examples use only exact public/action/CLI/discovery mappings supplied
+  by issues 19–22. Anonymous Tool detail (`registry.tools.describe` / `ae
+  describe`) is visibly distinct from caller Quote (`tool.quote`); Call
+  history is not presented as the Tool catalogue.
+- `ABOUT` copy is reconciled without changing the other `brand-copy.ts`
+  exports. CLI verbs and `--provider` are clear, and no aliases are introduced.
+- Package scope, acceptance, local/unsubmitted/unpublished Package 6 state,
+  blocked Package 7 state, production/legal holds and current limitations are
+  unchanged. No hosted/live/deployment claim is added.
+- Focused checks and typecheck are attached, with an exact changed-path list,
+  per-document receipt/mapping note, unresolved runtime/deployment limitations
+  and handoff evidence for issue 36. This ticket does not require or claim
+  implementation, generation or hosted verification.
+
+## Closure evidence
+
+Attach the literal changed-path list; a per-document old/current/protected
+mapping table; the issue 10–26 and 29/30 receipts consumed; the `ABOUT` slice
+handoff; focused test/typecheck/diff results; and a short Package 4/5/6/7
+status/hold comparison. Record any unverified installed, generated, hosted or
+deployment behavior explicitly. Close only when the bounded assignments,
+checks, decisions and queue coverage are evidenced and issue 36 can consume
+the handoff; do not wait for old pre-cutover names to disappear from protected
+records.
+
+## Comments
+
+- `docs/guides/package-6-plugin-release.md` is intentionally serialized: issue
+  27 owns current procedure terminology, while issue 28 is read-only there.
+- `tools/ae/README.md` is included because it is a maintained CLI developer
+  guide; `packages/cli/README.md` remains issue 20's package-facing boundary.
+- The Package 7 workflow is a work record and remains read-only. Any needed
+  historical/current cross-reference belongs in issue 28's bounded evidence
+  work, not in the workflow record.

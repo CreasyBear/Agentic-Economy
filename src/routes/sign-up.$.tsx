@@ -39,12 +39,12 @@ function SignUpRoute() {
     : isAgentAccessFlow
       ? 'Create an account to connect an agent'
       : isProviderFlow
-        ? 'Create a supplier account'
+        ? 'Create a Provider account'
         : 'Create an account'
   const body = isLocalE2E
     ? 'This browser journey does not connect a Clerk account. Nothing is signed in or authorized.'
     : isAgentAccessFlow
-      ? 'After you create your account, you’ll return to Access and create a caller identity.'
+      ? 'After you create your account, you’ll return to the agent connection you started.'
       : isProviderFlow
         ? 'After you create your account, you’ll continue to the Operation publishing workspace.'
         : redirect === undefined

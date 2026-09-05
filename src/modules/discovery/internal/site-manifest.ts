@@ -352,7 +352,7 @@ export function projectCompactSiteDiscoveryManifest(
       },
       access: {
         anonymous: {
-          cli: 'Search, inspect, and compare current Operations without connecting.',
+          cli: 'List, search, describe, and compare current Operations without connecting.',
         },
         connected: {
           authentication: manifest.operationGateway.executionModes.gateway.authentication,

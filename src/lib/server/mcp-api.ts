@@ -33,7 +33,7 @@ import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
 import { isRecord } from '@/modules/common/is-record'
-import { isOperationMarketReadAction, listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
+import { describeActionMcpMetadata, isOperationMarketReadAction, listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
 import {
   agentAuthorityModeAllows,
   agentAuthorityScopeForMode,
@@ -297,6 +297,7 @@ export function createAeMcpServer(
   const serverWithSdk = server as { server: Server }
   serverWithSdk.server = sdkServer
   for (const action of admittedActions) {
+    const metadata = describeActionMcpMetadata(action)
     server.registerTool(
       mcpToolName(action),
       {
@@ -305,8 +306,9 @@ export function createAeMcpServer(
         inputSchema: action.schema,
         annotations: {
           readOnlyHint: action.readOnly,
-          destructiveHint: !action.readOnly,
-          idempotentHint: true,
+          destructiveHint: action.readOnly ? false : metadata.destructive,
+          idempotentHint: metadata.idempotent,
+          openWorldHint: metadata.openWorld,
         },
       },
       async (data: unknown) => {

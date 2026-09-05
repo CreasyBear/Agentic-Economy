@@ -44,9 +44,9 @@ function SignInRoute() {
   const body = isLocalE2E
     ? 'This browser journey does not connect a Clerk account. Nothing is signed in or authorized.'
     : isAgentAccessFlow
-      ? 'After you sign in, you’ll return to Access and create a caller identity.'
+      ? 'After you sign in, you’ll return to the agent connection you started.'
       : isProviderFlow
-        ? 'After you sign in, you’ll return to your supplier workspace.'
+        ? 'After you sign in, you’ll return to your Provider workspace.'
         : redirect === undefined
           ? 'After you sign in, you’ll return to your account settings.'
           : 'After you sign in, you’ll return to where you left off.'

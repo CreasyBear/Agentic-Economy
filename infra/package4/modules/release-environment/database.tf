@@ -55,6 +55,8 @@ resource "aws_db_instance" "formance" {
   lifecycle {
     prevent_destroy = true
   }
+
+  depends_on = [aws_cloudwatch_log_group.rds]
 }
 
 resource "aws_cloudwatch_metric_alarm" "database_storage" {
@@ -62,7 +64,7 @@ resource "aws_cloudwatch_metric_alarm" "database_storage" {
   alarm_description   = "Package 4 Formance database free storage is below 10 GiB."
   namespace           = "AWS/RDS"
   metric_name         = "FreeStorageSpace"
-  dimensions          = { DBInstanceIdentifier = aws_db_instance.formance.id }
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.formance.identifier }
   statistic           = "Average"
   period              = 300
   evaluation_periods  = 2
@@ -78,12 +80,44 @@ resource "aws_cloudwatch_metric_alarm" "database_connections" {
   alarm_description   = "Package 4 Formance database connection pressure."
   namespace           = "AWS/RDS"
   metric_name         = "DatabaseConnections"
-  dimensions          = { DBInstanceIdentifier = aws_db_instance.formance.id }
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.formance.identifier }
   statistic           = "Average"
   period              = 300
   evaluation_periods  = 2
   comparison_operator = "GreaterThanThreshold"
   threshold           = 100
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "breaching"
+  tags                = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "database_cpu" {
+  alarm_name          = "${var.name}-rds-cpu"
+  alarm_description   = "Package 4 Formance database CPU is above 85 percent for 15 minutes."
+  namespace           = "AWS/RDS"
+  metric_name         = "CPUUtilization"
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.formance.identifier }
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 3
+  comparison_operator = "GreaterThanThreshold"
+  threshold           = 85
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "breaching"
+  tags                = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "database_memory" {
+  alarm_name          = "${var.name}-rds-low-memory"
+  alarm_description   = "Package 4 Formance database free memory is below 512 MiB."
+  namespace           = "AWS/RDS"
+  metric_name         = "FreeableMemory"
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.formance.identifier }
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 2
+  comparison_operator = "LessThanThreshold"
+  threshold           = 536870912
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "breaching"
   tags                = local.tags

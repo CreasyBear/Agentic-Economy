@@ -33,6 +33,7 @@ import {
   publishOwnerSupplySource,
 } from './source-first-owner'
 import {
+  cancelOwnerProviderConnectionAttemptInputSchema,
   completeOwnerMcpProviderConnectionInputSchema,
   completeOwnerHttpProviderConnectionInputSchema,
   ownerProviderConnectionAttemptInputSchema,
@@ -98,6 +99,14 @@ export const completeOwnerHttpProviderConnectionServer = createServerFn({
     setResponseHeader('cache-control', 'no-store')
     const { completeOwnerHttpProviderConnection } = await import('./internal/supply-funnel/provider-connection-handoff')
     return await completeOwnerHttpProviderConnection(input)
+  })
+
+export const cancelOwnerProviderConnectionAttemptServer = createServerFn({ method: 'POST' })
+  .validator((data) => cancelOwnerProviderConnectionAttemptInputSchema.parse(data))
+  .handler(async (input) => {
+    setResponseHeader('cache-control', 'no-store')
+    const { cancelOwnerProviderConnectionAttempt } = await import('./internal/supply-funnel/provider-connection-handoff')
+    return await cancelOwnerProviderConnectionAttempt(input)
   })
 
 export const startOwnerMcpProviderConnectionServer = createServerFn({

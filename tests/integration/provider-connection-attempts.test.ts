@@ -6,6 +6,7 @@ import schema from '../../convex/schema'
 import { convexModules as modules } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import { createCustomerRequestServiceAssertion } from '../../src/modules/agent-access/service-auth-envelope'
+import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import { stableStringify } from '../../src/modules/common/stable-hash'
 import {
   createPublishedBusinessOwner,
@@ -76,6 +77,115 @@ describe('Provider connection attempts', () => {
         state: 'pending',
       },
     })
+
+    const preparedCommand = {
+      attemptRef: reserved.attemptRef,
+      commandId: 'provider-owner-oauth-attempt:prepare',
+      operationKey: 'provider-owner-oauth-attempt:prepare',
+      correlationId: 'provider-owner-oauth-attempt:prepare',
+      proof: {
+        reverificationId: 'rev_provider_owner_oauth_attempt_prepare',
+        firstFactorAgeMinutes: 0,
+        secondFactorAgeMinutes: -1,
+      },
+    }
+    const prepared = await fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.prepareOAuthOwner,
+      await withSourceWrite('catalog_publish', preparedCommand),
+    )
+    if (prepared.kind !== 'prepared') throw new Error('expected prepared OAuth attempt')
+    await backend.mutation(internal.secretLifecycleOperations.initializeSecretPointer, {
+      authority: prepared.provisionAuthority,
+      secretRef: prepared.secretRef,
+      activeGeneration: 'sgn_00000000000040008000000000000081',
+    })
+    const stateHash = `sha256:${'9'.repeat(64)}`
+    await expect(fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.bindOAuthOwner,
+      await withSourceWrite('catalog_publish', {
+        attemptRef: reserved.attemptRef,
+        stateHash,
+        secretRef: prepared.secretRef,
+        provisionCommandId: prepared.provisionAuthority.idempotencyRef,
+        commandId: 'provider-owner-oauth-attempt:bind',
+        operationKey: 'provider-owner-oauth-attempt:bind',
+        correlationId: 'provider-owner-oauth-attempt:bind',
+      }),
+    )).resolves.toEqual({ kind: 'bound' })
+    const cancelCommand = {
+      ...preparedCommand,
+      commandId: 'provider-owner-oauth-attempt:cancel',
+      operationKey: 'provider-owner-oauth-attempt:cancel',
+      correlationId: 'provider-owner-oauth-attempt:cancel',
+    }
+    await expect(fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.cancelOwner,
+      await withSourceWrite('catalog_publish', cancelCommand),
+    )).resolves.toEqual({ kind: 'cancelled', state: 'cancelled' })
+    await expect(fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.prepareOAuthOwner,
+      await withSourceWrite('catalog_publish', {
+        ...cancelCommand,
+        commandId: 'provider-owner-oauth-attempt:late-callback',
+        operationKey: 'provider-owner-oauth-attempt:late-callback',
+        correlationId: 'provider-owner-oauth-attempt:late-callback',
+      }),
+    )).resolves.toEqual({ kind: 'refused', code: 'not_found' })
+    await expect(fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.finalizeOwner,
+      await withSourceWrite('catalog_publish', {
+        attemptRef: reserved.attemptRef,
+        secretRef: prepared.secretRef,
+        provisionCommandId: prepared.rotationAuthority.idempotencyRef,
+        commandId: 'provider-owner-oauth-attempt:late-finalize',
+        operationKey: 'provider-owner-oauth-attempt:late-finalize',
+        correlationId: 'provider-owner-oauth-attempt:late-finalize',
+      }),
+    )).resolves.toEqual({ kind: 'refused', code: 'not_found' })
+
+    const httpReserved = await fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.reserveOwner,
+      await withSourceWrite('catalog_publish', {
+        businessId: fixture.businessId,
+        sourceKind: 'http_credential' as const,
+        sourceUrl: 'https://provider.example/openapi.yaml',
+        authentication: { kind: 'http_bearer' as const },
+        environment: 'production' as const,
+        inputDigest: `sha256:${'8'.repeat(64)}`,
+        commandId: 'provider-owner-http-attempt:one',
+        operationKey: 'provider-owner-http-attempt:one',
+        correlationId: 'provider-owner-http-attempt:one',
+      }),
+    )
+    if (httpReserved.kind === 'refused') throw new Error('expected HTTP attempt reservation')
+    const httpCancel = {
+      ...cancelCommand,
+      attemptRef: httpReserved.attemptRef,
+      commandId: 'provider-owner-http-attempt:cancel',
+      operationKey: 'provider-owner-http-attempt:cancel',
+      correlationId: 'provider-owner-http-attempt:cancel',
+    }
+    await expect(fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.cancelOwner,
+      await withSourceWrite('catalog_publish', httpCancel),
+    )).resolves.toEqual({ kind: 'cancelled', state: 'cancelled' })
+    await expect(fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.finalizeOwner,
+      await withSourceWrite('catalog_publish', {
+        attemptRef: httpReserved.attemptRef,
+        secretRef: 'sec_cancelled_http',
+        provisionCommandId: 'provider-owner-http-attempt:late-prepare',
+        commandId: 'provider-owner-http-attempt:late-finalize',
+        operationKey: 'provider-owner-http-attempt:late-finalize',
+        correlationId: 'provider-owner-http-attempt:late-finalize',
+      }),
+    )).resolves.toEqual({ kind: 'refused', code: 'not_found' })
+    const afterLateReturns = await backend.run(async (ctx) => ({
+      attempts: await ctx.db.query('capabilityProviderConnectionAttempts').collect(),
+      connections: await ctx.db.query('capabilityProviderConnections').collect(),
+    }))
+    expect(afterLateReturns.attempts.map(({ lifecycle }) => lifecycle)).toEqual(['cancelled', 'cancelled'])
+    expect(afterLateReturns.connections).toHaveLength(0)
   })
 
   it('reserves one expiring credential-free handoff and replays it exactly', async () => {
@@ -269,6 +379,15 @@ describe('Provider connection attempts', () => {
         credentialSecretRef: prepared.secretRef,
         connectionRef: finalized.kind === 'connected' ? finalized.connection.connectionRef : '',
       })
+      await expect(fixture.owner.mutation(
+        api.capabilityProviderConnectionAttempts.cancelOwner,
+        await withSourceWrite('catalog_publish', {
+          ...prepareCommand,
+          commandId: 'provider-connection-attempt:cancel-consumed',
+          operationKey: 'provider-connection-attempt:cancel-consumed',
+          correlationId: 'provider-connection-attempt:cancel-consumed',
+        }),
+      )).resolves.toEqual({ kind: 'unchanged', state: 'consumed' })
 
       if (finalized.kind !== 'connected') throw new Error('expected connected HTTP source')
       const runtimeCommand = {
@@ -309,6 +428,109 @@ describe('Provider connection attempts', () => {
       if (previousServiceKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
       else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServiceKey
     }
+  })
+
+  it('binds an HTTP handoff to one saved owner candidate and refuses substitutions', async () => {
+    const backend = convexTest(schema, modules)
+    const fixture = await createPublishedBusinessOwner(backend, 'provider-http-candidate-binding')
+    const foreign = await createPublishedBusinessOwner(backend, 'provider-http-candidate-binding-foreign')
+    const source = {
+      kind: 'openapi' as const,
+      definitionUrl: 'https://provider.example/openapi.json',
+      environment: 'production' as const,
+    }
+    const selector = { serverUrl: 'https://provider.example/', path: '/lookup', method: 'post' }
+    const sourceDigest = canonicalDigest({ source: 'provider-http-candidate-binding:v1' })
+    const candidateRef = canonicalDigest({ sourceDigest, selector })
+    const draftCommand = {
+      businessId: fixture.businessId,
+      title: 'Reference lookup',
+      description: 'Looks up one public reference.',
+      category: 'Research',
+      sourceKind: source.kind,
+      sourceDescriptorJson: stableStringify(source),
+      sourceDigest,
+      sourceRevision: `openapi:${sourceDigest}`,
+      candidateRef,
+      sourceSelectorJson: stableStringify(selector),
+      operationKey: 'provider-http-candidate-binding:draft',
+      correlationId: 'provider-http-candidate-binding:draft',
+    }
+    const saved = await fixture.owner.mutation(
+      api.capabilitySupplyOwnerFunnel.saveOwnerSupplyIntegrationDraft,
+      await withSourceWrite('catalog_publish', draftCommand),
+    )
+    expect(saved).toMatchObject({ kind: 'saved', candidateRef, sourceDigest })
+    if (saved.kind === 'refused') throw new Error('expected saved owner candidate')
+
+    const command = {
+      businessId: fixture.businessId,
+      sourceKind: 'http_credential' as const,
+      sourceUrl: source.definitionUrl,
+      sourceDescriptorJson: stableStringify(source),
+      authentication: { kind: 'api_key' as const, location: 'header' as const, name: 'X-API-Key' },
+      environment: source.environment,
+      inputDigest: canonicalDigest({ command: 'provider-http-candidate-binding:reserve' }),
+      commandId: 'provider-http-candidate-binding:reserve',
+      operationKey: 'provider-http-candidate-binding:reserve',
+      correlationId: 'provider-http-candidate-binding:reserve',
+      candidateDraftRef: candidateRef,
+      candidateSourceDigest: sourceDigest,
+    }
+    const reserved = await fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.reserveOwner,
+      await withSourceWrite('catalog_publish', command),
+    )
+    expect(reserved).toMatchObject({ kind: 'reserved', candidateDraftRef: candidateRef })
+    if (reserved.kind === 'refused') throw new Error('expected candidate-bound HTTP attempt')
+    await expect(fixture.owner.query(
+      api.capabilityProviderConnectionAttempts.readOwner,
+      { attemptRef: reserved.attemptRef },
+    )).resolves.toMatchObject({
+      kind: 'available',
+      attempt: { candidateDraftRef: candidateRef, sourceUrl: source.definitionUrl, environment: 'production' },
+    })
+    await expect(backend.run((ctx) => ctx.db.query('capabilitySupplySourceDrafts').collect())).resolves.toEqual([])
+
+    await backend.run(async (ctx) => {
+      const draft = await ctx.db.query('offeringAccessPaths')
+        .withIndex('by_accessPathRef', (query) => query.eq(
+          'accessPathRef', saved.accessPathRef,
+        ))
+        .unique()
+      if (draft?.integrationDraft === undefined) throw new Error('saved_candidate_missing')
+      await ctx.db.patch(draft._id, {
+        integrationDraft: { ...draft.integrationDraft, connectionRef: 'connection:later' },
+      })
+    })
+    await expect(fixture.owner.mutation(
+      api.capabilityProviderConnectionAttempts.reserveOwner,
+      await withSourceWrite('catalog_publish', command),
+    )).resolves.toMatchObject({ kind: 'replayed', attemptRef: reserved.attemptRef })
+
+    const changedCandidate = canonicalDigest({ sourceDigest, selector: { ...selector, path: '/other' } })
+    for (const changed of [
+      { candidateDraftRef: changedCandidate },
+      { candidateSourceDigest: `sha256:${'c'.repeat(64)}` },
+      { sourceUrl: 'https://provider.example/other-openapi.json' },
+      { environment: 'sandbox' as const },
+    ]) {
+      await expect(fixture.owner.mutation(
+        api.capabilityProviderConnectionAttempts.reserveOwner,
+        await withSourceWrite('catalog_publish', { ...command, ...changed }),
+      )).resolves.toEqual({ kind: 'refused', code: 'command_identity_conflict' })
+    }
+    await expect(foreign.owner.mutation(
+      api.capabilityProviderConnectionAttempts.reserveOwner,
+      await withSourceWrite('catalog_publish', {
+        ...command,
+        businessId: foreign.businessId,
+        inputDigest: canonicalDigest({ command: 'provider-http-candidate-binding:foreign-business' }),
+        commandId: 'provider-http-candidate-binding:foreign-business',
+        operationKey: 'provider-http-candidate-binding:foreign-business',
+        correlationId: 'provider-http-candidate-binding:foreign-business',
+      }),
+    )).resolves.toEqual({ kind: 'refused', code: 'invalid_source' })
   })
 
   it('fails closed for changed replay input, unsafe sources, or another Account', async () => {

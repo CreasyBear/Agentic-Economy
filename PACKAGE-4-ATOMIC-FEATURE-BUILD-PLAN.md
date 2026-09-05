@@ -1,6 +1,6 @@
 # Package 4 atomic feature-build plan — OSS Formance amendment
 
-**Status:** engineering-reviewed and implementation-ready
+**Status:** substantially implemented; release verification and production activation remain gated
 
 **Scope:** Package 4A–4H, delivered as ten sequential, independently reviewable PRs
 
@@ -11,6 +11,25 @@
 **Supersedes:** the custom Convex journal, balance-projection, and automated-reconciliation sections of the previous Package 4 plan
 
 **Prepared:** 2026-09-02
+
+## Progress reconciliation — 2026-09-05
+
+The delivery design below is retained unchanged; its original future-tense
+tasks are not a current inventory of missing implementation. Package 4 source
+was integrated in `7865a0803` on 2026-09-03 and is present at `main`
+`987cdec5085c207eb6b9024b66ef4a20de8a3da0`. The current working tree contains
+additional uncommitted funding, webhook and infrastructure changes, whose
+deployment status must be read separately.
+
+[Package 4 release evidence](./docs/guides/package-4-release-evidence.md)
+records the dated local suites, real Formance checks and hosted Stripe sandbox
+funding of exactly AUD 5.000000. It explicitly leaves managed-x402
+success/refusal/recovery, refund/replay, documents and signed close, protocol
+parity, strict environment recovery and the external Base Sepolia canary open.
+[Deployment maturity](./docs/operations/deployment-maturity.md) records later
+partial deployments and operating blockers. None of those checks was rerun for
+this documentation reconciliation. Package 4 is not closed and production
+funding/mainnet effects remain gated.
 
 ## 1. Outcome
 

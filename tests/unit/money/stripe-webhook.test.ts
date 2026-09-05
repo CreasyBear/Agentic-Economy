@@ -8,13 +8,13 @@ describe('money Stripe webhook handler', () => {
     const response = await handleStripeWebhookRequest({
       request: new Request('http://localhost/api/stripe/webhook', { method: 'POST', body: '{}' }),
       verifier: { verify: async () => event() },
-      applier: { apply: async () => ({ kind: 'accepted', status: 'applied' }) },
+      ingester: { ingest: async () => ({ kind: 'accepted', status: 'queued' }) },
     })
     expect(response.status).toBe(400)
   })
 
-  it('verifies and applies the exact raw body before returning the applied event identity', async () => {
-    const applied: Array<{ stripeEventId: string; rawBody: string }> = []
+  it('verifies and durably queues the exact raw body before acknowledging', async () => {
+    const admitted: Array<{ stripeEventId: string; rawBody: string }> = []
     const webhookEvent = event()
     const verifier = {
       verify: async (input: { rawBody: string; signature: string }) => {
@@ -23,31 +23,39 @@ describe('money Stripe webhook handler', () => {
         return webhookEvent
       },
     }
-    const applier = {
-      apply: async (input: { event: StripeMoneyWebhookEvent; rawBody: string }) => {
-        applied.push({ stripeEventId: input.event.stripeEventId, rawBody: input.rawBody })
-        const appliedRef = input.event.kind === 'checkout' ? input.event.sessionId : input.event.externalRef
-        return { kind: 'accepted' as const, status: 'applied' as const, appliedRef }
+    const ingester = {
+      ingest: async (input: { event: StripeMoneyWebhookEvent; rawBody: string }) => {
+        admitted.push({ stripeEventId: input.event.stripeEventId, rawBody: input.rawBody })
+        return { kind: 'accepted' as const, status: 'queued' as const }
       },
     }
     const response = await handleStripeWebhookRequest({
       request: new Request('http://localhost/api/stripe/webhook', { method: 'POST', body: '{"ok":true}', headers: { 'stripe-signature': 'sig' } }),
       verifier,
-      applier,
+      ingester,
     })
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ kind: 'accepted', status: 'applied', appliedRef: 'cs_1' })
-    expect(applied).toEqual([{ stripeEventId: 'evt_1', rawBody: '{"ok":true}' }])
+    expect(await response.json()).toEqual({ kind: 'accepted', status: 'queued' })
+    expect(admitted).toEqual([{ stripeEventId: 'evt_1', rawBody: '{"ok":true}' }])
   })
 
   it('returns retryable pending with Retry-After', async () => {
     const response = await handleStripeWebhookRequest({
       request: new Request('http://localhost/api/stripe/webhook', { method: 'POST', body: '{}', headers: { 'stripe-signature': 'sig' } }),
       verifier: { verify: async () => event() },
-      applier: { apply: async () => ({ kind: 'refused' as const, code: 'credit_topup_pending' as const, retryable: true }) },
+      ingester: { ingest: async () => ({ kind: 'refused' as const, code: 'credit_topup_pending' as const, retryable: true }) },
     })
     expect(response.status).toBe(503)
     expect(response.headers.get('Retry-After')).toBe('5')
+  })
+
+  it('returns 503 when durable admission fails before acknowledgement', async () => {
+    const response = await handleStripeWebhookRequest({
+      request: new Request('http://localhost/api/stripe/webhook', { method: 'POST', body: '{}', headers: { 'stripe-signature': 'sig' } }),
+      verifier: { verify: async () => event() },
+      ingester: { ingest: async () => ({ kind: 'refused' as const, code: 'source_write_denied' as const, retryable: false }) },
+    })
+    expect(response.status).toBe(503)
   })
 
   it('rejects oversized webhook bodies before signature verification', async () => {
@@ -64,7 +72,7 @@ describe('money Stripe webhook handler', () => {
           return event()
         },
       },
-      applier: { apply: async () => ({ kind: 'accepted', status: 'applied' }) },
+      ingester: { ingest: async () => ({ kind: 'accepted', status: 'queued' }) },
     })
     expect(response.status).toBe(413)
     expect(verified).toBe(false)
@@ -89,4 +97,3 @@ function event(): StripeMoneyWebhookEvent {
     observedAt: 2,
   }
 }
-

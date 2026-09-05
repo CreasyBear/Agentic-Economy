@@ -286,6 +286,7 @@ export const marketRequestCreateAction = defineAction<MarketRequestCreateInput, 
     dataClasses: ['market_demand'], spendExposure: 'none', approval: 'none',
   },
   surfaces: ['http', 'mcp', 'cli'],
+  mcp: { idempotent: true, openWorld: false, destructive: false },
   credentialAdmission: { scope: MARKET_OPERATIONS_INVOKE_SCOPE, authority: 'descriptor_classified' },
   invocationContract: {
     version: MARKET_REQUEST_ROUTE_CONTRACTS.create.contractVersion,

@@ -48,20 +48,20 @@ export const AGENT_INSTRUCTION: AgentPasteInstruction = {
 /** Agent/Runtime door on `/` (routes to /for-agents). */
 export const AGENT_DOOR = {
   heading: 'For your agent',
-  body: 'Search and inspect without a key. Connect once when a call needs it.',
+  body: 'Browse public Operations. Connect your account when you are ready to make a Call.',
   cta: 'Connect your agent',
   href: '/for-agents',
 } as const
 
 /** Agent/Runtime landing (`/for-agents`) — setup for named harnesses, then the market. */
 export const AGENT_PAGE = {
-  metaTitle: 'One connection, every tool | Agentic Economy',
+  metaTitle: 'Connect your agent | Agentic Economy',
   metaDescription:
-    'Claude Code, Cursor, and Codex connect once. Then search, compare, and call listed tools from one wallet. No per-provider accounts.',
+    'Find an outside service, compare its terms, and connect Codex, Claude Code or Cursor to make an authorized Call.',
   eyebrow: 'Connections',
   heading: 'Add the market to your agent.',
   harnesses: 'Claude Code, Cursor, and Codex',
-  subhead: 'One native MCP connection. Search immediately; authenticate in your client, then approve each purchase.',
+  subhead: 'Find the service your task needs. Connect your account, review the terms, and make a Call within the authority you have granted.',
 } as const
 
 /** Supplier door on `/` (routes to the existing supply mode). */

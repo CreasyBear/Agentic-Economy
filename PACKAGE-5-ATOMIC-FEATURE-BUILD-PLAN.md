@@ -1,6 +1,6 @@
 # Package 5 atomic feature-build plan — supplier operations
 
-**Status:** implementation complete on `main`; external staging proof and production activation remain gated
+**Status:** core implementation landed on `main`; later handoff corrections locally verified but uncommitted; external release proof outstanding
 
 **Date:** 2026-09-04
 
@@ -13,6 +13,19 @@
 This document is the user-approved Package 5 execution authority. It authorises the additive dependencies, contracts, schema, migration code and local implementation described below. Production activation and destructive migration remain separately gated by signed release evidence.
 
 ## Implementation record — 2026-09-04
+
+**Reconciled 2026-09-05:** the core described below is present in `main` at
+`987cdec5085c207eb6b9024b66ef4a20de8a3da0`; later connection-handoff and resume
+corrections are uncommitted. The [transition review addendum](./PACKAGE-6-REVIEW.md#provider-handoff-and-recovery-transitions-source-and-focused-tests-verified)
+records their focused local verification (4 files / 27 tests, typecheck and
+narrow lint passing), while the repository import gate remains red on four
+baseline imports in two Package 5 test files. This is not deployed or native
+client proof. The 2026-09-04
+changed-cone result was **505 passed, 3 failed across 61 files**, with the
+concurrent-work failures detailed below. Neither that result nor the deployed
+reference Provider added in `987cdec50` proves the complete staging journey.
+This reconciliation did not rerun tests or deployed acceptance. The original
+scope and release requirements are unchanged.
 
 Implemented in the current worktree:
 

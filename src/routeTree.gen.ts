@@ -105,6 +105,7 @@ import { Route as ApiV1FundingConstraintsRouteImport } from './routes/api.v1.fun
 import { Route as ApiV1AccountFundingSessionsRouteImport } from './routes/api.v1.account.funding-sessions'
 import { Route as ApiV1AccountBalanceRouteImport } from './routes/api.v1.account.balance'
 import { Route as ApiV1AccountActivityRouteImport } from './routes/api.v1.account.activity'
+import { Route as ApiStripeWebhookAccountsV2RouteImport } from './routes/api.stripe.webhook.accounts-v2'
 import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
 import { Route as OperatorOwnerSettingsWorkspaceRouteImport } from './routes/_operator/owner.settings.workspace'
 import { Route as OperatorOwnerSettingsPayoutsRouteImport } from './routes/_operator/owner.settings.payouts'
@@ -627,6 +628,12 @@ const ApiV1AccountActivityRoute = ApiV1AccountActivityRouteImport.update({
   path: '/activity',
   getParentRoute: () => ApiV1AccountRoute,
 } as any)
+const ApiStripeWebhookAccountsV2Route =
+  ApiStripeWebhookAccountsV2RouteImport.update({
+    id: '/accounts-v2',
+    path: '/accounts-v2',
+    getParentRoute: () => ApiStripeWebhookRoute,
+  } as any)
 const OperatorOwnerSupplyOfferingRefRoute =
   OperatorOwnerSupplyOfferingRefRouteImport.update({
     id: '/$offeringRef',
@@ -825,7 +832,7 @@ export interface FileRoutesByFullPath {
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
-  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
@@ -841,6 +848,7 @@ export interface FileRoutesByFullPath {
   '/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
   '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
+  '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
   '/api/v1/account/funding-sessions': typeof ApiV1AccountFundingSessionsRouteWithChildren
@@ -944,7 +952,7 @@ export interface FileRoutesByTo {
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
-  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
@@ -960,6 +968,7 @@ export interface FileRoutesByTo {
   '/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
   '/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
+  '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
   '/api/v1/account/funding-sessions': typeof ApiV1AccountFundingSessionsRouteWithChildren
@@ -1065,7 +1074,7 @@ export interface FileRoutesById {
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
-  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRouteWithChildren
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
@@ -1081,6 +1090,7 @@ export interface FileRoutesById {
   '/_operator/owner/settings/payouts': typeof OperatorOwnerSettingsPayoutsRoute
   '/_operator/owner/settings/workspace': typeof OperatorOwnerSettingsWorkspaceRoute
   '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
+  '/api/stripe/webhook/accounts-v2': typeof ApiStripeWebhookAccountsV2Route
   '/api/v1/account/activity': typeof ApiV1AccountActivityRoute
   '/api/v1/account/balance': typeof ApiV1AccountBalanceRoute
   '/api/v1/account/funding-sessions': typeof ApiV1AccountFundingSessionsRouteWithChildren
@@ -1202,6 +1212,7 @@ export interface FileRouteTypes {
     | '/owner/settings/payouts'
     | '/owner/settings/workspace'
     | '/owner/supply/$offeringRef'
+    | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
     | '/api/v1/account/funding-sessions'
@@ -1321,6 +1332,7 @@ export interface FileRouteTypes {
     | '/owner/settings/payouts'
     | '/owner/settings/workspace'
     | '/owner/supply/$offeringRef'
+    | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
     | '/api/v1/account/funding-sessions'
@@ -1441,6 +1453,7 @@ export interface FileRouteTypes {
     | '/_operator/owner/settings/payouts'
     | '/_operator/owner/settings/workspace'
     | '/_operator/owner/supply/$offeringRef'
+    | '/api/stripe/webhook/accounts-v2'
     | '/api/v1/account/activity'
     | '/api/v1/account/balance'
     | '/api/v1/account/funding-sessions'
@@ -1530,7 +1543,7 @@ export interface RootRouteChildren {
   ApiInternalProviderConsequenceRoute: typeof ApiInternalProviderConsequenceRoute
   ApiInternalSecretLifecycleRoute: typeof ApiInternalSecretLifecycleRoute
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
-  ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
+  ApiStripeWebhookRoute: typeof ApiStripeWebhookRouteWithChildren
   ApiV1AccountRoute: typeof ApiV1AccountRouteWithChildren
   ApiV1MarketMetricsRoute: typeof ApiV1MarketMetricsRoute
   ApiV1MarketRequestsRoute: typeof ApiV1MarketRequestsRouteWithChildren
@@ -2234,6 +2247,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1AccountActivityRouteImport
       parentRoute: typeof ApiV1AccountRoute
     }
+    '/api/stripe/webhook/accounts-v2': {
+      id: '/api/stripe/webhook/accounts-v2'
+      path: '/accounts-v2'
+      fullPath: '/api/stripe/webhook/accounts-v2'
+      preLoaderRoute: typeof ApiStripeWebhookAccountsV2RouteImport
+      parentRoute: typeof ApiStripeWebhookRoute
+    }
     '/_operator/owner/supply/$offeringRef': {
       id: '/_operator/owner/supply/$offeringRef'
       path: '/$offeringRef'
@@ -2535,6 +2555,17 @@ const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
   ApiBusinessesRouteChildren,
 )
 
+interface ApiStripeWebhookRouteChildren {
+  ApiStripeWebhookAccountsV2Route: typeof ApiStripeWebhookAccountsV2Route
+}
+
+const ApiStripeWebhookRouteChildren: ApiStripeWebhookRouteChildren = {
+  ApiStripeWebhookAccountsV2Route: ApiStripeWebhookAccountsV2Route,
+}
+
+const ApiStripeWebhookRouteWithChildren =
+  ApiStripeWebhookRoute._addFileChildren(ApiStripeWebhookRouteChildren)
+
 interface ApiV1AccountFundingSessionsRouteChildren {
   ApiV1AccountFundingSessionsFundingSessionIdRoute: typeof ApiV1AccountFundingSessionsFundingSessionIdRoute
   ApiV1AccountFundingSessionsPublicFundingSessionIdRoute: typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
@@ -2688,7 +2719,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalProviderConsequenceRoute: ApiInternalProviderConsequenceRoute,
   ApiInternalSecretLifecycleRoute: ApiInternalSecretLifecycleRoute,
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,
-  ApiStripeWebhookRoute: ApiStripeWebhookRoute,
+  ApiStripeWebhookRoute: ApiStripeWebhookRouteWithChildren,
   ApiV1AccountRoute: ApiV1AccountRouteWithChildren,
   ApiV1MarketMetricsRoute: ApiV1MarketMetricsRoute,
   ApiV1MarketRequestsRoute: ApiV1MarketRequestsRouteWithChildren,

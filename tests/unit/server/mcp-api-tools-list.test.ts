@@ -41,6 +41,7 @@ describe('MCP host adapter tools/list', () => {
     expect(expectedToolNames).not.toContain('ae_operation_status')
     expect(tools.map((tool) => tool.name)).toEqual(expectedToolNames)
     expect(tools).toHaveLength(expectedToolNames.length)
+    expect(new TextEncoder().encode(JSON.stringify(tools)).byteLength).toBeLessThanOrEqual(8192)
 
     for (const tool of tools) {
       const name = tool.name
@@ -55,6 +56,12 @@ describe('MCP host adapter tools/list', () => {
         additionalProperties: false,
       }))
       expect(tool.outputSchema).toBeUndefined()
+      expect(tool.annotations).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      })
     }
 
     const list = tools.find((tool) => tool.name === 'ae_registry_operations_list')
@@ -187,11 +194,42 @@ describe('MCP host adapter tools/list', () => {
       .map(mcpToolName)
 
     expect(names).toEqual(expectedNames)
+    expect(new TextEncoder().encode(JSON.stringify(body.result?.tools ?? [])).byteLength).toBeLessThanOrEqual(Math.floor(23_631 * 1.1))
     expect(names).not.toEqual(expect.arrayContaining([
       'ae_supply_publish',
       'ae_supply_withdraw',
       'ae_supply_earnings',
     ]))
+    const inspect = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
+      .find((tool) => tool.name === 'ae_operation_inspect')
+    const invoke = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
+      .find((tool) => tool.name === 'ae_operation_invoke')
+    const cancel = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
+      .find((tool) => tool.name === 'ae_operation_cancel')
+    expect(inspect).toMatchObject({
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    })
+    expect(invoke).toMatchObject({
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    })
+    expect(cancel).toMatchObject({
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    })
   })
 
   it('lists every supplier lifecycle tool plus anonymous reads for a supply-only principal', async () => {
@@ -237,6 +275,17 @@ describe('MCP host adapter tools/list', () => {
       'supply.withdraw',
     ])
     expect(names).toEqual(expectedNames)
+    expect(new TextEncoder().encode(JSON.stringify(body.result?.tools ?? [])).byteLength).toBeLessThanOrEqual(Math.floor(28_506 * 1.1))
     expect(names).not.toEqual(expect.arrayContaining(operationProtectedNames))
+    const publish = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
+      .find((tool) => tool.name === 'ae_supply_publish')
+    const withdraw = ((body.result?.tools ?? []) as Array<Record<string, unknown>>)
+      .find((tool) => tool.name === 'ae_supply_withdraw')
+    expect(publish).toMatchObject({
+      annotations: { idempotentHint: true, openWorldHint: true, destructiveHint: false },
+    })
+    expect(withdraw).toMatchObject({
+      annotations: { idempotentHint: true, openWorldHint: true, destructiveHint: true },
+    })
   })
 })

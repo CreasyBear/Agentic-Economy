@@ -45,6 +45,18 @@ variable "database_instance_class" {
   default = "db.t4g.medium"
 }
 
+variable "alert_email" {
+  description = "Optional operator mailbox subscribed to infrastructure alarms."
+  type        = string
+  default     = null
+}
+
+variable "flow_log_destination_arn" {
+  description = "Optional encrypted S3 destination for VPC Flow Logs."
+  type        = string
+  default     = null
+}
+
 variable "cloudflare_access_secret_version" {
   description = "Set with previous_cloudflare_access_secret_expires_at to rotate through an overlap window."
   type        = number
@@ -54,5 +66,12 @@ variable "cloudflare_access_secret_version" {
 variable "previous_cloudflare_access_secret_expires_at" {
   description = "RFC3339 end of the overlap window for the previous Access secret."
   type        = string
+  default     = null
+}
+
+variable "cloudflare_tunnel_token_override" {
+  description = "Existing tunnel token supplied only for an AWS-only plan when Cloudflare refresh is intentionally disabled."
+  type        = string
+  sensitive   = true
   default     = null
 }

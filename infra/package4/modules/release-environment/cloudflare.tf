@@ -22,6 +22,7 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "formance" {
 }
 
 data "cloudflare_zero_trust_tunnel_cloudflared_token" "formance" {
+  count      = var.cloudflare_tunnel_token_override == null ? 1 : 0
   account_id = var.cloudflare_account_id
   tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.formance.id
 }
@@ -95,7 +96,7 @@ resource "aws_secretsmanager_secret" "cloudflare_tunnel" {
 
 resource "aws_secretsmanager_secret_version" "cloudflare_tunnel" {
   secret_id     = aws_secretsmanager_secret.cloudflare_tunnel.id
-  secret_string = data.cloudflare_zero_trust_tunnel_cloudflared_token.formance.token
+  secret_string = var.cloudflare_tunnel_token_override != null ? var.cloudflare_tunnel_token_override : data.cloudflare_zero_trust_tunnel_cloudflared_token.formance[0].token
 }
 
 resource "aws_secretsmanager_secret" "cloudflare_access" {

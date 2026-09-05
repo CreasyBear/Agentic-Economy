@@ -1,8 +1,10 @@
 # Agentic Economy implementation roadmap
 
 **Status:** active delivery roadmap
-**Revised:** 2026-09-02
-**Destination:** a mature, self-serve and operable Agentic Economy platform
+**Revised:** 2026-09-05 (maturity-first direction and product terminology;
+Packages 0–5 evidence reconciliation retained)
+**Destination:** a mature Australian equivalent of the familiar Locus and
+Nevermined experience; differentiation is not a current delivery objective
 **Authority:** subordinate to [`PRODUCT.md`](./PRODUCT.md), current source and
 tests
 **Package 4 research:**
@@ -37,6 +39,51 @@ foundation built     ->     starting-line release     ->    mature platform
 The starting-line product is the first externally useful release gate inside
 the platform roadmap. It is not a replacement destination.
 
+## Current-stage direction: familiar maturity, not differentiation
+
+Use Locus and Nevermined as the default product-design references, with Whop
+supporting familiar business administration. Build working Australian capability
+using established behaviour and maintained components; do not design unique
+interaction patterns, vocabulary or infrastructure without a concrete need.
+
+Review the whole supported platform, not only the paid Call: account and team
+access, agent connections and spending policies, service discovery and publishing,
+pricing, funding, usage and billing, documents, earnings and payouts, events,
+support, APIs and SDKs, and offboarding. Use the existing package boundaries.
+A gap in public documentation or client access is not automatically missing
+backend capability, and reference breadth is not automatic next-package scope.
+
+For each in-scope journey, use the existing scavenger item to identify the
+reference behaviour, AE's current implementation, the remaining gap and the
+evidence that proves the gap is closed. Include setup, normal use, changes,
+interruptions, failure, recovery and exit. Add a new reference entry only when
+the existing records do not cover the behaviour; do not create another ledger.
+
+Deviations need an Australian requirement, a correctness or safety constraint,
+or a demonstrated reference weakness and a clear customer benefit. "AE is
+different" is not a reason. SDKs and ordinary platform features need not prove
+novelty; reuse supported libraries and generate shared contracts where suitable.
+
+References:
+[Locus scavenger](./.planning/locus-docs/LOCUS-SCAVENGE-PAPERCUTS.md),
+[Nevermined scavenger](./.planning/nevermined-docs/NEVERMINED-SCAVENGE-PAPERCUTS.md),
+[Whop scavenger](./.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md).
+
+### Terminology and preserved evidence
+
+Product prose uses customer, agent, spending policy, service, quote and Call,
+as defined in [CONTEXT.md](./CONTEXT.md). Existing identifiers such as
+`operation.inspect`, `commitmentRef` and `invocationRef` are unchanged. No
+parallel records, public API rename or storage migration is authorised by this
+wording change.
+
+Dated progress assessments, linked research and the historical engineering
+review below retain their original terminology and evidence status. They are
+not fresh verification. Package numbers, operational acceptance checks and
+financial, concurrency, recovery and production gates remain in force.
+Differentiation and later market-learning hypotheses are not current closeout
+requirements.
+
 ## How to read the roadmap
 
 The **packages** describe durable platform capabilities:
@@ -65,7 +112,7 @@ renumber the packages.
    deterministic managed x402 path rather than a catalogue of evidence or
    payment connectors. External reconstruction follows the stable native Call.
 3. **Reuse the platform already built.** Externally observed acquisitions and
-   Agentic Economy-controlled Invocations share evidence and projection
+   Agentic Economy-controlled Calls share evidence and projection
    machinery without sharing provenance they did not earn.
 4. **Standards at the edges.** Use OpenTelemetry, W3C Trace Context,
    CloudEvents, FOCUS, official x402 packages and UBL/PINT rather than creating
@@ -80,25 +127,44 @@ renumber the packages.
 8. **Quality is continuous.** Failure containment, recovery, accessibility,
    responsive behaviour, performance and operational references apply to every
    package even where Package 10 owns the platform-wide audit.
-9. **Parity follows demonstrated demand.** Streamed-delivery machinery and new
-   payment-rail adapters enter only when an admitted Operation requires them.
+9. **Breadth follows the supported scope.** Streamed-delivery machinery and new
+   payment-rail adapters enter only when an admitted service requires them.
    Benchmark breadth is not automatic scope.
 10. **Deep interface, separate owners.** The buyer-facing Call interface remains
     small while market, authority, execution, money, protocol, evidence and
     recovery retain separate internal state ownership.
-11. **Agent budgets follow Agent Principals.** Credentials are replaceable
+11. **Budgets belong to agents, not credentials.** Credentials are replaceable
     access and audit evidence. Rotation cannot reset aggregate spend or detach
     prior Calls.
 
 ## Current position
 
-The user-confirmed build has completed Packages 1–3. Current source and tests
-remain the authority for the exact implemented boundary.
+Progress reconciled on 2026-09-05 against `main` at
+`987cdec5085c207eb6b9024b66ef4a20de8a3da0`, current source and the dated evidence
+linked below. The working tree also contains uncommitted application and
+infrastructure changes; neither their presence nor this documentation update
+proves that they are deployed. No runtime suites or cloud checks were rerun for
+this reconciliation.
 
-The repository also contains canonical Operations, Resolution, Commitment,
-controlled Invocation, exact money, prepaid credit, Charges, Provider earnings,
-refunds, recovery and x402 evidence. Package 4 should connect and complete those
-capabilities, not replace them with a parallel record system.
+| Package | Implemented progress | Verification and remaining boundary |
+| --- | --- | --- |
+| Foundation before Package 1 | Existing Operation, Invocation, money and recovery foundations underpin the numbered packages. | This roadmap has no numbered Package 0; the foundation is a baseline, not a newly declared completed package. |
+| 1 — Application shell | Failure containment, shared states and navigation safety are built. | The dated [Whop side-surface re-audit](./.planning/whop-docs/WHOP-SCAVENGE-PAPERCUTS.md#side-surface-recovery-re-audit--2026-08-31) records the verified scope at `9d95b4030`; it is not proof of every later route or external journey. |
+| 2 — Human workspace | Workspace restructuring, Supplier workspace consolidation and navigation cleanup are built. | The [Package 2 design](./research/PACKAGE-2-HUMAN-WORKSPACE-IA.md) is reflected in the [owner Operations workspace](./src/components/ae/offerings/AeOwnerOperationsWorkspace.tsx) and its [existing tests](./tests/unit/ui/owner-operations-workspace.test.tsx); no fresh full-workspace acceptance run is claimed here. |
+| 3 — Identity, access and authority | Account/Principal boundaries, selected-Operation access, consequential-action proof and durable credential lifecycle are built. | [Package 3 gauntlet evidence](./research/PACKAGE-3-GAUNTLET-PROGRESS.md) records scoped tests and live Clerk proof. Broader installed-client and concurrent spending proof remains bounded by the relevant release records. |
+| 4 — Managed Calls and financial operations | Formance-backed funding/reservations, inspection and Commitment-based invocation, recovery, Calls and document/obligation machinery are substantially implemented. | [Package 4 release evidence](./docs/guides/package-4-release-evidence.md) records local checks and real hosted sandbox funding. Managed-x402 success/refusal/recovery, refund/replay, documents/close, parity, strict recovery and external canary proof remain open; production remains gated. |
+| 5 — Supplier operations | Source-native preview, admission, the shared Operation lifecycle, health and durable offboarding have landed on `main`. | [Package 5 implementation and test record](./PACKAGE-5-ATOMIC-FEATURE-BUILD-PLAN.md) records the local baseline. Complete deployed Provider-to-buyer journeys, credential lifecycle, active-case restore and supported-client proof remain open. Later handoff corrections in the dirty tree are not release evidence. |
+
+Package 4 should connect and complete those capabilities, not replace them with
+a parallel record system.
+
+The [deployment maturity record](./docs/operations/deployment-maturity.md)
+separately identifies synthetic resources, partially deployed changes and
+operational blockers. A deployed test environment is not production readiness.
+Requirements, package priorities and completion gates below are unchanged;
+Packages 6–10 are outside this progress reconciliation.
+
+
 
 ## 1. Application shell — built
 
@@ -141,15 +207,15 @@ Organise the human product around:
 
 - calls and purchasing;
 - Agents, access and credit;
-- supplying Operations; and
+- supplying services; and
 - Account and security.
 
-Remove duplicated projections of credit, keys, Operations and settings.
+Remove duplicated projections of credit, keys, services and settings.
 
 ### Package 2B — Supplier workspace consolidation
 
-- Merge Operations and Publish.
-- Present one Operation lifecycle.
+- Merge services and Publish.
+- Present one service lifecycle.
 - Surface blockers and next actions.
 - Consolidate connection, publication and payout readiness.
 
@@ -206,7 +272,7 @@ The Locus and Whop maturity audits predate some final Package 3 work. Verify the
 current source and tests before reopening implementation. The re-audit must
 establish whether the built foundation already provides:
 
-- exact-Operation or bounded-capability execution scopes rather than only broad
+- exact-service or bounded-capability execution scopes rather than only broad
   admitted-supply access;
 - owner-bound headless Agent activation and recovery;
 - bounded credential overlap during rotation and immediate revocation;
@@ -219,7 +285,22 @@ establish whether the built foundation already provides:
 An unmet item returns to Package 3 as a specific acceptance gap. A passing item
 is recorded as verified and does not justify a refactor.
 
-## 4. Managed Calls and financial operations — next
+**Progress reconciliation — 2026-09-05:** the verification questions above
+remain unchanged. The dated 2026-09-03 connection re-audits and current source
+establish selected-Operation enforcement, owner-bound activation/recovery,
+refresh-family rotation and revocation. Owner-selected timed overlap for
+arbitrary keys remains absent. Fresh per-command Clerk proof exists for
+consequential actions, but `funding.top_up` currently selects no fresh-proof
+requirement; that does not satisfy the broader Funding question above. Managed
+Calls now reserve Formance Agent-budget and legal-customer exposure capacity;
+the existing concurrency proof does not cover two credentials and two routes.
+OAuth resource/audience binding also remains an acceptance gap despite the
+earlier local connection smoke. The [current Locus assessment](./.planning/locus-docs/LOCUS-SCAVENGE-PAPERCUTS.md#packages-05-progress-reconciliation--2026-09-05)
+records these bounded findings without reopening implemented mechanisms.
+
+
+
+## 4. Managed Calls and financial operations — substantially implemented, release gated
 
 ### Package 4 authority and outcome
 
@@ -242,7 +323,7 @@ Package 4 is implemented from these checked-in references:
 
 Where they differ, `PRODUCT.md` remains authoritative. Package 4 produces one
 coherent product: an Australian business funds an AUD Prepaid balance, its agent
-calls an admitted x402 Operation through Agentic Economy, Agentic Economy pays
+calls an admitted x402 service through Agentic Economy, Agentic Economy pays
 the upstream obligation from its corporate USDC treasury, and the business can
 see and substantiate the resulting Call without operating crypto infrastructure.
 
@@ -251,14 +332,14 @@ AUD customer leg                         corporate USDC leg
 
 fund -> available -> reserved            treasury -> committed -> settled
                          \                           /
-                          Commitment + Invocation
+                              quote + Call
                                   |
                                   v
                      one customer-facing Call
                     Logs | Usage | Spend | evidence
 ```
 
-The two legs share the Commitment and Invocation identity. They never share a
+The two legs share the quote and Call identity. They never share a
 balance, posting, after-the-fact currency conversion or claim of ownership.
 Package 4 is delivered atomically and sequentially. Each subpackage leaves the
 system internally complete; none introduces a second implementation alongside
@@ -268,7 +349,7 @@ The agent sees one short Call path, not these subsystems:
 
 ```text
 registry.operations.search
-  -> operation.inspect -> Commitment
+  -> operation.inspect -> quote
   -> operation.invoke -> result
 
 only when required:
@@ -282,9 +363,9 @@ market | authority | AUD ledger | treasury | x402 | Provider obligation
 ```
 
 The public interface is deliberately shallower than the implementation.
-`operation.inspect` accepts the chosen Operation, literal input and bounded
+`operation.inspect` accepts the chosen service, literal input and bounded
 constraints, merges the caller-specific material detail and returns a
-Commitment. `operation.invoke` accepts that Commitment and idempotency identity.
+quote. `operation.invoke` accepts that quote and idempotency identity.
 The Call returns an action-specific tagged result with authoritative state,
 exact money, material unknowns and at most one executable machine continuation
 plus an optional owner handoff. It never asks the agent to supply an Account,
@@ -301,9 +382,9 @@ change and must pass its deployment gate before the next begins.
 | --- | --- | --- |
 | Preflight | Export supported Convex backups, prove no user financial rows, record the current action-schema and payload baseline, and rerun the Package 3/money/x402 suites. | Stop if user data or production financial traffic exists; this plan contains no compatibility migration. |
 | 1 — commercial gate | Versioned commercial policy, Australian production gates, strict authority for policy changes, closed audit events and fixed rate-limit policies. | Missing or expired approval refuses before external production I/O. |
-| 2 — AUD ledger and Funding | Balanced single-asset postings, rebuildable projections, Account-level AUD Funding, Agent Principal budget windows and ported payout economics; delete legacy credit/ledger/budget paths. | Stripe replay, journal balance, Account pooling and concurrent Agent-budget proofs pass. |
+| 2 — AUD ledger and Funding | Balanced single-asset postings, rebuildable projections, Account-level AUD Funding, agent budget windows and ported payout economics; delete legacy credit/ledger/budget paths. | Stripe replay, journal balance, Account pooling and concurrent Agent-budget proofs pass. |
 | 3 — treasury and pricing evidence | Corporate USDC positions, commitments, buffers, maintained CDP observation and bounded sandbox FX evidence. | Stale evidence or insufficient buffered capacity fails closed; no custody material reaches buyer surfaces. |
-| 4 — inspection and Commitment | Pricing v3, one-to-three compact search, caller-specific `operation.inspect`, Commitment consumption and cross-surface inspect/invoke parity; delete pricing v2. | Successful, blocked and drift journeys meet the payload and caller-input budgets. |
+| 4 — inspection and quote | Pricing v3, one-to-three compact search, caller-specific `operation.inspect`, quote consumption and cross-surface inspect/invoke parity; delete pricing v2. | Successful, blocked and drift journeys meet the payload and caller-input budgets. |
 | 5 — managed x402 Call | One atomic Account/budget/treasury/Provider-obligation reservation before signing, payment release fence, paid retry, settlement/release/reconciliation and sandbox activation. | Mutation-before-sign, duplicate, crash and unknown-outcome journeys pass; possible dispatch exposes no invoke continuation. |
 | 6 — Calls, Usage and Spend | Indexed Call projections, Agent/Account pagination, version-aware status and automatically observed operational evidence; replace activity fan-out. | Unchanged status is bounded, cross-Account reads return no rows and browser/CLI/MCP recovery needs no dashboard. |
 | 7 — documents and reconciliation | Versioned Funding/period/adjustment documents, exact rounding, append-only corrections and external reconciliation. | Documents rebuild from journal facts and no tax document exists without active policy. |
@@ -318,7 +399,7 @@ forward; prior postings are never discarded or rewritten.
 ### Package 4A — Commercial contract and production gate
 
 - Encode one commercial mode: Agentic Economy is the buyer-facing Seller and
-  sole payee for admitted managed x402 Operations.
+  sole payee for admitted managed x402 services.
 - Record versioned, effective-dated pricing, top-up fee, tax, balance-limit,
   refund, treasury and evidence policies. Historical Calls retain the exact
   policy versions used.
@@ -337,8 +418,8 @@ forward; prior postings are never discarded or rewritten.
   money, expiry, at most one bound machine continuation and an optional owner
   handoff. Keep reusable consequence and retry descriptions in the existing
   action descriptors and generated agent manifest.
-- Resolve Business Principal, Account, Agent Principal, credential and active
-  Mandate from authentication. A Call request cannot select or override its
+- Resolve customer, Account, agent, credential and active
+  spending policy from authentication. A Call request cannot select or override its
   Account.
 
 **Gate:** the contracts, UI language, configuration and storage all express the
@@ -387,10 +468,8 @@ Implement:
   create a duplicate economic effect; and
 - immutable evidence references and effective/recorded timestamps on every
   transaction; and
-- authority reservations and aggregate spend keyed to the durable Agent
-  Principal, with credential identity retained as attributable evidence, plus
-  a separate principal-wide committed-exposure control across concurrent Agent
-  Principals and credentials.
+- authority reservations and aggregate spend keyed to the durable agent, with credential identity retained as attributable evidence, plus
+  a separate principal-wide committed-exposure control across concurrent agents and credentials.
 
 No transaction balances AUD against USDC. For each currency or asset:
 
@@ -403,7 +482,7 @@ available + reserved + other accessible value = customer liability control
 **Gate:** a full replay from postings rebuilds every projected balance exactly;
 concurrent reservations cannot overspend; a reversal restores the intended
 economic position without changing the original transaction; credential
-rotation cannot reset an Agent Principal budget or strand a reservation.
+rotation cannot reset an agent budget or strand a reservation.
 
 ### Package 4C — Funding and top-up service fee
 
@@ -441,8 +520,8 @@ duplicate, reversal and threshold-boundary cases.
 
 ### Package 4D — Managed x402 Call
 
-Use the existing Invocation as the durable execution identity and expose `Call`
-as its customer-facing projection. Do not introduce an acquisition record,
+Use the existing execution record (`Invocation`) as the durable Call identity.
+Customer views project that same record. Do not introduce an acquisition record,
 finance-ready purchase or universal receipt object.
 
 Expose one deep managed-Call module through the existing market and operation
@@ -450,7 +529,7 @@ actions. Its recommended public flow is:
 
 ```text
 registry.operations.search
-  -> operation.inspect -> Commitment
+  -> operation.inspect -> quote
   -> operation.invoke -> result
 
 only when required:
@@ -460,29 +539,28 @@ only when required:
 Search returns one to three compact candidates with no full schemas, repeated
 navigation or caller-specific money state. Public detail, comparison, whoami and
 balance remain optional reads. Authenticated `operation.inspect` accepts the
-Operation reference, literal input and bounded caller constraints, then combines
-the selected Operation's material detail with current caller viability, effects,
-data use, Seller and Provider, exact or maximum all-in AUD price, expiry, Agent
-Principal budget and permitted shared-balance impact, evidence provenance,
-material unknowns and the Commitment bound to the normalised input digest. It
+service reference, literal input and bounded caller constraints, then combines
+the selected service's material detail with current caller viability, effects,
+data use, Seller and Provider, exact or maximum all-in AUD price, expiry, agent budget and permitted shared-balance impact, evidence provenance,
+material unknowns and the quote bound to the normalised input digest. It
 uses bounded readiness evidence and performs no search-time Provider fan-out.
-Stale evidence blocks Commitment and returns one bound reinspection or status
-continuation with a recommended next observation time. Invocation accepts the
-Commitment and caller idempotency key. It does not
+Stale evidence blocks quote and returns one bound reinspection or status
+continuation with a recommended next observation time. Call accepts the
+quote and caller idempotency key. It does not
 accept an `accountRef`, wallet, treasury pool, exchange rate, ledger instruction
 or x402 payment payload from the customer.
 
 The controlled path is:
 
 ```text
-inspect exact Operation and normalized input
+inspect exact service and normalized input
   -> receive and validate x402 challenge
   -> calculate one expiring all-in AUD Call price
-  -> bind the Commitment
-  -> invoke that Commitment and revalidate material facts
-  -> atomically reserve Agent Principal budget, principal-wide exposure and AUD
+  -> bind the quote
+  -> accept that quote and revalidate material facts
+  -> atomically reserve agent budget, customer-wide exposure and AUD
   -> create/sign upstream payment from corporate USDC
-  -> retry the exact paid request once under the Invocation
+  -> retry the exact paid request once under the Call
   -> verify response and settlement evidence
   -> capture, release, or retain an explicit unknown reservation
   -> project the Call
@@ -502,7 +580,8 @@ all-in AUD price   = round_to_micro_AUD(versioned pricing policy(upstream basis)
 The quote stores the source amount and units, network and asset, executable FX
 rate, source, timestamp, expiry, pricing-policy version, rounding mode and final
 AUD amount. A customer never receives an FX adjustment after the Call. A stale
-or materially changed challenge requires a new quote and Commitment.
+or materially changed challenge requires a fresh bound quote, including its
+price, inputs, terms and spending checks.
 
 Reservation is a ledger transfer from available to reserved. On verified
 success it is captured into the buyer sale; any unused amount is released. A
@@ -520,7 +599,7 @@ current bounded delta rather than full history.
 
 **Gate:** one deterministic end-to-end sandbox path proves funding, quote,
 reservation, x402 payment, usable result, capture and Call projection; the same
-Invocation also proves duplicate replay, challenge drift, Provider failure,
+Call also proves duplicate replay, challenge drift, Provider failure,
 process loss and unknown-outcome recovery. A fresh agent process completes and
 recovers the Call using only the generated action contract and durable
 references, without inspecting a human dashboard or coordinating internal
@@ -562,29 +641,29 @@ protocol and settlement boundary.
 
 ### Package 4F — Calls, Usage and Spend
 
-Build a dedicated, rebuildable Call read model from Invocation, Operation,
+Build a dedicated, rebuildable Call read model from the existing execution record, service,
 usage, buyer-price, settlement and automatically observed delivery/recovery
 facts. The main table follows the
-familiar OpenRouter shape: time, Operation, Provider, Account/application,
-usage, cost, status and latency. Detail views add Commitment, attempt,
+familiar OpenRouter shape: time, service, Provider, Account/application,
+usage, cost, status and latency. Detail views add quote, attempt,
 settlement, evidence, recovery and business-allocation references without
 putting prompts, secrets or full results into the financial ledger.
 
 Provide three projections over the same Calls:
 
 - **Logs:** individual Calls, timing, routing, outcome, attempts and latency.
-- **Usage:** consumed quantity and unit by Operation, Provider, Account,
+- **Usage:** consumed quantity and unit by service, Provider, Account,
   application and time.
 - **Spend:** captured AUD price, adjustments, effective unit cost, service-fee
   totals, Provider concentration and reconciliation state.
 
 Provide two permissioned scopes over those projections:
 
-- the Agent Principal can read its own Calls, current allowance, remaining
+- the agent can read its own Calls, current allowance, remaining
   aggregate budget and permitted shared-balance facts across credential
   rotation; and
-- the Business Principal can read the full Account and attribute spend,
-  concurrency, failures and recovery to each Agent Principal and credential.
+- the customer can read the full Account and attribute spend,
+  concurrency, failures and recovery to each agent and credential.
 
 Build Account-scoped, rebuildable operational evidence from facts Package 4
 already observes: delivery and paid-non-delivery counts, latency, realised AUD
@@ -594,7 +673,7 @@ in Package 4. `operation.outcome.report` and outcome-derived allocation
 aggregates remain deferred until a demonstrated repeat-selection or evaluation
 consumer justifies the additional action and retention.
 
-Technical completion, upstream settlement, commercial closure and usefulness
+Technical completion, upstream settlement, purchase resolution and usefulness
 remain separate. Metrics are recalculable; they are not additional ledger
 entries or a second source of truth.
 
@@ -644,12 +723,12 @@ without rewriting the buyer ledger.
 After the managed Call is complete, add external-observation adapters only when
 a real source requires them. Follow the reconstruction research for OTLP,
 CloudEvents, FOCUS, UBL and PINT A-NZ boundaries. Imported evidence retains its
-native identity and provenance; it does not become a controlled Invocation or
-canonical Operation by correlation alone.
+native identity and provenance; it does not become a controlled Call or
+canonical service by correlation alone.
 
 **Gate:** the managed x402 lane needs no external reconstruction adapter to
 close, and the first later adapter can join evidence without changing the Call,
-Invocation, ledger or Operation identities.
+Call, ledger or service identities.
 
 ### Exact-money premortem
 
@@ -657,14 +736,14 @@ Invocation, ledger or Operation identities.
 | --- | --- | --- |
 | Floating-point contamination | Property tests find non-integral or drifting units | `bigint` at rest and in domain operations; `decimal.js` only at named conversion boundaries; search guard for money arithmetic. |
 | FX rate inverted, stale or mismatched | Quote recomputation and bounds checks fail | Typed base/quote units, executable-rate source, timestamp, expiry and sanity bounds; golden vectors for both rate directions. |
-| Wrong token decimals or network | Challenge validation differs from admitted Operation | Official x402 parsing plus allowlisted network/asset/decimals; reject before reservation or signing. |
-| Challenge changes between inspect and pay | Material digest or amount differs | Bind the accepted challenge and quote to the Commitment; require a fresh decision. |
+| Wrong token decimals or network | Challenge validation differs from admitted service | Official x402 parsing plus allowlisted network/asset/decimals; reject before reservation or signing. |
+| Challenge changes between inspect and pay | Material digest or amount differs | Bind the accepted challenge and all-in price to the quote; require a fresh decision. |
 | Minimum-fee threshold rounds incorrectly | Boundary vectors disagree by one cent | Central fee policy using decimal arithmetic; test below, at and above the crossover and half-cent boundaries. |
 | Service fee reduces credit | Funding reconciliation differs from requested principal | Separate principal, fee and total fields and postings; invariant that settled credit equals principal exactly. |
 | Per-Call rounding loses or creates money | Document total differs from ledger sum | Store six-decimal AUD Calls, sum exactly, round only at approved document/payment boundaries, post explicit residual. |
 | Duplicate processor, x402 or webhook event | Same external identity appears twice | Unique idempotency scope and atomic existing-result return; replay and collision tests. |
 | Concurrent Calls overspend AUD or USDC | Available or spendable projection becomes negative | Reserve both resources through serialized/OCC-safe commands; high-contention tests with one expected winner set. |
-| USDC settles but AUD remains reserved | Reconciliation sees settled payment without terminal capture | Durable unknown state and recovery command keyed by Invocation/payment identity; no blind retry. |
+| USDC settles but AUD remains reserved | Reconciliation sees settled payment without terminal capture | Durable unknown state and recovery command keyed by Call/payment identity; no blind retry. |
 | AUD captures without upstream settlement | Sale exists without verified settlement/delivery basis | State-transition preconditions and reconciliation alert; adviser-approved remedy path. |
 | Custody data is delayed or reorged | Confirmed position disagrees with chain/custodian | Finality policy, pending state, confirmations and capacity buffer; never infer finality from request success. |
 | Depeg, FX movement or network fee removes margin | Realised unit economics breaches policy | All-in quote with versioned margin/buffer, exposure and loss metrics, treasury stop-loss/escalation policy. |
@@ -678,15 +757,15 @@ Invocation, ledger or Operation identities.
 | Failure | Consequence | Required control and proof |
 | --- | --- | --- |
 | Agent must join identity, balance, budget and Call state itself | More context, more round trips and inconsistent decisions | Auth resolves the Account; inspection returns the material caller snapshot. Self and balance remain optional diagnostics. |
-| Credential rotation resets spend | An Agent Principal evades limits and loses continuity | Budget and history aggregate by Agent Principal; credential remains evidence only; rotation test preserves exposure and Calls. |
-| Inspection is stale at effect time | Agent acts on a price, Operation or Mandate that no longer applies | Commitment digest and expiry plus consequence-time revalidation; drift refuses before effect and returns a fresh-inspection continuation. |
+| Credential rotation resets spend | An agent evades limits and loses continuity | Budget and history aggregate by agent; credential remains evidence only; rotation test preserves exposure and Calls. |
+| Inspection is stale at effect time | Agent acts on a price, service or spending policy that no longer applies | quote digest and expiry plus consequence-time revalidation; drift refuses before effect and returns a fresh-inspection continuation. |
 | Response says what failed but not what is safe next | Agent guesses, retries blindly or needs a human | Closed reason codes plus at most one bound machine continuation and one optional owner handoff. Manifest-owned consequence metadata is not repeated. |
 | Status polling repeatedly returns full history | Context and bandwidth grow with Call age | `afterVersion`, a bounded unchanged response, current-state delta and recommended next observation time. |
 | Treasury detail leaks into buyer decisions | Agent becomes coupled to custody and protocol implementation | Expose `ready`, `not_ready` or `stale` plus remediation; keep wallet, pool and signing detail operator-only. |
-| Payment or delivery is treated as usefulness | Future Resolution learns the wrong lesson | Keep settlement and conforming delivery as separate observed facts; defer usefulness reporting and allocation until a real consumer exists. |
+| Payment or delivery is treated as usefulness | Future service comparison learns the wrong lesson | Keep settlement and conforming delivery as separate observed facts; defer usefulness reporting and allocation until a real consumer exists. |
 | One opaque rank hides alternatives | Agent cannot trade price, latency and risk for its actual gap | Apply hard constraints first; expose scoped facts, unknowns and exclusions; make policy version inspectable. |
 | Future feedback captures project context | Accretion becomes surveillance and increases liability | Do not ship buyer outcome collection in Package 4; any later contract must remain bounded and reject prompt, plan, file or chain-of-thought fields. |
-| Agent must open a human dashboard to recover | Headless operation stops at the first exception | Every handoff has a durable status ref; machine status continues while the Business Principal completes any required owner action. |
+| Agent must open a human dashboard to recover | Headless operation stops at the first exception | Every handoff has a durable status ref; machine status continues while the customer completes any required owner action. |
 
 ### What already exists
 
@@ -698,7 +777,7 @@ Retain and port the proven behaviours, not the present data model:
   `src/modules/money/internal/exact-amount.ts`;
 - reservation, finalisation, release, unknown-outcome, recovery, idempotency and
   concurrency test scenarios across the existing `convex/money*.ts` suite;
-- current Invocation, Commitment, Operation and authority identities;
+- current Call, quote, service and authority identities;
 - existing action descriptors, continuation IDs, agent self-inspection,
   generated agent skill/site manifest and status/recovery actions;
 - Convex transactions, optimistic concurrency and File Storage for immutable
@@ -723,11 +802,11 @@ The source change map is:
 | `convex/moneyX402Payment*` | Retain protocol-attempt identity and evidence concepts; adapt them to corporate treasury commitment and the official x402 paid-retry path. |
 | `src/modules/money/internal/exact-amount.ts` | Retain exact integer amount primitives, add six-decimal AUD and bounded conversion/rounding operations, and cover all public arithmetic with vectors and properties. |
 | `src/modules/money/{public,server,money.functions}.ts` | Publish the new funding, balance, Call and recovery contracts only. Breaking replacement is intentional; no compatibility export remains. |
-| `src/modules/agent-access/account.actions.ts` | Replace USD credit/activity shapes with authenticated operating context: resolved Account, durable Agent Principal, Mandate generation, caller-visible AUD balance, own remaining limits and funding handoff. Never accept an Account override. |
-| `src/modules/money/internal/credential-budget.ts` and authority admission | Move aggregate reservation identity from credential to durable Agent Principal and add principal-wide exposure; retain credential and Mandate generation as evidence. |
+| `src/modules/agent-access/account.actions.ts` | Replace USD credit/activity shapes with authenticated operating context: resolved Account, durable agent, spending policy generation, caller-visible AUD balance, own remaining limits and funding handoff. Never accept an Account override. |
+| `src/modules/money/internal/credential-budget.ts` and authority admission | Move aggregate reservation identity from credential to durable agent and add principal-wide exposure; retain credential and spending policy generation as evidence. |
 | `src/modules/capability-execution/operation-invoke-entry.ts`, action and recovery descriptors | Add authenticated `operation.inspect`; keep invoke/status/cancel/reconcile; define one compact tagged result per action, one bound continuation, optional owner handoff and version-aware status. Do not add outcome reporting in Package 4. |
 | `src/modules/discovery/internal/{agent-skill,page-markdown,site-manifest}.ts` | Generate the exact Package 4 action sequence, response versions, retry rules and human-handoff semantics from canonical descriptors rather than maintaining separate prose. |
-| `src/modules/capability-execution/managed-call/` | Add the deep application module that coordinates existing market, authority, Invocation, money, treasury, x402 and evidence interfaces. Keep each state machine in its owning module; this coordinator contains ordering, not duplicated truth. |
+| `src/modules/capability-execution/managed-call/` | Add the deep application module that coordinates existing market, authority, Call, money, treasury, x402 and evidence interfaces. Keep each state machine in its owning module; this coordinator contains ordering, not duplicated truth. |
 | `src/routes/api.v1.operations.call.ts` | Remain a thin authenticated HTTP entry into the managed-Call module; own no policy, money arithmetic, protocol semantics or lifecycle transitions. |
 | `src/routes/_operator/activity.tsx` and `src/routes/api.v1.account.activity.ts` | Replace the derived activity feed with paginated Logs, Usage and Spend queries over the dedicated Call read model. |
 | Existing money, x402 and route tests | Preserve acceptance intent; rewrite fixtures and expectations around the new schema and add exact-money, dual-reservation, fresh-process continuation, credential-rotation, context-bounded response, reconstruction and document proofs. |
@@ -769,7 +848,7 @@ caller-supplied fields and stale-state windows. A fresh process must resume from
 continuation plus an optional owner handoff. Do not couple interface tests to
 internal ledger or x402 record layout.
 
-The contract budgets, excluding literal Operation output and the generated
+The contract budgets, excluding literal service output and the generated
 manifest, are: search with three candidates at most 3 KB JSON; inspection at
 most 4 KB; unchanged status at most 512 bytes; refusal or uncertain result at
 most 1 KB. Generated tool schemas may grow by no more than 20% over the measured
@@ -779,7 +858,7 @@ or choices before adding another response mode.
 ### Performance and operability
 
 - Index journal and Call reads by Account plus stable sequence/time, and by
-  external idempotency, Invocation, Commitment and settlement identities.
+  external idempotency, Call, quote and settlement identities.
 - Page Call histories and stream/export large statements; never load an entire
   account history to calculate a balance.
 - Keep writes narrow enough for Convex optimistic concurrency. Measure conflict
@@ -823,10 +902,10 @@ Package 4 completes when the managed x402 start line passes as one system:
 
 1. a sandbox customer funds an AUD Prepaid balance and pays a separately stated
    top-up service fee without reducing the credited principal;
-2. `operation.inspect` produces a caller-bound Commitment with an expiring
-   all-in AUD Call price, and Invocation reserves Agent Principal budget,
+2. `operation.inspect` produces a caller-bound quote with an expiring
+   all-in AUD Call price, and Call reserves agent budget,
    principal-wide exposure, AUD and corporate USDC capacity before dispatch;
-3. one controlled Invocation completes an x402 paid retry and returns a usable
+3. one controlled Call completes an x402 paid retry and returns a usable
    result without a customer wallet;
 4. success, definitive failure and unknown outcome produce correct balanced,
    replay-safe and recoverable entries;
@@ -836,7 +915,7 @@ Package 4 completes when the managed x402 start line passes as one system:
 7. deterministic CI and the external x402 testnet canary pass;
 8. burst tests prove no AUD or USDC overspend and establish the single-pool
    operating envelope; and
-9. credential rotation preserves Agent Principal budget and history, while
+9. credential rotation preserves agent budget and history, while
    concurrent credentials cannot bypass agent or principal exposure limits;
 10. a fresh agent process can operate and recover the complete Call from stable
     contracts and references without a dashboard, wallet, `accountRef`, treasury
@@ -851,7 +930,18 @@ Package 4 completes when the managed x402 start line passes as one system:
 
 Package 5's source implementation is complete on `main`: source-native preview for OpenAPI, MCP, Agent Plugins 1.0 and x402; durable Provider connections; one admission-controlled publication path; one eight-state Supplier Operation projection; current health/delivery/Qualified Use evidence; and paged, routeability-first Provider offboarding. The former Offering-first editor, manual source JSON, separate readiness/test/promotion ceremonies and 100-Offering fleet ceiling have been removed from the golden path.
 
+This describes the landed Package 5 core baseline, not a claim that every
+connection-return branch is correct. Subsequent review found handoff and resume
+defects; their current working-tree corrections are uncommitted, with focused
+local verification recorded in the [transition review addendum](./PACKAGE-6-REVIEW.md#provider-handoff-and-recovery-transitions-source-and-focused-tests-verified).
+That later local evidence is not a deployed or native-client release result.
+The recorded 2026-09-04 changed-cone run was 505 passed and 3 failed across 61
+files, with the failures attributed in the Package 5 plan to concurrent work.
+It is historical local evidence, not a fresh green repository or staging run.
+
 Release credit remains gated on one staging revision proving all four source families through normal Provider admission and buyer `search → inspect → invoke`, deployed Infisical-backed credential rotation/revocation, active-case backup restoration, packaged CLI and actual supported clients. Production paid supply also remains gated by Package 4.
+
+
 
 ### Package 5A — Supplier onboarding
 
@@ -861,7 +951,9 @@ Release credit remains gated on one staging revision proving all four source fam
 - Admission expectations.
 - One clear starting action.
 
-### Package 5B — Operation lifecycle management
+<a id="package-5b--operation-lifecycle-management"></a>
+
+### Package 5B — Service lifecycle management
 
 - Draft.
 - Needs setup.
@@ -877,17 +969,17 @@ Release credit remains gated on one staging revision proving all four source fam
 - Connection failures.
 - Validation failures.
 - Publication blockers.
-- Stale Operation data.
+- Stale service data.
 - Corrective actions.
 - Supplier-facing incident information.
-- Verified paid non-delivery and useful-outcome evidence with sample size,
+- Verified paid non-delivery and useful-outcome records with sample size,
   recency and provenance.
 - Removal from routeability when current contract, authority, readiness or
   evidence expires, fails, is withdrawn or materially drifts.
 
 ### Package 5D — Supplier offboarding
 
-- Unpublish Operations.
+- Unpublish services.
 - Revoke connections.
 - Resolve outstanding calls.
 - Complete payout obligations.
@@ -897,10 +989,10 @@ Package 5 consumes Package 4 evidence for health, delivery, earnings and payout
 visibility. Observed external demand may guide which supplier lanes are
 prioritised, but it does not replace self-serve supplier operations.
 
-If an admitted Operation streams, its lifecycle must distinguish upstream
+If an admitted service streams, its lifecycle must distinguish upstream
 acceptance, Charge capture, bytes or units delivered, completion, disconnect and
 remedy. Payment or stream acceptance cannot imply useful delivery. No general
-streaming platform is required before such an Operation exists.
+streaming platform is required before such a service exists.
 
 ## 6. Onboarding, content and language — planned
 
@@ -921,17 +1013,20 @@ streaming platform is required before such an Operation exists.
 
 ### Package 6C — Product language system
 
-Apply the canonical language in [`CONTEXT.md`](./CONTEXT.md), including:
+Apply the familiar canonical terms in [CONTEXT.md](./CONTEXT.md):
 
-- Operation;
-- Business Principal and Agent Principal;
-- Provider, Seller and payment recipient;
-- Account and Agent access;
-- supplier connection;
-- Invocation;
-- Charge, Funding and Payout;
-- Outcome evidence; and
-- commercial closure.
+- customer, agent and account;
+- spending policy, permissions and limits;
+- service, tool or API operation as appropriate to the context;
+- quote, price and terms;
+- Call, result and purchase status;
+- Provider, Seller and payment recipient where responsibility matters; and
+- credit, charges, refunds, earnings and payouts.
+
+Use direct actions such as connect, add credit, publish, pause and check status.
+Do not require users to learn Mandate, Commitment, Invocation or commercial
+closure. Preserve the underlying distinctions and existing technical identifiers;
+language work is not permission to weaken controls or introduce a second API.
 
 ### Package 6D — Contextual guidance
 
@@ -1004,7 +1099,7 @@ it does not remove the need for one coherent platform governance system.
 - Component-level health.
 - Incident communication.
 - Degraded-service wording.
-- Resolution and history.
+- service comparison and history.
 
 ### Package 8C — Notifications
 
@@ -1013,7 +1108,7 @@ it does not remove the need for one coherent platform governance system.
 - Connection failure.
 - Publication blocked.
 - Payout problem.
-- Unknown Invocation outcome.
+- Unknown Call outcome.
 - Channel and frequency controls.
 
 ### Package 8D — Internal observability
@@ -1023,8 +1118,8 @@ Trace important events across:
 - Account;
 - human actor;
 - Agent access;
-- Operation;
-- Invocation;
+- service;
+- Call;
 - payment;
 - supplier connection; and
 - external execution.
@@ -1033,7 +1128,7 @@ Provide one joined operational view over the complete journey:
 
 - demand with no viable candidates;
 - candidates blocked by readiness, connection or authority;
-- stuck or uncertain Invocations;
+- stuck or uncertain Calls;
 - settlement discrepancies, refunds and payout failures;
 - outbound event delivery attempts; and
 - intervention, recovery and eventual user outcome.
@@ -1041,7 +1136,7 @@ Provide one joined operational view over the complete journey:
 Asynchronous continuation uses stable event identity and sequence, signatures,
 verified endpoints, retained attempt history, bounded secret overlap and manual
 replay. At-least-once and unordered delivery must not duplicate the underlying
-Invocation or financial effect.
+Call or financial effect.
 
 Package 8 uses the Package 4 evidence identity and reconstruction trail so
 support and operators can diagnose one problem without rebuilding its history.
@@ -1058,9 +1153,9 @@ support and operators can diagnose one problem without rebuilding its history.
 - Project caller-specific viability as `executable_now`, `setup_required` or
   `unavailable`, with the bounded reason and next valid action.
 - Keep canonical market facts common while considering current Account,
-  authority, balance, Operation scope and required Provider connection.
+  authority, balance, service scope and required Provider connection.
 - Co-locate the machine-readable descriptor and next action on the exact human
-  Operation page.
+  service page.
 
 ### Package 9B — Integration documentation
 
@@ -1088,7 +1183,7 @@ support and operators can diagnose one problem without rebuilding its history.
 - Actionable error messages.
 - Safe request references.
 - Evidence-source and adapter status.
-- Diagnostics that identify which inspected fact drifted when Invocation is
+- Diagnostics that identify which inspected fact drifted when Call is
   refused before dispatch.
 - Cross-surface conformance proving that HTTP, MCP and CLI return the same
   canonical facts, reason codes, retry classes and durable references.
@@ -1125,7 +1220,7 @@ Establish budgets for:
 - public first load;
 - authenticated navigation;
 - market search;
-- large Invocation and record histories;
+- large Call and record histories;
 - supplier workspace; and
 - slow-network behaviour.
 
@@ -1153,7 +1248,7 @@ The modes help check capability coverage without changing the roadmap:
 | Resell | Packages 3–5 and 7–10, including separate buyer and Provider financial legs, documents, remedies, payouts and governance. |
 
 A capability can support more than one mode. An observed acquisition does not
-become an Agentic Economy-controlled Invocation or canonical Operation merely
+become an Agentic Economy-controlled Call or canonical service merely
 because the same platform can display both.
 
 ## Mature-platform completion standard
@@ -1164,7 +1259,7 @@ The roadmap reaches its destination when:
    the resulting activity and recover from supported failures;
 2. a fresh agent process can discover, inspect, invoke, monitor and recover from
    stable machine contracts while minimising context, external calls and spend;
-3. a supplier can connect, publish, maintain and withdraw Operations, resolve
+3. a supplier can connect, publish, maintain and withdraw services, resolve
    delivery issues and receive attributable payouts;
 4. an external integrator can discover and use supported contracts without
    founder guidance;
@@ -1176,16 +1271,27 @@ The roadmap reaches its destination when:
    remain independently attributable;
 8. privacy, data lifecycle, platform terms, accessibility, responsive behaviour,
    performance and reliability are operated capabilities; and
-9. repeat demand, Provider switching, outcomes and supplier economics can
-   improve the market without weakening the authority of canonical Operations.
+9. the supported journeys meet the familiar reference behaviour, including
+   changes, failures, recovery and offboarding, without founder guidance or
+   unnecessary AE-specific concepts.
 
-The final market-acceptance proof must demonstrate one narrow category in which:
+Current acceptance still needs an immediately useful service result, an operable
+Provider delivery and payout path, and workable net economics for the supported
+lane. Deferring differentiation does not defer those practical proofs or any
+package's live release evidence.
+
+### Later market learning — not a maturity closeout gate
+
+After the familiar platform works, evaluate one narrow category against the
+following longer-term hypotheses. These do not require a differentiated market
+mechanism, Provider switching or a unique data advantage before current-stage
+closeout:
 
 - an unfamiliar capability gap reaches Agentic Economy from more than one
   harness;
-- at least two independent, currently routeable Operations are genuinely
+- at least two independent, currently routeable services are genuinely
   comparable on their declared unit and outcome;
-- the selected Operation returns an immediately useful contribution rather
+- the selected service returns an immediately useful contribution rather
   than merely a completed response;
 - a later comparable need returns through Agentic Economy as a justified repeat
   selection or Provider switch;
@@ -1198,6 +1304,10 @@ The starting-line gate proves that the first useful record can exist. The full
 roadmap proves that Agentic Economy is a mature platform.
 
 ## GSTACK REVIEW REPORT
+
+Historical engineering review retained verbatim below. Its implementation names
+and plan-level verdict are not a new status assessment. The maturity-first
+product direction and terminology above govern current product work.
 
 **Verdict:** Package 4 is implementation-ready as a sequential product slice.
 It now starts with the managed x402 Call that creates the product, while retaining

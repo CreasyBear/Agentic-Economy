@@ -34,8 +34,10 @@ function productionEnvironment(): Record<string, string> {
     AE_X402_CUSTODY_MAX_ATOMIC: '100000000',
     AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000000',
     AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
-    STRIPE_SECRET_KEY: 'sk_live_example',
+    STRIPE_SECRET_KEY: 'rk_live_command_example',
+    STRIPE_READBACK_KEY: 'rk_live_readback_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_live_example',
+    STRIPE_V2_WEBHOOK_SECRET: 'whsec_v2_live_example',
     STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_au_gst_10_inclusive',
     AE_FORMANCE_ENVIRONMENT: 'production',
     AE_FORMANCE_GATEWAY_URL: 'https://formance.example.com',
@@ -77,6 +79,7 @@ describe('deployment manifest validator', () => {
       'formance-financial-authority',
       'seller-onboarding-canary-funding',
       'durable-invocation-workpool',
+      'durable-stripe-webhook-inbox',
       'provider-operations-rollout',
       'operation-gateway',
       'convex-scheduled-jobs',
@@ -84,6 +87,7 @@ describe('deployment manifest validator', () => {
     const components = result.resources.find((resource) => resource.id === 'convex-components')
     expect((components as { components: readonly string[] }).components).toEqual([
       'workpool',
+      'workpool:stripeWebhookWorkpool',
       'workflow',
       'rate-limiter',
       'agent',
@@ -93,6 +97,11 @@ describe('deployment manifest validator', () => {
       'aggregate:marketOperationRatings',
       'aggregate:marketActiveOperations',
       'aggregate:marketActiveSuppliers',
+    ])
+    const stripeInbox = result.resources.find((resource) => resource.id === 'durable-stripe-webhook-inbox')
+    expect((stripeInbox as { workerEnvironment: readonly string[] }).workerEnvironment).toEqual([
+      'STRIPE_READBACK_KEY',
+      'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
     ])
     expect(result.readinessProbes.map((probe) => probe.path)).toEqual(['/api/health', '/api/ready', '/api/v1/release'])
   })
@@ -127,6 +136,7 @@ describe('deployment manifest validator', () => {
       'AE_SOURCE_WRITE_KEY_SESSION',
       'STRIPE_SECRET_KEY',
       'STRIPE_WEBHOOK_SECRET',
+      'STRIPE_V2_WEBHOOK_SECRET',
       'STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID',
       'AE_PACKAGE5_WRITES_ENABLED',
       'AE_SUPPLY_HTTP_CREDENTIALS_ENABLED',
@@ -247,15 +257,19 @@ describe('deployment manifest validator', () => {
   it('rejects test or malformed Stripe credentials in production', () => {
     const result = validateDeploymentManifest({
       ...productionEnvironment(),
-      STRIPE_SECRET_KEY: 'sk_test_example',
+      STRIPE_SECRET_KEY: 'sk_live_example',
+      STRIPE_READBACK_KEY: 'sk_live_readback_example',
       STRIPE_WEBHOOK_SECRET: 'not-a-webhook-secret',
+      STRIPE_V2_WEBHOOK_SECRET: 'not-a-v2-webhook-secret',
       STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'not-a-tax-rate',
     }, { nodeMajor: 22 })
 
     expect(result.ok).toBe(false)
     expect(result.findings).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'malformed', code: 'stripe_secret_key_invalid', names: ['STRIPE_SECRET_KEY'] }),
+      expect.objectContaining({ kind: 'malformed', code: 'stripe_readback_key_invalid', names: ['STRIPE_READBACK_KEY'] }),
       expect.objectContaining({ kind: 'malformed', code: 'stripe_webhook_secret_invalid', names: ['STRIPE_WEBHOOK_SECRET'] }),
+      expect.objectContaining({ kind: 'malformed', code: 'stripe_v2_webhook_secret_invalid', names: ['STRIPE_V2_WEBHOOK_SECRET'] }),
       expect.objectContaining({ kind: 'malformed', code: 'stripe_tax_rate_invalid', names: ['STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID'] }),
     ]))
   })
@@ -266,7 +280,8 @@ describe('deployment manifest validator', () => {
       AE_PACKAGE4_SANDBOX_DEPLOYMENT_PROFILE: 'synthetic_vps_fixture',
       VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_release',
       CLERK_SECRET_KEY: 'sk_test_release',
-      STRIPE_SECRET_KEY: 'sk_test_release',
+      STRIPE_SECRET_KEY: 'rk_test_release',
+      STRIPE_READBACK_KEY: 'rk_test_readback_release',
       STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: 'txr_au_gst_10_inclusive',
       AE_FORMANCE_ENVIRONMENT: 'sandbox',
       AE_FORMANCE_LEDGER: 'agentic-economy-release',
@@ -278,7 +293,7 @@ describe('deployment manifest validator', () => {
     })
     expect(validateDeploymentManifest({
       ...environment,
-      STRIPE_SECRET_KEY: 'sk_live_wrong-boundary',
+      STRIPE_SECRET_KEY: 'rk_live_wrong-boundary',
       AE_FORMANCE_ENVIRONMENT: 'production',
     }, { nodeMajor: 22 }).findings.map(({ code }) => code)).toEqual(expect.arrayContaining([
       'stripe_secret_key_invalid',

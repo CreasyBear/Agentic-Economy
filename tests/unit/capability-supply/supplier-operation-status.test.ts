@@ -49,6 +49,81 @@ describe('supplier Operation status', () => {
     })
   })
 
+  it.each([
+    ['health_unobserved', false, 'Action required', 'supply.recheck'],
+    ['health_stale', true, 'Action required', 'supply.recheck'],
+    ['health_unhealthy', true, 'Action required', 'supply.recheck'],
+    ['provider_authority_unverified', true, 'Submitted', 'supply.status'],
+    ['unrecognized_current_requirement', true, 'Action required', 'supply.status'],
+  ] as const)('returns one safe continuation for %s', (reason, submitted, state, action) => {
+    const status = projectSupplierOperationStatus({
+      ...base,
+      submitted,
+      routeable: false,
+      blockerCodes: [reason],
+    })
+
+    expect(status).toMatchObject({
+      state,
+      reasonCodes: [reason],
+      continuation: { action },
+    })
+  })
+
+  it('keeps submitted authority and health observations in current-status readback while review is in flight', () => {
+    const status = projectSupplierOperationStatus({
+      ...base,
+      routeable: false,
+      reviewActive: true,
+      blockerCodes: ['provider_authority_unverified', 'health_unobserved'],
+    })
+
+    expect(status).toMatchObject({
+      state: 'Under review',
+      reasonCodes: ['provider_authority_unverified', 'health_unobserved'],
+      continuation: { action: 'supply.status' },
+    })
+  })
+
+  it('does not schedule another check while a failed health check is already under review', () => {
+    const status = projectSupplierOperationStatus({
+      ...base,
+      routeable: false,
+      reviewActive: true,
+      blockerCodes: ['health_unhealthy'],
+    })
+
+    expect(status).toMatchObject({
+      state: 'Under review',
+      continuation: { action: 'supply.status' },
+    })
+  })
+
+  it('preserves causal reason priority and rechecks a current published revision only when it is no longer routeable', () => {
+    const status = projectSupplierOperationStatus({
+      ...base,
+      routeable: false,
+      blockerCodes: ['health_stale', 'provider_authority_unverified'],
+      health: {
+        connection: 'not_required',
+        validation: 'passed',
+        publication: 'published',
+        freshness: 'stale',
+        delivery: { kind: 'unobserved', provenance: 'canonical_call_receipts' },
+        usefulOutcome: { kind: 'unobserved', provenance: 'qualified_use_receipts' },
+        operationalConditions: ['health_stale', 'provider_authority_unverified'],
+      },
+    })
+
+    expect(status).toMatchObject({
+      state: 'Action required',
+      reasonCodes: ['health_stale', 'provider_authority_unverified'],
+      routeability: { available: false, reasonCodes: ['health_stale', 'provider_authority_unverified'] },
+      health: { publication: 'published', freshness: 'stale' },
+      continuation: { action: 'supply.recheck' },
+    })
+  })
+
   it('never emits more than one machine continuation or owner handoff', () => {
     const status = projectSupplierOperationStatus({
       ...base,

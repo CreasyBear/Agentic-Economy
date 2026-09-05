@@ -88,6 +88,13 @@ resource "aws_sns_topic" "alerts" {
   tags              = local.tags
 }
 
+resource "aws_sns_topic_subscription" "alerts_email" {
+  for_each  = var.alert_email == null ? toset([]) : toset([var.alert_email])
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = each.value
+}
+
 data "aws_iam_policy_document" "alerts" {
   statement {
     sid       = "AllowEventBridgePublish"

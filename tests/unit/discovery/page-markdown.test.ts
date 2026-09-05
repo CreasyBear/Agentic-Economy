@@ -64,7 +64,7 @@ describe('site brief markdown', () => {
     expect(body).toContain('Call `operation.inspect` with the exact input')
     expect(body).toContain('Invoke only with the returned Commitment')
     expect(body).toContain('official MCP client')
-    expect(body).toContain('If challenged')
+    expect(body).toContain('native account connection before protected work')
   })
 
   it('names the OAuth key boundary, body-only idempotency, and stable recovery identity', () => {
@@ -73,7 +73,7 @@ describe('site brief markdown', () => {
     expect(body).toContain('never contains provider credentials or silently grants payment or consequential authority')
     expect(body).toContain('If the receipt explicitly requires reconciliation')
     expect(body).toContain('the CLI creates and retains it automatically')
-    expect(body).toContain('List, search, describe, compare, and eligible free keyless reads are public')
+    expect(body).toContain('List, search, describe and compare are public')
     expect(body).toContain('Provider and publication records are supporting metadata')
   })
 
@@ -89,7 +89,7 @@ describe('site brief markdown', () => {
     expect(guide).not.toContain('ae connect --base-url "https://ae.example" --mcp')
     expect(guide).toContain('POST body example')
     expect(guide).toContain('application/problem+json')
-    expect(guide).toContain('ae inspect "$AE_OPERATION_REF" --base-url "https://ae.example" --json')
+    expect(guide).toContain('ae describe "$AE_OPERATION_REF" --base-url "https://ae.example" --json')
     expect(guide).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
     expect(guide).not.toContain('advanced')
     expect(guide).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)

@@ -16,7 +16,8 @@ terraform {
 }
 
 provider "aws" {
-  region = "ap-southeast-2"
+  region              = "ap-southeast-2"
+  allowed_account_ids = ["197716152388"]
 
   default_tags {
     tags = {
@@ -28,8 +29,9 @@ provider "aws" {
 }
 
 provider "aws" {
-  alias  = "dr"
-  region = "ap-southeast-4"
+  alias               = "dr"
+  region              = "ap-southeast-4"
+  allowed_account_ids = ["197716152388"]
 
   default_tags {
     tags = {

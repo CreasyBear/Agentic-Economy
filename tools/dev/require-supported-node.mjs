@@ -8,17 +8,15 @@
  * one actionable line plus the exact remedy, then executes the requested
  * command transparently on a suitable runtime.
  *
- * Suitable runtimes today: majors 18 through 24 (repo engines pins 22.x;
- * 24 is the blessed fallback via `npx -y -p node@24`).
+ * The project supports Node 22, matching .nvmrc and engines.node.
  */
 import { spawnSync } from 'node:child_process'
+import { delimiter, dirname } from 'node:path'
 import { argv, env, exit } from 'node:process'
 
 const SEPARATOR_INDEX = argv.indexOf('--')
 const PASSTHROUGH = SEPARATOR_INDEX === -1 ? [] : argv.slice(SEPARATOR_INDEX + 1)
 const INVOKED_AS = env.npm_lifecycle_event ?? 'this script'
-
-const SUPPORTED_MAJORS = new Set([18, 20, 22, 23, 24])
 
 function currentMajor() {
   const match = /^v(\d+)\./u.exec(process.version)
@@ -27,15 +25,15 @@ function currentMajor() {
 
 const major = currentMajor()
 
-if (!SUPPORTED_MAJORS.has(major)) {
+if (major !== 22) {
   const lines = [
     '',
-    `✖ ${INVOKED_AS}: Node ${process.version} is not supported by the Convex CLI.`,
+    `✖ ${INVOKED_AS}: this project requires Node 22; found ${process.version}.`,
     '  Repo pin: engines.node = 22.x.',
     '',
-    '  Remediate one of:',
-    '    • nvm use            (project .nvmrc will select 22)',
-    '    • npx -y -p node@24 npm run ' + INVOKED_AS,
+    '  Run nvm use from the project directory, then retry.',
+    '  For agent shells without NVM loaded:',
+    '    NODE_VERSION=22 "$HOME/.nvm/nvm-exec" ' + (env.npm_lifecycle_event === undefined ? '<command> [args...]' : `npm run ${INVOKED_AS}`),
     '',
     '  Command skipped: ' + PASSTHROUGH.join(' '),
     '',
@@ -50,6 +48,7 @@ if (PASSTHROUGH.length === 0) {
 }
 
 const ran = spawnSync(PASSTHROUGH[0] ?? '', PASSTHROUGH.slice(1), {
+  env: { ...env, PATH: [dirname(process.execPath), env.PATH].filter(Boolean).join(delimiter) },
   stdio: 'inherit',
   shell: false,
 })

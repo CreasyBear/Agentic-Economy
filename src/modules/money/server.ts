@@ -1,9 +1,6 @@
 import {
-  callPublicSourceAction,
-  callPublicSourceQuery,
-  createConvexServerFunctionAssertion,
-  sourceAction,
-  type ConvexServerFunctionAssertion,
+  callPublicSourceMutation,
+  sourceMutation,
 } from '@/lib/server/convex-source'
 import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
 import {
@@ -11,33 +8,21 @@ import {
   type SourceWriteAdmission,
   type SourceWriteAdmissionRequest,
 } from '@/modules/security/source-write-admission'
-import { isMoneyRefusal, type MoneyRefusal } from './public'
+import type { MoneyRefusal } from './public'
 import {
-  createStripeMoneyProvider,
-  resolveStripeMoneyProviderContext,
   verifyStripeMoneyWebhook,
   type StripeMoneyClient,
   type StripeMoneyMode,
   type StripeMoneyProviderConfig,
 } from '@/lib/server/stripe-money-provider'
-import { readStripeFundingRefund, type StripeFundingRefundEvidence } from '@/lib/server/stripe-money-provider'
 import {
   handleStripeWebhookRequest as handleStripeWebhook,
   type StripeMoneyWebhookEvent,
-  type StripeRefundWebhookEvent,
-  type StripeWebhookApplier,
-  type StripeWebhookApplication,
+  type StripeWebhookAdmission,
+  type StripeWebhookDestination,
+  type StripeWebhookIngester,
   type StripeWebhookVerifier,
 } from './internal/stripe-webhook'
-import {
-  fundingPaymentRequest,
-  fundingEvidence,
-  fundingWebhookReadbackRefusal,
-  readWebhookFundingCommandQuery,
-  readWebhookRefundCommandQuery,
-  type FundingProviderEvidence,
-} from './internal/account-funding-http'
-import { applyVerifiedConnectAccountEvent } from './internal/payout-connect-http'
 import type { Environment } from './internal/payout-http-runtime'
 
 export {
@@ -85,8 +70,9 @@ export type {
   StripeCheckoutWebhookEvent,
   StripeMoneyWebhookEvent,
   StripeRefundWebhookEvent,
-  StripeWebhookApplier,
-  StripeWebhookApplication,
+  StripeWebhookAdmission,
+  StripeWebhookDestination,
+  StripeWebhookIngester,
   StripeWebhookVerifier,
 } from './internal/stripe-webhook'
 export type { OwnerMoneyServerRuntime } from './internal/payout-http-runtime'
@@ -123,91 +109,34 @@ type SourceWriteBoundArgs = Readonly<{
   sourceWrite: SourceWriteAdmission
   sourceWriteRequest: SourceWriteAdmissionRequest
 }>
-type ApplyVerifiedStripeEventArgs = Readonly<{
+type IngestVerifiedStripeEventArgs = Readonly<{
+  destination: StripeWebhookDestination
   event: StripeMoneyWebhookEvent
-  readback?: FundingProviderEvidence
-  refundReadback?: StripeFundingRefundEvidence
   operationKey: string
   correlationId: string
 }> &
   SourceWriteBoundArgs
-type ApplyVerifiedStripeEventResult = StripeWebhookApplication | MoneyRefusal
+type IngestVerifiedStripeEventResult = StripeWebhookAdmission | MoneyRefusal
 
-const applyVerifiedStripeEventAction = sourceAction<
-  ApplyVerifiedStripeEventArgs,
-  ApplyVerifiedStripeEventResult
->('moneyAccountFundingFormance:applyVerifiedEvent')
+const ingestVerifiedStripeEventMutation = sourceMutation<
+  IngestVerifiedStripeEventArgs,
+  IngestVerifiedStripeEventResult
+>('moneyStripeWebhookInbox:ingest')
 
-export async function applyVerifiedStripeEventThroughSource(
+export async function ingestVerifiedStripeEventThroughSource(
   input: Readonly<{
+    destination: StripeWebhookDestination
     event: StripeMoneyWebhookEvent
     rawBody: string
     request: Request
     env?: Environment
-    config?: StripeMoneyProviderConfig
-    mode?: StripeMoneyMode
-    client?: StripeMoneyClient
   }>,
-): Promise<ApplyVerifiedStripeEventResult> {
-  if (input.event.kind === 'account')
-    return await applyVerifiedConnectAccountEvent({
-      event: input.event,
-      rawBody: input.rawBody,
-      request: input.request,
-      ...(input.env === undefined ? {} : { env: input.env }),
-      ...(input.config === undefined ? {} : { config: input.config }),
-      ...(input.mode === undefined ? {} : { mode: input.mode }),
-      ...(input.client === undefined ? {} : { client: input.client }),
-    })
-  if (input.event.kind === 'refund') {
-    return await applyVerifiedStripeRefundThroughSource(input as typeof input & { event: StripeRefundWebhookEvent })
-  }
-  let serviceAuth: ConvexServerFunctionAssertion
-  try {
-    serviceAuth = await createConvexServerFunctionAssertion({
-      operation: 'moneyAccountFunding:readWebhookCommand',
-      scope: 'money:funding_webhook_read',
-      command: {
-        commandRef: input.event.commandRef,
-        externalRef: input.event.sessionId,
-      },
-      ...(input.env === undefined ? {} : { env: input.env }),
-    })
-  } catch {
-    return { kind: 'refused', code: 'credit_topup_pending', retryable: true }
-  }
-  const durableCommand = await callPublicSourceQuery(
-    readWebhookFundingCommandQuery,
-    {
-      commandRef: input.event.commandRef,
-      externalRef: input.event.sessionId,
-      serviceAuth,
-    },
-    input.env === undefined ? {} : { env: input.env },
-  )
-  if (isMoneyRefusal(durableCommand)) return durableCommand
-  const provider = createStripeMoneyProvider({
-    ...(input.env === undefined ? {} : { env: input.env }),
-    ...(input.config === undefined ? {} : { config: input.config }),
-    ...(input.mode === undefined ? {} : { mode: input.mode }),
-    ...(input.client === undefined ? {} : { client: input.client }),
-  })
-  const payment = await provider.readCreditPayment({
-    ...fundingPaymentRequest(durableCommand.command),
-    externalRef: input.event.sessionId,
-  })
-  if (isMoneyRefusal(payment)) return payment
-  const readbackRefusal = fundingWebhookReadbackRefusal(
-    durableCommand.command,
-    input.event,
-    payment.evidence,
-  )
-  if (readbackRefusal !== undefined) return readbackRefusal
-  const operationKey = 'moneyAccountFunding:applyVerifiedEvent'
+): Promise<IngestVerifiedStripeEventResult> {
+  const operationKey = 'moneyStripeWebhookInbox:ingest'
   const correlationId = input.event.stripeEventId
   const command = {
+    destination: input.destination,
     event: input.event,
-    readback: fundingEvidence(payment.evidence),
     operationKey,
     correlationId,
   }
@@ -220,67 +149,7 @@ export async function applyVerifiedStripeEventThroughSource(
     correlationId,
     ...(input.env === undefined ? {} : { env: input.env }),
   })
-  return await callPublicSourceAction(applyVerifiedStripeEventAction, {
-    ...command,
-    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
-    sourceWrite,
-  })
-}
-
-async function applyVerifiedStripeRefundThroughSource(
-  input: Readonly<{
-    event: StripeRefundWebhookEvent
-    rawBody: string
-    request: Request
-    env?: Environment
-    config?: StripeMoneyProviderConfig
-    mode?: StripeMoneyMode
-    client?: StripeMoneyClient
-  }>,
-): Promise<ApplyVerifiedStripeEventResult> {
-  let serviceAuth: ConvexServerFunctionAssertion
-  try {
-    serviceAuth = await createConvexServerFunctionAssertion({
-      operation: 'moneyAccountFunding:readWebhookRefundCommand',
-      scope: 'money:funding_webhook_read',
-      command: { paymentId: input.event.paymentId, refundId: input.event.refundId },
-      ...(input.env === undefined ? {} : { env: input.env }),
-    })
-  } catch {
-    return { kind: 'refused', code: 'credit_topup_pending', retryable: true }
-  }
-  const durableCommand = await callPublicSourceQuery(
-    readWebhookRefundCommandQuery,
-    { paymentId: input.event.paymentId, refundId: input.event.refundId, serviceAuth },
-    input.env === undefined ? {} : { env: input.env },
-  )
-  if (isMoneyRefusal(durableCommand)) return durableCommand
-  const providerContext = resolveStripeMoneyProviderContext({
-    ...(input.env === undefined ? {} : { env: input.env }),
-    ...(input.config === undefined ? {} : { config: input.config }),
-    ...(input.mode === undefined ? {} : { mode: input.mode }),
-    ...(input.client === undefined ? {} : { client: input.client }),
-  })
-  if (isMoneyRefusal(providerContext)) return providerContext
-  const refundReadback = await readStripeFundingRefund(
-    providerContext.client,
-    providerContext.config,
-    input.event.refundId,
-  )
-  if (isMoneyRefusal(refundReadback)) return refundReadback
-  const operationKey = 'moneyAccountFunding:applyVerifiedEvent'
-  const correlationId = input.event.stripeEventId
-  const command = { event: input.event, refundReadback, operationKey, correlationId }
-  const sourceWrite = await sourceWriteAdmissionFromRequest({
-    request: input.request,
-    command,
-    body: input.rawBody,
-    scope: 'billing',
-    operationKey,
-    correlationId,
-    ...(input.env === undefined ? {} : { env: input.env }),
-  })
-  return await callPublicSourceAction(applyVerifiedStripeEventAction, {
+  return await callPublicSourceMutation(ingestVerifiedStripeEventMutation, {
     ...command,
     sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
     sourceWrite,
@@ -290,34 +159,35 @@ async function applyVerifiedStripeRefundThroughSource(
 export async function handleStripeWebhookRequest(
   request: Request,
   options: Readonly<{
+    destination?: StripeWebhookDestination
     env?: Environment
     config?: StripeMoneyProviderConfig
     mode?: StripeMoneyMode
     client?: StripeMoneyClient
   }> = {},
 ): Promise<Response> {
+  const destination = options.destination ?? 'snapshot'
   const verifier: StripeWebhookVerifier = {
     verify: async ({ rawBody, signature }) =>
       await verifyStripeMoneyWebhook({
         rawBody,
         signature,
+        destination,
         ...(options.env === undefined ? {} : { env: options.env }),
         ...(options.config === undefined ? {} : { config: options.config }),
         ...(options.mode === undefined ? {} : { mode: options.mode }),
         ...(options.client === undefined ? {} : { client: options.client }),
       }),
   }
-  const applier: StripeWebhookApplier = {
-    apply: async ({ event, rawBody }) =>
-      await applyVerifiedStripeEventThroughSource({
+  const ingester: StripeWebhookIngester = {
+    ingest: async ({ event, rawBody }) =>
+      await ingestVerifiedStripeEventThroughSource({
+        destination,
         event,
         rawBody,
         request,
         ...(options.env === undefined ? {} : { env: options.env }),
-        ...(options.config === undefined ? {} : { config: options.config }),
-        ...(options.mode === undefined ? {} : { mode: options.mode }),
-        ...(options.client === undefined ? {} : { client: options.client }),
       }),
   }
-  return await handleStripeWebhook({ request, verifier, applier })
+  return await handleStripeWebhook({ request, verifier, ingester })
 }

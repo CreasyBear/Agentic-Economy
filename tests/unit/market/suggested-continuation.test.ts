@@ -73,7 +73,7 @@ describe('shared suggested continuation projection', () => {
     ],
     [
       { subject: 'supplier', state: 'draft', offeringRef: 'offering:one' },
-      { label: 'Continue description', kind: 'navigate', href: '/owner/offerings/offering%3Aone' },
+      { label: 'Continue description', kind: 'navigate', href: '/owner/supply/offering%3Aone' },
     ],
     [
       { subject: 'supplier', state: 'unready', offeringRef: 'offering:one' },
@@ -89,7 +89,7 @@ describe('shared suggested continuation projection', () => {
     ],
     [
       { subject: 'supplier', state: 'current', offeringRef: 'offering:one', operationRef: OPERATION_REF },
-      { label: 'View live Operation', kind: 'navigate', command: `ae inspect ${OPERATION_REF}`, href: `/operations/${OPERATION_REF}` },
+      { label: 'View live Operation', kind: 'navigate', command: `ae describe ${OPERATION_REF}`, href: `/operations/${OPERATION_REF}` },
     ],
     [
       { subject: 'connection', state: 'missing', actor: 'buyer' },

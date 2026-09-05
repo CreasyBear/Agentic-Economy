@@ -2,9 +2,10 @@
 
 This directory is the reusable deployment definition for the private Formance
 Community financial authority. `environments/package4-release` is the sandbox
-release instance. A future production root must call the same module with a
-fresh state backend, database, ledger, hostname and credentials; the release
-instance is never promoted in place.
+release instance. `account-baseline` owns the account-wide audit and safety
+controls, `recovery-drill` proves an isolated restore, and
+`environments/production` declares the separate production boundary. The
+release instance is never promoted in place.
 
 ## Deployed boundary
 
@@ -21,6 +22,10 @@ instance is never promoted in place.
   only. Images and component versions are immutable digests.
 - A remotely configured Cloudflare Tunnel publishes Gateway. Cloudflare Access
   admits only the environment service token; direct origin access is absent.
+- Multi-region CloudTrail with integrity validation, GuardDuty, Access Analyzer,
+  account-level S3 blocking, default EBS encryption and S3-backed VPC Flow Logs.
+- Thirty-day host and RDS logs, CloudWatch Agent disk/memory metrics and eight
+  infrastructure alarms routed through the release SNS topic.
 
 No Formance Payments, Auth, Console, Reconciliation, Wallets, Flows or Webhooks
 module is deployed. PostgreSQL and Kubernetes APIs are not exposed publicly.
@@ -86,16 +91,33 @@ Validate with the pinned toolchain before planning:
 ```sh
 docker run --rm -v "$PWD:/workspace" \
   -w /workspace/infra/package4/environments/package4-release \
-  ghcr.io/opentofu/opentofu:1.12.6 init -backend=false
-docker run --rm -v "$PWD:/workspace" \
-  -w /workspace/infra/package4/environments/package4-release \
-  ghcr.io/opentofu/opentofu:1.12.6 validate
+  --entrypoint sh ghcr.io/opentofu/opentofu:1.12.6 -lc '
+    export TF_DATA_DIR=/tmp/tofu-data
+    tofu fmt -check -recursive .
+    tofu init -backend=false -input=false >/dev/null
+    tofu validate
+  '
 ```
 
 For a real plan, initialize with the external backend file and provide the
 variable file outside the checkout. Review the complete saved plan before
 applying. The module deliberately has no destroy shortcut: RDS deletion
 protection and `prevent_destroy` require an explicit reviewed change.
+
+When changing AWS-only resources in an existing environment, disable provider
+refresh and pass the existing Tunnel token from Secrets Manager through the
+sensitive `cloudflare_tunnel_token_override` environment variable. This keeps
+the Cloudflare boundary frozen without placing the token in source, command
+output or a variable file. New environments still require a valid Cloudflare
+management credential and must not use the override as a bootstrap shortcut.
+
+The production root is declaration only until alert delivery, account audit,
+cost ingestion and a passing recovery drill are all evidenced. It uses
+`ae-production`, VPC `10.43.0.0/16`, a dedicated encrypted state bucket and KMS
+key, Sydney primary and Melbourne recovery copy, and fresh Cloudflare and
+database identities. It contains no application traffic binding. The root
+refuses to plan unless `foundation_gates_passed=true`; the canonical criteria
+are in `docs/operations/aws-foundation.md`.
 
 ## Application binding
 
@@ -132,3 +154,16 @@ Database recovery uses RDS PITR into an isolated instance followed by a fresh
 Formance stack and exact schema, template, reference, balance and idempotency
 verification. Never attach a restored database to the authoritative release
 stack until the rehearsal evidence passes.
+
+Use `recovery-drill` with a dedicated state key for each drill date. Its
+verification script runs through Systems Manager, retrieves the drill secret
+on the host, creates a separate Formance namespace, compares source and restore
+digests, and submits a drill-only idempotency probe. Formance binds its logical
+database name to the Stack name, so the script briefly pauses the Formance
+operator control loop and points only the isolated drill Ledger deployments at
+the restored source database name. The source data-plane stays online and its
+endpoint is never redirected. Do not destroy the drill until the evidence is
+captured and Joel explicitly confirms cleanup. Run
+`cleanup-restored-formance.sh` first so the exact drill-only Formance resources
+and secret-bearing Settings are removed before the reviewed OpenTofu destroy
+plan deletes their AWS backing resources.

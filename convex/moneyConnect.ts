@@ -245,13 +245,16 @@ export const readPayoutAccountByStripeIdArgs = {
   stripeAccountId: identifier,
   serviceAuth: v.optional(serverFunctionAuth),
 }
-export const recordConnectAccountEventArgs = {
+export const recordConnectAccountEventFromInboxArgs = {
   businessId: identifier,
   currency: identifier,
   exponent: v.number(),
   event: accountUpdatedEventArg,
   readback: connectAccountReadbackArg,
   expectedVersion: v.optional(v.number()),
+}
+export const recordConnectAccountEventArgs = {
+  ...recordConnectAccountEventFromInboxArgs,
   ...billingSourceArgs,
 }
 
@@ -822,6 +825,25 @@ export async function readPayoutAccountByStripeIdHandler(
   )
 }
 
+export async function readPayoutAccountByStripeIdForWorkerHandler(
+  ctx: QueryCtx,
+  stripeAccountId: string,
+) {
+  return (
+    await ctx.db
+      .query('moneyPayoutAccounts')
+      .withIndex('by_stripeAccountId', (q) => q.eq('stripeAccountId', stripeAccountId))
+      .take(20)
+  ).map(({ businessId, currency, exponent, stripeAccountId: boundStripeAccountId, lastStripeEventId, version }) => ({
+    businessId,
+    currency,
+    exponent,
+    stripeAccountId: boundStripeAccountId,
+    ...(lastStripeEventId === undefined ? {} : { lastStripeEventId }),
+    ...(version === undefined ? {} : { version }),
+  }))
+}
+
 export async function readOwnerPayoutAccountHandler(
   ctx: QueryCtx,
   args: ReadOwnerPayoutAccountArgs,
@@ -851,6 +873,13 @@ export async function recordConnectAccountEventHandler(
   args: RecordConnectAccountEventArgs,
 ) {
   await requireBillingSourceWrite(ctx, args)
+  return await recordConnectAccountEventFromInboxHandler(ctx, args)
+}
+
+export async function recordConnectAccountEventFromInboxHandler(
+  ctx: MutationCtx,
+  args: Omit<RecordConnectAccountEventArgs, keyof BillingSourceWriteArgs>,
+) {
   const event = args.event
   if (event.externalRef !== event.stripeAccountId)
     return refusedConnect('payment_binding_invalid', false)

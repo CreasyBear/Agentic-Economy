@@ -1124,6 +1124,7 @@ export const supplyPublishAction = defineAction<SupplyPublishInput, SupplyPublis
   readOnly: false,
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'business', dataClasses: ['operation_input'], spendExposure: 'none', approval: 'mandate_eligible' },
   surfaces: supplySurfaces,
+  mcp: { idempotent: true, openWorld: true, destructive: false },
   credentialAdmission: supplyCredentialAdmission,
   invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.publish.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['businessRef', 'source', 'candidateRef', 'expectedSourceDigest', 'connectionRef', 'presentation', 'consequences', 'pricing', 'validationInput', 'environment', 'idempotencyKey', 'attestation'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['source_publication', 'publication_identity'], safeContinuations: ['supply.status'], invalidationConditions: ['source_changed', 'candidate_changed', 'connection_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {
@@ -1144,6 +1145,7 @@ export const supplyWithdrawAction = defineAction<SupplyWithdrawInput, SupplyWith
   readOnly: false,
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'business', dataClasses: ['operation_input'], spendExposure: 'none', approval: 'mandate_eligible' },
   surfaces: supplySurfaces,
+  mcp: { idempotent: true, openWorld: true, destructive: true },
   credentialAdmission: supplyCredentialAdmission,
   invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.withdraw.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['businessId', 'offeringRef', 'offeringRevision', 'offeringSourceHash', 'publicationRef', 'publicationRevision', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['withdrawal_identity'], safeContinuations: ['supply.status', 'supply.republish'], invalidationConditions: ['publication_ref_changed', 'publication_revision_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {
@@ -1164,6 +1166,7 @@ export const supplyRecheckAction = defineAction<SupplyRecheckInput, SupplyRechec
   readOnly: false,
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'provider_system', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'mandate_eligible' },
   surfaces: supplySurfaces,
+  mcp: { idempotent: true, openWorld: true, destructive: false },
   credentialAdmission: supplyCredentialAdmission,
   invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.recheck.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['businessId', 'offeringRef', 'offeringRevision', 'offeringSourceHash', 'publicationRef', 'publicationRevision', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['readiness_recheck_scheduled'], safeContinuations: ['supply.status'], invalidationConditions: ['publication_ref_changed', 'publication_revision_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {
@@ -1184,6 +1187,7 @@ export const supplyRepublishAction = defineAction<SupplyRepublishInput, SupplyRe
   readOnly: false,
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'business', dataClasses: ['operation_input'], spendExposure: 'none', approval: 'mandate_eligible' },
   surfaces: supplySurfaces,
+  mcp: { idempotent: true, openWorld: true, destructive: false },
   credentialAdmission: supplyCredentialAdmission,
   invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.republish.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['businessId', 'offeringRef', 'offeringRevision', 'offeringSourceHash', 'publicationRef', 'publicationRevision', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['publication_identity'], safeContinuations: ['supply.status'], invalidationConditions: ['publication_ref_changed', 'publication_revision_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {
@@ -1283,6 +1287,7 @@ export const supplyConnectionConnectAction = defineAction<SupplyConnectionConnec
   readOnly: false,
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'provider_system', dataClasses: ['operation_input'], spendExposure: 'none', approval: 'mandate_eligible' },
   surfaces: supplySurfaces,
+  mcp: { idempotent: true, openWorld: true, destructive: false },
   credentialAdmission: supplyCredentialAdmission,
   invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionConnect.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['kind', 'businessRef', 'sourceUrl', 'serverUrl', 'authentication', 'resourceUrl', 'method', 'environment', 'observationDigest', 'payTo', 'claimExpiresAt', 'claimSignature', 'evidenceRefs', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['provider_connection_attempt_or_identity'], safeContinuations: ['supply.connection.detail', 'supply.publish'], invalidationConditions: ['business_changed', 'source_changed', 'authentication_changed', 'environment_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {
@@ -1303,6 +1308,7 @@ export const supplyConnectionReconnectAction = defineAction<SupplyConnectionTran
   readOnly: false,
   effect: { class: 'external_state_change', reversible: true, recipientKind: 'provider_system', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'mandate_eligible' },
   surfaces: supplySurfaces,
+  mcp: { idempotent: true, openWorld: true, destructive: false },
   credentialAdmission: supplyCredentialAdmission,
   invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionReconnect.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['connectionRef', 'expectedAuthorityGeneration', 'expectedAuthorityDigest', 'reasonCode', 'evidenceRefs', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['provider_connection_authority'], safeContinuations: ['supply.connection.detail', 'supply.recheck'], invalidationConditions: ['authority_generation_changed', 'authority_digest_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {
@@ -1323,6 +1329,7 @@ export const supplyConnectionRevokeAction = defineAction<SupplyConnectionTransit
   readOnly: false,
   effect: { class: 'external_state_change', reversible: false, recipientKind: 'provider_system', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'mandate_eligible' },
   surfaces: supplySurfaces,
+  mcp: { idempotent: true, openWorld: true, destructive: true },
   credentialAdmission: supplyCredentialAdmission,
   invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.connectionRevoke.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['connectionRef', 'expectedAuthorityGeneration', 'expectedAuthorityDigest', 'reasonCode', 'evidenceRefs', 'idempotencyKey'], authorityRequirement: 'principal', retryClass: 'reconcile_before_retry', expectedEvidence: ['provider_connection_revocation'], safeContinuations: ['supply.connection.detail'], invalidationConditions: ['authority_generation_changed', 'authority_digest_changed', 'idempotency_key_changed'] },
   run: async ({ data, context }) => {

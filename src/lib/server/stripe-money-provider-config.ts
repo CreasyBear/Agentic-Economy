@@ -19,7 +19,8 @@ export type StripeMoneyClient = Stripe;
 
 export type StripeMoneyProviderConfig = Readonly<{
   secretKey: string;
-  webhookSecret: string;
+  webhookSecret?: string;
+  v2WebhookSecret?: string;
   inclusiveGstTaxRateId?: string;
   checkoutHost?: string;
   mode: StripeMoneyMode;
@@ -43,6 +44,7 @@ export function readStripeMoneyProviderConfig(
 ): StripeMoneyProviderConfig | MoneyRefusal {
   const secretKey = readEnvironmentValue(env, "STRIPE_SECRET_KEY");
   const webhookSecret = readEnvironmentValue(env, "STRIPE_WEBHOOK_SECRET");
+  const v2WebhookSecret = readEnvironmentValue(env, "STRIPE_V2_WEBHOOK_SECRET");
   const inclusiveGstTaxRateId = readEnvironmentValue(
     env,
     "STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID",
@@ -58,6 +60,7 @@ export function readStripeMoneyProviderConfig(
     {
       secretKey,
       webhookSecret,
+      ...(v2WebhookSecret === undefined ? {} : { v2WebhookSecret }),
       ...(inclusiveGstTaxRateId === undefined ? {} : { inclusiveGstTaxRateId }),
       ...(checkoutHost === undefined ? {} : { checkoutHost }),
       mode: modeFromSecretKey(secretKey) ?? "test",
@@ -75,10 +78,35 @@ export function validateStripeMoneyProviderConfig(
     secretMode === undefined ||
     config.mode !== secretMode ||
     (expectedMode !== undefined && secretMode !== expectedMode) ||
-    !/^whsec_[A-Za-z0-9_-]+$/u.test(config.webhookSecret)
+    (config.webhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(config.webhookSecret)) ||
+    (config.v2WebhookSecret !== undefined && !/^whsec_[A-Za-z0-9_-]+$/u.test(config.v2WebhookSecret))
   )
     return refusal("stripe_setup_required", false);
   return config;
+}
+
+export function readStripeMoneyReadbackProviderConfig(
+  env: Environment = process.env,
+  expectedMode?: StripeMoneyMode,
+): StripeMoneyProviderConfig | MoneyRefusal {
+  const secretKey = readEnvironmentValue(env, "STRIPE_READBACK_KEY");
+  if (secretKey === undefined || !/^rk_(?:test|live)_[A-Za-z0-9_-]+$/u.test(secretKey)) {
+    return refusal("stripe_setup_required", false);
+  }
+  const inclusiveGstTaxRateId = readEnvironmentValue(
+    env,
+    "STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID",
+  );
+  const checkoutHost = readEnvironmentValue(env, "STRIPE_CHECKOUT_HOST");
+  return validateStripeMoneyProviderConfig(
+    {
+      secretKey,
+      mode: modeFromSecretKey(secretKey) ?? "test",
+      ...(inclusiveGstTaxRateId === undefined ? {} : { inclusiveGstTaxRateId }),
+      ...(checkoutHost === undefined ? {} : { checkoutHost }),
+    },
+    expectedMode,
+  );
 }
 
 export function resolveStripeMoneyProviderContext(
@@ -219,8 +247,8 @@ function readEnvironmentValue(
 }
 
 function modeFromSecretKey(value: string): StripeMoneyMode | undefined {
-  if (/^sk_test_[A-Za-z0-9_-]+$/u.test(value)) return "test";
-  if (/^sk_live_[A-Za-z0-9_-]+$/u.test(value)) return "live";
+  if (/^(?:sk|rk)_test_[A-Za-z0-9_-]+$/u.test(value)) return "test";
+  if (/^(?:sk|rk)_live_[A-Za-z0-9_-]+$/u.test(value)) return "live";
   return undefined;
 }
 

@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 
 const root = resolve(process.cwd(), 'infra/package4')
 const read = (path: string) => readFileSync(resolve(root, path), 'utf8')
+const cloudflareRoot = resolve(process.cwd(), 'infra/cloudflare/account-baseline')
+const readCloudflare = (path: string) => readFileSync(resolve(cloudflareRoot, path), 'utf8')
 
 describe('Package 4 reusable release topology', () => {
   it('keeps the Formance origin private and admits only the Access service token', () => {
@@ -34,7 +36,105 @@ describe('Package 4 reusable release topology', () => {
     expect(database).toContain('deletion_protection        = true')
     expect(backup).toContain('copy_action {')
     expect(backup).toContain('delete_after = 7')
-    expect(environment).toContain('region = "ap-southeast-4"')
+    expect(environment).toMatch(/region\s*=\s*"ap-southeast-4"/u)
+  })
+
+  it('centralizes bounded host, database and network telemetry with actionable alarms', () => {
+    const observability = read('modules/release-environment/observability.tf')
+    const database = read('modules/release-environment/database.tf')
+    const pins = read('modules/release-environment/locals.tf')
+    const baseline = read('account-baseline/main.tf')
+
+    expect(pins).toContain('cloudwatch_agent       = "1.300072.0b1766"')
+    expect(observability).toContain('retention_in_days = 30')
+    expect(baseline).toContain('id     = "vpc-flow-log-retention"')
+    expect(baseline).toContain('days = 14')
+    expect(observability).toContain('metric_name         = "disk_used_percent"')
+    expect(observability).toContain('metric_name         = "mem_used_percent"')
+    expect(observability).toContain('metric_name         = "CPUUtilization"')
+    expect(observability).toContain('resource "aws_flow_log" "vpc"')
+    expect(database).toContain('metric_name         = "FreeableMemory"')
+    expect(database).toContain('alarm_name          = "${var.name}-rds-cpu"')
+    expect(database).toContain('depends_on = [aws_cloudwatch_log_group.rds]')
+  })
+
+  it('declares account audit, safe defaults, runway controls and isolated production state', () => {
+    const baseline = read('account-baseline/main.tf')
+    const production = read('environments/production/main.tf')
+    const productionBackend = read('environments/production/backend.hcl.example')
+    const productionVariables = read('environments/production/variables.tf')
+
+    expect(baseline).toContain('resource "aws_s3_account_public_access_block" "this"')
+    expect(baseline).toContain('resource "aws_ebs_encryption_by_default" "this"')
+    expect(baseline).toContain('is_multi_region_trail         = true')
+    expect(baseline).toContain('enable_log_file_validation    = true')
+    expect(baseline).toContain('resource "aws_guardduty_detector" "account"')
+    expect(baseline).toContain('resource "aws_accessanalyzer_analyzer" "account"')
+    expect(baseline).toContain('name         = "Agentic Economy USD 400 Runway"')
+    expect(production).toContain('name                     = "ae-production"')
+    expect(production).toContain('vpc_cidr                 = "10.43.0.0/16"')
+    expect(production).toContain('formance_hostname        = "formance.aecon.ai"')
+    expect(production).toContain('condition     = var.foundation_gates_passed')
+    expect(production).toContain('depends_on = [terraform_data.foundation_gate]')
+    expect(productionVariables).toMatch(/variable "foundation_gates_passed"[\s\S]*default\s*=\s*false/u)
+    expect(productionBackend).toContain('agentic-economy-production-state-197716152388-ap-southeast-2')
+    expect(productionBackend).toContain('alias/ae-production-opentofu-state')
+  })
+
+  it('isolates exactly two account-wide Cloudflare alert policies from runtime credentials', () => {
+    const alerts = readCloudflare('main.tf')
+    const variables = readCloudflare('variables.tf')
+    const backend = readCloudflare('backend.hcl.example')
+
+    expect(alerts.match(/resource "cloudflare_notification_policy"/gu)).toHaveLength(2)
+    expect(alerts).toContain('alert_type  = "tunnel_health_event"')
+    expect(alerts).toContain('alert_type  = "expiring_service_token_alert"')
+    expect(alerts).toContain('email = [{ id = var.alert_email }]')
+    expect(alerts).not.toContain('cloudflare_zero_trust_')
+    expect(alerts).not.toContain('cloudflare_dns_record')
+    expect(variables).toContain('default     = "joel@agentic-economy.ai"')
+    expect(backend).toContain('agentic-economy/cloudflare/account-baseline/opentofu.tfstate')
+  })
+
+  it('refuses every AWS root outside the intended account', () => {
+    for (const versionsPath of [
+      'account-baseline/versions.tf',
+      'environments/package4-release/versions.tf',
+      'environments/production/versions.tf',
+      'recovery-drill/versions.tf',
+    ]) {
+      expect(read(versionsPath)).toContain('allowed_account_ids = ["197716152388"]')
+    }
+  })
+
+  it('restores into an isolated drill boundary without redirecting the source environment', () => {
+    const drill = read('recovery-drill/main.tf')
+    const verification = read('recovery-drill/verify-restored-formance.sh')
+    const cleanup = read('recovery-drill/cleanup-restored-formance.sh')
+    const drillReadme = read('recovery-drill/README.md')
+
+    expect(drill).toMatch(/use_latest_restorable_time\s*=\s*true/u)
+    expect(drill).toMatch(/publicly_accessible\s*=\s*false/u)
+    expect(drill).toMatch(/multi_az\s*=\s*false/u)
+    expect(drill).toMatch(/backup_retention_period\s*=\s*0/u)
+    expect(drill).toContain('referenced_security_group_id = data.aws_security_group.k3s.id')
+    expect(drill).toContain('resources = [aws_db_instance.drill.master_user_secret[0].secret_arn]')
+    expect(verification).toContain('test "$source_schema_versions" = "$drill_schema_versions"')
+    expect(verification).toContain('test "$source_transactions" = "$drill_transactions"')
+    expect(verification).toContain('test "$source_balances" = "$drill_balances"')
+    expect(verification).toContain('test "$probe_count" = "1"')
+    expect(verification).toContain('scale deployment "$operator_deployment" --replicas=0')
+    expect(verification).toContain('"POSTGRES_DATABASE=${source_namespace}-ledger"')
+    expect(verification).toContain('restore_operator')
+    expect(verification).toContain('trap restore_on_exit EXIT')
+    expect(verification).toContain('^package4-release-restore-[0-9]{8}$')
+    expect(cleanup).toContain('^package4-release-restore-[0-9]{8}$')
+    expect(cleanup).toContain('--confirmed-by-joel')
+    expect(cleanup).toContain('kubectl delete stack "$drill_name"')
+    expect(cleanup).toContain('source_verification=PASS')
+    expect(cleanup).not.toMatch(/kubectl delete[^\n]*package4-release(?:\s|$)/u)
+    expect(drillReadme).toContain('Joel has explicitly')
+    expect(drill).not.toContain('modify-db-instance')
   })
 
   it('pins the official OSS components and deploys only Gateway and Ledger', () => {

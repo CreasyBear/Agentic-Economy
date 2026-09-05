@@ -46,6 +46,7 @@ export const operationInspectAction = defineAction<OperationInspectInput, Operat
     approval: 'none',
   },
   surfaces: ['http', 'mcp', 'cli', 'chat'],
+  mcp: { idempotent: false, openWorld: false, destructive: false },
   credentialAdmission: {
     scope: MARKET_OPERATIONS_INVOKE_SCOPE,
     authority: 'descriptor_classified',

@@ -66,6 +66,7 @@ export type CapabilityGraphNode = Readonly<{
     healthState: GraphPublicationRow['healthState']
     observedAt?: number
     validUntil?: number
+    lastHealthyAt?: number
     stale: boolean
   }>
   routability: Readonly<{ eligible: boolean; reasons: readonly string[] }>

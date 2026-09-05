@@ -1,6 +1,7 @@
 # Package 4 Formance release evidence
 
-Captured on 2026-09-03 for closure PR 8 and updated during closure PR 9B.
+Captured on 2026-09-03 for closure PR 8 and updated from live AWS readback on
+2026-09-04 during closure PR 9B.
 
 ## Disposition
 
@@ -30,17 +31,18 @@ The two product-hosting shells have also been isolated:
 
 | Resource | State | Evidence |
 | --- | --- | --- |
-| Vercel release project | DEPLOYED, VERIFIED | `agentic-economy-package4-release`, deployment `dpl_HusZd4YE3huJEwzyeKaAypS4unjL`, canonical alias `https://agentic-economy-package4-release.vercel.app`, source revision `79a24a309fe8e0a3ce02905caa9674cbd35db375`; health, readiness and release readback return HTTP 200. |
+| Vercel release project | DEPLOYED, VERIFIED | `agentic-economy-package4-release`, deployment `dpl_HusZd4YE3huJEwzyeKaAypS4unjL`, canonical alias `https://agentic-economy-package4-release.vercel.app`, source revision `6593dbe7b4b8f75304caeed5b468acc497b720f4`; health, readiness and release readback return HTTP 200. |
 | Convex release project | DEPLOYED, VERIFIED | `agentic-economy-package4-release`, development deployment `fastidious-barracuda-66`. It owns the synthetic release product state and completed the authenticated funding command. |
 | Clerk test instance | DEPLOYED, VERIFIED | Application `app_3Io6c0wmApyND4IBtoeomurojqj`, instance `ins_3Io6c2NfCPqxUqJI3Vx3Jvc37V9`; authenticated owner session completed the live hosted-funding journey. |
 | Stripe sandbox | DEPLOYED, PARTIALLY VERIFIED | Account `acct_1Tlni770N4UjLqHt`, enabled webhook `we_1UBYM070N4UjLqHtknl4R8Ep`, hosted Checkout and required sandbox 3DS passed. Event resend and refund/reversal remain. |
-| AWS/Cloudflare/Formance | DEPLOYED, PARTIALLY VERIFIED | AWS account `197716152388`, private k3s `i-063c00d935d85d74f`, private Multi-AZ RDS `package4-release-formance`, protected `formance-release.aecon.ai`, and live Formance funding/balance readback. Routine non-root deployment access, alerts, current backup jobs, and remote restore remain unproved. |
+| AWS/Cloudflare/Formance | DEPLOYED, PARTIALLY VERIFIED | AWS account `197716152388`, MFA-backed non-root deployment role, private k3s `i-063c00d935d85d74f`, private Multi-AZ RDS `package4-release-formance`, confirmed alert delivery, completed Sydney/Melbourne recovery points, account audit controls, bounded logs, actionable metrics, protected `formance-release.aecon.ai`, and live Formance funding/balance readback. The restore function passed but its 308-second RPO missed the target by eight seconds; Cost Explorer is still ingesting. |
 
 The complete identities, linkage, credential custody, and current gaps are
 recorded in `docs/operations/deployment-registry.yaml` and
-`docs/operations/deployment-maturity.md`. The environment is deployed but PR 9B
-is not fully closed until non-root operations, alert delivery, backup/restore,
-and token lifecycle evidence pass.
+`docs/operations/deployment-maturity.md`; the AWS operating contract is
+`docs/operations/aws-foundation.md`. The environment is deployed but PR 9B is
+not fully closed until strict recovery, cost, token-lifecycle and commercial
+evidence pass.
 
 ## Passing evidence
 
@@ -58,6 +60,9 @@ and token lifecycle evidence pass.
 | Production build | PASS | Vite/Nitro Node 22 build completed. |
 | Service restart | PASS | Gateway, Ledger API, worker and PostgreSQL restarted independently and returned healthy; the real Formance suite passed afterward. |
 | Backup/restore and upgrade | PASS (carried) | The promoted PR 0 evidence records official `pg_dump`/`pg_restore`, fresh-stack verification and Ledger 2.4.11 to 2.4.12 migration with 10,000 bookings. |
+| AWS account baseline | PASS | Account S3 public blocking, default EBS encryption, multi-region validated CloudTrail, encrypted 365-day audit storage, GuardDuty, Access Analyzer and 14-day VPC Flow Logs are live; the saved OpenTofu plan reports no changes. |
+| AWS observability | PASS | Three host log streams and two RDS log groups have bounded 30-day retention; memory/disk metrics publish; all eight actionable host/RDS alarms are `OK`; test SNS delivery was observed. |
+| AWS isolated restore function | PASS, threshold gate FAIL | Formance schema `v1.3.0`, transaction and balance digests, a known reference and idempotent replay matched on `package4-release-restore-20260904`. RTO was 2,998 seconds; RPO was 308 seconds against a 300-second limit. The drill remains isolated and retained pending approved cleanup. |
 
 The live contention proof allowed exactly 10 of 100 managed-Call reservations.
 No failed bulk left a partial reservation. Statement reads traversed Formance's
@@ -74,12 +79,18 @@ coverage before it becomes complete release evidence.
 
 ### Infrastructure operations
 
-The intended MFA-backed `package4-release-deployer` role path is not working,
-while a local bootstrap profile resolves to AWS root credentials. The alert SNS
-topic has no subscribers, the new RDS alarms are in missing-data `ALARM`, no
-completed regional backup copy was yet visible, and the current release
-database has not completed an isolated restore rehearsal. These are explicit
-release blockers.
+The MFA-backed deployment role, alerts, metrics, logs, audit baseline and both
+regional recovery points are now verified. The remaining AWS blockers are Cost
+Explorer ingestion and the recovery RPO: the functional drill completed within
+the 60-minute RTO but restored a point 308 seconds old, eight seconds outside
+the five-minute threshold. The separate `ae-production` OpenTofu root is
+declared but intentionally not applied.
+
+One recovery-diagnostic command exposed RDS credentials. The synthetic source
+credential was rotated and health reproved. At the user's direction, the
+isolated drill credential remains exposed. Do not retrieve, reuse or rotate it
+during stabilisation. Destroy the exact drill after evidence approval; it is
+never eligible for production use.
 
 The current Cloudflare Tunnel token was exposed during local operator evidence
 capture. The user accepted continued use only for the synthetic release. It
@@ -94,8 +105,8 @@ external evidence.
 
 ## Release completion procedure
 
-1. Repair and prove the MFA-backed AWS deployment role, alert delivery, first
-   backup copy, and isolated restore.
+1. Wait for Cost Explorer ingestion, capture observed spend/forecast, and repeat
+   the isolated restore at RPO <=300 seconds while retaining RTO <=60 minutes.
 2. Complete Stripe resend/refund and the remaining authenticated commercial
    journey with `npm run test:e2e:authenticated:required`.
 3. Supply the remote HTTPS Base Sepolia Provider and bounded test payment key;

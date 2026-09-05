@@ -130,7 +130,7 @@ const reasonPresentations: Readonly<Record<string, SupplierOperationReasonPresen
   },
   provider_authority_unverified: {
     title: 'Provider authority under review',
-    description: 'AE has not yet verified that this Business controls the source.',
+    description: 'AE is still verifying that this Business controls the source. Check the current status before taking another action.',
   },
   provider_offboarding: {
     title: 'Provider offboarding in progress',
@@ -155,13 +155,33 @@ export function supplierOperationReasonPresentation(
 ): SupplierOperationReasonPresentation {
   return reasonPresentations[code] ?? {
     title: 'Operation needs attention',
-    description: 'AE cannot confirm the current publication requirements. Use the available next action or contact support.',
+    description: 'AE cannot confirm the current publication requirements. Check the current status before taking another action.',
   }
+}
+
+const PENDING_REVIEW_BLOCKERS = new Set([
+  'health_unobserved',
+  'provider_authority_unverified',
+])
+
+const REVIEW_INTERRUPTING_BLOCKERS = new Set([
+  'source_drift',
+  'credential_lost',
+  'credential_cleanup_pending',
+  'provider_offboarding',
+])
+
+function hasActionableBlocker(facts: SupplierOperationStatusFacts): boolean {
+  return facts.blockerCodes.some((code) => !PENDING_REVIEW_BLOCKERS.has(code))
 }
 
 function stateFor(facts: SupplierOperationStatusFacts): SupplierOperationState {
   if (facts.retired && facts.retirementProven) return 'Retired'
-  if (facts.blockerCodes.length > 0 || (facts.retired && !facts.retirementProven)) {
+  const waitingForReview = (
+    facts.reviewActive
+    && !facts.blockerCodes.some((code) => REVIEW_INTERRUPTING_BLOCKERS.has(code))
+  ) || (facts.submitted && !hasActionableBlocker(facts))
+  if ((facts.blockerCodes.length > 0 && !waitingForReview) || (facts.retired && !facts.retirementProven)) {
     return 'Action required'
   }
   if (facts.paused) return 'Paused'
@@ -183,6 +203,13 @@ function continuationFor(
   if (state === 'Submitted' || state === 'Under review') return { action: 'supply.status' }
   if (state === 'Paused') return { action: 'supply.republish' }
   if (facts.blockerCodes.includes('source_drift')) return { action: 'supply.recheck' }
+  if (facts.blockerCodes.some((code) => (
+    code === 'health_unobserved'
+    || code === 'health_stale'
+    || code === 'health_unhealthy'
+  ))) return { action: 'supply.recheck' }
+  if (facts.blockerCodes.includes('provider_authority_unverified')) return { action: 'supply.status' }
+  if (facts.blockerCodes.length > 0) return { action: 'supply.status' }
   return undefined
 }
 

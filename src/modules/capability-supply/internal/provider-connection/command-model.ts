@@ -77,8 +77,11 @@ function normalizeSourceMetadata(command: AuthorityCommandFields):
         && !/[\r\n]/u.test(authentication.name)
       ))
   if (!validAuthentication) return { kind: 'refused', code: 'invalid_identity' }
-  if (command.grantedResources.length !== 1) return { kind: 'refused', code: 'invalid_resource' }
-  const resource = validPublicHttpsEndpoint(command.grantedResources[0]!)
+  const [grantedResource] = command.grantedResources
+  if (command.grantedResources.length !== 1 || grantedResource === undefined) {
+    return { kind: 'refused', code: 'invalid_resource' }
+  }
+  const resource = validPublicHttpsEndpoint(grantedResource)
   if (resource === undefined || resource.origin !== origin.origin) return { kind: 'refused', code: 'invalid_resource' }
   return {
     kind: 'ok',

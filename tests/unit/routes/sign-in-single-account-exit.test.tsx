@@ -75,7 +75,7 @@ describe('sign-in account exit', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Sign in to manage Operations' })).toBeTruthy()
-    expect(screen.getByText(/return to your supplier workspace/)).toBeTruthy()
+    expect(screen.getByText(/return to your Provider workspace/)).toBeTruthy()
     expect(screen.getAllByText(/Don’t have an account/)).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Sign up' }).getAttribute('href')).toBe('/sign-up')
     expect(screen.queryByRole('link', { name: 'Create one' })).toBeNull()
@@ -93,7 +93,7 @@ describe('sign-in account exit', () => {
     render(<Component />)
 
     expect(screen.getByRole('heading', { name: 'Sign in to connect an agent' })).toBeTruthy()
-    expect(screen.getByText('After you sign in, you’ll return to Access and create a caller identity.')).toBeTruthy()
+    expect(screen.getByText('After you sign in, you’ll return to the agent connection you started.')).toBeTruthy()
     expect(routeState.clerkProps).toMatchObject({
       fallbackRedirectUrl: '/agent-access',
       signUpUrl: '/sign-up',

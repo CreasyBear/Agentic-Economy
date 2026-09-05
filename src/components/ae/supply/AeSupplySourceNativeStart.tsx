@@ -43,7 +43,7 @@ export function AeSupplySourceNativeStart({
   connections?: readonly ProviderConnectionOwnerProjection[]
   initial?: Readonly<{
     source: SupplySourceInput
-    preview: Extract<SupplySourcePreview, { kind: 'ready' }>
+    preview?: Extract<SupplySourcePreview, { kind: 'ready' }>
     candidateRef: string
     connectionRef?: string
   }>
@@ -65,7 +65,7 @@ export function AeSupplySourceNativeStart({
   onDraftSaved?: (candidateRef: string, connectionRef?: string) => Promise<void> | void
   onPublish: (input: PublishSupplyOperationV2Input) => Promise<SupplyPublishResult>
 }>) {
-  const initialCandidate = initial?.preview.candidates.find(({ candidateRef }) => candidateRef === initial.candidateRef)
+  const initialCandidate = initial?.preview?.candidates.find(({ candidateRef }) => candidateRef === initial.candidateRef)
   const [sourceKind, setSourceKind] = useState<SourceKind>(initial?.source.kind ?? 'openapi')
   const [environment, setEnvironment] = useState<Environment>(initial?.source.environment ?? 'sandbox')
   const [definitionUrl, setDefinitionUrl] = useState(initial?.source.kind === 'openapi' ? initial.source.definitionUrl : '')
