@@ -1,4 +1,5 @@
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
+import { canonicalAuthorityBasisMaterial } from '@/modules/action-execution/runtime'
 import {
   type PublishedOperation,
   type RuntimePublishedOperationDescriptor,
@@ -392,9 +393,13 @@ export function buildOperationInvokeAuthority(input: Readonly<{
     expiresAt,
     acceptedBasis: input.authority.basis,
   } as const
+  const canonicalMaterial = {
+    ...material,
+    acceptedBasis: canonicalAuthorityBasisMaterial(input.authority.basis),
+  } as const
   return {
     ...material,
-    decisionDigest: canonicalDigest(material as StableHashValue),
+    decisionDigest: canonicalDigest(canonicalMaterial as StableHashValue),
   }
 }
 

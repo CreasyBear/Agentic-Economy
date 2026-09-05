@@ -63,6 +63,26 @@ function fixture() {
   return { operation, operationRef, descriptor: materializeRuntimePublishedOperation(operation) }
 }
 
+function fixedFixture() {
+  const packet = buildDevelopmentPublishedOperationEvidence()
+  const now = 1_757_000_000_000
+  const operation = {
+    ...packet.operation,
+    readiness: {
+      ...packet.operation.readiness,
+      observedAt: now,
+      validUntil: now + 60_000,
+    },
+  }
+  const operationRef = createPublicOperationRef({
+    operationId: operation.operationId,
+    publicationRef: operation.identity.publicationRef,
+    publicationRevision: operation.identity.publicationRevision,
+    contractRef: operation.contract.ref,
+  })
+  return { now, operation, operationRef, descriptor: materializeRuntimePublishedOperation(operation) }
+}
+
 
 describe('operation.invoke authority continuity', () => {
   it('preserves approved basis identity and bounds through worker validation', () => {
@@ -132,6 +152,47 @@ describe('operation.invoke authority continuity', () => {
         now,
       })).toEqual(DECISION_PRICE)
     }
+  })
+
+  it('keeps the operation authority decision digest stable for fixed authority material', () => {
+    const { now, operation, operationRef, descriptor } = fixedFixture()
+    const input = { symbol: 'BTC', convert: 'USD' }
+    const inputDigest = canonicalDigest(input)
+    const basis = { kind: 'approve_each' as const, authorityRef: 'authority:explicit:7' }
+    const persisted = buildOperationInvokeAuthority({
+      authority: {
+        kind: 'approved',
+        basis,
+        expiresAt: new Date(now + 20_000).toISOString(),
+      },
+      grant,
+      operation,
+      descriptor,
+      operationRef,
+      invocationRef: 'operation-invocation:authority-material',
+      inputDigest,
+      decisionPrice: DECISION_PRICE,
+      now,
+    })
+
+    expect(persisted).toBeDefined()
+    if (persisted === undefined) return
+    expect(persisted.acceptedBasis).toEqual(basis)
+    expect(persisted.decisionDigest).toBe('sha256:a6593ac21dc320b6dc73b350feea4b5832f23f88ded0319037f5fe18d1e517f7')
+    expect(validateOperationInvokeAuthority({
+      authority: persisted,
+      dispatch: {
+        invocationRef: persisted.invocationRef,
+        operationRef,
+        inputDigest,
+        grantGeneration: grant.generation,
+      },
+      grant,
+      principal,
+      operation,
+      descriptor,
+      now,
+    })).toEqual(DECISION_PRICE)
   })
 
   it('caps persisted authority expiry at the earliest authority, grant, and readiness bound', () => {

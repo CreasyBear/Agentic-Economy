@@ -12,6 +12,7 @@ export {
 export {
   x402PaymentReconciliationEvidenceValue,
 } from './internal/x402-convex-values'
+export { canonicalAuthorityBasisMaterial } from './contracts'
 
 export {
   buildCanonicalClaimCommand,

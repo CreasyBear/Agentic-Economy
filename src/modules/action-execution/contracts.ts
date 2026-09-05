@@ -186,6 +186,70 @@ export type ActionExecutionView<Result extends ActionResult = ActionResult> = Re
     | Readonly<{ state: 'invalidated'; reason: DecisionRefusalCode }>
 }>
 
+type ActionExecutionAcceptedAuthority = NonNullable<ActionExecutionView['acceptedAuthority']>
+
+/**
+ * Project the runtime authority basis into the stable JSON material used by
+ * authority-bound hashes. Keep this separate from the runtime union so later
+ * vocabulary changes can preserve protected bytes without changing the
+ * accepted authority stored or validated by the execution runtime.
+ */
+export function canonicalAuthorityBasisMaterial(
+  basis: ActionExecutionAcceptedAuthority,
+): StableHashValue {
+  switch (basis.kind) {
+    case 'approve_each':
+      return {
+        kind: basis.kind,
+        authorityRef: basis.authorityRef,
+      }
+    case 'standing_mandate_use':
+      return {
+        kind: basis.kind,
+        mandateRef: basis.mandateRef,
+        mandateVersion: basis.mandateVersion,
+        mandateGeneration: basis.mandateGeneration,
+        authorityUseRef: basis.authorityUseRef,
+        grantEvidenceRef: basis.grantEvidenceRef,
+      }
+    case 'customer_request_mandate_use':
+      return {
+        kind: basis.kind,
+        mandateRef: basis.mandateRef,
+        mandateDigest: basis.mandateDigest,
+        requestRevision: basis.requestRevision,
+        routeGeneration: basis.routeGeneration,
+        authorization: basis.authorization.kind === 'explicit'
+          ? {
+              kind: basis.authorization.kind,
+              authorizationEvidenceRef: basis.authorization.authorizationEvidenceRef,
+              authorizationEvidenceDigest: basis.authorization.authorizationEvidenceDigest,
+            }
+          : {
+              kind: basis.authorization.kind,
+              standingPolicyRef: basis.authorization.standingPolicyRef,
+              standingPolicyDigest: basis.authorization.standingPolicyDigest,
+              authorityUseRef: basis.authorization.authorityUseRef,
+            },
+        grantRef: basis.grantRef,
+        grantDigest: basis.grantDigest,
+      }
+    case 'public_capability_use':
+      return {
+        kind: basis.kind,
+        publicationRef: basis.publicationRef,
+        publicationRevision: basis.publicationRevision,
+        operationRef: basis.operationRef,
+        bindingId: basis.bindingId,
+        bindingRegistrationHash: basis.bindingRegistrationHash,
+      }
+    default: {
+      const exhaustive: never = basis
+      return exhaustive
+    }
+  }
+}
+
 export type InvokeActionInput<Input> = Readonly<{
   origin: ActionExecutionOrigin
   input: Input

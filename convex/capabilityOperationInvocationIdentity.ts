@@ -1,5 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
+import { canonicalAuthorityBasisMaterial } from '@/modules/action-execution/runtime'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { OperationInvokePersistedAuthority } from '@/modules/capability-execution/convex'
 import { exactAmountSchema, type ExactAmount } from '@/modules/money/public'
@@ -135,7 +136,7 @@ export function validateOperationInvokeAuthority(input: Readonly<{
       consequence: authority.consequence,
       limits: authority.limits,
       expiresAt: authority.expiresAt,
-      acceptedBasis: authority.acceptedBasis,
+      acceptedBasis: canonicalAuthorityBasisMaterial(authority.acceptedBasis),
     } as StableHashValue)
     return expectedDecisionDigest === authority.decisionDigest ? amount.data : undefined
   } catch {

@@ -10,6 +10,7 @@ import type {
   AuthorityBindingSnapshot,
   ExecutionActor,
 } from './contracts'
+import { canonicalAuthorityBasisMaterial } from './contracts'
 import { createAttempt } from './attempts'
 import type {
   DurableActionExecutionPort,
@@ -198,7 +199,10 @@ export function buildCanonicalClaimCommand(input: CanonicalClaimInput): Canonica
     origin: input.origin,
     action: input.action,
     materialInputDigest: input.materialInputDigest,
-    authority: input.authority,
+    authority: {
+      ...input.authority,
+      acceptedBasis: canonicalAuthorityBasisMaterial(input.authority.acceptedBasis),
+    },
     attempt: input.attempt,
     recordedAt: input.recordedAt,
   } as const
