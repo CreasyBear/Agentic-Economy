@@ -431,6 +431,22 @@ deployment, hosted-environment, or financial-operation claim.
 - `git diff --check` — clean.
 - Coordinator/issue22 receipt after source generation: affected binding generation/recheck passed; `test:types` passed 4/4; imports passed 49/49; the only reported API diff was the intended controller rename. Source11 did not edit generated output or rerun those package-owned checks.
 
+### Corrective import-boundary receipt
+
+The standing-mandate test's undeclared direct import of the internal
+`policyDecisionIntegrityValid` helper was removed. The test now retains the
+literal policy digest assertion and exercises the existing public store
+boundary: it builds `policyDecisions: [decision.value]` on an
+`issuedStore().exportSnapshot()` result, restores it, asserts the decision is
+retained in the restored export, and verifies both the restore function and
+the constructor refuse a tampered policy digest. The released source API is
+`exportSnapshot()` (not `snapshot()`); no alias, export, manifest exception or
+proof weakening was added.
+
+- `NODE_VERSION=22 "$HOME/.nvm/nvm-exec" npx vitest run tests/unit/action-execution/standing-mandate.test.ts tests/imports/module-boundaries.test.ts tests/imports/action-execution-host-boundaries.test.ts --no-file-parallelism` — 3 files and 62 tests passed.
+- No source, manifest, generated/package, Git, issue38, deployment or live
+  acceptance work was performed in this corrective pass.
+
 ### Root-cause fixes and ownership closure
 
 - Workpool claim/finalization was comparing the generic `actionExecutionControls`

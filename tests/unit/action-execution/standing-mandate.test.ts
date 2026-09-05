@@ -10,7 +10,6 @@ import {
   type AuthorityUseMaterial,
   type StandingMandateSnapshot,
 } from '@/modules/action-execution'
-import { policyDecisionIntegrityValid } from '@/modules/action-execution/standing-mandate'
 import { executeDevelopmentProviderOperationAction } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation.actions'
 import {
   providerOperationActor,
@@ -288,9 +287,27 @@ describe('Action Execution bounded standing mandate', () => {
       },
     })
     if (decision.kind !== 'accepted') throw new Error(decision.code)
-    expect(policyDecisionIntegrityValid(decision.value)).toBe(true)
     expect(decision.value.digest)
       .toBe('sha256:34ce24fe704c82059dda9fb39b88c4eac906eeb25e036a39b914cf9c57d90a62')
+
+    const issued = issuedStore()
+    const snapshotWithDecision: StandingMandateSnapshot = {
+      ...issued.exportSnapshot(),
+      policyDecisions: [decision.value],
+    }
+    const restored = restoreStandingMandateStore(structuredClone(snapshotWithDecision))
+    expect(restored.kind).toBe('accepted')
+    if (restored.kind !== 'accepted') throw new Error(restored.code)
+    expect(restored.value.exportSnapshot().policyDecisions).toEqual([decision.value])
+
+    const tampered = structuredClone(snapshotWithDecision)
+    ;(tampered.policyDecisions![0] as { digest: string }).digest = 'sha256:tampered'
+    expect(restoreStandingMandateStore(tampered)).toEqual({
+      kind: 'refused',
+      code: 'mandate_material_invalid',
+    })
+    expect(() => new StandingMandateStore(tampered))
+      .toThrow('standing_mandate_snapshot_policy_decision_refused')
   })
 
   it('loads a frozen valid v1 snapshot and enforces its held concurrency reservation', () => {
