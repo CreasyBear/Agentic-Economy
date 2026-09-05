@@ -9,7 +9,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   readAndVerifyProviderOperationPacket,
   writeEvidencePacket,
-} from '../../../tools/dev/action-invocation-evidence-packet'
+} from '../../../tools/dev/action-execution-evidence-packet'
 
 describe('development operation evidence packet', () => {
   it('refuses a checksummed packet whose durable terminal control was semantically tampered', async () => {

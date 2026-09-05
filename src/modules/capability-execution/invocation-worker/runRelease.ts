@@ -3,7 +3,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { Agent, fetch as guardedFetch } from 'undici'
-import { persistCanonicalReleaseFence, type CanonicalClaimSnapshot } from '@/modules/action-invocation/runtime'
+import { persistCanonicalReleaseFence, type CanonicalClaimSnapshot } from '@/modules/action-execution/runtime'
 import { invokePreparedRouteTransport, prepareRegisteredRouteTransportInvocation, type RouteTransportFetch, type RouteTransportObservation, type RouteTransportRuntime } from '@/modules/capability-supply/route-transport-runtime'
 import { parsePublishedOperationSnapshot } from '@/modules/capability-supply/public'
 import { currentOperationCommitmentsMatch } from '../current-operation-commitment'
@@ -23,7 +23,7 @@ import {
   providerConsequenceX402PaymentCustodyAvailable,
 } from './providerConsequenceBridge'
 
-type PreparedInvocationRun = Extract<InvocationPreparation, { kind: 'prepared' }>
+type PreparedExecutionRun = Extract<InvocationPreparation, { kind: 'prepared' }>
 
 type GrantValidityExpectation = Readonly<{
   grantRef: string
@@ -55,7 +55,7 @@ function activeGrantMatches(
 
 export async function releaseInvocationRun(
   ctx: ActionCtx,
-  preparedContext: PreparedInvocationRun,
+  preparedContext: PreparedExecutionRun,
 ): Promise<WorkerResult> {
   const {
     dispatch,

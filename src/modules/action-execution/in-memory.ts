@@ -1,0 +1,508 @@
+import {
+  resolveActionContract,
+  type ActionResult,
+} from '@/modules/common/action'
+import {
+  parseActionExecutionLimits,
+  type ActionExecutionTracer,
+  type ActionExecutionView,
+  type ExecutionDecision,
+  type PreparedExecution,
+} from './contracts'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
+import {
+  actorFromOrigin,
+  classifyActionResult,
+  materialDigest,
+  readPath,
+} from './preparation'
+import {
+  createAttempt,
+  replaceAttempt,
+} from './attempts'
+import {
+  beginAcquiredRelease,
+  checkReleaseCompletionFence,
+  executeReleasedAttempt,
+} from './fenced-execution'
+import {
+  acquireLease,
+  expireLease,
+  leaseIsExpired,
+  nextEffectGeneration,
+} from './lease-control'
+import {
+  checkBinding,
+  createRecord,
+  createRecordStore,
+  exportControlSnapshot,
+  nextView,
+  type InMemoryTracerOptions,
+  type StoredExecution,
+} from './in-memory-record-store'
+import {
+  cancelExecution,
+  publishObservation,
+  reconcileExecution,
+} from './resolution-control'
+
+/**
+ * Development-only in-memory control seam. It proves preparation, exact
+ * authority, attributable attempt transitions and registered-runner reuse. It
+ * makes no durability, delivery or real external-effect claim.
+ */
+export function createInMemoryActionExecutionTracer<
+  Input,
+  Result extends ActionResult,
+>(options: InMemoryTracerOptions<Input, Result>): ActionExecutionTracer<Input, Result> {
+  const records = createRecordStore(options)
+  const contract = resolveActionContract(options.action)
+  if (
+    (contract.consequenceClass === 'communication' || contract.consequenceClass === 'external_effect') &&
+    (
+      contract.developmentAttemptTimeoutMs === undefined ||
+      !Number.isInteger(contract.developmentAttemptTimeoutMs) ||
+      contract.developmentAttemptTimeoutMs <= 0
+    )
+  ) {
+    throw new Error(`Consequential action ${options.action.id} must declare a positive attempt timeout.`)
+  }
+  let authoritySequence = 0
+  let attemptSequence = 0
+
+  const prepareRecord = (
+    input: import('./contracts').PrepareActionInput<Input>,
+    continuation?: Readonly<{ executionRef: string; expectedExecutionVersion: number }>,
+  ) => {
+    if (contract.authorityRequirement === 'none') {
+      throw new Error(`Action ${options.action.id} does not require authority.`)
+    }
+    if (continuation !== undefined && records.has(continuation.executionRef)) {
+      throw new Error('execution_already_exists')
+    }
+    const record = createRecord(
+      options,
+      contract.version,
+      input.origin,
+      input.actor,
+      input.input,
+      input.context,
+      continuation,
+    )
+    const preparedAt = options.now()
+    const freshUntil = new Date(Date.parse(preparedAt) + input.freshnessMs).toISOString()
+    const digest = materialDigest(input.input, contract.materialInputPaths)
+    const authorityRef = options.nextAuthorityRef?.() ?? `dev:authority:${++authoritySequence}`
+    const projectedPreparation = options.action.projectInvocationPreparation?.(input.input)
+    const projectedDataUse = projectedPreparation?.dataUse
+    const limits = parseActionExecutionLimits(projectedDataUse?.limits ?? {})
+    if (limits === undefined) throw new Error('action_execution_limits_invalid')
+    const prepared: PreparedExecution = {
+      materialInputDigest: digest,
+      target: readPath(input.input, 'target') ?? null,
+      consequence: contract.consequenceClass,
+      dataUse: projectedDataUse === undefined
+        ? { fields: [], limits }
+        : { fields: projectedDataUse.fields, limits },
+      preparedAt,
+      freshUntil,
+    }
+    record.view = {
+      ...record.view,
+      prepared,
+      authority: { reference: authorityRef, expiresAt: freshUntil },
+      control: { state: 'awaiting_authority' },
+    }
+    record.authorityBinding = {
+      reference: authorityRef,
+      executionRef: record.view.executionRef,
+      actor: input.actor,
+      origin: input.origin,
+      executionVersion: record.view.executionVersion,
+      actionId: options.action.id,
+      contractVersion: contract.version,
+      digest,
+      targetDigest: canonicalDigest(prepared.target),
+      consequence: prepared.consequence,
+      limits: prepared.dataUse.limits,
+      expiresAt: freshUntil,
+    }
+    records.set(record.view.executionRef, record)
+    return record.view
+  }
+
+  const runAcquired = async (
+    record: StoredExecution<Input, Result>,
+    input: Readonly<{
+      expectedExecutionVersion: number
+      attemptRef: string
+      leaseOwner: string
+      effectGeneration: number
+    }>,
+  ): Promise<ExecutionDecision<Result>> => {
+    const operationKey = readPath(record.input, 'operationKey')
+    if (typeof operationKey !== 'string') {
+      throw new Error('Consequential action attempt requires an operation key and prepared material digest.')
+    }
+    const preReleaseResult = options.action.preReleaseCheck === undefined
+      ? undefined
+      : await options.action.preReleaseCheck({
+          data: record.input,
+          context: options.contextForExecution?.(record.context) ?? record.context,
+        })
+    if (preReleaseResult !== undefined) {
+      const attempt = record.view.attempts.find(({ attemptRef }) => attemptRef === input.attemptRef)
+      if (attempt === undefined) {
+        return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      }
+      const classification = classifyActionResult(options.action, preReleaseResult)
+      record.view = nextView(record.view, {
+        attempts: replaceAttempt(record.view.attempts, {
+          ...attempt,
+          release: { state: 'not_released' },
+          outcome: {
+            state: 'returned',
+            businessOutcome: classification.outcome,
+          },
+        }),
+        observedResolution: {
+          state: 'returned',
+          execution: 'pre_release_refused',
+          businessOutcome: classification.outcome,
+          resultReferenceable: classification.referenceable,
+          result: preReleaseResult,
+        },
+        freshness: { state: 'current', observedAt: options.now() },
+        control: { state: 'terminal' },
+      })
+      options.onExecutionResolved?.(record.view)
+      return { kind: 'accepted', view: record.view }
+    }
+    const releaseStart = beginAcquiredRelease({
+      view: record.view,
+      ...input,
+      now: options.now,
+    })
+    if (releaseStart.kind !== 'accepted') {
+      if (releaseStart.view !== undefined) record.view = releaseStart.view
+      return releaseStart
+    }
+    record.view = releaseStart.view
+    const releaseFence = options.beforeEffectRelease?.(
+      releaseStart.view,
+      input.effectGeneration,
+    )
+    const durableReleaseRefusal = releaseFence instanceof Promise
+      ? await releaseFence
+      : releaseFence
+    if (durableReleaseRefusal !== undefined) {
+      const attempt = record.view.attempts.find(({ attemptRef }) => attemptRef === input.attemptRef)
+      if (attempt !== undefined) {
+        record.view = nextView(record.view, {
+          attempts: replaceAttempt(record.view.attempts, {
+            ...attempt,
+            release: { state: 'not_released' },
+            outcome: {
+              state: 'failed',
+              retry: 'safe_before_release',
+              errorDigest: canonicalDigest(durableReleaseRefusal),
+            },
+          }),
+          control: { state: 'retryable', reason: 'pre_release_failure' },
+        })
+      }
+      return { kind: 'refused', code: durableReleaseRefusal, view: record.view }
+    }
+    const completed = await executeReleasedAttempt({
+      action: options.action,
+      actionInput: record.input,
+      context: options.contextForExecution?.(record.context) ?? record.context,
+      releaseStartView: releaseStart.view,
+      attemptRef: input.attemptRef,
+      leaseOwner: input.leaseOwner,
+      effectGeneration: input.effectGeneration,
+      operationKey,
+      now: options.now,
+      ...(options.developmentReleaseSignal === undefined
+        ? {}
+        : { developmentReleaseSignal: options.developmentReleaseSignal }),
+      ...(options.developmentTimeoutSignal === undefined
+        ? {}
+        : { timeoutSignal: options.developmentTimeoutSignal }),
+      ...(contract.developmentAttemptTimeoutMs === undefined
+        ? {}
+        : { timeoutMs: contract.developmentAttemptTimeoutMs }),
+    })
+    const completionRefusal = checkReleaseCompletionFence(record.view, releaseStart.view, input)
+    if (completionRefusal !== undefined) {
+      return { kind: 'refused', code: completionRefusal, view: record.view }
+    }
+    record.view = completed
+    options.onExecutionResolved?.(record.view)
+    return { kind: 'accepted', view: record.view }
+  }
+
+  const executeRunner = async (
+    record: StoredExecution<Input, Result>,
+  ): Promise<ActionExecutionView<Result>> => {
+    if (record.view.prepared === undefined) {
+      const running = nextView(record.view, { control: { state: 'in_progress' } })
+      record.view = running
+      try {
+        const context = options.contextForExecution?.(record.context) ?? record.context
+        const result = await options.action.run({ data: record.input, context })
+        const classification = classifyActionResult(options.action, result)
+        record.view = nextView(running, {
+          observedResolution: {
+            state: 'returned',
+            execution: 'runner_returned',
+            businessOutcome: classification.outcome,
+            resultReferenceable: classification.referenceable,
+            result,
+          },
+          freshness: { state: 'current', observedAt: options.now() },
+          control: { state: 'terminal' },
+        })
+      } catch (error) {
+        record.view = nextView(running, {
+          observedResolution: {
+            state: 'threw',
+            execution: 'runner_threw',
+            message: error instanceof Error ? error.message : 'Unknown runner failure',
+          },
+          freshness: { state: 'current', observedAt: options.now() },
+          control: { state: 'terminal' },
+        })
+      }
+      return record.view
+    }
+    const operationKey = readPath(record.input, 'operationKey')
+    if (typeof operationKey !== 'string') {
+      throw new Error('Consequential action attempt requires an operation key and prepared material digest.')
+    }
+    const leaseOwner = 'development:execute'
+    const leaseExpiresAt = new Date(Date.parse(options.now()) + 30_000).toISOString()
+    const attempt = createAttempt({
+      actionId: options.action.id,
+      attemptRef: options.nextAttemptRef?.() ?? `dev:attempt:${++attemptSequence}`,
+      attemptNumber: record.view.attempts.length + 1,
+      actor: record.view.owner,
+      operationKey,
+      materialInputDigest: record.view.prepared.materialInputDigest,
+      effectGeneration: nextEffectGeneration(record.view.attempts),
+      leaseOwner,
+      leaseExpiresAt,
+    })
+    record.view = acquireLease({
+      view: record.view,
+      actionId: options.action.id,
+      attemptRef: attempt.attemptRef,
+      operationKey,
+      materialInputDigest: record.view.prepared.materialInputDigest,
+      leaseOwner,
+      leaseExpiresAt,
+    })
+    const result = await runAcquired(record, {
+      expectedExecutionVersion: record.view.executionVersion,
+      attemptRef: attempt.attemptRef,
+      leaseOwner,
+      effectGeneration: attempt.effectGeneration,
+    })
+    if (result.kind !== 'accepted') throw new Error(`Development execution refused: ${result.code}`)
+    return result.view
+  }
+
+  return {
+    async invoke({ origin, input, context }) {
+      if (contract.authorityRequirement !== 'none') {
+        throw new Error(`Action ${options.action.id} requires prepare/decide/execute authority flow.`)
+      }
+      const actor = actorFromOrigin(origin)
+      const record = createRecord(options, contract.version, origin, actor, input, context)
+      records.set(record.view.executionRef, record)
+      return executeRunner(record)
+    },
+    async prepare({ origin, actor, input, context, freshnessMs }) {
+      return prepareRecord({ origin, actor, input, context, freshnessMs })
+    },
+    async prepareExisting(input) {
+      return prepareRecord(input, {
+        executionRef: input.executionRef,
+        expectedExecutionVersion: input.expectedExecutionVersion,
+      })
+    },
+    async revisePrepared(input) {
+      const existing = records.get(input.executionRef)
+      if (existing === undefined) return { kind: 'refused', code: 'execution_not_found' }
+      if (existing.view.executionVersion !== input.expectedExecutionVersion) {
+        return { kind: 'refused', code: 'stale_execution_version', view: existing.view }
+      }
+      if (existing.view.owner.callerRef !== input.actor.callerRef
+        || existing.view.owner.principalRef !== input.actor.principalRef) {
+        return { kind: 'refused', code: 'cross_principal_refused', view: existing.view }
+      }
+      if (stableStringify(existing.view.origin) !== stableStringify(input.origin)) {
+        return { kind: 'refused', code: 'cross_origin_refused', view: existing.view }
+      }
+      if ((existing.view.control.state !== 'awaiting_authority'
+          && existing.view.control.state !== 'authorized')
+        || existing.view.attempts.length > 0) {
+        return { kind: 'refused', code: 'invalid_control_state', view: existing.view }
+      }
+      records.delete(input.executionRef)
+      return {
+        kind: 'accepted',
+        view: prepareRecord(input, {
+          executionRef: input.executionRef,
+          expectedExecutionVersion: input.expectedExecutionVersion,
+        }),
+      }
+    },
+    async decide(input) {
+      const checked = checkBinding(records.get(input.executionRef), input, options.now())
+      if (checked.kind === 'refused') return checked
+      const record = checked.record
+      if (record.view.control.state !== 'awaiting_authority') {
+        return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      }
+      if (!input.accept) {
+        record.view = nextView(record.view, {
+          control: { state: 'invalidated', reason: 'authority_not_accepted' },
+        })
+        return { kind: 'refused', code: 'authority_not_accepted', view: record.view }
+      }
+      record.view = nextView(record.view, {
+        acceptedAuthority: { kind: 'approve_each', authorityRef: input.authorityRef },
+        control: { state: 'authorized', decidedAt: options.now() },
+      })
+      if (record.authorityBinding) {
+        record.authorityBinding = {
+          ...record.authorityBinding,
+          executionVersion: record.view.executionVersion,
+          acceptedBasis: { kind: 'approve_each', authorityRef: input.authorityRef },
+        }
+      }
+      return { kind: 'accepted', view: record.view }
+    },
+    async authorizeStandingMandateUse(input) {
+      const checked = checkBinding(records.get(input.executionRef), input, options.now())
+      if (checked.kind === 'refused') return checked
+      const record = checked.record
+      if (
+        record.view.control.state !== 'awaiting_authority'
+        || input.basis.kind !== 'standing_mandate_use'
+        || input.basis.authorityUseRef.length === 0
+        || input.basis.grantEvidenceRef.length === 0
+      ) return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      record.view = nextView(record.view, {
+        acceptedAuthority: input.basis,
+        control: { state: 'authorized', decidedAt: options.now() },
+      })
+      if (record.authorityBinding) {
+        record.authorityBinding = {
+          ...record.authorityBinding,
+          executionVersion: record.view.executionVersion,
+          acceptedBasis: input.basis,
+        }
+      }
+      return { kind: 'accepted', view: record.view }
+    },
+    async execute(input) {
+      const checked = checkBinding(records.get(input.executionRef), input, options.now())
+      if (checked.kind === 'refused') return checked
+      const record = checked.record
+      if (record.view.control.state === 'reconciliation_required') {
+        return { kind: 'refused', code: 'reconciliation_required', view: record.view }
+      }
+      if (record.view.control.state !== 'authorized' && record.view.control.state !== 'retryable') {
+        return { kind: 'refused', code: 'authority_not_accepted', view: record.view }
+      }
+      const digest = materialDigest(input.materialInput, contract.materialInputPaths)
+      if (digest !== record.authorityBinding?.digest) {
+        record.view = nextView(record.view, {
+          control: { state: 'invalidated', reason: 'material_input_changed' },
+        })
+        return { kind: 'refused', code: 'material_input_changed', view: record.view }
+      }
+      record.input = input.materialInput
+      return { kind: 'accepted', view: await executeRunner(record) }
+    },
+    async acquire(input) {
+      const checked = checkBinding(records.get(input.executionRef), input, options.now())
+      if (checked.kind === 'refused') return checked
+      const record = checked.record
+      const control = record.view.control
+      if (control.state === 'leased' && leaseIsExpired(control, options.now())) {
+        const expired = expireLease(record.view, options.now())
+        if (expired === undefined) {
+          return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+        }
+        record.view = expired
+        return { kind: 'refused', code: 'reconciliation_required', view: record.view }
+      }
+      const canAcquire = control.state === 'authorized' || control.state === 'retryable'
+      if (!canAcquire) return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      if (
+        record.view.acceptedAuthority?.kind === 'standing_mandate_use'
+        && (
+          input.acceptedAuthorityBasis === undefined
+          || canonicalDigest(record.view.acceptedAuthority as never)
+            !== canonicalDigest(input.acceptedAuthorityBasis as never)
+        )
+      ) return { kind: 'refused', code: 'authority_not_accepted', view: record.view }
+      const digest = materialDigest(input.materialInput, contract.materialInputPaths)
+      if (digest !== record.authorityBinding?.digest) {
+        return { kind: 'refused', code: 'material_input_changed', view: record.view }
+      }
+      const operationKey = readPath(input.materialInput, 'operationKey')
+      if (typeof operationKey !== 'string' || record.view.prepared === undefined) {
+        return { kind: 'refused', code: 'invalid_control_state', view: record.view }
+      }
+      const leaseExpiresAt = new Date(Date.parse(options.now()) + input.leaseMs).toISOString()
+      record.input = input.materialInput
+      record.view = acquireLease({
+        view: record.view,
+        actionId: options.action.id,
+        attemptRef: options.nextAttemptRef?.() ?? `dev:attempt:${++attemptSequence}`,
+        operationKey,
+        materialInputDigest: record.view.prepared.materialInputDigest,
+        leaseOwner: input.leaseOwner,
+        leaseExpiresAt,
+      })
+      if (record.authorityBinding) {
+        record.authorityBinding = {
+          ...record.authorityBinding,
+          executionVersion: record.view.executionVersion,
+        }
+      }
+      return { kind: 'accepted', view: record.view }
+    },
+    async executeAcquired(input) {
+      const record = records.get(input.executionRef)
+      if (record === undefined) return { kind: 'refused', code: 'execution_not_found' }
+      return runAcquired(record, input)
+    },
+    async publishObservation(input) {
+      return publishObservation(records.get(input.executionRef), input, options.now())
+    },
+    async cancel(input) {
+      return cancelExecution(records.get(input.executionRef), input)
+    },
+    async reconcile(input) {
+      return reconcileExecution(
+        records.get(input.executionRef),
+        input,
+        options.now(),
+        contract.reconciliationEvidenceSource,
+        options.verifyReconciliationEvidence,
+      )
+    },
+    inspect(executionRef) {
+      return records.get(executionRef)?.view
+    },
+    exportSnapshot() {
+      return exportControlSnapshot(records)
+    },
+  }
+}

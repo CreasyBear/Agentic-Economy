@@ -18,11 +18,11 @@ export {
 export {
   buildCanonicalTerminalOutcomeCommand,
   x402PaymentReconciliationEvidenceValue,
-} from '@/modules/action-invocation/runtime'
+} from '@/modules/action-execution/runtime'
 export { buildSellerOnboardingCanaryReceipt } from './invocation-worker/sellerCanaryReceipt'
 export type {
   CanonicalClaimSnapshot,
   CanonicalTerminalOutcome,
-  DurableActionInvocationPort,
-  PublicInvocationStatus,
-} from '@/modules/action-invocation/runtime'
+  DurableActionExecutionPort,
+  PublicExecutionStatus,
+} from '@/modules/action-execution/runtime'

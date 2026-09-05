@@ -98,8 +98,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
     const accepted = await tracer.decide({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: prepared.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: prepared.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor, origin: origins[1]!, accept: true,
     })
@@ -109,8 +109,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       readinessEvidenceRefs: ['dev:readiness:changed-after-authority'],
     })
     const refused = await tracer.execute({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: accepted.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: accepted.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor, origin: origins[1]!, materialInput: quoteInput,
     })

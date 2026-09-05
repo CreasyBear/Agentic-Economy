@@ -879,7 +879,7 @@ describe('money x402 payment authorization attempt', () => {
       paymentSigningClaimedAt: 1,
     })
     db.seedTable('capabilityOperationInvocations', invocationRow())
-    db.seedTable('actionInvocationControls', actionControlRow())
+    db.seedTable('actionExecutionControls', actionControlRow())
     const args = expiryArgs()
 
     await expect(queueExpired({ db }, args)).resolves.toMatchObject({ kind: 'queued', disposition: 'automatic', invocationRef: 'invocation:test', operationRef: 'operation:test', evidence: {
@@ -961,8 +961,8 @@ describe('money x402 payment authorization attempt', () => {
       principalId: 'principal:not-yet-expired',
       credentialId: 'credential:not-yet-expired',
     }))
-    db.seedTable('actionInvocationControls', actionControlRow({
-      invocationRef: 'invocation:not-yet-expired',
+    db.seedTable('actionExecutionControls', actionControlRow({
+      executionRef: 'invocation:not-yet-expired',
       attemptRef: 'attempt:not-yet-expired',
     }))
     db.seed({
@@ -983,8 +983,8 @@ describe('money x402 payment authorization attempt', () => {
       principalId: 'principal:possibly-submitted',
       credentialId: 'credential:possibly-submitted',
     }))
-    db.seedTable('actionInvocationControls', actionControlRow({
-      invocationRef: 'invocation:possibly-submitted',
+    db.seedTable('actionExecutionControls', actionControlRow({
+      executionRef: 'invocation:possibly-submitted',
       attemptRef: 'attempt:possibly-submitted',
     }))
     const notYetExpiredArgs = expiryArgs({
@@ -1042,7 +1042,7 @@ describe('money x402 payment authorization attempt', () => {
         reason: 'pending_accounting',
       },
     }))
-    db.seedTable('actionInvocationControls', actionControlRow())
+    db.seedTable('actionExecutionControls', actionControlRow())
     const before = JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityOperationInvocations') })
 
     await expect(queueExpired({ db }, expiryArgs())).resolves.toEqual({ kind: 'not_queued' })
@@ -1060,7 +1060,7 @@ describe('money x402 payment authorization attempt', () => {
       paymentAuthorizationExpiresAt: 4_000,
     })
     db.seedTable('capabilityOperationInvocations', invocationRow())
-    db.seedTable('actionInvocationControls', actionControlRow({ invocationVersion: 3 }))
+    db.seedTable('actionExecutionControls', actionControlRow({ executionVersion: 3 }))
     const before = JSON.stringify({ payments: db.rows('moneyX402PaymentAttempts'), invocations: db.rows('capabilityOperationInvocations') })
 
     await expect(queueExpired({ db }, expiryArgs())).resolves.toEqual({ kind: 'not_queued' })
@@ -1386,7 +1386,7 @@ function expiryArgs(overrides: Record<string, unknown> = {}): Record<string, unk
     authorizationDigest,
     reservationRef: 'reservation:test',
     nativeTransition: 'applied',
-    controlInvocationVersion: 2,
+    controlExecutionVersion: 2,
     observedControlState: 'leased',
     now: 5_000,
     ...overrides,
@@ -1394,16 +1394,16 @@ function expiryArgs(overrides: Record<string, unknown> = {}): Record<string, unk
 }
 
 function actionControlRow(overrides: Record<string, unknown> = {}): Row {
-  const invocationRef = String(overrides.invocationRef ?? 'invocation:test')
+  const executionRef = String(overrides.executionRef ?? 'invocation:test')
   const attemptRef = String(overrides.attemptRef ?? 'attempt:test')
-  const invocationVersion = Number(overrides.invocationVersion ?? 2)
+  const executionVersion = Number(overrides.executionVersion ?? 2)
   return {
-    _id: `control:${invocationRef}`,
-    invocationRef,
-    invocationVersion,
+    _id: `control:${executionRef}`,
+    executionRef,
+    executionVersion,
     control: {
-      invocationRef,
-      invocationVersion,
+      executionRef,
+      executionVersion,
       control: { state: 'reconciliation_required', attemptRef },
     },
     currentAttemptRef: attemptRef,

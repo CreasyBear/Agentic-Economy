@@ -1,15 +1,15 @@
-import { createDevelopmentFileX402PaymentAttemptPort } from './fixtures/action-invocation/development-file-x402-payment-attempt-port'
+import { createDevelopmentFileX402PaymentAttemptPort } from './fixtures/action-execution/development-file-x402-payment-attempt-port'
 import type {
   X402PaymentAttempt,
   X402PaymentAuthorizationEvent,
-} from '../../src/modules/action-invocation/x402-payment-attempt'
+} from '../../src/modules/action-execution/x402-payment-attempt'
 
 const [command, filePath, state = 'prepared'] = process.argv.slice(2)
 if (filePath === undefined) throw new Error('payment_state_path_required')
 
 const port = createDevelopmentFileX402PaymentAttemptPort(filePath)
 const event: X402PaymentAuthorizationEvent = {
-  invocationRef: 'invocation:child',
+  executionRef: 'invocation:child',
   attemptRef: 'attempt:child',
   effectGeneration: 1,
   operationKey: 'operation:child',
@@ -21,7 +21,7 @@ const event: X402PaymentAuthorizationEvent = {
 }
 const attempt: X402PaymentAttempt = {
   paymentIdentifier: 'operation:child',
-  invocationRef: event.invocationRef,
+  executionRef: event.executionRef,
   attemptRef: event.attemptRef,
   effectGeneration: event.effectGeneration,
   operationKey: event.operationKey,

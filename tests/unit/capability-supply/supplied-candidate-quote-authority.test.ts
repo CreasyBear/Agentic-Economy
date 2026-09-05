@@ -6,9 +6,9 @@ import {
   type SuppliedCandidateQuoteInput,
 } from '@/modules/capability-supply/server'
 import {
-  type ActionInvocationOrigin,
-  createInMemoryActionInvocationTracer,
-} from '@/modules/action-invocation'
+  type ActionExecutionOrigin,
+  createInMemoryActionExecutionTracer,
+} from '@/modules/action-execution'
 import {
   actor,
   candidate,
@@ -33,16 +33,16 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       operationKey: 'dev:quote-operation:independent-b',
     }
     let invocationSequence = 0
-    const tracer = createInMemoryActionInvocationTracer({
+    const tracer = createInMemoryActionExecutionTracer({
       action: collectSuppliedCandidateQuoteAction,
       now: nowIso,
-      nextInvocationRef: () => `dev:invocation:authority-isolation:${++invocationSequence}`,
+      nextExecutionRef: () => `dev:invocation:authority-isolation:${++invocationSequence}`,
       nextAuthorityRef: () => `dev:authority:quote:${invocationSequence}`,
       nextAttemptRef: () => `dev:attempt:quote:${invocationSequence}`,
     })
     const prepare = (
       invocationInput: SuppliedCandidateQuoteInput,
-      origin: ActionInvocationOrigin,
+      origin: ActionExecutionOrigin,
     ) =>
       prepareSuppliedCandidateQuote({
         tracer,
@@ -59,8 +59,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     if (preparedB.kind !== 'prepared') throw new Error(preparedB.code)
 
     const acceptedA = await tracer.decide({
-      invocationRef: preparedA.view.invocationRef,
-      expectedInvocationVersion: preparedA.view.invocationVersion,
+      executionRef: preparedA.view.executionRef,
+      expectedExecutionVersion: preparedA.view.executionVersion,
       authorityRef: preparedA.view.authority!.reference,
       actor,
       origin: origins[0]!,
@@ -68,24 +68,24 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
     expect(acceptedA).toMatchObject({ kind: 'accepted', view: { control: { state: 'authorized' } } })
     expect(await tracer.decide({
-      invocationRef: preparedB.view.invocationRef,
-      expectedInvocationVersion: preparedB.view.invocationVersion,
+      executionRef: preparedB.view.executionRef,
+      expectedExecutionVersion: preparedB.view.executionVersion,
       authorityRef: preparedA.view.authority!.reference,
       actor,
       origin: origins[1]!,
       accept: true,
     })).toMatchObject({ kind: 'refused' })
     await expect(tracer.execute({
-      invocationRef: preparedA.view.invocationRef,
-      expectedInvocationVersion: acceptedA.kind === 'accepted'
-        ? acceptedA.view.invocationVersion
-        : preparedA.view.invocationVersion,
+      executionRef: preparedA.view.executionRef,
+      expectedExecutionVersion: acceptedA.kind === 'accepted'
+        ? acceptedA.view.executionVersion
+        : preparedA.view.executionVersion,
       authorityRef: preparedA.view.authority!.reference,
       actor,
       origin: origins[0]!,
       materialInput: inputB,
     })).resolves.toMatchObject({ kind: 'refused', code: 'material_input_changed' })
-    expect(tracer.inspect(preparedB.view.invocationRef)).toMatchObject({
+    expect(tracer.inspect(preparedB.view.executionRef)).toMatchObject({
       authority: { reference: preparedB.view.authority!.reference },
       control: { state: 'awaiting_authority' },
       attempts: [],
@@ -124,8 +124,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       dataUse: { fields: quoteInput.disclosure.fields, limits: quoteInput.disclosure.limits },
     })
     const accepted = await tracer.decide({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: prepared.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: prepared.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor,
       origin,
@@ -133,8 +133,8 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
     if (accepted.kind !== 'accepted') throw new Error(accepted.code)
     const executed = await tracer.execute({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: accepted.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: accepted.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor,
       origin,

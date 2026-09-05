@@ -1,6 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { reconcilePublicInvocation, type ReconciliationEvidence } from '@/modules/action-invocation/runtime'
+import { reconcilePublicExecution, type ReconciliationEvidence } from '@/modules/action-execution/runtime'
 import {
   replayManagedX402SigningForRecovery,
   type X402AttemptMaterial,
@@ -230,9 +230,9 @@ async function advanceManagedSigningControl(
     callerRef: work.recovered.credentialId,
     principalRef: work.recovered.principalId,
   }
-  const reconciliation = await reconcilePublicInvocation({
+  const reconciliation = await reconcilePublicExecution({
     tracer: work.tracer,
-    invocationRef: work.recovered.invocationRef,
+    executionRef: work.recovered.invocationRef,
     attemptRef: evidence.attemptRef,
     actor,
     origin: { kind: 'standalone', ...actor },
@@ -307,7 +307,7 @@ function expiredAuthorizationTime(
 }
 
 function reconciliationReachedRetryable(
-  reconciliation: Awaited<ReturnType<typeof reconcilePublicInvocation>>,
+  reconciliation: Awaited<ReturnType<typeof reconcilePublicExecution>>,
 ): boolean {
   if (reconciliation.kind === 'refused') return false
   return reconciliation.status.control === 'retryable'

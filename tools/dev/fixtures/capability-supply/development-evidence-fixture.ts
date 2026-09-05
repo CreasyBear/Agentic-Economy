@@ -1,4 +1,4 @@
-import type { InvocationActor, ReconciliationEvidence, ReconciliationEvidenceMaterial } from '@/modules/action-invocation'
+import type { ExecutionActor, ReconciliationEvidence, ReconciliationEvidenceMaterial } from '@/modules/action-execution'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { pricingConfigDigest } from '@/modules/money/public'
@@ -19,7 +19,7 @@ import { qualifySuppliedCandidate, type SuppliedCandidateQuoteInput } from '@/mo
 
 export const developmentEvidenceNowMs = Date.parse('2026-07-19T08:00:00.000Z')
 export const developmentEvidenceNow = () => new Date(developmentEvidenceNowMs).toISOString()
-export const developmentEvidenceActor: InvocationActor = {
+export const developmentEvidenceActor: ExecutionActor = {
   callerRef: 'mock:caller:developer',
   principalRef: 'mock:principal:developer',
 }

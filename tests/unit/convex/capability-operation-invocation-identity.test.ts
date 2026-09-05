@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
-  const claimCanonicalInvocation = vi.fn()
+  const claimCanonicalExecution = vi.fn()
   const persistCanonicalReleaseFence = vi.fn()
   const persistCanonicalTerminalOutcome = vi.fn()
   const prepareRegisteredRouteTransportInvocation = vi.fn()
@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => {
     close = vi.fn(async () => undefined)
   }
   return {
-    claimCanonicalInvocation,
+    claimCanonicalExecution,
     persistCanonicalReleaseFence,
     persistCanonicalTerminalOutcome,
     prepareRegisteredRouteTransportInvocation,
@@ -33,8 +33,8 @@ const mocks = vi.hoisted(() => {
   }
 })
 
-vi.mock('@/modules/action-invocation', () => ({
-  claimCanonicalInvocation: mocks.claimCanonicalInvocation,
+vi.mock('@/modules/action-execution', () => ({
+  claimCanonicalExecution: mocks.claimCanonicalExecution,
   persistCanonicalReleaseFence: mocks.persistCanonicalReleaseFence,
   persistCanonicalTerminalOutcome: mocks.persistCanonicalTerminalOutcome,
 }))

@@ -1,4 +1,4 @@
-import { cancelPublicInvocation } from '@/modules/action-invocation/runtime'
+import { cancelPublicExecution } from '@/modules/action-execution/runtime'
 import type { WorkId } from '@convex-dev/workpool'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
@@ -83,9 +83,9 @@ async function cancelClaimedRecovery(
 ): Promise<RecoveryResult> {
   const actor = { callerRef: recovered.credentialId, principalRef: recovered.principalId }
   const origin = { kind: 'standalone' as const, callerRef: recovered.credentialId, principalRef: recovered.principalId }
-  const cancellation = await cancelPublicInvocation({
+  const cancellation = await cancelPublicExecution({
     tracer: work.tracer,
-    invocationRef: recovered.invocationRef,
+    executionRef: recovered.invocationRef,
     idempotencyKey: args.idempotencyKey,
     actor,
     origin,

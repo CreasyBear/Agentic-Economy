@@ -10,7 +10,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   ReconciliationEvidence,
   ReconciliationEvidenceMaterial,
-} from '@/modules/action-invocation/reconciliation-evidence'
+} from '@/modules/action-execution/reconciliation-evidence'
 import {
   operationReconciliationEvidenceSchema,
 } from '@/modules/capability-execution/operation-recovery.actions'

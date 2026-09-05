@@ -1,9 +1,9 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
-  reconcilePublicInvocation,
+  reconcilePublicExecution,
   type ReconciliationEvidence,
-} from '@/modules/action-invocation/runtime'
+} from '@/modules/action-execution/runtime'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
 import {
@@ -67,9 +67,9 @@ export async function reconcilePreSubmissionRecovery(
     callerRef: work.recovered.credentialId,
     principalRef: work.recovered.principalId,
   }
-  const reconciliation = await reconcilePublicInvocation({
+  const reconciliation = await reconcilePublicExecution({
     tracer: work.tracer,
-    invocationRef: work.recovered.invocationRef,
+    executionRef: work.recovered.invocationRef,
     attemptRef: proof.evidence.attemptRef,
     actor,
     origin: { kind: 'standalone', ...actor },

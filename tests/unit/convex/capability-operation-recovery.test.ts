@@ -109,8 +109,8 @@ function canonicalFixture(
       currentAttemptRef: `operation-attempt:${invocationRef}:1`,
       currentEffectGeneration: 1,
       control: {
-        invocationRef,
-        invocationVersion: 3,
+        executionRef: invocationRef,
+        executionVersion: 3,
         origin: {
           kind: 'standalone' as const,
           principalRef: principal.principalId,
@@ -240,7 +240,7 @@ function workerRecoveryContext(
           ? control.currentEffectGeneration
           : 1
         return [{
-          invocationRef: currentRow.invocationRef,
+          executionRef: currentRow.invocationRef,
           attemptRef: control.currentAttemptRef,
           attemptNumber: 1,
           effectGeneration,
@@ -635,7 +635,7 @@ describe('capability operation recovery Convex adapters', () => {
     expect(effectMutationCalls(context)).toHaveLength(0)
     expect(context.runQuery.mock.calls.map(([reference]) => functionPath(reference))).toEqual([
       'capabilityOperationInvocations:readRecovery',
-      'actionInvocationControl:readControl',
+      'actionExecutionControl:readControl',
     ])
   })
 
@@ -918,7 +918,7 @@ describe('capability operation recovery Convex adapters', () => {
       control: {
         owner: { principalRef: 'principal:other', callerRef: principal.credentialId },
         origin: { kind: 'standalone', principalRef: principal.principalId, callerRef: principal.credentialId },
-        invocationRef,
+        executionRef: invocationRef,
       },
     })
 

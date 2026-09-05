@@ -1,7 +1,7 @@
 import {
   evaluateAdr009Transfer,
   type TransferBoundaryEvent,
-} from '../../../../src/modules/action-invocation/transfer-evaluator'
+} from '../../../../src/modules/action-execution/transfer-evaluator'
 import {
   cancelDevelopmentProviderOperationAction,
   executeDevelopmentProviderOperationAction,
@@ -138,7 +138,7 @@ export async function runDevelopmentProviderOperationEvidence() {
   const authorityIndex = order.indexOf('authority_decision')
   const releaseIndex = order.indexOf('provider_release')
   const authorityBeforeRelease = authorityIndex >= 0 && releaseIndex > authorityIndex
-  const standaloneCold = await standalone.tracer.coldResume(standalone.view.invocationRef)
+  const standaloneCold = await standalone.tracer.coldResume(standalone.view.executionRef)
   const transfer = evaluateAdr009Transfer({
     events: {
       direct_read: [],
@@ -152,16 +152,16 @@ export async function runDevelopmentProviderOperationEvidence() {
           (event): event is TransferBoundaryEvent =>
             event.kind !== 'standing_mandate_authorization',
         ),
-        { kind: 'attempt', invocationRef: standalone.view.invocationRef, attemptRef: standalone.view.attempts[0]!.attemptRef },
+        { kind: 'attempt', executionRef: standalone.view.executionRef, attemptRef: standalone.view.attempts[0]!.attemptRef },
       ],
     },
     requiredContinuations: { direct_read: 0, direct_consequential: 1, controlled: 1 },
     controlledReadback: {
-      invocationVersion: standalone.view.invocationVersion,
+      executionVersion: standalone.view.executionVersion,
       controlRecords: standalone.state.controls.size,
       attributableAttempts: standalone.view.attempts.length,
-      durableHistoryRecords: standalone.state.history.get(standalone.view.invocationRef)?.length ?? 0,
-      terminalResultReconstructed: standaloneCold.inspect(standalone.view.invocationRef)
+      durableHistoryRecords: standalone.state.history.get(standalone.view.executionRef)?.length ?? 0,
+      terminalResultReconstructed: standaloneCold.inspect(standalone.view.executionRef)
         ?.control.state === 'terminal',
       exactAuthorityBeforeRelease: authorityBeforeRelease,
       retryClass: executeDevelopmentProviderOperationAction.invocationContract!.retryClass,
@@ -241,7 +241,7 @@ export async function runDevelopmentProviderOperationEvidence() {
 }
 
 function effectResult(
-  resolution: import('@/modules/action-invocation').ActionInvocationView<DevelopmentProviderOperationResult>['observedResolution'],
+  resolution: import('@/modules/action-execution').ActionExecutionView<DevelopmentProviderOperationResult>['observedResolution'],
 ) {
   if (resolution.state !== 'returned' || resolution.result.kind !== 'effect_confirmed') {
     throw new Error('confirmed_effect_missing')

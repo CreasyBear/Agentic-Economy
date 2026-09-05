@@ -1,11 +1,11 @@
 import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
-  createDurableActionInvocationTracer,
-  type ActionInvocationOrigin,
-  type PreparedInvocation,
+  createDurableActionExecutionTracer,
+  type ActionExecutionOrigin,
+  type PreparedExecution,
   type ReconciliationEvidenceMaterial,
-} from '../../../../src/modules/action-invocation'
+} from '../../../../src/modules/action-execution'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
   executeDevelopmentProviderOperationAction,
@@ -22,7 +22,7 @@ type Provider = ReturnType<typeof createDevelopmentProviderOperationProvider>
 export async function runProviderOperationReconciliation(input: Readonly<{
   provider: Provider
   operation: DevelopmentProviderOperationInput
-  origin: ActionInvocationOrigin
+  origin: ActionExecutionOrigin
   resolution?: 'released' | 'not_released'
   ref?: string
   evidenceRef?: string
@@ -48,7 +48,7 @@ export async function runProviderOperationReconciliation(input: Readonly<{
     version: 1,
     evidenceRef: input.evidenceRef ?? 'mock:evidence:operation-observer',
     source: 'provider_operation.executeDevelopmentCancellable:mock-provider-observer:v1',
-    invocationRef: uncertain.view.invocationRef,
+    invocationRef: uncertain.view.executionRef,
     attemptRef: attempt.attemptRef,
     effectGeneration: attempt.effectGeneration,
     resolution: input.resolution ?? 'released',
@@ -56,10 +56,10 @@ export async function runProviderOperationReconciliation(input: Readonly<{
   }
   const evidence = { ...material, digest: canonicalDigest(material) }
   issued.add(canonicalDigest(evidence))
-  const cold = await uncertain.tracer.coldResume(uncertain.view.invocationRef)
+  const cold = await uncertain.tracer.coldResume(uncertain.view.executionRef)
   const reconciled = await cold.reconcile({
-    invocationRef: uncertain.view.invocationRef,
-    expectedInvocationVersion: uncertain.view.invocationVersion,
+    executionRef: uncertain.view.executionRef,
+    expectedExecutionVersion: uncertain.view.executionVersion,
     attemptRef: attempt.attemptRef,
     actor: uncertain.owner,
     origin: uncertain.origin,
@@ -79,16 +79,16 @@ export async function runProviderOperationReconciliation(input: Readonly<{
 
 export async function runCancelBeforeRelease(input: Readonly<{
   operation: DevelopmentProviderOperationInput
-  origin: ActionInvocationOrigin
+  origin: ActionExecutionOrigin
 }>) {
   const owner = providerOperationActor(input.origin)
   const state = createDevelopmentDurableState<DevelopmentProviderOperationResult>()
-  let preparedSource: PreparedInvocation | undefined
-  const tracer = createDurableActionInvocationTracer({
+  let preparedSource: PreparedExecution | undefined
+  const tracer = createDurableActionExecutionTracer({
     action: executeDevelopmentProviderOperationAction,
     port: createDevelopmentDurablePort(state),
     now: developmentProviderOperationNow,
-    nextInvocationRef: () => 'mock:operation-invocation:cancel-before',
+    nextExecutionRef: () => 'mock:operation-invocation:cancel-before',
     nextAuthorityRef: () => 'mock:operation-authority:cancel-before',
     nextAttemptRef: () => 'mock:operation-attempt:cancel-before',
     resolveSourceState: () => ({
@@ -103,16 +103,16 @@ export async function runCancelBeforeRelease(input: Readonly<{
   })
   preparedSource = prepared.prepared
   const decision = await tracer.decide({
-    invocationRef: prepared.invocationRef,
-    expectedInvocationVersion: prepared.invocationVersion,
+    executionRef: prepared.executionRef,
+    expectedExecutionVersion: prepared.executionVersion,
     authorityRef: prepared.authority!.reference,
     actor: owner, origin: input.origin, accept: true,
   })
   if (decision.kind !== 'accepted') throw new Error(decision.code)
   const cancelled = await tracer.cancel({
-    invocationRef: prepared.invocationRef,
-    idempotencyKey: `cancel:${prepared.invocationRef}:provider-recovery`,
-    expectedInvocationVersion: decision.view.invocationVersion,
+    executionRef: prepared.executionRef,
+    idempotencyKey: `cancel:${prepared.executionRef}:provider-recovery`,
+    expectedExecutionVersion: decision.view.executionVersion,
     actor: owner, origin: input.origin,
   })
   if (cancelled.kind !== 'accepted') throw new Error(cancelled.code)

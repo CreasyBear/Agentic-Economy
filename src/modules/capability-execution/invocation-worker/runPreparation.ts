@@ -7,7 +7,7 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   buildCanonicalClaimCommand,
   type CanonicalClaimInput,
-} from '@/modules/action-invocation/runtime'
+} from '@/modules/action-execution/runtime'
 import {
   cdpX402CustodyConfigurationFromEnvironment,
   economicRailForInvocation,
@@ -534,13 +534,13 @@ export async function prepareInvocationRun(
       : initialAttemptRef
     const claimAttemptNumber = retrying ? retryAttempt.attemptNumber + 1 : 1
     const claimEffectGeneration = retrying ? retryAttempt.effectGeneration + 1 : 1
-    const claimInvocationVersion = retrying ? existingControl!.invocationVersion + 1 : 1
-    const expectedInvocationVersion = retrying ? existingControl!.invocationVersion : null
+    const claimExecutionVersion = retrying ? existingControl!.executionVersion + 1 : 1
+    const expectedExecutionVersion = retrying ? existingControl!.executionVersion : null
     const claimInput: CanonicalClaimInput = {
-      invocationRef: dispatch.invocationRef,
+      executionRef: dispatch.invocationRef,
       sourceRef: `operation-invocation-source:${dispatch.invocationRef}`,
-      invocationVersion: claimInvocationVersion,
-      expectedInvocationVersion,
+      executionVersion: claimExecutionVersion,
+      expectedExecutionVersion,
       ...(retrying ? { expectedEffectGeneration: retryAttempt.effectGeneration } : {}),
       actor,
       origin: { kind: 'standalone', callerRef: actor.callerRef, principalRef: actor.principalRef },

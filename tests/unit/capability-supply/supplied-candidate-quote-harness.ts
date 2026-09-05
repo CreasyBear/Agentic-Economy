@@ -34,16 +34,16 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { pricingConfigDigest } from '@/modules/money/public'
 import {
-  type ActionInvocationOrigin,
-  type InvocationActor,
+  type ActionExecutionOrigin,
+  type ExecutionActor,
   createDevelopmentReleaseSignal,
-  createInMemoryActionInvocationTracer,
-} from '@/modules/action-invocation'
+  createInMemoryActionExecutionTracer,
+} from '@/modules/action-execution'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
 
 export const nowMs = Date.parse('2026-07-19T08:00:00.000Z')
 export const nowIso = () => new Date(nowMs).toISOString()
-export const actor: InvocationActor = { callerRef: 'dev:caller', principalRef: 'dev:principal' }
+export const actor: ExecutionActor = { callerRef: 'dev:caller', principalRef: 'dev:principal' }
 
 export const contract = defineCapabilityContract(capabilityContractV2({
   capabilityId: 'sandbox.route.service.quote',
@@ -170,7 +170,7 @@ export const admittedTransport = {
   configJson: JSON.stringify(admittedTransportConfig),
   configDigest: canonicalDigest(admittedTransportConfig),
 }
-export const origins: readonly ActionInvocationOrigin[] = [
+export const origins: readonly ActionExecutionOrigin[] = [
   { kind: 'request_owned', requestRef: 'dev:request', revision: 4 },
   { kind: 'standalone', ...actor },
 ]
@@ -335,10 +335,10 @@ export function inMemoryTracer(
   adapter: ReturnType<typeof vi.fn>,
   releaseSignal = createDevelopmentReleaseSignal(),
 ) {
-  return createInMemoryActionInvocationTracer({
+  return createInMemoryActionExecutionTracer({
     action: collectSuppliedCandidateQuoteAction,
     now: nowIso,
-    nextInvocationRef: () => `dev:invocation:${Math.random()}`,
+    nextExecutionRef: () => `dev:invocation:${Math.random()}`,
     nextAuthorityRef: () => 'dev:authority:quote',
     nextAttemptRef: () => 'dev:attempt:quote',
     developmentReleaseSignal: releaseSignal,

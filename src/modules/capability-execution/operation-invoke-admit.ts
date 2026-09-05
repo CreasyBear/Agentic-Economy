@@ -7,7 +7,7 @@ import {
   type RuntimePublishedOperationDescriptor,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StandingMandateAuthorityBasis } from '@/modules/action-invocation/runtime'
+import type { StandingMandateAuthorityBasis } from '@/modules/action-execution/runtime'
 import { currentOperationDigest } from './current-operation-commitment'
 import {
   operationEnvironmentMismatchNextAction,

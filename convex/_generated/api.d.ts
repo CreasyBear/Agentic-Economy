@@ -8,7 +8,7 @@
  * @module
  */
 
-import type * as actionInvocationControl from "../actionInvocationControl.js";
+import type * as actionExecutionControl from "../actionExecutionControl.js";
 import type * as agentAccessOAuth from "../agentAccessOAuth.js";
 import type * as agentAccessPolicy from "../agentAccessPolicy.js";
 import type * as agentAccessPrincipals from "../agentAccessPrincipals.js";
@@ -187,7 +187,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  actionInvocationControl: typeof actionInvocationControl;
+  actionExecutionControl: typeof actionExecutionControl;
   agentAccessOAuth: typeof agentAccessOAuth;
   agentAccessPolicy: typeof agentAccessPolicy;
   agentAccessPrincipals: typeof agentAccessPrincipals;

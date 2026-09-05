@@ -17,7 +17,7 @@ const queueExpiredX402AuthorizationArgs = {
   authorizationDigest: v.string(),
   reservationRef: v.optional(v.string()),
   nativeTransition: v.union(v.literal('applied'), v.literal('replayable'), v.literal('manual_review')),
-  controlInvocationVersion: v.number(),
+  controlExecutionVersion: v.number(),
   observedControlState: v.string(),
   now: v.number(),
 }
@@ -102,17 +102,17 @@ async function queueExpiredX402AuthorizationHandler(
   ])
   if (invocation === null || payment === null) return { kind: 'not_queued' }
 
-  const actionControl = await ctx.db.query('actionInvocationControls')
-    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
+  const actionControl = await ctx.db.query('actionExecutionControls')
+    .withIndex('by_executionRef', (query) => query.eq('executionRef', args.invocationRef))
     .unique()
   if (
     actionControl === null
-    || actionControl.invocationRef !== args.invocationRef
-    || actionControl.invocationVersion !== args.controlInvocationVersion
+    || actionControl.executionRef !== args.invocationRef
+    || actionControl.executionVersion !== args.controlExecutionVersion
     || actionControl.currentAttemptRef !== args.attemptRef
     || actionControl.currentEffectGeneration !== args.effectGeneration
-    || actionControl.control.invocationRef !== args.invocationRef
-    || actionControl.control.invocationVersion !== args.controlInvocationVersion
+    || actionControl.control.executionRef !== args.invocationRef
+    || actionControl.control.executionVersion !== args.controlExecutionVersion
   ) return { kind: 'not_queued' }
   const actionControlState = actionControl.control.control.state
   if (

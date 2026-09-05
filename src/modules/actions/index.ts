@@ -212,7 +212,7 @@ export {
   type ActionConsequenceClass,
   type ActionContext,
   type ActionCredentialAdmission,
-  type ActionInvocationContract,
+  type ActionExecutionContract,
   type ActionMcpMetadata,
   type ActionParameter,
   type ActionRetryClass,

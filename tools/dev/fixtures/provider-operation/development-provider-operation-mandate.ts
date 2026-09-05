@@ -1,12 +1,12 @@
 import {
   StandingMandateStore,
-  type ActionInvocationOrigin,
-  type ActionInvocationView,
+  type ActionExecutionOrigin,
+  type ActionExecutionView,
   type AuthorityUse,
   type MandateDecision,
   type MandateRefusalCode,
   type StandingMandateAuthorityBasis,
-} from '../../../../src/modules/action-invocation'
+} from '../../../../src/modules/action-execution'
 import type { ExactAmount } from '../../../../src/modules/money/public'
 import type {
   DevelopmentProviderOperationCancellationResult,
@@ -18,7 +18,7 @@ type ProviderOperationEffectResult = DevelopmentProviderOperationResult | Develo
 
 export type DevelopmentProviderOperationReleaseToken = Readonly<{
   authorityUseRef: string
-  invocationRef: string
+  executionRef: string
   basis: StandingMandateAuthorityBasis
   action: Readonly<{ id: string; version: string }>
   preparedMaterialDigest: string
@@ -39,7 +39,7 @@ export function createDevelopmentProviderOperationMandateService(input: Readonly
 
     settleExecutionException(args: Readonly<{
       authorityUseRef: string
-      view: ActionInvocationView<ProviderOperationEffectResult> | undefined
+      view: ActionExecutionView<ProviderOperationEffectResult> | undefined
       attemptRef: string
       releaseSignalObserved: boolean
     }>): MandateDecision<AuthorityUse> {
@@ -69,8 +69,8 @@ export function createDevelopmentProviderOperationMandateService(input: Readonly
     reserveAndAuthorize(args: Readonly<{
       mandateRef: string
       authorityUseRef: string
-      view: ActionInvocationView<DevelopmentProviderOperationResult>
-      origin: ActionInvocationOrigin
+      view: ActionExecutionView<DevelopmentProviderOperationResult>
+      origin: ActionExecutionOrigin
       operation: DevelopmentProviderOperationInput
       effectGeneration: number
       fallbackRef?: string | null
@@ -99,7 +99,7 @@ export function createDevelopmentProviderOperationMandateService(input: Readonly
         callerRef: args.view.owner.callerRef,
         principalRef: args.view.owner.principalRef,
         delegateRef: input.authenticatedDelegate.delegateRef,
-        invocationRef: args.view.invocationRef,
+        executionRef: args.view.executionRef,
         action: { id: args.view.action.id, version: args.view.action.contractVersion },
         preparedMaterialDigest: args.view.prepared.materialInputDigest,
         providerRef: args.operation.slot.providerRef,
@@ -140,7 +140,7 @@ export function createDevelopmentProviderOperationMandateService(input: Readonly
       purpose: string
       dataFields: readonly string[]
       preparedMaterialDigest: string
-      invocationRef: string
+      executionRef: string
       action: Readonly<{ id: string; version: string }>
       effectGeneration: number
       risk: string
@@ -157,7 +157,7 @@ export function createDevelopmentProviderOperationMandateService(input: Readonly
         callerRef: args.actor.callerRef,
         principalRef: args.actor.principalRef,
         delegateRef: input.authenticatedDelegate.delegateRef,
-        invocationRef: args.invocationRef,
+        executionRef: args.executionRef,
         action: args.action,
         preparedMaterialDigest: args.preparedMaterialDigest,
         providerRef: args.providerRef,
@@ -198,7 +198,7 @@ export function createDevelopmentProviderOperationMandateService(input: Readonly
 
     recheckRelease<Result extends ProviderOperationEffectResult>(args: Readonly<{
       authorityUseRef: string
-      view: ActionInvocationView<Result>
+      view: ActionExecutionView<Result>
       effectGeneration: number
     }>): MandateDecision<AuthorityUse> {
       const token = reconstructReleaseToken(input.store, args.authorityUseRef, args.view, args.effectGeneration)
@@ -211,7 +211,7 @@ export function createDevelopmentProviderOperationMandateService(input: Readonly
 
     settleFromInvocation<Result extends ProviderOperationEffectResult>(args: Readonly<{
       authorityUseRef: string
-      view: ActionInvocationView<Result>
+      view: ActionExecutionView<Result>
       attemptRef: string
     }>): MandateDecision<AuthorityUse> {
       const use = input.store.inspectUse(args.authorityUseRef)
@@ -242,7 +242,7 @@ export function createDevelopmentProviderOperationMandateService(input: Readonly
 export function reconstructReleaseToken<Result extends ProviderOperationEffectResult>(
   store: StandingMandateStore,
   authorityUseRef: string,
-  view: ActionInvocationView<Result>,
+  view: ActionExecutionView<Result>,
   effectGeneration: number,
 ): MandateDecision<DevelopmentProviderOperationReleaseToken> {
   const use = store.inspectUse(authorityUseRef)
@@ -252,7 +252,7 @@ export function reconstructReleaseToken<Result extends ProviderOperationEffectRe
     use === undefined
     || grant === undefined
     || basis?.kind !== 'standing_mandate_use'
-    || use.invocationRef !== view.invocationRef
+    || use.executionRef !== view.executionRef
     || use.effectGeneration !== effectGeneration
     || use.action.id !== view.action.id
     || use.action.version !== view.action.contractVersion
@@ -269,7 +269,7 @@ export function reconstructReleaseToken<Result extends ProviderOperationEffectRe
     kind: 'accepted',
     value: {
       authorityUseRef: use.authorityUseRef,
-      invocationRef: use.invocationRef,
+      executionRef: use.executionRef,
       basis,
       action: use.action,
       preparedMaterialDigest: use.preparedMaterialDigest,

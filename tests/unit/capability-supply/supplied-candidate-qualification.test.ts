@@ -637,7 +637,7 @@ describe('ADR-009 supplied-candidate qualification', () => {
       'src/modules/capability-supply/internal/graph/qualify-candidate.ts',
       'utf8',
     )
-    expect(source).not.toMatch(/defineAction|ActionInvocationTracer|\.run\(|execute|fetch\(/)
+    expect(source).not.toMatch(/defineAction|ActionExecutionTracer|\.run\(|execute|fetch\(/)
   })
 })
 

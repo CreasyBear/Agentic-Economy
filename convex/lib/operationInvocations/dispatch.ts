@@ -2,7 +2,7 @@ import { type Infer, type ObjectType } from 'convex/values'
 import { internal } from '../../_generated/api'
 import type { Doc } from '../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../_generated/server'
-import { actionInvocationTransactArgs } from '../../actionInvocationControl'
+import { actionExecutionTransactArgs } from '../../actionExecutionControl'
 import { marketDispatchWorkpool } from '../../marketDispatchWorkpool'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
@@ -23,7 +23,7 @@ export const OPERATION_INVOKE_RETRY_AFTER_MS = 1_000
 
 type OperationInvocationRow = Doc<'capabilityOperationInvocations'>
 type PersistedOperationAuthority = Infer<typeof operationInvokeAuthorityValue>
-type DispatchCommand = ObjectType<typeof actionInvocationTransactArgs>
+type DispatchCommand = ObjectType<typeof actionExecutionTransactArgs>
 type OperationResult = Infer<typeof operationResultValue>
 type Usage = Infer<typeof usageValue>
 
@@ -154,26 +154,27 @@ function commandMatchesDispatch(command: unknown, dispatch: OpenDispatchValue): 
   const idempotency = asRecord(attempt.idempotency)
   const attemptActor = asRecord(attempt.actor)
   const authority = dispatch.authority
-  return [
-    row.invocationRef === dispatch.invocationRef,
+  const matches = [
+    row.executionRef === dispatch.invocationRef,
     row.sourceRef === `operation-invocation-source:${dispatch.invocationRef}`,
     row.preparedMaterialDigest === dispatch.inputDigest,
-    field(control, 'invocationRef') === dispatch.invocationRef,
+    field(control, 'executionRef') === dispatch.invocationRef,
     field(owner, 'callerRef') === dispatch.credentialId,
     field(owner, 'principalRef') === dispatch.principalId,
     field(action, 'id') === operation.operationId,
-    field(authorityBinding, 'invocationRef') === dispatch.invocationRef,
+    field(authorityBinding, 'executionRef') === dispatch.invocationRef,
     field(authorityBinding, 'digest') === field(asRecord(authority), 'decisionDigest'),
     field(authorityBinding, 'targetDigest') === field(asRecord(authority), 'targetDigest'),
     field(authorityBinding, 'expiresAt') === field(asRecord(authority), 'expiresAt'),
-    attempt.invocationRef === dispatch.invocationRef,
+    attempt.executionRef === dispatch.invocationRef,
     field(attemptActor, 'callerRef') === dispatch.credentialId,
     field(attemptActor, 'principalRef') === dispatch.principalId,
     field(idempotency, 'operationKey') === dispatch.operationRef,
     field(idempotency, 'materialInputDigest') === dispatch.inputDigest,
     typeof attempt.attemptRef === 'string',
     typeof attempt.effectGeneration === 'number',
-  ].every(Boolean)
+  ]
+  return matches.every(Boolean)
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -198,12 +199,12 @@ async function canonicalCommandReadbackMatches(ctx: MutationCtx, command: unknow
   if (!isRecord(commandRow) || !isRecord(currentAttemptWrite)) return false
   const expectedAttempt = currentAttemptWrite
   const [control, attempt] = await Promise.all([
-    ctx.db.query('actionInvocationControls')
-      .withIndex('by_invocationRef', (query) => query.eq('invocationRef', String(commandRow.invocationRef)))
+    ctx.db.query('actionExecutionControls')
+      .withIndex('by_executionRef', (query) => query.eq('executionRef', String(commandRow.executionRef)))
       .unique(),
-    ctx.db.query('actionInvocationAttempts')
-      .withIndex('by_invocationRef_and_attemptRef', (query) => (
-        query.eq('invocationRef', String(expectedAttempt.invocationRef))
+    ctx.db.query('actionExecutionAttempts')
+      .withIndex('by_executionRef_and_attemptRef', (query) => (
+        query.eq('executionRef', String(expectedAttempt.executionRef))
           .eq('attemptRef', String(expectedAttempt.attemptRef))
       ))
       .unique(),
@@ -368,11 +369,11 @@ async function sellerCanaryHasNoEffectEvidence(
   invocationRef: string,
 ): Promise<boolean> {
   const [control, attempts, paymentAttempts, usage, qualifiedUse, providerJournals] = await Promise.all([
-    ctx.db.query('actionInvocationControls')
-      .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+    ctx.db.query('actionExecutionControls')
+      .withIndex('by_executionRef', (query) => query.eq('executionRef', invocationRef))
       .take(1),
-    ctx.db.query('actionInvocationAttempts')
-      .withIndex('by_invocationRef_and_attemptNumber', (query) => query.eq('invocationRef', invocationRef))
+    ctx.db.query('actionExecutionAttempts')
+      .withIndex('by_executionRef_and_attemptNumber', (query) => query.eq('executionRef', invocationRef))
       .take(1),
     ctx.db.query('moneyX402PaymentAttempts')
       // Payment attempts are keyed by attemptRef, but dispatchRef is the
@@ -405,11 +406,11 @@ export async function knownUnpaidSellerCanaryRefusal(
 
 function exactSellerCanaryAttemptIdentityMatches(
   row: OperationInvocationRow,
-  attempt: Doc<'actionInvocationAttempts'>,
+  attempt: Doc<'actionExecutionAttempts'>,
   attemptNumber: number,
 ): boolean {
   return [
-      attempt.invocationRef === row.invocationRef,
+      attempt.executionRef === row.invocationRef,
       attempt.attemptNumber === attemptNumber,
       attempt.attemptRef === `operation-attempt:${row.invocationRef}:${attemptNumber}`,
       attempt.effectGeneration === attemptNumber,
@@ -422,7 +423,7 @@ function exactSellerCanaryAttemptIdentityMatches(
 
 function safelyClosedSellerCanaryAttempt(
   row: OperationInvocationRow,
-  attempt: Doc<'actionInvocationAttempts'>,
+  attempt: Doc<'actionExecutionAttempts'>,
   attemptNumber: number,
 ): boolean {
   if (
@@ -437,9 +438,9 @@ function safelyClosedSellerCanaryAttempt(
 
 function exactSafeBeforeReleaseAttemptHistory(
   row: OperationInvocationRow,
-  attempts: Doc<'actionInvocationAttempts'>[],
+  attempts: Doc<'actionExecutionAttempts'>[],
   currentAttemptRef: string,
-): Doc<'actionInvocationAttempts'> | undefined {
+): Doc<'actionExecutionAttempts'> | undefined {
   const ordered = [...attempts].sort((left, right) => left.attemptNumber - right.attemptNumber)
   if (ordered.length === 0) return undefined
   const current = ordered.at(-1)
@@ -480,7 +481,7 @@ function isGenericSafeBeforeReleaseRefusal(row: OperationInvocationRow): boolean
 
 function safeBeforeReleaseCanonicalControlMatches(
   row: OperationInvocationRow,
-  control: Doc<'actionInvocationControls'>,
+  control: Doc<'actionExecutionControls'>,
 ): boolean {
   const canonical = control.control.control
   const binding = control.authorityBinding
@@ -489,14 +490,14 @@ function safeBeforeReleaseCanonicalControlMatches(
   if (binding === undefined || operation === undefined || row.authority === undefined) return false
   return [
       canonical.reason === 'pre_release_failure',
-      control.invocationRef === row.invocationRef,
+      control.executionRef === row.invocationRef,
       control.currentAttemptRef === row.attemptRef,
       control.sourceRef === `operation-invocation-source:${row.invocationRef}`,
       control.preparedMaterialDigest === row.inputDigest,
       control.control.owner.callerRef === row.credentialId,
       control.control.owner.principalRef === row.principalId,
       control.control.action.id === operation.operationId,
-      binding.invocationRef === row.invocationRef,
+      binding.executionRef === row.invocationRef,
       binding.digest === row.authority.decisionDigest,
       binding.targetDigest === row.authority.targetDigest,
       binding.expiresAt === row.authority.expiresAt,
@@ -505,9 +506,9 @@ function safeBeforeReleaseCanonicalControlMatches(
 
 function currentSafeBeforeReleaseAttempt(
   row: OperationInvocationRow,
-  control: Doc<'actionInvocationControls'>,
-  attempts: Doc<'actionInvocationAttempts'>[],
-): Doc<'actionInvocationAttempts'> | undefined {
+  control: Doc<'actionExecutionControls'>,
+  attempts: Doc<'actionExecutionAttempts'>[],
+): Doc<'actionExecutionAttempts'> | undefined {
   const currentAttemptRef = control.currentAttemptRef
   if (currentAttemptRef === undefined) return undefined
   const attempt = exactSafeBeforeReleaseAttemptHistory(row, attempts, currentAttemptRef)
@@ -528,11 +529,11 @@ export async function safeBeforeReleaseSellerCanaryRefusal(
   if (!isGenericSafeBeforeReleaseRefusal(row)) return undefined
 
   const [control, attempts, paymentAttempts, usage, qualifiedUse, providerJournals] = await Promise.all([
-    ctx.db.query('actionInvocationControls')
-      .withIndex('by_invocationRef', (query) => query.eq('invocationRef', row.invocationRef))
+    ctx.db.query('actionExecutionControls')
+      .withIndex('by_executionRef', (query) => query.eq('executionRef', row.invocationRef))
       .unique(),
-    ctx.db.query('actionInvocationAttempts')
-      .withIndex('by_invocationRef_and_attemptNumber', (query) => query.eq('invocationRef', row.invocationRef))
+    ctx.db.query('actionExecutionAttempts')
+      .withIndex('by_executionRef_and_attemptNumber', (query) => query.eq('executionRef', row.invocationRef))
       .collect(),
     ctx.db.query('moneyX402PaymentAttempts')
       .filter((query) => query.eq(query.field('dispatchRef'), row.invocationRef))
@@ -854,7 +855,7 @@ export async function claimDispatchHandler(
     || !commandMatchesDispatch(command, dispatch)
   ) return { kind: 'refused', code: 'outer_identity_refused' }
   const canonicalResult = await ctx.runMutation(
-    internal.actionInvocationControl.transact,
+    internal.actionExecutionControl.transact,
     command,
   )
   if (canonicalResult.kind === 'refused') return canonicalResult
@@ -1062,7 +1063,7 @@ export async function finalizeDispatchHandler(
   const terminalResult = await terminalFinalizationResult(ctx, row, command, normalizedProjection)
   if (terminalResult !== null) return terminalResult
   const canonicalResult = await ctx.runMutation(
-    internal.actionInvocationControl.transact,
+    internal.actionExecutionControl.transact,
     command,
   )
   if (canonicalResult.kind === 'refused') return canonicalResult
@@ -1126,7 +1127,7 @@ async function patchCancelledInvocation(ctx: MutationCtx, row: OperationInvocati
 }
 
 function cancellationNeedsReconciliation(
-  canonical: Doc<'actionInvocationControls'>['control']['control'],
+  canonical: Doc<'actionExecutionControls'>['control']['control'],
   attemptRef: string | undefined,
 ): boolean {
   if (attemptRef === undefined) return true
@@ -1183,8 +1184,8 @@ export async function cancelBeforeClaimHandler(
     .unique()
   if (!cancellationIdentityMatches(row, args)) return { kind: 'refused', code: 'invocation_not_found' }
   if (row.state === 'cancelled') return cancelledResult(row.workId)
-  const control = await ctx.db.query('actionInvocationControls')
-    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
+  const control = await ctx.db.query('actionExecutionControls')
+    .withIndex('by_executionRef', (query) => query.eq('executionRef', args.invocationRef))
     .unique()
   if (control === null && row.state === 'pending') {
     const workId = row.workId

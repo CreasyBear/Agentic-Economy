@@ -3,7 +3,7 @@ import { v } from 'convex/values'
 import {
   acceptedAuthorityValue,
   type CanonicalClaimAuthority,
-} from '@/modules/action-invocation/runtime'
+} from '@/modules/action-execution/runtime'
 
 export type OperationInvokePersistedAuthority = CanonicalClaimAuthority & Readonly<{
   format: 'operation-invoke-authority:v1'

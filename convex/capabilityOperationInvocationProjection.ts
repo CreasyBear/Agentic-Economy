@@ -26,9 +26,9 @@ import {
   buildSellerOnboardingCanaryReceipt,
   type CanonicalClaimSnapshot,
   type CanonicalTerminalOutcome,
-  type DurableActionInvocationPort,
+  type DurableActionExecutionPort,
   type OperationInvokePersistedAuthority,
-  type PublicInvocationStatus,
+  type PublicExecutionStatus,
 } from '@/modules/capability-execution/convex'
 import {
   operationInvokeReceiptPaymentProfile,
@@ -94,7 +94,7 @@ export type WorkerAcceptedCharge = Omit<MoneyAcceptedInvocationCharge, 'transact
 }>
 
 export type CanonicalPort = Pick<
-  DurableActionInvocationPort<OperationInvokeResult>,
+  DurableActionExecutionPort<OperationInvokeResult>,
   'transact' | 'readControl' | 'readAttempt' | 'readAttempts' | 'readHistory' | 'readHistoryCommand' | 'recordLateObservation'
 >
 
@@ -138,13 +138,13 @@ type RecoveryOuterProjectionOptions = Readonly<{
 }>
 
 export function toOperationDispatchCommand(
-  command: Parameters<DurableActionInvocationPort<OperationInvokeResult>['transact']>[0],
+  command: Parameters<DurableActionExecutionPort<OperationInvokeResult>['transact']>[0],
 ): OperationDispatchCommand {
-  const { commandId, commandDigest, expectedInvocationVersion, expectedEffectGeneration, row, currentAttemptWrite, history } = command
+  const { commandId, commandDigest, expectedExecutionVersion, expectedEffectGeneration, row, currentAttemptWrite, history } = command
   return {
     commandId,
     commandDigest,
-    expectedInvocationVersion,
+    expectedExecutionVersion,
     ...(expectedEffectGeneration === undefined ? {} : { expectedEffectGeneration }),
     row: {
       ...row,
@@ -162,8 +162,8 @@ export function toOperationDispatchCommand(
 
 export function canonicalPort(ctx: ActionCtx): CanonicalPort {
   return {
-    transact: async (command: Parameters<DurableActionInvocationPort<OperationInvokeResult>['transact']>[0]) => {
-      const { commandId, commandDigest, expectedInvocationVersion, expectedEffectGeneration, row, currentAttemptWrite, history } = command
+    transact: async (command: Parameters<DurableActionExecutionPort<OperationInvokeResult>['transact']>[0]) => {
+      const { commandId, commandDigest, expectedExecutionVersion, expectedEffectGeneration, row, currentAttemptWrite, history } = command
       const mutableRow = {
         ...row,
         control: {
@@ -173,22 +173,22 @@ export function canonicalPort(ctx: ActionCtx): CanonicalPort {
             : row.control.control,
         },
       }
-      return await ctx.runMutation(internal.actionInvocationControl.transact, {
+      return await ctx.runMutation(internal.actionExecutionControl.transact, {
         commandId,
         commandDigest,
-        expectedInvocationVersion,
+        expectedExecutionVersion,
         ...(expectedEffectGeneration === undefined ? {} : { expectedEffectGeneration }),
         row: mutableRow,
         ...(currentAttemptWrite === undefined ? {} : { currentAttemptWrite }),
         history,
       })
     },
-    readControl: async (invocationRef) => await ctx.runQuery(internal.actionInvocationControl.readControl, { invocationRef }) ?? undefined,
-    readAttempt: async (invocationRef, attemptRef) => await ctx.runQuery(internal.actionInvocationControl.readAttempt, { invocationRef, attemptRef }) ?? undefined,
-    readAttempts: async (invocationRef, limit) => await ctx.runQuery(internal.actionInvocationControl.readAttempts, { invocationRef, limit }),
-    readHistory: async (invocationRef, afterVersion, limit) => await ctx.runQuery(internal.actionInvocationControl.readHistory, { invocationRef, afterVersion, limit }),
-    readHistoryCommand: async (invocationRef, commandId) => await ctx.runQuery(internal.actionInvocationControl.readHistoryCommand, { invocationRef, commandId }) ?? undefined,
-    recordLateObservation: async (input) => await ctx.runMutation(internal.actionInvocationControl.recordLateObservation, { ...input, recordedAt: new Date().toISOString() }),
+    readControl: async (executionRef) => await ctx.runQuery(internal.actionExecutionControl.readControl, { executionRef }) ?? undefined,
+    readAttempt: async (executionRef, attemptRef) => await ctx.runQuery(internal.actionExecutionControl.readAttempt, { executionRef, attemptRef }) ?? undefined,
+    readAttempts: async (executionRef, limit) => await ctx.runQuery(internal.actionExecutionControl.readAttempts, { executionRef, limit }),
+    readHistory: async (executionRef, afterVersion, limit) => await ctx.runQuery(internal.actionExecutionControl.readHistory, { executionRef, afterVersion, limit }),
+    readHistoryCommand: async (executionRef, commandId) => await ctx.runQuery(internal.actionExecutionControl.readHistoryCommand, { executionRef, commandId }) ?? undefined,
+    recordLateObservation: async (input) => await ctx.runMutation(internal.actionExecutionControl.recordLateObservation, { ...input, recordedAt: new Date().toISOString() }),
   }
 }
 
@@ -198,7 +198,7 @@ export function recoveryNotFound(invocationRef: string): WorkerRecoveryResult {
 
 export function projectPureOperationInvocationStatus(
   row: RecoveryRow,
-  status: PublicInvocationStatus,
+  status: PublicExecutionStatus,
 ): WorkerRecoveryResult {
   const latestAttempt = status.attempts.at(-1)
   const attemptRef = latestAttempt?.attemptRef ?? row.attemptRef
@@ -273,7 +273,7 @@ export function projectPersistedRecovery(
   const receipt = projectedResult !== undefined && 'receipt' in projectedResult
     ? projectedResult.receipt
     : undefined
-  const publicState: PublicInvocationStatus['control'] = state === 'pending'
+  const publicState: PublicExecutionStatus['control'] = state === 'pending'
     ? row.result?.kind === 'needs_authority'
       ? 'awaiting_authority'
       : row.result?.kind === 'reconciliation_required'
@@ -310,7 +310,7 @@ function recoveryOuterState(
 
 export function reconciliationResult(
   row: RecoveryRow,
-  status: PublicInvocationStatus,
+  status: PublicExecutionStatus,
   attemptRows: readonly RecoveryAttempt[],
   operationId: string,
   receipt?: Infer<typeof operationInvokeReceiptValue>,

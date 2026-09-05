@@ -2,13 +2,13 @@ import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
   createDevelopmentReleaseSignal,
-  createDurableActionInvocationTracer,
-  type ActionInvocationOrigin,
-  type ActionInvocationView,
-  type PreparedInvocation,
+  createDurableActionExecutionTracer,
+  type ActionExecutionOrigin,
+  type ActionExecutionView,
+  type PreparedExecution,
   type ReconciliationEvidenceVerifier,
-} from '../../../../src/modules/action-invocation'
-import type { TransferBoundaryEvent } from '../../../../src/modules/action-invocation/transfer-evaluator'
+} from '../../../../src/modules/action-execution'
+import type { TransferBoundaryEvent } from '../../../../src/modules/action-execution/transfer-evaluator'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
   cancelDevelopmentProviderOperationAction,
@@ -30,19 +30,19 @@ import type { ExactAmount } from '../../../../src/modules/money/public'
 type Provider = ReturnType<typeof createDevelopmentProviderOperationProvider>
 type ProviderOperationInvocationEvent = TransferBoundaryEvent | Readonly<{
   kind: 'standing_mandate_authorization'
-  invocationRef: string
+  executionRef: string
 }>
 
 export type ProviderOperationInvocationRun<Result extends DevelopmentProviderOperationResult | DevelopmentProviderOperationCancellationResult> =
   Readonly<{
-    view: ActionInvocationView<Result>
-    origin: ActionInvocationOrigin
+    view: ActionExecutionView<Result>
+    origin: ActionExecutionOrigin
     owner: ReturnType<typeof providerOperationActor>
     state: ReturnType<typeof createDevelopmentDurableState<Result>>
-    tracer: ReturnType<typeof createDurableActionInvocationTracer<unknown, Result>>
+    tracer: ReturnType<typeof createDurableActionExecutionTracer<unknown, Result>>
     source: Readonly<{
       input: unknown
-      prepared: PreparedInvocation | undefined
+      prepared: PreparedExecution | undefined
       result?: Result
       resultIdentity?: Readonly<{ sourceResultRef: string; resultDigest: string }>
     }>
@@ -52,7 +52,7 @@ export type ProviderOperationInvocationRun<Result extends DevelopmentProviderOpe
 export async function runProviderOperationInvocation(input: Readonly<{
   provider: Provider
   operation: DevelopmentProviderOperationInput
-  origin: ActionInvocationOrigin
+  origin: ActionExecutionOrigin
   ref: string
   nowMs?: number
   loseResponseAfterRelease?: boolean
@@ -65,7 +65,7 @@ export async function runProviderOperationInvocation(input: Readonly<{
     authorityUseRef: string
     afterEffect?: () => void
     reconstructBeforeRelease?: (
-      view: ActionInvocationView<DevelopmentProviderOperationResult>,
+      view: ActionExecutionView<DevelopmentProviderOperationResult>,
     ) => DevelopmentProviderOperationMandateService
     developmentAuthorizationVersionOverride?: number
     developmentAcquisitionVersionOverride?: number
@@ -81,7 +81,7 @@ export async function runProviderOperationInvocation(input: Readonly<{
   const events: ProviderOperationInvocationEvent[] = []
   const source: {
     input: DevelopmentProviderOperationInput
-    prepared: PreparedInvocation | undefined
+    prepared: PreparedExecution | undefined
     result?: DevelopmentProviderOperationResult
     resultIdentity?: { sourceResultRef: string; resultDigest: string }
   } = { input: input.operation, prepared: undefined }
@@ -116,7 +116,7 @@ export async function runProviderOperationInvocation(input: Readonly<{
   const state = createDevelopmentDurableState<DevelopmentProviderOperationResult>()
   const configuredMandate = input.boundedMandate
   let activeMandateService = configuredMandate?.service
-  const tracer = createDurableActionInvocationTracer<DevelopmentProviderOperationInput, DevelopmentProviderOperationResult>({
+  const tracer = createDurableActionExecutionTracer<DevelopmentProviderOperationInput, DevelopmentProviderOperationResult>({
     action: executeDevelopmentProviderOperationAction,
     port: createDevelopmentDurablePort(state),
     now: developmentProviderOperationNow,
@@ -124,7 +124,7 @@ export async function runProviderOperationInvocation(input: Readonly<{
     ...(input.verifyReconciliationEvidence === undefined
       ? {}
       : { verifyReconciliationEvidence: input.verifyReconciliationEvidence }),
-    nextInvocationRef: () => `mock:operation-invocation:${input.ref}`,
+    nextExecutionRef: () => `mock:operation-invocation:${input.ref}`,
     nextAuthorityRef: () => `mock:operation-authority:${input.ref}`,
     nextAttemptRef: () => `mock:operation-attempt:${input.ref}`,
     ...(configuredMandate === undefined ? {} : {
@@ -162,16 +162,16 @@ export async function runProviderOperationInvocation(input: Readonly<{
   source.prepared = prepared.prepared
   if (configuredMandate === undefined) {
     const decision = await tracer.decide({
-      invocationRef: prepared.invocationRef,
-      expectedInvocationVersion: prepared.invocationVersion,
+      executionRef: prepared.executionRef,
+      expectedExecutionVersion: prepared.executionVersion,
       authorityRef: prepared.authority!.reference,
       actor: owner, origin: input.origin, accept: true,
     })
     if (decision.kind !== 'accepted') throw new Error(decision.code)
-    events.push({ kind: 'authority_decision', invocationRef: prepared.invocationRef })
+    events.push({ kind: 'authority_decision', executionRef: prepared.executionRef })
     const executed = await tracer.execute({
-      invocationRef: prepared.invocationRef,
-      expectedInvocationVersion: decision.view.invocationVersion,
+      executionRef: prepared.executionRef,
+      expectedExecutionVersion: decision.view.executionVersion,
       authorityRef: prepared.authority!.reference,
       actor: owner, origin: input.origin, materialInput: input.operation,
     })
@@ -197,9 +197,9 @@ export async function runProviderOperationInvocation(input: Readonly<{
   let standingAuthorization
   try {
     standingAuthorization = await tracer.authorizeStandingMandateUse({
-      invocationRef: prepared.invocationRef,
-      expectedInvocationVersion: bounded.developmentAuthorizationVersionOverride
-        ?? prepared.invocationVersion,
+      executionRef: prepared.executionRef,
+      expectedExecutionVersion: bounded.developmentAuthorizationVersionOverride
+        ?? prepared.executionVersion,
       authorityRef: prepared.authority!.reference,
       actor: owner,
       origin: input.origin,
@@ -219,13 +219,13 @@ export async function runProviderOperationInvocation(input: Readonly<{
       standingAuthorization.code,
     )
   }
-  events.push({ kind: 'standing_mandate_authorization', invocationRef: prepared.invocationRef })
+  events.push({ kind: 'standing_mandate_authorization', executionRef: prepared.executionRef })
   let acquired
   try {
     acquired = await tracer.acquire({
-      invocationRef: prepared.invocationRef,
-      expectedInvocationVersion: bounded.developmentAcquisitionVersionOverride
-        ?? standingAuthorization.view.invocationVersion,
+      executionRef: prepared.executionRef,
+      expectedExecutionVersion: bounded.developmentAcquisitionVersionOverride
+        ?? standingAuthorization.view.executionVersion,
       authorityRef: prepared.authority!.reference,
       actor: owner, origin: input.origin, materialInput: input.operation,
       leaseOwner: `mock:operation-worker:${input.ref}`,
@@ -251,9 +251,9 @@ export async function runProviderOperationInvocation(input: Readonly<{
       if (bounded.throwDuringReconstruction === true) {
         throw new Error('mock_cold_reconstruction_failed')
       }
-      const resumed = await tracer.coldResume(prepared.invocationRef)
+      const resumed = await tracer.coldResume(prepared.executionRef)
       activeMandateService = bounded.reconstructBeforeRelease(
-        resumed.inspect(prepared.invocationRef) ?? acquired.view,
+        resumed.inspect(prepared.executionRef) ?? acquired.view,
       )
     } catch (error) {
       throw compensateAndPreserve(
@@ -275,14 +275,14 @@ export async function runProviderOperationInvocation(input: Readonly<{
   let executed
   try {
     executed = await tracer.executeAcquired({
-      invocationRef: prepared.invocationRef,
-      expectedInvocationVersion: acquired.view.invocationVersion,
+      executionRef: prepared.executionRef,
+      expectedExecutionVersion: acquired.view.executionVersion,
       attemptRef: acquired.view.control.attemptRef,
       leaseOwner: acquired.view.control.leaseOwner,
       effectGeneration: acquired.view.control.effectGeneration,
     })
   } catch (error) {
-    const current = tracer.inspect(prepared.invocationRef)
+    const current = tracer.inspect(prepared.executionRef)
     const settlement = activeMandateService.settleExecutionException({
       authorityUseRef: bounded.authorityUseRef,
       view: current,
@@ -326,7 +326,7 @@ function compensateAndPreserve(
 export async function runCancellationInvocation(input: Readonly<{
   provider: Provider
   cancellation: DevelopmentProviderOperationCancellationInput
-  origin: ActionInvocationOrigin
+  origin: ActionExecutionOrigin
   ref: string
   fullYoloMandate?: Readonly<{
     service: DevelopmentProviderOperationMandateService
@@ -338,7 +338,7 @@ export async function runCancellationInvocation(input: Readonly<{
   const events: ProviderOperationInvocationEvent[] = []
   const source: {
     input: DevelopmentProviderOperationCancellationInput
-    prepared: PreparedInvocation | undefined
+    prepared: PreparedExecution | undefined
     result?: DevelopmentProviderOperationCancellationResult
     resultIdentity?: { sourceResultRef: string; resultDigest: string }
   } = { input: input.cancellation, prepared: undefined }
@@ -361,7 +361,7 @@ export async function runCancellationInvocation(input: Readonly<{
     },
   })
   const state = createDevelopmentDurableState<DevelopmentProviderOperationCancellationResult>()
-  const tracer = createDurableActionInvocationTracer<
+  const tracer = createDurableActionExecutionTracer<
     DevelopmentProviderOperationCancellationInput,
     DevelopmentProviderOperationCancellationResult
   >({
@@ -369,7 +369,7 @@ export async function runCancellationInvocation(input: Readonly<{
     port: createDevelopmentDurablePort(state),
     now: developmentProviderOperationNow,
     developmentReleaseSignal: release,
-    nextInvocationRef: () => `mock:cancellation-invocation:${input.ref}`,
+    nextExecutionRef: () => `mock:cancellation-invocation:${input.ref}`,
     nextAuthorityRef: () => `mock:cancellation-authority:${input.ref}`,
     nextAttemptRef: () => `mock:cancellation-attempt:${input.ref}`,
     ...(input.fullYoloMandate === undefined ? {} : {
@@ -410,7 +410,7 @@ export async function runCancellationInvocation(input: Readonly<{
       purpose: 'cancel_development_effect',
       dataFields: ['reason'],
       preparedMaterialDigest: prepared.prepared!.materialInputDigest,
-      invocationRef: prepared.invocationRef,
+      executionRef: prepared.executionRef,
       action: { id: cancelDevelopmentProviderOperationAction.id, version: 'v1' },
       effectGeneration: 1,
       risk: 'development_provider_operation_bounded_loss',
@@ -420,8 +420,8 @@ export async function runCancellationInvocation(input: Readonly<{
     })
     if (reserved.kind === 'refused') throw new Error(reserved.code)
     const authorized = await tracer.authorizeStandingMandateUse({
-      invocationRef: prepared.invocationRef,
-      expectedInvocationVersion: prepared.invocationVersion,
+      executionRef: prepared.executionRef,
+      expectedExecutionVersion: prepared.executionVersion,
       authorityRef: prepared.authority!.reference,
       actor: owner,
       origin: input.origin,
@@ -431,10 +431,10 @@ export async function runCancellationInvocation(input: Readonly<{
       configured.service.compensateNotReleased(configured.authorityUseRef)
       throw new Error(authorized.code)
     }
-    events.push({ kind: 'standing_mandate_authorization', invocationRef: prepared.invocationRef })
+    events.push({ kind: 'standing_mandate_authorization', executionRef: prepared.executionRef })
     const acquired = await tracer.acquire({
-      invocationRef: prepared.invocationRef,
-      expectedInvocationVersion: authorized.view.invocationVersion,
+      executionRef: prepared.executionRef,
+      expectedExecutionVersion: authorized.view.executionVersion,
       authorityRef: prepared.authority!.reference,
       actor: owner,
       origin: input.origin,
@@ -448,8 +448,8 @@ export async function runCancellationInvocation(input: Readonly<{
       throw new Error(acquired.kind === 'refused' ? acquired.code : 'cancellation_acquisition_failed')
     }
     const executed = await tracer.executeAcquired({
-      invocationRef: prepared.invocationRef,
-      expectedInvocationVersion: acquired.view.invocationVersion,
+      executionRef: prepared.executionRef,
+      expectedExecutionVersion: acquired.view.executionVersion,
       attemptRef: acquired.view.control.attemptRef,
       leaseOwner: acquired.view.control.leaseOwner,
       effectGeneration: acquired.view.control.effectGeneration,
@@ -464,16 +464,16 @@ export async function runCancellationInvocation(input: Readonly<{
     return { view: executed.view, origin: input.origin, owner, state, tracer: tracer as never, source, events }
   }
   const decision = await tracer.decide({
-    invocationRef: prepared.invocationRef,
-    expectedInvocationVersion: prepared.invocationVersion,
+    executionRef: prepared.executionRef,
+    expectedExecutionVersion: prepared.executionVersion,
     authorityRef: prepared.authority!.reference,
     actor: owner, origin: input.origin, accept: true,
   })
   if (decision.kind !== 'accepted') throw new Error(decision.code)
-  events.push({ kind: 'authority_decision', invocationRef: prepared.invocationRef })
+  events.push({ kind: 'authority_decision', executionRef: prepared.executionRef })
   const executed = await tracer.execute({
-    invocationRef: prepared.invocationRef,
-    expectedInvocationVersion: decision.view.invocationVersion,
+    executionRef: prepared.executionRef,
+    expectedExecutionVersion: decision.view.executionVersion,
     authorityRef: prepared.authority!.reference,
     actor: owner, origin: input.origin, materialInput: input.cancellation,
   })

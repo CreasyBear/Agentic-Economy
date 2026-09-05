@@ -1,10 +1,10 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
-  readPublicInvocationStatus,
+  readPublicExecutionStatus,
   type ReconciliationEvidence,
-} from '@/modules/action-invocation/runtime'
-import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-invocation/runtime'
+} from '@/modules/action-execution/runtime'
+import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-execution/runtime'
 import type { OperationInvokeReceipt } from '@/modules/capability-execution/operation-invoke-contracts'
 import {
   verifyExactEvmX402AuthorizationCancellation,
@@ -21,7 +21,7 @@ import { readX402EvmReceipt } from '../x402Route'
 import type { RecoveryWorkContext } from './loading'
 
 type X402Evidence = Infer<typeof x402PaymentReconciliationEvidenceValue>
-type RecoveryStatus = Exclude<Awaited<ReturnType<typeof readPublicInvocationStatus>>, { kind: 'refused' }>
+type RecoveryStatus = Exclude<Awaited<ReturnType<typeof readPublicExecutionStatus>>, { kind: 'refused' }>
 
 type FailedAuthorizationAttempt = Readonly<{
   asset: string
@@ -48,9 +48,9 @@ export async function prepareX402RecoveryEvidence(
   submitted: X402Evidence,
 ): Promise<X402EvidencePreparation> {
   const { recovered, brokeredReceipt } = work
-  const status = await readPublicInvocationStatus({
+  const status = await readPublicExecutionStatus({
     port: work.port,
-    invocationRef: recovered.invocationRef,
+    executionRef: recovered.invocationRef,
     actor: { callerRef: recovered.credentialId, principalRef: recovered.principalId },
   })
   if (status.kind === 'refused') return { kind: 'not_found' }

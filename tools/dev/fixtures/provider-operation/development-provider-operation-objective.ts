@@ -7,7 +7,7 @@ import {
   type StandingMandatePolicyDecision,
   type StandingMandate,
   type StandingMandateSnapshot,
-} from '../../../../src/modules/action-invocation'
+} from '../../../../src/modules/action-execution'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import type { AnyAction } from '../../../../src/modules/common/action'
 import {
@@ -208,7 +208,7 @@ async function runFullYoloDevelopmentObjectiveInternal(
       executeDevelopmentProviderOperationAction.invocationContract!.materialInputPaths,
     ),
     authorityUseRef: 'mock:authority-use:full-yolo:a',
-    invocationRef: operationAInvocationRef,
+    executionRef: operationAInvocationRef,
     action: { id: executeDevelopmentProviderOperationAction.id, version: 'v1' },
     providerRef: slotA.providerRef,
     recipientRef: slotA.providerRef,
@@ -250,7 +250,7 @@ async function runFullYoloDevelopmentObjectiveInternal(
       executeDevelopmentProviderOperationAction.invocationContract!.materialInputPaths,
     ),
     authorityUseRef: 'mock:authority-use:full-yolo:b',
-    invocationRef: operationBInvocationRef,
+    executionRef: operationBInvocationRef,
     action: { id: executeDevelopmentProviderOperationAction.id, version: 'v1' },
     providerRef: slotB.providerRef,
     recipientRef: slotB.providerRef,
@@ -295,7 +295,7 @@ async function runFullYoloDevelopmentObjectiveInternal(
       attemptedProviderRefs: [slotA.providerRef, slotB.providerRef],
       activeFallbackRef: 'none',
     },
-    completedInvocationRefs: [first.view.invocationRef, second.view.invocationRef],
+    completedInvocationRefs: [first.view.executionRef, second.view.executionRef],
     policyDecisionRefs: decisions.map(({ policyDecisionRef }) => policyDecisionRef),
     operationResultRef: confirmed.effectRef,
     cancellationResultRef: null,
@@ -346,7 +346,7 @@ async function runFullYoloDevelopmentObjectiveInternal(
     const action = actionById.get(record.action.id)
     if (action === undefined) throw new Error('cold_action_missing')
     return (await reconstructDevelopmentProviderOperationInvocation({
-      invocationRef: record.invocationRef,
+      executionRef: record.executionRef,
       action,
       durable: record.durable,
     })).view
@@ -395,11 +395,11 @@ async function runFullYoloDevelopmentObjectiveInternal(
       finalObjectiveState: resumed.objectiveState,
       replayedObjectiveState: replayed.objectiveState,
       freshObjectGraphRefs: [resumed.processRef, replayed.processRef],
-      resumeReconstructedInvocationRefs: resumed.reconstructed.map(({ invocationRef }) => invocationRef),
-      replayReconstructedInvocationRefs: replayed.reconstructed.map(({ invocationRef }) => invocationRef),
+      resumeReconstructedInvocationRefs: resumed.reconstructed.map(({ executionRef }) => executionRef),
+      replayReconstructedInvocationRefs: replayed.reconstructed.map(({ executionRef }) => executionRef),
       reconstructed: reconstructed.map((view) => ({
-        invocationRef: view.invocationRef,
-        invocationVersion: view.invocationVersion,
+        executionRef: view.executionRef,
+        executionVersion: view.executionVersion,
         controlState: view.control.state,
         authorityUseRef: view.acceptedAuthority?.kind === 'standing_mandate_use'
           ? view.acceptedAuthority.authorityUseRef
@@ -434,7 +434,7 @@ async function runFullYoloDevelopmentObjectiveInternal(
 
 function invocationRecord(run: any) {
   return {
-    invocationRef: run.view.invocationRef,
+    executionRef: run.view.executionRef,
     action: run.view.action,
     acceptedAuthority: run.view.acceptedAuthority,
     events: run.events,
@@ -461,12 +461,12 @@ export async function resumeDevelopmentProviderOperationObjective(input: Readonl
   ) throw new Error('development_provider_operation_objective_linkage_refused')
 
   const reconstructed = await Promise.all(input.durableInvocations.map(async (durable, index) => {
-    const invocationRef = input.objectiveState.completedInvocationRefs[index]
+    const executionRef = input.objectiveState.completedInvocationRefs[index]
     const action = index < 2
       ? executeDevelopmentProviderOperationAction
       : cancelDevelopmentProviderOperationAction
-    if (invocationRef === undefined) throw new Error('development_provider_operation_objective_invocation_missing')
-    return (await reconstructDevelopmentProviderOperationInvocation({ invocationRef, action, durable })).view
+    if (executionRef === undefined) throw new Error('development_provider_operation_objective_invocation_missing')
+    return (await reconstructDevelopmentProviderOperationInvocation({ executionRef, action, durable })).view
   }))
   const provider = createDevelopmentProviderOperationProvider({
     ...input.providerSnapshot.options,
@@ -527,7 +527,7 @@ export async function resumeDevelopmentProviderOperationObjective(input: Readonl
         cancelDevelopmentProviderOperationAction.invocationContract!.materialInputPaths,
       ),
       authorityUseRef: 'mock:authority-use:full-yolo:cancel',
-      invocationRef: cancellationInvocationRef,
+      executionRef: cancellationInvocationRef,
       action: { id: cancelDevelopmentProviderOperationAction.id, version: 'v1' },
       providerRef: confirmed.providerRef,
       recipientRef: confirmed.providerRef,
@@ -596,7 +596,7 @@ export async function resumeDevelopmentProviderOperationObjective(input: Readonl
     fallbackProgress: input.objectiveState.fallbackProgress,
     completedInvocationRefs: [
       ...input.objectiveState.completedInvocationRefs,
-      cancellationRun.view.invocationRef,
+      cancellationRun.view.executionRef,
     ],
     policyDecisionRefs: [
       ...input.objectiveState.policyDecisionRefs,

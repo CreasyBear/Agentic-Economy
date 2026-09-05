@@ -41,7 +41,7 @@ export async function expireAuthorizationRecovery(
     attemptRef,
     effectGeneration,
     nativeTransition: transition.nativeTransition,
-    controlInvocationVersion: transition.controlInvocationVersion,
+    controlExecutionVersion: transition.controlExecutionVersion,
     observedControlState: canonicalControl.state,
   })
   if (queued === undefined || queued.kind === 'not_queued' || queued.disposition === undefined) {
@@ -60,30 +60,30 @@ async function observeExpiryTransition(
   effectGeneration: number,
 ): Promise<Readonly<{
   nativeTransition: 'applied' | 'replayable' | 'manual_review'
-  controlInvocationVersion: number
+  controlExecutionVersion: number
 }>> {
   const { recovered, control, tracer } = work
   const canonicalControl = control.control.control
   if (canonicalControl.state === 'reconciliation_required') {
-    return { nativeTransition: 'replayable', controlInvocationVersion: control.control.invocationVersion }
+    return { nativeTransition: 'replayable', controlExecutionVersion: control.control.executionVersion }
   }
   if (!expiryObservationAllowed(canonicalControl, attemptRef, effectGeneration)) {
-    return { nativeTransition: 'manual_review', controlInvocationVersion: control.control.invocationVersion }
+    return { nativeTransition: 'manual_review', controlExecutionVersion: control.control.executionVersion }
   }
   try {
     const observation = await tracer.publishObservation({
-      invocationRef: recovered.invocationRef,
-      expectedInvocationVersion: control.control.invocationVersion,
+      executionRef: recovered.invocationRef,
+      expectedExecutionVersion: control.control.executionVersion,
       attemptRef,
       leaseOwner: canonicalControl.leaseOwner,
       effectGeneration,
       release: 'possibly_released',
     })
     return observation.kind === 'accepted'
-      ? { nativeTransition: 'applied', controlInvocationVersion: observation.view.invocationVersion }
-      : { nativeTransition: 'manual_review', controlInvocationVersion: control.control.invocationVersion }
+      ? { nativeTransition: 'applied', controlExecutionVersion: observation.view.executionVersion }
+      : { nativeTransition: 'manual_review', controlExecutionVersion: control.control.executionVersion }
   } catch {
-    return { nativeTransition: 'manual_review', controlInvocationVersion: control.control.invocationVersion }
+    return { nativeTransition: 'manual_review', controlExecutionVersion: control.control.executionVersion }
   }
 }
 
@@ -106,7 +106,7 @@ async function queueExpiredAuthorization(
     attemptRef: string
     effectGeneration: number
     nativeTransition: 'applied' | 'replayable' | 'manual_review'
-    controlInvocationVersion: number
+    controlExecutionVersion: number
     observedControlState: string
   }>,
 ): Promise<ExpiryQueueResult | undefined> {
@@ -121,7 +121,7 @@ async function queueExpiredAuthorization(
       authorizationDigest: input.x402Attempt.authorizationDigest,
       ...(input.x402Attempt.reservationRef === undefined ? {} : { reservationRef: input.x402Attempt.reservationRef }),
       nativeTransition: input.nativeTransition,
-      controlInvocationVersion: input.controlInvocationVersion,
+      controlExecutionVersion: input.controlExecutionVersion,
       observedControlState: input.observedControlState,
       now: Date.now(),
     })

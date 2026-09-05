@@ -10,7 +10,7 @@ import { runDevelopmentEvidenceScenario } from '../../../tools/dev/fixtures/capa
 import {
   readAndVerifyEvidencePacket,
   writeEvidencePacket,
-} from '../../../tools/dev/action-invocation-evidence-packet'
+} from '../../../tools/dev/action-execution-evidence-packet'
 
 const revision = 'bd23435eaf51b479dba460227e1680857c882ace'
 
@@ -19,10 +19,10 @@ describe('Action Invocation development evidence surface', () => {
     const directory = await mkdtemp(join(tmpdir(), 'ae-evidence-cli-'))
     const path = join(directory, 'packet.json')
     const run = execFileSync('npm', [
-      'run', 'evidence:action-invocation:development', '--', 'run', path,
+      'run', 'evidence:action-execution:development', '--', 'run', path,
     ], { encoding: 'utf8' })
     const verify = execFileSync('npm', [
-      'run', 'evidence:action-invocation:development', '--', 'verify', path,
+      'run', 'evidence:action-execution:development', '--', 'verify', path,
     ], { encoding: 'utf8' })
     expect(run).toContain('"command": "run"')
     expect(run).toContain('"environment": "MOCK/DEVELOPMENT ONLY"')
@@ -104,10 +104,10 @@ describe('Action Invocation development evidence surface', () => {
       packet.durable.controls[0].sourceResultDigest = `sha256:${'0'.repeat(64)}`
     }, 'packet_source_identity_refused'],
     ['attempt linkage', (packet: any) => {
-      packet.durable.attempts[0].invocationRef = 'mock:invocation:other'
+      packet.durable.attempts[0].executionRef = 'mock:invocation:other'
     }, 'packet_attempt_linkage_refused'],
     ['history linkage', (packet: any) => {
-      packet.durable.history[0].invocationRef = 'mock:invocation:other'
+      packet.durable.history[0].executionRef = 'mock:invocation:other'
     }, 'packet_history_linkage_refused'],
     ['completion reference', (packet: any) => {
       packet.completedReference.sourceResultRef = 'mock:source-result:other'
@@ -119,7 +119,7 @@ describe('Action Invocation development evidence surface', () => {
       packet.recovery.after.state = 'retryable'
     }, 'packet_recovery_refused'],
     ['transfer', (packet: any) => {
-      packet.transfer.recommendation = 'narrow_action_invocation_seam'
+      packet.transfer.recommendation = 'narrow_action_execution_seam'
     }, 'packet_transfer_refused'],
   ])('refuses recomputed-checksum semantic tamper: %s', async (_label, mutate, refusal) => {
     const directory = await mkdtemp(join(tmpdir(), 'ae-evidence-semantic-'))

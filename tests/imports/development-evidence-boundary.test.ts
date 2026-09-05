@@ -22,7 +22,7 @@ const publicBarrels = [
 
 const forbiddenImportSelectors = [
   /from\s+['"][^'"]*capability-supply\/development-[^'"]+['"]/u,
-  /from\s+['"][^'"]*action-invocation\/development-[^'"]+['"]/u,
+  /from\s+['"][^'"]*action-execution\/development-[^'"]+['"]/u,
   /from\s+['"][^'"]*modules\/dev(?:\/|['"])/u,
   /from\s+['"][^'"]*tools\/dev\/[^'"]+['"]/u,
   /from\s+['"][^'"]*tests\/helpers\/[^'"]+['"]/u,
@@ -69,19 +69,19 @@ describe('development evidence boundary', () => {
       'tools/dev/fixtures/capability-supply/development-alternate-published-operation-evidence.ts',
       'tools/dev/fixtures/capability-supply/development-evidence-continuity.ts',
       'tools/dev/fixtures/capability-supply/development-evidence-fixture.ts',
-      'tools/dev/fixtures/capability-supply/development-evidence-invocations.ts',
+      'tools/dev/fixtures/capability-supply/development-evidence-executions.ts',
       'tools/dev/fixtures/capability-supply/development-evidence-scenario.ts',
       'tools/dev/fixtures/capability-supply/development-published-operation-evidence.ts',
     ].sort()
 
     expect(globSync('src/modules/capability-supply/development-*.ts')).toEqual([])
     expect(existsSync('src/modules/capability-supply/btc-usd-quote-result.ts')).toBe(false)
-    expect(existsSync('src/modules/action-invocation/development-file-x402-payment-attempt-port.ts')).toBe(false)
+    expect(existsSync('src/modules/action-execution/development-file-x402-payment-attempt-port.ts')).toBe(false)
     expect(globSync('tools/dev/fixtures/capability-supply/*.ts').sort()).toEqual(
       expectedCapabilitySupplyFixtures,
     )
-    expect(globSync('tools/dev/fixtures/action-invocation/*.ts')).toEqual([
-      'tools/dev/fixtures/action-invocation/development-file-x402-payment-attempt-port.ts',
+    expect(globSync('tools/dev/fixtures/action-execution/*.ts')).toEqual([
+      'tools/dev/fixtures/action-execution/development-file-x402-payment-attempt-port.ts',
     ])
   })
 })

@@ -58,7 +58,7 @@ describe('provider_operation.executeDevelopmentCancellable', () => {
   })
 
   it('deduplicates same operation material and conflicts changed material', () => {
-    expect(packet.idempotency.first.invocationRef).not.toBe(packet.idempotency.replay.invocationRef)
+    expect(packet.idempotency.first.executionRef).not.toBe(packet.idempotency.replay.executionRef)
     expect(packet.idempotency.first.observedResolution).toEqual(packet.idempotency.replay.observedResolution)
     expect(packet.idempotency.effectsAfterFirst).toBe(packet.idempotency.effectsBeforeDedupe + 1)
     expect(packet.idempotency.effectsAfterReplay).toBe(packet.idempotency.effectsAfterFirst)

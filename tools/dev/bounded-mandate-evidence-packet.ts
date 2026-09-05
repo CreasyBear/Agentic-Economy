@@ -10,7 +10,7 @@ import {
   verifiedGrantMatchesMandate,
   type StandingMandateSnapshot,
   type VerifiedStandingMandateGrant,
-} from '../../src/modules/action-invocation'
+} from '../../src/modules/action-execution'
 import { executeDevelopmentProviderOperationAction } from './fixtures/provider-operation/development-provider-operation.actions'
 import {
   providerOperationActor,
@@ -36,9 +36,9 @@ import {
 } from './evidence-provenance'
 
 type ProviderOperationRecord = Readonly<{
-  invocationRef: string
+  executionRef: string
   origin: 'request_owned' | 'standalone'
-  events: readonly Readonly<{ kind: string; invocationRef?: string; actionId?: string }>[]
+  events: readonly Readonly<{ kind: string; executionRef?: string; actionId?: string }>[]
   durable: ReturnType<typeof projectDurableRun>
 }>
 
@@ -73,7 +73,7 @@ export type BoundedMandatePacketEvidence = Readonly<{
     revokeRace: Readonly<{ refusal: string; providerEffects: number; useState: string }>
     reconciliations: readonly Readonly<{
       authorityUseRef: string
-      invocationRef: string
+      executionRef: string
       attemptRef: string
       evidenceRef: string
       resolution: string
@@ -189,7 +189,7 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
       },
     })
     operations.push({
-      invocationRef: run.view.invocationRef,
+      executionRef: run.view.executionRef,
       origin: origin.kind,
       events: run.events,
       durable: projectDurableRun(run),
@@ -224,7 +224,7 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
   })
   for (const recovery of [unknownReleased, unknownNotReleased]) {
     operations.push({
-      invocationRef: recovery.reconciled.invocationRef,
+      executionRef: recovery.reconciled.executionRef,
       origin: recovery.uncertain.origin.kind,
       events: recovery.uncertain.events,
       durable: projectDurableRun({
@@ -238,7 +238,7 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
   const firstUse = {
     authorityUseRef: 'mock:packet:concurrency:1', mandateRef: concurrency.mandate.mandateRef,
     mandateVersion: 1, mandateGeneration: 1, callerRef, principalRef,
-    delegateRef: concurrency.mandate.delegateRef, invocationRef: 'mock:packet:concurrency-invocation:1',
+    delegateRef: concurrency.mandate.delegateRef, executionRef: 'mock:packet:concurrency-invocation:1',
     action: concurrency.mandate.scope.action, preparedMaterialDigest: 'sha256:prepared:1',
     providerRef: slot.providerRef, recipientRef: slot.providerRef,
     purpose: 'create_development_effect', dataFields: ['customer.name', 'customer.email'],
@@ -249,7 +249,7 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
   const concurrent = concurrency.store.reserve({
     ...firstUse,
     authorityUseRef: 'mock:packet:concurrency:2',
-    invocationRef: 'mock:packet:concurrency-invocation:2',
+    executionRef: 'mock:packet:concurrency-invocation:2',
   }, now)
 
   const scope = activeStore.reserve({
@@ -406,7 +406,7 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
       reconciliations: [
         {
           authorityUseRef: 'mock:packet:use:unknown-released',
-          invocationRef: unknownReleased.reconciled.invocationRef,
+          executionRef: unknownReleased.reconciled.executionRef,
           attemptRef: unknownReleased.attempt.attemptRef,
           evidenceRef: unknownReleased.evidence.evidenceRef,
           resolution: unknownReleased.evidence.resolution,
@@ -414,7 +414,7 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
         },
         {
           authorityUseRef: 'mock:packet:use:unknown-not-released',
-          invocationRef: unknownNotReleased.reconciled.invocationRef,
+          executionRef: unknownNotReleased.reconciled.executionRef,
           attemptRef: unknownNotReleased.attempt.attemptRef,
           evidenceRef: unknownNotReleased.evidence.evidenceRef,
           resolution: unknownNotReleased.evidence.resolution,
@@ -435,7 +435,7 @@ export async function runBoundedMandateDevelopmentEvidence(): Promise<BoundedMan
 export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvidence) {
   const reconstructed = new StandingMandateStore(structuredClone(evidence.mandateSnapshot))
   const unique = (values: readonly string[]) => new Set(values).size === values.length
-  const invocationRefs = evidence.operations.map(({ invocationRef }) => invocationRef)
+  const executionRefs = evidence.operations.map(({ executionRef }) => executionRef)
   const useRefs = evidence.mandateSnapshot.uses.map(({ authorityUseRef }) => authorityUseRef)
   const attemptRefs = evidence.operations.flatMap(({ durable }) =>
     durable.attempts.map((attempt) => String((attempt as { attemptRef?: string }).attemptRef)))
@@ -459,7 +459,7 @@ export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvide
     || evidence.observations.scopeRefusal !== 'mandate_provider_mismatch'
     || evidence.observations.compensationCases.length !== 2
     || evidence.observations.compensationCases.some(({ refusal, providerEffects, heldCount, useState }) =>
-      refusal !== 'stale_invocation_version'
+      refusal !== 'stale_execution_version'
       || providerEffects !== 0
       || heldCount !== 0
       || useState !== 'not_released')
@@ -478,7 +478,7 @@ export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvide
     || evidence.observations.revokeRace.providerEffects !== 0
     || evidence.observations.revokeRace.useState !== 'not_released'
     || evidence.observations.reconciliations.some(({ resolution, useState }) => resolution !== useState)
-    || !unique(invocationRefs)
+    || !unique(executionRefs)
     || !unique(useRefs)
     || !unique(attemptRefs)
     || !unique(evidenceRefs)
@@ -492,7 +492,7 @@ export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvide
       || (providerReleaseIndex >= 0 && standingAuthorizationIndex >= providerReleaseIndex)
     ) throw new Error('bounded_mandate_event_order_refused')
     const control = operation.durable.controls[0] as {
-      invocationRef: string
+      executionRef: string
       preparedMaterialDigest: string
       control: {
         acceptedAuthority?: { kind: string; authorityUseRef?: string }
@@ -501,7 +501,7 @@ export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvide
       }
     }
     const attempt = operation.durable.attempts[0] as {
-      invocationRef: string
+      executionRef: string
       effectGeneration: number
       idempotency: { materialInputDigest: string }
       release: { state: string }
@@ -510,10 +510,10 @@ export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvide
     const useRef = control.control.acceptedAuthority?.authorityUseRef
     const use = useRef === undefined ? undefined : reconstructed.inspectUse(useRef)
     if (
-      control.invocationRef !== operation.invocationRef
+      control.executionRef !== operation.executionRef
       || control.control.acceptedAuthority?.kind !== 'standing_mandate_use'
       || use === undefined
-      || use.invocationRef !== operation.invocationRef
+      || use.executionRef !== operation.executionRef
       || use.action.id !== control.control.action.id
       || use.action.version !== control.control.action.contractVersion
       || use.preparedMaterialDigest !== control.preparedMaterialDigest
@@ -537,14 +537,14 @@ export function verifyBoundedMandateEvidence(evidence: BoundedMandatePacketEvide
     ) throw new Error('bounded_mandate_provider_operation_linkage_refused')
   }
   for (const reconciliation of evidence.observations.reconciliations) {
-    const operation = evidence.operations.find(({ invocationRef }) =>
-      invocationRef === reconciliation.invocationRef)
+    const operation = evidence.operations.find(({ executionRef }) =>
+      executionRef === reconciliation.executionRef)
     if (
       operation === undefined
       || !operation.durable.attempts.some((attempt) =>
         (attempt as { attemptRef?: string }).attemptRef === reconciliation.attemptRef)
-      || reconstructed.inspectUse(reconciliation.authorityUseRef)?.invocationRef
-        !== reconciliation.invocationRef
+      || reconstructed.inspectUse(reconciliation.authorityUseRef)?.executionRef
+        !== reconciliation.executionRef
     ) throw new Error('bounded_mandate_reconciliation_identity_refused')
   }
   const capacity = reconstructed.capacity(evidence.mandateSnapshot.mandates[0]?.mandateRef ?? '')

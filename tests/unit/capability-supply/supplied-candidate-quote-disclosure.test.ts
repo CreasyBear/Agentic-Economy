@@ -67,23 +67,23 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
     })
     if (prepared.kind !== 'prepared') throw new Error(prepared.code)
     expect(await tracer.decide({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: prepared.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: prepared.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor: { ...actor, principalRef: 'dev:other-principal' },
       origin: origins[1]!,
       accept: true,
     })).toMatchObject({ kind: 'refused', code: 'cross_principal_refused' })
     const accepted = await tracer.decide({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: prepared.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: prepared.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor, origin: origins[1]!, accept: true,
     })
     if (accepted.kind !== 'accepted') throw new Error(accepted.code)
     await expect(tracer.execute({
-      invocationRef: prepared.view.invocationRef,
-      expectedInvocationVersion: accepted.view.invocationVersion,
+      executionRef: prepared.view.executionRef,
+      expectedExecutionVersion: accepted.view.executionVersion,
       authorityRef: prepared.view.authority!.reference,
       actor,
       origin: origins[1]!,

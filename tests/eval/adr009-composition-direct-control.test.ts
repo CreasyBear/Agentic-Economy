@@ -43,7 +43,7 @@ vi.mock('@/modules/registry/registry.functions', () => ({
 }))
 
 import { actionToToolContract, findAction } from '@/modules/actions'
-import type { TransferBoundaryEvent } from '@/modules/action-invocation/transfer-evaluator'
+import type { TransferBoundaryEvent } from '@/modules/action-execution/transfer-evaluator'
 
 describe('ADR-009 direct-path negative control', () => {
   it('instruments the selected direct first-contact/read path; Founder must supersede stale direct-booking wording', async () => {
@@ -62,7 +62,7 @@ describe('ADR-009 direct-path negative control', () => {
     const found = result as typeof detailFixture
     emissions.push({ kind: 'direct_runner_returned', actionId: action.id, outcome: found.kind })
     const snapshot = {
-      actionInvocationEmissions: 0,
+      actionExecutionEmissions: 0,
       controlEmissions: 0,
       attemptEmissions: 0,
       historyEmissions: 0,
@@ -89,7 +89,7 @@ describe('ADR-009 direct-path negative control', () => {
       { kind: 'direct_runner_returned', actionId: 'registry.detail', outcome: 'found' },
       {
         kind: 'direct_control_snapshot',
-        actionInvocationEmissions: 0,
+        actionExecutionEmissions: 0,
         controlEmissions: 0,
         attemptEmissions: 0,
         historyEmissions: 0,
@@ -100,7 +100,7 @@ describe('ADR-009 direct-path negative control', () => {
     expect(action.invocationContract?.authorityRequirement).toBe('none')
     expect(contract.readOnly).toBe(true)
     expect(snapshot).toEqual({
-      actionInvocationEmissions: 0,
+      actionExecutionEmissions: 0,
       controlEmissions: 0,
       attemptEmissions: 0,
       historyEmissions: 0,

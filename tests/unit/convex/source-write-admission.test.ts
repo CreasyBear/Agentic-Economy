@@ -4,7 +4,7 @@ import { requireSourceWrite } from '../../../convex/sourceWriteAdmission'
 import {
   readControlSource,
   recordLateObservationSource,
-} from '../../../convex/actionInvocationControl'
+} from '../../../convex/actionExecutionControl'
 import {
   createSourceWriteAdmission,
   sourceWriteBodyDigest,
@@ -58,17 +58,17 @@ describe('Convex source-write:v2 admission', () => {
       vi.stubEnv('AE_SOURCE_WRITE_SECRET', secret)
       const readDb = createNonceDb()
       const readCommand = {
-        invocationRef: `invocation:isolation-read:${caseKind}`,
+        executionRef: `execution:isolation-read:${caseKind}`,
         callerRef: `caller:isolation-read:${caseKind}`,
         principalRef: `principal:isolation-read:${caseKind}`,
-        operationKey: 'actionInvocationControl:readControlSource',
+        operationKey: 'actionExecutionControl:readControlSource',
         correlationId: `correlation:isolation-read:${caseKind}`,
       }
       const readArgs = await isolationArgs(readCommand, `nonce:isolation-read:${caseKind}`, caseKind)
 
       const writeDb = createNonceDb()
       const writeCommand = {
-        invocationRef: `invocation:isolation-write:${caseKind}`,
+        executionRef: `execution:isolation-write:${caseKind}`,
         commandId: `command:isolation-write:${caseKind}`,
         effectGeneration: 1,
         actorRef: `actor:isolation-write:${caseKind}`,
@@ -76,7 +76,7 @@ describe('Convex source-write:v2 admission', () => {
         release: 'not_released',
         evidenceDigest: `sha256:${'b'.repeat(64)}`,
         recordedAt: '2026-08-26T00:00:00.000Z',
-        operationKey: 'actionInvocationControl:recordLateObservationSource',
+        operationKey: 'actionExecutionControl:recordLateObservationSource',
         correlationId: `correlation:isolation-write:${caseKind}`,
       }
       const writeArgs = await isolationArgs(writeCommand, `nonce:isolation-write:${caseKind}`, caseKind)
@@ -85,10 +85,10 @@ describe('Convex source-write:v2 admission', () => {
         await expect(readControlSourceRuntime({ db: readDb }, readArgs)).resolves.toBeNull()
         await expect(recordLateObservationSourceRuntime({ db: writeDb }, writeArgs)).resolves.toEqual({
           kind: 'refused',
-          code: 'stale_invocation_version',
+          code: 'stale_execution_version',
         })
-        expect(readDb.queries).toEqual(['actionInvocationControls'])
-        expect(writeDb.queries.filter((table) => table === 'actionInvocationControls')).toHaveLength(1)
+        expect(readDb.queries).toEqual(['actionExecutionControls'])
+        expect(writeDb.queries.filter((table) => table === 'actionExecutionControls')).toHaveLength(1)
         expect(writeDb.inserts).toHaveLength(1)
         return
       }
@@ -106,29 +106,29 @@ describe('Convex source-write:v2 admission', () => {
     vi.stubEnv('AE_SOURCE_WRITE_SECRET', secret)
     const db = createNonceDb()
     const command = {
-      invocationRef: 'invocation:runtime-read',
+      executionRef: 'execution:runtime-read',
       callerRef: 'caller:runtime-read',
       principalRef: 'principal:runtime-read',
-      operationKey: 'actionInvocationControl:readControlSource',
+      operationKey: 'actionExecutionControl:readControlSource',
       correlationId: 'correlation:runtime-read',
     }
     const args = await signedArgs(command, 'nonce:runtime-read')
 
     await expect(readControlSourceRuntime({ db }, args)).resolves.toBeNull()
-    expect(db.queries).toEqual(['actionInvocationControls'])
+    expect(db.queries).toEqual(['actionExecutionControls'])
 
     await expect(readControlSourceRuntime({ db }, {
       ...args,
       principalRef: 'principal:attacker',
     })).rejects.toThrow()
-    expect(db.queries).toEqual(['actionInvocationControls'])
+    expect(db.queries).toEqual(['actionExecutionControls'])
   })
 
   it('runs the registered source write mutation once and rejects replay before a duplicate control effect', async () => {
     vi.stubEnv('AE_SOURCE_WRITE_SECRET', secret)
     const db = createNonceDb()
     const command = {
-      invocationRef: 'invocation:runtime-write',
+      executionRef: 'execution:runtime-write',
       commandId: 'command:runtime-write',
       effectGeneration: 1,
       actorRef: 'actor:runtime-write',
@@ -136,19 +136,19 @@ describe('Convex source-write:v2 admission', () => {
       release: 'not_released',
       evidenceDigest: `sha256:${'a'.repeat(64)}`,
       recordedAt: '2026-08-26T00:00:00.000Z',
-      operationKey: 'actionInvocationControl:recordLateObservationSource',
+      operationKey: 'actionExecutionControl:recordLateObservationSource',
       correlationId: 'correlation:runtime-write',
     }
     const args = await signedArgs(command, 'nonce:runtime-write')
 
     await expect(recordLateObservationSourceRuntime({ db }, args)).resolves.toEqual({
       kind: 'refused',
-      code: 'stale_invocation_version',
+      code: 'stale_execution_version',
     })
     await expect(recordLateObservationSourceRuntime({ db }, args))
-      .rejects.toThrow('action_invocation_source_write_rejected:source_write_nonce_replayed')
+      .rejects.toThrow('action_execution_source_write_rejected:source_write_nonce_replayed')
     expect(db.inserts).toHaveLength(1)
-    expect(db.queries.filter((table) => table === 'actionInvocationControls')).toHaveLength(1)
+    expect(db.queries.filter((table) => table === 'actionExecutionControls')).toHaveLength(1)
   })
 
   it('accepts a valid exact command and consumes the nonce exactly once', async () => {

@@ -108,9 +108,9 @@ const durableTables = [
   'disputes',
   'chatThreads',
   'chatThreadShares',
-  'actionInvocationControls',
-  'actionInvocationAttempts',
-  'actionInvocationHistory',
+  'actionExecutionControls',
+  'actionExecutionAttempts',
+  'actionExecutionHistory',
   'marketActiveOperations',
   'marketActiveSuppliers',
   'marketEvidenceFacts',
@@ -655,10 +655,10 @@ describe('Convex schema', () => {
     })).rejects.toThrow()
   })
 
-  it('validates current action invocation attempts and rejects removed legacy messages', async () => {
+  it('validates current action execution attempts and rejects removed legacy messages', async () => {
     const backend = convexTest(schema, convexModules)
     const currentAttempt = {
-      invocationRef: 'invocation:schema-regression',
+      executionRef: 'execution:schema-regression',
       attemptRef: 'attempt:current',
       attemptNumber: 1,
       effectGeneration: 1,
@@ -688,28 +688,28 @@ describe('Convex schema', () => {
     } as const
 
     await expect(backend.run(async (ctx) => (
-      ctx.db.insert('actionInvocationAttempts', legacyAttempt as never)
+      ctx.db.insert('actionExecutionAttempts', legacyAttempt as never)
     ))).rejects.toThrow()
     await backend.run(async (ctx) => {
-      await ctx.db.insert('actionInvocationAttempts', currentAttempt)
+      await ctx.db.insert('actionExecutionAttempts', currentAttempt)
     })
     const row = await backend.run(async (ctx) => (
-      ctx.db.query('actionInvocationAttempts').unique()
+      ctx.db.query('actionExecutionAttempts').unique()
     ))
     expect(row).toEqual(expect.objectContaining({
       outcome: currentAttempt.outcome,
     }))
     expect(row?.outcome).not.toHaveProperty('message')
   })
-  it('validates current action invocation controls and rejects removed legacy shapes', async () => {
+  it('validates current action execution controls and rejects removed legacy shapes', async () => {
     const backend = convexTest(schema, convexModules)
     const acceptedAuthority = {
       kind: 'approve_each',
       authorityRef: 'authority:schema-regression',
     } as const
     const control = {
-      invocationRef: 'invocation:schema-regression:current',
-      invocationVersion: 1,
+      executionRef: 'execution:schema-regression:current',
+      executionVersion: 1,
       origin: {
         kind: 'standalone',
         callerRef: 'caller:schema-regression',
@@ -727,8 +727,8 @@ describe('Convex schema', () => {
       acceptedAuthority,
     } as const
     const currentControl = {
-      invocationRef: control.invocationRef,
-      invocationVersion: 1,
+      executionRef: control.executionRef,
+      executionVersion: 1,
       control,
       sourceRef: 'source:schema-regression:current',
       authorityReference: 'authority:schema-regression',
@@ -738,35 +738,35 @@ describe('Convex schema', () => {
     const { acceptedAuthority: removedAuthority, ...legacyInnerControl } = control
     const legacyControl = {
       ...currentControl,
-      invocationRef: 'invocation:schema-regression:legacy',
+      executionRef: 'execution:schema-regression:legacy',
       control: {
         ...legacyInnerControl,
-        invocationRef: 'invocation:schema-regression:legacy',
+        executionRef: 'execution:schema-regression:legacy',
       },
       acceptedAuthority: removedAuthority,
     } as const
     const malformedGatheringControl = {
       ...currentControl,
-      invocationRef: 'invocation:schema-regression:malformed-gathering',
+      executionRef: 'execution:schema-regression:malformed-gathering',
       control: {
         ...currentControl.control,
-        invocationRef: 'invocation:schema-regression:malformed-gathering',
+        executionRef: 'execution:schema-regression:malformed-gathering',
         control: { state: 'gathering_information', missingFields: 'convert' },
       },
     } as const
 
     await expect(backend.run(async (ctx) => (
-      ctx.db.insert('actionInvocationControls', legacyControl as never)
+      ctx.db.insert('actionExecutionControls', legacyControl as never)
     ))).rejects.toThrow()
     await expect(backend.run(async (ctx) => (
-      ctx.db.insert('actionInvocationControls', malformedGatheringControl as never)
+      ctx.db.insert('actionExecutionControls', malformedGatheringControl as never)
     ))).rejects.toThrow()
 
     await backend.run(async (ctx) => {
-      await ctx.db.insert('actionInvocationControls', currentControl)
+      await ctx.db.insert('actionExecutionControls', currentControl)
     })
     const row = await backend.run(async (ctx) => (
-      ctx.db.query('actionInvocationControls').unique()
+      ctx.db.query('actionExecutionControls').unique()
     ))
     expect(row).toEqual(expect.objectContaining({
       control: expect.objectContaining({ acceptedAuthority }),

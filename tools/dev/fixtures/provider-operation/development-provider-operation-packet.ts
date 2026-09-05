@@ -3,8 +3,8 @@ import type { AnyAction } from '../../../../src/modules/common/action'
 import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
-  createDurableActionInvocationTracer,
-} from '../../../../src/modules/action-invocation'
+  createDurableActionExecutionTracer,
+} from '../../../../src/modules/action-execution'
 import type { ProviderOperationInvocationRun } from './development-provider-operation-runner'
 
 export function projectDurableRun<Result extends ActionResult>(
@@ -15,8 +15,8 @@ export function projectDurableRun<Result extends ActionResult>(
 ) {
   return {
     controls: [...run.state.controls.values()],
-    attempts: [...(run.state.attempts.get(run.view.invocationRef)?.values() ?? [])],
-    history: run.state.history.get(run.view.invocationRef) ?? [],
+    attempts: [...(run.state.attempts.get(run.view.executionRef)?.values() ?? [])],
+    history: run.state.history.get(run.view.executionRef) ?? [],
     source: {
       input: run.source.input,
       prepared: run.source.prepared,
@@ -27,24 +27,24 @@ export function projectDurableRun<Result extends ActionResult>(
 }
 
 export async function reconstructDevelopmentProviderOperationInvocation(input: Readonly<{
-  invocationRef: string
+  executionRef: string
   action: AnyAction
   durable: ReturnType<typeof projectDurableRun>
 }>) {
   const state = createDevelopmentDurableState<any>()
-  for (const control of input.durable.controls) state.controls.set(control.invocationRef, control as never)
+  for (const control of input.durable.controls) state.controls.set(control.executionRef, control as never)
   for (const attempt of input.durable.attempts) {
-    const rows = state.attempts.get(attempt.invocationRef) ?? new Map()
+    const rows = state.attempts.get(attempt.executionRef) ?? new Map()
     rows.set(attempt.attemptRef, attempt)
-    state.attempts.set(attempt.invocationRef, rows)
+    state.attempts.set(attempt.executionRef, rows)
   }
-  state.history.set(input.invocationRef, [...input.durable.history])
+  state.history.set(input.executionRef, [...input.durable.history])
   const source = structuredClone(input.durable.source)
-  const tracer = createDurableActionInvocationTracer({
+  const tracer = createDurableActionExecutionTracer({
     action: input.action as never,
     port: createDevelopmentDurablePort(state),
     now: () => '2026-07-19T04:00:00.000Z',
-    nextInvocationRef: () => 'cold_reconstruction_must_not_create_invocation',
+    nextExecutionRef: () => 'cold_reconstruction_must_not_create_invocation',
     nextAuthorityRef: () => 'cold_reconstruction_must_not_create_authority',
     nextAttemptRef: () => 'cold_reconstruction_must_not_create_attempt',
     resolveSourceState: () => ({
@@ -63,8 +63,8 @@ export async function reconstructDevelopmentProviderOperationInvocation(input: R
       ...(source.resultIdentity === undefined ? {} : { resultIdentity: source.resultIdentity }),
     }),
   })
-  const resumed = await tracer.coldResume(input.invocationRef)
-  const view = resumed.inspect(input.invocationRef)
+  const resumed = await tracer.coldResume(input.executionRef)
+  const view = resumed.inspect(input.executionRef)
   if (view === undefined) throw new Error('development_provider_operation_cold_reconstruction_failed')
   return { view, state }
 }

@@ -3,7 +3,7 @@ import type { Doc } from '../../_generated/dataModel'
 import { isRecord } from '@/modules/common/is-record'
 
 type InvocationRow = Doc<'capabilityOperationInvocations'>
-type InvocationControlRow = Doc<'actionInvocationControls'>
+type ExecutionControlRow = Doc<'actionExecutionControls'>
 type WorkResult =
   | { kind: 'success'; returnValue: unknown }
   | { kind: 'failed'; error: string }
@@ -15,16 +15,16 @@ function isRecordedSuccess(result: WorkResult): boolean {
     && result.returnValue.kind === 'recorded'
 }
 
-function effectMayHaveBeenReleased(control: InvocationControlRow | null): boolean {
+function effectMayHaveBeenReleased(control: ExecutionControlRow | null): boolean {
   if (control === null) return false
-  const invocationControl = control.control.control
-  if (invocationControl.state === 'reconciliation_required') return true
-  if (invocationControl.state === 'terminal') return true
-  return invocationControl.state === 'leased' && invocationControl.release === 'possibly_released'
+  const executionControl = control.control.control
+  if (executionControl.state === 'reconciliation_required') return true
+  if (executionControl.state === 'terminal') return true
+  return executionControl.state === 'leased' && executionControl.release === 'possibly_released'
 }
 
 function controlAttempt(
-  control: InvocationControlRow | null,
+  control: ExecutionControlRow | null,
   fallbackAttemptRef: string,
 ): Readonly<{ attemptRef: string; effectGeneration: number }> {
   return {
@@ -108,8 +108,8 @@ export async function completeWorkHandler(
     await ctx.db.patch(row._id, { dispatchState: 'completed', updatedAt: Date.now() })
     return null
   }
-  const control = await ctx.db.query('actionInvocationControls')
-    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', context.invocationRef)).unique()
+  const control = await ctx.db.query('actionExecutionControls')
+    .withIndex('by_executionRef', (query) => query.eq('executionRef', context.invocationRef)).unique()
   if (effectMayHaveBeenReleased(control)) {
     await patchReconciliationRequired(
       ctx,

@@ -1,4 +1,4 @@
-import type { ActionInvocationOrigin, InvocationActor } from '../../../../src/modules/action-invocation'
+import type { ActionExecutionOrigin, ExecutionActor } from '../../../../src/modules/action-execution'
 import type {
   DevelopmentProviderOperationCancellationInput,
   DevelopmentProviderOperationInput,
@@ -8,7 +8,7 @@ import type { DevelopmentAvailabilityObservation } from './development-provider-
 export const developmentProviderOperationNowMs = Date.parse('2026-07-19T04:00:00.000Z')
 export const developmentProviderOperationNow = () => new Date(developmentProviderOperationNowMs).toISOString()
 
-export function providerOperationActor(origin: ActionInvocationOrigin): InvocationActor {
+export function providerOperationActor(origin: ActionExecutionOrigin): ExecutionActor {
   return origin.kind === 'standalone'
     ? { callerRef: origin.callerRef, principalRef: origin.principalRef }
     : { callerRef: `request:${origin.requestRef}`, principalRef: `request-owner:${origin.requestRef}` }

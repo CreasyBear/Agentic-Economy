@@ -467,8 +467,8 @@ export async function refuseInvocationBeforeEffectForInvalidAuthority(
     ctx.db.query('capabilityOperationInvocations')
       .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
       .unique(),
-    ctx.db.query('actionInvocationControls')
-      .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+    ctx.db.query('actionExecutionControls')
+      .withIndex('by_executionRef', (query) => query.eq('executionRef', invocationRef))
       .unique(),
   ])
   if (row === null || row.state !== 'pending' || control !== null) return

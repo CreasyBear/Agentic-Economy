@@ -18,8 +18,8 @@ describe('operation.invoke recover/reconcile', () => {
     const snapshot = canonicalProjectionSnapshot(operationRef, operation.operationId, operation.identity.contractVersion)
     const runQuery = vi.fn(async (reference: unknown) => {
       const path = typeof reference === 'string' ? reference : getFunctionName(reference as never)
-      if (path === 'actionInvocationControl:readControl') return snapshot.control
-      if (path === 'actionInvocationControl:readAttempt') return snapshot.attempt
+      if (path === 'actionExecutionControl:readControl') return snapshot.control
+      if (path === 'actionExecutionControl:readAttempt') return snapshot.attempt
       throw new Error(`unexpected_query:${path}`)
     })
     const runMutation = vi.fn().mockResolvedValue({ kind: 'recorded' })
@@ -66,8 +66,8 @@ describe('operation.invoke recover/reconcile', () => {
     const snapshot = canonicalProjectionSnapshot(operationRef, operation.operationId, operation.identity.contractVersion)
     const runQuery = vi.fn(async (reference: unknown) => {
       const path = typeof reference === 'string' ? reference : getFunctionName(reference as never)
-      if (path === 'actionInvocationControl:readControl') return snapshot.control
-      if (path === 'actionInvocationControl:readAttempt') return snapshot.attempt
+      if (path === 'actionExecutionControl:readControl') return snapshot.control
+      if (path === 'actionExecutionControl:readAttempt') return snapshot.attempt
       throw new Error(`unexpected_query:${path}`)
     })
     const runMutation = vi.fn().mockResolvedValue({ kind: 'recorded' })

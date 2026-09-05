@@ -3,7 +3,7 @@ import {
   type X402PaymentAttempt,
   type X402PaymentAttemptPort,
   type X402PaymentAuthorizationEvent,
-} from '../../src/modules/action-invocation/x402-payment-attempt'
+} from '../../src/modules/action-execution/x402-payment-attempt'
 
 export function createInMemoryX402PaymentAttemptPort(
   initial: readonly X402PaymentAttempt[] = [],

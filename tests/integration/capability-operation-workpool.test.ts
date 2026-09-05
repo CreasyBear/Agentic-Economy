@@ -571,19 +571,19 @@ async function readEvidence(
     const invocation = await ctx.db.query('capabilityOperationInvocations')
       .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
       .unique()
-    const control = await ctx.db.query('actionInvocationControls')
-      .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+    const control = await ctx.db.query('actionExecutionControls')
+      .withIndex('by_executionRef', (query) => query.eq('executionRef', invocationRef))
       .unique()
-    const attempt = await ctx.db.query('actionInvocationAttempts')
-      .withIndex('by_invocationRef_and_attemptRef', (query) => (
-        query.eq('invocationRef', invocationRef).eq('attemptRef', invocation?.attemptRef ?? '')
+    const attempt = await ctx.db.query('actionExecutionAttempts')
+      .withIndex('by_executionRef_and_attemptRef', (query) => (
+        query.eq('executionRef', invocationRef).eq('attemptRef', invocation?.attemptRef ?? '')
       ))
       .unique()
     const call = await ctx.db.query('capabilityOperationCallProjections')
       .withIndex('by_callRef', (query) => query.eq('callRef', invocationRef))
       .unique()
-    const history = await ctx.db.query('actionInvocationHistory')
-      .withIndex('by_invocationRef_and_invocationVersion', (query) => query.eq('invocationRef', invocationRef))
+    const history = await ctx.db.query('actionExecutionHistory')
+      .withIndex('by_executionRef_and_executionVersion', (query) => query.eq('executionRef', invocationRef))
       .order('asc')
       .collect()
     return {
@@ -640,9 +640,9 @@ describe('capability operation Workpool lifecycle', () => {
         throw new Error('operation invocation not assigned before provider transport')
       }
       historyObservedDuringProvider = await backend.run(async (ctx) => (
-        (await ctx.db.query('actionInvocationHistory')
-          .withIndex('by_invocationRef_and_invocationVersion', (query) => (
-            query.eq('invocationRef', providerInvocationRef)
+        (await ctx.db.query('actionExecutionHistory')
+          .withIndex('by_executionRef_and_executionVersion', (query) => (
+            query.eq('executionRef', providerInvocationRef)
           ))
           .order('asc')
           .collect())
@@ -697,7 +697,7 @@ describe('capability operation Workpool lifecycle', () => {
       'release_fence_before_network',
       'terminal_returned',
     ])
-    expect(completed.history.map((row) => row.invocationVersion)).toEqual([1, 2, 3])
+    expect(completed.history.map((row) => row.executionVersion)).toEqual([1, 2, 3])
     expect(completedResult.output).toEqual(providerOutput)
     await expect(backend.action(
       api.capabilityOperationInvocations.readInvocationStatus,

@@ -95,8 +95,8 @@ export type ActionModelRequestObservation = Readonly<{
 
 type ActionBaseContext = {
   /** Kernel-owned execution attribution; action callers must not supply it. */
-  actionInvocationExecution?: Readonly<{
-    invocationRef: string
+  actionExecution?: Readonly<{
+    executionRef: string
     attemptRef: string
     effectGeneration: number
   }>
@@ -191,7 +191,7 @@ export type ActionEffectMetadata = Readonly<{
   approval: 'none' | 'approve_each' | 'mandate_eligible'
 }>
 
-export type ActionInvocationContract = Readonly<{
+export type ActionExecutionContract = Readonly<{
   /** Immutable version of the action's invocation semantics, not the application version. */
   version: string
   consequenceClass: ActionConsequenceClass
@@ -208,7 +208,7 @@ export type ActionInvocationContract = Readonly<{
   reconciliationEvidenceSource?: string
 }>
 
-export type ActionInvocationPreparation = Readonly<{
+export type ActionExecutionPreparation = Readonly<{
   dataUse: Readonly<{
     fields: readonly string[]
     limits: Readonly<Record<string, ActionJsonValue>>
@@ -223,18 +223,18 @@ type ActionJsonValue =
   | readonly ActionJsonValue[]
   | Readonly<{ [key: string]: ActionJsonValue }>
 
-export type ActionInvocationResultClassification = Readonly<{
+export type ActionExecutionResultClassification = Readonly<{
   outcome: string
   referenceable: boolean
 }>
 
 
 type ActionPreparationProjector<Input> = {
-  project(input: Input): ActionInvocationPreparation
+  project(input: Input): ActionExecutionPreparation
 }['project']
 
 type ActionResultClassifier<Result extends ActionResult> = {
-  classify(result: Result): ActionInvocationResultClassification
+  classify(result: Result): ActionExecutionResultClassification
 }['classify']
 
 type ActionPreReleaseCheck<Input, Result extends ActionResult> = {
@@ -260,7 +260,7 @@ export type ActionDefinition<
   readonly effect: ActionEffectMetadata
   readonly surfaces: readonly ActionSurface[]
   readonly outputSchema: z.ZodType<Result>
-  readonly invocationContract: ActionInvocationContract
+  readonly invocationContract: ActionExecutionContract
   readonly projectInvocationPreparation?: ActionPreparationProjector<Input>
   /** Action-owned interpretation of its returned business result. */
   readonly classifyInvocationResult?: ActionResultClassifier<Result>
@@ -281,7 +281,7 @@ export function defineAction<Input, Result extends ActionResult>(
 }
 
 /** Return the action's declared invocation contract without deriving metadata. */
-export function resolveActionContract(action: AnyAction): ActionInvocationContract {
+export function resolveActionContract(action: AnyAction): ActionExecutionContract {
   return action.invocationContract
 }
 

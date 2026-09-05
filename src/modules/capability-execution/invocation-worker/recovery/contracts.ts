@@ -4,7 +4,7 @@ import {
   reconciliationValue,
   recoveryResultValue,
 } from '@/modules/capability-execution/convex'
-import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-invocation/runtime'
+import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-execution/runtime'
 import type { RecoveryRow } from '../../../../../convex/capabilityOperationInvocationProjection'
 
 export const recoveryArgs = {

@@ -2,7 +2,7 @@ import { paginationResultValidator } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import { vOnCompleteArgs } from '@convex-dev/workpool'
 import { sourceWriteArgs } from '../../sourceWriteAdmission'
-import { actionInvocationTransactArgs } from '../../actionInvocationControl'
+import { actionExecutionTransactArgs } from '../../actionExecutionControl'
 import {
   operationInvokeAuthorityValue,
   operationResultValue,
@@ -137,7 +137,7 @@ export const operationDispatchProjectionValue = v.object({
 })
 export const operationDispatchMutationArgs = {
   dispatch: openDispatchValue,
-  command: v.object(actionInvocationTransactArgs),
+  command: v.object(actionExecutionTransactArgs),
 } as const
 export const cancelBeforeClaimArgs = {
   invocationRef: v.string(),
@@ -147,7 +147,7 @@ export const cancelBeforeClaimArgs = {
 } as const
 export const finalizeDispatchArgs = {
   dispatch: openDispatchValue,
-  command: v.object(actionInvocationTransactArgs),
+  command: v.object(actionExecutionTransactArgs),
   projection: operationDispatchProjectionValue,
 } as const
 export type OperationDispatchCommand = Infer<typeof operationDispatchMutationArgs.command>

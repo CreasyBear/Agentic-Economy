@@ -1,6 +1,6 @@
 import { getFunctionName } from 'convex/server'
 import { beforeEach, expect, vi } from 'vitest'
-type ActionInvocationModule = Record<string, unknown>
+type ActionExecutionModule = Record<string, unknown>
 type SignRouteTransportCall = typeof import('@/modules/capability-supply/server').signRouteTransportCall
 const mocks = vi.hoisted(() => {
   const claimCanonicalInvocation = vi.fn()
@@ -104,8 +104,8 @@ const mocks = vi.hoisted(() => {
   }
 })
 
-vi.mock('@/modules/action-invocation/runtime', async (importOriginal) => {
-  const actual = await importOriginal<ActionInvocationModule>()
+vi.mock('@/modules/action-execution/runtime', async (importOriginal) => {
+  const actual = await importOriginal<ActionExecutionModule>()
   return {
     ...actual,
     claimCanonicalInvocation: mocks.claimCanonicalInvocation,
@@ -634,12 +634,12 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   const recordedAt = new Date(now).toISOString()
   const actor = { callerRef: String(dispatch.credentialId), principalRef: String(dispatch.principalId) }
   const canonicalControl = {
-    invocationRef,
-    invocationVersion: 1,
+    executionRef: invocationRef,
+    executionVersion: 1,
     sourceRef: `operation-invocation-source:${invocationRef}`,
     control: {
-      invocationRef,
-      invocationVersion: 1,
+      executionRef: invocationRef,
+      executionVersion: 1,
       origin: { kind: 'standalone' as const, ...actor },
       owner: actor,
       action: { id: operation.operationId, contractVersion: String(descriptor.version) },
@@ -661,7 +661,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     updatedAt: recordedAt,
   }
   const canonicalAttempt = {
-    invocationRef,
+    executionRef: invocationRef,
     attemptRef,
     attemptNumber: 1,
     actor,
@@ -788,8 +788,8 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   }
   const functionPath = (reference: unknown): string => typeof reference === 'string' ? reference : getFunctionName(reference as never)
   mocks.claimCanonicalInvocation.mockResolvedValue({ kind: 'claimed', snapshot: { control: canonicalControl, attempt: canonicalAttempt } })
-  mocks.persistCanonicalReleaseFence.mockResolvedValue(options.releaseFenceResult ?? { kind: 'applied', invocationVersion: 2 })
-  mocks.persistCanonicalTerminalOutcome.mockResolvedValue({ kind: 'applied', invocationVersion: 3 })
+  mocks.persistCanonicalReleaseFence.mockResolvedValue(options.releaseFenceResult ?? { kind: 'applied', executionVersion: 2 })
+  mocks.persistCanonicalTerminalOutcome.mockResolvedValue({ kind: 'applied', executionVersion: 3 })
   mocks.prepareRegisteredRouteTransportInvocation.mockImplementation((
     invocation: RouteTransportInvocation,
     x402PaymentSigningAvailable?: (input: {
@@ -1106,8 +1106,8 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
             if (options.signingBoundaryProviderAuthority === 'invalid') return null
           }
           return providerAuthority
-        case 'actionInvocationControl:readControl': return canonicalClaimed ? canonicalControl : undefined
-        case 'actionInvocationControl:readAttempt': return canonicalClaimed ? canonicalAttempt : undefined
+        case 'actionExecutionControl:readControl': return canonicalClaimed ? canonicalControl : undefined
+        case 'actionExecutionControl:readAttempt': return canonicalClaimed ? canonicalAttempt : undefined
         case 'capabilityProviderConnections:resolveLeaseCredentialRef': return { kind: 'resolved', credentialRef: providerCredentialRef }
         case 'moneyX402PaymentAttempts:readX402PaymentAuthorization': {
           const material = persistedPaymentMaterial(args?.requestFingerprint)

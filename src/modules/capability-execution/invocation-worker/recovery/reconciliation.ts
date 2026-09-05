@@ -1,8 +1,8 @@
 import { type ObjectType } from 'convex/values'
 import {
-  reconcilePublicInvocation,
+  reconcilePublicExecution,
   type ReconciliationEvidence,
-} from '@/modules/action-invocation/runtime'
+} from '@/modules/action-execution/runtime'
 import type { OperationInvokeReceipt } from '@/modules/capability-execution/operation-invoke-contracts'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import { internal } from '../../../../../convex/_generated/api'
@@ -107,9 +107,9 @@ export async function reconcileRecovery(
     brokeredReconciliationReceipt,
     brokeredOutcomeReceipt,
   } = prepared
-  const reconciliation = await reconcilePublicInvocation({
+  const reconciliation = await reconcilePublicExecution({
     tracer,
-    invocationRef: recovered.invocationRef,
+    executionRef: recovered.invocationRef,
     attemptRef: evidence.attemptRef,
     actor,
     origin,

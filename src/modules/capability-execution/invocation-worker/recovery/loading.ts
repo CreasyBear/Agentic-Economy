@@ -7,9 +7,9 @@ import {
   type InvocationMaterialInput,
 } from '../../invocation-material'
 import {
-  createDurableActionInvocationTracer,
+  createDurableActionExecutionTracer,
   type ReconciliationEvidence,
-} from '@/modules/action-invocation/runtime'
+} from '@/modules/action-execution/runtime'
 import {
   materializeRuntimePublishedOperation,
   parsePublishedOperationSnapshot,
@@ -73,7 +73,7 @@ export async function loadRecoveryControl(
     || control.control.origin.kind !== 'standalone'
     || control.control.origin.principalRef !== recovered.principalId
     || control.control.origin.callerRef !== recovered.credentialId
-    || control.control.invocationRef !== recovered.invocationRef
+    || control.control.executionRef !== recovered.invocationRef
     || control.sourceRef !== `operation-invocation-source:${recovered.invocationRef}`
   ) return { kind: 'not_found' }
   return { kind: 'ready', recovered, port, control }
@@ -127,7 +127,7 @@ export async function loadRecoveryWorkContext(
     port.readHistory(recovered.invocationRef, 0, 100),
   ])
   if (!recoveryHistoryMatches(recovered, historyRows)) return undefined
-  const attempts = attemptRows.map(({ invocationRef: _invocationRef, recordedAt: _recordedAt, ...attempt }) => attempt)
+  const attempts = attemptRows.map(({ executionRef: _executionRef, recordedAt: _recordedAt, ...attempt }) => attempt)
   const prepared = {
     materialInputDigest: dynamicInput.inputDigest,
     target: dynamicInput.target,
@@ -150,11 +150,11 @@ export async function loadRecoveryWorkContext(
     managedReservation,
   })
   const trustedReconciliationEvidenceDigest: { value?: string } = {}
-  const tracer = createDurableActionInvocationTracer({
+  const tracer = createDurableActionExecutionTracer({
     action,
     port,
     now: () => new Date().toISOString(),
-    nextInvocationRef: () => recovered.invocationRef,
+    nextExecutionRef: () => recovered.invocationRef,
     nextAuthorityRef: () => `operation-authority:${recovered.invocationRef}`,
     nextAttemptRef: () => `${recovered.invocationRef}:recovery`,
     resolveSourceState: (sourceRef) => {
@@ -184,7 +184,7 @@ export async function loadRecoveryWorkContext(
           && history.observation?.evidenceDigest === evidence.digest)
     },
   }, {
-    format: 'action-invocation-control:development:v1' as const,
+    format: 'action-execution-control:development:v1' as const,
     records: [{
       sourceRef: control.sourceRef,
       control: { ...control.control, attempts },
@@ -398,9 +398,9 @@ function preparedMaterialMatches(control: RecoveryControlRow, inputDigest: strin
 
 function recoveryHistoryMatches(
   recovered: RecoveredInvocation,
-  historyRows: readonly Readonly<{ invocationRef: string }>[],
+  historyRows: readonly Readonly<{ executionRef: string }>[],
 ): boolean {
-  return historyRows.every(({ invocationRef }) => invocationRef === recovered.invocationRef)
+  return historyRows.every(({ executionRef }) => executionRef === recovered.invocationRef)
 }
 
 async function loadX402Attempt(

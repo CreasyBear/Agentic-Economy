@@ -1,4 +1,4 @@
-import { readPublicInvocationStatus } from '@/modules/action-invocation/runtime'
+import { readPublicExecutionStatus } from '@/modules/action-execution/runtime'
 import type { ActionCtx } from '../../../../../convex/_generated/server'
 import {
   projectPersistedRecovery,
@@ -20,9 +20,9 @@ export async function readRecoveryStatus(
   const loaded = await loadRecoveryControl(ctx, recovered)
   if (loaded.kind === 'not_found') return recoveryNotFound(args.invocationRef)
   if (loaded.kind === 'persisted') return projectPersistedRecovery(recovered)
-  const status = await readPublicInvocationStatus({
+  const status = await readPublicExecutionStatus({
     port: loaded.port,
-    invocationRef: recovered.invocationRef,
+    executionRef: recovered.invocationRef,
     actor: { callerRef: recovered.credentialId, principalRef: recovered.principalId },
   })
   if (status.kind === 'refused') return recoveryNotFound(args.invocationRef)

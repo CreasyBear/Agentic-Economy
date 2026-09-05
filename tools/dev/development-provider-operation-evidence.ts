@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { parseArgs } from '../ae/lib/args'
 
 import { runDevelopmentProviderOperationEvidence } from './fixtures/provider-operation/development-provider-operation-evidence'
-import { readAndVerifyProviderOperationPacket, writeEvidencePacket } from './action-invocation-evidence-packet'
+import { readAndVerifyProviderOperationPacket, writeEvidencePacket } from './action-execution-evidence-packet'
 import {
   captureOfficialEvidenceProvenance,
   verifyOfficialEvidenceProvenance,

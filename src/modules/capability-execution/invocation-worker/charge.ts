@@ -1,4 +1,4 @@
-import type { CanonicalClaimSnapshot } from '@/modules/action-invocation/runtime'
+import type { CanonicalClaimSnapshot } from '@/modules/action-execution/runtime'
 import type { RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
 import type { ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'

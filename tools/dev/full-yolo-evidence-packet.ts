@@ -10,7 +10,7 @@ import {
   materialDigest,
   StandingMandateStore,
   verifiedGrantMatchesMandate,
-} from '../../src/modules/action-invocation'
+} from '../../src/modules/action-execution'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import {
   compareExactAmounts,
@@ -77,7 +77,7 @@ export async function runFullYoloEvidence(): Promise<FullYoloEvidence> {
     callerRef: mandate.callerRef,
     principalRef: mandate.principalRef,
     delegateRef: mandate.delegateRef,
-    invocationRef: `mock:invocation:${authorityUseRef}`,
+    executionRef: `mock:invocation:${authorityUseRef}`,
     action: mandate.scope.actions![0]!,
     preparedMaterialDigest: `sha256:${authorityUseRef}`,
     providerRef: mandate.scope.providerRefs[0]!,
@@ -103,7 +103,7 @@ export async function runFullYoloEvidence(): Promise<FullYoloEvidence> {
         sourceOptionRef: `mock:option:${use.authorityUseRef}`,
         materialDigest: use.preparedMaterialDigest,
         authorityUseRef: use.authorityUseRef,
-        invocationRef: use.invocationRef,
+        executionRef: use.executionRef,
         action: use.action,
         providerRef: use.providerRef,
         recipientRef: use.recipientRef,
@@ -131,7 +131,7 @@ export async function runFullYoloEvidence(): Promise<FullYoloEvidence> {
       sourceOptionRef: 'mock:option:revoke',
       materialDigest: revokeMaterial.preparedMaterialDigest,
       authorityUseRef: revokeMaterial.authorityUseRef,
-      invocationRef: revokeMaterial.invocationRef,
+      executionRef: revokeMaterial.executionRef,
       action: revokeMaterial.action,
       providerRef: revokeMaterial.providerRef,
       recipientRef: revokeMaterial.recipientRef,
@@ -368,16 +368,16 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     || evidence.coldContinuation.finalObjectiveState.digest
       !== evidence.coldContinuation.replayedObjectiveState.digest
     || evidence.coldContinuation.finalObjectiveState.completedInvocationRefs.join(',')
-      !== evidence.invocations.map(({ invocationRef }) => invocationRef).join(',')
+      !== evidence.invocations.map(({ executionRef }) => executionRef).join(',')
     || evidence.coldContinuation.finalObjectiveState.policyDecisionRefs.join(',')
       !== evidence.policyDecisions.map(({ policyDecisionRef }) => policyDecisionRef).join(',')
     || evidence.coldContinuation.midRun.objectiveState.fallbackProgress.attemptedProviderRefs.join(',')
       !== evidence.objectiveDecisionRecords.slice(0, 2).map(({ providerRef }) => providerRef).join(',')
     || new Set(evidence.coldContinuation.freshObjectGraphRefs).size !== 2
     || evidence.coldContinuation.resumeReconstructedInvocationRefs.join(',')
-      !== evidence.invocations.slice(0, 2).map(({ invocationRef }) => invocationRef).join(',')
+      !== evidence.invocations.slice(0, 2).map(({ executionRef }) => executionRef).join(',')
     || evidence.coldContinuation.replayReconstructedInvocationRefs.join(',')
-      !== evidence.invocations.map(({ invocationRef }) => invocationRef).join(',')
+      !== evidence.invocations.map(({ executionRef }) => executionRef).join(',')
     || evidence.coldContinuation.continuationKind !== 'source_owned_objective_resume'
     || 'replayedOperation' in evidence.coldContinuation
     || 'replayedCancellation' in evidence.coldContinuation
@@ -446,17 +446,17 @@ export function verifyFullYoloEvidence(evidence: FullYoloEvidence) {
     if (
       use === undefined
       || useRefs.has(use.authorityUseRef)
-      || use.invocationRef !== invocation.invocationRef
+      || use.executionRef !== invocation.executionRef
       || use.action.id !== invocation.action.id
       || use.action.version !== invocation.action.contractVersion
       || standingIndex < 0
       || releaseIndex <= standingIndex
       || evidence.policyDecisions[index]?.proposal.action.id !== invocation.action.id
       || evidence.policyDecisions[index]?.proposal.authorityUseRef !== use.authorityUseRef
-      || evidence.policyDecisions[index]?.proposal.invocationRef !== invocation.invocationRef
+      || evidence.policyDecisions[index]?.proposal.executionRef !== invocation.executionRef
       || evidence.policyDecisions[index]?.proposal.materialDigest !== use.preparedMaterialDigest
       || use.policyDecisionRef !== evidence.policyDecisions[index]?.policyDecisionRef
-      || evidence.coldContinuation.reconstructed[index]?.invocationRef !== invocation.invocationRef
+      || evidence.coldContinuation.reconstructed[index]?.executionRef !== invocation.executionRef
       || evidence.coldContinuation.reconstructed[index]?.authorityUseRef !== use.authorityUseRef
     ) throw new Error('full_yolo_action_use_linkage_refused')
     useRefs.add(use.authorityUseRef)
