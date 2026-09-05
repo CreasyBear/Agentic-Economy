@@ -1,0 +1,6 @@
+interface:
+  display_name: "Wayfinder Delivery"
+  short_description: "Scope with gstack, deliver, maintain and improve"
+  default_prompt: "Use $wayfinder-delivery to scope this goal with gstack, agree the direction, and carry the work through evaluation, review, housekeeping and local commit."
+policy:
+  allow_implicit_invocation: false

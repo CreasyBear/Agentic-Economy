@@ -66,3 +66,9 @@ eval/parity/results.tsv
 
 # Brand direction preview scratch (rebrand iteration); never commit
 /.brand-preview/
+
+# Wayfinder: durable workflow records and native gstack design documents
+!/docs/workflow/
+!/docs/workflow/**
+!/docs/designs/
+!/docs/designs/*.md
