@@ -190,16 +190,16 @@ database, deployment or financial-history work is complete.
   `/Users/joelchan/.codex/backups/agentic-economy/vocabulary-20260905-073915/local-checkpoint-20260905/candidate.sha256`.
   The candidate manifest digests are recorded in the same private directory;
   no file contents or credential values are copied into this receipt.
-- The checkpoint deliberately excludes, without deleting or altering, the 23
-  generated visual critique/review artifacts under
-  `.impeccable/` and the 10 generated PDF-render artifacts under
-  `tmp/pdfs/agentic-blueprint-review/`. The exact excluded file paths are
-  retained at
+- Historical first-checkpoint staging boundary: the first checkpoint left out,
+  without deleting or altering, the 23 generated visual critique/review
+  artifacts under `.impeccable/` and the 10 generated PDF-render artifacts
+  under `tmp/pdfs/agentic-blueprint-review/`. At that point they remained
+  visible as untracked work pending Joel's later explicit all-dirty checkpoint
+  authorization. The exact paths remain at
   `/Users/joelchan/.codex/backups/agentic-economy/vocabulary-20260905-073915/local-checkpoint-20260905/excluded.paths`.
-  They remain visible as untracked work for a later explicit decision. The
-  tracked `.env.example` template is included in the candidate set; ignored
-  environment files, private backups, Terraform state/provider directories,
-  dependency caches and other ignored paths are not force-added.
+  The tracked `.env.example` template is included in the first candidate set;
+  ignored environment files, private backups, Terraform state/provider
+  directories, dependency caches and other ignored paths were not force-added.
 - A read-only high-signal credential screen found no private-key header,
   cloud/API token or bearer-token match. Four source/test locations contained
   secret-shaped names or test fixtures and were retained as reviewed source,
@@ -223,3 +223,35 @@ database, deployment or financial-history work is complete.
   remaining dirty paths are recorded by the coordinator after the non-amend
   commit. No other issue, map, work record or source path is modified by this
   receipt update.
+
+### Second local artifact checkpoint receipt — 2026-09-05
+
+Joel then authorised committing all current nonignored dirty work. The prior
+33-path exclusion was reviewed as a staging boundary only, not a disposal or
+privacy determination. The 33 paths were inspected before staging and retained
+unchanged:
+
+- one dated critique Markdown file under `.impeccable/critique/`;
+- 22 visual review PNGs under `.impeccable/review/`; and
+- one blueprint text export, one contact sheet and eight page PNGs under
+  `tmp/pdfs/agentic-blueprint-review/`.
+
+The review used a path-only high-signal credential scan for text and binary
+content, PNG structure/metadata checks, and visual inspection of all 31 PNGs.
+No private-key header, real cloud/API token, personal data, or image metadata
+was found. The blueprint contains a visibly synthetic, short credential-shaped
+example used as documentation content; it is not a real credential and its
+value is intentionally not reproduced here. No files were moved, deleted or
+ignored, and no secret values were printed. The exact second-checkpoint path
+list and per-file digest capture are retained privately at
+`/Users/joelchan/.codex/backups/agentic-economy/vocabulary-20260905-073915/local-checkpoint-20260905/second-candidate.paths`
+and `second-candidate.sha256`.
+
+The second non-amend local checkpoint stages those 33 retained artifacts plus
+this receipt update (34 paths total). Its commit SHA, staged-path count,
+integrity comparison, hook result and final worktree status are recorded in the
+private `second-commit` and `second-postcommit-verification.json` receipts in
+that same directory and in the coordinator handoff. This checkpoint remains
+source-history evidence only; it is not application, database, deployment or
+financial-backup proof. The original source archive and first checkpoint remain
+unchanged, and no push or broad test run is performed.
