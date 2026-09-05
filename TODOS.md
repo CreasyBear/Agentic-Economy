@@ -81,6 +81,26 @@ Distinguish a stale task catalogue from a persistent discovery defect before fix
 **Close when:** A reloaded desktop/new-task observation agrees with intended
 enabled and implicit-invocation policy, or the remaining platform defect is isolated.
 
+### WF-20260905-workflow-07 — Distinguish an unavailable pre-commit scan from regressions
+
+**What:** Correct or configure the existing React pre-commit wrapper's handling
+of an unavailable scan without absorbing another task's configuration edits.
+**Why:** It labels inability to scan as “staged regressions” while still allowing
+the commit, obscuring what was actually checked.
+**Context:** During the workflow-only commit, React Doctor refused to scan because
+pre-existing `package.json` differed between index and worktree. The hook printed
+a regression message and exited successfully. No React files were in the commit.
+**Effort:** S
+**Priority:** P2
+**Kind:** tooling papercut
+**Status:** open
+**Owner:** unassigned
+**Evidence:** [setup validation](docs/workflow/validation.md), local `.git/hooks/pre-commit`,
+and commit `95564302c` output retained by this task.
+**Close when:** In the approved hook policy, no-relevant-files, scan-unavailable,
+actual failure and pass are accurately distinguished; unrelated staged/unstaged
+work remains untouched and the hook's blocking behavior is explicit.
+
 ## Architecture
 
 ### WF-20260905-workflow-05 — Review responsibility hotspots before splitting files

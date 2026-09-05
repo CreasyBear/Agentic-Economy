@@ -48,11 +48,14 @@ their roles. Research used the installed gstack source contracts and
 
 - [Validation](../validation.md) records actual checks and their limits.
 - Documentation: workflow entry point, skill chain, templates, curated lessons,
-  installer and six deduplicated investigation/cleanup candidates.
+  installer and seven deduplicated investigation/cleanup candidates.
 - Scoped housekeeping: new durable paths visible to Git; links checked; fixture
   bytecode/scratch removed; external stage substitutes labelled honestly.
 - What fell short: symlink discovery changed the callable name. Actual injection
   testing caught it; a guarded derived installation fixed the mismatch.
+- The existing React hook could not scan with another task's unstaged
+  `package.json` configuration. Its misleading regression message is recorded as
+  `WF-20260905-workflow-07`; no application changes were staged or silently fixed.
 - No automatic improvement tournament was run for this initial build; the bounded
   procedure and adverse handoff decision were tested. Real adoption is still due.
 - Local commit receipt: `git log --oneline --fixed-strings --grep=WF-20260905-workflow`.

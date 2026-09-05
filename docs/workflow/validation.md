@@ -20,6 +20,7 @@ faster delivery. The first real project goal remains the adoption trial.
 | Independent evolution handoff fixture | Rejected a staged-work regression, incomplete evidence and malformed ranking; retained incumbent at exhausted budget |
 | Guarded installer | Ten checks passed: initial install, read-only check, idempotence, source update, local-edit refusal, unmanaged-target refusal, symlink refusal, nested-target refusal, restoration after publication failure, and recovery-copy retention after rollback failure |
 | Protected content fingerprints | 347 baseline files unchanged: 109 gstack skill/metadata files, 232 plugin files, original Wayfinder and relevant global/project instructions/configuration |
+| Existing React pre-commit hook | Could not scan because pre-existing `package.json` differs between index and worktree. Its wrapper printed “staged regressions” but allowed the commit. No React/application files were staged; this is not a passing React scan or an observed React regression. See the hook papercut in TODOS. |
 
 The delivery fixture executed real Python tests and a local Git commit. Its
 review stage used a controlled fixture skill, not production gstack. The other
