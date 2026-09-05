@@ -99,7 +99,7 @@ const chatOperationInspectContract = {
   summary: 'Resolve the exact caller-specific terms for one Operation into an expiring Commitment.',
   boundaries: [
     'Creates no Invocation, reservation, signature, payment, or Provider effect.',
-    'AE resolves the Account, Agent Principal, authority, current Operation revision, normalized input, AUD price, budget, balance, treasury capacity, and policy versions server-side.',
+    'AE resolves the Account, Agent, authority, current Operation revision, normalized input, AUD price, budget, balance, treasury capacity, and policy versions server-side.',
     'Invoke only with the returned Commitment. Changed or expired material requires a fresh inspection.',
   ],
   surfaces: ['http', 'mcp', 'cli', 'chat'],

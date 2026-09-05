@@ -428,7 +428,7 @@ describe('issued agent binding', () => {
     ])
   })
 
-  it('fails closed as soon as the Agent Principal loses active Account membership', async () => {
+  it('fails closed as soon as the Agent loses active Account membership', async () => {
     const backend = convexTest(schema, modules)
     const owner = backend.withIdentity(identity('user_owner'))
     await owner.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {})

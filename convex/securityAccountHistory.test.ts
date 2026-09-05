@@ -166,19 +166,19 @@ describe('account security history', () => {
     const backend = convexTest(schema, modules)
     const owner = await insertOwner(backend, 'agent_history_owner')
     const sibling = await insertOwner(backend, 'agent_history_sibling')
-    const agentPrincipalRef = await insertAgent(backend, owner, 'history_agent')
+    const agentRef = await insertAgent(backend, owner, 'history_agent')
     await backend.run(async (ctx) => {
       await ctx.db.insert('auditEvents', auditRow({
         eventId: 'audit:agent-history:created',
         activeAccountRef: owner.accountRef,
-        targetRef: agentPrincipalRef,
+        targetRef: agentRef,
         sourceSystem: 'ae_recorded',
         createdAt: ACCOUNT_SECURITY_HISTORY_ACTIVATED_AT + 1_000,
       }))
       await ctx.db.insert('auditEvents', auditRow({
         eventId: 'audit:agent-history:renamed',
         activeAccountRef: owner.accountRef,
-        targetRef: agentPrincipalRef,
+        targetRef: agentRef,
         eventType: 'agent.renamed',
         sourceSystem: 'ae_recorded',
         createdAt: ACCOUNT_SECURITY_HISTORY_ACTIVATED_AT + 2_000,
@@ -186,7 +186,7 @@ describe('account security history', () => {
       await ctx.db.insert('auditEvents', auditRow({
         eventId: 'audit:agent-history:foreign',
         activeAccountRef: sibling.accountRef,
-        targetRef: agentPrincipalRef,
+        targetRef: agentRef,
         sourceSystem: 'ae_recorded',
         createdAt: ACCOUNT_SECURITY_HISTORY_ACTIVATED_AT + 3_000,
       }))
@@ -194,26 +194,26 @@ describe('account security history', () => {
 
     const firstPage = await owner.client.query(
       api.securityAccountHistory.listCurrentOwnerAgentSecurityHistory,
-      { principalRef: agentPrincipalRef, paginationOpts: { cursor: null, numItems: 1 } },
+      { principalRef: agentRef, paginationOpts: { cursor: null, numItems: 1 } },
     )
     expect(firstPage.page).toEqual([expect.objectContaining({
       eventRef: 'audit:agent-history:renamed',
-      targetRef: agentPrincipalRef,
+      targetRef: agentRef,
       sourceSystem: 'ae_recorded',
     })])
     expect(firstPage.isDone).toBe(false)
     const secondPage = await owner.client.query(
       api.securityAccountHistory.listCurrentOwnerAgentSecurityHistory,
-      { principalRef: agentPrincipalRef, paginationOpts: { cursor: firstPage.continueCursor, numItems: 1 } },
+      { principalRef: agentRef, paginationOpts: { cursor: firstPage.continueCursor, numItems: 1 } },
     )
     expect(secondPage.page).toEqual([expect.objectContaining({
       eventRef: 'audit:agent-history:created',
-      targetRef: agentPrincipalRef,
+      targetRef: agentRef,
     })])
     expect(secondPage.page.some(({ eventRef }) => eventRef === 'audit:agent-history:foreign')).toBe(false)
     await expect(sibling.client.query(
       api.securityAccountHistory.listCurrentOwnerAgentSecurityHistory,
-      { principalRef: agentPrincipalRef, paginationOpts: { cursor: null, numItems: 10 } },
+      { principalRef: agentRef, paginationOpts: { cursor: null, numItems: 10 } },
     )).rejects.toThrow('agent_history_not_found')
   })
 })

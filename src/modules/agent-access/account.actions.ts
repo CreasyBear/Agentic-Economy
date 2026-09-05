@@ -239,7 +239,7 @@ export function createAccountManagementService(request: Request, bodyText: strin
 }
 
 /**
- * Canonical self-inspection for an authenticated agent principal. Every
+ * Canonical self-inspection for an authenticated Agent. Every
  * transport projects this result; no adapter re-derives account identity.
  */
 export const agentAccountSelfAction = defineAction<
@@ -248,7 +248,7 @@ export const agentAccountSelfAction = defineAction<
 >({
   id: AGENT_ACCOUNT_SELF_ACTION_ID,
   name: 'Inspect current agent account',
-  summary: 'Read the current agent principal, owner account, credential identity, scopes, and authority mode.',
+  summary: 'Read the current Agent, owner Account, credential identity, scopes, and authority mode.',
   boundaries: [
     'Requires a current AE-issued agent credential.',
     'Returns identity and authority metadata only; it never returns the bearer secret or provider credentials.',

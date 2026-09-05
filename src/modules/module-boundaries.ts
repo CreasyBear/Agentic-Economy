@@ -164,5 +164,6 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { id: 'test-whitebox-70', importers: ['tests/unit/capability-supply/openapi-preflight.test.ts', 'tests/unit/release/package5-reference-provider.test.ts'], to: 'capability-supply', entry: 'internal/openapi-import/validation.ts', owner: 'source-tests' },
     { id: 'test-whitebox-71', importers: ['tests/unit/release/package5-reference-provider.test.ts'], to: 'capability-supply', entry: 'internal/mcp-source-discovery.ts', owner: 'source-tests' },
     { id: 'test-whitebox-72', importers: ['tests/unit/release/package5-reference-provider.test.ts'], to: 'capability-supply', entry: 'internal/x402-seller-endpoint-inspector.ts', owner: 'source-tests' },
+    { id: 'test-whitebox-73', importers: ['tests/unit/agent-access/agent-audit.test.ts'], to: 'agent-access', entry: 'agent-audit.ts', owner: 'source-tests' },
   ],
 }

@@ -601,7 +601,7 @@ export const registerIssuedAgentBindingForServer: RegisteredMutation<'public', R
       eventType: 'agent.created',
       actorPrincipalRef: owner.principalRef,
       activeAccountRef: owner.accountRef,
-      agentPrincipalRef: refs.principalRef,
+      agentRef: refs.principalRef,
       correlationRef: action.correlationRef,
       idempotencyRef: action.idempotencyRef,
       authorityGeneration: storedGrant.generation,
@@ -681,7 +681,7 @@ export const renameAgentForServer = mutation({
         eventType: 'agent.renamed',
         actorPrincipalRef: owner.principalRef,
         activeAccountRef: owner.accountRef,
-        agentPrincipalRef: renamed.principalRef,
+        agentRef: renamed.principalRef,
         correlationRef: args.correlationRef,
         idempotencyRef: `agent-rename:${renamed.principalRef}:${args.expectedRevision}`,
         beforeState: 'named',
@@ -888,7 +888,7 @@ export async function prepareCredentialReplacementCore(
       eventType: 'agent.credential.replacement_prepared',
       actorPrincipalRef: owner.principalRef,
       activeAccountRef: owner.accountRef,
-      agentPrincipalRef: input.principalRef,
+      agentRef: input.principalRef,
       credentialRef: refs.credentialRef,
       correlationRef: action.correlationRef,
       idempotencyRef: action.idempotencyRef,
@@ -951,7 +951,7 @@ export async function transitionCredentialReplacementCore(
       eventType: 'agent.credential.replacement_cancelled',
       actorPrincipalRef: owner.principalRef,
       activeAccountRef: owner.accountRef,
-      agentPrincipalRef: input.principalRef,
+      agentRef: input.principalRef,
       credentialRef: successor.credentialRef,
       correlationRef: canonicalDigest({ format: 'agent-credential-replacement-cancel:v1', successorGrantRef: input.successorGrantRef } as never),
       idempotencyRef: `agent-credential-replacement-cancel:${input.successorGrantRef}`,
@@ -988,7 +988,7 @@ export async function transitionCredentialReplacementCore(
     eventType: 'agent.credential.replacement_promoted',
     actorPrincipalRef: owner.principalRef,
     activeAccountRef: owner.accountRef,
-    agentPrincipalRef: input.principalRef,
+    agentRef: input.principalRef,
     credentialRef: successor.credentialRef,
     correlationRef: canonicalDigest({ format: 'agent-credential-replacement-promote:v1', successorGrantRef: input.successorGrantRef } as never),
     idempotencyRef: `agent-credential-replacement-promote:${input.successorGrantRef}`,
@@ -1165,10 +1165,10 @@ async function requireLifecycleOwner(
   }
 }
 
-async function lifecycleMembership(ctx: MutationCtx, owner: CanonicalCredentialOwner, agentPrincipalRef: string) {
+async function lifecycleMembership(ctx: MutationCtx, owner: CanonicalCredentialOwner, agentRef: string) {
   return await ctx.db.query('memberships')
     .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
-      .eq('accountRef', owner.accountRef).eq('memberPrincipalRef', agentPrincipalRef).eq('lifecycle', 'active'))
+      .eq('accountRef', owner.accountRef).eq('memberPrincipalRef', agentRef).eq('lifecycle', 'active'))
     .unique()
 }
 
@@ -1463,7 +1463,7 @@ export const revokeCredentialForServer = mutation({
       eventType: 'agent.credential.revoked',
       actorPrincipalRef: owner.principalRef,
       activeAccountRef: owner.accountRef,
-      agentPrincipalRef: credential.principalRef,
+      agentRef: credential.principalRef,
       credentialRef: credential.credentialRef,
       correlationRef: args.correlationRef,
       idempotencyRef: canonicalDigest({
@@ -1581,7 +1581,7 @@ export const disconnectAgentForServer = mutation({
       eventType: 'agent.disconnected',
       actorPrincipalRef: owner.principalRef,
       activeAccountRef: owner.accountRef,
-      agentPrincipalRef: args.principalRef,
+      agentRef: args.principalRef,
       correlationRef: args.correlationRef,
       idempotencyRef: canonicalDigest({
         format: 'agent-disconnect-audit:v1',

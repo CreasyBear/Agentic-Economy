@@ -3,8 +3,8 @@
 Type: task
 Label: wayfinder:task
 Mode: AFK
-Status: open
-Assignee: unassigned (coordinator dispatches a Luna Max worker)
+Status: resolved
+Assignee: /root/vocabulary_10
 Assigned role: Luna Max / customer-agent terminology owner, max reasoning
 Parent: ../map.md
 Blocked by: 08, 09, 29, 30
@@ -63,6 +63,8 @@ slice identified in the outcome.
 
 ### Agent access and audit contracts
 
+- `src/modules/module-boundaries.ts` — only the exact test-only audit entry
+  specified in the checkpoint correction below; no runtime surface change.
 - `src/modules/agent-access/agent-audit.ts`
 - `tests/unit/agent-access/agent-audit.test.ts` (new focused test file at this
   exact path, using the existing Vitest setup; no new test infrastructure)
@@ -233,22 +235,22 @@ reclassify those findings, and no broad suite is required during preparation.
 
 ## Acceptance
 
-- [ ] Canonical role-bearing source fields, functions, labels and tests use
+- [x] Canonical role-bearing source fields, functions, labels and tests use
       Customer/Agent with no blanket Business/User/Account/IAM replacement.
-- [ ] Sign-in, account selection, membership, credential replacement/revocation
+- [x] Sign-in, account selection, membership, credential replacement/revocation
       and Agent lifecycle consumers retain their existing authorization and
       ownership behavior.
-- [ ] The qualified `AgentAccessPrincipal` / `agentAccessPrincipals` IAM family,
+- [x] The qualified `AgentAccessPrincipal` / `agentAccessPrincipals` IAM family,
       generic principal/account tables and their fields remain intact; no
       `AgentAccessAgents` table or credential-to-Agent collapse is introduced.
-- [ ] `AgentAuditInput` has an explicit external target-field boundary while
+- [x] `AgentAuditInput` has an explicit external target-field boundary while
       the `agentPrincipalRef` hash key, audit formats, IDs and digest vectors
       remain byte-stable; `issued-agent-principal:v2` vectors are unchanged.
-- [ ] Shared Provider/paid/money consumers are updated in their owned slices or
+- [x] Shared Provider/paid/money consumers are updated in their owned slices or
       carry an explicit serialized handoff; no old role term is reintroduced.
-- [ ] Focused role tests, type tests and the generation/import checkpoint pass;
+- [x] Focused role tests, type tests and the generation/import checkpoint pass;
       authenticated live proof is attached or remains open under issue 34.
-- [ ] No generated output, database, deployment, financial record, public
+- [x] No generated output, database, deployment, financial record, public
       protocol, dependency, alias or unrelated documentation change is included.
 
 ## Closure evidence
@@ -264,6 +266,31 @@ does not close it.
 
 ## Comments
 
+### Source10 checkpoint correction — owned audit-test declaration
+
+Issue22's first checkpoint passed native generation, typecheck and type tests,
+but `test:imports` reported one `module-unowned-test-import`: the new audit
+vector test intentionally exercises the existing private audit encoder.
+Register only that test through the existing `testOnlyWhiteBoxExceptions`
+pattern in `src/modules/module-boundaries.ts`:
+
+- `id`: `test-whitebox-73`
+- `importers`: only `tests/unit/agent-access/agent-audit.test.ts`
+- `to`: `agent-access`
+- `entry`: `agent-audit.ts`
+- `owner`: `source-tests`
+
+This exact allowlist extension is necessary to add the approved protected-byte
+test without promoting a private encoder into the runtime API. Preserve
+runtime entry surfaces, dependency edges, existing exceptions and every import
+assertion. Do not weaken the checker or add a general exemption. The issue10
+owner fixes it and runs the existing module-boundary and audit tests; issue22
+then reruns the serialized full import check before issue10 can close.
+
+- 2026-09-05 — Claimed by /root/vocabulary_10 for the serialized source
+  implementation. The issue remains open pending its focused evidence,
+  generated-artifact checkpoint and coordinator review.
+
 - 2026-09-05 — Prepared from the dirty-tree source inventory and engineering
   finding F4. The coordinator decision retains qualified
   `AgentAccessPrincipal`/`agentAccessPrincipals` access bindings and generic
@@ -272,3 +299,90 @@ does not close it.
   target `agentRef` only at the existing input boundary. The hash JSON key and
   `issued-agent-principal:v2` are protected bytes. This issue is blocked by
   review/dispatch gates and has not changed application source.
+
+- 2026-09-05 — Source patch prepared by `/root/vocabulary_10` within the
+  approved canonical Customer/Agent slice. Changed paths are
+  `src/modules/agent-access/agent-audit.ts`,
+  `convex/authorityBoundary.ts`, `convex/agentAccessPrincipals.ts`,
+  `convex/chatTools.ts`, `src/modules/agent-access/account.actions.ts`,
+  `src/modules/money/funding-handoff.actions.ts`,
+  `convex/agentAccessPrincipals.test.ts`, and
+  `convex/securityAccountHistory.test.ts`, with the authorised new vector test
+  at `tests/unit/agent-access/agent-audit.test.ts`. Audit callers now use the
+  external `agentRef` boundary; the two literal `agentPrincipalRef` hash keys,
+  digest bytes, event IDs, qualified `canonicalAgentPrincipal` resolver,
+  `AgentAccessPrincipal` IAM family and binding payloads remain protected.
+  No generated output, dependency, schema, deployment, alias, or live system
+  was changed.
+
+- 2026-09-05 — Focused Vitest command passed 13 files / 167 tests with
+  `--no-file-parallelism`; the audit-vector plus security-history smoke passed
+  2 files / 8 tests. `npm run typecheck` passed and `npm run test:types`
+  passed 1 file / 4 tests under Node 22. Authenticated Playwright was not run
+  because no safe configured target was released; live proof remains with
+  issue 34. `test:imports`, generators, build, and deployment remain deferred
+  to the coordinator's serialized issue 22 checkpoint. The issue remains open
+  pending that checkpoint and root review.
+
+- 2026-09-05 — Original-baseline receipt: compared all 2,096 paths in
+  `/Users/joelchan/.codex/backups/agentic-economy/vocabulary-20260905-073915/archive.sha256`
+  against HEAD `645a348421479510432db4bdc630ed306acd18d8` and the current
+  checkout. Twenty-seven paths differ from the archive; eighteen of those
+  differences predate HEAD. The only nine archive-listed application paths
+  differing from HEAD are the finite issue10 source/test slice below; each
+  archive hash matched its HEAD hash before this patch:
+
+  - `convex/agentAccessPrincipals.test.ts`:
+    `2affa72869a44fac7c04389e200513ce0d58fff1063391dd7175ce9ff9b0144f` →
+    `d41c4abf27fed76c4d8d142b92f083ec2a89402ce0aab66d21240cd39ad69e20`
+  - `convex/agentAccessPrincipals.ts`:
+    `8aae401df10e14d2d8995fb03619365bce290d4b0562bc3b32049d93b3f5bed6` →
+    `7b62489d4be793ca9c7aae1ec807d19759457b6b4159805d91c4a18439a0b19a`
+  - `convex/authorityBoundary.ts`:
+    `9fea7acb003f1fadf7df4338c64bd65d6d5cf734014d345746eaf8c60b1ec677` →
+    `2cc31774924bca9b87fcd1b22757795aa86f2a5306a2681235ea48492e3b63b8`
+  - `convex/chatTools.ts`:
+    `ed0f05ab87386ab09657fe31edc9aa90a15e7ca565dda42bc907de2085a813ca` →
+    `79e59fac971bdee89643619c95a59c4395469b2a7c49921fa05712b8001761d2`
+  - `convex/securityAccountHistory.test.ts`:
+    `a2a1981feecaf7a789fccd71668b597b74ba6e1bd99f0153a4d9812efd10f6e5` →
+    `f47d329765ac11c1c6f20af92953167cf771481e9bd1b3227be1d5dcf6e528e8`
+  - `src/modules/agent-access/account.actions.ts`:
+    `51a62c7a9a8ab44b51fb7c2d6d0187ef03e86fc95b64b53478149c347d5f874e` →
+    `29f5b10c175705b4e6a26f88a6ed3b74fea74a2021d788af739222fb5ff2c336`
+  - `src/modules/agent-access/agent-audit.ts`:
+    `473825ff5c2a3ccfd9db7b5327d9549b92b44527d97035c4a1d95886d38ec484` →
+    `ac4734e3c1cc5c3705fe4245d751b3b2f21d2400bebe1c893c983a390e6183ca`
+  - `src/modules/module-boundaries.ts`:
+    `4c7cb47916ce082563221a77f5cc2e6ea39b3be3edb5821c3e7a507c2275aaf2` →
+    `e808a2a7d0c8e3327faeed5f2cb7199f98a37d209437262ceb820c33ad4c0156`
+  - `src/modules/money/funding-handoff.actions.ts`:
+    `0a6979dc18832889a9c3986ac3487146cf3121bca857b63d1c5bf0d756e2263d` →
+    `a10833bc2b54433de71f6bef962037ca9501b52fb4619588b3d5c9e052ff1f68`
+
+  The authorised new `tests/unit/agent-access/agent-audit.test.ts` was absent
+  from both archive and HEAD; the issue10 record was absent from the archive
+  and already existed at HEAD. The remaining eight current-vs-HEAD differences
+  are concurrent Phase0/coordinator documentation paths
+  (`.scratch/vocabulary-rationalisation/issues/03-current-footprint.md`,
+  `08-execution-baseline.md`, `37-prepare-implementation-issues.md`,
+  `.scratch/vocabulary-rationalisation/map.md`,
+  `docs/designs/vocabulary-rationalisation.md`,
+  `docs/workflow/work/WF-20260905-vocabulary.md`,
+  `docs/operations/deployment-maturity.md`, and
+  `docs/operations/deployment-registry.yaml`). No other archive-listed
+  application-source path differs from HEAD; no baseline dirty or untracked
+  path was overwritten by this issue10 worker.
+
+- 2026-09-05 — Final acceptance receipt: issue22's serialized checkpoint
+  passed native generation and import (`test:imports`: 11 files / 49 tests),
+  with content-identical CLI output and no generated, package, lockfile or
+  public-archive diffs. Issue10's focused boundary/audit tests passed 2 files /
+  13 tests; the earlier role-focused suite passed 13 files / 167 tests;
+  `npm run typecheck` and `npm run test:types` passed under Node 22. The
+  exact source/test declaration is the sole module-boundary addition, and all
+  protected IAM names, generic fields, hash keys and vectors remain intact.
+  Authenticated live proof was not run without a released safe target and
+  remains explicitly owned by issue 34. Acceptance is resolved locally; no
+  deployment, database reset, financial action, generated-artifact edit or
+  public protocol change was performed.

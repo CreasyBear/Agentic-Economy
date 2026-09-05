@@ -185,7 +185,7 @@ export const fundingHandoffStatusAction = defineAction<FundingHandoffStatusInput
   id: FUNDING_HANDOFF_STATUS_ACTION_ID,
   name: 'Read a funding handoff',
   summary: 'Poll the same funding session until signed payment fulfilment makes Account credit usable.',
-  boundaries: ['Only the requesting Agent Principal may read private status.', 'Polling and browser redirects never credit the Account.'],
+  boundaries: ['Only the requesting Agent may read private status.', 'Polling and browser redirects never credit the Account.'],
   schema: fundingHandoffStatusInputSchema, outputSchema: fundingHandoffStatusResultSchema,
   parameters: [{ name: 'fundingSessionId', type: 'string', description: 'Stripe Checkout Session ID returned by create.', required: true }],
   readOnly: true,

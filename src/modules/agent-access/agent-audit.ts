@@ -27,7 +27,7 @@ type AgentCredentialTransition =
 type AgentAuditContext = Readonly<{
   actorPrincipalRef: string
   activeAccountRef: string
-  agentPrincipalRef: string
+  agentRef: string
   correlationRef: string
   idempotencyRef: string
   authorityGeneration?: number
@@ -68,7 +68,7 @@ export type AgentAuditEnvelope = Readonly<{
 export function createAgentAuditEnvelope(input: AgentAuditInput): AgentAuditEnvelope {
   const actor = principalRef(input.actorPrincipalRef)
   const account = accountRef(input.activeAccountRef)
-  const agent = principalRef(input.agentPrincipalRef)
+  const agent = principalRef(input.agentRef)
   const affectedCredential = 'credentialRef' in input
     ? credentialRef(input.credentialRef)
     : undefined
